@@ -41,6 +41,9 @@ const SANDBOX_HTTP_SERVICE_KEY_PREFIX: &str = "agistack:sandbox:http_services:";
 const SANDBOX_PREVIEW_SESSION_KEY_PREFIX: &str = "agistack:sandbox:preview_session:";
 const SANDBOX_TERMINAL_SESSION_KEY_PREFIX: &str = "agistack:sandbox:terminal_session:";
 const SANDBOX_MCP_UPSTREAM_TOKEN_KEY_PREFIX: &str = "agistack:sandbox:mcp_token:";
+const WORKER_LAUNCH_COOLDOWN_KEY_PREFIX: &str = "workspace:worker_launch:cooldown:";
+const AGENT_RUNNING_KEY_PREFIX: &str = "agent:running:";
+const AGENT_FINISHED_KEY_PREFIX: &str = "agent:finished:";
 
 /// Open a multiplexed async connection to Redis (e.g. `redis://localhost:6379`).
 ///
@@ -460,6 +463,86 @@ impl RedisSandboxHttpRegistry {
     }
 }
 
+/// Redis-backed worker-launch process state. It mirrors the Python keys used by
+/// `worker_launch.py`: duplicate-launch cooldowns plus per-conversation
+/// `agent:running` / `agent:finished` sentinels.
+#[derive(Clone)]
+pub struct RedisWorkerLaunchStateStore {
+    conn: MultiplexedConnection,
+}
+
+impl RedisWorkerLaunchStateStore {
+    pub fn from_connection(conn: MultiplexedConnection) -> Self {
+        Self { conn }
+    }
+
+    pub async fn connect(url: &str) -> CoreResult<Self> {
+        let client = redis::Client::open(url).map_err(gerr)?;
+        let conn = client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(gerr)?;
+        Ok(Self { conn })
+    }
+
+    pub async fn claim_worker_launch_cooldown(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        let mut conn = self.conn.clone();
+        let claimed: Option<String> = redis::cmd("SET")
+            .arg(worker_launch_cooldown_key(conversation_id))
+            .arg("1")
+            .arg("NX")
+            .arg("EX")
+            .arg(ttl_seconds.max(1))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(claimed.is_some())
+    }
+
+    pub async fn refresh_worker_launch_cooldown(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        let mut conn = self.conn.clone();
+        let refreshed: bool = redis::cmd("EXPIRE")
+            .arg(worker_launch_cooldown_key(conversation_id))
+            .arg(ttl_seconds.max(1))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(refreshed)
+    }
+
+    pub async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool> {
+        let mut conn = self.conn.clone();
+        let exists: i64 = redis::cmd("EXISTS")
+            .arg(agent_running_key(conversation_id))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(exists > 0)
+    }
+
+    pub async fn clear_reused_worker_session_markers(
+        &self,
+        conversation_id: &str,
+    ) -> CoreResult<()> {
+        let mut conn = self.conn.clone();
+        let _: i64 = redis::cmd("DEL")
+            .arg(agent_finished_key(conversation_id))
+            .arg(worker_launch_cooldown_key(conversation_id))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(())
+    }
+}
+
 pub fn device_code_key(device_code: &str) -> String {
     format!("{DEVICE_CODE_KEY_PREFIX}{device_code}")
 }
@@ -482,6 +565,18 @@ pub fn sandbox_terminal_session_key(project_id: &str, session_id: &str) -> Strin
 
 pub fn sandbox_mcp_upstream_token_key(token: &str) -> String {
     format!("{SANDBOX_MCP_UPSTREAM_TOKEN_KEY_PREFIX}{token}")
+}
+
+pub fn worker_launch_cooldown_key(conversation_id: &str) -> String {
+    format!("{WORKER_LAUNCH_COOLDOWN_KEY_PREFIX}{conversation_id}")
+}
+
+pub fn agent_running_key(conversation_id: &str) -> String {
+    format!("{AGENT_RUNNING_KEY_PREFIX}{conversation_id}")
+}
+
+pub fn agent_finished_key(conversation_id: &str) -> String {
+    format!("{AGENT_FINISHED_KEY_PREFIX}{conversation_id}")
 }
 
 /// Map any Redis error to the port-level [`CoreError::Event`], keeping the

@@ -75,6 +75,7 @@ const AWAITING_LEADER_ADJUDICATION_STATUS: &str = "awaiting_leader_adjudication"
 const DEFAULT_WORKER_LAUNCH_MAX_ACTIVE: i64 = 4;
 const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
+const WORKER_LAUNCH_COOLDOWN_SECONDS: u64 = 300;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
@@ -189,6 +190,62 @@ const FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS: &[&str] = &[
     "worktree_integration_worktree_path",
 ];
 
+#[async_trait]
+pub(crate) trait WorkerLaunchRuntimeStateStore: Send + Sync {
+    async fn claim_launch_cooldown(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool>;
+
+    async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool>;
+
+    async fn clear_reused_session_markers(&self, conversation_id: &str) -> CoreResult<()>;
+}
+
+#[derive(Debug, Default)]
+struct NoopWorkerLaunchRuntimeStateStore;
+
+#[async_trait]
+impl WorkerLaunchRuntimeStateStore for NoopWorkerLaunchRuntimeStateStore {
+    async fn claim_launch_cooldown(
+        &self,
+        _conversation_id: &str,
+        _ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        Ok(true)
+    }
+
+    async fn agent_running_exists(&self, _conversation_id: &str) -> CoreResult<bool> {
+        Ok(false)
+    }
+
+    async fn clear_reused_session_markers(&self, _conversation_id: &str) -> CoreResult<()> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl WorkerLaunchRuntimeStateStore for agistack_adapters_redis::RedisWorkerLaunchStateStore {
+    async fn claim_launch_cooldown(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        self.claim_worker_launch_cooldown(conversation_id, ttl_seconds)
+            .await
+    }
+
+    async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool> {
+        self.agent_running_exists(conversation_id).await
+    }
+
+    async fn clear_reused_session_markers(&self, conversation_id: &str) -> CoreResult<()> {
+        self.clear_reused_worker_session_markers(conversation_id)
+            .await
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn workspace_plan_outbox_handlers(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
@@ -200,12 +257,24 @@ pub(crate) fn workspace_plan_outbox_handlers_with_stage_runner(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
     stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
 ) -> WorkspacePlanOutboxHandlers {
+    workspace_plan_outbox_handlers_with_runtime_state(dispatch_store, stage_runner, None)
+}
+
+pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state(
+    dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
+    stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
+    worker_launch_state: Option<Arc<dyn WorkerLaunchRuntimeStateStore>>,
+) -> WorkspacePlanOutboxHandlers {
     let handoff = Arc::new(DurableHandoffResumeHandler::new(Arc::clone(
         &dispatch_store,
     )));
-    let worker_launch = Arc::new(WorkerLaunchAdmissionHandler::new(Arc::clone(
-        &dispatch_store,
-    )));
+    let worker_launch = Arc::new(match worker_launch_state {
+        Some(runtime_state) => WorkerLaunchAdmissionHandler::with_runtime_state(
+            Arc::clone(&dispatch_store),
+            runtime_state,
+        ),
+        None => WorkerLaunchAdmissionHandler::new(Arc::clone(&dispatch_store)),
+    });
     let supervisor_tick = Arc::new(SupervisorTickAdmissionHandler::new(Arc::clone(
         &dispatch_store,
     )));
@@ -1316,13 +1385,22 @@ fn worker_conversation_metadata(
 
 pub(crate) struct WorkerLaunchAdmissionHandler {
     store: Arc<dyn WorkspacePlanDispatchStore>,
+    runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
     config: WorkerLaunchAdmissionConfig,
 }
 
 impl WorkerLaunchAdmissionHandler {
     pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
+        Self::with_runtime_state(store, Arc::new(NoopWorkerLaunchRuntimeStateStore))
+    }
+
+    pub(crate) fn with_runtime_state(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
+    ) -> Self {
         Self {
             store,
+            runtime_state,
             config: WorkerLaunchAdmissionConfig::from_env(),
         }
     }
@@ -1332,7 +1410,24 @@ impl WorkerLaunchAdmissionHandler {
         store: Arc<dyn WorkspacePlanDispatchStore>,
         config: WorkerLaunchAdmissionConfig,
     ) -> Self {
-        Self { store, config }
+        Self {
+            store,
+            runtime_state: Arc::new(NoopWorkerLaunchRuntimeStateStore),
+            config,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_config_and_runtime_state(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
+        config: WorkerLaunchAdmissionConfig,
+    ) -> Self {
+        Self {
+            store,
+            runtime_state,
+            config,
+        }
     }
 }
 
@@ -1451,7 +1546,9 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                         "workspace task session attempt {attempt_id} not found"
                     ))
                 })?;
-            let conversation_id = string_from_map(&payload, "reuse_conversation_id")
+            let reuse_conversation_id = string_from_map(&payload, "reuse_conversation_id");
+            let conversation_id = reuse_conversation_id
+                .clone()
                 .or_else(|| attempt.conversation_id.clone())
                 .unwrap_or_else(|| {
                     worker_conversation_id(
@@ -1461,6 +1558,18 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                         Some(attempt_id),
                     )
                 });
+            if reuse_conversation_id.is_some()
+                && self.runtime_agent_running_exists(&conversation_id).await
+            {
+                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+            }
+            if reuse_conversation_id.is_some() {
+                self.runtime_clear_reused_session_markers(&conversation_id)
+                    .await;
+            }
+            if !self.runtime_claim_launch_cooldown(&conversation_id).await {
+                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+            }
             let agent_config = json!({
                 "selected_agent_id": worker_agent_id,
                 "agent_definition_id": worker_agent_id,
@@ -1579,6 +1688,50 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
 }
 
 impl WorkerLaunchAdmissionHandler {
+    async fn runtime_agent_running_exists(&self, conversation_id: &str) -> bool {
+        match self
+            .runtime_state
+            .agent_running_exists(conversation_id)
+            .await
+        {
+            Ok(exists) => exists,
+            Err(err) => {
+                eprintln!(
+                    "[agistack] worker launch state: agent:running check failed for {conversation_id}: {err}"
+                );
+                false
+            }
+        }
+    }
+
+    async fn runtime_clear_reused_session_markers(&self, conversation_id: &str) {
+        if let Err(err) = self
+            .runtime_state
+            .clear_reused_session_markers(conversation_id)
+            .await
+        {
+            eprintln!(
+                "[agistack] worker launch state: clear reused markers failed for {conversation_id}: {err}"
+            );
+        }
+    }
+
+    async fn runtime_claim_launch_cooldown(&self, conversation_id: &str) -> bool {
+        match self
+            .runtime_state
+            .claim_launch_cooldown(conversation_id, WORKER_LAUNCH_COOLDOWN_SECONDS)
+            .await
+        {
+            Ok(claimed) => claimed,
+            Err(err) => {
+                eprintln!(
+                    "[agistack] worker launch state: cooldown claim failed for {conversation_id}: {err}"
+                );
+                true
+            }
+        }
+    }
+
     async fn stale_worker_launch_reason(
         &self,
         task: &WorkspaceTaskRecord,
@@ -10683,6 +10836,88 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FakeWorkerLaunchRuntimeStateStore {
+        cooldowns: Mutex<HashSet<String>>,
+        running: Mutex<HashSet<String>>,
+        finished: Mutex<HashSet<String>>,
+        claims: Mutex<Vec<String>>,
+        clears: Mutex<Vec<String>>,
+    }
+
+    impl FakeWorkerLaunchRuntimeStateStore {
+        fn insert_cooldown(&self, conversation_id: &str) {
+            self.cooldowns
+                .lock()
+                .unwrap()
+                .insert(conversation_id.to_string());
+        }
+
+        fn insert_running(&self, conversation_id: &str) {
+            self.running
+                .lock()
+                .unwrap()
+                .insert(conversation_id.to_string());
+        }
+
+        fn insert_finished(&self, conversation_id: &str) {
+            self.finished
+                .lock()
+                .unwrap()
+                .insert(conversation_id.to_string());
+        }
+
+        fn has_cooldown(&self, conversation_id: &str) -> bool {
+            self.cooldowns.lock().unwrap().contains(conversation_id)
+        }
+
+        fn has_finished(&self, conversation_id: &str) -> bool {
+            self.finished.lock().unwrap().contains(conversation_id)
+        }
+
+        fn claims(&self) -> Vec<String> {
+            self.claims.lock().unwrap().clone()
+        }
+
+        fn clears(&self) -> Vec<String> {
+            self.clears.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl WorkerLaunchRuntimeStateStore for FakeWorkerLaunchRuntimeStateStore {
+        async fn claim_launch_cooldown(
+            &self,
+            conversation_id: &str,
+            _ttl_seconds: u64,
+        ) -> CoreResult<bool> {
+            self.claims
+                .lock()
+                .unwrap()
+                .push(conversation_id.to_string());
+            let mut cooldowns = self.cooldowns.lock().unwrap();
+            if cooldowns.contains(conversation_id) {
+                return Ok(false);
+            }
+            cooldowns.insert(conversation_id.to_string());
+            Ok(true)
+        }
+
+        async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool> {
+            Ok(self.running.lock().unwrap().contains(conversation_id))
+        }
+
+        async fn clear_reused_session_markers(&self, conversation_id: &str) -> CoreResult<()> {
+            self.clears
+                .lock()
+                .unwrap()
+                .push(conversation_id.to_string());
+            self.finished.lock().unwrap().remove(conversation_id);
+            self.cooldowns.lock().unwrap().remove(conversation_id);
+            Ok(())
+        }
+    }
+
     #[derive(Debug, Clone, PartialEq)]
     struct FakePipelineContractRecord {
         id: String,
@@ -10836,6 +11071,10 @@ mod tests {
                 .get(id)
                 .cloned()
                 .unwrap_or_else(|| panic!("conversation {id} not found"))
+        }
+
+        fn conversation_count(&self) -> usize {
+            self.conversations.lock().unwrap().len()
         }
 
         fn plan_events(&self) -> Vec<WorkspacePlanEventRecord> {
@@ -12013,6 +12252,22 @@ esac
         )
     }
 
+    fn worker_launch_handler_with_state(
+        store: Arc<FakeWorkspacePlanDispatchStore>,
+        runtime_state: Arc<FakeWorkerLaunchRuntimeStateStore>,
+        max_active: i64,
+    ) -> WorkerLaunchAdmissionHandler {
+        WorkerLaunchAdmissionHandler::with_config_and_runtime_state(
+            store as Arc<dyn WorkspacePlanDispatchStore>,
+            runtime_state as Arc<dyn WorkerLaunchRuntimeStateStore>,
+            WorkerLaunchAdmissionConfig {
+                max_active_worker_conversations: max_active,
+                defer_seconds: 30,
+                active_event_grace_seconds: 60,
+            },
+        )
+    }
+
     fn worker_launch_item() -> WorkspacePlanOutboxRecord {
         let mut item = outbox("job-worker-launch", WORKER_LAUNCH_EVENT);
         item.payload_json = json!({
@@ -12403,6 +12658,145 @@ esac
             conversation.metadata_json["conversation_scope"],
             "task:task-test:attempt:attempt-test"
         );
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_skips_duplicate_launch_when_cooldown_exists() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let runtime_state = Arc::new(FakeWorkerLaunchRuntimeStateStore::default());
+        runtime_state.insert_cooldown("d267a78e-eefc-5d33-bfb3-ac4fa7ece855");
+        let handler =
+            worker_launch_handler_with_state(Arc::clone(&store), Arc::clone(&runtime_state), 4);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert_eq!(
+            runtime_state.claims(),
+            vec!["d267a78e-eefc-5d33-bfb3-ac4fa7ece855"]
+        );
+        assert!(runtime_state.has_cooldown("d267a78e-eefc-5d33-bfb3-ac4fa7ece855"));
+        assert_eq!(store.conversation_count(), 0);
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert!(attempt.conversation_id.is_none());
+        let task = store.task("task-test");
+        assert_eq!(task.status, "todo");
+        assert!(task.metadata_json.get("launch_state").is_none());
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "dispatched");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-test"));
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_clears_reused_markers_before_repair_reuse() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let runtime_state = Arc::new(FakeWorkerLaunchRuntimeStateStore::default());
+        runtime_state.insert_cooldown("conv-existing-repair");
+        runtime_state.insert_finished("conv-existing-repair");
+        let handler =
+            worker_launch_handler_with_state(Arc::clone(&store), Arc::clone(&runtime_state), 4);
+        let mut item = worker_launch_item();
+        if let Some(payload) = item.payload_json.as_object_mut() {
+            payload.insert(
+                "reuse_conversation_id".to_string(),
+                json!("conv-existing-repair"),
+            );
+        }
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert_eq!(runtime_state.clears(), vec!["conv-existing-repair"]);
+        assert_eq!(runtime_state.claims(), vec!["conv-existing-repair"]);
+        assert!(runtime_state.has_cooldown("conv-existing-repair"));
+        assert!(!runtime_state.has_finished("conv-existing-repair"));
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(
+            attempt.conversation_id.as_deref(),
+            Some("conv-existing-repair")
+        );
+        assert_eq!(store.conversation_count(), 1);
+        let task = store.task("task-test");
+        assert_eq!(
+            task.metadata_json[CURRENT_ATTEMPT_CONVERSATION_ID],
+            "conv-existing-repair"
+        );
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_skips_reuse_when_agent_running_marker_exists() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let runtime_state = Arc::new(FakeWorkerLaunchRuntimeStateStore::default());
+        runtime_state.insert_running("conv-existing-repair");
+        let handler =
+            worker_launch_handler_with_state(Arc::clone(&store), Arc::clone(&runtime_state), 4);
+        let mut item = worker_launch_item();
+        if let Some(payload) = item.payload_json.as_object_mut() {
+            payload.insert(
+                "reuse_conversation_id".to_string(),
+                json!("conv-existing-repair"),
+            );
+        }
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert!(runtime_state.clears().is_empty());
+        assert!(runtime_state.claims().is_empty());
+        assert_eq!(store.conversation_count(), 0);
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert!(attempt.conversation_id.is_none());
+        let task = store.task("task-test");
+        assert_eq!(task.status, "todo");
+        assert!(task.metadata_json.get("launch_state").is_none());
     }
 
     #[tokio::test]

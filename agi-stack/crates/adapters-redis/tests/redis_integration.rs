@@ -14,9 +14,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use agistack_adapters_mem::InMemoryEventStream;
 use agistack_adapters_redis::{
-    connect, device_code_key, device_user_code_key, sandbox_http_services_key,
-    sandbox_mcp_upstream_token_key, sandbox_preview_session_key, sandbox_terminal_session_key,
-    DeviceGrant, RedisDeviceGrantStore, RedisEventStream, RedisSandboxHttpRegistry,
+    agent_finished_key, agent_running_key, connect, device_code_key, device_user_code_key,
+    sandbox_http_services_key, sandbox_mcp_upstream_token_key, sandbox_preview_session_key,
+    sandbox_terminal_session_key, worker_launch_cooldown_key, DeviceGrant, RedisDeviceGrantStore,
+    RedisEventStream, RedisSandboxHttpRegistry, RedisWorkerLaunchStateStore,
     SandboxHttpServiceRecord, SandboxMcpUpstreamTokenRecord, SandboxPreviewSessionRecord,
     SandboxTerminalSessionRecord,
 };
@@ -70,6 +71,17 @@ async fn redis_sandbox_http_registry_or_skip() -> Option<RedisSandboxHttpRegistr
     }
 }
 
+async fn redis_worker_launch_state_or_skip() -> Option<RedisWorkerLaunchStateStore> {
+    let uri = redis_uri();
+    match RedisWorkerLaunchStateStore::connect(&uri).await {
+        Ok(store) => Some(store),
+        Err(e) => {
+            eprintln!("[skip] Redis unreachable at {uri}: {e} — skipping worker launch state test");
+            None
+        }
+    }
+}
+
 async fn del(stream: &RedisEventStream, topic: &str) {
     // Best-effort cleanup via a throwaway append+trim is awkward; instead issue a
     // raw DEL through a fresh connection helper. RedisEventStream doesn't expose
@@ -98,6 +110,19 @@ async fn ttl(key: &str) -> Option<i64> {
     let client = redis::Client::open(uri).ok()?;
     let mut conn = client.get_multiplexed_async_connection().await.ok()?;
     redis::cmd("TTL").arg(key).query_async(&mut conn).await.ok()
+}
+
+async fn set_key(key: &str, value: &str, ttl_seconds: u64) {
+    let uri = redis_uri();
+    let client = redis::Client::open(uri).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    let _: () = redis::cmd("SETEX")
+        .arg(key)
+        .arg(ttl_seconds.max(1))
+        .arg(value)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
 }
 
 async fn payloads_after(
@@ -370,4 +395,51 @@ async fn redis_sandbox_mcp_upstream_tokens_are_ttl_persisted() {
     );
 
     del_keys(&[key]).await;
+}
+
+#[tokio::test]
+async fn redis_worker_launch_state_matches_python_marker_keys() {
+    let Some(store) = redis_worker_launch_state_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("worker-launch").replace(':', "-");
+    let conversation_id = format!("conv-{suffix}");
+    let cooldown_key = worker_launch_cooldown_key(&conversation_id);
+    let running_key = agent_running_key(&conversation_id);
+    let finished_key = agent_finished_key(&conversation_id);
+    del_keys(&[
+        cooldown_key.clone(),
+        running_key.clone(),
+        finished_key.clone(),
+    ])
+    .await;
+
+    assert!(store
+        .claim_worker_launch_cooldown(&conversation_id, 60)
+        .await
+        .unwrap());
+    assert!(!store
+        .claim_worker_launch_cooldown(&conversation_id, 60)
+        .await
+        .unwrap());
+    let cooldown_ttl = ttl(&cooldown_key).await.unwrap();
+    assert!(
+        (1..=60).contains(&cooldown_ttl),
+        "worker launch cooldown should be Redis TTL-backed, got {cooldown_ttl}"
+    );
+
+    assert!(!store.agent_running_exists(&conversation_id).await.unwrap());
+    set_key(&running_key, "1", 60).await;
+    assert!(store.agent_running_exists(&conversation_id).await.unwrap());
+    set_key(&finished_key, "msg-1", 60).await;
+
+    store
+        .clear_reused_worker_session_markers(&conversation_id)
+        .await
+        .unwrap();
+    assert_eq!(ttl(&cooldown_key).await.unwrap(), -2);
+    assert_eq!(ttl(&finished_key).await.unwrap(), -2);
+    assert!(store.agent_running_exists(&conversation_id).await.unwrap());
+
+    del_keys(&[cooldown_key, running_key, finished_key]).await;
 }

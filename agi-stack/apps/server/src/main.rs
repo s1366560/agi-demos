@@ -90,9 +90,11 @@ use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
 use crate::workspace_outbox_worker::{
+    workspace_plan_outbox_handlers_with_runtime_state,
     workspace_plan_outbox_handlers_with_stage_runner, PgWorkspacePlanOutboxStore,
     ProjectSandboxPipelineStageRunner, SharedWorkspacePlanOutboxWorker,
-    WorkspacePipelineStageRunner, WorkspacePlanOutboxWorker, WorkspacePlanOutboxWorkerConfig,
+    WorkerLaunchRuntimeStateStore, WorkspacePipelineStageRunner, WorkspacePlanOutboxWorker,
+    WorkspacePlanOutboxWorkerConfig,
 };
 
 /// Shared, cheaply-cloneable application state. Every `Arc`/`HotPlugRegistry`
@@ -655,6 +657,30 @@ async fn build_sandbox_http_service_registry() -> SharedHttpServiceRegistry {
     }
 }
 
+async fn build_worker_launch_runtime_state_store() -> Option<Arc<dyn WorkerLaunchRuntimeStateStore>>
+{
+    match std::env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => {
+            match agistack_adapters_redis::RedisWorkerLaunchStateStore::connect(&url).await {
+                Ok(store) => {
+                    eprintln!("[agistack] worker launch state: Redis markers via REDIS_URL");
+                    Some(Arc::new(store))
+                }
+                Err(err) => {
+                    eprintln!(
+                        "[agistack] worker launch state: Redis unavailable ({err}); duplicate launch guard disabled"
+                    );
+                    None
+                }
+            }
+        }
+        _ => {
+            eprintln!("[agistack] worker launch state: no Redis cooldown guard (dev)");
+            None
+        }
+    }
+}
+
 async fn build_graph_store() -> Arc<dyn GraphStore> {
     match std::env::var("NEO4J_URI") {
         Ok(uri) if !uri.is_empty() => {
@@ -754,6 +780,7 @@ async fn build_state() -> AppState {
     let graph = build_graph_store().await;
     let sandbox_runtime = build_container_runtime().await;
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
+    let worker_launch_runtime_state = build_worker_launch_runtime_state_store().await;
     let sandbox_image =
         std::env::var("AGISTACK_SANDBOX_IMAGE").unwrap_or_else(|_| "redis:7-alpine".to_string());
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
@@ -775,15 +802,23 @@ async fn build_state() -> AppState {
         let stage_runner: Arc<dyn WorkspacePipelineStageRunner> = Arc::new(
             ProjectSandboxPipelineStageRunner::new(Arc::clone(&sandboxes)),
         );
+        let handlers = match worker_launch_runtime_state.clone() {
+            Some(runtime_state) => workspace_plan_outbox_handlers_with_runtime_state(
+                Arc::new(PgWorkspaceRepository::new(pool.clone())),
+                Some(Arc::clone(&stage_runner)),
+                Some(runtime_state),
+            ),
+            None => workspace_plan_outbox_handlers_with_stage_runner(
+                Arc::new(PgWorkspaceRepository::new(pool.clone())),
+                Some(Arc::clone(&stage_runner)),
+            ),
+        };
         Arc::new(WorkspacePlanOutboxWorker::new(
             Arc::new(PgWorkspacePlanOutboxStore::new(PgWorkspaceRepository::new(
                 pool.clone(),
             ))),
             WorkspacePlanOutboxWorkerConfig::from_env(),
-            workspace_plan_outbox_handlers_with_stage_runner(
-                Arc::new(PgWorkspaceRepository::new(pool)),
-                Some(stage_runner),
-            ),
+            handlers,
         ))
     });
     let engine = Arc::new(ReActEngine::new(
