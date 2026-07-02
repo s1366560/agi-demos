@@ -9,8 +9,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use agistack_adapters_postgres::{
-    PgWorkspaceRepository, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
-    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    PgWorkspaceRepository, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceTaskRecord,
+    WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::{CoreError, CoreResult};
@@ -41,6 +42,7 @@ const WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV: &str =
 const WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV: &str =
     "AGISTACK_WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY";
 const PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV: &str = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES";
+const AWAITING_LEADER_ADJUDICATION_STATUS: &str = "awaiting_leader_adjudication";
 const DEFAULT_WORKER_LAUNCH_MAX_ACTIVE: i64 = 4;
 const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
@@ -261,6 +263,11 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         node_id: &str,
     ) -> CoreResult<bool>;
 
+    async fn create_plan_event(
+        &self,
+        event: WorkspacePlanEventRecord,
+    ) -> CoreResult<WorkspacePlanEventRecord>;
+
     async fn enqueue_plan_outbox(
         &self,
         item: WorkspacePlanOutboxRecord,
@@ -415,6 +422,13 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
             node_id,
         )
         .await
+    }
+
+    async fn create_plan_event(
+        &self,
+        event: WorkspacePlanEventRecord,
+    ) -> CoreResult<WorkspacePlanEventRecord> {
+        PgWorkspaceRepository::create_plan_event(self, event).await
     }
 
     async fn enqueue_plan_outbox(
@@ -1099,11 +1113,13 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                     reason: Some("supervisor_tick_requires_full_runtime".to_string()),
                 });
             };
-            if self
+            let changed_missing = self
                 .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
-                .await?
-                > 0
-            {
+                .await?;
+            let changed_reported = self
+                .reconcile_reported_attempt_nodes(&workspace_id, &plan_id)
+                .await?;
+            if changed_missing + changed_reported > 0 {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
             }
             return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
@@ -1306,6 +1322,80 @@ impl SupervisorTickAdmissionHandler {
                 .await?;
         }
         Ok(changed)
+    }
+
+    async fn reconcile_reported_attempt_nodes(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let mut changed = Vec::new();
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if !reported_reconcilable_node(&node) {
+                continue;
+            }
+            let Some(attempt_id) = node.current_attempt_id.as_deref() else {
+                continue;
+            };
+            let Some(attempt) = self.store.get_task_session_attempt(attempt_id).await? else {
+                continue;
+            };
+            if attempt.status != AWAITING_LEADER_ADJUDICATION_STATUS {
+                continue;
+            }
+            if !attempt_has_candidate_output(&attempt) {
+                continue;
+            }
+
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            metadata.insert(
+                "reported_attempt_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert(
+                "reported_attempt_status".to_string(),
+                json!(AWAITING_LEADER_ADJUDICATION_STATUS),
+            );
+            node.execution = "reported".to_string();
+            node.metadata_json = Value::Object(metadata);
+            node.updated_at = Some(now);
+            self.store.save_plan_node(node.clone()).await?;
+            changed.push(node);
+        }
+
+        if let Some(first) = changed.first() {
+            self.store
+                .create_plan_event(WorkspacePlanEventRecord {
+                    id: generate_uuid_v4(),
+                    plan_id: plan_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    node_id: Some(first.id.clone()),
+                    attempt_id: first.current_attempt_id.clone(),
+                    event_type: "auto_reported_attempt_reconciled".to_string(),
+                    source: "workspace_plan_supervisor_tick".to_string(),
+                    actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                    payload_json: json!({
+                        "reason": "active_plan_node_points_to_reported_attempt",
+                        "node_ids": changed.iter().map(|node| node.id.clone()).collect::<Vec<_>>()
+                    }),
+                    created_at: now,
+                })
+                .await?;
+        }
+
+        Ok(changed.len())
     }
 
     async fn retry_context_for_node(
@@ -1604,6 +1694,32 @@ fn recoverable_node_attempt_id(node: &WorkspacePlanNodeRecord) -> Option<String>
         return Some(attempt_id.to_string());
     }
     None
+}
+
+fn reported_reconcilable_node(node: &WorkspacePlanNodeRecord) -> bool {
+    if node
+        .current_attempt_id
+        .as_deref()
+        .is_none_or(|attempt_id| attempt_id.trim().is_empty())
+    {
+        return false;
+    }
+    if matches!(
+        node.execution.as_str(),
+        "dispatched" | "running" | "verifying"
+    ) {
+        return true;
+    }
+    node.intent == "in_progress" && node.execution == "idle"
+}
+
+fn attempt_has_candidate_output(attempt: &WorkspaceTaskSessionAttemptRecord) -> bool {
+    attempt
+        .candidate_summary
+        .as_deref()
+        .is_some_and(|summary| !summary.trim().is_empty())
+        || !attempt.candidate_artifacts_json.is_empty()
+        || !attempt.candidate_verifications_json.is_empty()
 }
 
 fn release_node_for_terminal_retry(
@@ -2001,6 +2117,7 @@ mod tests {
         plans: Mutex<HashMap<String, WorkspacePlanRecord>>,
         nodes: Mutex<HashMap<String, WorkspacePlanNodeRecord>>,
         attempts: Mutex<HashMap<String, WorkspaceTaskSessionAttemptRecord>>,
+        plan_events: Mutex<Vec<WorkspacePlanEventRecord>>,
         outbox: Mutex<Vec<WorkspacePlanOutboxRecord>>,
         active_worker_conversations: Mutex<i64>,
         supervisor_dispose_nodes: Mutex<HashSet<(String, String, String)>>,
@@ -2040,6 +2157,10 @@ mod tests {
 
         fn attempts(&self) -> Vec<WorkspaceTaskSessionAttemptRecord> {
             self.attempts.lock().unwrap().values().cloned().collect()
+        }
+
+        fn plan_events(&self) -> Vec<WorkspacePlanEventRecord> {
+            self.plan_events.lock().unwrap().clone()
         }
 
         fn outbox(&self) -> Vec<WorkspacePlanOutboxRecord> {
@@ -2190,6 +2311,14 @@ mod tests {
                 plan_id.to_string(),
                 node_id.to_string(),
             )))
+        }
+
+        async fn create_plan_event(
+            &self,
+            event: WorkspacePlanEventRecord,
+        ) -> CoreResult<WorkspacePlanEventRecord> {
+            self.plan_events.lock().unwrap().push(event.clone());
+            Ok(event)
         }
 
         async fn enqueue_plan_outbox(
@@ -2743,6 +2872,57 @@ mod tests {
             queued[0].metadata_json["retry_attempt_id"],
             "missing-attempt"
         );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_reconciles_reported_attempt_node_and_writes_event() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-test",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("worker produced a candidate".to_string());
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-test"));
+        assert_eq!(
+            node.metadata_json["reported_attempt_status"],
+            AWAITING_LEADER_ADJUDICATION_STATUS
+        );
+        assert!(node.metadata_json["reported_attempt_reconciled_at"].is_string());
+        assert!(store.outbox().is_empty());
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "auto_reported_attempt_reconciled");
+        assert_eq!(events[0].source, "workspace_plan_supervisor_tick");
+        assert_eq!(events[0].node_id.as_deref(), Some("node-test"));
+        assert_eq!(events[0].attempt_id.as_deref(), Some("attempt-test"));
+        assert_eq!(
+            events[0].payload_json["reason"],
+            "active_plan_node_points_to_reported_attempt"
+        );
+        assert_eq!(events[0].payload_json["node_ids"], json!(["node-test"]));
     }
 
     #[tokio::test]
