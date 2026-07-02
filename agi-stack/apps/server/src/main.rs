@@ -58,9 +58,9 @@ use agistack_adapters_mem::{
 use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
-    PgMemoryRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
-    PgShareRepository, PgSkillRepository, PgTenantRepository, PgTrustRepository, PgUserStore,
-    PgVectorIndex, PgWorkspaceRepository,
+    PgMemoryRepository, PgPool, PgProjectReadRepository, PgProjectSandboxRepository,
+    PgProjectStore, PgShareRepository, PgSkillRepository, PgTenantRepository, PgTrustRepository,
+    PgUserStore, PgVectorIndex, PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -90,8 +90,9 @@ use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
 use crate::workspace_outbox_worker::{
-    workspace_plan_outbox_handlers, PgWorkspacePlanOutboxStore, SharedWorkspacePlanOutboxWorker,
-    WorkspacePlanOutboxWorker, WorkspacePlanOutboxWorkerConfig,
+    workspace_plan_outbox_handlers_with_stage_runner, PgWorkspacePlanOutboxStore,
+    ProjectSandboxPipelineStageRunner, SharedWorkspacePlanOutboxWorker,
+    WorkspacePipelineStageRunner, WorkspacePlanOutboxWorker, WorkspacePlanOutboxWorkerConfig,
 };
 
 /// Shared, cheaply-cloneable application state. Every `Arc`/`HotPlugRegistry`
@@ -498,7 +499,7 @@ async fn build_memory_and_auth(
     SharedTrust,
     SharedSkills,
     SharedWorkspaces,
-    Option<SharedWorkspacePlanOutboxWorker>,
+    Option<PgPool>,
     Option<PgProjectSandboxRepository>,
     Option<PgProjectReadRepository>,
 ) {
@@ -552,13 +553,6 @@ async fn build_memory_and_auth(
                 PgWorkspaceRepository::new(pool.clone()),
                 object_store,
             ));
-            let workspace_plan_outbox_worker = Some(Arc::new(WorkspacePlanOutboxWorker::new(
-                Arc::new(PgWorkspacePlanOutboxStore::new(PgWorkspaceRepository::new(
-                    pool.clone(),
-                ))),
-                WorkspacePlanOutboxWorkerConfig::from_env(),
-                workspace_plan_outbox_handlers(Arc::new(PgWorkspaceRepository::new(pool.clone()))),
-            )));
             let sandbox_repo = Some(PgProjectSandboxRepository::new(pool.clone()));
             let project_sandbox_config_repo = Some(PgProjectReadRepository::new(pool.clone()));
             eprintln!("[agistack] persistence: PostgreSQL (production, shared Python schema)");
@@ -571,7 +565,7 @@ async fn build_memory_and_auth(
                 trust,
                 skills,
                 workspaces,
-                workspace_plan_outbox_worker,
+                Some(pool),
                 sandbox_repo,
                 project_sandbox_config_repo,
             )
@@ -752,7 +746,7 @@ async fn build_state() -> AppState {
         trust,
         skills,
         workspaces,
-        workspace_plan_outbox_worker,
+        workspace_plan_pool,
         sandbox_repo,
         project_config_repo,
     ) = build_memory_and_auth(llm.clone(), embedding, object_store).await;
@@ -777,6 +771,21 @@ async fn build_state() -> AppState {
             .with_tool_host(Arc::clone(&tool_host))
             .with_ws_mcp_connector(),
     );
+    let workspace_plan_outbox_worker = workspace_plan_pool.map(|pool| {
+        let stage_runner: Arc<dyn WorkspacePipelineStageRunner> = Arc::new(
+            ProjectSandboxPipelineStageRunner::new(Arc::clone(&sandboxes)),
+        );
+        Arc::new(WorkspacePlanOutboxWorker::new(
+            Arc::new(PgWorkspacePlanOutboxStore::new(PgWorkspaceRepository::new(
+                pool.clone(),
+            ))),
+            WorkspacePlanOutboxWorkerConfig::from_env(),
+            workspace_plan_outbox_handlers_with_stage_runner(
+                Arc::new(PgWorkspaceRepository::new(pool)),
+                Some(stage_runner),
+            ),
+        ))
+    });
     let engine = Arc::new(ReActEngine::new(
         llm,
         Arc::clone(&tool_host),

@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use agistack_adapters_postgres::{
     PgWorkspaceRepository, WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
@@ -21,6 +22,8 @@ use serde_json::{json, Map, Value};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
+use crate::sandbox_api::{ExecuteToolResponse, ProjectSandboxService};
+
 pub(crate) type SharedWorkspacePlanOutboxWorker = Arc<WorkspacePlanOutboxWorker>;
 pub(crate) type WorkspacePlanOutboxHandlers = HashMap<String, Arc<dyn WorkspacePlanOutboxHandler>>;
 
@@ -33,6 +36,7 @@ const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
 const PLANNING_CONTRACT_SOURCE: &str = "planner_agent_code_analysis";
 const DEFAULT_PIPELINE_TIMEOUT_SECONDS: i32 = 600;
 const DEFAULT_PREVIEW_PORT: i32 = 3000;
+const PIPELINE_EXIT_MARKER: &str = "__MEMSTACK_PIPELINE_EXIT_CODE__=";
 const WORKSPACE_PLAN_SYSTEM_ACTOR_ID: &str = "workspace-plan:system";
 const ROOT_GOAL_TASK_ID: &str = "root_goal_task_id";
 const WORKSPACE_PLAN_ID: &str = "workspace_plan_id";
@@ -168,8 +172,16 @@ const FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS: &[&str] = &[
     "worktree_integration_worktree_path",
 ];
 
+#[cfg(test)]
 pub(crate) fn workspace_plan_outbox_handlers(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
+) -> WorkspacePlanOutboxHandlers {
+    workspace_plan_outbox_handlers_with_stage_runner(dispatch_store, None)
+}
+
+pub(crate) fn workspace_plan_outbox_handlers_with_stage_runner(
+    dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
+    stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
 ) -> WorkspacePlanOutboxHandlers {
     let handoff = Arc::new(DurableHandoffResumeHandler::new(Arc::clone(
         &dispatch_store,
@@ -180,7 +192,10 @@ pub(crate) fn workspace_plan_outbox_handlers(
     let supervisor_tick = Arc::new(SupervisorTickAdmissionHandler::new(Arc::clone(
         &dispatch_store,
     )));
-    let pipeline_run = Arc::new(PipelineRunAdmissionHandler::new(dispatch_store));
+    let pipeline_run = Arc::new(PipelineRunAdmissionHandler::new(
+        dispatch_store,
+        stage_runner,
+    ));
     HashMap::from([
         (
             SUPERVISOR_TICK_EVENT.to_string(),
@@ -291,6 +306,72 @@ pub(crate) trait WorkspacePlanOutboxHandler: Send + Sync {
         &self,
         item: WorkspacePlanOutboxRecord,
     ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome>;
+}
+
+#[async_trait]
+pub(crate) trait WorkspacePipelineStageRunner: Send + Sync {
+    async fn run_stage(
+        &self,
+        project_id: &str,
+        contract: &PipelineContractFoundation,
+        stage: &PipelineStageSpec,
+    ) -> PipelineStageResult;
+}
+
+pub(crate) struct ProjectSandboxPipelineStageRunner {
+    sandboxes: Arc<ProjectSandboxService>,
+}
+
+impl ProjectSandboxPipelineStageRunner {
+    pub(crate) fn new(sandboxes: Arc<ProjectSandboxService>) -> Self {
+        Self { sandboxes }
+    }
+}
+
+#[async_trait]
+impl WorkspacePipelineStageRunner for ProjectSandboxPipelineStageRunner {
+    async fn run_stage(
+        &self,
+        project_id: &str,
+        contract: &PipelineContractFoundation,
+        stage: &PipelineStageSpec,
+    ) -> PipelineStageResult {
+        let command = wrapped_pipeline_command(
+            &stage.command,
+            contract.code_root.as_deref(),
+            &contract.env_json,
+        );
+        let started = Instant::now();
+        let raw = self
+            .sandboxes
+            .execute_pipeline_tool(
+                project_id,
+                "bash",
+                &json!({
+                    "command": command,
+                    "timeout": stage.timeout_seconds
+                }),
+                f64::from(stage.timeout_seconds.saturating_add(5).max(1)),
+            )
+            .await;
+        let duration_ms = saturating_duration_ms(started.elapsed().as_millis());
+        match raw {
+            Ok(response) => pipeline_stage_result_from_tool_response(stage, response, duration_ms),
+            Err(err) => PipelineStageResult {
+                stage: stage.stage.clone(),
+                status: "failed".to_string(),
+                command: stage.command.clone(),
+                exit_code: Some(1),
+                stdout_preview: String::new(),
+                stderr_preview: compact_text(&format!("{err:?}"), 4_000),
+                duration_ms,
+                log_ref: None,
+                artifact_refs: Vec::new(),
+                service_id: stage.service_id.clone(),
+                required: stage.required,
+            },
+        }
+    }
 }
 
 #[async_trait]
@@ -1348,11 +1429,18 @@ impl WorkerLaunchAdmissionHandler {
 
 pub(crate) struct PipelineRunAdmissionHandler {
     store: Arc<dyn WorkspacePlanDispatchStore>,
+    stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
 }
 
 impl PipelineRunAdmissionHandler {
-    pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
-        Self { store }
+    pub(crate) fn new(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
+    ) -> Self {
+        Self {
+            store,
+            stage_runner,
+        }
     }
 }
 
@@ -1481,7 +1569,7 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
             node_id: Some(node_id.clone()),
             attempt_id: attempt_id.clone(),
             commit_ref: node_expected_commit_ref(&node),
-            provider: contract.provider,
+            provider: contract.provider.clone(),
             status: "running".to_string(),
             reason: None,
             started_at: Some(now),
@@ -1494,13 +1582,70 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
         };
         let run = self.store.create_pipeline_run(run).await?;
         mark_existing_pipeline_run_running(&mut node, &run, now);
-        self.store.save_plan_node(node).await?;
+        self.store.save_plan_node(node.clone()).await?;
+
+        if contract.can_execute_inline_stages() {
+            if let Some(stage_runner) = &self.stage_runner {
+                let outcome = execute_sandbox_native_pipeline_stages(
+                    self.store.as_ref(),
+                    stage_runner.as_ref(),
+                    &workspace,
+                    &contract,
+                    &run,
+                )
+                .await?;
+                let completed_at = Utc::now();
+                let run = self
+                    .store
+                    .finish_pipeline_run(
+                        &run.id,
+                        &outcome.status,
+                        outcome.reason.as_deref(),
+                        &json!({
+                            "stage_count": outcome.stage_results.len(),
+                            "service_count": 0,
+                            "preview_urls": {}
+                        }),
+                        completed_at,
+                    )
+                    .await?
+                    .unwrap_or_else(|| {
+                        let mut fallback = run.clone();
+                        fallback.status = outcome.status.clone();
+                        fallback.reason = outcome.reason.clone();
+                        fallback.completed_at = Some(completed_at);
+                        fallback.updated_at = Some(completed_at);
+                        fallback
+                    });
+                finish_pipeline_on_node(
+                    &mut node,
+                    &run,
+                    &outcome.status,
+                    outcome.reason.as_deref(),
+                    &outcome.evidence_refs,
+                    None,
+                    contract.health_url.as_deref(),
+                    completed_at,
+                );
+                self.store.save_plan_node(node).await?;
+                self.store
+                    .enqueue_plan_outbox(pipeline_completed_supervisor_tick(
+                        &workspace_id,
+                        &plan_id,
+                        &node_id,
+                        &run.id,
+                        &outcome.status,
+                        completed_at,
+                    ))
+                    .await?;
+            }
+        }
 
         Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
     }
 }
 
-struct PipelineContractFoundation {
+pub(crate) struct PipelineContractFoundation {
     provider: String,
     code_root: Option<String>,
     commands_json: Value,
@@ -1514,6 +1659,44 @@ struct PipelineContractFoundation {
     agent_managed: bool,
     contract_source: String,
     metadata_json: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PipelineStageSpec {
+    stage: String,
+    command: String,
+    required: bool,
+    timeout_seconds: i32,
+    service_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PipelineStageResult {
+    stage: String,
+    status: String,
+    command: String,
+    exit_code: Option<i32>,
+    stdout_preview: String,
+    stderr_preview: String,
+    duration_ms: i32,
+    log_ref: Option<String>,
+    artifact_refs: Vec<String>,
+    service_id: Option<String>,
+    required: bool,
+}
+
+impl PipelineStageResult {
+    fn passed(&self) -> bool {
+        matches!(self.status.as_str(), "success" | "skipped")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PipelineStageExecutionOutcome {
+    status: String,
+    reason: Option<String>,
+    stage_results: Vec<PipelineStageResult>,
+    evidence_refs: Vec<String>,
 }
 
 impl PipelineContractFoundation {
@@ -1535,6 +1718,305 @@ impl PipelineContractFoundation {
         }
         service_count > 0
     }
+
+    fn can_execute_inline_stages(&self) -> bool {
+        self.provider == SANDBOX_NATIVE_PROVIDER
+            && !self.auto_deploy
+            && self.services_json.as_array().map_or(0, Vec::len) == 0
+    }
+}
+
+async fn execute_sandbox_native_pipeline_stages(
+    store: &dyn WorkspacePlanDispatchStore,
+    runner: &dyn WorkspacePipelineStageRunner,
+    workspace: &WorkspaceRecord,
+    contract: &PipelineContractFoundation,
+    run: &WorkspacePipelineRunRecord,
+) -> CoreResult<PipelineStageExecutionOutcome> {
+    let stages = pipeline_stage_specs_from_json(&contract.commands_json, contract.timeout_seconds);
+    let mut stage_results = Vec::new();
+    let mut evidence_refs = Vec::new();
+    let mut failure_reason = None;
+
+    for stage in stages {
+        let started_at = Utc::now();
+        let stage_row = store
+            .create_pipeline_stage_run(WorkspacePipelineStageRunRecord {
+                id: generate_uuid_v4(),
+                run_id: run.id.clone(),
+                workspace_id: workspace.id.clone(),
+                stage: stage.stage.clone(),
+                status: "running".to_string(),
+                command: Some(stage.command.clone()),
+                exit_code: None,
+                stdout_preview: None,
+                stderr_preview: None,
+                log_ref: None,
+                artifact_refs_json: Vec::new(),
+                started_at: Some(started_at),
+                completed_at: None,
+                duration_ms: None,
+                metadata_json: json!({
+                    "required": stage.required,
+                    "service_id": stage.service_id
+                }),
+                created_at: started_at,
+                updated_at: None,
+            })
+            .await?;
+        let stage_result = runner
+            .run_stage(&workspace.project_id, contract, &stage)
+            .await;
+        let completed_at = Utc::now();
+        let _ = store
+            .finish_pipeline_stage_run(
+                &stage_row.id,
+                &stage_result.status,
+                stage_result.exit_code,
+                Some(&stage_result.stdout_preview),
+                Some(&stage_result.stderr_preview),
+                stage_result.log_ref.as_deref(),
+                &stage_result.artifact_refs,
+                &json!({
+                    "duration_ms_observed": stage_result.duration_ms,
+                    "service_id": stage_result.service_id
+                }),
+                completed_at,
+            )
+            .await?;
+
+        let passed = stage_result.passed();
+        let status_label = if passed { "passed" } else { "failed" };
+        evidence_refs.push(format!(
+            "pipeline_stage:{}:{status_label}",
+            stage_result.stage
+        ));
+        if let Some(service_id) = &stage_result.service_id {
+            evidence_refs.push(format!(
+                "pipeline_stage:{}:{status_label}:{service_id}",
+                stage_result.stage
+            ));
+        }
+        if !passed && stage_result.required {
+            failure_reason = Some(format!(
+                "stage {} failed with exit {}",
+                stage_result.stage,
+                stage_result.exit_code.unwrap_or(1)
+            ));
+            stage_results.push(stage_result);
+            break;
+        }
+        stage_results.push(stage_result);
+    }
+
+    let status = if failure_reason.is_none() {
+        "success"
+    } else {
+        "failed"
+    }
+    .to_string();
+    evidence_refs.insert(
+        0,
+        format!(
+            "ci_pipeline:{}",
+            if status == "success" {
+                "passed"
+            } else {
+                "failed"
+            }
+        ),
+    );
+    evidence_refs.push(format!("pipeline_run:{status}:{}", run.id));
+    dedup_strings(&mut evidence_refs);
+
+    Ok(PipelineStageExecutionOutcome {
+        status,
+        reason: failure_reason,
+        stage_results,
+        evidence_refs,
+    })
+}
+
+fn pipeline_stage_specs_from_json(
+    commands_json: &Value,
+    default_timeout: i32,
+) -> Vec<PipelineStageSpec> {
+    commands_json
+        .as_array()
+        .map(|stages| {
+            stages
+                .iter()
+                .filter_map(|stage| {
+                    let map = stage.as_object()?;
+                    let stage_name =
+                        string_from_map(map, "stage").or_else(|| string_from_map(map, "id"))?;
+                    let command = string_from_map(map, "command")?;
+                    Some(PipelineStageSpec {
+                        stage: stage_name,
+                        command,
+                        required: bool_from_map_default(map, "required", true),
+                        timeout_seconds: positive_i32_from_map(
+                            map,
+                            "timeout_seconds",
+                            default_timeout,
+                        ),
+                        service_id: string_from_map(map, "service_id"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn wrapped_pipeline_command(command: &str, code_root: Option<&str>, env_json: &Value) -> String {
+    let mut lines = vec!["set +e".to_string()];
+    if let Some(code_root) = code_root.filter(|value| !value.trim().is_empty()) {
+        let quoted = shell_quote(code_root);
+        lines.push(format!("cd {quoted}"));
+        lines.push("code=$?".to_string());
+        lines.push("if [ \"$code\" -ne 0 ]; then".to_string());
+        lines.push(format!(
+            "  printf 'workspace pipeline code_root is not accessible: %s\\n' {quoted} >&2"
+        ));
+        lines.push(format!(
+            "  printf \"\\n{PIPELINE_EXIT_MARKER}%s\\n\" \"$code\""
+        ));
+        lines.push("  exit 0".to_string());
+        lines.push("fi".to_string());
+    }
+    for (key, value) in sorted_pipeline_env(env_json) {
+        lines.push(format!("export {key}={}", shell_quote(&value)));
+    }
+    lines.push("(".to_string());
+    lines.push(command.to_string());
+    lines.push(")".to_string());
+    lines.push("code=$?".to_string());
+    lines.push(format!(
+        "printf \"\\n{PIPELINE_EXIT_MARKER}%s\\n\" \"$code\""
+    ));
+    lines.push("exit 0".to_string());
+    lines.join("\n")
+}
+
+fn sorted_pipeline_env(env_json: &Value) -> Vec<(String, String)> {
+    let mut values = env_json
+        .as_object()
+        .into_iter()
+        .flat_map(|env| env.iter())
+        .filter_map(|(key, value)| {
+            if key
+                .replace('_', "")
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric())
+            {
+                value.as_str().map(|value| (key.clone(), value.to_string()))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    values.sort_by(|left, right| left.0.cmp(&right.0));
+    values
+}
+
+fn shell_quote(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn pipeline_stage_result_from_tool_response(
+    stage: &PipelineStageSpec,
+    response: ExecuteToolResponse,
+    duration_ms: i32,
+) -> PipelineStageResult {
+    let text = tool_response_text(&response);
+    let stdout = if response.is_error {
+        String::new()
+    } else {
+        text.clone()
+    };
+    let stderr = if response.is_error {
+        text.clone()
+    } else {
+        String::new()
+    };
+    let combined = format!("{stdout}\n{stderr}").trim().to_string();
+    let exit_code =
+        exit_code_from_pipeline_output(&combined).unwrap_or(if response.is_error { 1 } else { 0 });
+    let cleaned = strip_pipeline_exit_markers(&combined);
+    let status = if exit_code == 0 { "success" } else { "failed" }.to_string();
+    let log_ref = format!(
+        "sandbox://pipeline/{}/{}.log",
+        generate_uuid_v4(),
+        stage.stage
+    );
+    PipelineStageResult {
+        stage: stage.stage.clone(),
+        status,
+        command: stage.command.clone(),
+        exit_code: Some(exit_code),
+        stdout_preview: compact_text(&cleaned, 4_000),
+        stderr_preview: if exit_code == 0 {
+            String::new()
+        } else {
+            compact_text(&stderr, 4_000)
+        },
+        duration_ms,
+        log_ref: Some(log_ref.clone()),
+        artifact_refs: vec![format!("pipeline_log:{}:{log_ref}", stage.stage)],
+        service_id: stage.service_id.clone(),
+        required: stage.required,
+    }
+}
+
+fn tool_response_text(response: &ExecuteToolResponse) -> String {
+    response
+        .content
+        .iter()
+        .filter_map(|item| {
+            item.get("text")
+                .and_then(Value::as_str)
+                .or_else(|| item.as_str())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn exit_code_from_pipeline_output(output: &str) -> Option<i32> {
+    let start = output.find(PIPELINE_EXIT_MARKER)? + PIPELINE_EXIT_MARKER.len();
+    let digits = output[start..]
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>();
+    digits.parse().ok()
+}
+
+fn strip_pipeline_exit_markers(output: &str) -> String {
+    output
+        .lines()
+        .filter(|line| !line.contains(PIPELINE_EXIT_MARKER))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+fn compact_text(value: &str, limit: usize) -> String {
+    let compacted = value.trim();
+    if compacted.len() <= limit {
+        return compacted.to_string();
+    }
+    let prefix = compacted
+        .chars()
+        .take(limit.saturating_sub(15))
+        .collect::<String>();
+    format!("{prefix}...[truncated]")
+}
+
+fn saturating_duration_ms(duration_ms: u128) -> i32 {
+    i32::try_from(duration_ms).unwrap_or(i32::MAX)
 }
 
 fn pipeline_contract_foundation(workspace: &WorkspaceRecord) -> PipelineContractFoundation {
@@ -1904,6 +2386,98 @@ fn reflect_existing_pipeline_run_to_node(
 
     node.metadata_json = Value::Object(metadata);
     node.updated_at = Some(now);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish_pipeline_on_node(
+    node: &mut WorkspacePlanNodeRecord,
+    run: &WorkspacePipelineRunRecord,
+    status: &str,
+    reason: Option<&str>,
+    evidence_refs: &[String],
+    preview_url: Option<&str>,
+    health_url: Option<&str>,
+    now: DateTime<Utc>,
+) {
+    let mut metadata = object_or_empty(node.metadata_json.clone());
+    for (key, value) in pipeline_node_metadata_projection(&run.metadata_json) {
+        metadata.insert(key, value);
+    }
+    let summary = reason.unwrap_or("harness-native CI/CD pipeline passed");
+    metadata.insert("pipeline_run_id".to_string(), json!(run.id));
+    metadata.insert("pipeline_status".to_string(), json!(status));
+    metadata.insert("pipeline_gate_status".to_string(), json!(status));
+    metadata.insert("pipeline_finished_at".to_string(), json!(now.to_rfc3339()));
+    metadata.insert("pipeline_last_summary".to_string(), json!(summary));
+    let pipeline_evidence_refs =
+        merge_string_values(metadata.get("pipeline_evidence_refs"), evidence_refs);
+    metadata.insert(
+        "pipeline_evidence_refs".to_string(),
+        json!(pipeline_evidence_refs),
+    );
+    let execution_verifications =
+        merge_string_values(metadata.get("execution_verifications"), evidence_refs);
+    metadata.insert(
+        "execution_verifications".to_string(),
+        json!(execution_verifications),
+    );
+    let merged_evidence_refs = merge_string_values(metadata.get("evidence_refs"), evidence_refs);
+    metadata.insert("evidence_refs".to_string(), json!(merged_evidence_refs));
+    if let Some(preview_url) = preview_url {
+        metadata.insert("preview_url".to_string(), json!(preview_url));
+    }
+    if let Some(health_url) = health_url {
+        metadata.insert("health_url".to_string(), json!(health_url));
+    }
+    if status == "success" {
+        metadata.insert("last_verification_summary".to_string(), json!(summary));
+        metadata.insert("last_verification_passed".to_string(), json!(true));
+        metadata.insert("last_verification_hard_fail".to_string(), json!(false));
+        metadata.insert(
+            "last_verification_ran_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.remove("pipeline_stop_reason");
+    }
+    let (intent, execution) = pipeline_completion_node_state(node, &metadata, status);
+    node.intent = intent;
+    node.execution = execution;
+    node.metadata_json = Value::Object(metadata);
+    node.updated_at = Some(now);
+}
+
+fn pipeline_completed_supervisor_tick(
+    workspace_id: &str,
+    plan_id: &str,
+    node_id: &str,
+    pipeline_run_id: &str,
+    pipeline_status: &str,
+    now: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    WorkspacePlanOutboxRecord {
+        id: generate_uuid_v4(),
+        plan_id: Some(plan_id.to_string()),
+        workspace_id: workspace_id.to_string(),
+        event_type: SUPERVISOR_TICK_EVENT.to_string(),
+        payload_json: json!({
+            "workspace_id": workspace_id,
+            "plan_id": plan_id,
+            "node_id": node_id,
+            "pipeline_run_id": pipeline_run_id,
+            "pipeline_status": pipeline_status
+        }),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: 3,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "workspace_plan.pipeline_run_completed"}),
+        created_at: now,
+        updated_at: None,
+    }
 }
 
 fn pipeline_node_metadata_projection(run_metadata: &Value) -> Map<String, Value> {
@@ -4499,6 +5073,63 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct StaticPipelineStageRunner {
+        results: Mutex<HashMap<String, PipelineStageResult>>,
+        seen: Mutex<Vec<(String, String, String)>>,
+    }
+
+    impl StaticPipelineStageRunner {
+        fn with_result(self, result: PipelineStageResult) -> Self {
+            self.results
+                .lock()
+                .unwrap()
+                .insert(result.stage.clone(), result);
+            self
+        }
+
+        fn seen(&self) -> Vec<(String, String, String)> {
+            self.seen.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl WorkspacePipelineStageRunner for StaticPipelineStageRunner {
+        async fn run_stage(
+            &self,
+            project_id: &str,
+            _contract: &PipelineContractFoundation,
+            stage: &PipelineStageSpec,
+        ) -> PipelineStageResult {
+            self.seen.lock().unwrap().push((
+                project_id.to_string(),
+                stage.stage.clone(),
+                stage.command.clone(),
+            ));
+            self.results
+                .lock()
+                .unwrap()
+                .get(&stage.stage)
+                .cloned()
+                .unwrap_or_else(|| PipelineStageResult {
+                    stage: stage.stage.clone(),
+                    status: "success".to_string(),
+                    command: stage.command.clone(),
+                    exit_code: Some(0),
+                    stdout_preview: "ok".to_string(),
+                    stderr_preview: String::new(),
+                    duration_ms: 25,
+                    log_ref: Some(format!("sandbox://pipeline/test/{}.log", stage.stage)),
+                    artifact_refs: vec![format!(
+                        "pipeline_log:{}:sandbox://pipeline/test/{}.log",
+                        stage.stage, stage.stage
+                    )],
+                    service_id: stage.service_id.clone(),
+                    required: stage.required,
+                })
+        }
+    }
+
     #[derive(Debug, Clone, PartialEq)]
     struct FakePipelineContractRecord {
         id: String,
@@ -4600,6 +5231,15 @@ mod tests {
                 .get(id)
                 .unwrap()
                 .clone()
+        }
+
+        fn pipeline_stage_runs(&self) -> Vec<WorkspacePipelineStageRunRecord> {
+            self.pipeline_stage_runs
+                .lock()
+                .unwrap()
+                .values()
+                .cloned()
+                .collect()
         }
 
         fn pipeline_contract(
@@ -5298,7 +5938,17 @@ mod tests {
     fn pipeline_run_handler(
         store: Arc<FakeWorkspacePlanDispatchStore>,
     ) -> PipelineRunAdmissionHandler {
-        PipelineRunAdmissionHandler::new(store as Arc<dyn WorkspacePlanDispatchStore>)
+        PipelineRunAdmissionHandler::new(store as Arc<dyn WorkspacePlanDispatchStore>, None)
+    }
+
+    fn pipeline_run_handler_with_stage_runner(
+        store: Arc<FakeWorkspacePlanDispatchStore>,
+        stage_runner: Arc<dyn WorkspacePipelineStageRunner>,
+    ) -> PipelineRunAdmissionHandler {
+        PipelineRunAdmissionHandler::new(
+            store as Arc<dyn WorkspacePlanDispatchStore>,
+            Some(stage_runner),
+        )
     }
 
     fn pipeline_run_item() -> WorkspacePlanOutboxRecord {
@@ -5678,6 +6328,138 @@ mod tests {
             contract.metadata_json["contract_source"],
             PLANNING_CONTRACT_SOURCE
         );
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_executes_no_service_stage_and_finishes_success() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_pipeline_contract());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1234567890"}));
+        store.insert_node(node);
+        let runner = Arc::new(StaticPipelineStageRunner::default());
+        let stage_runner: Arc<dyn WorkspacePipelineStageRunner> = runner.clone();
+        let handler = pipeline_run_handler_with_stage_runner(Arc::clone(&store), stage_runner);
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert_eq!(
+            runner.seen(),
+            vec![(
+                "project-test".to_string(),
+                "test".to_string(),
+                "cargo test --workspace".to_string()
+            )]
+        );
+        let runs = store.pipeline_runs();
+        assert_eq!(runs.len(), 1);
+        let run = &runs[0];
+        assert_eq!(run.status, "success");
+        assert_eq!(run.reason, None);
+        assert!(run.completed_at.is_some());
+        assert_eq!(run.metadata_json["stage_count"], 1);
+        assert_eq!(run.metadata_json["service_count"], 0);
+
+        let stages = store.pipeline_stage_runs();
+        assert_eq!(stages.len(), 1);
+        let stage = &stages[0];
+        assert_eq!(stage.run_id, run.id);
+        assert_eq!(stage.stage, "test");
+        assert_eq!(stage.status, "success");
+        assert_eq!(stage.exit_code, Some(0));
+        assert_eq!(stage.stdout_preview.as_deref(), Some("ok"));
+        assert_eq!(stage.metadata_json["required"], true);
+        assert_eq!(stage.metadata_json["duration_ms_observed"], 25);
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.metadata_json["pipeline_status"], "success");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "success");
+        assert_eq!(node.metadata_json["last_verification_passed"], true);
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs")),
+            vec![
+                "ci_pipeline:passed".to_string(),
+                "pipeline_stage:test:passed".to_string(),
+                format!("pipeline_run:success:{}", run.id)
+            ]
+        );
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("execution_verifications")),
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs"))
+        );
+
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, SUPERVISOR_TICK_EVENT);
+        assert_eq!(queued[0].payload_json["pipeline_run_id"], run.id);
+        assert_eq!(queued[0].payload_json["pipeline_status"], "success");
+        assert_eq!(
+            queued[0].metadata_json["source"],
+            "workspace_plan.pipeline_run_completed"
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_executes_no_service_stage_and_finishes_failure() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_pipeline_contract());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        let runner = Arc::new(StaticPipelineStageRunner::default().with_result(
+            PipelineStageResult {
+                stage: "test".to_string(),
+                status: "failed".to_string(),
+                command: "cargo test --workspace".to_string(),
+                exit_code: Some(2),
+                stdout_preview: "tests failed".to_string(),
+                stderr_preview: "failure details".to_string(),
+                duration_ms: 31,
+                log_ref: Some("sandbox://pipeline/test/test.log".to_string()),
+                artifact_refs: vec![
+                    "pipeline_log:test:sandbox://pipeline/test/test.log".to_string(),
+                ],
+                service_id: None,
+                required: true,
+            },
+        ));
+        let stage_runner: Arc<dyn WorkspacePipelineStageRunner> = runner;
+        let handler = pipeline_run_handler_with_stage_runner(Arc::clone(&store), stage_runner);
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.status, "failed");
+        assert_eq!(run.reason.as_deref(), Some("stage test failed with exit 2"));
+        let stage = store.pipeline_stage_runs().into_iter().next().unwrap();
+        assert_eq!(stage.status, "failed");
+        assert_eq!(stage.exit_code, Some(2));
+        assert_eq!(stage.stderr_preview.as_deref(), Some("failure details"));
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.metadata_json["pipeline_status"], "failed");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "failed");
+        assert!(node.metadata_json.get("last_verification_passed").is_none());
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs")),
+            vec![
+                "ci_pipeline:failed".to_string(),
+                "pipeline_stage:test:failed".to_string(),
+                format!("pipeline_run:failed:{}", run.id)
+            ]
+        );
+        assert_eq!(store.outbox().len(), 1);
     }
 
     #[tokio::test]

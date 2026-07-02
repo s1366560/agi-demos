@@ -139,7 +139,7 @@ impl IntoResponse for SandboxApiError {
     }
 }
 
-type SandboxApiResult<T> = Result<T, SandboxApiError>;
+pub(crate) type SandboxApiResult<T> = Result<T, SandboxApiError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SandboxProfile {
@@ -1340,17 +1340,18 @@ impl ProjectSandboxService {
         Ok(true)
     }
 
-    async fn execute_tool(
+    async fn execute_tool_with_max_timeout(
         &self,
         project_id: &str,
         tool_name: &str,
         arguments: &Value,
         timeout_seconds: f64,
+        max_timeout_seconds: f64,
     ) -> SandboxApiResult<ExecuteToolResponse> {
-        if !(1.0..=300.0).contains(&timeout_seconds) || !timeout_seconds.is_finite() {
-            return Err(SandboxApiError::bad_request(
-                "Execution timeout must be between 1 and 300 seconds",
-            ));
+        if !(1.0..=max_timeout_seconds).contains(&timeout_seconds) || !timeout_seconds.is_finite() {
+            return Err(SandboxApiError::bad_request(format!(
+                "Execution timeout must be between 1 and {max_timeout_seconds:.0} seconds"
+            )));
         }
 
         let info = self
@@ -1371,6 +1372,34 @@ impl ProjectSandboxService {
             .map_err(|_| SandboxApiError::internal("Execution failed"))?;
         let elapsed = started.elapsed().as_millis().min(i64::MAX as u128) as i64;
         Ok(normalize_tool_result(&raw, elapsed))
+    }
+
+    async fn execute_tool(
+        &self,
+        project_id: &str,
+        tool_name: &str,
+        arguments: &Value,
+        timeout_seconds: f64,
+    ) -> SandboxApiResult<ExecuteToolResponse> {
+        self.execute_tool_with_max_timeout(project_id, tool_name, arguments, timeout_seconds, 300.0)
+            .await
+    }
+
+    pub(crate) async fn execute_pipeline_tool(
+        &self,
+        project_id: &str,
+        tool_name: &str,
+        arguments: &Value,
+        timeout_seconds: f64,
+    ) -> SandboxApiResult<ExecuteToolResponse> {
+        self.execute_tool_with_max_timeout(
+            project_id,
+            tool_name,
+            arguments,
+            timeout_seconds,
+            3_600.0,
+        )
+        .await
     }
 
     async fn register_http_service(
@@ -1836,11 +1865,11 @@ fn default_tool_timeout() -> f64 {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-struct ExecuteToolResponse {
-    success: bool,
-    content: Vec<Value>,
-    is_error: bool,
-    execution_time_ms: Option<i64>,
+pub(crate) struct ExecuteToolResponse {
+    pub(crate) success: bool,
+    pub(crate) content: Vec<Value>,
+    pub(crate) is_error: bool,
+    pub(crate) execution_time_ms: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
