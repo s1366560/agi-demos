@@ -21,6 +21,10 @@ const WORKSPACE_COLS: &str = "id, tenant_id, project_id, name, description, crea
 const TASK_COLS: &str = "id, workspace_id, title, description, created_by, assignee_user_id, \
     assignee_agent_id, status, priority, estimated_effort, blocker_reason, metadata_json, \
     created_at, updated_at, completed_at, archived_at";
+const TASK_SESSION_ATTEMPT_COLS: &str = "id, workspace_task_id, root_goal_task_id, workspace_id, \
+    attempt_number, status, conversation_id, worker_agent_id, leader_agent_id, candidate_summary, \
+    candidate_artifacts_json, candidate_verifications_json, leader_feedback, adjudication_reason, \
+    created_at, updated_at, completed_at";
 const NODE_COLS: &str = "id, workspace_id, node_type, ref_id, title, position_x, position_y, \
     hex_q, hex_r, status, tags_json, data_json, created_at, updated_at";
 const EDGE_COLS: &str = "id, workspace_id, source_node_id, target_node_id, label, \
@@ -93,6 +97,27 @@ pub struct WorkspaceTaskRecord {
     pub updated_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub archived_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceTaskSessionAttemptRecord {
+    pub id: String,
+    pub workspace_task_id: String,
+    pub root_goal_task_id: String,
+    pub workspace_id: String,
+    pub attempt_number: i32,
+    pub status: String,
+    pub conversation_id: Option<String>,
+    pub worker_agent_id: Option<String>,
+    pub leader_agent_id: Option<String>,
+    pub candidate_summary: Option<String>,
+    pub candidate_artifacts_json: Vec<String>,
+    pub candidate_verifications_json: Vec<String>,
+    pub leader_feedback: Option<String>,
+    pub adjudication_reason: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -618,6 +643,98 @@ impl PgWorkspaceRepository {
         .map(row_to_task)
         .transpose()?
         .ok_or_else(|| CoreError::Storage("workspace task update returned no row".into()))
+    }
+
+    pub async fn find_active_task_session_attempt(
+        &self,
+        workspace_task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        sqlx::query(&format!(
+            "SELECT {TASK_SESSION_ATTEMPT_COLS} FROM workspace_task_session_attempts \
+             WHERE workspace_task_id = $1 \
+               AND status IN ('pending', 'running', 'awaiting_leader_adjudication') \
+             ORDER BY attempt_number DESC, id ASC LIMIT 1"
+        ))
+        .bind(workspace_task_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()
+    }
+
+    pub async fn latest_task_session_attempt_number(
+        &self,
+        workspace_task_id: &str,
+    ) -> CoreResult<i32> {
+        let row = sqlx::query_as::<_, (Option<i32>,)>(
+            "SELECT MAX(attempt_number) FROM workspace_task_session_attempts \
+             WHERE workspace_task_id = $1",
+        )
+        .bind(workspace_task_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(row.0.unwrap_or(0))
+    }
+
+    pub async fn create_task_session_attempt(
+        &self,
+        attempt: WorkspaceTaskSessionAttemptRecord,
+    ) -> CoreResult<WorkspaceTaskSessionAttemptRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_task_session_attempts \
+                (id, workspace_task_id, root_goal_task_id, workspace_id, attempt_number, status, \
+                 conversation_id, worker_agent_id, leader_agent_id, candidate_summary, \
+                 candidate_artifacts_json, candidate_verifications_json, leader_feedback, \
+                 adjudication_reason, created_at, updated_at, completed_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) \
+             RETURNING {TASK_SESSION_ATTEMPT_COLS}"
+        ))
+        .bind(&attempt.id)
+        .bind(&attempt.workspace_task_id)
+        .bind(&attempt.root_goal_task_id)
+        .bind(&attempt.workspace_id)
+        .bind(attempt.attempt_number)
+        .bind(&attempt.status)
+        .bind(&attempt.conversation_id)
+        .bind(&attempt.worker_agent_id)
+        .bind(&attempt.leader_agent_id)
+        .bind(&attempt.candidate_summary)
+        .bind(Json(&attempt.candidate_artifacts_json))
+        .bind(Json(&attempt.candidate_verifications_json))
+        .bind(&attempt.leader_feedback)
+        .bind(&attempt.adjudication_reason)
+        .bind(attempt.created_at)
+        .bind(attempt.updated_at)
+        .bind(attempt.completed_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()?
+        .ok_or_else(|| {
+            CoreError::Storage("workspace task session attempt insert returned no row".into())
+        })
+    }
+
+    pub async fn mark_task_session_attempt_running(
+        &self,
+        attempt_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        sqlx::query(&format!(
+            "UPDATE workspace_task_session_attempts \
+             SET status = 'running', updated_at = $2 \
+             WHERE id = $1 RETURNING {TASK_SESSION_ATTEMPT_COLS}"
+        ))
+        .bind(attempt_id)
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()
     }
 
     pub async fn delete_task(&self, workspace_id: &str, task_id: &str) -> CoreResult<bool> {
@@ -1866,6 +1983,34 @@ fn row_to_task(row: PgRow) -> CoreResult<WorkspaceTaskRecord> {
         updated_at: row.try_get("updated_at").map_err(storage)?,
         completed_at: row.try_get("completed_at").map_err(storage)?,
         archived_at: row.try_get("archived_at").map_err(storage)?,
+    })
+}
+
+fn row_to_task_session_attempt(row: PgRow) -> CoreResult<WorkspaceTaskSessionAttemptRecord> {
+    Ok(WorkspaceTaskSessionAttemptRecord {
+        id: row.try_get("id").map_err(storage)?,
+        workspace_task_id: row.try_get("workspace_task_id").map_err(storage)?,
+        root_goal_task_id: row.try_get("root_goal_task_id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        attempt_number: row.try_get("attempt_number").map_err(storage)?,
+        status: row.try_get("status").map_err(storage)?,
+        conversation_id: row.try_get("conversation_id").map_err(storage)?,
+        worker_agent_id: row.try_get("worker_agent_id").map_err(storage)?,
+        leader_agent_id: row.try_get("leader_agent_id").map_err(storage)?,
+        candidate_summary: row.try_get("candidate_summary").map_err(storage)?,
+        candidate_artifacts_json: row
+            .try_get::<Json<Vec<String>>, _>("candidate_artifacts_json")
+            .map_err(storage)?
+            .0,
+        candidate_verifications_json: row
+            .try_get::<Json<Vec<String>>, _>("candidate_verifications_json")
+            .map_err(storage)?
+            .0,
+        leader_feedback: row.try_get("leader_feedback").map_err(storage)?,
+        adjudication_reason: row.try_get("adjudication_reason").map_err(storage)?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+        updated_at: row.try_get("updated_at").map_err(storage)?,
+        completed_at: row.try_get("completed_at").map_err(storage)?,
     })
 }
 

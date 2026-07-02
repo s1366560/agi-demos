@@ -26,7 +26,7 @@ use agistack_adapters_postgres::{
     TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
     WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
     WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
-    WorkspaceTaskRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
@@ -78,6 +78,7 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         "blackboard_posts",
         "topology_edges",
         "topology_nodes",
+        "workspace_task_session_attempts",
         "workspace_tasks",
         "workspace_members",
     ] {
@@ -224,6 +225,48 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     task.completed_at = Some(created_at);
     let saved_task = repo.save_task(task).await.unwrap();
     assert_eq!(saved_task.status, "done");
+
+    let attempt = repo
+        .create_task_session_attempt(WorkspaceTaskSessionAttemptRecord {
+            id: "attempt_p6_repo_1".to_string(),
+            workspace_task_id: "task_p6_repo".to_string(),
+            root_goal_task_id: "task_p6_repo".to_string(),
+            workspace_id: "ws_p6_repo".to_string(),
+            attempt_number: 1,
+            status: "pending".to_string(),
+            conversation_id: None,
+            worker_agent_id: Some("agent_p6_worker".to_string()),
+            leader_agent_id: None,
+            candidate_summary: None,
+            candidate_artifacts_json: Vec::new(),
+            candidate_verifications_json: Vec::new(),
+            leader_feedback: None,
+            adjudication_reason: None,
+            created_at,
+            updated_at: Some(created_at),
+            completed_at: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(attempt.status, "pending");
+    assert_eq!(
+        repo.latest_task_session_attempt_number("task_p6_repo")
+            .await
+            .unwrap(),
+        1
+    );
+    let running = repo
+        .mark_task_session_attempt_running("attempt_p6_repo_1", created_at)
+        .await
+        .unwrap()
+        .expect("attempt should update");
+    assert_eq!(running.status, "running");
+    let active = repo
+        .find_active_task_session_attempt("task_p6_repo")
+        .await
+        .unwrap()
+        .expect("active attempt");
+    assert_eq!(active.id, "attempt_p6_repo_1");
 
     let node = repo
         .create_node(TopologyNodeRecord {
@@ -870,6 +913,22 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             blocker_reason text, metadata_json json DEFAULT '{}'::json, \
             created_at timestamptz DEFAULT now(), updated_at timestamptz, \
             completed_at timestamptz, archived_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS workspace_task_session_attempts (\
+            id text PRIMARY KEY, workspace_task_id text NOT NULL, root_goal_task_id text NOT NULL, \
+            workspace_id text NOT NULL, attempt_number integer NOT NULL, \
+            status varchar(40) DEFAULT 'pending' NOT NULL, conversation_id text, \
+            worker_agent_id text, leader_agent_id text, candidate_summary text, \
+            candidate_artifacts_json json DEFAULT '[]'::json NOT NULL, \
+            candidate_verifications_json json DEFAULT '[]'::json NOT NULL, \
+            leader_feedback text, adjudication_reason text, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz, \
+            completed_at timestamptz)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_task_session_attempts_task_attempt \
+            ON workspace_task_session_attempts (workspace_task_id, attempt_number)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_task_session_attempts_task_status \
+            ON workspace_task_session_attempts (workspace_task_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_task_session_attempts_root_created \
+            ON workspace_task_session_attempts (root_goal_task_id, created_at)",
         "CREATE TABLE IF NOT EXISTS workspace_plans (\
             id text PRIMARY KEY, workspace_id text NOT NULL, goal_id text NOT NULL, \
             status varchar(20) DEFAULT 'draft' NOT NULL, \

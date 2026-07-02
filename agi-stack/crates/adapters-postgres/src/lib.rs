@@ -71,6 +71,7 @@ pub use workspace_repo::{
     WorkspaceMemberRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
     WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
     WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceTaskSessionAttemptRecord,
 };
 
 use agistack_core::ports::{CoreError, CoreResult};

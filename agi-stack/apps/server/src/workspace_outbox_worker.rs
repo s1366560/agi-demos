@@ -8,15 +8,48 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use agistack_adapters_postgres::{PgWorkspaceRepository, WorkspacePlanOutboxRecord};
-use agistack_core::ports::CoreResult;
+use agistack_adapters_postgres::{
+    PgWorkspaceRepository, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+};
+use agistack_adapters_secrets::generate_uuid_v4;
+use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use serde_json::{json, Map, Value};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
 pub(crate) type SharedWorkspacePlanOutboxWorker = Arc<WorkspacePlanOutboxWorker>;
 pub(crate) type WorkspacePlanOutboxHandlers = HashMap<String, Arc<dyn WorkspacePlanOutboxHandler>>;
+
+const SUPERVISOR_TICK_EVENT: &str = "supervisor_tick";
+const WORKER_LAUNCH_EVENT: &str = "worker_launch";
+const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
+const ATTEMPT_RETRY_EVENT: &str = "attempt_retry";
+const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
+const WORKSPACE_PLAN_SYSTEM_ACTOR_ID: &str = "workspace-plan:system";
+const ROOT_GOAL_TASK_ID: &str = "root_goal_task_id";
+const WORKSPACE_PLAN_ID: &str = "workspace_plan_id";
+const WORKSPACE_PLAN_NODE_ID: &str = "workspace_plan_node_id";
+const CURRENT_ATTEMPT_ID: &str = "current_attempt_id";
+const CURRENT_ATTEMPT_WORKER_BINDING_ID: &str = "current_attempt_worker_binding_id";
+
+pub(crate) fn workspace_plan_outbox_handlers(
+    dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
+) -> WorkspacePlanOutboxHandlers {
+    let handoff = Arc::new(DurableHandoffResumeHandler::new(dispatch_store));
+    HashMap::from([
+        (
+            HANDOFF_RESUME_EVENT.to_string(),
+            Arc::clone(&handoff) as Arc<dyn WorkspacePlanOutboxHandler>,
+        ),
+        (
+            ATTEMPT_RETRY_EVENT.to_string(),
+            handoff as Arc<dyn WorkspacePlanOutboxHandler>,
+        ),
+    ])
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkspacePlanOutboxWorkerConfig {
@@ -137,6 +170,49 @@ pub(crate) trait WorkspacePlanOutboxStore: Send + Sync {
     ) -> CoreResult<bool>;
 }
 
+#[async_trait]
+pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
+    async fn get_task(
+        &self,
+        workspace_id: &str,
+        task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskRecord>>;
+
+    async fn save_task(&self, task: WorkspaceTaskRecord) -> CoreResult<WorkspaceTaskRecord>;
+
+    async fn get_plan(&self, plan_id: &str) -> CoreResult<Option<WorkspacePlanRecord>>;
+
+    async fn list_plan_nodes(&self, plan_id: &str) -> CoreResult<Vec<WorkspacePlanNodeRecord>>;
+
+    async fn save_plan_node(
+        &self,
+        node: WorkspacePlanNodeRecord,
+    ) -> CoreResult<WorkspacePlanNodeRecord>;
+
+    async fn find_active_task_session_attempt(
+        &self,
+        workspace_task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
+
+    async fn latest_task_session_attempt_number(&self, workspace_task_id: &str) -> CoreResult<i32>;
+
+    async fn create_task_session_attempt(
+        &self,
+        attempt: WorkspaceTaskSessionAttemptRecord,
+    ) -> CoreResult<WorkspaceTaskSessionAttemptRecord>;
+
+    async fn mark_task_session_attempt_running(
+        &self,
+        attempt_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
+
+    async fn enqueue_plan_outbox(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxRecord>;
+}
+
 pub(crate) struct PgWorkspacePlanOutboxStore {
     repo: PgWorkspaceRepository,
 }
@@ -197,6 +273,319 @@ impl WorkspacePlanOutboxStore for PgWorkspacePlanOutboxStore {
     }
 }
 
+#[async_trait]
+impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
+    async fn get_task(
+        &self,
+        workspace_id: &str,
+        task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskRecord>> {
+        PgWorkspaceRepository::get_task(self, workspace_id, task_id).await
+    }
+
+    async fn save_task(&self, task: WorkspaceTaskRecord) -> CoreResult<WorkspaceTaskRecord> {
+        PgWorkspaceRepository::save_task(self, task).await
+    }
+
+    async fn get_plan(&self, plan_id: &str) -> CoreResult<Option<WorkspacePlanRecord>> {
+        PgWorkspaceRepository::get_plan(self, plan_id).await
+    }
+
+    async fn list_plan_nodes(&self, plan_id: &str) -> CoreResult<Vec<WorkspacePlanNodeRecord>> {
+        PgWorkspaceRepository::list_plan_nodes(self, plan_id).await
+    }
+
+    async fn save_plan_node(
+        &self,
+        node: WorkspacePlanNodeRecord,
+    ) -> CoreResult<WorkspacePlanNodeRecord> {
+        PgWorkspaceRepository::save_plan_node(self, node).await
+    }
+
+    async fn find_active_task_session_attempt(
+        &self,
+        workspace_task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        PgWorkspaceRepository::find_active_task_session_attempt(self, workspace_task_id).await
+    }
+
+    async fn latest_task_session_attempt_number(&self, workspace_task_id: &str) -> CoreResult<i32> {
+        PgWorkspaceRepository::latest_task_session_attempt_number(self, workspace_task_id).await
+    }
+
+    async fn create_task_session_attempt(
+        &self,
+        attempt: WorkspaceTaskSessionAttemptRecord,
+    ) -> CoreResult<WorkspaceTaskSessionAttemptRecord> {
+        PgWorkspaceRepository::create_task_session_attempt(self, attempt).await
+    }
+
+    async fn mark_task_session_attempt_running(
+        &self,
+        attempt_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        PgWorkspaceRepository::mark_task_session_attempt_running(self, attempt_id, now).await
+    }
+
+    async fn enqueue_plan_outbox(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxRecord> {
+        PgWorkspaceRepository::enqueue_plan_outbox(self, item).await
+    }
+}
+
+pub(crate) struct DurableHandoffResumeHandler {
+    store: Arc<dyn WorkspacePlanDispatchStore>,
+}
+
+impl DurableHandoffResumeHandler {
+    pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
+    async fn handle(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
+        let payload = object_or_empty(item.payload_json.clone());
+        let workspace_id =
+            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let task_id = required_string(&payload, "task_id")?;
+        let mut task = self
+            .store
+            .get_task(&workspace_id, &task_id)
+            .await?
+            .ok_or_else(|| {
+                CoreError::Storage(format!(
+                    "workspace task {task_id} not found for workspace {workspace_id}"
+                ))
+            })?;
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        let actor_user_id =
+            string_from_map(&payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
+        let leader_agent_id = string_from_map(&payload, "leader_agent_id")
+            .or_else(|| string_from_map(&task_metadata, "leader_agent_id"))
+            .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
+        let worker_agent_id = string_from_map(&payload, "worker_agent_id")
+            .or_else(|| task.assignee_agent_id.clone())
+            .ok_or_else(|| {
+                CoreError::Storage(format!("workspace task {task_id} has no worker agent"))
+            })?;
+        let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID)
+            .or_else(|| string_from_map(&payload, "root_task_id"))
+            .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID))
+            .ok_or_else(|| {
+                CoreError::Storage(format!("workspace task {task_id} has no root goal task"))
+            })?;
+        let plan_id = item
+            .plan_id
+            .clone()
+            .or_else(|| string_from_map(&payload, "plan_id"))
+            .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_ID));
+        let node_id = string_from_map(&payload, "node_id")
+            .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_NODE_ID));
+        let previous_attempt_id = string_from_map(&payload, "previous_attempt_id");
+        let force_schedule = bool_from_map(&payload, "force_schedule");
+
+        let mut should_schedule = force_schedule;
+        let mut attempt = self
+            .store
+            .find_active_task_session_attempt(&task.id)
+            .await?;
+        if let Some(active) = attempt.as_ref() {
+            if !force_schedule
+                && previous_attempt_id.as_deref() == Some(active.id.as_str())
+                && active.status == "running"
+                && active.conversation_id.is_some()
+            {
+                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+            }
+        }
+
+        let now = Utc::now();
+        if attempt.is_none() {
+            let next_attempt_number = self
+                .store
+                .latest_task_session_attempt_number(&task.id)
+                .await?
+                + 1;
+            let created = self
+                .store
+                .create_task_session_attempt(WorkspaceTaskSessionAttemptRecord {
+                    id: generate_uuid_v4(),
+                    workspace_task_id: task.id.clone(),
+                    root_goal_task_id: root_goal_task_id.clone(),
+                    workspace_id: workspace_id.clone(),
+                    attempt_number: next_attempt_number,
+                    status: "pending".to_string(),
+                    conversation_id: None,
+                    worker_agent_id: Some(worker_agent_id.clone()),
+                    leader_agent_id: persisted_attempt_leader_agent_id(&leader_agent_id),
+                    candidate_summary: None,
+                    candidate_artifacts_json: Vec::new(),
+                    candidate_verifications_json: Vec::new(),
+                    leader_feedback: None,
+                    adjudication_reason: None,
+                    created_at: now,
+                    updated_at: Some(now),
+                    completed_at: None,
+                })
+                .await?;
+            attempt = Some(created);
+            should_schedule = true;
+        }
+        let mut attempt = attempt.expect("attempt must exist after creation branch");
+        if attempt.status == "pending" {
+            attempt = self
+                .store
+                .mark_task_session_attempt_running(&attempt.id, now)
+                .await?
+                .ok_or_else(|| {
+                    CoreError::Storage(format!(
+                        "workspace task session attempt {} not found",
+                        attempt.id
+                    ))
+                })?;
+            should_schedule = true;
+        } else if attempt.conversation_id.is_none() {
+            should_schedule = true;
+        }
+
+        if let (Some(plan_id), Some(node_id)) = (plan_id.as_deref(), node_id.as_deref()) {
+            self.project_attempt_to_plan_node(
+                &workspace_id,
+                plan_id,
+                node_id,
+                &item,
+                &payload,
+                &attempt,
+                &worker_agent_id,
+            )
+            .await?;
+        }
+
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt.id.clone()));
+        task_metadata.insert(
+            "current_attempt_number".to_string(),
+            json!(attempt.attempt_number),
+        );
+        task_metadata.insert(
+            "current_attempt_worker_agent_id".to_string(),
+            json!(worker_agent_id.clone()),
+        );
+        task_metadata.insert(CURRENT_ATTEMPT_WORKER_BINDING_ID.to_string(), Value::Null);
+        task_metadata.insert("last_attempt_status".to_string(), json!("running"));
+        task_metadata.insert("launch_state".to_string(), json!("scheduled"));
+        task_metadata.insert(
+            "execution_state".to_string(),
+            json!({
+                "phase": "in_progress",
+                "last_agent_reason": "workspace_plan.dispatch.project_attempt",
+                "last_agent_action": "start",
+                "updated_by_actor_type": "agent",
+                "updated_by_actor_id": leader_agent_id,
+                "updated_at": now.to_rfc3339()
+            }),
+        );
+        task.metadata_json = Value::Object(task_metadata);
+        if task.status != "done" {
+            task.status = "in_progress".to_string();
+            task.completed_at = None;
+        }
+        task.updated_at = Some(now);
+        self.store.save_task(task).await?;
+
+        if should_schedule {
+            self.store
+                .enqueue_plan_outbox(worker_launch_outbox(
+                    plan_id.as_deref(),
+                    &workspace_id,
+                    &item.event_type,
+                    &payload,
+                    &task_id,
+                    &worker_agent_id,
+                    &actor_user_id,
+                    &leader_agent_id,
+                    &attempt.id,
+                    node_id.as_deref(),
+                    now,
+                ))
+                .await?;
+        }
+
+        Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
+    }
+}
+
+impl DurableHandoffResumeHandler {
+    async fn project_attempt_to_plan_node(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+        node_id: &str,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        attempt: &WorkspaceTaskSessionAttemptRecord,
+        worker_agent_id: &str,
+    ) -> CoreResult<()> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+        let mut nodes = self.store.list_plan_nodes(plan_id).await?;
+        let mut node = nodes
+            .drain(..)
+            .find(|candidate| candidate.id == node_id)
+            .ok_or_else(|| {
+                CoreError::Storage(format!("workspace plan node {node_id} not found"))
+            })?;
+        let now = Utc::now();
+        let handoff = json!({
+            "event_type": item.event_type,
+            "outbox_id": item.id,
+            "previous_attempt_id": string_from_map(payload, "previous_attempt_id"),
+            "attempt_id": attempt.id,
+            "worker_agent_id": worker_agent_id,
+        });
+        node.handoff_package_json = Some(handoff.clone());
+        node.current_attempt_id = Some(attempt.id.clone());
+        node.assignee_agent_id = Some(worker_agent_id.to_string());
+        if node.intent != "done" {
+            node.intent = "in_progress".to_string();
+            node.execution = "dispatched".to_string();
+            node.completed_at = None;
+        }
+        let mut metadata = object_or_empty(node.metadata_json);
+        metadata.insert("handoff_package".to_string(), handoff);
+        metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt.id.clone()));
+        metadata.insert(
+            "current_attempt_number".to_string(),
+            json!(attempt.attempt_number),
+        );
+        metadata.insert(
+            "current_attempt_worker_agent_id".to_string(),
+            json!(worker_agent_id),
+        );
+        metadata.insert("last_attempt_status".to_string(), json!("running"));
+        metadata.insert("launch_state".to_string(), json!("scheduled"));
+        node.metadata_json = Value::Object(metadata);
+        node.updated_at = Some(now);
+        self.store.save_plan_node(node).await?;
+        Ok(())
+    }
+}
+
 pub(crate) struct WorkspacePlanOutboxWorker {
     store: Arc<dyn WorkspacePlanOutboxStore>,
     config: WorkspacePlanOutboxWorkerConfig,
@@ -224,9 +613,11 @@ impl WorkspacePlanOutboxWorker {
         if !self.config.autostart {
             return None;
         }
-        if self.handlers.is_empty() {
+        let missing_handlers = missing_required_handler_event_types(&self.handlers);
+        if !missing_handlers.is_empty() {
             eprintln!(
-                "[agistack] workspace plan outbox worker: autostart requested but no handlers are registered; not consuming queue"
+                "[agistack] workspace plan outbox worker: autostart requested but handlers are incomplete (missing: {}); not consuming queue",
+                missing_handlers.join(", ")
             );
             return None;
         }
@@ -370,6 +761,112 @@ fn bool_env(name: &str, default: bool) -> bool {
             )
         })
         .unwrap_or(default)
+}
+
+fn required_handler_event_types() -> [&'static str; 5] {
+    [
+        SUPERVISOR_TICK_EVENT,
+        WORKER_LAUNCH_EVENT,
+        HANDOFF_RESUME_EVENT,
+        ATTEMPT_RETRY_EVENT,
+        PIPELINE_RUN_REQUESTED_EVENT,
+    ]
+}
+
+fn missing_required_handler_event_types(handlers: &WorkspacePlanOutboxHandlers) -> Vec<String> {
+    required_handler_event_types()
+        .into_iter()
+        .filter(|event_type| !handlers.contains_key(*event_type))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn object_or_empty(value: Value) -> Map<String, Value> {
+    match value {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    }
+}
+
+fn string_from_map(map: &Map<String, Value>, key: &str) -> Option<String> {
+    map.get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn bool_from_map(map: &Map<String, Value>, key: &str) -> bool {
+    map.get(key).and_then(Value::as_bool).unwrap_or(false)
+}
+
+fn required_string(map: &Map<String, Value>, key: &str) -> CoreResult<String> {
+    string_from_map(map, key)
+        .ok_or_else(|| CoreError::Storage(format!("{key} is required in outbox payload")))
+}
+
+fn persisted_attempt_leader_agent_id(leader_agent_id: &str) -> Option<String> {
+    if leader_agent_id == WORKSPACE_PLAN_SYSTEM_ACTOR_ID {
+        None
+    } else {
+        Some(leader_agent_id.to_string())
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn worker_launch_outbox(
+    plan_id: Option<&str>,
+    workspace_id: &str,
+    source_event_type: &str,
+    payload: &Map<String, Value>,
+    task_id: &str,
+    worker_agent_id: &str,
+    actor_user_id: &str,
+    leader_agent_id: &str,
+    attempt_id: &str,
+    node_id: Option<&str>,
+    created_at: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    let mut launch_payload = Map::new();
+    launch_payload.insert("workspace_id".to_string(), json!(workspace_id));
+    launch_payload.insert("task_id".to_string(), json!(task_id));
+    launch_payload.insert("worker_agent_id".to_string(), json!(worker_agent_id));
+    launch_payload.insert("actor_user_id".to_string(), json!(actor_user_id));
+    launch_payload.insert("leader_agent_id".to_string(), json!(leader_agent_id));
+    launch_payload.insert("attempt_id".to_string(), json!(attempt_id));
+    if let Some(node_id) = node_id {
+        launch_payload.insert("node_id".to_string(), json!(node_id));
+    }
+    for optional_key in [
+        "extra_instructions",
+        "reuse_conversation_id",
+        "repair_brief_prompt",
+    ] {
+        if let Some(value) = payload.get(optional_key) {
+            launch_payload.insert(optional_key.to_string(), value.clone());
+        }
+    }
+    WorkspacePlanOutboxRecord {
+        id: generate_uuid_v4(),
+        plan_id: plan_id.map(ToOwned::to_owned),
+        workspace_id: workspace_id.to_string(),
+        event_type: WORKER_LAUNCH_EVENT.to_string(),
+        payload_json: Value::Object(launch_payload),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({
+            "source": format!("workspace_plan.{source_event_type}"),
+            "previous_attempt_id": string_from_map(payload, "previous_attempt_id")
+        }),
+        created_at,
+        updated_at: None,
+    }
 }
 
 #[cfg(test)]
@@ -541,6 +1038,171 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FakeWorkspacePlanDispatchStore {
+        tasks: Mutex<HashMap<String, WorkspaceTaskRecord>>,
+        plans: Mutex<HashMap<String, WorkspacePlanRecord>>,
+        nodes: Mutex<HashMap<String, WorkspacePlanNodeRecord>>,
+        attempts: Mutex<HashMap<String, WorkspaceTaskSessionAttemptRecord>>,
+        outbox: Mutex<Vec<WorkspacePlanOutboxRecord>>,
+    }
+
+    impl FakeWorkspacePlanDispatchStore {
+        fn insert_task(&self, task: WorkspaceTaskRecord) {
+            self.tasks.lock().unwrap().insert(task.id.clone(), task);
+        }
+
+        fn insert_plan(&self, plan: WorkspacePlanRecord) {
+            self.plans.lock().unwrap().insert(plan.id.clone(), plan);
+        }
+
+        fn insert_node(&self, node: WorkspacePlanNodeRecord) {
+            self.nodes.lock().unwrap().insert(node.id.clone(), node);
+        }
+
+        fn task(&self, id: &str) -> WorkspaceTaskRecord {
+            self.tasks.lock().unwrap().get(id).unwrap().clone()
+        }
+
+        fn node(&self, id: &str) -> WorkspacePlanNodeRecord {
+            self.nodes.lock().unwrap().get(id).unwrap().clone()
+        }
+
+        fn attempts(&self) -> Vec<WorkspaceTaskSessionAttemptRecord> {
+            self.attempts.lock().unwrap().values().cloned().collect()
+        }
+
+        fn outbox(&self) -> Vec<WorkspacePlanOutboxRecord> {
+            self.outbox.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl WorkspacePlanDispatchStore for FakeWorkspacePlanDispatchStore {
+        async fn get_task(
+            &self,
+            workspace_id: &str,
+            task_id: &str,
+        ) -> CoreResult<Option<WorkspaceTaskRecord>> {
+            Ok(self
+                .tasks
+                .lock()
+                .unwrap()
+                .get(task_id)
+                .filter(|task| task.workspace_id == workspace_id)
+                .cloned())
+        }
+
+        async fn save_task(&self, task: WorkspaceTaskRecord) -> CoreResult<WorkspaceTaskRecord> {
+            self.tasks
+                .lock()
+                .unwrap()
+                .insert(task.id.clone(), task.clone());
+            Ok(task)
+        }
+
+        async fn get_plan(&self, plan_id: &str) -> CoreResult<Option<WorkspacePlanRecord>> {
+            Ok(self.plans.lock().unwrap().get(plan_id).cloned())
+        }
+
+        async fn list_plan_nodes(&self, plan_id: &str) -> CoreResult<Vec<WorkspacePlanNodeRecord>> {
+            Ok(self
+                .nodes
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|node| node.plan_id == plan_id)
+                .cloned()
+                .collect())
+        }
+
+        async fn save_plan_node(
+            &self,
+            node: WorkspacePlanNodeRecord,
+        ) -> CoreResult<WorkspacePlanNodeRecord> {
+            self.nodes
+                .lock()
+                .unwrap()
+                .insert(node.id.clone(), node.clone());
+            Ok(node)
+        }
+
+        async fn find_active_task_session_attempt(
+            &self,
+            workspace_task_id: &str,
+        ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+            let mut attempts = self
+                .attempts
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|attempt| {
+                    attempt.workspace_task_id == workspace_task_id
+                        && matches!(
+                            attempt.status.as_str(),
+                            "pending" | "running" | "awaiting_leader_adjudication"
+                        )
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            attempts.sort_by(|left, right| {
+                right
+                    .attempt_number
+                    .cmp(&left.attempt_number)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+            Ok(attempts.into_iter().next())
+        }
+
+        async fn latest_task_session_attempt_number(
+            &self,
+            workspace_task_id: &str,
+        ) -> CoreResult<i32> {
+            Ok(self
+                .attempts
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|attempt| attempt.workspace_task_id == workspace_task_id)
+                .map(|attempt| attempt.attempt_number)
+                .max()
+                .unwrap_or(0))
+        }
+
+        async fn create_task_session_attempt(
+            &self,
+            attempt: WorkspaceTaskSessionAttemptRecord,
+        ) -> CoreResult<WorkspaceTaskSessionAttemptRecord> {
+            self.attempts
+                .lock()
+                .unwrap()
+                .insert(attempt.id.clone(), attempt.clone());
+            Ok(attempt)
+        }
+
+        async fn mark_task_session_attempt_running(
+            &self,
+            attempt_id: &str,
+            now: DateTime<Utc>,
+        ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+            let mut attempts = self.attempts.lock().unwrap();
+            let Some(attempt) = attempts.get_mut(attempt_id) else {
+                return Ok(None);
+            };
+            attempt.status = "running".to_string();
+            attempt.updated_at = Some(now);
+            Ok(Some(attempt.clone()))
+        }
+
+        async fn enqueue_plan_outbox(
+            &self,
+            item: WorkspacePlanOutboxRecord,
+        ) -> CoreResult<WorkspacePlanOutboxRecord> {
+            self.outbox.lock().unwrap().push(item.clone());
+            Ok(item)
+        }
+    }
+
     fn worker(
         store: Arc<FakeWorkspacePlanOutboxStore>,
         handlers: WorkspacePlanOutboxHandlers,
@@ -581,6 +1243,146 @@ mod tests {
             created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
             updated_at: None,
         }
+    }
+
+    fn task_with_plan_metadata() -> WorkspaceTaskRecord {
+        WorkspaceTaskRecord {
+            id: "task-test".to_string(),
+            workspace_id: "workspace-test".to_string(),
+            title: "Build feature".to_string(),
+            description: None,
+            created_by: "actor-test".to_string(),
+            assignee_user_id: None,
+            assignee_agent_id: Some("agent-worker".to_string()),
+            status: "todo".to_string(),
+            priority: 1,
+            estimated_effort: None,
+            blocker_reason: None,
+            metadata_json: json!({
+                ROOT_GOAL_TASK_ID: "root-task",
+                WORKSPACE_PLAN_ID: "plan-test",
+                WORKSPACE_PLAN_NODE_ID: "node-test"
+            }),
+            created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            updated_at: None,
+            completed_at: None,
+            archived_at: None,
+        }
+    }
+
+    fn plan() -> WorkspacePlanRecord {
+        WorkspacePlanRecord {
+            id: "plan-test".to_string(),
+            workspace_id: "workspace-test".to_string(),
+            goal_id: "root-task".to_string(),
+            status: "active".to_string(),
+            created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            updated_at: None,
+        }
+    }
+
+    fn plan_node() -> WorkspacePlanNodeRecord {
+        WorkspacePlanNodeRecord {
+            id: "node-test".to_string(),
+            plan_id: "plan-test".to_string(),
+            parent_id: None,
+            kind: "task".to_string(),
+            title: "Build feature".to_string(),
+            description: String::new(),
+            depends_on_json: Vec::new(),
+            inputs_schema_json: json!({}),
+            outputs_schema_json: json!({}),
+            acceptance_criteria_json: Vec::new(),
+            feature_checkpoint_json: None,
+            handoff_package_json: None,
+            recommended_capabilities_json: Vec::new(),
+            preferred_agent_id: None,
+            estimated_effort_json: json!({}),
+            priority: 1,
+            intent: "blocked".to_string(),
+            execution: "idle".to_string(),
+            progress_json: json!({}),
+            assignee_agent_id: Some("agent-worker".to_string()),
+            current_attempt_id: None,
+            workspace_task_id: Some("task-test".to_string()),
+            metadata_json: json!({"terminal_attempt_retry_reason": "worker_crashed"}),
+            created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            updated_at: None,
+            completed_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn handoff_retry_handler_projects_attempt_and_queues_worker_launch() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        store.insert_node(plan_node());
+        let handler = DurableHandoffResumeHandler::new(
+            Arc::clone(&store) as Arc<dyn WorkspacePlanDispatchStore>
+        );
+        let mut item = outbox("job-retry", ATTEMPT_RETRY_EVENT);
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "task_id": "task-test",
+            "node_id": "node-test",
+            "worker_agent_id": "agent-worker",
+            "actor_user_id": "actor-test",
+            "previous_attempt_id": "attempt-old",
+            "extra_instructions": "retry with context"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempts = store.attempts();
+        assert_eq!(attempts.len(), 1);
+        let attempt = &attempts[0];
+        assert_eq!(attempt.workspace_task_id, "task-test");
+        assert_eq!(attempt.root_goal_task_id, "root-task");
+        assert_eq!(attempt.status, "running");
+        assert_eq!(attempt.attempt_number, 1);
+        assert_eq!(attempt.worker_agent_id.as_deref(), Some("agent-worker"));
+        assert_eq!(attempt.leader_agent_id, None);
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "in_progress");
+        assert_eq!(
+            task.metadata_json[CURRENT_ATTEMPT_ID].as_str(),
+            Some(attempt.id.as_str())
+        );
+        assert_eq!(task.metadata_json["launch_state"], "scheduled");
+        assert_eq!(task.metadata_json["last_attempt_status"], "running");
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "dispatched");
+        assert_eq!(
+            node.current_attempt_id.as_deref(),
+            Some(attempt.id.as_str())
+        );
+        assert_eq!(
+            node.handoff_package_json
+                .as_ref()
+                .and_then(|value| value["previous_attempt_id"].as_str()),
+            Some("attempt-old")
+        );
+
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, WORKER_LAUNCH_EVENT);
+        assert_eq!(
+            queued[0].payload_json["attempt_id"].as_str(),
+            Some(attempt.id.as_str())
+        );
+        assert_eq!(
+            queued[0].payload_json["extra_instructions"].as_str(),
+            Some("retry with context")
+        );
+        assert_eq!(
+            queued[0].metadata_json["source"].as_str(),
+            Some("workspace_plan.attempt_retry")
+        );
     }
 
     #[tokio::test]
@@ -709,9 +1511,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workspace_outbox_loop_refuses_partial_production_handlers() {
+        let store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        store.insert(outbox("job-safe", HANDOFF_RESUME_EVENT));
+        let worker = Arc::new(WorkspacePlanOutboxWorker::new(
+            Arc::clone(&store) as Arc<dyn WorkspacePlanOutboxStore>,
+            WorkspacePlanOutboxWorkerConfig {
+                autostart: true,
+                ..WorkspacePlanOutboxWorkerConfig::default()
+            },
+            HashMap::from([(
+                HANDOFF_RESUME_EVENT.to_string(),
+                handler(HandlerBehavior::Complete),
+            )]),
+        ));
+
+        let runtime = worker.spawn_if_enabled();
+
+        assert!(runtime.is_none());
+        let item = store.get("job-safe");
+        assert_eq!(item.status, "pending");
+        assert_eq!(item.attempt_count, 0);
+    }
+
+    #[tokio::test]
     async fn workspace_outbox_loop_polls_until_stopped_when_handlers_exist() {
         let store = Arc::new(FakeWorkspacePlanOutboxStore::default());
         store.insert(outbox("job-loop", "known"));
+        let mut handlers = required_handler_event_types()
+            .into_iter()
+            .map(|event_type| (event_type.to_string(), handler(HandlerBehavior::Complete)))
+            .collect::<WorkspacePlanOutboxHandlers>();
+        handlers.insert("known".to_string(), handler(HandlerBehavior::Complete));
         let worker = Arc::new(WorkspacePlanOutboxWorker::new(
             Arc::clone(&store) as Arc<dyn WorkspacePlanOutboxStore>,
             WorkspacePlanOutboxWorkerConfig {
@@ -721,7 +1552,7 @@ mod tests {
                 poll_interval_millis: 5,
                 autostart: true,
             },
-            HashMap::from([("known".to_string(), handler(HandlerBehavior::Complete))]),
+            handlers,
         ));
         let runtime = worker.spawn_if_enabled().expect("runtime should start");
 

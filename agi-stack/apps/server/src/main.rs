@@ -90,7 +90,7 @@ use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
 use crate::workspace_outbox_worker::{
-    PgWorkspacePlanOutboxStore, SharedWorkspacePlanOutboxWorker, WorkspacePlanOutboxHandlers,
+    workspace_plan_outbox_handlers, PgWorkspacePlanOutboxStore, SharedWorkspacePlanOutboxWorker,
     WorkspacePlanOutboxWorker, WorkspacePlanOutboxWorkerConfig,
 };
 
@@ -557,7 +557,7 @@ async fn build_memory_and_auth(
                     pool.clone(),
                 ))),
                 WorkspacePlanOutboxWorkerConfig::from_env(),
-                WorkspacePlanOutboxHandlers::default(),
+                workspace_plan_outbox_handlers(Arc::new(PgWorkspaceRepository::new(pool.clone()))),
             )));
             let sandbox_repo = Some(PgProjectSandboxRepository::new(pool.clone()));
             let project_sandbox_config_repo = Some(PgProjectReadRepository::new(pool.clone()));
