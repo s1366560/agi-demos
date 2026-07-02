@@ -38,6 +38,8 @@ const WORKER_LAUNCH_MAX_ACTIVE_ENV: &str = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE";
 const WORKER_LAUNCH_DEFER_SECONDS_ENV: &str = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS";
 const WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV: &str =
     "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS";
+const WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV: &str =
+    "AGISTACK_WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY";
 const DEFAULT_WORKER_LAUNCH_MAX_ACTIVE: i64 = 4;
 const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
@@ -52,8 +54,15 @@ pub(crate) fn workspace_plan_outbox_handlers(
     let worker_launch = Arc::new(WorkerLaunchAdmissionHandler::new(Arc::clone(
         &dispatch_store,
     )));
+    let supervisor_tick = Arc::new(SupervisorTickAdmissionHandler::new(Arc::clone(
+        &dispatch_store,
+    )));
     let pipeline_run = Arc::new(PipelineRunAdmissionHandler::new(dispatch_store));
     HashMap::from([
+        (
+            SUPERVISOR_TICK_EVENT.to_string(),
+            supervisor_tick as Arc<dyn WorkspacePlanOutboxHandler>,
+        ),
         (
             HANDOFF_RESUME_EVENT.to_string(),
             Arc::clone(&handoff) as Arc<dyn WorkspacePlanOutboxHandler>,
@@ -80,6 +89,7 @@ pub(crate) struct WorkspacePlanOutboxWorkerConfig {
     pub lease_seconds: i64,
     pub poll_interval_millis: u64,
     pub autostart: bool,
+    pub production_ready: bool,
 }
 
 impl WorkspacePlanOutboxWorkerConfig {
@@ -95,6 +105,7 @@ impl WorkspacePlanOutboxWorkerConfig {
             lease_seconds: positive_i64_env("WORKSPACE_PLAN_OUTBOX_LEASE_SECONDS", 60),
             poll_interval_millis: positive_millis_env("WORKSPACE_PLAN_OUTBOX_POLL_SECONDS", 2000),
             autostart: rust_autostart && python_worker_enabled,
+            production_ready: bool_env(WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV, false),
         }
     }
 }
@@ -107,6 +118,7 @@ impl Default for WorkspacePlanOutboxWorkerConfig {
             lease_seconds: 60,
             poll_interval_millis: 2000,
             autostart: false,
+            production_ready: false,
         }
     }
 }
@@ -1054,6 +1066,152 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
     }
 }
 
+pub(crate) struct SupervisorTickAdmissionHandler {
+    store: Arc<dyn WorkspacePlanDispatchStore>,
+}
+
+impl SupervisorTickAdmissionHandler {
+    pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
+    async fn handle(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
+        let payload = object_or_empty(item.payload_json.clone());
+        let workspace_id =
+            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let Some(node_id) = string_from_map(&payload, "retry_node_id")
+            .or_else(|| string_from_map(&payload, "node_id"))
+        else {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string()),
+            });
+        };
+        let plan_id = item
+            .plan_id
+            .clone()
+            .or_else(|| string_from_map(&payload, "plan_id"))
+            .ok_or_else(|| {
+                CoreError::Storage("supervisor_tick retry requires plan_id".to_string())
+            })?;
+        let plan = self.store.get_plan(&plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let mut nodes = self.store.list_plan_nodes(&plan_id).await?;
+        let Some(mut node) = nodes.drain(..).find(|candidate| candidate.id == node_id) else {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        };
+        if node.intent == "done" {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+        let retry_attempt_id = string_from_map(&payload, "retry_attempt_id")
+            .or_else(|| string_from_map(&payload, "attempt_id"));
+        if retry_attempt_id.is_some()
+            && node.current_attempt_id.as_deref().is_some()
+            && node.current_attempt_id.as_deref() != retry_attempt_id.as_deref()
+        {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+
+        let task_id = string_from_map(&payload, "task_id")
+            .or_else(|| node.workspace_task_id.clone())
+            .ok_or_else(|| {
+                CoreError::Storage(format!(
+                    "supervisor_tick retry node {node_id} has no workspace task"
+                ))
+            })?;
+        let task = self
+            .store
+            .get_task(&workspace_id, &task_id)
+            .await?
+            .ok_or_else(|| {
+                CoreError::Storage(format!(
+                    "workspace task {task_id} not found for workspace {workspace_id}"
+                ))
+            })?;
+        let task_metadata = object_or_empty(task.metadata_json.clone());
+        let Some(worker_agent_id) = string_from_map(&payload, "worker_agent_id")
+            .or_else(|| node.assignee_agent_id.clone())
+            .or_else(|| task.assignee_agent_id.clone())
+        else {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_retry_requires_worker_agent".to_string()),
+            });
+        };
+        let actor_user_id =
+            string_from_map(&payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
+        let leader_agent_id = string_from_map(&payload, "leader_agent_id")
+            .or_else(|| string_from_map(&task_metadata, "leader_agent_id"))
+            .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
+        let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID)
+            .or_else(|| string_from_map(&payload, "root_task_id"))
+            .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID));
+        let retry_reason = string_from_map(&payload, "retry_reason")
+            .unwrap_or_else(|| "supervisor_tick_retry".to_string());
+
+        let now = Utc::now();
+        let mut metadata = object_or_empty(node.metadata_json);
+        metadata.insert(
+            "supervisor_tick_status".to_string(),
+            json!("retry_admitted"),
+        );
+        metadata.insert(
+            "supervisor_tick_admitted_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.insert(
+            "supervisor_tick_outbox_id".to_string(),
+            json!(item.id.clone()),
+        );
+        metadata.insert(
+            "supervisor_tick_retry_reason".to_string(),
+            json!(retry_reason.clone()),
+        );
+        if let Some(attempt_id) = retry_attempt_id.as_deref() {
+            metadata.insert(
+                "supervisor_tick_retry_attempt_id".to_string(),
+                json!(attempt_id),
+            );
+        }
+        node.metadata_json = Value::Object(metadata);
+        node.updated_at = Some(now);
+        self.store.save_plan_node(node).await?;
+
+        self.store
+            .enqueue_plan_outbox(supervisor_retry_attempt_outbox(
+                &item,
+                &payload,
+                &workspace_id,
+                &plan_id,
+                &node_id,
+                &task_id,
+                &worker_agent_id,
+                &actor_user_id,
+                &leader_agent_id,
+                root_goal_task_id.as_deref(),
+                retry_attempt_id.as_deref(),
+                &retry_reason,
+                now,
+            ))
+            .await?;
+
+        Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
+    }
+}
+
 pub(crate) struct WorkspacePlanOutboxWorker {
     store: Arc<dyn WorkspacePlanOutboxStore>,
     config: WorkspacePlanOutboxWorkerConfig,
@@ -1079,6 +1237,12 @@ impl WorkspacePlanOutboxWorker {
 
     pub(crate) fn spawn_if_enabled(self: Arc<Self>) -> Option<WorkspacePlanOutboxWorkerRuntime> {
         if !self.config.autostart {
+            return None;
+        }
+        if !self.config.production_ready {
+            eprintln!(
+                "[agistack] workspace plan outbox worker: autostart requested but production readiness gate is disabled (set {WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV}=true after full handler parity); not consuming queue"
+            );
             return None;
         }
         let missing_handlers = missing_required_handler_event_types(&self.handlers);
@@ -1391,6 +1555,75 @@ fn deferred_worker_launch_outbox(
         processed_at: None,
         metadata_json: Value::Object(metadata),
         created_at: now,
+        updated_at: None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn supervisor_retry_attempt_outbox(
+    item: &WorkspacePlanOutboxRecord,
+    payload: &Map<String, Value>,
+    workspace_id: &str,
+    plan_id: &str,
+    node_id: &str,
+    task_id: &str,
+    worker_agent_id: &str,
+    actor_user_id: &str,
+    leader_agent_id: &str,
+    root_goal_task_id: Option<&str>,
+    retry_attempt_id: Option<&str>,
+    retry_reason: &str,
+    created_at: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    let mut retry_payload = Map::new();
+    retry_payload.insert("workspace_id".to_string(), json!(workspace_id));
+    retry_payload.insert("plan_id".to_string(), json!(plan_id));
+    retry_payload.insert("node_id".to_string(), json!(node_id));
+    retry_payload.insert("task_id".to_string(), json!(task_id));
+    retry_payload.insert("worker_agent_id".to_string(), json!(worker_agent_id));
+    retry_payload.insert("actor_user_id".to_string(), json!(actor_user_id));
+    retry_payload.insert("leader_agent_id".to_string(), json!(leader_agent_id));
+    retry_payload.insert("retry_reason".to_string(), json!(retry_reason));
+    if let Some(root_goal_task_id) = root_goal_task_id {
+        retry_payload.insert(ROOT_GOAL_TASK_ID.to_string(), json!(root_goal_task_id));
+    }
+    if let Some(retry_attempt_id) = retry_attempt_id {
+        retry_payload.insert("previous_attempt_id".to_string(), json!(retry_attempt_id));
+        retry_payload.insert("retry_attempt_id".to_string(), json!(retry_attempt_id));
+    }
+    for optional_key in [
+        "extra_instructions",
+        "force_schedule",
+        "repair_brief_prompt",
+        "reuse_conversation_id",
+    ] {
+        if let Some(value) = payload.get(optional_key) {
+            retry_payload.insert(optional_key.to_string(), value.clone());
+        }
+    }
+
+    WorkspacePlanOutboxRecord {
+        id: generate_uuid_v4(),
+        plan_id: Some(plan_id.to_string()),
+        workspace_id: workspace_id.to_string(),
+        event_type: ATTEMPT_RETRY_EVENT.to_string(),
+        payload_json: Value::Object(retry_payload),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: item.max_attempts,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({
+            "source": "workspace_plan.supervisor_tick.retry_admission",
+            "previous_outbox_id": item.id,
+            "retry_node_id": node_id,
+            "retry_attempt_id": retry_attempt_id,
+            "retry_reason": retry_reason
+        }),
+        created_at,
         updated_at: None,
     }
 }
@@ -1783,6 +2016,7 @@ mod tests {
                 lease_seconds: 60,
                 poll_interval_millis: 5,
                 autostart: false,
+                production_ready: false,
             },
             handlers,
         )
@@ -1952,6 +2186,36 @@ mod tests {
             "reason": "operator requested harness-native pipeline"
         });
         item
+    }
+
+    fn supervisor_tick_handler(
+        store: Arc<FakeWorkspacePlanDispatchStore>,
+    ) -> SupervisorTickAdmissionHandler {
+        SupervisorTickAdmissionHandler::new(store as Arc<dyn WorkspacePlanDispatchStore>)
+    }
+
+    fn supervisor_tick_retry_item() -> WorkspacePlanOutboxRecord {
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "retry_node_id": "node-test",
+            "retry_attempt_id": "attempt-stale",
+            "retry_reason": "stale_plan_node_no_terminal_worker_report",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+            "extra_instructions": "recover stale node"
+        });
+        item
+    }
+
+    #[test]
+    fn workspace_plan_outbox_handlers_register_required_foundations() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let handlers = workspace_plan_outbox_handlers(store as Arc<dyn WorkspacePlanDispatchStore>);
+
+        assert!(missing_required_handler_event_types(&handlers).is_empty());
+        assert_eq!(handlers.len(), required_handler_event_types().len());
     }
 
     #[tokio::test]
@@ -2182,6 +2446,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn supervisor_tick_handler_queues_attempt_retry_for_retry_node() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.current_attempt_id = Some("attempt-stale".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        store.insert_node(node);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(supervisor_tick_retry_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(queued[0].plan_id.as_deref(), Some("plan-test"));
+        assert_eq!(queued[0].payload_json["workspace_id"], "workspace-test");
+        assert_eq!(queued[0].payload_json["task_id"], "task-test");
+        assert_eq!(queued[0].payload_json["node_id"], "node-test");
+        assert_eq!(queued[0].payload_json["worker_agent_id"], "agent-worker");
+        assert_eq!(
+            queued[0].payload_json["previous_attempt_id"],
+            "attempt-stale"
+        );
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            "stale_plan_node_no_terminal_worker_report"
+        );
+        assert_eq!(
+            queued[0].payload_json["extra_instructions"],
+            "recover stale node"
+        );
+        assert_eq!(
+            queued[0].metadata_json["source"],
+            "workspace_plan.supervisor_tick.retry_admission"
+        );
+        let node = store.node("node-test");
+        assert_eq!(
+            node.metadata_json["supervisor_tick_status"],
+            "retry_admitted"
+        );
+        assert_eq!(
+            node.metadata_json["supervisor_tick_retry_attempt_id"],
+            "attempt-stale"
+        );
+        assert!(node.metadata_json["supervisor_tick_admitted_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_releases_generic_tick_until_full_runtime() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "controller_reason": "delivery_contract_regeneration_requested"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string())
+            }
+        );
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
     async fn workspace_outbox_worker_marks_registered_handler_completed() {
         let store = Arc::new(FakeWorkspacePlanOutboxStore::default());
         store.insert(outbox("job-complete", "known"));
@@ -2293,6 +2631,7 @@ mod tests {
             Arc::clone(&store) as Arc<dyn WorkspacePlanOutboxStore>,
             WorkspacePlanOutboxWorkerConfig {
                 autostart: true,
+                production_ready: true,
                 ..WorkspacePlanOutboxWorkerConfig::default()
             },
             HashMap::new(),
@@ -2314,12 +2653,40 @@ mod tests {
             Arc::clone(&store) as Arc<dyn WorkspacePlanOutboxStore>,
             WorkspacePlanOutboxWorkerConfig {
                 autostart: true,
+                production_ready: true,
                 ..WorkspacePlanOutboxWorkerConfig::default()
             },
             HashMap::from([(
                 HANDOFF_RESUME_EVENT.to_string(),
                 handler(HandlerBehavior::Complete),
             )]),
+        ));
+
+        let runtime = worker.spawn_if_enabled();
+
+        assert!(runtime.is_none());
+        let item = store.get("job-safe");
+        assert_eq!(item.status, "pending");
+        assert_eq!(item.attempt_count, 0);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_loop_refuses_autostart_without_production_ready_gate() {
+        let store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        store.insert(outbox("job-safe", "known"));
+        let mut handlers = required_handler_event_types()
+            .into_iter()
+            .map(|event_type| (event_type.to_string(), handler(HandlerBehavior::Complete)))
+            .collect::<WorkspacePlanOutboxHandlers>();
+        handlers.insert("known".to_string(), handler(HandlerBehavior::Complete));
+        let worker = Arc::new(WorkspacePlanOutboxWorker::new(
+            Arc::clone(&store) as Arc<dyn WorkspacePlanOutboxStore>,
+            WorkspacePlanOutboxWorkerConfig {
+                autostart: true,
+                production_ready: false,
+                ..WorkspacePlanOutboxWorkerConfig::default()
+            },
+            handlers,
         ));
 
         let runtime = worker.spawn_if_enabled();
@@ -2347,6 +2714,7 @@ mod tests {
                 lease_seconds: 60,
                 poll_interval_millis: 5,
                 autostart: true,
+                production_ready: true,
             },
             handlers,
         ));
