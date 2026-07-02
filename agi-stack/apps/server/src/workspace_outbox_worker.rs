@@ -49,7 +49,10 @@ pub(crate) fn workspace_plan_outbox_handlers(
     let handoff = Arc::new(DurableHandoffResumeHandler::new(Arc::clone(
         &dispatch_store,
     )));
-    let worker_launch = Arc::new(WorkerLaunchAdmissionHandler::new(dispatch_store));
+    let worker_launch = Arc::new(WorkerLaunchAdmissionHandler::new(Arc::clone(
+        &dispatch_store,
+    )));
+    let pipeline_run = Arc::new(PipelineRunAdmissionHandler::new(dispatch_store));
     HashMap::from([
         (
             HANDOFF_RESUME_EVENT.to_string(),
@@ -62,6 +65,10 @@ pub(crate) fn workspace_plan_outbox_handlers(
         (
             WORKER_LAUNCH_EVENT.to_string(),
             worker_launch as Arc<dyn WorkspacePlanOutboxHandler>,
+        ),
+        (
+            PIPELINE_RUN_REQUESTED_EVENT.to_string(),
+            pipeline_run as Arc<dyn WorkspacePlanOutboxHandler>,
         ),
     ])
 }
@@ -962,6 +969,91 @@ impl WorkerLaunchAdmissionHandler {
     }
 }
 
+pub(crate) struct PipelineRunAdmissionHandler {
+    store: Arc<dyn WorkspacePlanDispatchStore>,
+}
+
+impl PipelineRunAdmissionHandler {
+    pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
+    async fn handle(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
+        let payload = object_or_empty(item.payload_json.clone());
+        let workspace_id =
+            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let plan_id = item
+            .plan_id
+            .clone()
+            .or_else(|| string_from_map(&payload, "plan_id"))
+            .ok_or_else(|| {
+                CoreError::Storage(
+                    "pipeline_run_requested requires plan_id and node_id".to_string(),
+                )
+            })?;
+        let node_id = required_string(&payload, "node_id")?;
+        let attempt_id = string_from_map(&payload, "attempt_id");
+        let reason = string_from_map(&payload, "reason")
+            .unwrap_or_else(|| "pipeline_gate_required".to_string());
+
+        let plan = self.store.get_plan(&plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+        let nodes = self.store.list_plan_nodes(&plan_id).await?;
+        let Some(mut node) = nodes.into_iter().find(|candidate| candidate.id == node_id) else {
+            return Err(CoreError::Storage(format!(
+                "workspace plan node {node_id} not found"
+            )));
+        };
+        if node.intent == "done" {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+        if attempt_id.is_some()
+            && node.current_attempt_id.as_deref().is_some()
+            && node.current_attempt_id.as_deref() != attempt_id.as_deref()
+        {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+
+        let now = Utc::now();
+        let mut metadata = object_or_empty(node.metadata_json);
+        metadata.insert("pipeline_status".to_string(), json!("requested"));
+        metadata.insert("pipeline_gate_status".to_string(), json!("requested"));
+        metadata.insert("pipeline_requested_at".to_string(), json!(now.to_rfc3339()));
+        metadata.insert("pipeline_request_outbox_id".to_string(), json!(item.id));
+        metadata.insert("pipeline_request_reason".to_string(), json!(reason));
+        metadata.insert(
+            "pipeline_runtime_state".to_string(),
+            json!("runtime_admitted"),
+        );
+        if let Some(attempt_id) = attempt_id {
+            metadata.insert(
+                "pipeline_requested_attempt_id".to_string(),
+                json!(attempt_id),
+            );
+        }
+        node.execution = "idle".to_string();
+        node.metadata_json = Value::Object(metadata);
+        node.updated_at = Some(now);
+        self.store.save_plan_node(node).await?;
+
+        Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
+    }
+}
+
 pub(crate) struct WorkspacePlanOutboxWorker {
     store: Arc<dyn WorkspacePlanOutboxStore>,
     config: WorkspacePlanOutboxWorkerConfig,
@@ -1843,6 +1935,25 @@ mod tests {
         item
     }
 
+    fn pipeline_run_handler(
+        store: Arc<FakeWorkspacePlanDispatchStore>,
+    ) -> PipelineRunAdmissionHandler {
+        PipelineRunAdmissionHandler::new(store as Arc<dyn WorkspacePlanDispatchStore>)
+    }
+
+    fn pipeline_run_item() -> WorkspacePlanOutboxRecord {
+        let mut item = outbox("job-pipeline-run", PIPELINE_RUN_REQUESTED_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "node_id": "node-test",
+            "attempt_id": "attempt-test",
+            "reason": "operator requested harness-native pipeline"
+        });
+        item
+    }
+
     #[tokio::test]
     async fn handoff_retry_handler_projects_attempt_and_queues_worker_launch() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
@@ -2014,6 +2125,60 @@ mod tests {
         let node = store.node("node-test");
         assert_eq!(node.execution, "dispatched");
         assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-new"));
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_marks_node_requested_without_running_provider() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.metadata_json["pipeline_status"], "requested");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "requested");
+        assert_eq!(
+            node.metadata_json["pipeline_request_outbox_id"],
+            "job-pipeline-run"
+        );
+        assert_eq!(
+            node.metadata_json["pipeline_request_reason"],
+            "operator requested harness-native pipeline"
+        );
+        assert_eq!(
+            node.metadata_json["pipeline_runtime_state"],
+            "runtime_admitted"
+        );
+        assert_eq!(
+            node.metadata_json["pipeline_requested_attempt_id"],
+            "attempt-test"
+        );
+        assert!(node.metadata_json["pipeline_requested_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_skips_stale_attempt_without_projection() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-new".to_string());
+        store.insert_node(node);
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "reported");
+        assert_ne!(node.metadata_json["pipeline_status"], "requested");
     }
 
     #[tokio::test]
