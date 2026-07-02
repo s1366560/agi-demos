@@ -6000,6 +6000,18 @@ async fn git_blob_hash(cwd: &Path, text: &str, env: &[(String, String)]) -> Core
     }
 }
 
+async fn current_worktree_dirty_signature(cwd: &Path) -> CoreResult<Option<String>> {
+    if !cwd.exists() {
+        return Ok(None);
+    }
+    let env = vec![("GIT_TERMINAL_PROMPT".to_string(), "0".to_string())];
+    let dirty = run_git_command(cwd, &["status", "--porcelain"], &env, 60).await?;
+    if dirty.exit_code != 0 || dirty.stdout.trim().is_empty() {
+        return Ok(None);
+    }
+    git_blob_hash(cwd, &dirty.stdout, &env).await.map(Some)
+}
+
 fn create_git_askpass_script() -> CoreResult<PathBuf> {
     let path = std::env::temp_dir().join(format!("memstack-git-askpass-{}.sh", generate_uuid_v4()));
     std::fs::write(
@@ -7222,7 +7234,10 @@ impl SupervisorTickAdmissionHandler {
             if attempt.status.trim().to_ascii_lowercase() != ACCEPTED_ATTEMPT_STATUS {
                 continue;
             }
-            if accepted_projection_already_complete(&node, &attempt) {
+            if self
+                .accepted_projection_already_complete(workspace_id, &node, &attempt)
+                .await?
+            {
                 continue;
             }
             if !accepted_attempt_matches_node_expected_commit(&node, &attempt) {
@@ -7655,6 +7670,62 @@ impl SupervisorTickAdmissionHandler {
             })
             .await?;
         Ok(())
+    }
+
+    async fn accepted_projection_already_complete(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        attempt: &WorkspaceTaskSessionAttemptRecord,
+    ) -> CoreResult<bool> {
+        let metadata = object_or_empty(node.metadata_json.clone());
+        if !accepted_projection_already_complete_base(node, attempt, &metadata) {
+            return Ok(false);
+        }
+        if metadata_string(metadata.get("worktree_integration_status")).as_deref()
+            != Some("blocked_dirty_main")
+        {
+            return Ok(true);
+        }
+        self.blocked_dirty_main_projection_still_current(workspace_id, node, attempt, &metadata)
+            .await
+    }
+
+    async fn blocked_dirty_main_projection_still_current(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        attempt: &WorkspaceTaskSessionAttemptRecord,
+        metadata: &Map<String, Value>,
+    ) -> CoreResult<bool> {
+        let task_id = node
+            .workspace_task_id
+            .as_ref()
+            .unwrap_or(&attempt.workspace_task_id);
+        let Some(task) = self.store.get_task(workspace_id, task_id).await? else {
+            return Ok(false);
+        };
+        if task.workspace_id != workspace_id {
+            return Ok(false);
+        }
+        let task_metadata = object_or_empty(task.metadata_json.clone());
+        let Some(stored_signature) =
+            metadata_string(metadata.get("worktree_integration_dirty_signature")).or_else(|| {
+                metadata_string(task_metadata.get("worktree_integration_dirty_signature"))
+            })
+        else {
+            return Ok(false);
+        };
+        let Some(workspace) = self.store.get_workspace(workspace_id).await? else {
+            return Ok(false);
+        };
+        let Some(sandbox_code_root) =
+            sandbox_code_root_for_integration(&task.metadata_json, &workspace.metadata_json)
+        else {
+            return Ok(false);
+        };
+        let current = current_worktree_dirty_signature(Path::new(&sandbox_code_root)).await?;
+        Ok(current.as_deref() == Some(stored_signature.as_str()))
     }
 
     async fn reconcile_terminal_attempt_nodes(
@@ -8289,11 +8360,11 @@ fn attempt_has_candidate_output(attempt: &WorkspaceTaskSessionAttemptRecord) -> 
         || !attempt.candidate_verifications_json.is_empty()
 }
 
-fn accepted_projection_already_complete(
+fn accepted_projection_already_complete_base(
     node: &WorkspacePlanNodeRecord,
     attempt: &WorkspaceTaskSessionAttemptRecord,
+    metadata: &Map<String, Value>,
 ) -> bool {
-    let metadata = object_or_empty(node.metadata_json.clone());
     node.intent == "done"
         && node.execution == "idle"
         && metadata
@@ -13276,7 +13347,7 @@ steps:
     }
 
     #[tokio::test]
-    async fn supervisor_tick_handler_blocks_accepted_worktree_when_main_is_dirty() {
+    async fn supervisor_tick_handler_retries_blocked_accepted_worktree_when_main_is_clean() {
         let Some(fixture) = git_publish_fixture() else {
             return;
         };
@@ -13368,6 +13439,42 @@ steps:
         );
         assert_eq!(events[0].payload_json["status"], "blocked_dirty_main");
         assert!(store.outbox().is_empty());
+
+        std::fs::remove_file(fixture.repo.join("dirty.txt")).unwrap();
+        let mut item = outbox("job-supervisor-tick-retry", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        let task = store.task("task-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(task.status, "done");
+        assert_eq!(node.metadata_json["worktree_integration_status"], "merged");
+        assert_eq!(
+            node.metadata_json["worktree_integration_commit_ref"],
+            candidate_commit
+        );
+        assert_eq!(
+            run_git_ok(&fixture.repo, &["rev-parse", "HEAD"])
+                .trim()
+                .to_string(),
+            candidate_commit
+        );
+        assert_eq!(
+            std::fs::read_to_string(fixture.repo.join("accepted.txt")).unwrap(),
+            "accepted work\n"
+        );
+        let events = store.plan_events();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1].event_type, "accepted_worktree_integrated");
+        assert_eq!(events[1].payload_json["status"], "merged");
     }
 
     #[tokio::test]
