@@ -24,7 +24,7 @@ use axum::{
     routing::{get, patch, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -47,6 +47,11 @@ pub(crate) type SharedWorkspaces = Arc<dyn WorkspaceService>;
 
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
 const SUPERVISOR_TICK_EVENT: &str = "supervisor_tick";
+const WORKER_LAUNCH_EVENT: &str = "worker_launch";
+const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
+const STALE_RECOVERY_DISPATCH_STALE_SECONDS: i64 = 180;
+const STALE_RECOVERY_RUNNING_STALE_SECONDS: i64 = 300;
+const STALE_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS: i64 = 300;
 const OPERATOR_CLEARED_RETRY_KEYS: &[&str] = &[
     "retry_count",
     "retry_last_reason",
@@ -159,6 +164,13 @@ pub(crate) trait WorkspaceService: Send + Sync {
         user_id: &str,
         workspace_id: &str,
         outbox_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
+
+    async fn recover_stale_attempts(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
         body: WorkspacePlanActionRequest,
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
 
@@ -1444,7 +1456,7 @@ impl WorkspaceService for PgWorkspaceService {
     ) -> Result<WorkspacePlanSnapshotView, WorkspaceApiError> {
         self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Read)
             .await?;
-        let _recover_stale_attempts = query.recover_stale_attempts.unwrap_or(false);
+        let recover_stale_attempts = query.recover_stale_attempts.unwrap_or(false);
         let mut plans = self
             .repo
             .list_plans(workspace_id, 50)
@@ -1478,6 +1490,26 @@ impl WorkspaceService for PgWorkspaceService {
             plans_with_nodes.push((plan, nodes));
         }
         let include_details = query.include_details.unwrap_or(true);
+        if recover_stale_attempts
+            && include_details
+            && plans_with_nodes
+                .first()
+                .map(|(plan, _)| plan.id.as_str() == selected_plan_id.as_str())
+                .unwrap_or(false)
+            && self
+                .repo
+                .user_can_access_workspace(user_id, workspace_id, WorkspaceAccess::Write)
+                .await
+                .map_err(WorkspaceApiError::internal)?
+        {
+            if let Some((plan, nodes)) = plans_with_nodes
+                .iter()
+                .find(|(plan, _)| plan.id == selected_plan_id)
+            {
+                recover_stale_plan_records_pg(&self.repo, workspace_id, plan, nodes, user_id)
+                    .await?;
+            }
+        }
         let (blackboard, outbox, events) = if include_details {
             (
                 self.repo
@@ -1558,6 +1590,44 @@ impl WorkspaceService for PgWorkspaceService {
             plan_id,
             node_id: None,
             outbox_id: Some(outbox_id.to_string()),
+        })
+    }
+
+    async fn recover_stale_attempts(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
+            .await?;
+        let plan = self
+            .repo
+            .list_plans(workspace_id, 1)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .next()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let nodes = self
+            .repo
+            .list_plan_nodes(&plan.id)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let recovered =
+            recover_stale_plan_records_pg(&self.repo, workspace_id, &plan, &nodes, user_id).await?;
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: if recovered {
+                "Workspace plan stale attempt recovery queued."
+            } else {
+                "No stale workspace plan attempts needed recovery."
+            }
+            .to_string(),
+            plan_id: plan.id,
+            node_id: None,
+            outbox_id: None,
         })
     }
 
@@ -3449,8 +3519,8 @@ impl WorkspaceService for DevWorkspaceService {
         query: WorkspacePlanSnapshotQuery,
     ) -> Result<WorkspacePlanSnapshotView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let _recover_stale_attempts = query.recover_stale_attempts.unwrap_or(false);
-        let state = self.state.lock().expect("workspace dev state");
+        let recover_stale_attempts = query.recover_stale_attempts.unwrap_or(false);
+        let mut state = self.state.lock().expect("workspace dev state");
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -3472,6 +3542,30 @@ impl WorkspaceService for DevWorkspaceService {
         } else {
             plans[0].id.clone()
         };
+        let include_details = query.include_details.unwrap_or(true);
+        if recover_stale_attempts
+            && include_details
+            && plans
+                .first()
+                .map(|plan| plan.id.as_str() == selected_plan_id.as_str())
+                .unwrap_or(false)
+        {
+            if let Some(plan) = plans
+                .iter()
+                .find(|plan| plan.id == selected_plan_id)
+                .cloned()
+            {
+                let nodes = plan_nodes_for_dev(&state, &plan.id);
+                recover_stale_plan_records_dev(
+                    &mut state,
+                    workspace_id,
+                    &plan,
+                    &nodes,
+                    user_id,
+                    Utc::now(),
+                );
+            }
+        }
         let plans_with_nodes: Vec<_> = plans
             .into_iter()
             .map(|plan| {
@@ -3490,7 +3584,6 @@ impl WorkspaceService for DevWorkspaceService {
                 (plan, nodes)
             })
             .collect();
-        let include_details = query.include_details.unwrap_or(true);
         let (blackboard, outbox, events) = if include_details {
             let mut latest = HashMap::<String, WorkspacePlanBlackboardEntryRecord>::new();
             for entry in state
@@ -3623,6 +3716,44 @@ impl WorkspaceService for DevWorkspaceService {
             plan_id,
             node_id: None,
             outbox_id: Some(outbox_id.to_string()),
+        })
+    }
+
+    async fn recover_stale_attempts(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.require_dev_user(user_id)?;
+        let mut state = self.state.lock().expect("workspace dev state");
+        if !state.workspaces.contains_key(workspace_id) {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let plan = latest_plan_for_workspace(&state, workspace_id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let nodes = plan_nodes_for_dev(&state, &plan.id);
+        let recovered = recover_stale_plan_records_dev(
+            &mut state,
+            workspace_id,
+            &plan,
+            &nodes,
+            user_id,
+            Utc::now(),
+        );
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: if recovered {
+                "Workspace plan stale attempt recovery queued."
+            } else {
+                "No stale workspace plan attempts needed recovery."
+            }
+            .to_string(),
+            plan_id: plan.id,
+            node_id: None,
+            outbox_id: None,
         })
     }
 
@@ -6175,6 +6306,259 @@ fn plan_action_outbox(
     }
 }
 
+async fn recover_stale_plan_records_pg(
+    repo: &PgWorkspaceRepository,
+    workspace_id: &str,
+    plan: &WorkspacePlanRecord,
+    nodes: &[WorkspacePlanNodeRecord],
+    actor_id: &str,
+) -> Result<bool, WorkspaceApiError> {
+    let outbox = repo
+        .list_plan_outbox(&plan.id, 250)
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    let events = repo
+        .list_plan_events(&plan.id, 250)
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    let Some((outbox_record, event_record)) = stale_plan_node_recovery_records(
+        workspace_id,
+        plan,
+        nodes,
+        &outbox,
+        &events,
+        actor_id,
+        Utc::now(),
+    ) else {
+        return Ok(false);
+    };
+    repo.enqueue_plan_outbox(outbox_record)
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    repo.create_plan_event(event_record)
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    Ok(true)
+}
+
+fn recover_stale_plan_records_dev(
+    state: &mut DevWorkspaceState,
+    workspace_id: &str,
+    plan: &WorkspacePlanRecord,
+    nodes: &[WorkspacePlanNodeRecord],
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> bool {
+    let outbox: Vec<_> = state
+        .plan_outbox
+        .iter()
+        .filter(|item| item.plan_id.as_deref() == Some(plan.id.as_str()))
+        .cloned()
+        .collect();
+    let events: Vec<_> = state
+        .plan_events
+        .iter()
+        .filter(|event| event.plan_id == plan.id)
+        .cloned()
+        .collect();
+    let Some((outbox_record, event_record)) = stale_plan_node_recovery_records(
+        workspace_id,
+        plan,
+        nodes,
+        &outbox,
+        &events,
+        actor_id,
+        now,
+    ) else {
+        return false;
+    };
+    state.plan_outbox.push(outbox_record);
+    state.plan_events.push(event_record);
+    true
+}
+
+fn stale_plan_node_recovery_records(
+    workspace_id: &str,
+    plan: &WorkspacePlanRecord,
+    nodes: &[WorkspacePlanNodeRecord],
+    outbox: &[WorkspacePlanOutboxRecord],
+    events: &[WorkspacePlanEventRecord],
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Option<(WorkspacePlanOutboxRecord, WorkspacePlanEventRecord)> {
+    let node = nodes
+        .iter()
+        .find(|node| blocked_recovery_node_without_attempt(node))
+        .or_else(|| nodes.iter().find(|node| stale_running_node(node, now)))?;
+    if !node_has_recovery_execution_target(node)
+        || has_supervisor_dispose_decision_for_node(events, &node.id)
+        || has_pending_node_recovery_job(outbox, events, workspace_id, plan, node, now)
+    {
+        return None;
+    }
+    let root_goal_task_id = nodes
+        .iter()
+        .find(|candidate| candidate.id == plan.goal_id)
+        .and_then(|candidate| candidate.workspace_task_id.clone())
+        .unwrap_or_default();
+    Some((
+        plan_action_outbox(
+            &plan.id,
+            workspace_id,
+            SUPERVISOR_TICK_EVENT,
+            json!({
+                "workspace_id": workspace_id,
+                "actor_user_id": actor_id,
+                "root_goal_task_id": root_goal_task_id,
+                "retry_node_id": node.id.clone(),
+                "retry_attempt_id": node.current_attempt_id.clone(),
+                "retry_reason": "stale_plan_node_no_terminal_worker_report",
+                "summary": "auto_recovery_stale_plan_node_no_terminal_worker_report"
+            }),
+            json!({
+                "source": "workspace_plan.snapshot_stale_node_recovery",
+                "node_id": node.id.clone(),
+                "previous_attempt_id": node.current_attempt_id.clone()
+            }),
+            now,
+        ),
+        WorkspacePlanEventRecord {
+            id: new_id(),
+            plan_id: plan.id.clone(),
+            workspace_id: workspace_id.to_string(),
+            node_id: Some(node.id.clone()),
+            attempt_id: node.current_attempt_id.clone(),
+            event_type: "auto_stale_node_recovery_queued".to_string(),
+            source: "workspace_plan_snapshot".to_string(),
+            actor_id: Some(actor_id.to_string()),
+            payload_json: json!({
+                "reason": "stale_plan_node_without_recoverable_attempt",
+                "execution": node.execution.clone()
+            }),
+            created_at: now,
+        },
+    ))
+}
+
+fn blocked_recovery_node_without_attempt(node: &WorkspacePlanNodeRecord) -> bool {
+    if node.intent != "blocked"
+        || node.execution != "idle"
+        || node.current_attempt_id.is_some()
+        || !node_has_recovery_execution_target(node)
+    {
+        return false;
+    }
+    let metadata = object_or_empty(node.metadata_json.clone());
+    if node_human_intervention_required(&metadata) {
+        return false;
+    }
+    string_from_value(metadata.get("terminal_attempt_retry_reason")).is_some()
+        || metadata
+            .get("last_verification_passed")
+            .and_then(Value::as_bool)
+            == Some(false)
+        || string_from_value(metadata.get("pipeline_status")).as_deref() == Some("failed")
+}
+
+fn stale_running_node(node: &WorkspacePlanNodeRecord, now: DateTime<Utc>) -> bool {
+    let threshold_seconds = match node.execution.as_str() {
+        "dispatched" => STALE_RECOVERY_DISPATCH_STALE_SECONDS,
+        "running" => STALE_RECOVERY_RUNNING_STALE_SECONDS,
+        _ => return false,
+    };
+    let last_update = node.updated_at.unwrap_or(node.created_at);
+    now - last_update > Duration::seconds(threshold_seconds)
+}
+
+fn node_has_recovery_execution_target(node: &WorkspacePlanNodeRecord) -> bool {
+    node.workspace_task_id
+        .as_deref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+        && node
+            .assignee_agent_id
+            .as_deref()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+}
+
+fn node_human_intervention_required(metadata: &Value) -> bool {
+    string_from_value(metadata.get("last_verification_judge_verdict")).as_deref()
+        == Some("blocked_human_required")
+}
+
+fn has_supervisor_dispose_decision_for_node(
+    events: &[WorkspacePlanEventRecord],
+    node_id: &str,
+) -> bool {
+    events.iter().any(|event| {
+        event.node_id.as_deref() == Some(node_id)
+            && event.event_type == "supervisor_decision_completed"
+            && string_from_value(event.payload_json.get("action")).as_deref()
+                == Some("dispose_node")
+    })
+}
+
+fn has_pending_node_recovery_job(
+    outbox: &[WorkspacePlanOutboxRecord],
+    events: &[WorkspacePlanEventRecord],
+    workspace_id: &str,
+    plan: &WorkspacePlanRecord,
+    node: &WorkspacePlanNodeRecord,
+    now: DateTime<Utc>,
+) -> bool {
+    if outbox.iter().any(|item| {
+        item.workspace_id == workspace_id
+            && item.plan_id.as_deref() == Some(plan.id.as_str())
+            && matches!(
+                item.event_type.as_str(),
+                HANDOFF_RESUME_EVENT | WORKER_LAUNCH_EVENT | SUPERVISOR_TICK_EVENT
+            )
+            && matches!(item.status.as_str(), "pending" | "processing" | "failed")
+            && payload_targets_node(&item.payload_json, &node.id)
+    }) {
+        return true;
+    }
+    let recent_cutoff = now - Duration::seconds(STALE_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS);
+    let previous_attempt_id = node.current_attempt_id.as_deref();
+    if outbox.iter().any(|item| {
+        item.workspace_id == workspace_id
+            && item.plan_id.as_deref() == Some(plan.id.as_str())
+            && matches!(
+                item.event_type.as_str(),
+                HANDOFF_RESUME_EVENT | SUPERVISOR_TICK_EVENT
+            )
+            && item.status == "completed"
+            && item.created_at >= recent_cutoff
+            && payload_targets_node(&item.payload_json, &node.id)
+            && previous_attempt_id
+                .map(|attempt_id| payload_targets_attempt(&item.payload_json, attempt_id))
+                .unwrap_or(true)
+    }) {
+        return true;
+    }
+    events.iter().any(|event| {
+        event.workspace_id == workspace_id
+            && event.plan_id == plan.id
+            && event.event_type == "auto_stale_node_recovery_queued"
+            && event.created_at >= recent_cutoff
+            && event.node_id.as_deref() == Some(node.id.as_str())
+            && previous_attempt_id
+                .map(|attempt_id| event.attempt_id.as_deref() == Some(attempt_id))
+                .unwrap_or(true)
+    })
+}
+
+fn payload_targets_node(payload: &Value, node_id: &str) -> bool {
+    string_from_value(payload.get("node_id")).as_deref() == Some(node_id)
+        || string_from_value(payload.get("retry_node_id")).as_deref() == Some(node_id)
+}
+
+fn payload_targets_attempt(payload: &Value, attempt_id: &str) -> bool {
+    string_from_value(payload.get("previous_attempt_id")).as_deref() == Some(attempt_id)
+        || string_from_value(payload.get("retry_attempt_id")).as_deref() == Some(attempt_id)
+}
+
 fn operator_tick_outbox(
     plan_id: &str,
     workspace_id: &str,
@@ -7486,6 +7870,18 @@ async fn retry_plan_outbox(
         .map(Json)
 }
 
+async fn recover_stale_attempts(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(workspace_id): Path<String>,
+    Json(body): Json<WorkspacePlanActionRequest>,
+) -> Result<Json<WorkspacePlanActionResultView>, WorkspaceApiError> {
+    app.workspaces
+        .recover_stale_attempts(&identity.user_id, &workspace_id, body)
+        .await
+        .map(Json)
+}
+
 async fn request_delivery_pipeline_run(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -8250,6 +8646,10 @@ pub(crate) fn router() -> Router<AppState> {
             post(retry_plan_outbox),
         )
         .route(
+            "/api/v1/workspaces/:workspace_id/plan/recover-stale-attempts",
+            post(recover_stale_attempts),
+        )
+        .route(
             "/api/v1/workspaces/:workspace_id/plan/delivery/run-pipeline",
             post(request_delivery_pipeline_run),
         )
@@ -8694,6 +9094,29 @@ mod tests {
             &node_action_results,
             serde_json::from_str(include_str!(
                 "../tests/golden/workspace_plan_node_action_results.json"
+            ))
+            .unwrap(),
+        );
+        let recover_stale_results = json!({
+            "queued": serde_json::to_value(WorkspacePlanActionResultView {
+                ok: true,
+                message: "Workspace plan stale attempt recovery queued.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: None,
+                outbox_id: None,
+            }).unwrap(),
+            "noop": serde_json::to_value(WorkspacePlanActionResultView {
+                ok: true,
+                message: "No stale workspace plan attempts needed recovery.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: None,
+                outbox_id: None,
+            }).unwrap()
+        });
+        assert_golden(
+            &recover_stale_results,
+            serde_json::from_str(include_str!(
+                "../tests/golden/workspace_plan_recover_stale_action_results.json"
             ))
             .unwrap(),
         );
@@ -9252,6 +9675,96 @@ mod tests {
                     && event.payload_json["evidence_refs"] == json!(["ci:new", "ci:previous"])
             }));
         }
+        {
+            let mut state = service.state.lock().expect("workspace dev state");
+            let now = "2026-01-02T03:05:05Z".parse().unwrap();
+            state.plan_nodes.insert(
+                "plan-node-stale".to_string(),
+                WorkspacePlanNodeRecord {
+                    id: "plan-node-stale".to_string(),
+                    plan_id: "plan-dev".to_string(),
+                    parent_id: Some("plan-node-dev".to_string()),
+                    kind: "task".to_string(),
+                    title: "Recover stale node".to_string(),
+                    description: "Queue recovery without a linked attempt".to_string(),
+                    depends_on_json: Vec::new(),
+                    inputs_schema_json: json!({}),
+                    outputs_schema_json: json!({}),
+                    acceptance_criteria_json: Vec::new(),
+                    feature_checkpoint_json: None,
+                    handoff_package_json: None,
+                    recommended_capabilities_json: Vec::new(),
+                    preferred_agent_id: None,
+                    estimated_effort_json: json!({}),
+                    priority: 2,
+                    intent: "blocked".to_string(),
+                    execution: "idle".to_string(),
+                    progress_json: json!({}),
+                    assignee_agent_id: Some("agent-1".to_string()),
+                    current_attempt_id: None,
+                    workspace_task_id: Some(task.id.clone()),
+                    metadata_json: json!({
+                        "terminal_attempt_retry_reason": "worker did not report terminal state",
+                        "last_verification_passed": false
+                    }),
+                    created_at: now,
+                    updated_at: None,
+                    completed_at: None,
+                },
+            );
+        }
+        let recovered = service
+            .recover_stale_attempts(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanActionRequest {
+                    reason: Some("recover stale node".to_string()),
+                    evidence_refs: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            recovered.message,
+            "Workspace plan stale attempt recovery queued."
+        );
+        let stale_snapshot = service
+            .get_plan_snapshot(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanSnapshotQuery::default(),
+            )
+            .await
+            .unwrap();
+        assert!(stale_snapshot.outbox.iter().any(|item| {
+            item.event_type == SUPERVISOR_TICK_EVENT
+                && item.payload["retry_node_id"] == "plan-node-stale"
+                && item.payload["retry_attempt_id"].is_null()
+                && item.payload["retry_reason"] == "stale_plan_node_no_terminal_worker_report"
+                && item.metadata["source"] == "workspace_plan.snapshot_stale_node_recovery"
+        }));
+        assert!(stale_snapshot.events.iter().any(|event| {
+            event.event_type == "auto_stale_node_recovery_queued"
+                && event.node_id.as_deref() == Some("plan-node-stale")
+                && event.attempt_id.is_none()
+                && event.payload["reason"] == "stale_plan_node_without_recoverable_attempt"
+                && event.payload["execution"] == "idle"
+        }));
+        let duplicate = service
+            .recover_stale_attempts(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanActionRequest {
+                    reason: Some("recover stale node again".to_string()),
+                    evidence_refs: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            duplicate.message,
+            "No stale workspace plan attempts needed recovery."
+        );
         let done = service
             .transition_task(
                 "user-1",

@@ -1,0 +1,16 @@
+{
+  "noop": {
+    "message": "No stale workspace plan attempts needed recovery.",
+    "node_id": null,
+    "ok": true,
+    "outbox_id": null,
+    "plan_id": "plan-1"
+  },
+  "queued": {
+    "message": "Workspace plan stale attempt recovery queued.",
+    "node_id": null,
+    "ok": true,
+    "outbox_id": null,
+    "plan_id": "plan-1"
+  }
+}
