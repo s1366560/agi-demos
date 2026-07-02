@@ -90,8 +90,8 @@ use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
 use crate::workspace_outbox_worker::{
-    workspace_plan_outbox_handlers_with_runtime_state,
-    workspace_plan_outbox_handlers_with_stage_runner, PgWorkspacePlanOutboxStore,
+    worker_launch_event_stream_source,
+    workspace_plan_outbox_handlers_with_runtime_state_and_event_stream, PgWorkspacePlanOutboxStore,
     ProjectSandboxPipelineStageRunner, SharedWorkspacePlanOutboxWorker,
     WorkerLaunchRuntimeStateStore, WorkspacePipelineStageRunner, WorkspacePlanOutboxWorker,
     WorkspacePlanOutboxWorkerConfig,
@@ -802,15 +802,21 @@ async fn build_state() -> AppState {
         let stage_runner: Arc<dyn WorkspacePipelineStageRunner> = Arc::new(
             ProjectSandboxPipelineStageRunner::new(Arc::clone(&sandboxes)),
         );
+        let worker_stream_events = worker_launch_event_stream_source(Arc::clone(&events));
         let handlers = match worker_launch_runtime_state.clone() {
-            Some(runtime_state) => workspace_plan_outbox_handlers_with_runtime_state(
+            Some(runtime_state) => {
+                workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
+                    Arc::new(PgWorkspaceRepository::new(pool.clone())),
+                    Some(Arc::clone(&stage_runner)),
+                    Some(runtime_state),
+                    Some(Arc::clone(&worker_stream_events)),
+                )
+            }
+            None => workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
                 Arc::new(PgWorkspaceRepository::new(pool.clone())),
                 Some(Arc::clone(&stage_runner)),
-                Some(runtime_state),
-            ),
-            None => workspace_plan_outbox_handlers_with_stage_runner(
-                Arc::new(PgWorkspaceRepository::new(pool.clone())),
-                Some(Arc::clone(&stage_runner)),
+                None,
+                Some(worker_stream_events),
             ),
         };
         Arc::new(WorkspacePlanOutboxWorker::new(

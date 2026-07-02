@@ -17,7 +17,7 @@ use agistack_adapters_postgres::{
     WorkspacePlanRecord, WorkspaceRecord, WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
-use agistack_core::ports::{CoreError, CoreResult};
+use agistack_core::ports::{CoreError, CoreResult, EventStream, StreamEntry};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{json, Map, Value};
@@ -86,6 +86,7 @@ const WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS: usize = 700;
 const WORKER_STREAM_COMPLETION_SUMMARY_CHARS: usize = 2000;
 #[allow(dead_code)]
 const DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS: i64 = 900;
+const DEFAULT_WORKER_STREAM_REPLAY_BATCH_LIMIT: usize = 100;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
@@ -854,6 +855,55 @@ impl WorkerLaunchRuntimeStateStore for agistack_adapters_redis::RedisWorkerLaunc
     }
 }
 
+#[async_trait]
+pub(crate) trait WorkerLaunchEventStream: Send + Sync {
+    async fn read_after(
+        &self,
+        conversation_id: &str,
+        after_id: &str,
+        limit: usize,
+    ) -> CoreResult<Vec<StreamEntry>>;
+}
+
+#[derive(Debug, Default)]
+struct NoopWorkerLaunchEventStream;
+
+#[async_trait]
+impl WorkerLaunchEventStream for NoopWorkerLaunchEventStream {
+    async fn read_after(
+        &self,
+        _conversation_id: &str,
+        _after_id: &str,
+        _limit: usize,
+    ) -> CoreResult<Vec<StreamEntry>> {
+        Ok(Vec::new())
+    }
+}
+
+struct EventStreamWorkerLaunchEventSource {
+    events: Arc<dyn EventStream>,
+}
+
+#[async_trait]
+impl WorkerLaunchEventStream for EventStreamWorkerLaunchEventSource {
+    async fn read_after(
+        &self,
+        conversation_id: &str,
+        after_id: &str,
+        limit: usize,
+    ) -> CoreResult<Vec<StreamEntry>> {
+        self.events
+            .read_after(&worker_stream_topic(conversation_id), after_id, limit)
+            .await
+    }
+}
+
+pub(crate) fn worker_launch_event_stream_source(
+    events: Arc<dyn EventStream>,
+) -> Arc<dyn WorkerLaunchEventStream> {
+    Arc::new(EventStreamWorkerLaunchEventSource { events })
+}
+
 #[cfg(test)]
 pub(crate) fn workspace_plan_outbox_handlers(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
@@ -861,6 +911,7 @@ pub(crate) fn workspace_plan_outbox_handlers(
     workspace_plan_outbox_handlers_with_stage_runner(dispatch_store, None)
 }
 
+#[allow(dead_code)]
 pub(crate) fn workspace_plan_outbox_handlers_with_stage_runner(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
     stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
@@ -868,20 +919,41 @@ pub(crate) fn workspace_plan_outbox_handlers_with_stage_runner(
     workspace_plan_outbox_handlers_with_runtime_state(dispatch_store, stage_runner, None)
 }
 
+#[allow(dead_code)]
 pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
     stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
     worker_launch_state: Option<Arc<dyn WorkerLaunchRuntimeStateStore>>,
 ) -> WorkspacePlanOutboxHandlers {
+    workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
+        dispatch_store,
+        stage_runner,
+        worker_launch_state,
+        None,
+    )
+}
+
+pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
+    dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
+    stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
+    worker_launch_state: Option<Arc<dyn WorkerLaunchRuntimeStateStore>>,
+    worker_stream_events: Option<Arc<dyn WorkerLaunchEventStream>>,
+) -> WorkspacePlanOutboxHandlers {
     let handoff = Arc::new(DurableHandoffResumeHandler::new(Arc::clone(
         &dispatch_store,
     )));
+    let stream_events =
+        worker_stream_events.unwrap_or_else(|| Arc::new(NoopWorkerLaunchEventStream));
     let worker_launch = Arc::new(match worker_launch_state {
-        Some(runtime_state) => WorkerLaunchAdmissionHandler::with_runtime_state(
+        Some(runtime_state) => WorkerLaunchAdmissionHandler::with_runtime_state_and_event_stream(
             Arc::clone(&dispatch_store),
             runtime_state,
+            stream_events,
         ),
-        None => WorkerLaunchAdmissionHandler::new(Arc::clone(&dispatch_store)),
+        None => WorkerLaunchAdmissionHandler::with_event_stream(
+            Arc::clone(&dispatch_store),
+            stream_events,
+        ),
     });
     let supervisor_tick = Arc::new(SupervisorTickAdmissionHandler::new(Arc::clone(
         &dispatch_store,
@@ -1988,6 +2060,10 @@ fn worker_conversation_id(
     Uuid::new_v5(&Uuid::NAMESPACE_DNS, name.as_bytes()).to_string()
 }
 
+fn worker_stream_topic(conversation_id: &str) -> String {
+    format!("agent:events:{conversation_id}")
+}
+
 fn worker_conversation_title(task: &WorkspaceTaskRecord) -> String {
     let title_prefix = task.title.chars().take(80).collect::<String>();
     format!("Workspace Worker - {title_prefix}")
@@ -2025,21 +2101,52 @@ fn worker_conversation_metadata(
 pub(crate) struct WorkerLaunchAdmissionHandler {
     store: Arc<dyn WorkspacePlanDispatchStore>,
     runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
+    stream_events: Arc<dyn WorkerLaunchEventStream>,
     config: WorkerLaunchAdmissionConfig,
 }
 
 impl WorkerLaunchAdmissionHandler {
+    #[allow(dead_code)]
     pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
-        Self::with_runtime_state(store, Arc::new(NoopWorkerLaunchRuntimeStateStore))
+        Self::with_runtime_state_and_event_stream(
+            store,
+            Arc::new(NoopWorkerLaunchRuntimeStateStore),
+            Arc::new(NoopWorkerLaunchEventStream),
+        )
     }
 
+    #[allow(dead_code)]
     pub(crate) fn with_runtime_state(
         store: Arc<dyn WorkspacePlanDispatchStore>,
         runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
     ) -> Self {
+        Self::with_runtime_state_and_event_stream(
+            store,
+            runtime_state,
+            Arc::new(NoopWorkerLaunchEventStream),
+        )
+    }
+
+    pub(crate) fn with_event_stream(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        stream_events: Arc<dyn WorkerLaunchEventStream>,
+    ) -> Self {
+        Self::with_runtime_state_and_event_stream(
+            store,
+            Arc::new(NoopWorkerLaunchRuntimeStateStore),
+            stream_events,
+        )
+    }
+
+    pub(crate) fn with_runtime_state_and_event_stream(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
+        stream_events: Arc<dyn WorkerLaunchEventStream>,
+    ) -> Self {
         Self {
             store,
             runtime_state,
+            stream_events,
             config: WorkerLaunchAdmissionConfig::from_env(),
         }
     }
@@ -2052,6 +2159,7 @@ impl WorkerLaunchAdmissionHandler {
         Self {
             store,
             runtime_state: Arc::new(NoopWorkerLaunchRuntimeStateStore),
+            stream_events: Arc::new(NoopWorkerLaunchEventStream),
             config,
         }
     }
@@ -2065,6 +2173,21 @@ impl WorkerLaunchAdmissionHandler {
         Self {
             store,
             runtime_state,
+            stream_events: Arc::new(NoopWorkerLaunchEventStream),
+            config,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_config_and_event_stream(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        stream_events: Arc<dyn WorkerLaunchEventStream>,
+        config: WorkerLaunchAdmissionConfig,
+    ) -> Self {
+        Self {
+            store,
+            runtime_state: Arc::new(NoopWorkerLaunchRuntimeStateStore),
+            stream_events,
             config,
         }
     }
@@ -2265,7 +2388,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
         }
         task_metadata.insert(
             "worker_launch_admitted_by".to_string(),
-            json!(leader_agent_id),
+            json!(leader_agent_id.clone()),
         );
         task_metadata.insert(
             "current_attempt_worker_agent_id".to_string(),
@@ -2324,6 +2447,30 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
         )
         .await?;
 
+        if let (Some(conversation_id), Some(attempt_id)) = (
+            current_attempt_conversation_id.as_deref(),
+            attempt_id.as_deref(),
+        ) {
+            let stream_after_id = string_from_map(&payload, "stream_after_id")
+                .or_else(|| string_from_map(&payload, "worker_stream_after_id"));
+            let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID);
+            self.replay_bound_worker_stream_once(WorkerStreamReplayInput {
+                workspace_id: &workspace_id,
+                task_id: &task_id,
+                root_goal_task_id: root_goal_task_id.as_deref(),
+                attempt_id,
+                conversation_id,
+                actor_user_id: &actor_user_id,
+                worker_agent_id: &worker_agent_id,
+                leader_agent_id: Some(&leader_agent_id),
+                plan_id: plan_id.as_deref(),
+                node_id: node_id.as_deref(),
+                stream_after_id: stream_after_id.as_deref(),
+                now,
+            })
+            .await?;
+        }
+
         Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
     }
 }
@@ -2344,6 +2491,21 @@ struct WorkerStreamTerminalPersistence<'a> {
     now: DateTime<Utc>,
 }
 
+struct WorkerStreamReplayInput<'a> {
+    workspace_id: &'a str,
+    task_id: &'a str,
+    root_goal_task_id: Option<&'a str>,
+    attempt_id: &'a str,
+    conversation_id: &'a str,
+    actor_user_id: &'a str,
+    worker_agent_id: &'a str,
+    leader_agent_id: Option<&'a str>,
+    plan_id: Option<&'a str>,
+    node_id: Option<&'a str>,
+    stream_after_id: Option<&'a str>,
+    now: DateTime<Utc>,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct WorkerReportPayload {
@@ -2356,6 +2518,190 @@ struct WorkerReportPayload {
 }
 
 impl WorkerLaunchAdmissionHandler {
+    async fn replay_bound_worker_stream_once(
+        &self,
+        input: WorkerStreamReplayInput<'_>,
+    ) -> CoreResult<bool> {
+        let stream_after_id = self.worker_stream_replay_after_id(&input).await?;
+        let entries = self
+            .stream_events
+            .read_after(
+                input.conversation_id,
+                &stream_after_id,
+                DEFAULT_WORKER_STREAM_REPLAY_BATCH_LIMIT,
+            )
+            .await?;
+        if entries.is_empty() {
+            return Ok(false);
+        }
+
+        let mut state = worker_stream_watchdog::StreamState::default();
+        let mut last_entry_id = None;
+        let mut terminal_seen = false;
+        for entry in entries {
+            last_entry_id = Some(entry.id.clone());
+            let event = match serde_json::from_str::<Value>(&entry.payload) {
+                Ok(event) => event,
+                Err(err) => json!({
+                    "type": "error",
+                    "data": {
+                        "message": format!(
+                            "Malformed worker stream payload at {}: {err}",
+                            entry.id
+                        )
+                    }
+                }),
+            };
+            if state.observe_event(&event).is_some() {
+                terminal_seen = true;
+                break;
+            }
+        }
+
+        let last_entry_id = last_entry_id.as_deref();
+        if !terminal_seen {
+            self.patch_worker_stream_replay_metadata(&input, last_entry_id, &state, None)
+                .await?;
+            return Ok(false);
+        }
+
+        let report_recorded_for_attempt = self
+            .store
+            .get_task(input.workspace_id, input.task_id)
+            .await?
+            .map(|task| {
+                worker_stream_watchdog::terminal_report_metadata_matches_attempt(
+                    Some(&task.metadata_json),
+                    Some(input.attempt_id),
+                    None,
+                )
+            })
+            .unwrap_or(false);
+        let outcome = state.terminal_outcome(report_recorded_for_attempt);
+        let reported = self
+            .persist_worker_stream_terminal_outcome(WorkerStreamTerminalPersistence {
+                workspace_id: input.workspace_id,
+                task_id: input.task_id,
+                root_goal_task_id: input.root_goal_task_id,
+                attempt_id: Some(input.attempt_id),
+                conversation_id: Some(input.conversation_id),
+                actor_user_id: input.actor_user_id,
+                worker_agent_id: input.worker_agent_id,
+                leader_agent_id: input.leader_agent_id,
+                plan_id: input.plan_id,
+                node_id: input.node_id,
+                outcome: &outcome,
+                now: input.now,
+            })
+            .await?;
+        self.patch_worker_stream_replay_metadata(&input, last_entry_id, &state, Some(&outcome))
+            .await?;
+        Ok(reported)
+    }
+
+    async fn worker_stream_replay_after_id(
+        &self,
+        input: &WorkerStreamReplayInput<'_>,
+    ) -> CoreResult<String> {
+        if let Some(after_id) = input
+            .stream_after_id
+            .filter(|value| !value.trim().is_empty())
+        {
+            return Ok(after_id.to_string());
+        }
+        let after_id = self
+            .store
+            .get_task(input.workspace_id, input.task_id)
+            .await?
+            .and_then(|task| {
+                task.metadata_json
+                    .get("worker_stream_last_entry_id")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .map(ToOwned::to_owned)
+            })
+            .unwrap_or_default();
+        Ok(after_id)
+    }
+
+    async fn patch_worker_stream_replay_metadata(
+        &self,
+        input: &WorkerStreamReplayInput<'_>,
+        last_entry_id: Option<&str>,
+        state: &worker_stream_watchdog::StreamState,
+        outcome: Option<&worker_stream_watchdog::TerminalOutcome>,
+    ) -> CoreResult<()> {
+        let Some(mut task) = self
+            .store
+            .get_task(input.workspace_id, input.task_id)
+            .await?
+        else {
+            return Ok(());
+        };
+        let mut metadata = object_or_empty(task.metadata_json.clone());
+        if let Some(last_entry_id) = last_entry_id {
+            metadata.insert(
+                "worker_stream_last_entry_id".to_string(),
+                json!(last_entry_id),
+            );
+        }
+        metadata.insert(
+            "worker_stream_last_replayed_at".to_string(),
+            json!(input.now.to_rfc3339()),
+        );
+        metadata.insert(
+            "worker_stream_replay_status".to_string(),
+            json!(if outcome.is_some() {
+                "terminal"
+            } else {
+                "observed"
+            }),
+        );
+        metadata.insert(
+            "worker_stream_replay_attempt_id".to_string(),
+            json!(input.attempt_id),
+        );
+        if let Some(last_event_type) = state
+            .last_stream_event_type
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            metadata.insert(
+                "worker_stream_last_event_type".to_string(),
+                json!(last_event_type),
+            );
+        }
+        if let Some(message_id) = state
+            .stream_message_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            metadata.insert("worker_stream_message_id".to_string(), json!(message_id));
+        }
+        if let Some(outcome) = outcome {
+            metadata.insert(
+                "worker_stream_terminal_outcome".to_string(),
+                json!(outcome.outcome_reason),
+            );
+            metadata.insert(
+                "worker_stream_terminal_launch_state".to_string(),
+                json!(outcome.launch_state),
+            );
+            metadata.insert(
+                "worker_stream_terminal_should_report".to_string(),
+                json!(outcome.should_report),
+            );
+            metadata.insert(
+                "worker_stream_terminal_replayed_at".to_string(),
+                json!(input.now.to_rfc3339()),
+            );
+        }
+        task.metadata_json = Value::Object(metadata);
+        task.updated_at = Some(input.now);
+        self.store.save_task(task).await?;
+        Ok(())
+    }
+
     #[allow(dead_code)]
     async fn persist_worker_stream_terminal_outcome(
         &self,
@@ -12202,6 +12548,50 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FakeWorkerLaunchEventStream {
+        entries: Mutex<HashMap<String, Vec<StreamEntry>>>,
+    }
+
+    impl FakeWorkerLaunchEventStream {
+        fn push(&self, conversation_id: &str, id: &str, payload: Value) {
+            self.entries
+                .lock()
+                .unwrap()
+                .entry(conversation_id.to_string())
+                .or_default()
+                .push(StreamEntry {
+                    id: id.to_string(),
+                    payload: payload.to_string(),
+                });
+        }
+    }
+
+    #[async_trait]
+    impl WorkerLaunchEventStream for FakeWorkerLaunchEventStream {
+        async fn read_after(
+            &self,
+            conversation_id: &str,
+            after_id: &str,
+            limit: usize,
+        ) -> CoreResult<Vec<StreamEntry>> {
+            let entries = self.entries.lock().unwrap();
+            let mut seen_after = after_id.is_empty() || after_id == "0";
+            let mut out = Vec::new();
+            for entry in entries.get(conversation_id).into_iter().flatten() {
+                if !seen_after {
+                    seen_after = entry.id == after_id;
+                    continue;
+                }
+                out.push(entry.clone());
+                if out.len() >= limit {
+                    break;
+                }
+            }
+            Ok(out)
+        }
+    }
+
     #[derive(Debug, Clone, PartialEq)]
     struct FakePipelineContractRecord {
         id: String,
@@ -13582,6 +13972,22 @@ esac
         )
     }
 
+    fn worker_launch_handler_with_event_stream(
+        store: Arc<FakeWorkspacePlanDispatchStore>,
+        stream_events: Arc<FakeWorkerLaunchEventStream>,
+        max_active: i64,
+    ) -> WorkerLaunchAdmissionHandler {
+        WorkerLaunchAdmissionHandler::with_config_and_event_stream(
+            store as Arc<dyn WorkspacePlanDispatchStore>,
+            stream_events as Arc<dyn WorkerLaunchEventStream>,
+            WorkerLaunchAdmissionConfig {
+                max_active_worker_conversations: max_active,
+                defer_seconds: 30,
+                active_event_grace_seconds: 60,
+            },
+        )
+    }
+
     fn worker_launch_item() -> WorkspacePlanOutboxRecord {
         let mut item = outbox("job-worker-launch", WORKER_LAUNCH_EVENT);
         item.payload_json = json!({
@@ -14608,6 +15014,159 @@ esac
             node.metadata_json[CURRENT_ATTEMPT_CONVERSATION_ID],
             "d267a78e-eefc-5d33-bfb3-ac4fa7ece855"
         );
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_replays_bound_stream_complete_to_terminal_report() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.insert_task(root_goal_task());
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let conversation_id = "d267a78e-eefc-5d33-bfb3-ac4fa7ece855";
+        let stream_events = Arc::new(FakeWorkerLaunchEventStream::default());
+        stream_events.push(
+            conversation_id,
+            "1-0",
+            json!({"type": "message", "data": {"id": "msg-1"}}),
+        );
+        stream_events.push(
+            conversation_id,
+            "2-0",
+            json!({"type": "text_delta", "data": {"text": "finished "}}),
+        );
+        stream_events.push(
+            conversation_id,
+            "3-0",
+            json!({
+                "type": "complete",
+                "data": {
+                    "content": "{\"summary\":\"done via event stream\",\"test_commands\":[\"cargo test -p app\"]}"
+                }
+            }),
+        );
+        let handler = worker_launch_handler_with_event_stream(Arc::clone(&store), stream_events, 4);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let task = store.task("task-test");
+        assert_eq!(task.metadata_json["launch_state"], "completed_via_stream");
+        assert_eq!(
+            task.metadata_json[CURRENT_ATTEMPT_CONVERSATION_ID],
+            conversation_id
+        );
+        assert_eq!(task.metadata_json["worker_stream_last_entry_id"], "3-0");
+        assert_eq!(
+            task.metadata_json["worker_stream_replay_status"],
+            "terminal"
+        );
+        assert_eq!(
+            task.metadata_json["worker_stream_last_event_type"],
+            "complete"
+        );
+        assert_eq!(task.metadata_json["worker_stream_message_id"], "msg-1");
+        assert_eq!(
+            task.metadata_json["worker_stream_terminal_outcome"],
+            "completed"
+        );
+        assert_eq!(task.metadata_json["last_worker_report_type"], "completed");
+        assert_eq!(
+            task.metadata_json[LAST_WORKER_REPORT_SUMMARY],
+            "done via event stream"
+        );
+        assert_eq!(
+            task.metadata_json["last_worker_report_verifications"],
+            json!(["test_run:cargo test -p app"])
+        );
+
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        assert_eq!(
+            attempt.candidate_summary.as_deref(),
+            Some("done via event stream")
+        );
+        assert_eq!(attempt.conversation_id.as_deref(), Some(conversation_id));
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.progress_json["note"], "done via event stream");
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "worker_report_terminal");
+        let outbox = store.outbox();
+        assert_eq!(outbox.len(), 1);
+        assert_eq!(outbox[0].event_type, SUPERVISOR_TICK_EVENT);
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_replays_nonterminal_stream_without_reporting() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let conversation_id = "d267a78e-eefc-5d33-bfb3-ac4fa7ece855";
+        let stream_events = Arc::new(FakeWorkerLaunchEventStream::default());
+        stream_events.push(
+            conversation_id,
+            "1-0",
+            json!({"type": "message", "data": {"id": "msg-1"}}),
+        );
+        stream_events.push(
+            conversation_id,
+            "2-0",
+            json!({"type": "text_delta", "data": {"text": "still running"}}),
+        );
+        let handler = worker_launch_handler_with_event_stream(Arc::clone(&store), stream_events, 4);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let task = store.task("task-test");
+        assert_eq!(task.metadata_json["launch_state"], "bound");
+        assert_eq!(task.metadata_json["worker_stream_last_entry_id"], "2-0");
+        assert_eq!(
+            task.metadata_json["worker_stream_replay_status"],
+            "observed"
+        );
+        assert_eq!(
+            task.metadata_json["worker_stream_last_event_type"],
+            "text_delta"
+        );
+        assert_eq!(task.metadata_json["worker_stream_message_id"], "msg-1");
+        assert!(task.metadata_json.get("last_worker_report_type").is_none());
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(attempt.status, "running");
+        assert!(attempt.candidate_summary.is_none());
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "running");
+        assert!(store.plan_events().is_empty());
         assert!(store.outbox().is_empty());
     }
 
