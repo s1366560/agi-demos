@@ -86,6 +86,7 @@ const WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS: usize = 700;
 const WORKER_STREAM_COMPLETION_SUMMARY_CHARS: usize = 2000;
 #[allow(dead_code)]
 const DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS: i64 = 900;
+const DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS: i64 = 60;
 const DEFAULT_WORKER_STREAM_REPLAY_BATCH_LIMIT: usize = 100;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
@@ -204,6 +205,7 @@ const FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS: &[&str] = &[
 #[allow(dead_code)]
 mod worker_stream_watchdog {
     use super::{
+        DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS,
         DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS, WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS,
         WORKER_STREAM_COMPLETION_SUMMARY_CHARS,
     };
@@ -279,7 +281,9 @@ mod worker_stream_watchdog {
         now: f64,
         interval_seconds: Option<i64>,
     ) -> bool {
-        let interval = interval_seconds.unwrap_or(60).max(1) as f64;
+        let interval = interval_seconds
+            .unwrap_or(DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS)
+            .max(1) as f64;
         if idle_seconds < interval {
             return false;
         }
@@ -2064,6 +2068,18 @@ fn worker_stream_topic(conversation_id: &str) -> String {
     format!("agent:events:{conversation_id}")
 }
 
+fn worker_stream_event_time_us(event: &Value) -> Option<i64> {
+    event
+        .get("event_time_us")
+        .and_then(Value::as_i64)
+        .or_else(|| {
+            event
+                .get("event_time_us")
+                .and_then(Value::as_u64)
+                .and_then(|value| i64::try_from(value).ok())
+        })
+}
+
 fn worker_conversation_title(task: &WorkspaceTaskRecord) -> String {
     let title_prefix = task.title.chars().take(80).collect::<String>();
     format!("Workspace Worker - {title_prefix}")
@@ -2174,6 +2190,21 @@ impl WorkerLaunchAdmissionHandler {
             store,
             runtime_state,
             stream_events: Arc::new(NoopWorkerLaunchEventStream),
+            config,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_config_and_runtime_state_and_event_stream(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
+        stream_events: Arc<dyn WorkerLaunchEventStream>,
+        config: WorkerLaunchAdmissionConfig,
+    ) -> Self {
+        Self {
+            store,
+            runtime_state,
+            stream_events,
             config,
         }
     }
@@ -2506,6 +2537,13 @@ struct WorkerStreamReplayInput<'a> {
     now: DateTime<Utc>,
 }
 
+struct WorkerStreamIdleProgress {
+    summary: String,
+    idle_seconds: i64,
+    running_exists: bool,
+    finished_message_id: Option<String>,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct WorkerReportPayload {
@@ -2537,6 +2575,7 @@ impl WorkerLaunchAdmissionHandler {
 
         let mut state = worker_stream_watchdog::StreamState::default();
         let mut last_entry_id = None;
+        let mut last_event_time_us = None;
         let mut terminal_seen = false;
         for entry in entries {
             last_entry_id = Some(entry.id.clone());
@@ -2552,6 +2591,9 @@ impl WorkerLaunchAdmissionHandler {
                     }
                 }),
             };
+            if let Some(event_time_us) = worker_stream_event_time_us(&event) {
+                last_event_time_us = Some(event_time_us);
+            }
             if state.observe_event(&event).is_some() {
                 terminal_seen = true;
                 break;
@@ -2560,8 +2602,14 @@ impl WorkerLaunchAdmissionHandler {
 
         let last_entry_id = last_entry_id.as_deref();
         if !terminal_seen {
-            self.patch_worker_stream_replay_metadata(&input, last_entry_id, &state, None)
-                .await?;
+            self.patch_worker_stream_replay_metadata(
+                &input,
+                last_entry_id,
+                last_event_time_us,
+                &state,
+                None,
+            )
+            .await?;
             return Ok(false);
         }
 
@@ -2594,8 +2642,14 @@ impl WorkerLaunchAdmissionHandler {
                 now: input.now,
             })
             .await?;
-        self.patch_worker_stream_replay_metadata(&input, last_entry_id, &state, Some(&outcome))
-            .await?;
+        self.patch_worker_stream_replay_metadata(
+            &input,
+            last_entry_id,
+            last_event_time_us,
+            &state,
+            Some(&outcome),
+        )
+        .await?;
         Ok(reported)
     }
 
@@ -2628,6 +2682,7 @@ impl WorkerLaunchAdmissionHandler {
         &self,
         input: &WorkerStreamReplayInput<'_>,
         last_entry_id: Option<&str>,
+        last_event_time_us: Option<i64>,
         state: &worker_stream_watchdog::StreamState,
         outcome: Option<&worker_stream_watchdog::TerminalOutcome>,
     ) -> CoreResult<()> {
@@ -2639,10 +2694,22 @@ impl WorkerLaunchAdmissionHandler {
             return Ok(());
         };
         let mut metadata = object_or_empty(task.metadata_json.clone());
+        let idle_progress = if outcome.is_none() {
+            self.worker_stream_idle_progress(input, state, last_event_time_us, &metadata)
+                .await
+        } else {
+            None
+        };
         if let Some(last_entry_id) = last_entry_id {
             metadata.insert(
                 "worker_stream_last_entry_id".to_string(),
                 json!(last_entry_id),
+            );
+        }
+        if let Some(last_event_time_us) = last_event_time_us {
+            metadata.insert(
+                "worker_stream_last_event_time_us".to_string(),
+                json!(last_event_time_us),
             );
         }
         metadata.insert(
@@ -2653,6 +2720,8 @@ impl WorkerLaunchAdmissionHandler {
             "worker_stream_replay_status".to_string(),
             json!(if outcome.is_some() {
                 "terminal"
+            } else if idle_progress.is_some() {
+                "stream_idle"
             } else {
                 "observed"
             }),
@@ -2696,9 +2765,167 @@ impl WorkerLaunchAdmissionHandler {
                 json!(input.now.to_rfc3339()),
             );
         }
+        if let Some(progress) = idle_progress.as_ref() {
+            metadata.insert(
+                "worker_stream_idle_progress_summary".to_string(),
+                json!(progress.summary.clone()),
+            );
+            metadata.insert(
+                "worker_stream_idle_seconds".to_string(),
+                json!(progress.idle_seconds),
+            );
+            metadata.insert(
+                "worker_stream_idle_progress_published_at".to_string(),
+                json!(input.now.to_rfc3339()),
+            );
+            metadata.insert(
+                "worker_stream_idle_progress_published_at_us".to_string(),
+                json!(input.now.timestamp_micros()),
+            );
+            metadata.insert(
+                "worker_stream_idle_running_exists".to_string(),
+                json!(progress.running_exists),
+            );
+            if let Some(finished_message_id) = progress.finished_message_id.as_deref() {
+                metadata.insert(
+                    "worker_stream_idle_finished_message_id".to_string(),
+                    json!(finished_message_id),
+                );
+            }
+            metadata.insert(
+                "execution_state".to_string(),
+                worker_execution_state(
+                    "in_progress",
+                    &progress.summary,
+                    "observe_stream_idle",
+                    input.leader_agent_id.unwrap_or(input.actor_user_id),
+                    input.now,
+                ),
+            );
+        }
         task.metadata_json = Value::Object(metadata);
         task.updated_at = Some(input.now);
         self.store.save_task(task).await?;
+        if let Some(progress) = idle_progress.as_ref() {
+            self.mark_workspace_plan_node_stream_idle(input, progress)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn worker_stream_idle_progress(
+        &self,
+        input: &WorkerStreamReplayInput<'_>,
+        state: &worker_stream_watchdog::StreamState,
+        last_event_time_us: Option<i64>,
+        metadata: &Map<String, Value>,
+    ) -> Option<WorkerStreamIdleProgress> {
+        let last_event_time_us = last_event_time_us?;
+        let now_us = input.now.timestamp_micros();
+        if now_us <= last_event_time_us {
+            return None;
+        }
+        let idle_seconds = (now_us - last_event_time_us) as f64 / 1_000_000.0;
+        let last_published_at = metadata
+            .get("worker_stream_idle_progress_published_at_us")
+            .and_then(Value::as_i64)
+            .map(|value| value as f64 / 1_000_000.0)
+            .unwrap_or_default();
+        let now_seconds = now_us as f64 / 1_000_000.0;
+        if !worker_stream_watchdog::should_publish_idle_progress(
+            idle_seconds,
+            last_published_at,
+            now_seconds,
+            None,
+        ) {
+            return None;
+        }
+        let finished_message_id = self
+            .runtime_agent_finished_message_id(input.conversation_id)
+            .await;
+        let running_exists = self
+            .runtime_agent_running_exists(input.conversation_id)
+            .await;
+        let summary = worker_stream_watchdog::idle_progress_summary(
+            idle_seconds,
+            state.last_stream_event_type.as_deref(),
+            running_exists,
+            finished_message_id.as_deref(),
+        );
+        Some(WorkerStreamIdleProgress {
+            summary,
+            idle_seconds: idle_seconds as i64,
+            running_exists,
+            finished_message_id,
+        })
+    }
+
+    async fn mark_workspace_plan_node_stream_idle(
+        &self,
+        input: &WorkerStreamReplayInput<'_>,
+        progress: &WorkerStreamIdleProgress,
+    ) -> CoreResult<()> {
+        let (Some(plan_id), Some(node_id)) = (input.plan_id, input.node_id) else {
+            return Ok(());
+        };
+        let mut nodes = self.store.list_plan_nodes(plan_id).await?;
+        let Some(mut node) = nodes.drain(..).find(|candidate| candidate.id == node_id) else {
+            return Ok(());
+        };
+        if node.current_attempt_id.as_deref() != Some(input.attempt_id) {
+            return Ok(());
+        }
+        if node.execution != "running" {
+            return Ok(());
+        }
+
+        let mut progress_json = object_or_empty(node.progress_json.clone());
+        progress_json
+            .entry("percent".to_string())
+            .or_insert_with(|| json!(0.0));
+        progress_json
+            .entry("confidence".to_string())
+            .or_insert_with(|| json!(1.0));
+        progress_json.insert("note".to_string(), json!(progress.summary.clone()));
+
+        let mut metadata = object_or_empty(node.metadata_json.clone());
+        let reported_at = input.now.to_rfc3339();
+        let progress_event = json!({
+            "event_type": "worker_stream_idle",
+            "source_event_type": "worker_stream_idle",
+            "summary": progress.summary.clone(),
+            "attempt_id": input.attempt_id,
+            "worker_agent_id": input.worker_agent_id,
+            "idle_seconds": progress.idle_seconds,
+            "running_exists": progress.running_exists,
+            "reported_at": reported_at.clone()
+        });
+        let mut progress_events = metadata
+            .get("progress_events")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        progress_events.push(progress_event.clone());
+        if progress_events.len() > 25 {
+            progress_events = progress_events.split_off(progress_events.len() - 25);
+        }
+        metadata.insert("progress_events".to_string(), Value::Array(progress_events));
+        metadata.insert("latest_worker_progress".to_string(), progress_event);
+        metadata.insert("launch_state".to_string(), json!("stream_idle"));
+        metadata.insert(
+            "worker_stream_idle_progress_summary".to_string(),
+            json!(progress.summary.clone()),
+        );
+        metadata.insert(
+            "worker_stream_idle_progress_published_at".to_string(),
+            json!(reported_at),
+        );
+
+        node.intent = "in_progress".to_string();
+        node.progress_json = Value::Object(progress_json);
+        node.metadata_json = Value::Object(metadata);
+        node.updated_at = Some(input.now);
+        self.store.save_plan_node(node).await?;
         Ok(())
     }
 
@@ -13988,6 +14215,24 @@ esac
         )
     }
 
+    fn worker_launch_handler_with_state_and_event_stream(
+        store: Arc<FakeWorkspacePlanDispatchStore>,
+        runtime_state: Arc<FakeWorkerLaunchRuntimeStateStore>,
+        stream_events: Arc<FakeWorkerLaunchEventStream>,
+        max_active: i64,
+    ) -> WorkerLaunchAdmissionHandler {
+        WorkerLaunchAdmissionHandler::with_config_and_runtime_state_and_event_stream(
+            store as Arc<dyn WorkspacePlanDispatchStore>,
+            runtime_state as Arc<dyn WorkerLaunchRuntimeStateStore>,
+            stream_events as Arc<dyn WorkerLaunchEventStream>,
+            WorkerLaunchAdmissionConfig {
+                max_active_worker_conversations: max_active,
+                defer_seconds: 30,
+                active_event_grace_seconds: 60,
+            },
+        )
+    }
+
     fn worker_launch_item() -> WorkspacePlanOutboxRecord {
         let mut item = outbox("job-worker-launch", WORKER_LAUNCH_EVENT);
         item.payload_json = json!({
@@ -15166,6 +15411,109 @@ esac
         assert!(attempt.candidate_summary.is_none());
         let node = store.node("node-test");
         assert_eq!(node.execution, "running");
+        assert!(store.plan_events().is_empty());
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_publishes_idle_progress_for_stale_nonterminal_stream() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let conversation_id = "d267a78e-eefc-5d33-bfb3-ac4fa7ece855";
+        let runtime_state = Arc::new(FakeWorkerLaunchRuntimeStateStore::default());
+        runtime_state.insert_running(conversation_id);
+        let stream_events = Arc::new(FakeWorkerLaunchEventStream::default());
+        stream_events.push(
+            conversation_id,
+            "1-0",
+            json!({
+                "type": "message",
+                "event_time_us": 0,
+                "data": {"id": "msg-1"}
+            }),
+        );
+        stream_events.push(
+            conversation_id,
+            "2-0",
+            json!({
+                "type": "text_delta",
+                "event_time_us": 0,
+                "data": {"text": "still running"}
+            }),
+        );
+        let handler = worker_launch_handler_with_state_and_event_stream(
+            Arc::clone(&store),
+            runtime_state,
+            stream_events,
+            4,
+        );
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let task = store.task("task-test");
+        assert_eq!(task.metadata_json["launch_state"], "bound");
+        assert_eq!(
+            task.metadata_json["worker_stream_replay_status"],
+            "stream_idle"
+        );
+        assert_eq!(task.metadata_json["worker_stream_last_entry_id"], "2-0");
+        assert_eq!(task.metadata_json["worker_stream_last_event_time_us"], 0);
+        assert_eq!(
+            task.metadata_json["worker_stream_idle_running_exists"],
+            true
+        );
+        assert!(
+            task.metadata_json["worker_stream_idle_seconds"]
+                .as_i64()
+                .unwrap()
+                > DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS
+        );
+        let summary = task.metadata_json["worker_stream_idle_progress_summary"]
+            .as_str()
+            .unwrap();
+        assert!(summary.contains("Worker stream still active"));
+        assert!(summary.contains("agent:running present"));
+        assert!(summary.contains("last_event=text_delta"));
+        assert_eq!(
+            task.metadata_json["execution_state"]["last_agent_action"],
+            "observe_stream_idle"
+        );
+        assert!(task.metadata_json.get("last_worker_report_type").is_none());
+
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(attempt.status, "running");
+        assert!(attempt.candidate_summary.is_none());
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "running");
+        assert_eq!(node.metadata_json["launch_state"], "stream_idle");
+        assert_eq!(
+            node.metadata_json["latest_worker_progress"]["event_type"],
+            "worker_stream_idle"
+        );
+        assert_eq!(
+            node.metadata_json["latest_worker_progress"]["attempt_id"],
+            "attempt-test"
+        );
+        assert!(node.progress_json["note"]
+            .as_str()
+            .unwrap()
+            .contains("Worker stream still active"));
         assert!(store.plan_events().is_empty());
         assert!(store.outbox().is_empty());
     }
