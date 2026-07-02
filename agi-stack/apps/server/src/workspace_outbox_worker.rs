@@ -40,9 +40,11 @@ const WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV: &str =
     "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS";
 const WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV: &str =
     "AGISTACK_WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY";
+const PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV: &str = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES";
 const DEFAULT_WORKER_LAUNCH_MAX_ACTIVE: i64 = 4;
 const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
+const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 
 pub(crate) fn workspace_plan_outbox_handlers(
@@ -1085,20 +1087,32 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
         let payload = object_or_empty(item.payload_json.clone());
         let workspace_id =
             string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
-        let Some(node_id) = string_from_map(&payload, "retry_node_id")
-            .or_else(|| string_from_map(&payload, "node_id"))
-        else {
+        let node_id = string_from_map(&payload, "retry_node_id")
+            .or_else(|| string_from_map(&payload, "node_id"));
+        let plan_id = item
+            .plan_id
+            .clone()
+            .or_else(|| string_from_map(&payload, "plan_id"));
+        let Some(node_id) = node_id else {
+            let Some(plan_id) = plan_id else {
+                return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
+                    reason: Some("supervisor_tick_requires_full_runtime".to_string()),
+                });
+            };
+            if self
+                .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
+                .await?
+                > 0
+            {
+                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+            }
             return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
                 reason: Some("supervisor_tick_requires_full_runtime".to_string()),
             });
         };
-        let plan_id = item
-            .plan_id
-            .clone()
-            .or_else(|| string_from_map(&payload, "plan_id"))
-            .ok_or_else(|| {
-                CoreError::Storage("supervisor_tick retry requires plan_id".to_string())
-            })?;
+        let plan_id = plan_id.ok_or_else(|| {
+            CoreError::Storage("supervisor_tick retry requires plan_id".to_string())
+        })?;
         let plan = self.store.get_plan(&plan_id).await?.ok_or_else(|| {
             CoreError::Storage(format!(
                 "workspace plan {plan_id} not found for workspace {workspace_id}"
@@ -1209,6 +1223,127 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             .await?;
 
         Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
+    }
+}
+
+struct SupervisorRetryContext {
+    task_id: String,
+    worker_agent_id: String,
+    actor_user_id: String,
+    leader_agent_id: String,
+    root_goal_task_id: Option<String>,
+}
+
+impl SupervisorTickAdmissionHandler {
+    async fn recover_missing_attempt_nodes(
+        &self,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
+                continue;
+            };
+            if self
+                .store
+                .get_task_session_attempt(&attempt_id)
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            let Some(context) = self
+                .retry_context_for_node(payload, workspace_id, &node)
+                .await?
+            else {
+                continue;
+            };
+
+            let now = Utc::now();
+            let node_id = node.id.clone();
+            let retry_exhausted = release_node_for_terminal_retry(
+                &mut node,
+                "missing_attempt",
+                now,
+                plan_terminal_attempt_max_retries(),
+            );
+            self.store.save_plan_node(node).await?;
+            changed += 1;
+
+            if retry_exhausted {
+                continue;
+            }
+            self.store
+                .enqueue_plan_outbox(supervisor_retry_attempt_outbox(
+                    item,
+                    payload,
+                    workspace_id,
+                    plan_id,
+                    &node_id,
+                    &context.task_id,
+                    &context.worker_agent_id,
+                    &context.actor_user_id,
+                    &context.leader_agent_id,
+                    context.root_goal_task_id.as_deref(),
+                    Some(&attempt_id),
+                    "missing_attempt",
+                    now,
+                ))
+                .await?;
+        }
+        Ok(changed)
+    }
+
+    async fn retry_context_for_node(
+        &self,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+    ) -> CoreResult<Option<SupervisorRetryContext>> {
+        let Some(task_id) =
+            string_from_map(payload, "task_id").or_else(|| node.workspace_task_id.clone())
+        else {
+            return Ok(None);
+        };
+        let Some(task) = self.store.get_task(workspace_id, &task_id).await? else {
+            return Ok(None);
+        };
+        let task_metadata = object_or_empty(task.metadata_json.clone());
+        let Some(worker_agent_id) = string_from_map(payload, "worker_agent_id")
+            .or_else(|| node.assignee_agent_id.clone())
+            .or_else(|| task.assignee_agent_id.clone())
+        else {
+            return Ok(None);
+        };
+        let actor_user_id =
+            string_from_map(payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
+        let leader_agent_id = string_from_map(payload, "leader_agent_id")
+            .or_else(|| string_from_map(&task_metadata, "leader_agent_id"))
+            .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
+        let root_goal_task_id = string_from_map(payload, ROOT_GOAL_TASK_ID)
+            .or_else(|| string_from_map(payload, "root_task_id"))
+            .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID));
+        Ok(Some(SupervisorRetryContext {
+            task_id,
+            worker_agent_id,
+            actor_user_id,
+            leader_agent_id,
+            root_goal_task_id,
+        }))
     }
 }
 
@@ -1450,6 +1585,68 @@ fn persisted_attempt_leader_agent_id(leader_agent_id: &str) -> Option<String> {
     } else {
         Some(leader_agent_id.to_string())
     }
+}
+
+fn recoverable_node_attempt_id(node: &WorkspacePlanNodeRecord) -> Option<String> {
+    let attempt_id = node.current_attempt_id.as_deref()?.trim();
+    if attempt_id.is_empty() {
+        return None;
+    }
+    if matches!(
+        node.execution.as_str(),
+        "dispatched" | "running" | "reported" | "verifying"
+    ) {
+        return Some(attempt_id.to_string());
+    }
+    if node.execution == "idle"
+        && matches!(node.intent.as_str(), "in_progress" | "blocked" | "done")
+    {
+        return Some(attempt_id.to_string());
+    }
+    None
+}
+
+fn release_node_for_terminal_retry(
+    node: &mut WorkspacePlanNodeRecord,
+    reason: &str,
+    now: DateTime<Utc>,
+    max_retries: i64,
+) -> bool {
+    let mut metadata = object_or_empty(node.metadata_json.clone());
+    let retry_count = metadata
+        .get("terminal_attempt_retry_count")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        + 1;
+    metadata.insert(
+        "terminal_attempt_retry_count".to_string(),
+        json!(retry_count),
+    );
+    metadata.insert("terminal_attempt_retry_reason".to_string(), json!(reason));
+    metadata.insert(
+        "terminal_attempt_reconciled_at".to_string(),
+        json!(now.to_rfc3339()),
+    );
+    metadata.remove("retry_not_before");
+
+    let retry_exhausted = retry_count > max_retries;
+    node.intent = if retry_exhausted {
+        "blocked".to_string()
+    } else {
+        "todo".to_string()
+    };
+    node.execution = "idle".to_string();
+    node.current_attempt_id = None;
+    node.metadata_json = Value::Object(metadata);
+    node.updated_at = Some(now);
+    retry_exhausted
+}
+
+fn plan_terminal_attempt_max_retries() -> i64 {
+    positive_i64_env(
+        PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV,
+        DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2493,6 +2690,59 @@ mod tests {
             "attempt-stale"
         );
         assert!(node.metadata_json["supervisor_tick_admitted_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_releases_missing_attempt_node_and_queues_retry() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("missing-attempt".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        node.metadata_json = json!({"retry_not_before": "2026-01-02T03:04:05Z"});
+        store.insert_node(node);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id, None);
+        assert_eq!(
+            node.metadata_json["terminal_attempt_retry_reason"],
+            "missing_attempt"
+        );
+        assert_eq!(node.metadata_json["terminal_attempt_retry_count"], 1);
+        assert!(node.metadata_json["terminal_attempt_reconciled_at"].is_string());
+        assert!(node.metadata_json.get("retry_not_before").is_none());
+
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(queued[0].payload_json["node_id"], "node-test");
+        assert_eq!(queued[0].payload_json["task_id"], "task-test");
+        assert_eq!(
+            queued[0].payload_json["previous_attempt_id"],
+            "missing-attempt"
+        );
+        assert_eq!(queued[0].payload_json["retry_reason"], "missing_attempt");
+        assert_eq!(queued[0].metadata_json["retry_node_id"], "node-test");
+        assert_eq!(
+            queued[0].metadata_json["retry_attempt_id"],
+            "missing-attempt"
+        );
     }
 
     #[tokio::test]
