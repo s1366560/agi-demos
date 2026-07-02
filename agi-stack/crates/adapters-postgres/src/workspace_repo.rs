@@ -50,6 +50,9 @@ const PLAN_EVENT_COLS: &str = "id, plan_id, workspace_id, node_id, attempt_id, e
 const PLAN_OUTBOX_COLS: &str = "id, plan_id, workspace_id, event_type, payload_json, status, \
     attempt_count, max_attempts, lease_owner, lease_expires_at, last_error, next_attempt_at, \
     processed_at, metadata_json, created_at, updated_at";
+const PIPELINE_RUN_COLS: &str = "id, contract_id, workspace_id, plan_id, node_id, attempt_id, \
+    commit_ref, provider, status, reason, started_at, completed_at, metadata_json, created_at, \
+    updated_at";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceRecord {
@@ -294,6 +297,25 @@ pub struct WorkspacePlanOutboxRecord {
     pub last_error: Option<String>,
     pub next_attempt_at: Option<DateTime<Utc>>,
     pub processed_at: Option<DateTime<Utc>>,
+    pub metadata_json: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspacePipelineRunRecord {
+    pub id: String,
+    pub contract_id: String,
+    pub workspace_id: String,
+    pub plan_id: Option<String>,
+    pub node_id: Option<String>,
+    pub attempt_id: Option<String>,
+    pub commit_ref: Option<String>,
+    pub provider: String,
+    pub status: String,
+    pub reason: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
     pub metadata_json: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -742,6 +764,34 @@ impl PgWorkspaceRepository {
         .map_err(storage)?
         .map(row_to_task_session_attempt)
         .transpose()
+    }
+
+    pub async fn latest_pipeline_run_for_node(
+        &self,
+        plan_id: &str,
+        node_id: &str,
+        attempt_id: Option<&str>,
+    ) -> CoreResult<Option<WorkspacePipelineRunRecord>> {
+        let query = format!(
+            "SELECT {PIPELINE_RUN_COLS} FROM workspace_pipeline_runs \
+             WHERE plan_id = $1 AND node_id = $2 {attempt_filter} \
+             ORDER BY created_at DESC, id DESC LIMIT 1",
+            attempt_filter = if attempt_id.is_some() {
+                "AND attempt_id = $3"
+            } else {
+                ""
+            }
+        );
+        let mut query = sqlx::query(&query).bind(plan_id).bind(node_id);
+        if let Some(attempt_id) = attempt_id {
+            query = query.bind(attempt_id);
+        }
+        query
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+            .map(row_to_pipeline_run)
+            .transpose()
     }
 
     pub async fn latest_task_session_attempt_number(
@@ -2143,6 +2193,26 @@ fn row_to_task_session_attempt(row: PgRow) -> CoreResult<WorkspaceTaskSessionAtt
         created_at: row.try_get("created_at").map_err(storage)?,
         updated_at: row.try_get("updated_at").map_err(storage)?,
         completed_at: row.try_get("completed_at").map_err(storage)?,
+    })
+}
+
+fn row_to_pipeline_run(row: PgRow) -> CoreResult<WorkspacePipelineRunRecord> {
+    Ok(WorkspacePipelineRunRecord {
+        id: row.try_get("id").map_err(storage)?,
+        contract_id: row.try_get("contract_id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        plan_id: row.try_get("plan_id").map_err(storage)?,
+        node_id: row.try_get("node_id").map_err(storage)?,
+        attempt_id: row.try_get("attempt_id").map_err(storage)?,
+        commit_ref: row.try_get("commit_ref").map_err(storage)?,
+        provider: row.try_get("provider").map_err(storage)?,
+        status: row.try_get("status").map_err(storage)?,
+        reason: row.try_get("reason").map_err(storage)?,
+        started_at: row.try_get("started_at").map_err(storage)?,
+        completed_at: row.try_get("completed_at").map_err(storage)?,
+        metadata_json: json_value(&row, "metadata_json")?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+        updated_at: row.try_get("updated_at").map_err(storage)?,
     })
 }
 

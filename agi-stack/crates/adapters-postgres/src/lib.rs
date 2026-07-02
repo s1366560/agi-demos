@@ -68,9 +68,9 @@ pub use vector_index::PgVectorIndex;
 pub use workspace_repo::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceMemberRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
-    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceMemberRecord, WorkspacePipelineRunRecord, WorkspacePlanBlackboardEntryRecord,
+    WorkspacePlanEventRecord, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord,
+    WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
     WorkspaceTaskSessionAttemptRecord,
 };
 
