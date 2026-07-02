@@ -20,7 +20,7 @@ agistack-adapters-s3 = { path = "../../crates/adapters-s3" }
 agistack-adapters-smtp = { path = "../../crates/adapters-smtp" }
 agistack-adapters-wasmtime = { path = "../../crates/adapters-wasmtime" }
 axum = { version = "0.7", features = ["multipart", "ws"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "process", "signal", "time"] }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
