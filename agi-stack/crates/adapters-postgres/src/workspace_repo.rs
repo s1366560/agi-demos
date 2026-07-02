@@ -663,6 +663,27 @@ impl PgWorkspaceRepository {
         .transpose()
     }
 
+    pub async fn find_latest_accepted_task_session_attempt(
+        &self,
+        workspace_id: &str,
+        workspace_task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        sqlx::query(&format!(
+            "SELECT {TASK_SESSION_ATTEMPT_COLS} FROM workspace_task_session_attempts \
+             WHERE workspace_id = $1 \
+               AND workspace_task_id = $2 \
+               AND status = 'accepted' \
+             ORDER BY attempt_number DESC, id ASC LIMIT 1"
+        ))
+        .bind(workspace_id)
+        .bind(workspace_task_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()
+    }
+
     pub async fn get_task_session_attempt(
         &self,
         attempt_id: &str,

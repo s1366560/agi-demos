@@ -345,6 +345,12 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         workspace_task_id: &str,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
 
+    async fn find_latest_accepted_task_session_attempt(
+        &self,
+        workspace_id: &str,
+        workspace_task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
+
     async fn get_task_session_attempt(
         &self,
         attempt_id: &str,
@@ -485,6 +491,19 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         workspace_task_id: &str,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
         PgWorkspaceRepository::find_active_task_session_attempt(self, workspace_task_id).await
+    }
+
+    async fn find_latest_accepted_task_session_attempt(
+        &self,
+        workspace_id: &str,
+        workspace_task_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        PgWorkspaceRepository::find_latest_accepted_task_session_attempt(
+            self,
+            workspace_id,
+            workspace_task_id,
+        )
+        .await
     }
 
     async fn get_task_session_attempt(
@@ -1918,6 +1937,97 @@ impl SupervisorTickAdmissionHandler {
             if !TERMINAL_RETRY_ATTEMPT_STATUSES.contains(&status.as_str()) {
                 continue;
             }
+            if let Some(accepted_attempt) = self
+                .reconciling_accepted_attempt_for_terminal_attempt(workspace_id, &node, &attempt)
+                .await?
+            {
+                let now = Utc::now();
+                let evidence_refs = accepted_attempt_evidence_refs(&accepted_attempt);
+                let commit_ref = first_valid_commit_ref(&evidence_refs);
+                let git_diff_summary = first_prefixed_ref(&evidence_refs, "git_diff_summary:");
+                let test_commands = prefixed_refs(&evidence_refs, "test_run:");
+                let summary = accepted_attempt_summary(&accepted_attempt);
+                let Some(integration_metadata) = self
+                    .project_accepted_attempt_to_task(
+                        workspace_id,
+                        &node,
+                        &accepted_attempt,
+                        &summary,
+                        &evidence_refs,
+                        commit_ref.as_deref(),
+                        git_diff_summary.as_deref(),
+                        &test_commands,
+                        now,
+                    )
+                    .await?
+                else {
+                    continue;
+                };
+
+                let mut metadata =
+                    accepted_attempt_projection_base_metadata(&node, &accepted_attempt);
+                metadata.insert(
+                    "terminal_attempt_status".to_string(),
+                    json!(ACCEPTED_ATTEMPT_STATUS),
+                );
+                metadata.insert(
+                    "terminal_attempt_reconciled_at".to_string(),
+                    json!(now.to_rfc3339()),
+                );
+                metadata.insert(
+                    "terminal_attempt_superseded_attempt_id".to_string(),
+                    json!(attempt.id.clone()),
+                );
+                metadata.insert(
+                    "terminal_attempt_superseded_status".to_string(),
+                    json!(status.clone()),
+                );
+                if let Some(reason) = attempt
+                    .adjudication_reason
+                    .as_deref()
+                    .or(attempt.leader_feedback.as_deref())
+                {
+                    metadata.insert(
+                        "terminal_attempt_superseded_reason".to_string(),
+                        json!(reason),
+                    );
+                }
+                metadata.insert("last_verification_summary".to_string(), json!(summary));
+                metadata.insert("last_verification_passed".to_string(), json!(true));
+                metadata.insert("last_verification_hard_fail".to_string(), json!(false));
+                metadata.insert(
+                    "last_verification_attempt_id".to_string(),
+                    json!(accepted_attempt.id.clone()),
+                );
+                metadata.insert(
+                    "last_verification_ran_at".to_string(),
+                    json!(now.to_rfc3339()),
+                );
+                if !accepted_attempt.candidate_artifacts_json.is_empty() {
+                    metadata.insert(
+                        "candidate_artifacts".to_string(),
+                        json!(accepted_attempt.candidate_artifacts_json.clone()),
+                    );
+                }
+                if !accepted_attempt.candidate_verifications_json.is_empty() {
+                    metadata.insert(
+                        "candidate_verifications".to_string(),
+                        json!(accepted_attempt.candidate_verifications_json.clone()),
+                    );
+                }
+                metadata.extend(integration_metadata);
+
+                node.intent = "done".to_string();
+                node.execution = "idle".to_string();
+                node.current_attempt_id = Some(accepted_attempt.id.clone());
+                node.feature_checkpoint_json =
+                    accepted_attempt_projection_feature_checkpoint(&node, &accepted_attempt);
+                node.metadata_json = Value::Object(metadata);
+                node.updated_at = Some(now);
+                self.store.save_plan_node(node).await?;
+                changed += 1;
+                continue;
+            }
             let Some(context) = self
                 .retry_context_for_node(payload, workspace_id, &node)
                 .await?
@@ -1959,6 +2069,36 @@ impl SupervisorTickAdmissionHandler {
                 .await?;
         }
         Ok(changed)
+    }
+
+    async fn reconciling_accepted_attempt_for_terminal_attempt(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        terminal_attempt: &WorkspaceTaskSessionAttemptRecord,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        let Some(accepted_attempt) = self
+            .store
+            .find_latest_accepted_task_session_attempt(
+                workspace_id,
+                &terminal_attempt.workspace_task_id,
+            )
+            .await?
+        else {
+            return Ok(None);
+        };
+        if accepted_attempt.id == terminal_attempt.id {
+            return Ok(None);
+        }
+        if !accepted_attempt_matches_node_expected_commit(node, &accepted_attempt) {
+            return Ok(None);
+        }
+        if accepted_attempt.attempt_number > terminal_attempt.attempt_number
+            || attempt_cancelled_because_parent_done_without_output(terminal_attempt)
+        {
+            return Ok(Some(accepted_attempt));
+        }
+        Ok(None)
     }
 
     async fn reconcile_reported_attempt_nodes(
@@ -2748,6 +2888,20 @@ fn accepted_attempt_matches_node_expected_commit(
         return true;
     }
     last_verified_attempt_contains_attempt_commit(node, attempt, &actual_refs)
+}
+
+fn attempt_cancelled_because_parent_done_without_output(
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> bool {
+    attempt_cancelled_because_parent_done(attempt) && !attempt_has_candidate_output(attempt)
+}
+
+fn attempt_cancelled_because_parent_done(attempt: &WorkspaceTaskSessionAttemptRecord) -> bool {
+    if attempt.status.trim().to_ascii_lowercase() != "cancelled" {
+        return false;
+    }
+    attempt.adjudication_reason.as_deref() == Some("recovery:parent_done")
+        || attempt.leader_feedback.as_deref() == Some("recovery:parent_done")
 }
 
 fn accepted_attempt_evidence_refs(attempt: &WorkspaceTaskSessionAttemptRecord) -> Vec<String> {
@@ -3573,6 +3727,32 @@ mod tests {
             Ok(attempts.into_iter().next())
         }
 
+        async fn find_latest_accepted_task_session_attempt(
+            &self,
+            workspace_id: &str,
+            workspace_task_id: &str,
+        ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+            let mut attempts = self
+                .attempts
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|attempt| {
+                    attempt.workspace_id == workspace_id
+                        && attempt.workspace_task_id == workspace_task_id
+                        && attempt.status == ACCEPTED_ATTEMPT_STATUS
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            attempts.sort_by(|left, right| {
+                right
+                    .attempt_number
+                    .cmp(&left.attempt_number)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+            Ok(attempts.into_iter().next())
+        }
+
         async fn get_task_session_attempt(
             &self,
             attempt_id: &str,
@@ -4278,6 +4458,166 @@ mod tests {
         assert_eq!(
             queued[0].payload_json["retry_reason"],
             "terminal_attempt_rejected"
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_projects_superseding_accepted_attempt_before_retry() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-cancelled".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": "/workspace/.worktrees/attempt-accepted",
+            "branch_name": "attempt-accepted",
+            "base_ref": "main",
+            "commit_ref": "abcdef1"
+        }));
+        store.insert_node(node);
+        let mut cancelled =
+            task_session_attempt("attempt-cancelled", "cancelled", Some("conversation-test"));
+        cancelled.attempt_number = 2;
+        cancelled.adjudication_reason = Some("recovery:parent_done".to_string());
+        store.insert_attempt(cancelled);
+        let mut accepted = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        accepted.attempt_number = 1;
+        accepted.leader_feedback = Some("accepted after parent recovery".to_string());
+        accepted.candidate_artifacts_json = vec!["commit_ref:abcdef1234567890".to_string()];
+        accepted.candidate_verifications_json = vec![
+            "test_run:cargo test -p agistack-server workspace_outbox_worker".to_string(),
+            "git_diff_summary:accepted sibling won".to_string(),
+        ];
+        store.insert_attempt(accepted);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-accepted"));
+        assert_eq!(
+            node.metadata_json["terminal_attempt_status"],
+            ACCEPTED_ATTEMPT_STATUS
+        );
+        assert_eq!(
+            node.metadata_json["terminal_attempt_superseded_attempt_id"],
+            "attempt-cancelled"
+        );
+        assert_eq!(
+            node.metadata_json["terminal_attempt_superseded_status"],
+            "cancelled"
+        );
+        assert_eq!(
+            node.metadata_json["terminal_attempt_superseded_reason"],
+            "recovery:parent_done"
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_attempt_id"],
+            "attempt-accepted"
+        );
+        assert_eq!(node.metadata_json["last_verification_passed"], true);
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "done");
+        assert_eq!(task.metadata_json["durable_plan_verdict"], "accepted");
+        assert_eq!(task.metadata_json[CURRENT_ATTEMPT_ID], "attempt-accepted");
+        assert_eq!(
+            task.metadata_json["last_worker_report_summary"],
+            "accepted after parent recovery"
+        );
+        assert_eq!(
+            task.metadata_json["handoff_package"]["git_head"],
+            "abcdef1234567890"
+        );
+        assert_eq!(
+            task.metadata_json["handoff_package"]["git_diff_summary"],
+            "accepted sibling won"
+        );
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_retries_terminal_parent_done_with_output() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-cancelled".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1"}));
+        store.insert_node(node);
+        let mut cancelled =
+            task_session_attempt("attempt-cancelled", "cancelled", Some("conversation-test"));
+        cancelled.attempt_number = 2;
+        cancelled.adjudication_reason = Some("recovery:parent_done".to_string());
+        cancelled.candidate_summary = Some("cancelled attempt already produced output".to_string());
+        store.insert_attempt(cancelled);
+        let mut accepted = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        accepted.attempt_number = 1;
+        accepted.candidate_artifacts_json = vec!["commit_ref:abcdef1234567890".to_string()];
+        store.insert_attempt(accepted);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id, None);
+        assert_eq!(
+            node.metadata_json["terminal_attempt_retry_reason"],
+            "terminal_attempt_cancelled"
+        );
+        assert!(node
+            .metadata_json
+            .get("terminal_attempt_superseded_attempt_id")
+            .is_none());
+        let task = store.task("task-test");
+        assert_eq!(task.status, "todo");
+        assert!(task.metadata_json.get("durable_plan_verdict").is_none());
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(
+            queued[0].payload_json["previous_attempt_id"],
+            "attempt-cancelled"
+        );
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            "terminal_attempt_cancelled"
         );
     }
 
