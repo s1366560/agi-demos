@@ -21,6 +21,7 @@ use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{json, Map, Value};
+use serde_yaml_ng::Value as YamlValue;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
@@ -40,6 +41,7 @@ const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
 const DRONE_SERVER_URL_ENV: &str = "DRONE_SERVER_URL";
 const DRONE_TOKEN_ENV: &str = "DRONE_TOKEN";
 const DRONE_DOCKER_DEPLOY_VALIDATION: &str = "explicit_deploy_step_v1";
+const DRONE_YAML_PREFLIGHT_VALIDATION: &str = "drone_yml_preflight_v1";
 const DEFAULT_DRONE_DEPLOY_MODE: &str = "cli";
 const DEFAULT_DRONE_DEPLOY_STAGE: &str = "deploy";
 const PLANNING_CONTRACT_SOURCE: &str = "planner_agent_code_analysis";
@@ -1773,6 +1775,7 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
 
 pub(crate) struct PipelineContractFoundation {
     provider: String,
+    host_code_root: Option<String>,
     code_root: Option<String>,
     commands_json: Value,
     env_json: Value,
@@ -1896,6 +1899,7 @@ struct DronePipelineConfig {
     repo: String,
     server_url: String,
     token: String,
+    host_code_root: Option<PathBuf>,
     branch: Option<String>,
     commit: Option<String>,
     params: Vec<(String, String)>,
@@ -2344,6 +2348,7 @@ fn drone_pipeline_config(
         repo: repo.to_string(),
         server_url: server_url.trim_end_matches('/').to_string(),
         token,
+        host_code_root: contract.host_code_root.as_deref().map(PathBuf::from),
         branch: string_from_map(&provider_config, "branch"),
         commit: string_from_map(&provider_config, "commit"),
         params,
@@ -2487,12 +2492,274 @@ fn drone_config_failure_config(message: &str) -> DronePipelineConfig {
         repo: String::new(),
         server_url: String::new(),
         token: String::new(),
+        host_code_root: None,
         branch: None,
         commit: None,
         params: vec![("__configuration_error__".to_string(), message.to_string())],
         deploy: None,
         timeout_seconds: 1,
         poll_interval_seconds: 1,
+    }
+}
+
+fn drone_yaml_preflight_failure_result(
+    config: &DronePipelineConfig,
+) -> Option<DronePipelineResult> {
+    let host_code_root = config.host_code_root.as_ref()?;
+    let path = host_code_root.join(".drone.yml");
+    let content = match std::fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Some(drone_preflight_failure_result(
+                "Drone build .drone.yml preflight failed: .drone.yml is missing",
+                &[".drone.yml is missing".to_string()],
+                &["drone_error:missing_config".to_string()],
+                config.deploy.as_ref(),
+            ));
+        }
+        Err(err) => {
+            return Some(drone_preflight_failure_result(
+                &format!("Drone build .drone.yml preflight failed: {err}"),
+                &[format!("could not read .drone.yml: {err}")],
+                &["drone_error:config_read_failed".to_string()],
+                config.deploy.as_ref(),
+            ));
+        }
+    };
+    let yaml = match serde_yaml_ng::from_str::<YamlValue>(&content) {
+        Ok(value) => value,
+        Err(err) => {
+            return Some(drone_preflight_failure_result(
+                &format!("Drone build .drone.yml preflight failed: {err}"),
+                &[format!(".drone.yml parse error: {err}")],
+                &[
+                    "drone_error:yaml_parse_failed".to_string(),
+                    "drone_config:.drone.yml".to_string(),
+                ],
+                config.deploy.as_ref(),
+            ));
+        }
+    };
+    let mut issues = drone_yaml_command_type_issues(&yaml);
+    if let Some(deploy) = config
+        .deploy
+        .as_ref()
+        .filter(|deploy| deploy.mode == "docker")
+    {
+        issues.extend(drone_yaml_docker_deploy_issues(&yaml, deploy));
+    }
+    dedup_strings(&mut issues);
+    if issues.is_empty() {
+        return None;
+    }
+    let mut evidence_refs = vec![
+        "drone:preflight_failed".to_string(),
+        "drone_config:.drone.yml".to_string(),
+    ];
+    if issues
+        .iter()
+        .any(|issue| issue.contains("commands") && issue.contains("string"))
+    {
+        evidence_refs.push("drone_error:yaml_unmarshal_into_string".to_string());
+    }
+    if issues
+        .iter()
+        .any(|issue| issue.contains("required services"))
+    {
+        evidence_refs.push("drone_error:docker_deploy_missing_required_service".to_string());
+    }
+    if issues
+        .iter()
+        .any(|issue| issue.contains("host.docker.internal") || issue.contains("localhost"))
+    {
+        evidence_refs.push("drone_error:docker_deploy_local_registry".to_string());
+    }
+    dedup_strings(&mut evidence_refs);
+    Some(drone_preflight_failure_result(
+        &format!(
+            "Drone build .drone.yml preflight failed: {}",
+            issues
+                .iter()
+                .take(4)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+        &issues,
+        &evidence_refs,
+        config.deploy.as_ref(),
+    ))
+}
+
+fn drone_preflight_failure_result(
+    reason: &str,
+    issues: &[String],
+    evidence_refs: &[String],
+    deploy: Option<&DroneDeployConfig>,
+) -> DronePipelineResult {
+    let preview = compact_text(reason, 4_000);
+    let mut metadata = Map::new();
+    metadata.insert("external_provider".to_string(), json!(DRONE_PROVIDER));
+    metadata.insert(
+        "drone_preflight".to_string(),
+        json!(DRONE_YAML_PREFLIGHT_VALIDATION),
+    );
+    metadata.insert("drone_preflight_status".to_string(), json!("failed"));
+    metadata.insert("drone_config_path".to_string(), json!(".drone.yml"));
+    metadata.insert(
+        "drone_preflight_issues".to_string(),
+        json!(issues.iter().take(8).cloned().collect::<Vec<_>>()),
+    );
+    if let Some(deploy) = deploy {
+        metadata.extend(drone_deploy_metadata(Some(deploy), Some("invalid"), issues));
+        metadata.insert(
+            "deploy_preflight_validation".to_string(),
+            json!(DRONE_YAML_PREFLIGHT_VALIDATION),
+        );
+    }
+
+    let mut stage_metadata = Map::new();
+    stage_metadata.insert("external_provider".to_string(), json!(DRONE_PROVIDER));
+    stage_metadata.insert(
+        "drone_preflight".to_string(),
+        json!(DRONE_YAML_PREFLIGHT_VALIDATION),
+    );
+    stage_metadata.insert("drone_config_path".to_string(), json!(".drone.yml"));
+    stage_metadata.insert(
+        "drone_preflight_issues".to_string(),
+        json!(issues.iter().take(8).cloned().collect::<Vec<_>>()),
+    );
+
+    let mut refs = vec!["ci_pipeline:failed".to_string()];
+    refs.extend(evidence_refs.iter().cloned());
+    if deploy.is_some() {
+        refs.push("deployment:invalid:docker".to_string());
+    }
+    dedup_strings(&mut refs);
+
+    DronePipelineResult {
+        status: "failed".to_string(),
+        reason: Some(preview.clone()),
+        stage_results: vec![DronePipelineStageResult {
+            stage: "drone_preflight".to_string(),
+            status: "failed".to_string(),
+            command: "drone:preflight .drone.yml".to_string(),
+            exit_code: Some(1),
+            stdout_preview: String::new(),
+            stderr_preview: preview,
+            duration_ms: 0,
+            log_ref: Some("drone://preflight/.drone.yml".to_string()),
+            artifact_refs: vec!["drone_config:.drone.yml".to_string()],
+            metadata: stage_metadata,
+        }],
+        evidence_refs: refs,
+        external_id: None,
+        external_url: None,
+        metadata,
+    }
+}
+
+fn drone_yaml_command_type_issues(yaml: &YamlValue) -> Vec<String> {
+    let mut issues = Vec::new();
+    for (index, step) in drone_yaml_steps(yaml).iter().enumerate() {
+        let step_name = drone_yaml_step_name(step, index);
+        let Some(commands) = yaml_get(step, "commands") else {
+            continue;
+        };
+        let Some(commands) = yaml_sequence(commands) else {
+            issues.push(format!(
+                "steps[{step_name}].commands must be a list of strings"
+            ));
+            continue;
+        };
+        for (command_index, command) in commands.iter().enumerate() {
+            if yaml_string(command).is_none() {
+                issues.push(format!(
+                    "steps[{step_name}].commands[{command_index}] must be a string"
+                ));
+            }
+        }
+    }
+    issues
+}
+
+fn drone_yaml_docker_deploy_issues(yaml: &YamlValue, deploy: &DroneDeployConfig) -> Vec<String> {
+    let deploy_commands = drone_yaml_deploy_commands(yaml, deploy);
+    if deploy_commands.is_empty() {
+        return vec![format!("docker deploy stage {} is missing", deploy.stage)];
+    }
+    let output = deploy_commands.join("\n").to_ascii_lowercase();
+    let mut issues = Vec::new();
+    if drone_docker_deploy_uses_forbidden_local_registry_pull(&output) {
+        issues.push(
+            "deploy step pulls or runs host.docker.internal/localhost local-registry images through the mounted host Docker daemon".to_string(),
+        );
+    }
+    let missing_services = drone_missing_docker_deploy_required_services(&output, deploy);
+    if !missing_services.is_empty() {
+        issues.push(format!(
+            "docker deploy stage {} does not cover required services: {}",
+            deploy.stage,
+            missing_services.join(", ")
+        ));
+    }
+    if !drone_docker_deploy_has_run_marker(&output) {
+        issues.push(format!(
+            "docker deploy stage {} missing docker run/compose/stack/service deploy command",
+            deploy.stage
+        ));
+    }
+    issues
+}
+
+fn drone_yaml_deploy_commands(yaml: &YamlValue, deploy: &DroneDeployConfig) -> Vec<String> {
+    drone_yaml_steps(yaml)
+        .into_iter()
+        .filter(|step| {
+            yaml_get(step, "name")
+                .and_then(yaml_string)
+                .is_some_and(|name| drone_is_deploy_label(name, deploy))
+        })
+        .filter_map(|step| yaml_get(step, "commands"))
+        .filter_map(yaml_sequence)
+        .flat_map(|commands| commands.iter().filter_map(yaml_string))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn drone_yaml_steps(yaml: &YamlValue) -> Vec<&YamlValue> {
+    yaml_get(yaml, "steps")
+        .and_then(yaml_sequence)
+        .map(|steps| steps.iter().collect())
+        .unwrap_or_default()
+}
+
+fn drone_yaml_step_name(step: &YamlValue, index: usize) -> String {
+    yaml_get(step, "name")
+        .and_then(yaml_string)
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| index.to_string())
+}
+
+fn yaml_get<'a>(value: &'a YamlValue, key: &str) -> Option<&'a YamlValue> {
+    let YamlValue::Mapping(map) = value else {
+        return None;
+    };
+    map.get(YamlValue::String(key.to_string()))
+}
+
+fn yaml_sequence(value: &YamlValue) -> Option<&Vec<YamlValue>> {
+    match value {
+        YamlValue::Sequence(items) => Some(items),
+        _ => None,
+    }
+}
+
+fn yaml_string(value: &YamlValue) -> Option<&str> {
+    match value {
+        YamlValue::String(text) => Some(text),
+        _ => None,
     }
 }
 
@@ -2503,6 +2770,9 @@ async fn run_drone_pipeline(config: &DronePipelineConfig) -> CoreResult<DronePip
         .find(|(key, _)| key == "__configuration_error__")
     {
         return Ok(drone_configuration_failure_result(message));
+    }
+    if let Some(result) = drone_yaml_preflight_failure_result(config) {
+        return Ok(result);
     }
 
     let client = reqwest::Client::builder()
@@ -4862,6 +5132,7 @@ fn pipeline_contract_foundation(workspace: &WorkspaceRecord) -> PipelineContract
         .and_then(Value::as_f64)
         .filter(|value| (0.0..=1.0).contains(value))
         .unwrap_or(1.0);
+    let host_code_root = host_code_root_from_workspace(&workspace.metadata_json);
     let code_root = string_from_map(&delivery, "code_root")
         .or_else(|| string_from_map(&workspace_metadata, "sandbox_code_root"))
         .or_else(|| {
@@ -4888,6 +5159,7 @@ fn pipeline_contract_foundation(workspace: &WorkspaceRecord) -> PipelineContract
     });
     PipelineContractFoundation {
         provider,
+        host_code_root,
         code_root,
         commands_json,
         env_json,
@@ -8755,7 +9027,15 @@ mod tests {
         server_url: &str,
         token_env: &str,
     ) -> WorkspaceRecord {
-        workspace_with_metadata(json!({
+        workspace_with_drone_api_pipeline_contract_with_host_root(server_url, token_env, None)
+    }
+
+    fn workspace_with_drone_api_pipeline_contract_with_host_root(
+        server_url: &str,
+        token_env: &str,
+        host_code_root: Option<&Path>,
+    ) -> WorkspaceRecord {
+        let mut metadata = json!({
             "source_control": {
                 "default_branch": "main"
             },
@@ -8776,14 +9056,37 @@ mod tests {
                     }
                 }
             }
-        }))
+        });
+        if let Some(host_code_root) = host_code_root {
+            metadata
+                .as_object_mut()
+                .expect("workspace metadata object")
+                .insert(
+                    "code_context".to_string(),
+                    json!({
+                        "host_code_root": host_code_root.to_string_lossy().to_string(),
+                        "sandbox_code_root": "/workspace/project"
+                    }),
+                );
+        }
+        workspace_with_metadata(metadata)
     }
 
     fn workspace_with_drone_docker_deploy_pipeline_contract(
         server_url: &str,
         token_env: &str,
     ) -> WorkspaceRecord {
-        workspace_with_metadata(json!({
+        workspace_with_drone_docker_deploy_pipeline_contract_with_host_root(
+            server_url, token_env, None,
+        )
+    }
+
+    fn workspace_with_drone_docker_deploy_pipeline_contract_with_host_root(
+        server_url: &str,
+        token_env: &str,
+        host_code_root: Option<&Path>,
+    ) -> WorkspaceRecord {
+        let mut metadata = json!({
             "source_control": {
                 "default_branch": "main"
             },
@@ -8820,7 +9123,20 @@ mod tests {
                     "timeout_seconds": 1
                 }
             }
-        }))
+        });
+        if let Some(host_code_root) = host_code_root {
+            metadata
+                .as_object_mut()
+                .expect("workspace metadata object")
+                .insert(
+                    "code_context".to_string(),
+                    json!({
+                        "host_code_root": host_code_root.to_string_lossy().to_string(),
+                        "sandbox_code_root": "/workspace/project"
+                    }),
+                );
+        }
+        workspace_with_metadata(metadata)
     }
 
     async fn drone_api_mock(
@@ -8895,6 +9211,24 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.root);
         }
+    }
+
+    struct DroneYamlFixture {
+        root: PathBuf,
+    }
+
+    impl Drop for DroneYamlFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn drone_yaml_fixture(content: &str) -> DroneYamlFixture {
+        let root =
+            std::env::temp_dir().join(format!("agistack-drone-yaml-test-{}", generate_uuid_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join(".drone.yml"), content).unwrap();
+        DroneYamlFixture { root }
     }
 
     fn git_publish_fixture() -> Option<GitPublishFixture> {
@@ -9898,6 +10232,149 @@ mod tests {
                 "pipeline_run_external:drone:owner/repo#42".to_string(),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_fails_drone_yaml_preflight_for_non_string_command() {
+        let fixture = drone_yaml_fixture(
+            r#"
+kind: pipeline
+type: docker
+name: default
+steps:
+  - name: ci
+    image: alpine
+    commands:
+      - echo ok
+      - label: value
+"#,
+        );
+        let (server_url, captured) = drone_api_mock(vec![]).await;
+        std::env::set_var("AGISTACK_TEST_DRONE_TOKEN_PREFLIGHT", "token-preflight");
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_api_pipeline_contract_with_host_root(
+            &server_url,
+            "AGISTACK_TEST_DRONE_TOKEN_PREFLIGHT",
+            Some(&fixture.root),
+        ));
+        store.insert_plan(plan());
+        store.insert_node(plan_node());
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler
+            .handle(pipeline_run_item_without_attempt())
+            .await
+            .unwrap();
+        std::env::remove_var("AGISTACK_TEST_DRONE_TOKEN_PREFLIGHT");
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert!(captured.lock().await.is_empty());
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.status, "failed");
+        assert!(run
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("commands[1] must be a string")));
+        assert_eq!(
+            run.metadata_json["drone_preflight"],
+            DRONE_YAML_PREFLIGHT_VALIDATION
+        );
+        assert_eq!(run.metadata_json["drone_preflight_status"], "failed");
+        assert_eq!(
+            run.metadata_json["pipeline_failed_stage"],
+            "drone_preflight"
+        );
+
+        let stage = store.pipeline_stage_runs().into_iter().next().unwrap();
+        assert_eq!(stage.stage, "drone_preflight");
+        assert_eq!(stage.status, "failed");
+        assert_eq!(stage.command.as_deref(), Some("drone:preflight .drone.yml"));
+        assert!(stage
+            .stderr_preview
+            .as_deref()
+            .is_some_and(|preview| preview.contains("commands[1] must be a string")));
+
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["pipeline_status"], "failed");
+        assert_eq!(
+            node.metadata_json["pipeline_failed_stage"],
+            "drone_preflight"
+        );
+        let evidence = metadata_string_values(node.metadata_json.get("pipeline_evidence_refs"));
+        assert!(evidence.contains(&"ci_pipeline:failed".to_string()));
+        assert!(evidence.contains(&"drone:preflight_failed".to_string()));
+        assert!(evidence.contains(&"drone_config:.drone.yml".to_string()));
+        assert!(evidence.contains(&"drone_error:yaml_unmarshal_into_string".to_string()));
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_fails_drone_yaml_preflight_for_missing_deploy_service() {
+        let fixture = drone_yaml_fixture(
+            r#"
+kind: pipeline
+type: docker
+name: default
+steps:
+  - name: docker-build-web
+    image: plugins/docker
+    commands:
+      - docker build -t registry.local/app-web:abc .
+  - name: deploy
+    image: docker:cli
+    commands:
+      - docker run -d --name other-service registry.local/other-service:abc
+"#,
+        );
+        let (server_url, captured) = drone_api_mock(vec![]).await;
+        std::env::set_var(
+            "AGISTACK_TEST_DRONE_TOKEN_PREFLIGHT_DEPLOY",
+            "token-preflight-deploy",
+        );
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(
+            workspace_with_drone_docker_deploy_pipeline_contract_with_host_root(
+                &server_url,
+                "AGISTACK_TEST_DRONE_TOKEN_PREFLIGHT_DEPLOY",
+                Some(&fixture.root),
+            ),
+        );
+        store.insert_plan(plan());
+        store.insert_node(plan_node());
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler
+            .handle(pipeline_run_item_without_attempt())
+            .await
+            .unwrap();
+        std::env::remove_var("AGISTACK_TEST_DRONE_TOKEN_PREFLIGHT_DEPLOY");
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert!(captured.lock().await.is_empty());
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.status, "failed");
+        assert_eq!(run.metadata_json["deployment_status"], "invalid");
+        assert_eq!(
+            run.metadata_json["deploy_preflight_validation"],
+            DRONE_YAML_PREFLIGHT_VALIDATION
+        );
+        assert!(run.metadata_json["deploy_validation_failure"]
+            .as_str()
+            .is_some_and(|failure| failure.contains("required services: app-web")));
+        assert!(run
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("required services: app-web")));
+
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["pipeline_status"], "failed");
+        assert_eq!(node.metadata_json["deployment_status"], "invalid");
+        let evidence = metadata_string_values(node.metadata_json.get("pipeline_evidence_refs"));
+        assert!(evidence.contains(&"ci_pipeline:failed".to_string()));
+        assert!(evidence.contains(&"drone:preflight_failed".to_string()));
+        assert!(
+            evidence.contains(&"drone_error:docker_deploy_missing_required_service".to_string())
+        );
+        assert!(evidence.contains(&"deployment:invalid:docker".to_string()));
     }
 
     #[tokio::test]
