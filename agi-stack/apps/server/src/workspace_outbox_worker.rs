@@ -86,6 +86,79 @@ const NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS: [&str; 27] = [
     "worktree_integration_summary",
     "worktree_integration_worktree_path",
 ];
+const FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS: &[&str] = &[
+    "candidate_artifacts",
+    "candidate_verifications",
+    "deploy_mode",
+    "deployment_status",
+    "evidence_refs",
+    "execution_verifications",
+    "external_id",
+    "external_provider",
+    "external_url",
+    "last_verification_summary",
+    "last_verification_passed",
+    "last_verification_hard_fail",
+    "last_verification_attempt_id",
+    "last_verification_ran_at",
+    "last_verification_judge_confidence",
+    "last_verification_judge_failed_criteria",
+    "last_verification_judge_next_action_kind",
+    "last_verification_judge_rationale",
+    "last_verification_judge_repair_brief",
+    "last_verification_judge_required_next_action",
+    "last_verification_judge_verdict",
+    "last_verification_feedback_items",
+    "last_worker_report_attempt_id",
+    "last_worker_report_artifacts",
+    "last_worker_report_summary",
+    "last_worker_report_type",
+    "last_worker_report_verifications",
+    "verification_feedback_disposition",
+    "obsolete_by_verifier_feedback",
+    "obsolete_feedback_items",
+    "current_repair_turn",
+    "dependency_invalidated_at",
+    "dependency_invalidated_missing_ids",
+    "dependency_invalidated_reason",
+    "dependency_invalidated_previous_attempt_id",
+    "dependency_invalidated_previous_intent",
+    "dependency_invalidated_previous_execution",
+    "pipeline_finished_at",
+    "pipeline_request_count",
+    "pipeline_requested_at",
+    "verification_evidence_refs",
+    "verified_commit_ref",
+    "verified_git_diff_summary",
+    "verified_test_commands",
+    "reported_attempt_reconciled_at",
+    "reported_attempt_status",
+    "retry_last_reason",
+    "source_publish_branch",
+    "source_publish_commit_ref",
+    "source_publish_provider",
+    "source_publish_reason",
+    "source_publish_source_commit_ref",
+    "source_publish_status",
+    "source_publish_token_env",
+    "terminal_attempt_status",
+    "terminal_attempt_reconciled_at",
+    "terminal_attempt_superseded_attempt_id",
+    "terminal_attempt_superseded_reason",
+    "terminal_attempt_superseded_status",
+    "pipeline_status",
+    "pipeline_gate_status",
+    "pipeline_run_id",
+    "pipeline_evidence_refs",
+    "pipeline_last_summary",
+    "worktree_integration_attempt_id",
+    "worktree_integration_commit_ref",
+    "worktree_integration_dirty_signature",
+    "worktree_integration_ran_at",
+    "worktree_integration_status",
+    "worktree_integration_summary",
+    "worktree_integration_worktree_path",
+];
 
 pub(crate) fn workspace_plan_outbox_handlers(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
@@ -1157,6 +1230,9 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                     reason: Some("supervisor_tick_requires_full_runtime".to_string()),
                 });
             };
+            let changed_worktree_failed = self
+                .reopen_failed_worktree_integration_nodes(&item, &payload, &workspace_id, &plan_id)
+                .await?;
             let changed_missing = self
                 .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
                 .await?;
@@ -1169,7 +1245,13 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_reported = self
                 .reconcile_reported_attempt_nodes(&workspace_id, &plan_id)
                 .await?;
-            if changed_missing + changed_accepted + changed_terminal + changed_reported > 0 {
+            if changed_worktree_failed
+                + changed_missing
+                + changed_accepted
+                + changed_terminal
+                + changed_reported
+                > 0
+            {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
             }
             return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
@@ -1301,6 +1383,134 @@ struct SupervisorRetryContext {
 }
 
 impl SupervisorTickAdmissionHandler {
+    async fn reopen_failed_worktree_integration_nodes(
+        &self,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if !done_node_needs_worktree_integration_retry(&node) {
+                continue;
+            }
+            let Some(context) = self
+                .retry_context_for_node(payload, workspace_id, &node)
+                .await?
+            else {
+                continue;
+            };
+
+            let now = Utc::now();
+            let previous_metadata = object_or_empty(node.metadata_json.clone());
+            let previous_attempt_id =
+                metadata_string(previous_metadata.get("worktree_integration_attempt_id"))
+                    .or_else(|| node.current_attempt_id.clone());
+            let previous_commit_ref = node_verified_commit_ref(&node);
+            let previous_summary =
+                metadata_string(previous_metadata.get("worktree_integration_summary"))
+                    .unwrap_or_else(|| "accepted worktree integration failed".to_string());
+
+            let mut metadata =
+                clear_failed_worktree_retry_stale_attempt_metadata(previous_metadata);
+            metadata.insert("last_verification_passed".to_string(), json!(false));
+            metadata.insert(
+                "last_verification_summary".to_string(),
+                json!(format!(
+                    "accepted worktree integration failed after verification: {previous_summary}"
+                )),
+            );
+            metadata.insert(
+                "terminal_attempt_retry_reason".to_string(),
+                json!("worktree_integration_failed"),
+            );
+            metadata.insert(
+                "worktree_integration_failed_done_reopened_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            if let Some(previous_attempt_id) = previous_attempt_id.as_deref() {
+                metadata.insert(
+                    "worktree_integration_failed_previous_attempt_id".to_string(),
+                    json!(previous_attempt_id),
+                );
+            }
+            if let Some(previous_commit_ref) = previous_commit_ref.as_deref() {
+                metadata.insert(
+                    "worktree_integration_failed_previous_commit_ref".to_string(),
+                    json!(previous_commit_ref),
+                );
+            }
+            metadata.insert(
+                "worktree_integration_failed_previous_summary".to_string(),
+                json!(previous_summary.clone()),
+            );
+
+            let node_id = node.id.clone();
+            node.intent = "todo".to_string();
+            node.execution = "idle".to_string();
+            node.assignee_agent_id = None;
+            node.current_attempt_id = None;
+            node.feature_checkpoint_json =
+                reset_feature_checkpoint(node.feature_checkpoint_json.clone());
+            node.metadata_json = Value::Object(metadata);
+            node.updated_at = Some(now);
+            node.completed_at = None;
+            self.store.save_plan_node(node.clone()).await?;
+            changed += 1;
+
+            self.store
+                .create_plan_event(WorkspacePlanEventRecord {
+                    id: generate_uuid_v4(),
+                    plan_id: plan_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    node_id: Some(node_id.clone()),
+                    attempt_id: previous_attempt_id.clone(),
+                    event_type: "worktree_integration_failed_done_node_reopened".to_string(),
+                    source: "workspace_plan_supervisor_tick".to_string(),
+                    actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                    payload_json: json!({
+                        "previous_attempt_id": previous_attempt_id,
+                        "previous_commit_ref": previous_commit_ref,
+                        "summary": "done node reopened because accepted worktree integration failed",
+                        "worktree_integration_summary": previous_summary,
+                    }),
+                    created_at: now,
+                })
+                .await?;
+
+            self.store
+                .enqueue_plan_outbox(supervisor_retry_attempt_outbox(
+                    item,
+                    payload,
+                    workspace_id,
+                    plan_id,
+                    &node_id,
+                    &context.task_id,
+                    &context.worker_agent_id,
+                    &context.actor_user_id,
+                    &context.leader_agent_id,
+                    context.root_goal_task_id.as_deref(),
+                    previous_attempt_id.as_deref(),
+                    "worktree_integration_failed",
+                    now,
+                ))
+                .await?;
+        }
+        Ok(changed)
+    }
+
     async fn recover_missing_attempt_nodes(
         &self,
         item: &WorkspacePlanOutboxRecord,
@@ -2219,6 +2429,110 @@ fn accepted_worktree_projection_complete_for_node(
         .unwrap_or_default()
         .to_ascii_lowercase();
     WORKTREE_INTEGRATION_DONE_STATUSES.contains(&status.as_str())
+}
+
+fn done_node_needs_worktree_integration_retry(node: &WorkspacePlanNodeRecord) -> bool {
+    if node.intent != "done" || node.execution != "idle" {
+        return false;
+    }
+    let metadata = object_or_empty(node.metadata_json.clone());
+    if metadata_string(metadata.get("worktree_integration_status")).as_deref() != Some("failed") {
+        return false;
+    }
+    dependency_commit_needs_integration(node, &metadata)
+}
+
+fn dependency_commit_needs_integration(
+    node: &WorkspacePlanNodeRecord,
+    metadata: &Map<String, Value>,
+) -> bool {
+    if node_disposition_satisfies_dependency_without_integration(metadata) {
+        return false;
+    }
+    if node_verified_commit_ref(node).is_none() {
+        return false;
+    }
+    let Some(worktree_path) = node_attempt_worktree_path(node, metadata) else {
+        return false;
+    };
+    if !looks_like_attempt_worktree(&worktree_path) {
+        return false;
+    }
+    let status = metadata_string(metadata.get("worktree_integration_status"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if status == "failed"
+        && metadata
+            .get("terminal_attempt_status")
+            .and_then(Value::as_str)
+            == Some("accepted")
+        && metadata
+            .get("worktree_integration_dirty_signature")
+            .is_none_or(Value::is_null)
+        && metadata_string(metadata.get("worktree_integration_summary"))
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .contains("commit_ref not found in attempt worktree")
+    {
+        return false;
+    }
+    !matches!(status.as_str(), "merged" | "already_merged" | "skipped")
+}
+
+fn node_disposition_satisfies_dependency_without_integration(
+    metadata: &Map<String, Value>,
+) -> bool {
+    metadata_string(metadata.get("verification_feedback_disposition")).as_deref()
+        == Some("supervisor_agent_disposed_node")
+        && metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
+            == Some("dispose_node")
+        && metadata_string(metadata.get("last_verification_judge_next_action_kind")).as_deref()
+            != Some("retry_same_node")
+}
+
+fn node_verified_commit_ref(node: &WorkspacePlanNodeRecord) -> Option<String> {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    metadata
+        .get("verified_commit_ref")
+        .and_then(Value::as_str)
+        .and_then(commit_ref_token)
+        .or_else(|| {
+            metadata
+                .get("worktree_integration_commit_ref")
+                .and_then(Value::as_str)
+                .and_then(commit_ref_token)
+        })
+        .or_else(|| feature_checkpoint_commit_ref(node))
+}
+
+fn node_attempt_worktree_path(
+    node: &WorkspacePlanNodeRecord,
+    metadata: &Map<String, Value>,
+) -> Option<String> {
+    metadata_string(metadata.get("worktree_integration_worktree_path"))
+        .or_else(|| metadata_string(metadata.get("active_execution_root")))
+        .or_else(|| metadata_string(metadata.get("worktree_path")))
+        .or_else(|| {
+            metadata_string_from_path(
+                node.feature_checkpoint_json
+                    .as_ref()
+                    .unwrap_or(&Value::Null),
+                &["worktree_path"],
+            )
+        })
+}
+
+fn looks_like_attempt_worktree(path: &str) -> bool {
+    path.contains("/.memstack/worktrees/")
+}
+
+fn clear_failed_worktree_retry_stale_attempt_metadata(
+    mut metadata: Map<String, Value>,
+) -> Map<String, Value> {
+    for key in FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS {
+        metadata.remove(*key);
+    }
+    metadata
 }
 
 fn apply_verification_checkpoint_metadata(
@@ -4225,6 +4539,168 @@ mod tests {
         assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-accepted"));
         assert_eq!(task.status, "todo");
         assert!(task.metadata_json.get("durable_plan_verdict").is_none());
+        assert!(store.plan_events().is_empty());
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_reopens_failed_worktree_integration_done_node() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "done".to_string();
+        node.execution = "idle".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        node.completed_at = Some(Utc.with_ymd_and_hms(2026, 1, 2, 4, 5, 6).unwrap());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": "/workspace/.memstack/worktrees/attempt-accepted",
+            "branch_name": "workspace/node-attempt-accepted",
+            "base_ref": "main",
+            "commit_ref": "abcdef1"
+        }));
+        node.metadata_json = json!({
+            "terminal_attempt_status": "accepted",
+            "last_verification_passed": true,
+            "last_verification_attempt_id": "attempt-accepted",
+            "verified_commit_ref": "abcdef1234567890",
+            "worktree_integration_attempt_id": "attempt-accepted",
+            "worktree_integration_status": "failed",
+            "worktree_integration_commit_ref": "abcdef1234567890",
+            "worktree_integration_worktree_path": "/workspace/.memstack/worktrees/attempt-accepted",
+            "worktree_integration_dirty_signature": Value::Null,
+            "worktree_integration_summary": "Exit code: 128\nstatus=failed\nreason=merge_failed_aborted\nfatal: refusing to merge unrelated histories",
+            "candidate_artifacts": ["commit_ref:abcdef1234567890"]
+        });
+        store.insert_node(node);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+            "extra_instructions": "retry failed accepted worktree integration"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert!(node.current_attempt_id.is_none());
+        assert!(node.assignee_agent_id.is_none());
+        assert!(node.completed_at.is_none());
+        let checkpoint = node.feature_checkpoint_json.unwrap();
+        assert!(checkpoint["worktree_path"].is_null());
+        assert!(checkpoint["branch_name"].is_null());
+        assert_eq!(checkpoint["base_ref"], "HEAD");
+        assert!(checkpoint["commit_ref"].is_null());
+        assert_eq!(node.metadata_json["last_verification_passed"], false);
+        assert_eq!(
+            node.metadata_json["terminal_attempt_retry_reason"],
+            "worktree_integration_failed"
+        );
+        assert_eq!(
+            node.metadata_json["worktree_integration_failed_previous_attempt_id"],
+            "attempt-accepted"
+        );
+        assert_eq!(
+            node.metadata_json["worktree_integration_failed_previous_commit_ref"],
+            "abcdef1234567890"
+        );
+        assert!(node
+            .metadata_json
+            .get("worktree_integration_status")
+            .is_none());
+        assert!(node.metadata_json.get("candidate_artifacts").is_none());
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].event_type,
+            "worktree_integration_failed_done_node_reopened"
+        );
+        assert_eq!(events[0].source, "workspace_plan_supervisor_tick");
+        assert_eq!(
+            events[0].payload_json["previous_attempt_id"],
+            "attempt-accepted"
+        );
+        assert_eq!(
+            events[0].payload_json["previous_commit_ref"],
+            "abcdef1234567890"
+        );
+
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(queued[0].payload_json["node_id"], "node-test");
+        assert_eq!(
+            queued[0].payload_json["previous_attempt_id"],
+            "attempt-accepted"
+        );
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            "worktree_integration_failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_preserves_failed_worktree_when_commit_ref_was_missing() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "done".to_string();
+        node.execution = "idle".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": "/workspace/.memstack/worktrees/attempt-accepted",
+            "branch_name": "workspace/node-attempt-accepted",
+            "base_ref": "main",
+            "commit_ref": "abcdef1"
+        }));
+        node.metadata_json = json!({
+            "terminal_attempt_status": "accepted",
+            "last_verification_passed": true,
+            "last_verification_attempt_id": "attempt-accepted",
+            "verified_commit_ref": "abcdef1234567890",
+            "worktree_integration_attempt_id": "attempt-accepted",
+            "worktree_integration_status": "failed",
+            "worktree_integration_commit_ref": "abcdef1234567890",
+            "worktree_integration_worktree_path": "/workspace/.memstack/worktrees/attempt-accepted",
+            "worktree_integration_dirty_signature": Value::Null,
+            "worktree_integration_summary": "status=failed\ncommit_ref not found in attempt worktree"
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_artifacts_json = vec!["commit_ref:abcdef1234567890".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string())
+            }
+        );
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.metadata_json["worktree_integration_status"], "failed");
         assert!(store.plan_events().is_empty());
         assert!(store.outbox().is_empty());
     }
