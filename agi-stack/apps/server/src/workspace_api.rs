@@ -45,6 +45,9 @@ use crate::AppState;
 
 pub(crate) type SharedWorkspaces = Arc<dyn WorkspaceService>;
 
+const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
+const SUPERVISOR_TICK_EVENT: &str = "supervisor_tick";
+
 #[async_trait]
 pub(crate) trait WorkspaceService: Send + Sync {
     async fn create_workspace(
@@ -83,6 +86,20 @@ pub(crate) trait WorkspaceService: Send + Sync {
         user_id: &str,
         workspace_id: &str,
         outbox_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
+
+    async fn request_delivery_pipeline_run(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: WorkspacePlanPipelineRunRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
+
+    async fn request_delivery_contract_regeneration(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
         body: WorkspacePlanActionRequest,
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
 
@@ -1110,6 +1127,16 @@ pub(crate) struct WorkspacePlanActionRequest {
     evidence_refs: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct WorkspacePlanPipelineRunRequest {
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    evidence_refs: Vec<String>,
+    #[serde(default)]
+    node_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) struct WorkspacePlanActionResultView {
     ok: bool,
@@ -1434,6 +1461,145 @@ impl WorkspaceService for PgWorkspaceService {
             plan_id,
             node_id: None,
             outbox_id: Some(outbox_id.to_string()),
+        })
+    }
+
+    async fn request_delivery_pipeline_run(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: WorkspacePlanPipelineRunRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_pipeline_request(&body)?;
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
+            .await?;
+        let plan = self
+            .repo
+            .list_plans(workspace_id, 1)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .next()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let nodes = self
+            .repo
+            .list_plan_nodes(&plan.id)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let node = pipeline_target_node(&nodes, body.node_id.as_deref())
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let reason = body
+            .reason
+            .clone()
+            .unwrap_or_else(|| "operator requested harness-native pipeline".to_string());
+        let outbox = self
+            .repo
+            .enqueue_plan_outbox(plan_action_outbox(
+                &plan.id,
+                workspace_id,
+                PIPELINE_RUN_REQUESTED_EVENT,
+                json!({
+                    "workspace_id": workspace_id,
+                    "plan_id": plan.id,
+                    "node_id": node.id,
+                    "attempt_id": node.current_attempt_id,
+                    "reason": reason
+                }),
+                json!({"source": "workspace_plan.operator_delivery_run_pipeline"}),
+                Utc::now(),
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Harness-native pipeline run requested.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node.id),
+            outbox_id: Some(outbox.id),
+        })
+    }
+
+    async fn request_delivery_contract_regeneration(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
+            .await?;
+        let plan = self
+            .repo
+            .list_plans(workspace_id, 1)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .next()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let now = Utc::now();
+        let mut workspace = self
+            .repo
+            .get_workspace(workspace_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .ok_or_else(WorkspaceApiError::workspace_not_found)?;
+        apply_delivery_contract_regeneration(
+            &mut workspace.metadata_json,
+            user_id,
+            body.reason.as_deref(),
+            now,
+        );
+        workspace.updated_at = Some(now);
+        self.repo
+            .save_workspace(workspace)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let reason = body
+            .reason
+            .clone()
+            .unwrap_or_else(|| "operator requested delivery contract regeneration".to_string());
+        let outbox = self
+            .repo
+            .enqueue_plan_outbox(plan_action_outbox(
+                &plan.id,
+                workspace_id,
+                SUPERVISOR_TICK_EVENT,
+                json!({
+                    "workspace_id": workspace_id,
+                    "plan_id": plan.id,
+                    "reason": reason
+                }),
+                json!({"source": "workspace_plan.operator_delivery_regenerate_contract"}),
+                now,
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        self.repo
+            .create_plan_event(WorkspacePlanEventRecord {
+                id: new_id(),
+                plan_id: plan.id.clone(),
+                workspace_id: workspace_id.to_string(),
+                node_id: None,
+                attempt_id: None,
+                event_type: "delivery_contract_regeneration_requested".to_string(),
+                source: "operator".to_string(),
+                actor_id: None,
+                payload_json: json!({
+                    "reason": body.reason,
+                    "requested_by": user_id,
+                    "requested_at": iso(now)
+                }),
+                created_at: now,
+            })
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Delivery contract regeneration requested.".to_string(),
+            plan_id: plan.id,
+            node_id: None,
+            outbox_id: Some(outbox.id),
         })
     }
 
@@ -3116,6 +3282,121 @@ impl WorkspaceService for DevWorkspaceService {
             plan_id,
             node_id: None,
             outbox_id: Some(outbox_id.to_string()),
+        })
+    }
+
+    async fn request_delivery_pipeline_run(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: WorkspacePlanPipelineRunRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_pipeline_request(&body)?;
+        self.require_dev_user(user_id)?;
+        let mut state = self.state.lock().expect("workspace dev state");
+        if !state.workspaces.contains_key(workspace_id) {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let plan = latest_plan_for_workspace(&state, workspace_id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let nodes = plan_nodes_for_dev(&state, &plan.id);
+        let node = pipeline_target_node(&nodes, body.node_id.as_deref())
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let reason = body
+            .reason
+            .clone()
+            .unwrap_or_else(|| "operator requested harness-native pipeline".to_string());
+        let outbox = plan_action_outbox(
+            &plan.id,
+            workspace_id,
+            PIPELINE_RUN_REQUESTED_EVENT,
+            json!({
+                "workspace_id": workspace_id,
+                "plan_id": plan.id,
+                "node_id": node.id,
+                "attempt_id": node.current_attempt_id,
+                "reason": reason
+            }),
+            json!({"source": "workspace_plan.operator_delivery_run_pipeline"}),
+            Utc::now(),
+        );
+        let outbox_id = outbox.id.clone();
+        state.plan_outbox.push(outbox);
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Harness-native pipeline run requested.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node.id),
+            outbox_id: Some(outbox_id),
+        })
+    }
+
+    async fn request_delivery_contract_regeneration(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.require_dev_user(user_id)?;
+        let mut state = self.state.lock().expect("workspace dev state");
+        let plan = latest_plan_for_workspace(&state, workspace_id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let now = Utc::now();
+        let workspace = state
+            .workspaces
+            .get_mut(workspace_id)
+            .ok_or_else(WorkspaceApiError::workspace_not_found)?;
+        apply_delivery_contract_regeneration(
+            &mut workspace.metadata_json,
+            user_id,
+            body.reason.as_deref(),
+            now,
+        );
+        workspace.updated_at = Some(now);
+        let reason = body
+            .reason
+            .clone()
+            .unwrap_or_else(|| "operator requested delivery contract regeneration".to_string());
+        let outbox = plan_action_outbox(
+            &plan.id,
+            workspace_id,
+            SUPERVISOR_TICK_EVENT,
+            json!({
+                "workspace_id": workspace_id,
+                "plan_id": plan.id,
+                "reason": reason
+            }),
+            json!({"source": "workspace_plan.operator_delivery_regenerate_contract"}),
+            now,
+        );
+        let outbox_id = outbox.id.clone();
+        state.plan_outbox.push(outbox);
+        state.plan_events.push(WorkspacePlanEventRecord {
+            id: new_id(),
+            plan_id: plan.id.clone(),
+            workspace_id: workspace_id.to_string(),
+            node_id: None,
+            attempt_id: None,
+            event_type: "delivery_contract_regeneration_requested".to_string(),
+            source: "operator".to_string(),
+            actor_id: None,
+            payload_json: json!({
+                "reason": body.reason,
+                "requested_by": user_id,
+                "requested_at": iso(now)
+            }),
+            created_at: now,
+        });
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Delivery contract regeneration requested.".to_string(),
+            plan_id: plan.id,
+            node_id: None,
+            outbox_id: Some(outbox_id),
         })
     }
 
@@ -5300,12 +5581,23 @@ fn outbox_actions(
 fn validate_plan_action_request(
     body: &WorkspacePlanActionRequest,
 ) -> Result<(), WorkspaceApiError> {
-    if body
-        .reason
-        .as_ref()
+    validate_plan_action_parts(body.reason.as_ref(), body.evidence_refs.len())
+}
+
+fn validate_plan_pipeline_request(
+    body: &WorkspacePlanPipelineRunRequest,
+) -> Result<(), WorkspaceApiError> {
+    validate_plan_action_parts(body.reason.as_ref(), body.evidence_refs.len())
+}
+
+fn validate_plan_action_parts(
+    reason: Option<&String>,
+    evidence_refs_len: usize,
+) -> Result<(), WorkspaceApiError> {
+    if reason
         .map(|reason| reason.chars().count() > 500)
         .unwrap_or(false)
-        || body.evidence_refs.len() > 20
+        || evidence_refs_len > 20
     {
         return Err(WorkspaceApiError::bad_request(
             "Invalid workspace plan request",
@@ -5320,6 +5612,127 @@ fn map_plan_outbox_retry_error(err: agistack_core::ports::CoreError) -> Workspac
     } else {
         WorkspaceApiError::internal(err)
     }
+}
+
+fn plan_action_outbox(
+    plan_id: &str,
+    workspace_id: &str,
+    event_type: &str,
+    payload_json: Value,
+    metadata_json: Value,
+    created_at: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    WorkspacePlanOutboxRecord {
+        id: new_id(),
+        plan_id: Some(plan_id.to_string()),
+        workspace_id: workspace_id.to_string(),
+        event_type: event_type.to_string(),
+        payload_json,
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json,
+        created_at,
+        updated_at: None,
+    }
+}
+
+fn pipeline_target_node<'a>(
+    nodes: &'a [WorkspacePlanNodeRecord],
+    node_id: Option<&str>,
+) -> Option<&'a WorkspacePlanNodeRecord> {
+    if let Some(node_id) = node_id {
+        return nodes.iter().find(|node| node.id == node_id);
+    }
+    let mut candidates = nodes
+        .iter()
+        .filter(|node| {
+            matches!(node.kind.as_str(), "task" | "verify")
+                && node
+                    .metadata_json
+                    .get("pipeline_required")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    if candidates.is_empty() {
+        candidates = nodes
+            .iter()
+            .filter(|node| matches!(node.kind.as_str(), "task" | "verify"))
+            .collect::<Vec<_>>();
+    }
+    candidates.sort_by(|a, b| {
+        pipeline_execution_rank(&a.execution)
+            .cmp(&pipeline_execution_rank(&b.execution))
+            .then(a.priority.cmp(&b.priority))
+            .then(node_updated_or_created(a).cmp(&node_updated_or_created(b)))
+    });
+    candidates.into_iter().next()
+}
+
+fn pipeline_execution_rank(execution: &str) -> i32 {
+    match execution {
+        "reported" | "verifying" | "running" | "dispatched" => 0,
+        _ => 1,
+    }
+}
+
+fn node_updated_or_created(node: &WorkspacePlanNodeRecord) -> DateTime<Utc> {
+    node.updated_at.unwrap_or(node.created_at)
+}
+
+fn apply_delivery_contract_regeneration(
+    metadata_json: &mut Value,
+    actor_id: &str,
+    reason: Option<&str>,
+    now: DateTime<Utc>,
+) {
+    let mut metadata = match metadata_json.clone() {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
+    let mut delivery = match metadata.get("delivery_cicd").cloned() {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    };
+    delivery.insert("agent_managed".to_string(), json!(true));
+    delivery.insert(
+        "contract_source".to_string(),
+        json!("agent_regeneration_requested"),
+    );
+    delivery.insert("contract_confidence".to_string(), json!(0.0));
+    delivery.insert("regenerate_requested_at".to_string(), json!(iso(now)));
+    delivery.insert("regenerate_requested_by".to_string(), json!(actor_id));
+    if let Some(reason) = reason {
+        delivery.insert("regenerate_reason".to_string(), json!(reason));
+    }
+    metadata.insert("delivery_cicd".to_string(), Value::Object(delivery));
+    *metadata_json = Value::Object(metadata);
+}
+
+fn latest_plan_for_workspace<'a>(
+    state: &'a DevWorkspaceState,
+    workspace_id: &str,
+) -> Option<&'a WorkspacePlanRecord> {
+    state
+        .plans
+        .values()
+        .filter(|plan| plan.workspace_id == workspace_id)
+        .max_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)))
+}
+
+fn plan_nodes_for_dev(state: &DevWorkspaceState, plan_id: &str) -> Vec<WorkspacePlanNodeRecord> {
+    state
+        .plan_nodes
+        .values()
+        .filter(|node| node.plan_id == plan_id)
+        .cloned()
+        .collect()
 }
 
 fn plan_retry_event(
@@ -6252,6 +6665,30 @@ async fn retry_plan_outbox(
         .map(Json)
 }
 
+async fn request_delivery_pipeline_run(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(workspace_id): Path<String>,
+    Json(body): Json<WorkspacePlanPipelineRunRequest>,
+) -> Result<Json<WorkspacePlanActionResultView>, WorkspaceApiError> {
+    app.workspaces
+        .request_delivery_pipeline_run(&identity.user_id, &workspace_id, body)
+        .await
+        .map(Json)
+}
+
+async fn request_delivery_contract_regeneration(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(workspace_id): Path<String>,
+    Json(body): Json<WorkspacePlanActionRequest>,
+) -> Result<Json<WorkspacePlanActionResultView>, WorkspaceApiError> {
+    app.workspaces
+        .request_delivery_contract_regeneration(&identity.user_id, &workspace_id, body)
+        .await
+        .map(Json)
+}
+
 async fn update_workspace(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -6955,6 +7392,14 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/workspaces/:workspace_id/plan/outbox/:outbox_id/retry",
             post(retry_plan_outbox),
         )
+        .route(
+            "/api/v1/workspaces/:workspace_id/plan/delivery/run-pipeline",
+            post(request_delivery_pipeline_run),
+        )
+        .route(
+            "/api/v1/workspaces/:workspace_id/plan/delivery/regenerate-contract",
+            post(request_delivery_contract_regeneration),
+        )
         .route("/api/v1/workspaces/:workspace_id/tasks", post(create_task).get(list_tasks))
         .route(
             "/api/v1/workspaces/:workspace_id/tasks/:task_id",
@@ -7330,6 +7775,29 @@ mod tests {
             ))
             .unwrap(),
         );
+        let delivery_results = json!({
+            "pipeline": serde_json::to_value(WorkspacePlanActionResultView {
+                ok: true,
+                message: "Harness-native pipeline run requested.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: Some("node-1".to_string()),
+                outbox_id: Some("outbox-pipeline".to_string()),
+            }).unwrap(),
+            "regenerate_contract": serde_json::to_value(WorkspacePlanActionResultView {
+                ok: true,
+                message: "Delivery contract regeneration requested.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: None,
+                outbox_id: Some("outbox-contract".to_string()),
+            }).unwrap()
+        });
+        assert_golden(
+            &delivery_results,
+            serde_json::from_str(include_str!(
+                "../tests/golden/workspace_plan_delivery_action_results.json"
+            ))
+            .unwrap(),
+        );
     }
 
     #[tokio::test]
@@ -7583,7 +8051,7 @@ mod tests {
                     assignee_agent_id: None,
                     current_attempt_id: None,
                     workspace_task_id: Some(task.id.clone()),
-                    metadata_json: json!({"iteration_phase": "plan"}),
+                    metadata_json: json!({"iteration_phase": "plan", "pipeline_required": true}),
                     created_at: now,
                     updated_at: None,
                     completed_at: None,
@@ -7673,6 +8141,61 @@ mod tests {
             .iter()
             .any(|event| event.event_type == "operator_retry_outbox"
                 && event.payload["outbox_id"] == "outbox-dev"));
+        let pipeline = service
+            .request_delivery_pipeline_run(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanPipelineRunRequest {
+                    reason: Some("run CI".to_string()),
+                    evidence_refs: Vec::new(),
+                    node_id: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(pipeline.message, "Harness-native pipeline run requested.");
+        assert_eq!(pipeline.node_id.as_deref(), Some("plan-node-dev"));
+        let regenerated = service
+            .request_delivery_contract_regeneration(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanActionRequest {
+                    reason: Some("refresh contract".to_string()),
+                    evidence_refs: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            regenerated.message,
+            "Delivery contract regeneration requested."
+        );
+        let delivery_snapshot = service
+            .get_plan_snapshot(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanSnapshotQuery::default(),
+            )
+            .await
+            .unwrap();
+        assert!(delivery_snapshot.outbox.iter().any(|item| {
+            item.event_type == PIPELINE_RUN_REQUESTED_EVENT
+                && item.payload["node_id"] == "plan-node-dev"
+                && item.payload["reason"] == "run CI"
+        }));
+        assert!(delivery_snapshot.outbox.iter().any(|item| item.event_type
+            == SUPERVISOR_TICK_EVENT
+            && item.metadata["source"] == "workspace_plan.operator_delivery_regenerate_contract"));
+        assert!(delivery_snapshot.events.iter().any(|event| {
+            event.event_type == "delivery_contract_regeneration_requested"
+                && event.payload["requested_by"] == "user-1"
+        }));
+        {
+            let state = service.state.lock().expect("workspace dev state");
+            let delivery = &state.workspaces[&workspace.id].metadata_json["delivery_cicd"];
+            assert_eq!(delivery["contract_source"], "agent_regeneration_requested");
+            assert_eq!(delivery["regenerate_reason"], "refresh contract");
+        }
         let done = service
             .transition_task(
                 "user-1",

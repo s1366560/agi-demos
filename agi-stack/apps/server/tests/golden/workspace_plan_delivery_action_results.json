@@ -1,0 +1,16 @@
+{
+  "pipeline": {
+    "message": "Harness-native pipeline run requested.",
+    "node_id": "node-1",
+    "ok": true,
+    "outbox_id": "outbox-pipeline",
+    "plan_id": "plan-1"
+  },
+  "regenerate_contract": {
+    "message": "Delivery contract regeneration requested.",
+    "node_id": null,
+    "ok": true,
+    "outbox_id": "outbox-contract",
+    "plan_id": "plan-1"
+  }
+}
