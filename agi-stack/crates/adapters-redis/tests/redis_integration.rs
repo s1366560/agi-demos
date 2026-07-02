@@ -443,3 +443,73 @@ async fn redis_worker_launch_state_matches_python_marker_keys() {
 
     del_keys(&[cooldown_key, running_key, finished_key]).await;
 }
+
+#[tokio::test]
+async fn redis_worker_launch_refreshes_runtime_markers_like_python_heartbeat() {
+    let Some(store) = redis_worker_launch_state_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("worker-launch-refresh").replace(':', "-");
+    let conversation_id = format!("conv-{suffix}");
+    let cooldown_key = worker_launch_cooldown_key(&conversation_id);
+    let running_key = agent_running_key(&conversation_id);
+    let finished_key = agent_finished_key(&conversation_id);
+    del_keys(&[
+        cooldown_key.clone(),
+        running_key.clone(),
+        finished_key.clone(),
+    ])
+    .await;
+
+    assert_eq!(
+        store
+            .agent_finished_message_id(&conversation_id)
+            .await
+            .unwrap(),
+        None
+    );
+    assert!(!store
+        .refresh_worker_launch_cooldown(&conversation_id, 60)
+        .await
+        .unwrap());
+    assert!(!store
+        .refresh_existing_agent_running_marker(&conversation_id, 60)
+        .await
+        .unwrap());
+
+    set_key(&cooldown_key, "1", 5).await;
+    set_key(&running_key, "1", 5).await;
+    assert!(store
+        .refresh_worker_launch_cooldown(&conversation_id, 60)
+        .await
+        .unwrap());
+    assert!(store
+        .refresh_existing_agent_running_marker(&conversation_id, 60)
+        .await
+        .unwrap());
+    let cooldown_ttl = ttl(&cooldown_key).await.unwrap();
+    let running_ttl = ttl(&running_key).await.unwrap();
+    assert!(
+        (30..=60).contains(&cooldown_ttl),
+        "worker launch cooldown should be refreshed, got {cooldown_ttl}"
+    );
+    assert!(
+        (30..=60).contains(&running_ttl),
+        "agent:running marker should be refreshed, got {running_ttl}"
+    );
+
+    set_key(&finished_key, "msg-1", 60).await;
+    assert_eq!(
+        store
+            .agent_finished_message_id(&conversation_id)
+            .await
+            .unwrap(),
+        Some("msg-1".to_string())
+    );
+    assert!(!store
+        .refresh_existing_agent_running_marker(&conversation_id, 60)
+        .await
+        .unwrap());
+
+    del_keys(&[cooldown_key, running_key, finished_key]).await;
+}

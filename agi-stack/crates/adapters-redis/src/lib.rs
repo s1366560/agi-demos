@@ -518,6 +518,19 @@ impl RedisWorkerLaunchStateStore {
         Ok(refreshed)
     }
 
+    pub async fn agent_finished_message_id(
+        &self,
+        conversation_id: &str,
+    ) -> CoreResult<Option<String>> {
+        let mut conn = self.conn.clone();
+        let message_id: Option<String> = redis::cmd("GET")
+            .arg(agent_finished_key(conversation_id))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(message_id)
+    }
+
     pub async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool> {
         let mut conn = self.conn.clone();
         let exists: i64 = redis::cmd("EXISTS")
@@ -526,6 +539,30 @@ impl RedisWorkerLaunchStateStore {
             .await
             .map_err(gerr)?;
         Ok(exists > 0)
+    }
+
+    pub async fn refresh_existing_agent_running_marker(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        let mut conn = self.conn.clone();
+        let finished_exists: i64 = redis::cmd("EXISTS")
+            .arg(agent_finished_key(conversation_id))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        if finished_exists > 0 {
+            return Ok(false);
+        }
+
+        let refreshed: bool = redis::cmd("EXPIRE")
+            .arg(agent_running_key(conversation_id))
+            .arg(ttl_seconds.max(1))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(refreshed)
     }
 
     pub async fn clear_reused_worker_session_markers(

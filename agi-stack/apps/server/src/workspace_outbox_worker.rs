@@ -198,7 +198,21 @@ pub(crate) trait WorkerLaunchRuntimeStateStore: Send + Sync {
         ttl_seconds: u64,
     ) -> CoreResult<bool>;
 
+    async fn refresh_launch_cooldown(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool>;
+
+    async fn agent_finished_message_id(&self, conversation_id: &str) -> CoreResult<Option<String>>;
+
     async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool>;
+
+    async fn refresh_agent_running_marker(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool>;
 
     async fn clear_reused_session_markers(&self, conversation_id: &str) -> CoreResult<()>;
 }
@@ -216,7 +230,30 @@ impl WorkerLaunchRuntimeStateStore for NoopWorkerLaunchRuntimeStateStore {
         Ok(true)
     }
 
+    async fn refresh_launch_cooldown(
+        &self,
+        _conversation_id: &str,
+        _ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        Ok(false)
+    }
+
+    async fn agent_finished_message_id(
+        &self,
+        _conversation_id: &str,
+    ) -> CoreResult<Option<String>> {
+        Ok(None)
+    }
+
     async fn agent_running_exists(&self, _conversation_id: &str) -> CoreResult<bool> {
+        Ok(false)
+    }
+
+    async fn refresh_agent_running_marker(
+        &self,
+        _conversation_id: &str,
+        _ttl_seconds: u64,
+    ) -> CoreResult<bool> {
         Ok(false)
     }
 
@@ -236,8 +273,30 @@ impl WorkerLaunchRuntimeStateStore for agistack_adapters_redis::RedisWorkerLaunc
             .await
     }
 
+    async fn refresh_launch_cooldown(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        self.refresh_worker_launch_cooldown(conversation_id, ttl_seconds)
+            .await
+    }
+
+    async fn agent_finished_message_id(&self, conversation_id: &str) -> CoreResult<Option<String>> {
+        self.agent_finished_message_id(conversation_id).await
+    }
+
     async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool> {
         self.agent_running_exists(conversation_id).await
+    }
+
+    async fn refresh_agent_running_marker(
+        &self,
+        conversation_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<bool> {
+        self.refresh_existing_agent_running_marker(conversation_id, ttl_seconds)
+            .await
     }
 
     async fn clear_reused_session_markers(&self, conversation_id: &str) -> CoreResult<()> {
@@ -1602,6 +1661,8 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                         "workspace task session attempt {attempt_id} not found"
                     ))
                 })?;
+            self.runtime_refresh_bound_session_markers(&conversation_id)
+                .await;
             current_attempt_conversation_id = Some(conversation_id);
             bound_attempt = Some(attempt);
         }
@@ -1713,6 +1774,67 @@ impl WorkerLaunchAdmissionHandler {
             eprintln!(
                 "[agistack] worker launch state: clear reused markers failed for {conversation_id}: {err}"
             );
+        }
+    }
+
+    async fn runtime_refresh_bound_session_markers(&self, conversation_id: &str) {
+        self.runtime_refresh_launch_cooldown(conversation_id).await;
+        if self
+            .runtime_agent_finished_message_id(conversation_id)
+            .await
+            .is_some()
+        {
+            return;
+        }
+        self.runtime_refresh_agent_running_marker(conversation_id)
+            .await;
+    }
+
+    async fn runtime_refresh_launch_cooldown(&self, conversation_id: &str) -> bool {
+        match self
+            .runtime_state
+            .refresh_launch_cooldown(conversation_id, WORKER_LAUNCH_COOLDOWN_SECONDS)
+            .await
+        {
+            Ok(refreshed) => refreshed,
+            Err(err) => {
+                eprintln!(
+                    "[agistack] worker launch state: cooldown refresh failed for {conversation_id}: {err}"
+                );
+                false
+            }
+        }
+    }
+
+    async fn runtime_agent_finished_message_id(&self, conversation_id: &str) -> Option<String> {
+        match self
+            .runtime_state
+            .agent_finished_message_id(conversation_id)
+            .await
+        {
+            Ok(message_id) => message_id,
+            Err(err) => {
+                eprintln!(
+                    "[agistack] worker launch state: agent:finished read failed for {conversation_id}: {err}"
+                );
+                None
+            }
+        }
+    }
+
+    async fn runtime_refresh_agent_running_marker(&self, conversation_id: &str) -> bool {
+        match self
+            .runtime_state
+            .refresh_agent_running_marker(conversation_id, WORKER_LAUNCH_COOLDOWN_SECONDS)
+            .await
+        {
+            Ok(refreshed) => refreshed,
+            Err(err) => {
+                eprintln!(
+                    "[agistack] worker launch state: agent:running refresh failed for {conversation_id}: {err}"
+                );
+                false
+            }
         }
     }
 
@@ -10840,9 +10962,11 @@ mod tests {
     struct FakeWorkerLaunchRuntimeStateStore {
         cooldowns: Mutex<HashSet<String>>,
         running: Mutex<HashSet<String>>,
-        finished: Mutex<HashSet<String>>,
+        finished: Mutex<HashMap<String, String>>,
         claims: Mutex<Vec<String>>,
         clears: Mutex<Vec<String>>,
+        refresh_cooldowns: Mutex<Vec<String>>,
+        refresh_running: Mutex<Vec<String>>,
     }
 
     impl FakeWorkerLaunchRuntimeStateStore {
@@ -10864,7 +10988,7 @@ mod tests {
             self.finished
                 .lock()
                 .unwrap()
-                .insert(conversation_id.to_string());
+                .insert(conversation_id.to_string(), "msg-1".to_string());
         }
 
         fn has_cooldown(&self, conversation_id: &str) -> bool {
@@ -10872,7 +10996,7 @@ mod tests {
         }
 
         fn has_finished(&self, conversation_id: &str) -> bool {
-            self.finished.lock().unwrap().contains(conversation_id)
+            self.finished.lock().unwrap().contains_key(conversation_id)
         }
 
         fn claims(&self) -> Vec<String> {
@@ -10881,6 +11005,14 @@ mod tests {
 
         fn clears(&self) -> Vec<String> {
             self.clears.lock().unwrap().clone()
+        }
+
+        fn refresh_cooldowns(&self) -> Vec<String> {
+            self.refresh_cooldowns.lock().unwrap().clone()
+        }
+
+        fn refresh_running(&self) -> Vec<String> {
+            self.refresh_running.lock().unwrap().clone()
         }
     }
 
@@ -10903,7 +11035,41 @@ mod tests {
             Ok(true)
         }
 
+        async fn refresh_launch_cooldown(
+            &self,
+            conversation_id: &str,
+            _ttl_seconds: u64,
+        ) -> CoreResult<bool> {
+            self.refresh_cooldowns
+                .lock()
+                .unwrap()
+                .push(conversation_id.to_string());
+            Ok(self.cooldowns.lock().unwrap().contains(conversation_id))
+        }
+
+        async fn agent_finished_message_id(
+            &self,
+            conversation_id: &str,
+        ) -> CoreResult<Option<String>> {
+            Ok(self.finished.lock().unwrap().get(conversation_id).cloned())
+        }
+
         async fn agent_running_exists(&self, conversation_id: &str) -> CoreResult<bool> {
+            Ok(self.running.lock().unwrap().contains(conversation_id))
+        }
+
+        async fn refresh_agent_running_marker(
+            &self,
+            conversation_id: &str,
+            _ttl_seconds: u64,
+        ) -> CoreResult<bool> {
+            if self.finished.lock().unwrap().contains_key(conversation_id) {
+                return Ok(false);
+            }
+            self.refresh_running
+                .lock()
+                .unwrap()
+                .push(conversation_id.to_string());
             Ok(self.running.lock().unwrap().contains(conversation_id))
         }
 
@@ -12608,6 +12774,40 @@ esac
             "d267a78e-eefc-5d33-bfb3-ac4fa7ece855"
         );
         assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_refreshes_runtime_markers_after_binding() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let runtime_state = Arc::new(FakeWorkerLaunchRuntimeStateStore::default());
+        let conversation_id = "d267a78e-eefc-5d33-bfb3-ac4fa7ece855";
+        runtime_state.insert_running(conversation_id);
+        let handler =
+            worker_launch_handler_with_state(Arc::clone(&store), Arc::clone(&runtime_state), 4);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert_eq!(runtime_state.claims(), vec![conversation_id]);
+        assert_eq!(runtime_state.refresh_cooldowns(), vec![conversation_id]);
+        assert_eq!(runtime_state.refresh_running(), vec![conversation_id]);
+        let task = store.task("task-test");
+        assert_eq!(
+            task.metadata_json[CURRENT_ATTEMPT_CONVERSATION_ID],
+            conversation_id
+        );
     }
 
     #[tokio::test]
