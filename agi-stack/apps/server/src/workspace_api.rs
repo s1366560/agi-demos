@@ -26,7 +26,7 @@ use axum::{
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 #[cfg(test)]
 use agistack_adapters_mem::InMemoryObjectStore;
@@ -77,6 +77,14 @@ pub(crate) trait WorkspaceService: Send + Sync {
         workspace_id: &str,
         query: WorkspacePlanSnapshotQuery,
     ) -> Result<WorkspacePlanSnapshotView, WorkspaceApiError>;
+
+    async fn retry_plan_outbox(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        outbox_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
 
     async fn update_workspace(
         &self,
@@ -1094,6 +1102,23 @@ pub(crate) struct WorkspacePlanSnapshotView {
     artifact_index: Option<Value>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct WorkspacePlanActionRequest {
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    evidence_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanActionResultView {
+    ok: bool,
+    message: String,
+    plan_id: String,
+    node_id: Option<String>,
+    outbox_id: Option<String>,
+}
+
 pub(crate) struct PgWorkspaceService {
     repo: PgWorkspaceRepository,
     object_store: Arc<dyn ObjectStore>,
@@ -1362,6 +1387,54 @@ impl WorkspaceService for PgWorkspaceService {
             outbox,
             events,
         ))
+    }
+
+    async fn retry_plan_outbox(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        outbox_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
+            .await?;
+        let now = Utc::now();
+        let item = self
+            .repo
+            .retry_plan_outbox_now(
+                outbox_id,
+                workspace_id,
+                Some(user_id),
+                body.reason.as_deref(),
+                now,
+            )
+            .await
+            .map_err(map_plan_outbox_retry_error)?
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let plan_id = item
+            .plan_id
+            .clone()
+            .ok_or_else(|| WorkspaceApiError::bad_request("Invalid workspace plan request"))?;
+        self.repo
+            .create_plan_event(plan_retry_event(
+                &plan_id,
+                workspace_id,
+                user_id,
+                outbox_id,
+                &item.event_type,
+                body.reason.as_deref(),
+                now,
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Outbox job queued for retry.".to_string(),
+            plan_id,
+            node_id: None,
+            outbox_id: Some(outbox_id.to_string()),
+        })
     }
 
     async fn update_workspace(
@@ -2963,6 +3036,87 @@ impl WorkspaceService for DevWorkspaceService {
             outbox,
             events,
         ))
+    }
+
+    async fn retry_plan_outbox(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        outbox_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.require_dev_user(user_id)?;
+        let now = Utc::now();
+        let mut state = self.state.lock().expect("workspace dev state");
+        if !state.workspaces.contains_key(workspace_id) {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let item = state
+            .plan_outbox
+            .iter_mut()
+            .find(|item| item.id == outbox_id && item.workspace_id == workspace_id)
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let delayed_pending = item.status == "pending"
+            && item
+                .next_attempt_at
+                .map(|next_attempt_at| next_attempt_at > now)
+                .unwrap_or(false);
+        if !matches!(item.status.as_str(), "failed" | "dead_letter") && !delayed_pending {
+            return Err(WorkspaceApiError::bad_request(
+                "Invalid workspace plan request",
+            ));
+        }
+        let plan_id = item
+            .plan_id
+            .clone()
+            .ok_or_else(|| WorkspaceApiError::bad_request("Invalid workspace plan request"))?;
+        let previous_status = item.status.clone();
+        let previous_error = item.last_error.clone();
+        let previous_next_attempt_at = item.next_attempt_at.map(iso);
+        let previous_event_type = item.event_type.clone();
+        item.status = "pending".to_string();
+        if previous_status == "dead_letter" {
+            item.attempt_count = 0;
+        }
+        item.lease_owner = None;
+        item.lease_expires_at = None;
+        item.last_error = None;
+        item.next_attempt_at = None;
+        item.processed_at = None;
+        item.updated_at = Some(now);
+        let mut metadata = match item.metadata_json.clone() {
+            Value::Object(map) => map,
+            _ => Map::new(),
+        };
+        metadata.insert(
+            "operator_retry".to_string(),
+            json!({
+                "actor_id": user_id,
+                "reason": body.reason.clone(),
+                "retried_at": iso(now),
+                "previous_status": previous_status,
+                "previous_error": previous_error,
+                "previous_next_attempt_at": previous_next_attempt_at
+            }),
+        );
+        item.metadata_json = Value::Object(metadata);
+        state.plan_events.push(plan_retry_event(
+            &plan_id,
+            workspace_id,
+            user_id,
+            outbox_id,
+            &previous_event_type,
+            body.reason.as_deref(),
+            now,
+        ));
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Outbox job queued for retry.".to_string(),
+            plan_id,
+            node_id: None,
+            outbox_id: Some(outbox_id.to_string()),
+        })
     }
 
     async fn update_workspace(
@@ -5143,6 +5297,58 @@ fn outbox_actions(
     )])
 }
 
+fn validate_plan_action_request(
+    body: &WorkspacePlanActionRequest,
+) -> Result<(), WorkspaceApiError> {
+    if body
+        .reason
+        .as_ref()
+        .map(|reason| reason.chars().count() > 500)
+        .unwrap_or(false)
+        || body.evidence_refs.len() > 20
+    {
+        return Err(WorkspaceApiError::bad_request(
+            "Invalid workspace plan request",
+        ));
+    }
+    Ok(())
+}
+
+fn map_plan_outbox_retry_error(err: agistack_core::ports::CoreError) -> WorkspaceApiError {
+    if err.to_string().contains("not retryable") {
+        WorkspaceApiError::bad_request("Invalid workspace plan request")
+    } else {
+        WorkspaceApiError::internal(err)
+    }
+}
+
+fn plan_retry_event(
+    plan_id: &str,
+    workspace_id: &str,
+    actor_id: &str,
+    outbox_id: &str,
+    outbox_event_type: &str,
+    reason: Option<&str>,
+    created_at: DateTime<Utc>,
+) -> WorkspacePlanEventRecord {
+    WorkspacePlanEventRecord {
+        id: new_id(),
+        plan_id: plan_id.to_string(),
+        workspace_id: workspace_id.to_string(),
+        node_id: None,
+        attempt_id: None,
+        event_type: "operator_retry_outbox".to_string(),
+        source: "operator".to_string(),
+        actor_id: Some(actor_id.to_string()),
+        payload_json: json!({
+            "outbox_id": outbox_id,
+            "event_type": outbox_event_type,
+            "reason": reason
+        }),
+        created_at,
+    }
+}
+
 fn phase_label(phase: &str) -> String {
     match phase {
         "research" => "Research",
@@ -6034,6 +6240,18 @@ async fn get_plan_snapshot(
         .map(Json)
 }
 
+async fn retry_plan_outbox(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((workspace_id, outbox_id)): Path<(String, String)>,
+    Json(body): Json<WorkspacePlanActionRequest>,
+) -> Result<Json<WorkspacePlanActionResultView>, WorkspaceApiError> {
+    app.workspaces
+        .retry_plan_outbox(&identity.user_id, &workspace_id, &outbox_id, body)
+        .await
+        .map(Json)
+}
+
 async fn update_workspace(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -6733,6 +6951,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/workspaces/:workspace_id/plan",
             get(get_plan_snapshot),
         )
+        .route(
+            "/api/v1/workspaces/:workspace_id/plan/outbox/:outbox_id/retry",
+            post(retry_plan_outbox),
+        )
         .route("/api/v1/workspaces/:workspace_id/tasks", post(create_task).get(list_tasks))
         .route(
             "/api/v1/workspaces/:workspace_id/tasks/:task_id",
@@ -7095,6 +7317,19 @@ mod tests {
             serde_json::from_str(include_str!("../tests/golden/workspace_plan_snapshot.json"))
                 .unwrap(),
         );
+        assert_golden(
+            &WorkspacePlanActionResultView {
+                ok: true,
+                message: "Outbox job queued for retry.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: None,
+                outbox_id: Some("outbox-1".to_string()),
+            },
+            serde_json::from_str(include_str!(
+                "../tests/golden/workspace_plan_action_result.json"
+            ))
+            .unwrap(),
+        );
     }
 
     #[tokio::test]
@@ -7367,6 +7602,24 @@ mod tests {
                     metadata_json: json!({}),
                     created_at: now,
                 });
+            state.plan_outbox.push(WorkspacePlanOutboxRecord {
+                id: "outbox-dev".to_string(),
+                plan_id: Some("plan-dev".to_string()),
+                workspace_id: workspace.id.clone(),
+                event_type: "supervisor_tick".to_string(),
+                payload_json: json!({"node_id": "plan-node-dev"}),
+                status: "failed".to_string(),
+                attempt_count: 1,
+                max_attempts: 5,
+                lease_owner: None,
+                lease_expires_at: None,
+                last_error: Some("provider unavailable".to_string()),
+                next_attempt_at: None,
+                processed_at: None,
+                metadata_json: json!({"source": "workspace_plan_api"}),
+                created_at: now,
+                updated_at: None,
+            });
         }
         let snapshot = service
             .get_plan_snapshot(
@@ -7381,6 +7634,45 @@ mod tests {
             Some("plan-dev")
         );
         assert_eq!(snapshot.blackboard.len(), 1);
+        assert_eq!(snapshot.outbox.len(), 1);
+        assert!(snapshot.outbox[0].actions["retry_outbox"].enabled);
+        let retried = service
+            .retry_plan_outbox(
+                "user-1",
+                &workspace.id,
+                "outbox-dev",
+                WorkspacePlanActionRequest {
+                    reason: Some("operator retry".to_string()),
+                    evidence_refs: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(retried.plan_id, "plan-dev");
+        let retried_snapshot = service
+            .get_plan_snapshot(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanSnapshotQuery::default(),
+            )
+            .await
+            .unwrap();
+        let retried_outbox = retried_snapshot
+            .outbox
+            .iter()
+            .find(|item| item.id == "outbox-dev")
+            .expect("retried outbox in snapshot");
+        assert_eq!(retried_outbox.status, "pending");
+        assert!(retried_outbox.last_error.is_none());
+        assert_eq!(
+            retried_outbox.metadata["operator_retry"]["previous_status"],
+            "failed"
+        );
+        assert!(retried_snapshot
+            .events
+            .iter()
+            .any(|event| event.event_type == "operator_retry_outbox"
+                && event.payload["outbox_id"] == "outbox-dev"));
         let done = service
             .transition_task(
                 "user-1",

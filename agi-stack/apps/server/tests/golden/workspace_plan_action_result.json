@@ -1,0 +1,7 @@
+{
+  "message": "Outbox job queued for retry.",
+  "node_id": null,
+  "ok": true,
+  "outbox_id": "outbox-1",
+  "plan_id": "plan-1"
+}
