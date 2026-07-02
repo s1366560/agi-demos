@@ -379,6 +379,15 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         attempt_id: Option<&str>,
     ) -> CoreResult<Option<WorkspacePipelineRunRecord>>;
 
+    async fn finish_pipeline_run(
+        &self,
+        run_id: &str,
+        status: &str,
+        reason: Option<&str>,
+        metadata_patch: &Value,
+        completed_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspacePipelineRunRecord>>;
+
     async fn latest_task_session_attempt_number(&self, workspace_task_id: &str) -> CoreResult<i32>;
 
     async fn create_task_session_attempt(
@@ -570,6 +579,25 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
     ) -> CoreResult<Option<WorkspacePipelineRunRecord>> {
         PgWorkspaceRepository::latest_pipeline_run_for_node(self, plan_id, node_id, attempt_id)
             .await
+    }
+
+    async fn finish_pipeline_run(
+        &self,
+        run_id: &str,
+        status: &str,
+        reason: Option<&str>,
+        metadata_patch: &Value,
+        completed_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspacePipelineRunRecord>> {
+        PgWorkspaceRepository::finish_pipeline_run(
+            self,
+            run_id,
+            status,
+            reason,
+            metadata_patch,
+            completed_at,
+        )
+        .await
     }
 
     async fn latest_task_session_attempt_number(&self, workspace_task_id: &str) -> CoreResult<i32> {
@@ -1257,10 +1285,17 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
             .latest_pipeline_run_for_node(&plan_id, &node_id, attempt_id.as_deref())
             .await?
         {
-            if run.status == "running" && pipeline_run_matches_node_expected_commit(&run, &node) {
-                mark_existing_pipeline_run_running(&mut node, &run, now);
-                self.store.save_plan_node(node).await?;
-                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+            if run.status == "running" {
+                if pipeline_run_matches_node_expected_commit(&run, &node) {
+                    mark_existing_pipeline_run_running(&mut node, &run, now);
+                    self.store.save_plan_node(node).await?;
+                    return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+                }
+                let (reason, metadata_patch) = stale_pipeline_run_failure_metadata(&run, &node);
+                let _ = self
+                    .store
+                    .finish_pipeline_run(&run.id, "failed", Some(&reason), &metadata_patch, now)
+                    .await?;
             }
             if can_reflect_existing_pipeline_run(&run, &node) {
                 reflect_existing_pipeline_run_to_node(&mut node, &run, now);
@@ -1322,6 +1357,24 @@ fn pipeline_run_source_commit_ref(run: &WorkspacePipelineRunRecord) -> Option<St
         .and_then(Value::as_str)
         .and_then(commit_ref_token)
         .or_else(|| run.commit_ref.as_deref().and_then(commit_ref_token))
+}
+
+fn stale_pipeline_run_failure_metadata(
+    run: &WorkspacePipelineRunRecord,
+    node: &WorkspacePlanNodeRecord,
+) -> (String, Value) {
+    let stale_source_commit_ref = pipeline_run_source_commit_ref(run);
+    let requested_source_commit_ref = node_expected_commit_ref(node);
+    let stale = stale_source_commit_ref.as_deref().unwrap_or("unknown");
+    let requested = requested_source_commit_ref.as_deref().unwrap_or("unknown");
+    (
+        format!("stale pipeline run source commit {stale} superseded by {requested}"),
+        json!({
+            "stale_pipeline_run": true,
+            "stale_source_commit_ref": stale_source_commit_ref,
+            "superseded_by_source_commit_ref": requested_source_commit_ref
+        }),
+    )
 }
 
 fn mark_existing_pipeline_run_running(
@@ -4033,6 +4086,10 @@ mod tests {
             self.nodes.lock().unwrap().get(id).unwrap().clone()
         }
 
+        fn pipeline_run(&self, id: &str) -> WorkspacePipelineRunRecord {
+            self.pipeline_runs.lock().unwrap().get(id).unwrap().clone()
+        }
+
         fn attempts(&self) -> Vec<WorkspaceTaskSessionAttemptRecord> {
             self.attempts.lock().unwrap().values().cloned().collect()
         }
@@ -4258,6 +4315,30 @@ mod tests {
                     .then_with(|| right.id.cmp(&left.id))
             });
             Ok(runs.into_iter().next())
+        }
+
+        async fn finish_pipeline_run(
+            &self,
+            run_id: &str,
+            status: &str,
+            reason: Option<&str>,
+            metadata_patch: &Value,
+            completed_at: DateTime<Utc>,
+        ) -> CoreResult<Option<WorkspacePipelineRunRecord>> {
+            let mut runs = self.pipeline_runs.lock().unwrap();
+            let Some(run) = runs.get_mut(run_id) else {
+                return Ok(None);
+            };
+            run.status = status.to_string();
+            run.reason = reason.map(ToOwned::to_owned);
+            run.completed_at = Some(completed_at);
+            run.updated_at = Some(completed_at);
+            let mut metadata = object_or_empty(run.metadata_json.clone());
+            for (key, value) in object_or_empty(metadata_patch.clone()) {
+                metadata.insert(key, value);
+            }
+            run.metadata_json = Value::Object(metadata);
+            Ok(Some(run.clone()))
         }
 
         async fn latest_task_session_attempt_number(
@@ -4980,6 +5061,67 @@ mod tests {
         );
         assert!(node.metadata_json.get("pipeline_run_id").is_none());
         assert!(node.metadata_json.get("pipeline_started_at").is_none());
+        let run = store.pipeline_run("pipeline-run-running-stale");
+        assert_eq!(run.status, "failed");
+        assert_eq!(
+            run.reason.as_deref(),
+            Some(
+                "stale pipeline run source commit bbbbbb1234567890 superseded by abcdef1234567890"
+            )
+        );
+        assert_eq!(run.metadata_json["stale_pipeline_run"], true);
+        assert_eq!(
+            run.metadata_json["stale_source_commit_ref"],
+            "bbbbbb1234567890"
+        );
+        assert_eq!(
+            run.metadata_json["superseded_by_source_commit_ref"],
+            "abcdef1234567890"
+        );
+        assert!(run.completed_at.is_some());
+        assert!(run.updated_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_marks_running_run_without_source_ref_stale() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1234567890"}));
+        store.insert_node(node);
+        store.insert_pipeline_run(pipeline_run_record(
+            "pipeline-run-running-unknown",
+            "running",
+            Some("attempt-test"),
+            None,
+            json!({"pipeline_last_summary": "still running without source ref"}),
+        ));
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["pipeline_status"], "requested");
+        assert!(node.metadata_json.get("pipeline_run_id").is_none());
+        let run = store.pipeline_run("pipeline-run-running-unknown");
+        assert_eq!(run.status, "failed");
+        assert_eq!(
+            run.reason.as_deref(),
+            Some("stale pipeline run source commit unknown superseded by abcdef1234567890")
+        );
+        assert_eq!(
+            run.metadata_json["pipeline_last_summary"],
+            "still running without source ref"
+        );
+        assert_eq!(run.metadata_json["stale_pipeline_run"], true);
+        assert!(run.metadata_json["stale_source_commit_ref"].is_null());
+        assert_eq!(
+            run.metadata_json["superseded_by_source_commit_ref"],
+            "abcdef1234567890"
+        );
     }
 
     #[tokio::test]

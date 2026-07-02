@@ -794,6 +794,33 @@ impl PgWorkspaceRepository {
             .transpose()
     }
 
+    pub async fn finish_pipeline_run(
+        &self,
+        run_id: &str,
+        status: &str,
+        reason: Option<&str>,
+        metadata_patch: &Value,
+        completed_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspacePipelineRunRecord>> {
+        sqlx::query(&format!(
+            "UPDATE workspace_pipeline_runs \
+             SET status = $2, reason = $3, completed_at = $4, updated_at = $4, \
+                 metadata_json = metadata_json || $5 \
+             WHERE id = $1 \
+             RETURNING {PIPELINE_RUN_COLS}"
+        ))
+        .bind(run_id)
+        .bind(status)
+        .bind(reason)
+        .bind(completed_at)
+        .bind(Json(metadata_patch))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_pipeline_run)
+        .transpose()
+    }
+
     pub async fn latest_task_session_attempt_number(
         &self,
         workspace_task_id: &str,
