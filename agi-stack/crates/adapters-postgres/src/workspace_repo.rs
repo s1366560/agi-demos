@@ -663,6 +663,21 @@ impl PgWorkspaceRepository {
         .transpose()
     }
 
+    pub async fn get_task_session_attempt(
+        &self,
+        attempt_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        sqlx::query(&format!(
+            "SELECT {TASK_SESSION_ATTEMPT_COLS} FROM workspace_task_session_attempts WHERE id = $1"
+        ))
+        .bind(attempt_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()
+    }
+
     pub async fn latest_task_session_attempt_number(
         &self,
         workspace_task_id: &str,
@@ -735,6 +750,26 @@ impl PgWorkspaceRepository {
         .map_err(storage)?
         .map(row_to_task_session_attempt)
         .transpose()
+    }
+
+    pub async fn count_recent_running_task_session_attempts_with_conversation(
+        &self,
+        workspace_id: &str,
+        active_after: DateTime<Utc>,
+    ) -> CoreResult<i64> {
+        let row = sqlx::query_as::<_, (i64,)>(
+            "SELECT COUNT(*)::bigint FROM workspace_task_session_attempts \
+             WHERE workspace_id = $1 \
+               AND status = 'running' \
+               AND conversation_id IS NOT NULL \
+               AND COALESCE(updated_at, created_at) >= $2",
+        )
+        .bind(workspace_id)
+        .bind(active_after)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(row.0)
     }
 
     pub async fn delete_task(&self, workspace_id: &str, task_id: &str) -> CoreResult<bool> {
@@ -1611,6 +1646,30 @@ impl PgWorkspaceRepository {
         .await
         .map_err(storage)?;
         rows.into_iter().map(row_to_plan_event).collect()
+    }
+
+    pub async fn has_supervisor_dispose_decision_for_node(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+        node_id: &str,
+    ) -> CoreResult<bool> {
+        let row = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT id FROM workspace_plan_events \
+             WHERE workspace_id = $1 \
+               AND plan_id = $2 \
+               AND node_id = $3 \
+               AND event_type = 'supervisor_decision_completed' \
+               AND payload_json->>'action' = 'dispose_node' \
+             LIMIT 1",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .bind(node_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(row.is_some())
     }
 
     pub async fn enqueue_plan_outbox(

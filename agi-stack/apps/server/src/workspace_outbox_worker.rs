@@ -15,7 +15,7 @@ use agistack_adapters_postgres::{
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{json, Map, Value};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
@@ -34,11 +34,22 @@ const WORKSPACE_PLAN_ID: &str = "workspace_plan_id";
 const WORKSPACE_PLAN_NODE_ID: &str = "workspace_plan_node_id";
 const CURRENT_ATTEMPT_ID: &str = "current_attempt_id";
 const CURRENT_ATTEMPT_WORKER_BINDING_ID: &str = "current_attempt_worker_binding_id";
+const WORKER_LAUNCH_MAX_ACTIVE_ENV: &str = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE";
+const WORKER_LAUNCH_DEFER_SECONDS_ENV: &str = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS";
+const WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV: &str =
+    "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS";
+const DEFAULT_WORKER_LAUNCH_MAX_ACTIVE: i64 = 4;
+const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
+const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
+const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 
 pub(crate) fn workspace_plan_outbox_handlers(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
 ) -> WorkspacePlanOutboxHandlers {
-    let handoff = Arc::new(DurableHandoffResumeHandler::new(dispatch_store));
+    let handoff = Arc::new(DurableHandoffResumeHandler::new(Arc::clone(
+        &dispatch_store,
+    )));
+    let worker_launch = Arc::new(WorkerLaunchAdmissionHandler::new(dispatch_store));
     HashMap::from([
         (
             HANDOFF_RESUME_EVENT.to_string(),
@@ -47,6 +58,10 @@ pub(crate) fn workspace_plan_outbox_handlers(
         (
             ATTEMPT_RETRY_EVENT.to_string(),
             handoff as Arc<dyn WorkspacePlanOutboxHandler>,
+        ),
+        (
+            WORKER_LAUNCH_EVENT.to_string(),
+            worker_launch as Arc<dyn WorkspacePlanOutboxHandler>,
         ),
     ])
 }
@@ -194,6 +209,11 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         workspace_task_id: &str,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
 
+    async fn get_task_session_attempt(
+        &self,
+        attempt_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
+
     async fn latest_task_session_attempt_number(&self, workspace_task_id: &str) -> CoreResult<i32>;
 
     async fn create_task_session_attempt(
@@ -206,6 +226,19 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         attempt_id: &str,
         now: DateTime<Utc>,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
+
+    async fn count_recent_running_task_session_attempts_with_conversation(
+        &self,
+        workspace_id: &str,
+        active_after: DateTime<Utc>,
+    ) -> CoreResult<i64>;
+
+    async fn has_supervisor_dispose_decision_for_node(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+        node_id: &str,
+    ) -> CoreResult<bool>;
 
     async fn enqueue_plan_outbox(
         &self,
@@ -309,6 +342,13 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         PgWorkspaceRepository::find_active_task_session_attempt(self, workspace_task_id).await
     }
 
+    async fn get_task_session_attempt(
+        &self,
+        attempt_id: &str,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        PgWorkspaceRepository::get_task_session_attempt(self, attempt_id).await
+    }
+
     async fn latest_task_session_attempt_number(&self, workspace_task_id: &str) -> CoreResult<i32> {
         PgWorkspaceRepository::latest_task_session_attempt_number(self, workspace_task_id).await
     }
@@ -326,6 +366,34 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         now: DateTime<Utc>,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
         PgWorkspaceRepository::mark_task_session_attempt_running(self, attempt_id, now).await
+    }
+
+    async fn count_recent_running_task_session_attempts_with_conversation(
+        &self,
+        workspace_id: &str,
+        active_after: DateTime<Utc>,
+    ) -> CoreResult<i64> {
+        PgWorkspaceRepository::count_recent_running_task_session_attempts_with_conversation(
+            self,
+            workspace_id,
+            active_after,
+        )
+        .await
+    }
+
+    async fn has_supervisor_dispose_decision_for_node(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+        node_id: &str,
+    ) -> CoreResult<bool> {
+        PgWorkspaceRepository::has_supervisor_dispose_decision_for_node(
+            self,
+            workspace_id,
+            plan_id,
+            node_id,
+        )
+        .await
     }
 
     async fn enqueue_plan_outbox(
@@ -586,6 +654,314 @@ impl DurableHandoffResumeHandler {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct WorkerLaunchAdmissionConfig {
+    pub max_active_worker_conversations: i64,
+    pub defer_seconds: i64,
+    pub active_event_grace_seconds: i64,
+}
+
+impl WorkerLaunchAdmissionConfig {
+    fn from_env() -> Self {
+        Self {
+            max_active_worker_conversations: i64_env(
+                WORKER_LAUNCH_MAX_ACTIVE_ENV,
+                DEFAULT_WORKER_LAUNCH_MAX_ACTIVE,
+            ),
+            defer_seconds: positive_i64_env(
+                WORKER_LAUNCH_DEFER_SECONDS_ENV,
+                DEFAULT_WORKER_LAUNCH_DEFER_SECONDS,
+            ),
+            active_event_grace_seconds: positive_i64_env(
+                WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV,
+                DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS,
+            ),
+        }
+    }
+}
+
+pub(crate) struct WorkerLaunchAdmissionHandler {
+    store: Arc<dyn WorkspacePlanDispatchStore>,
+    config: WorkerLaunchAdmissionConfig,
+}
+
+impl WorkerLaunchAdmissionHandler {
+    pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
+        Self {
+            store,
+            config: WorkerLaunchAdmissionConfig::from_env(),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_config(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        config: WorkerLaunchAdmissionConfig,
+    ) -> Self {
+        Self { store, config }
+    }
+}
+
+#[async_trait]
+impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
+    async fn handle(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
+        let payload = object_or_empty(item.payload_json.clone());
+        let workspace_id =
+            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let task_id = required_string(&payload, "task_id")?;
+        let actor_user_id = required_string(&payload, "actor_user_id")?;
+        let leader_agent_id = string_from_map(&payload, "leader_agent_id")
+            .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
+        let mut task = self
+            .store
+            .get_task(&workspace_id, &task_id)
+            .await?
+            .ok_or_else(|| {
+                CoreError::Storage(format!(
+                    "workspace task {task_id} not found for workspace {workspace_id}"
+                ))
+            })?;
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        let worker_agent_id = string_from_map(&payload, "worker_agent_id")
+            .or_else(|| task.assignee_agent_id.clone())
+            .ok_or_else(|| {
+                CoreError::Storage(format!("workspace task {task_id} has no worker agent"))
+            })?;
+        let plan_id = item
+            .plan_id
+            .clone()
+            .or_else(|| string_from_map(&payload, "plan_id"))
+            .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_ID));
+        let node_id = string_from_map(&payload, "node_id")
+            .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_NODE_ID));
+        let attempt_id = string_from_map(&payload, "attempt_id");
+
+        if self
+            .stale_worker_launch_reason(
+                &task,
+                plan_id.as_deref(),
+                node_id.as_deref(),
+                attempt_id.as_deref(),
+            )
+            .await?
+            .is_some()
+        {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+
+        if let Some(active_count) = self
+            .defer_active_capacity_count(&workspace_id, attempt_id.as_deref())
+            .await?
+        {
+            self.store
+                .enqueue_plan_outbox(deferred_worker_launch_outbox(
+                    &item,
+                    &payload,
+                    active_count,
+                    self.config.max_active_worker_conversations,
+                    self.config.defer_seconds,
+                    Utc::now(),
+                ))
+                .await?;
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+
+        let now = Utc::now();
+        task_metadata.insert("launch_state".to_string(), json!("runtime_admitted"));
+        task_metadata.insert(
+            "worker_launch_admitted_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        task_metadata.insert(
+            "worker_launch_admitted_by".to_string(),
+            json!(leader_agent_id),
+        );
+        task_metadata.insert(
+            "current_attempt_worker_agent_id".to_string(),
+            json!(worker_agent_id),
+        );
+        task_metadata.insert(CURRENT_ATTEMPT_WORKER_BINDING_ID.to_string(), Value::Null);
+        if let Some(attempt_id) = attempt_id.as_deref() {
+            task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
+        }
+        task_metadata.insert(
+            "execution_state".to_string(),
+            json!({
+                "phase": "in_progress",
+                "last_agent_reason": "workspace_plan.worker_launch.admitted",
+                "last_agent_action": "schedule",
+                "updated_by_actor_type": "agent",
+                "updated_by_actor_id": task_metadata
+                    .get("worker_launch_admitted_by")
+                    .and_then(Value::as_str)
+                    .unwrap_or(WORKSPACE_PLAN_SYSTEM_ACTOR_ID),
+                "actor_user_id": actor_user_id,
+                "updated_at": now.to_rfc3339()
+            }),
+        );
+        task.metadata_json = Value::Object(task_metadata);
+        if task.status != "done" {
+            task.status = "in_progress".to_string();
+            task.completed_at = None;
+        }
+        task.updated_at = Some(now);
+        self.store.save_task(task).await?;
+
+        self.mark_plan_node_running_after_launch_schedule(
+            plan_id.as_deref(),
+            node_id.as_deref(),
+            attempt_id.as_deref(),
+            now,
+        )
+        .await?;
+
+        Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
+    }
+}
+
+impl WorkerLaunchAdmissionHandler {
+    async fn stale_worker_launch_reason(
+        &self,
+        task: &WorkspaceTaskRecord,
+        plan_id: Option<&str>,
+        node_id: Option<&str>,
+        attempt_id: Option<&str>,
+    ) -> CoreResult<Option<String>> {
+        let mut reason = None;
+        if let Some(attempt_id) = attempt_id {
+            match self.store.get_task_session_attempt(attempt_id).await? {
+                None => reason = Some("attempt_missing".to_string()),
+                Some(attempt) => {
+                    if attempt.workspace_task_id != task.id
+                        || attempt.workspace_id != task.workspace_id
+                    {
+                        reason = Some("attempt_task_mismatch".to_string());
+                    } else if !WORKER_LAUNCHABLE_ATTEMPT_STATUSES.contains(&attempt.status.as_str())
+                    {
+                        reason = Some(format!("attempt_{}", attempt.status));
+                    }
+                }
+            }
+        }
+
+        let task_metadata = object_or_empty(task.metadata_json.clone());
+        let current_task_attempt_id = string_from_map(&task_metadata, CURRENT_ATTEMPT_ID);
+        if reason.is_none()
+            && current_task_attempt_id.is_some()
+            && current_task_attempt_id.as_deref() != attempt_id
+        {
+            reason = Some("task_current_attempt_changed".to_string());
+        }
+
+        if reason.is_none() {
+            if let (Some(plan_id), Some(node_id)) = (plan_id, node_id) {
+                if self
+                    .store
+                    .has_supervisor_dispose_decision_for_node(&task.workspace_id, plan_id, node_id)
+                    .await?
+                {
+                    return Ok(Some("supervisor_disposed_node".to_string()));
+                }
+                if let Some(plan) = self.store.get_plan(plan_id).await? {
+                    if plan.workspace_id == task.workspace_id {
+                        let nodes = self.store.list_plan_nodes(plan_id).await?;
+                        if let Some(node) =
+                            nodes.into_iter().find(|candidate| candidate.id == node_id)
+                        {
+                            if node.workspace_task_id.as_deref().is_some()
+                                && node.workspace_task_id.as_deref() != Some(task.id.as_str())
+                            {
+                                reason = Some("node_task_mismatch".to_string());
+                            } else if node.current_attempt_id.as_deref().is_some()
+                                && node.current_attempt_id.as_deref() != attempt_id
+                            {
+                                reason = Some("node_current_attempt_changed".to_string());
+                            } else if node.intent == "done" || node.execution == "idle" {
+                                reason = Some("node_not_launchable".to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(reason)
+    }
+
+    async fn defer_active_capacity_count(
+        &self,
+        workspace_id: &str,
+        attempt_id: Option<&str>,
+    ) -> CoreResult<Option<i64>> {
+        let max_active = self.config.max_active_worker_conversations;
+        if max_active <= 0 {
+            return Ok(None);
+        }
+        if let Some(attempt_id) = attempt_id {
+            if self
+                .store
+                .get_task_session_attempt(attempt_id)
+                .await?
+                .and_then(|attempt| attempt.conversation_id)
+                .is_some()
+            {
+                return Ok(None);
+            }
+        }
+        let active_after =
+            Utc::now() - ChronoDuration::seconds(self.config.active_event_grace_seconds.max(1));
+        let active_count = self
+            .store
+            .count_recent_running_task_session_attempts_with_conversation(
+                workspace_id,
+                active_after,
+            )
+            .await?;
+        Ok((active_count >= max_active).then_some(active_count))
+    }
+
+    async fn mark_plan_node_running_after_launch_schedule(
+        &self,
+        plan_id: Option<&str>,
+        node_id: Option<&str>,
+        attempt_id: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        let (Some(plan_id), Some(node_id)) = (plan_id, node_id) else {
+            return Ok(());
+        };
+        let mut nodes = self.store.list_plan_nodes(plan_id).await?;
+        let Some(mut node) = nodes.drain(..).find(|candidate| candidate.id == node_id) else {
+            return Ok(());
+        };
+        if attempt_id.is_some()
+            && node.current_attempt_id.as_deref().is_some()
+            && node.current_attempt_id.as_deref() != attempt_id
+        {
+            return Ok(());
+        }
+        if !matches!(node.execution.as_str(), "dispatched" | "running") {
+            return Ok(());
+        }
+        node.execution = "running".to_string();
+        if let Some(attempt_id) = attempt_id {
+            node.current_attempt_id = Some(attempt_id.to_string());
+        }
+        let mut metadata = object_or_empty(node.metadata_json);
+        metadata.insert("launch_state".to_string(), json!("runtime_admitted"));
+        metadata.insert(
+            "worker_launch_admitted_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        node.metadata_json = Value::Object(metadata);
+        node.updated_at = Some(now);
+        self.store.save_plan_node(node).await?;
+        Ok(())
+    }
+}
+
 pub(crate) struct WorkspacePlanOutboxWorker {
     store: Arc<dyn WorkspacePlanOutboxStore>,
     config: WorkspacePlanOutboxWorkerConfig,
@@ -742,6 +1118,13 @@ fn positive_i64_env(name: &str, default: i64) -> i64 {
         .unwrap_or(default)
 }
 
+fn i64_env(name: &str, default: i64) -> i64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|raw| raw.trim().parse::<i64>().ok())
+        .unwrap_or(default)
+}
+
 fn positive_millis_env(name: &str, default_millis: u64) -> u64 {
     std::env::var(name)
         .ok()
@@ -869,8 +1252,60 @@ fn worker_launch_outbox(
     }
 }
 
+fn deferred_worker_launch_outbox(
+    item: &WorkspacePlanOutboxRecord,
+    payload: &Map<String, Value>,
+    active_count: i64,
+    max_active: i64,
+    delay_seconds: i64,
+    now: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    let mut metadata = object_or_empty(item.metadata_json.clone());
+    let defer_count = metadata
+        .get("defer_count")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        + 1;
+    metadata.insert(
+        "source".to_string(),
+        json!("workspace_plan.worker_launch.deferred_capacity"),
+    );
+    metadata.insert(
+        "deferred_from_outbox_id".to_string(),
+        json!(item.id.clone()),
+    );
+    metadata.insert("defer_count".to_string(), json!(defer_count));
+    metadata.insert(
+        "active_worker_conversations".to_string(),
+        json!(active_count),
+    );
+    metadata.insert(
+        "max_active_worker_conversations".to_string(),
+        json!(max_active),
+    );
+    WorkspacePlanOutboxRecord {
+        id: generate_uuid_v4(),
+        plan_id: item.plan_id.clone(),
+        workspace_id: item.workspace_id.clone(),
+        event_type: WORKER_LAUNCH_EVENT.to_string(),
+        payload_json: Value::Object(payload.clone()),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: item.max_attempts,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: Some(now + ChronoDuration::seconds(delay_seconds.max(1))),
+        processed_at: None,
+        metadata_json: Value::Object(metadata),
+        created_at: now,
+        updated_at: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use std::sync::Mutex;
 
     use agistack_core::ports::CoreError;
@@ -1045,6 +1480,8 @@ mod tests {
         nodes: Mutex<HashMap<String, WorkspacePlanNodeRecord>>,
         attempts: Mutex<HashMap<String, WorkspaceTaskSessionAttemptRecord>>,
         outbox: Mutex<Vec<WorkspacePlanOutboxRecord>>,
+        active_worker_conversations: Mutex<i64>,
+        supervisor_dispose_nodes: Mutex<HashSet<(String, String, String)>>,
     }
 
     impl FakeWorkspacePlanDispatchStore {
@@ -1058,6 +1495,17 @@ mod tests {
 
         fn insert_node(&self, node: WorkspacePlanNodeRecord) {
             self.nodes.lock().unwrap().insert(node.id.clone(), node);
+        }
+
+        fn insert_attempt(&self, attempt: WorkspaceTaskSessionAttemptRecord) {
+            self.attempts
+                .lock()
+                .unwrap()
+                .insert(attempt.id.clone(), attempt);
+        }
+
+        fn set_active_worker_conversations(&self, count: i64) {
+            *self.active_worker_conversations.lock().unwrap() = count;
         }
 
         fn task(&self, id: &str) -> WorkspaceTaskRecord {
@@ -1154,6 +1602,13 @@ mod tests {
             Ok(attempts.into_iter().next())
         }
 
+        async fn get_task_session_attempt(
+            &self,
+            attempt_id: &str,
+        ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+            Ok(self.attempts.lock().unwrap().get(attempt_id).cloned())
+        }
+
         async fn latest_task_session_attempt_number(
             &self,
             workspace_task_id: &str,
@@ -1192,6 +1647,27 @@ mod tests {
             attempt.status = "running".to_string();
             attempt.updated_at = Some(now);
             Ok(Some(attempt.clone()))
+        }
+
+        async fn count_recent_running_task_session_attempts_with_conversation(
+            &self,
+            _workspace_id: &str,
+            _active_after: DateTime<Utc>,
+        ) -> CoreResult<i64> {
+            Ok(*self.active_worker_conversations.lock().unwrap())
+        }
+
+        async fn has_supervisor_dispose_decision_for_node(
+            &self,
+            workspace_id: &str,
+            plan_id: &str,
+            node_id: &str,
+        ) -> CoreResult<bool> {
+            Ok(self.supervisor_dispose_nodes.lock().unwrap().contains(&(
+                workspace_id.to_string(),
+                plan_id.to_string(),
+                node_id.to_string(),
+            )))
         }
 
         async fn enqueue_plan_outbox(
@@ -1312,6 +1788,61 @@ mod tests {
         }
     }
 
+    fn task_session_attempt(
+        id: &str,
+        status: &str,
+        conversation_id: Option<&str>,
+    ) -> WorkspaceTaskSessionAttemptRecord {
+        WorkspaceTaskSessionAttemptRecord {
+            id: id.to_string(),
+            workspace_task_id: "task-test".to_string(),
+            root_goal_task_id: "root-task".to_string(),
+            workspace_id: "workspace-test".to_string(),
+            attempt_number: 1,
+            status: status.to_string(),
+            conversation_id: conversation_id.map(ToOwned::to_owned),
+            worker_agent_id: Some("agent-worker".to_string()),
+            leader_agent_id: None,
+            candidate_summary: None,
+            candidate_artifacts_json: Vec::new(),
+            candidate_verifications_json: Vec::new(),
+            leader_feedback: None,
+            adjudication_reason: None,
+            created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            updated_at: Some(Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap()),
+            completed_at: None,
+        }
+    }
+
+    fn worker_launch_handler(
+        store: Arc<FakeWorkspacePlanDispatchStore>,
+        max_active: i64,
+    ) -> WorkerLaunchAdmissionHandler {
+        WorkerLaunchAdmissionHandler::with_config(
+            store as Arc<dyn WorkspacePlanDispatchStore>,
+            WorkerLaunchAdmissionConfig {
+                max_active_worker_conversations: max_active,
+                defer_seconds: 30,
+                active_event_grace_seconds: 60,
+            },
+        )
+    }
+
+    fn worker_launch_item() -> WorkspacePlanOutboxRecord {
+        let mut item = outbox("job-worker-launch", WORKER_LAUNCH_EVENT);
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "task_id": "task-test",
+            "node_id": "node-test",
+            "worker_agent_id": "agent-worker",
+            "actor_user_id": "actor-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+            "attempt_id": "attempt-test",
+            "extra_instructions": "continue implementation"
+        });
+        item
+    }
+
     #[tokio::test]
     async fn handoff_retry_handler_projects_attempt_and_queues_worker_launch() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
@@ -1383,6 +1914,106 @@ mod tests {
             queued[0].metadata_json["source"].as_str(),
             Some("workspace_plan.attempt_retry")
         );
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_marks_dispatched_node_running_and_task_admitted() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let handler = worker_launch_handler(Arc::clone(&store), 4);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let task = store.task("task-test");
+        assert_eq!(task.status, "in_progress");
+        assert_eq!(task.metadata_json["launch_state"], "runtime_admitted");
+        assert_eq!(
+            task.metadata_json["current_attempt_worker_agent_id"],
+            "agent-worker"
+        );
+        assert!(task.metadata_json["worker_launch_admitted_at"].is_string());
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "running");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-test"));
+        assert_eq!(node.metadata_json["launch_state"], "runtime_admitted");
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_defers_when_active_capacity_reached() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        store.set_active_worker_conversations(1);
+        let handler = worker_launch_handler(Arc::clone(&store), 1);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, WORKER_LAUNCH_EVENT);
+        assert_eq!(queued[0].status, "pending");
+        assert!(queued[0].next_attempt_at.is_some());
+        assert_eq!(
+            queued[0].metadata_json["source"],
+            "workspace_plan.worker_launch.deferred_capacity"
+        );
+        assert_eq!(
+            queued[0].metadata_json["deferred_from_outbox_id"],
+            "job-worker-launch"
+        );
+        assert_eq!(queued[0].metadata_json["active_worker_conversations"], 1);
+        assert_eq!(
+            queued[0].metadata_json["max_active_worker_conversations"],
+            1
+        );
+        let task = store.task("task-test");
+        assert_ne!(task.metadata_json["launch_state"], "runtime_admitted");
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_skips_stale_attempt_without_projection() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-new"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-new".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let handler = worker_launch_handler(Arc::clone(&store), 4);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert!(store.outbox().is_empty());
+        let task = store.task("task-test");
+        assert_eq!(task.status, "todo");
+        assert_ne!(task.metadata_json["launch_state"], "runtime_admitted");
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "dispatched");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-new"));
     }
 
     #[tokio::test]

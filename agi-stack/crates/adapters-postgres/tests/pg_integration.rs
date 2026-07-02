@@ -267,6 +267,49 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         .unwrap()
         .expect("active attempt");
     assert_eq!(active.id, "attempt_p6_repo_1");
+    let loaded_attempt = repo
+        .get_task_session_attempt("attempt_p6_repo_1")
+        .await
+        .unwrap()
+        .expect("loaded attempt by id");
+    assert_eq!(loaded_attempt.workspace_task_id, "task_p6_repo");
+    repo.create_task_session_attempt(WorkspaceTaskSessionAttemptRecord {
+        id: "attempt_p6_repo_2".to_string(),
+        workspace_task_id: "task_p6_repo".to_string(),
+        root_goal_task_id: "task_p6_repo".to_string(),
+        workspace_id: "ws_p6_repo".to_string(),
+        attempt_number: 2,
+        status: "running".to_string(),
+        conversation_id: Some("conv_p6_worker_active".to_string()),
+        worker_agent_id: Some("agent_p6_worker".to_string()),
+        leader_agent_id: Some("agent_p6_leader".to_string()),
+        candidate_summary: None,
+        candidate_artifacts_json: Vec::new(),
+        candidate_verifications_json: Vec::new(),
+        leader_feedback: None,
+        adjudication_reason: None,
+        created_at,
+        updated_at: Some(created_at),
+        completed_at: None,
+    })
+    .await
+    .unwrap();
+    let active_worker_count = repo
+        .count_recent_running_task_session_attempts_with_conversation(
+            "ws_p6_repo",
+            ts(2026, 1, 2, 3, 4, 4),
+        )
+        .await
+        .unwrap();
+    assert_eq!(active_worker_count, 1);
+    let expired_worker_count = repo
+        .count_recent_running_task_session_attempts_with_conversation(
+            "ws_p6_repo",
+            ts(2026, 1, 2, 3, 4, 6),
+        )
+        .await
+        .unwrap();
+    assert_eq!(expired_worker_count, 0);
 
     let node = repo
         .create_node(TopologyNodeRecord {
@@ -568,6 +611,28 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     .unwrap();
     let events = repo.list_plan_events("plan_p6_repo", 5).await.unwrap();
     assert_eq!(events[0].event_type, "workspace_plan_updated");
+    repo.create_plan_event(WorkspacePlanEventRecord {
+        id: "plan_event_p6_dispose".to_string(),
+        plan_id: "plan_p6_repo".to_string(),
+        workspace_id: "ws_p6_repo".to_string(),
+        node_id: Some("plan_node_p6".to_string()),
+        attempt_id: Some("attempt_p6_repo_1".to_string()),
+        event_type: "supervisor_decision_completed".to_string(),
+        source: "supervisor".to_string(),
+        actor_id: Some("u_p6_owner".to_string()),
+        payload_json: json!({"action": "dispose_node", "reason": "test"}),
+        created_at,
+    })
+    .await
+    .unwrap();
+    assert!(repo
+        .has_supervisor_dispose_decision_for_node("ws_p6_repo", "plan_p6_repo", "plan_node_p6")
+        .await
+        .unwrap());
+    assert!(!repo
+        .has_supervisor_dispose_decision_for_node("ws_p6_repo", "plan_p6_repo", "plan_node_other")
+        .await
+        .unwrap());
 
     repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
         id: "plan_outbox_p6".to_string(),
