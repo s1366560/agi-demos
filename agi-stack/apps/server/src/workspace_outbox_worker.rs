@@ -48,6 +48,7 @@ const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
+const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
 
 pub(crate) fn workspace_plan_outbox_handlers(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
@@ -1116,10 +1117,13 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_missing = self
                 .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
                 .await?;
+            let changed_terminal = self
+                .reconcile_terminal_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
+                .await?;
             let changed_reported = self
                 .reconcile_reported_attempt_nodes(&workspace_id, &plan_id)
                 .await?;
-            if changed_missing + changed_reported > 0 {
+            if changed_missing + changed_terminal + changed_reported > 0 {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
             }
             return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
@@ -1317,6 +1321,82 @@ impl SupervisorTickAdmissionHandler {
                     context.root_goal_task_id.as_deref(),
                     Some(&attempt_id),
                     "missing_attempt",
+                    now,
+                ))
+                .await?;
+        }
+        Ok(changed)
+    }
+
+    async fn reconcile_terminal_attempt_nodes(
+        &self,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
+                continue;
+            };
+            let Some(attempt) = self.store.get_task_session_attempt(&attempt_id).await? else {
+                continue;
+            };
+            let status = attempt.status.trim().to_ascii_lowercase();
+            if terminal_attempt_pending_pipeline_verification(&node, &status) {
+                continue;
+            }
+            if !TERMINAL_RETRY_ATTEMPT_STATUSES.contains(&status.as_str()) {
+                continue;
+            }
+            let Some(context) = self
+                .retry_context_for_node(payload, workspace_id, &node)
+                .await?
+            else {
+                continue;
+            };
+
+            let now = Utc::now();
+            let node_id = node.id.clone();
+            let retry_reason = format!("terminal_attempt_{status}");
+            let retry_exhausted = release_node_for_terminal_retry(
+                &mut node,
+                &retry_reason,
+                now,
+                plan_terminal_attempt_max_retries(),
+            );
+            self.store.save_plan_node(node).await?;
+            changed += 1;
+
+            if retry_exhausted {
+                continue;
+            }
+            self.store
+                .enqueue_plan_outbox(supervisor_retry_attempt_outbox(
+                    item,
+                    payload,
+                    workspace_id,
+                    plan_id,
+                    &node_id,
+                    &context.task_id,
+                    &context.worker_agent_id,
+                    &context.actor_user_id,
+                    &context.leader_agent_id,
+                    context.root_goal_task_id.as_deref(),
+                    Some(&attempt_id),
+                    &retry_reason,
                     now,
                 ))
                 .await?;
@@ -1720,6 +1800,66 @@ fn attempt_has_candidate_output(attempt: &WorkspaceTaskSessionAttemptRecord) -> 
         .is_some_and(|summary| !summary.trim().is_empty())
         || !attempt.candidate_artifacts_json.is_empty()
         || !attempt.candidate_verifications_json.is_empty()
+}
+
+fn terminal_attempt_pending_pipeline_verification(
+    node: &WorkspacePlanNodeRecord,
+    status: &str,
+) -> bool {
+    if node_waiting_for_verification_retry(node) {
+        return true;
+    }
+    if node_has_pipeline_gate_in_flight(node, status) {
+        return true;
+    }
+    if node.execution != "reported" || status == "accepted" {
+        return false;
+    }
+    let metadata = object_or_empty(node.metadata_json.clone());
+    let pipeline_status = metadata_string(metadata.get("pipeline_status"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if !matches!(
+        pipeline_status.as_str(),
+        "failed" | "failure" | "error" | "success"
+    ) {
+        return false;
+    }
+    metadata_string(metadata.get("pipeline_run_id")).is_some()
+        || metadata_string(metadata.get("external_id")).is_some()
+}
+
+fn node_waiting_for_verification_retry(node: &WorkspacePlanNodeRecord) -> bool {
+    node.execution == "reported"
+        && object_or_empty(node.metadata_json.clone())
+            .get("retry_verification_only")
+            .and_then(Value::as_bool)
+            == Some(true)
+}
+
+fn node_has_pipeline_gate_in_flight(node: &WorkspacePlanNodeRecord, status: &str) -> bool {
+    if status == "accepted" || node.intent != "in_progress" {
+        return false;
+    }
+    let metadata = object_or_empty(node.metadata_json.clone());
+    let pipeline_status = metadata_string(metadata.get("pipeline_status"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let gate_status = metadata_string(metadata.get("pipeline_gate_status"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        pipeline_status.as_str(),
+        "requested" | "running" | "processing"
+    ) || matches!(gate_status.as_str(), "requested" | "running" | "processing")
+}
+
+fn metadata_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn release_node_for_terminal_retry(
@@ -2872,6 +3012,100 @@ mod tests {
             queued[0].metadata_json["retry_attempt_id"],
             "missing-attempt"
         );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_releases_terminal_rejected_attempt_and_queues_retry() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-rejected".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt(
+            "attempt-rejected",
+            "rejected",
+            Some("conversation-test"),
+        ));
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id, None);
+        assert_eq!(
+            node.metadata_json["terminal_attempt_retry_reason"],
+            "terminal_attempt_rejected"
+        );
+        assert_eq!(node.metadata_json["terminal_attempt_retry_count"], 1);
+        assert!(node.metadata_json["terminal_attempt_reconciled_at"].is_string());
+
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(queued[0].payload_json["node_id"], "node-test");
+        assert_eq!(
+            queued[0].payload_json["previous_attempt_id"],
+            "attempt-rejected"
+        );
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            "terminal_attempt_rejected"
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_skips_terminal_attempt_with_pipeline_result_pending() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-rejected".to_string());
+        node.metadata_json = json!({
+            "pipeline_status": "success",
+            "pipeline_run_id": "pipeline-run-test"
+        });
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt(
+            "attempt-rejected",
+            "rejected",
+            Some("conversation-test"),
+        ));
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string())
+            }
+        );
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-rejected"));
+        assert!(store.outbox().is_empty());
     }
 
     #[tokio::test]
