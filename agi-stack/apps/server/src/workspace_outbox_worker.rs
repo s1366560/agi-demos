@@ -451,6 +451,209 @@ mod worker_stream_watchdog {
         terminal_report_tool_applied && !report_recorded_for_attempt
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(super) enum StreamTerminalEvent {
+        Complete,
+        Error,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Default)]
+    pub(super) struct StreamState {
+        pub(super) final_content: String,
+        pub(super) accumulated_text: String,
+        pub(super) terminal_event: Option<StreamTerminalEvent>,
+        pub(super) stream_message_id: Option<String>,
+        pub(super) terminal_report_tool_observed: bool,
+        pub(super) terminal_report_tool_denied: bool,
+        pub(super) terminal_report_tool_applied: bool,
+        pub(super) terminal_report_tool_report_type: Option<TerminalReportType>,
+        pub(super) last_stream_event_type: Option<String>,
+    }
+
+    impl StreamState {
+        pub(super) fn observe_event(&mut self, event: &Value) -> Option<StreamTerminalEvent> {
+            if self.stream_message_id.is_none() {
+                self.stream_message_id = message_id_from_event(event).map(ToOwned::to_owned);
+            }
+            let event_type = event
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            self.last_stream_event_type = Some(event_type.to_string());
+            match event_type {
+                "text_delta" => {
+                    if let Some(text) = event
+                        .get("data")
+                        .and_then(Value::as_object)
+                        .and_then(|data| data.get("text"))
+                        .and_then(Value::as_str)
+                    {
+                        self.accumulated_text.push_str(text);
+                    }
+                    None
+                }
+                "observe" => {
+                    if let Some(status) = terminal_report_tool_observation_status(event) {
+                        self.terminal_report_tool_observed = true;
+                        if let Some(report_type) = terminal_report_tool_report_type(event) {
+                            self.terminal_report_tool_report_type = Some(report_type);
+                        }
+                        match status {
+                            TerminalReportToolStatus::Denied => {
+                                self.terminal_report_tool_denied = true;
+                            }
+                            TerminalReportToolStatus::Applied => {
+                                self.terminal_report_tool_applied = true;
+                            }
+                            TerminalReportToolStatus::Attempted => {}
+                        }
+                    }
+                    None
+                }
+                "complete" => {
+                    self.terminal_event = Some(StreamTerminalEvent::Complete);
+                    self.final_content = event
+                        .get("data")
+                        .and_then(Value::as_object)
+                        .and_then(|data| data.get("content"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    if self.final_content.is_empty() && !self.accumulated_text.is_empty() {
+                        self.final_content = self.accumulated_text.clone();
+                    }
+                    self.terminal_event
+                }
+                "error" => {
+                    self.terminal_event = Some(StreamTerminalEvent::Error);
+                    self.final_content = event
+                        .get("data")
+                        .and_then(Value::as_object)
+                        .and_then(|data| data.get("message"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("Worker stream reported an error")
+                        .to_string();
+                    self.terminal_event
+                }
+                _ => None,
+            }
+        }
+
+        pub(super) fn mark_stream_ended_without_terminal(&mut self) {
+            self.final_content =
+                "Worker stream ended without a terminal complete/error event.".to_string();
+            self.terminal_event = None;
+        }
+
+        pub(super) fn mark_orphaned_stream_stop(&mut self, reason: Option<&str>) {
+            let reason = reason.unwrap_or("unknown");
+            self.final_content = format!(
+                "Worker stream stopped without a terminal complete/error event ({reason})."
+            );
+            self.terminal_event = None;
+        }
+
+        pub(super) fn terminal_outcome(
+            &self,
+            report_recorded_for_attempt: bool,
+        ) -> TerminalOutcome {
+            match self.terminal_event {
+                Some(StreamTerminalEvent::Complete) => {
+                    let summary =
+                        stream_completion_summary(&self.final_content, &self.accumulated_text);
+                    if should_synthesize_stream_completion_report(
+                        self.terminal_report_tool_observed,
+                    ) {
+                        return TerminalOutcome {
+                            outcome_reason: "completed",
+                            launch_state: "completed_via_stream",
+                            report_type: Some(TerminalReportType::Completed),
+                            summary,
+                            should_report: true,
+                            should_reconcile: false,
+                        };
+                    }
+                    if should_reconcile_terminal_report_tool(
+                        self.terminal_report_tool_applied,
+                        report_recorded_for_attempt,
+                    ) {
+                        return TerminalOutcome {
+                            outcome_reason: "terminal_report_tool_reconciled",
+                            launch_state: "terminal_report_tool_reconciled",
+                            report_type: Some(
+                                self.terminal_report_tool_report_type
+                                    .unwrap_or(TerminalReportType::Completed),
+                            ),
+                            summary,
+                            should_report: true,
+                            should_reconcile: true,
+                        };
+                    }
+                    let outcome_reason = if self.terminal_report_tool_applied {
+                        "terminal_report_tool_applied"
+                    } else if self.terminal_report_tool_denied {
+                        "terminal_report_tool_denied"
+                    } else {
+                        "terminal_report_tool_observed"
+                    };
+                    TerminalOutcome {
+                        outcome_reason,
+                        launch_state: outcome_reason,
+                        report_type: None,
+                        summary,
+                        should_report: false,
+                        should_reconcile: false,
+                    }
+                }
+                Some(StreamTerminalEvent::Error) => TerminalOutcome {
+                    outcome_reason: "blocked",
+                    launch_state: "blocked",
+                    report_type: Some(TerminalReportType::Blocked),
+                    summary: bounded_terminal_summary(
+                        &self.final_content,
+                        "Worker stream errored.",
+                    ),
+                    should_report: true,
+                    should_reconcile: false,
+                },
+                None => {
+                    if self.terminal_report_tool_applied {
+                        TerminalOutcome {
+                            outcome_reason: "terminal_report_tool_applied",
+                            launch_state: "terminal_report_tool_applied",
+                            report_type: None,
+                            summary: bounded_terminal_summary(&self.final_content, ""),
+                            should_report: false,
+                            should_reconcile: false,
+                        }
+                    } else {
+                        TerminalOutcome {
+                            outcome_reason: "no_terminal_event",
+                            launch_state: "no_terminal_event",
+                            report_type: Some(TerminalReportType::Blocked),
+                            summary: bounded_terminal_summary(
+                                &self.final_content,
+                                "Worker stream ended without a terminal complete/error event and without a workspace_report_complete/workspace_report_blocked tool call.",
+                            ),
+                            should_report: true,
+                            should_reconcile: false,
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(super) struct TerminalOutcome {
+        pub(super) outcome_reason: &'static str,
+        pub(super) launch_state: &'static str,
+        pub(super) report_type: Option<TerminalReportType>,
+        pub(super) summary: String,
+        pub(super) should_report: bool,
+        pub(super) should_reconcile: bool,
+    }
+
     fn terminal_report_type_for_tool(value: &Value) -> Option<TerminalReportType> {
         match value.as_str()?.trim() {
             "workspace_report_complete" => Some(TerminalReportType::Completed),
@@ -499,6 +702,17 @@ mod worker_stream_watchdog {
             return Some(TerminalReportToolStatus::Denied);
         }
         None
+    }
+
+    fn bounded_terminal_summary(value: &str, default: &str) -> String {
+        let trimmed = value.trim();
+        let summary = if trimmed.is_empty() { default } else { trimmed };
+        if summary.chars().count() > WORKER_STREAM_COMPLETION_SUMMARY_CHARS {
+            let end = char_prefix_boundary(summary, WORKER_STREAM_COMPLETION_SUMMARY_CHARS);
+            summary[..end].to_string()
+        } else {
+            summary.to_string()
+        }
     }
 
     fn json_truthy(value: &Value) -> bool {
@@ -13330,6 +13544,150 @@ esac
         assert!(worker_stream_watchdog::should_reconcile_terminal_report_tool(true, false));
         assert!(!worker_stream_watchdog::should_reconcile_terminal_report_tool(true, true));
         assert!(!worker_stream_watchdog::should_reconcile_terminal_report_tool(false, false));
+    }
+
+    #[test]
+    fn worker_stream_watchdog_reduces_text_then_complete_like_python_stream_loop() {
+        let mut state = worker_stream_watchdog::StreamState::default();
+        assert_eq!(
+            state.observe_event(&json!({
+                "type": "message",
+                "data": {"id": "msg-1"}
+            })),
+            None
+        );
+        assert_eq!(state.stream_message_id.as_deref(), Some("msg-1"));
+        assert_eq!(
+            state.observe_event(&json!({
+                "type": "text_delta",
+                "data": {"text": "Finished "}
+            })),
+            None
+        );
+        assert_eq!(
+            state.observe_event(&json!({
+                "type": "text_delta",
+                "data": {"text": "implementation."}
+            })),
+            None
+        );
+        assert_eq!(
+            state.observe_event(&json!({
+                "type": "complete",
+                "data": {"content": ""}
+            })),
+            Some(worker_stream_watchdog::StreamTerminalEvent::Complete)
+        );
+        assert_eq!(state.final_content, "Finished implementation.");
+        assert_eq!(state.last_stream_event_type.as_deref(), Some("complete"));
+
+        let outcome = state.terminal_outcome(false);
+        assert_eq!(outcome.outcome_reason, "completed");
+        assert_eq!(outcome.launch_state, "completed_via_stream");
+        assert_eq!(
+            outcome
+                .report_type
+                .map(worker_stream_watchdog::TerminalReportType::as_str),
+            Some("completed")
+        );
+        assert_eq!(outcome.summary, "Finished implementation.");
+        assert!(outcome.should_report);
+        assert!(!outcome.should_reconcile);
+    }
+
+    #[test]
+    fn worker_stream_watchdog_terminal_tool_outcomes_match_python_stream_loop() {
+        let mut denied = worker_stream_watchdog::StreamState::default();
+        denied.observe_event(&json!({
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_complete",
+                "result": "{\"error\": \"completion denied: failed tests\"}",
+                "error": null
+            }
+        }));
+        denied.observe_event(&json!({
+            "type": "complete",
+            "data": {"content": "ignored fallback"}
+        }));
+        let denied_outcome = denied.terminal_outcome(false);
+        assert_eq!(denied_outcome.outcome_reason, "terminal_report_tool_denied");
+        assert_eq!(denied_outcome.launch_state, "terminal_report_tool_denied");
+        assert!(!denied_outcome.should_report);
+
+        let mut applied = worker_stream_watchdog::StreamState::default();
+        applied.observe_event(&json!({
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_blocked",
+                "result": "{\"applied_report\": {\"applied\": true}}",
+                "error": null
+            }
+        }));
+        applied.observe_event(&json!({
+            "type": "complete",
+            "data": {"content": "blocked summary"}
+        }));
+        let reconcile = applied.terminal_outcome(false);
+        assert_eq!(reconcile.outcome_reason, "terminal_report_tool_reconciled");
+        assert_eq!(reconcile.launch_state, "terminal_report_tool_reconciled");
+        assert_eq!(
+            reconcile
+                .report_type
+                .map(worker_stream_watchdog::TerminalReportType::as_str),
+            Some("blocked")
+        );
+        assert!(reconcile.should_report);
+        assert!(reconcile.should_reconcile);
+
+        let already_recorded = applied.terminal_outcome(true);
+        assert_eq!(
+            already_recorded.outcome_reason,
+            "terminal_report_tool_applied"
+        );
+        assert!(!already_recorded.should_report);
+    }
+
+    #[test]
+    fn worker_stream_watchdog_error_and_missing_terminal_outcomes_match_python_loop() {
+        let mut error = worker_stream_watchdog::StreamState::default();
+        assert_eq!(
+            error.observe_event(&json!({
+                "type": "error",
+                "data": {"message": "worker failed"}
+            })),
+            Some(worker_stream_watchdog::StreamTerminalEvent::Error)
+        );
+        let error_outcome = error.terminal_outcome(false);
+        assert_eq!(error_outcome.outcome_reason, "blocked");
+        assert_eq!(error_outcome.launch_state, "blocked");
+        assert_eq!(
+            error_outcome
+                .report_type
+                .map(worker_stream_watchdog::TerminalReportType::as_str),
+            Some("blocked")
+        );
+        assert_eq!(error_outcome.summary, "worker failed");
+        assert!(error_outcome.should_report);
+
+        let mut ended = worker_stream_watchdog::StreamState::default();
+        ended.mark_stream_ended_without_terminal();
+        let ended_outcome = ended.terminal_outcome(false);
+        assert_eq!(ended_outcome.outcome_reason, "no_terminal_event");
+        assert_eq!(
+            ended_outcome.summary,
+            "Worker stream ended without a terminal complete/error event."
+        );
+        assert!(ended_outcome.should_report);
+
+        let mut orphan = worker_stream_watchdog::StreamState::default();
+        orphan.mark_orphaned_stream_stop(Some("agent_not_running_stream_idle"));
+        let orphan_outcome = orphan.terminal_outcome(false);
+        assert_eq!(orphan_outcome.outcome_reason, "no_terminal_event");
+        assert_eq!(
+            orphan_outcome.summary,
+            "Worker stream stopped without a terminal complete/error event (agent_not_running_stream_idle)."
+        );
     }
 
     #[tokio::test]
