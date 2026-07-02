@@ -22,6 +22,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{json, Map, Value};
 use serde_yaml_ng::Value as YamlValue;
+use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
@@ -1891,6 +1892,14 @@ struct GitPublishResult {
 struct GitRemoteMergeResult {
     status: String,
     reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AcceptedWorktreeIntegrationResult {
+    status: String,
+    summary: String,
+    commit_ref: String,
+    dirty_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -5738,6 +5747,259 @@ async fn run_git_command(
     })
 }
 
+async fn run_git_command_with_stdin(
+    cwd: &Path,
+    args: &[&str],
+    env: &[(String, String)],
+    timeout_seconds: u64,
+    stdin_text: &str,
+) -> CoreResult<GitCommandOutput> {
+    let mut command = tokio::process::Command::new("git");
+    command
+        .args(args)
+        .current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let mut child = command.spawn().map_err(|err| {
+        CoreError::Storage(format!("git {} failed to start: {err}", args.join(" ")))
+    })?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(stdin_text.as_bytes())
+            .await
+            .map_err(|err| {
+                CoreError::Storage(format!("git {} stdin failed: {err}", args.join(" ")))
+            })?;
+    }
+    let output = tokio::time::timeout(
+        Duration::from_secs(timeout_seconds),
+        child.wait_with_output(),
+    )
+    .await
+    .map_err(|_| {
+        CoreError::Storage(format!(
+            "git {} timed out after {timeout_seconds}s",
+            args.join(" ")
+        ))
+    })?
+    .map_err(|err| CoreError::Storage(format!("git {} failed: {err}", args.join(" "))))?;
+    Ok(GitCommandOutput {
+        exit_code: output.status.code().unwrap_or(1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+async fn integrate_accepted_attempt_worktree_with_git(
+    sandbox_code_root: &Path,
+    worktree_path: &Path,
+    commit_ref: &str,
+) -> CoreResult<AcceptedWorktreeIntegrationResult> {
+    let env = vec![("GIT_TERMINAL_PROMPT".to_string(), "0".to_string())];
+    if !sandbox_code_root.exists() {
+        return Ok(AcceptedWorktreeIntegrationResult {
+            status: "failed".to_string(),
+            summary: format!(
+                "sandbox_code_root does not exist: {}",
+                sandbox_code_root.display()
+            ),
+            commit_ref: commit_ref.to_string(),
+            dirty_signature: None,
+        });
+    }
+    if !worktree_path.exists() {
+        return Ok(AcceptedWorktreeIntegrationResult {
+            status: "failed".to_string(),
+            summary: format!(
+                "accepted worktree does not exist: {}",
+                worktree_path.display()
+            ),
+            commit_ref: commit_ref.to_string(),
+            dirty_signature: None,
+        });
+    }
+
+    let resolved_commit = resolve_accepted_worktree_commit(worktree_path, commit_ref, &env).await?;
+    let Some(resolved_commit) = resolved_commit else {
+        return Ok(AcceptedWorktreeIntegrationResult {
+            status: "failed".to_string(),
+            summary: "status=failed\nreason=commit_ref not found in attempt worktree".to_string(),
+            commit_ref: commit_ref.to_string(),
+            dirty_signature: None,
+        });
+    };
+
+    let already_merged = run_git_command(
+        sandbox_code_root,
+        &["merge-base", "--is-ancestor", &resolved_commit, "HEAD"],
+        &env,
+        60,
+    )
+    .await?;
+    if already_merged.exit_code == 0 {
+        let git_head = short_git_head(sandbox_code_root, &env).await?;
+        return Ok(AcceptedWorktreeIntegrationResult {
+            status: "already_merged".to_string(),
+            summary: format!(
+                "resolved_commit_ref={resolved_commit}\nstatus=already_merged\ngit_head={git_head}"
+            ),
+            commit_ref: resolved_commit,
+            dirty_signature: None,
+        });
+    }
+
+    let dirty = run_git_command(sandbox_code_root, &["status", "--porcelain"], &env, 60).await?;
+    if dirty.exit_code != 0 {
+        return Ok(AcceptedWorktreeIntegrationResult {
+            status: "failed".to_string(),
+            summary: compact_git_error(&dirty),
+            commit_ref: resolved_commit,
+            dirty_signature: None,
+        });
+    }
+    if !dirty.stdout.trim().is_empty() {
+        let signature = git_blob_hash(sandbox_code_root, &dirty.stdout, &env).await?;
+        return Ok(AcceptedWorktreeIntegrationResult {
+            status: "blocked_dirty_main".to_string(),
+            summary: compact_text(
+                &format!(
+                    "status=blocked_dirty_main\nreason=sandbox_code_root has uncommitted changes\ndirty_signature={}\n{}",
+                    signature,
+                    dirty.stdout.trim()
+                ),
+                1200,
+            ),
+            commit_ref: resolved_commit,
+            dirty_signature: Some(signature),
+        });
+    }
+
+    let merge = run_git_command(
+        sandbox_code_root,
+        &["merge", "--no-edit", &resolved_commit],
+        &env,
+        120,
+    )
+    .await?;
+    let merge = if merge.exit_code != 0 && is_unrelated_history_merge_rejection(&merge) {
+        let _ = run_git_command(sandbox_code_root, &["merge", "--abort"], &env, 60).await;
+        run_git_command(
+            sandbox_code_root,
+            &[
+                "merge",
+                "--no-edit",
+                "--allow-unrelated-histories",
+                "-X",
+                "theirs",
+                &resolved_commit,
+            ],
+            &env,
+            120,
+        )
+        .await?
+    } else {
+        merge
+    };
+    if merge.exit_code != 0 {
+        let summary = compact_text(
+            &format!(
+                "{}\nstatus=failed\nreason=merge_failed_aborted",
+                compact_git_error(&merge)
+            ),
+            1200,
+        );
+        let _ = run_git_command(sandbox_code_root, &["merge", "--abort"], &env, 60).await;
+        return Ok(AcceptedWorktreeIntegrationResult {
+            status: "failed".to_string(),
+            summary,
+            commit_ref: resolved_commit,
+            dirty_signature: None,
+        });
+    }
+
+    let git_head = short_git_head(sandbox_code_root, &env).await?;
+    Ok(AcceptedWorktreeIntegrationResult {
+        status: "merged".to_string(),
+        summary: compact_text(
+            &format!(
+                "resolved_commit_ref={resolved_commit}\n{}\nstatus=merged\ngit_head={git_head}",
+                merge.stdout.trim()
+            ),
+            1200,
+        ),
+        commit_ref: resolved_commit,
+        dirty_signature: None,
+    })
+}
+
+async fn resolve_accepted_worktree_commit(
+    worktree_path: &Path,
+    commit_ref: &str,
+    env: &[(String, String)],
+) -> CoreResult<Option<String>> {
+    let exists = run_git_command(
+        worktree_path,
+        &["cat-file", "-e", &format!("{commit_ref}^{{commit}}")],
+        env,
+        60,
+    )
+    .await?;
+    if exists.exit_code == 0 {
+        let resolved = run_git_command(
+            worktree_path,
+            &["rev-parse", &format!("{commit_ref}^{{commit}}")],
+            env,
+            60,
+        )
+        .await?;
+        if resolved.exit_code == 0 {
+            return Ok(Some(resolved.stdout.trim().to_string()));
+        }
+    }
+    let short_commit = commit_ref.chars().take(12).collect::<String>();
+    let repaired = run_git_command(
+        worktree_path,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{short_commit}^{{commit}}"),
+        ],
+        env,
+        60,
+    )
+    .await?;
+    if repaired.exit_code == 0 {
+        let value = repaired.stdout.trim();
+        if !value.is_empty() {
+            return Ok(Some(value.to_string()));
+        }
+    }
+    Ok(None)
+}
+
+async fn short_git_head(cwd: &Path, env: &[(String, String)]) -> CoreResult<String> {
+    let head = run_git_command(cwd, &["rev-parse", "--short", "HEAD"], env, 60).await?;
+    if head.exit_code == 0 {
+        Ok(head.stdout.trim().to_string())
+    } else {
+        Ok("unknown".to_string())
+    }
+}
+
+async fn git_blob_hash(cwd: &Path, text: &str, env: &[(String, String)]) -> CoreResult<String> {
+    let hash = run_git_command_with_stdin(cwd, &["hash-object", "--stdin"], env, 60, text).await?;
+    if hash.exit_code == 0 {
+        Ok(hash.stdout.trim().to_string())
+    } else {
+        Ok(format!("git_hash_failed:{}", compact_git_error(&hash)))
+    }
+}
+
 fn create_git_askpass_script() -> CoreResult<PathBuf> {
     let path = std::env::temp_dir().join(format!("memstack-git-askpass-{}.sh", generate_uuid_v4()));
     std::fs::write(
@@ -7332,7 +7594,33 @@ impl SupervisorTickAdmissionHandler {
             .await?;
             return Ok(Some(metadata));
         }
-        Ok(None)
+        let integration = integrate_accepted_attempt_worktree_with_git(
+            Path::new(&sandbox_code_root),
+            Path::new(&worktree_path),
+            &commit_ref,
+        )
+        .await?;
+        let metadata = worktree_integration_metadata(
+            &integration.status,
+            &integration.summary,
+            attempt_id,
+            Some(integration.commit_ref.as_str()),
+            Some(worktree_path.as_str()),
+            now,
+            integration.dirty_signature.as_deref(),
+        );
+        let event_type = worktree_integration_event_type(&integration.status);
+        self.record_worktree_integration_event(
+            workspace_id,
+            node,
+            attempt_id,
+            task,
+            &metadata,
+            event_type,
+            now,
+        )
+        .await?;
+        Ok(Some(metadata))
     }
 
     async fn record_worktree_integration_event(
@@ -8288,6 +8576,16 @@ fn worktree_integration_metadata(
         dirty_signature.map_or(Value::Null, |value| json!(value)),
     );
     metadata
+}
+
+fn worktree_integration_event_type(status: &str) -> &'static str {
+    match status {
+        "merged" => "accepted_worktree_integrated",
+        "already_merged" | "skipped" => "accepted_worktree_integration_skipped",
+        "blocked_dirty_main" => "accepted_worktree_integration_blocked",
+        "failed" => "accepted_worktree_integration_failed",
+        _ => "accepted_worktree_integration_failed",
+    }
 }
 
 fn sandbox_code_root_for_integration(
@@ -12887,9 +13185,32 @@ steps:
     }
 
     #[tokio::test]
-    async fn supervisor_tick_handler_releases_accepted_attempt_that_requires_real_worktree_merge() {
+    async fn supervisor_tick_handler_integrates_accepted_attempt_worktree() {
+        let Some(fixture) = git_publish_fixture() else {
+            return;
+        };
+        let worktree_path = fixture.root.join(".memstack/worktrees/attempt-accepted");
+        std::fs::create_dir_all(worktree_path.parent().unwrap()).unwrap();
+        run_git_ok(
+            &fixture.repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "attempt-accepted",
+                worktree_path.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        std::fs::write(worktree_path.join("accepted.txt"), "accepted work\n").unwrap();
+        run_git_ok(&worktree_path, &["add", "accepted.txt"]);
+        run_git_ok(&worktree_path, &["commit", "-m", "accepted work"]);
+        let candidate_commit = run_git_ok(&worktree_path, &["rev-parse", "HEAD"])
+            .trim()
+            .to_string();
+
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
-        store.insert_workspace(workspace_with_code_root("/workspace/app"));
+        store.insert_workspace(workspace_with_code_root(fixture.repo.to_str().unwrap()));
         store.insert_task(task_with_plan_metadata());
         store.insert_plan(plan());
         let mut node = plan_node();
@@ -12897,10 +13218,10 @@ steps:
         node.execution = "running".to_string();
         node.current_attempt_id = Some("attempt-accepted".to_string());
         node.feature_checkpoint_json = Some(json!({
-            "worktree_path": "/workspace/.memstack/worktrees/attempt-accepted",
+            "worktree_path": worktree_path.to_str().unwrap(),
             "branch_name": "attempt-accepted",
             "base_ref": "main",
-            "commit_ref": "abcdef1"
+            "commit_ref": candidate_commit
         }));
         store.insert_node(node);
         let mut attempt = task_session_attempt(
@@ -12909,7 +13230,7 @@ steps:
             Some("conversation-test"),
         );
         attempt.leader_feedback = Some("accepted in isolated worktree".to_string());
-        attempt.candidate_artifacts_json = vec!["commit_ref:abcdef1234567890".to_string()];
+        attempt.candidate_artifacts_json = vec![format!("commit_ref:{candidate_commit}")];
         store.insert_attempt(attempt);
         let handler = supervisor_tick_handler(Arc::clone(&store));
         let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
@@ -12921,20 +13242,131 @@ steps:
 
         let outcome = handler.handle(item).await.unwrap();
 
-        assert_eq!(
-            outcome,
-            WorkspacePlanOutboxHandlerOutcome::Release {
-                reason: Some("supervisor_tick_requires_full_runtime".to_string())
-            }
-        );
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let node = store.node("node-test");
         let task = store.task("task-test");
-        assert_eq!(node.intent, "in_progress");
-        assert_eq!(node.execution, "running");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
         assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-accepted"));
-        assert_eq!(task.status, "todo");
-        assert!(task.metadata_json.get("durable_plan_verdict").is_none());
-        assert!(store.plan_events().is_empty());
+        assert_eq!(task.status, "done");
+        assert_eq!(node.metadata_json["worktree_integration_status"], "merged");
+        assert_eq!(
+            node.metadata_json["worktree_integration_commit_ref"],
+            candidate_commit
+        );
+        assert_eq!(
+            task.metadata_json["worktree_integration_worktree_path"],
+            worktree_path.to_str().unwrap()
+        );
+        assert_eq!(
+            run_git_ok(&fixture.repo, &["rev-parse", "HEAD"])
+                .trim()
+                .to_string(),
+            candidate_commit
+        );
+        assert_eq!(
+            std::fs::read_to_string(fixture.repo.join("accepted.txt")).unwrap(),
+            "accepted work\n"
+        );
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "accepted_worktree_integrated");
+        assert_eq!(events[0].payload_json["status"], "merged");
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_blocks_accepted_worktree_when_main_is_dirty() {
+        let Some(fixture) = git_publish_fixture() else {
+            return;
+        };
+        let worktree_path = fixture.root.join(".memstack/worktrees/attempt-accepted");
+        std::fs::create_dir_all(worktree_path.parent().unwrap()).unwrap();
+        run_git_ok(
+            &fixture.repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "attempt-accepted",
+                worktree_path.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        std::fs::write(worktree_path.join("accepted.txt"), "accepted work\n").unwrap();
+        run_git_ok(&worktree_path, &["add", "accepted.txt"]);
+        run_git_ok(&worktree_path, &["commit", "-m", "accepted work"]);
+        let candidate_commit = run_git_ok(&worktree_path, &["rev-parse", "HEAD"])
+            .trim()
+            .to_string();
+        std::fs::write(fixture.repo.join("dirty.txt"), "local dirty\n").unwrap();
+
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_code_root(fixture.repo.to_str().unwrap()));
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": worktree_path.to_str().unwrap(),
+            "branch_name": "attempt-accepted",
+            "base_ref": "main",
+            "commit_ref": candidate_commit
+        }));
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.leader_feedback = Some("accepted in isolated worktree".to_string());
+        attempt.candidate_artifacts_json = vec![format!("commit_ref:{candidate_commit}")];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        let task = store.task("task-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(task.status, "done");
+        assert_eq!(
+            node.metadata_json["worktree_integration_status"],
+            "blocked_dirty_main"
+        );
+        assert_eq!(
+            task.metadata_json["worktree_integration_commit_ref"],
+            candidate_commit
+        );
+        assert!(node.metadata_json["worktree_integration_dirty_signature"].is_string());
+        assert!(node.metadata_json["worktree_integration_summary"]
+            .as_str()
+            .unwrap()
+            .contains("sandbox_code_root has uncommitted changes"));
+        assert_eq!(
+            run_git_ok(&fixture.repo, &["rev-parse", "HEAD"])
+                .trim()
+                .to_string(),
+            fixture.commit_ref
+        );
+        assert!(!fixture.repo.join("accepted.txt").exists());
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].event_type,
+            "accepted_worktree_integration_blocked"
+        );
+        assert_eq!(events[0].payload_json["status"], "blocked_dirty_main");
         assert!(store.outbox().is_empty());
     }
 
