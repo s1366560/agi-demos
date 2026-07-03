@@ -11,9 +11,9 @@ import { InputBar } from './index';
 
 import type { TimelineEvent } from '@/types/agent';
 
-export const INPUT_MIN_HEIGHT = 160;
+export const INPUT_MIN_HEIGHT = 176;
 export const INPUT_MAX_HEIGHT = 560;
-export const INPUT_DEFAULT_HEIGHT = 160;
+export const INPUT_DEFAULT_HEIGHT = 176;
 
 export interface ChatColumnProps {
   headerExtra?: React.ReactNode;

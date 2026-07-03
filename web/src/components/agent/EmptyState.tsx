@@ -116,7 +116,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   ];
 
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center p-6 overflow-y-auto relative">
+    <div className="relative flex h-full w-full flex-col items-center justify-start overflow-y-auto px-6 pb-12 pt-10 sm:pt-12 lg:pt-14">
       {/* Main Content */}
       <div className="text-center mb-10 relative z-10">
         {/* Logo/Icon with glow effect */}

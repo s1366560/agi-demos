@@ -6380,6 +6380,47 @@
       "viewExecutionHistory": "查看执行历史",
       "viewWorkflowPatterns": "查看工作流模式"
     },
+    "layoutModes": {
+      "tooltipTitle": "{{mode}}模式",
+      "aria": "{{mode}}模式",
+      "chat": {
+        "label": "聊天",
+        "description": "完整聊天视图"
+      },
+      "task": {
+        "label": "任务",
+        "description": "聊天与检查器"
+      },
+      "code": {
+        "label": "代码",
+        "description": "聊天与终端"
+      },
+      "canvas": {
+        "label": "画布",
+        "description": "聊天与画布"
+      },
+      "collab": {
+        "label": "协作",
+        "description": "聊天与工作空间"
+      }
+    },
+    "statusSlots": {
+      "task": "任务",
+      "taskProgress": "任务进度",
+      "llm": "LLM",
+      "streaming": "流式响应中",
+      "sandbox": "沙盒",
+      "hitl": "HITL",
+      "doomLoop": "循环调用",
+      "suggestions": "{{count}} 条建议",
+      "suggestions_one": "{{count}} 条建议",
+      "suggestions_other": "{{count}} 条建议",
+      "evidence": "证据",
+      "artifacts": "{{count}} 项证据",
+      "artifacts_one": "{{count}} 项证据",
+      "artifacts_other": "{{count}} 项证据",
+      "evidenceHint": "打开证据抽屉查看截图、差异、测试运行和日志"
+    },
     "collab": {
       "noWorkspace": "未选择工作空间"
     },
@@ -6541,7 +6582,10 @@
         "planMode": "计划模式"
       },
       "header": {
-        "createdAt": "创建于 {{date}}"
+        "createdAt": "创建于 {{date}}",
+        "messageCount": "{{count}} 条时间线项",
+        "messageCount_one": "{{count}} 条时间线项",
+        "messageCount_other": "{{count}} 条时间线项"
       },
       "messagesAria": "聊天消息",
       "errors": {
@@ -6716,6 +6760,7 @@
       "startNewChat": "开始一个新的对话吧",
       "selectProject": "选择项目",
       "selectProjectTitle": "选择项目",
+      "selectProjectToViewConversations": "选择项目以查看对话",
       "projectSwitcher": "项目切换器",
       "searchProjects": "搜索项目",
       "searchProjectsPlaceholder": "搜索所有有权限的项目",
@@ -6772,6 +6817,18 @@
       "subAgentIcon": "SubAgent 图标"
     },
     "inputBar": {
+      "composer": "输入区",
+      "runModeAria": "运行模式：{{mode}}",
+      "runMode": {
+        "plan": "规划",
+        "build": "构建",
+        "auto": "自动",
+        "readOnly": "只读"
+      },
+      "attachmentCount": "{{count}} 个文件",
+      "attachmentCount_one": "{{count}} 个文件",
+      "attachmentCount_other": "{{count}} 个文件",
+      "queuedCount": "{{count}} 条排队",
       "placeholder": "输入任何问题，或输入 / 使用命令...",
       "planPlaceholder": "详细描述你想规划的内容...",
       "planModeActive": "规划模式已激活",

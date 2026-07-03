@@ -6357,6 +6357,47 @@
       "viewExecutionHistory": "View execution history",
       "viewWorkflowPatterns": "View workflow patterns"
     },
+    "layoutModes": {
+      "tooltipTitle": "{{mode}} mode",
+      "aria": "{{mode}} mode",
+      "chat": {
+        "label": "Chat",
+        "description": "Full chat view"
+      },
+      "task": {
+        "label": "Task",
+        "description": "Chat with inspector"
+      },
+      "code": {
+        "label": "Code",
+        "description": "Chat with terminal"
+      },
+      "canvas": {
+        "label": "Canvas",
+        "description": "Chat with canvas"
+      },
+      "collab": {
+        "label": "Collab",
+        "description": "Chat with workspace"
+      }
+    },
+    "statusSlots": {
+      "task": "Task",
+      "taskProgress": "Task progress",
+      "llm": "LLM",
+      "streaming": "streaming",
+      "sandbox": "Sandbox",
+      "hitl": "HITL",
+      "doomLoop": "doom-loop",
+      "suggestions": "{{count}} suggestion",
+      "suggestions_one": "{{count}} suggestion",
+      "suggestions_other": "{{count}} suggestions",
+      "evidence": "Evidence",
+      "artifacts": "{{count}} artifact",
+      "artifacts_one": "{{count}} artifact",
+      "artifacts_other": "{{count}} artifacts",
+      "evidenceHint": "Open the Evidence drawer to inspect screenshots, diffs, test runs and logs"
+    },
     "collab": {
       "noWorkspace": "No workspace selected"
     },
@@ -6518,7 +6559,10 @@
         "planMode": "Plan Mode"
       },
       "header": {
-        "createdAt": "Created {{date}}"
+        "createdAt": "Created {{date}}",
+        "messageCount": "{{count}} timeline item",
+        "messageCount_one": "{{count}} timeline item",
+        "messageCount_other": "{{count}} timeline items"
       },
       "messagesAria": "Chat messages",
       "errors": {
@@ -6693,6 +6737,7 @@
       "startNewChat": "Start a new chat to begin",
       "selectProject": "Select a project",
       "selectProjectTitle": "Select Project",
+      "selectProjectToViewConversations": "Select a project to view conversations",
       "projectSwitcher": "Project switcher",
       "searchProjects": "Search projects",
       "searchProjectsPlaceholder": "Search all authorized projects",
@@ -6749,6 +6794,18 @@
       "subAgentIcon": "SubAgent Icon"
     },
     "inputBar": {
+      "composer": "Composer",
+      "runModeAria": "Run mode: {{mode}}",
+      "runMode": {
+        "plan": "Plan",
+        "build": "Build",
+        "auto": "Auto",
+        "readOnly": "Read-only"
+      },
+      "attachmentCount": "{{count}} file",
+      "attachmentCount_one": "{{count}} file",
+      "attachmentCount_other": "{{count}} files",
+      "queuedCount": "{{count}} queued",
       "placeholder": "Ask me anything, or type '/' for commands...",
       "planPlaceholder": "Describe what you want to plan in detail...",
       "planModeActive": "Plan Mode Active",

@@ -117,9 +117,9 @@ interface AgentChatContentProps {
 }
 
 // Constants for resize constraints
-const INPUT_MIN_HEIGHT = 160;
+const INPUT_MIN_HEIGHT = 176;
 const INPUT_MAX_HEIGHT = 560;
-const INPUT_DEFAULT_HEIGHT = 160;
+const INPUT_DEFAULT_HEIGHT = 176;
 
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   const value = metadata?.[key];
@@ -440,13 +440,15 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     );
 
     const inputBarRef = useRef<HTMLTextAreaElement>(null);
+    const isEmptyConversationSurface = !activeConversationId && timeline.length === 0;
 
-    // Auto-switch to task mode when tasks appear
+    // Keep the first screen conversation-first. Inspector modes are useful once
+    // there is a run, task, terminal, or artifact to inspect.
     useEffect(() => {
-      if (tasks.length > 0 && layoutMode === 'chat') {
-        // Don't auto-switch, just let the user know via the layout selector
+      if (isEmptyConversationSurface && layoutMode !== 'chat') {
+        setLayoutMode('chat');
       }
-    }, [tasks.length, layoutMode]);
+    }, [isEmptyConversationSurface, layoutMode, setLayoutMode]);
 
     useEffect(() => {
       return subscribeToAgentChatSearchRequests(() => {
@@ -844,43 +846,62 @@ ${content}`;
     }, [isPlanMode]);
 
     const chatColumn = (
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative bg-slate-50/65 dark:bg-slate-950/45">
         {headerExtra && (
           <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 px-4 py-2 flex items-center gap-2">
             {headerExtra}
           </div>
         )}
         {(currentConversation || activeAgentNode?.name) && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-1.5 flex items-center gap-2 min-w-0">
-            <ConversationAgentBadge conversation={currentConversation} />
-            {currentConversation && (
-              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                <span
-                  className="min-w-0 truncate text-sm font-medium text-slate-800 dark:text-slate-100"
-                  title={conversationTitle}
-                >
-                  {conversationTitle}
-                </span>
-                {conversationCreatedAt && (
+          <div className="flex-shrink-0 border-b border-slate-200/60 bg-white/90 px-4 py-2 dark:border-slate-800/70 dark:bg-slate-950/75 sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <ConversationAgentBadge conversation={currentConversation} />
+              {currentConversation && (
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
                   <span
-                    className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400 sm:inline-flex"
-                    title={conversationCreatedAt}
+                    className="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-slate-100"
+                    title={conversationTitle}
                   >
-                    <Clock3 size={12} />
-                    {t('agent.chat.header.createdAt', {
-                      date: conversationCreatedAt,
-                      defaultValue: 'Created {{date}}',
-                    })}
+                    {conversationTitle}
                   </span>
-                )}
-              </div>
-            )}
-            {activeAgentNode?.name && (
-              <span className="flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-medium px-2 py-0.5 rounded-full">
-                <Bot size={12} />
-                {activeAgentNode.name}
-              </span>
-            )}
+                  <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    {conversationCreatedAt && (
+                      <span
+                        className="hidden shrink-0 items-center gap-1 sm:inline-flex"
+                        title={conversationCreatedAt}
+                      >
+                        <Clock3 size={12} />
+                        {t('agent.chat.header.createdAt', {
+                          date: conversationCreatedAt,
+                          defaultValue: 'Created {{date}}',
+                        })}
+                      </span>
+                    )}
+                    <span className="truncate">
+                      {t('agent.chat.header.messageCount', {
+                        count: timeline.length,
+                        defaultValue: '{{count}} timeline item',
+                      })}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {activeAgentNode?.name && (
+                <span className="flex shrink-0 items-center gap-1.5 rounded-md bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                  <Bot size={12} />
+                  {activeAgentNode.name}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setLayoutMode('task');
+                }}
+                className="hidden h-7 shrink-0 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 min-[920px]:inline-flex"
+              >
+                {t('agent.run.openInspector', { defaultValue: 'Inspector' })}
+              </button>
+            </div>
           </div>
         )}
         <div className="flex-1 overflow-hidden relative min-h-0">
@@ -1024,7 +1045,7 @@ ${content}`;
             ? Math.round((taskProgress.current / taskProgress.total) * 100)
             : 0;
         slots.task = {
-          label: 'Task',
+          label: t('agent.statusSlots.task', 'Task'),
           value: `${String(taskProgress.current)}/${String(taskProgress.total)} · ${String(taskPercent)}%`,
           tone:
             taskProgress.status === 'failed'
@@ -1032,12 +1053,16 @@ ${content}`;
               : taskProgress.status === 'completed'
                 ? 'ok'
                 : 'running',
-          hint: taskProgress.label ?? 'Task progress',
+          hint: taskProgress.label ?? t('agent.statusSlots.taskProgress', 'Task progress'),
           progressPercent: taskPercent,
         };
       }
       if (isStreaming) {
-        slots.llm = { label: 'LLM', value: 'streaming', tone: 'running' };
+        slots.llm = {
+          label: t('agent.statusSlots.llm', 'LLM'),
+          value: t('agent.statusSlots.streaming', 'streaming'),
+          tone: 'running',
+        };
       }
       if (sandboxConnectionStatus !== 'idle') {
         const tone: 'ok' | 'error' | 'running' =
@@ -1047,7 +1072,7 @@ ${content}`;
               ? 'error'
               : 'running';
         slots.sandbox = {
-          label: 'Sandbox',
+          label: t('agent.statusSlots.sandbox', 'Sandbox'),
           value: currentTool
             ? `${sandboxConnectionStatus} · ${currentTool.name}`
             : sandboxConnectionStatus,
@@ -1056,21 +1081,28 @@ ${content}`;
       }
       if (suggestionsCount > 0 || doomLoopDetected) {
         slots.hitl = {
-          label: 'HITL',
+          label: t('agent.statusSlots.hitl', 'HITL'),
           value: doomLoopDetected
-            ? 'doom-loop'
-            : `${String(suggestionsCount)} suggestion${suggestionsCount === 1 ? '' : 's'}`,
+            ? t('agent.statusSlots.doomLoop', 'doom-loop')
+            : t('agent.statusSlots.suggestions', {
+                count: suggestionsCount,
+                defaultValue: '{{count}} suggestions',
+              }),
           tone: doomLoopDetected ? 'error' : 'warning',
         };
       }
       if (conversationArtifacts.length > 0) {
         slots.friction = {
-          label: 'Evidence',
-          value: `${String(conversationArtifacts.length)} artifact${
-            conversationArtifacts.length === 1 ? '' : 's'
-          }`,
+          label: t('agent.statusSlots.evidence', 'Evidence'),
+          value: t('agent.statusSlots.artifacts', {
+            count: conversationArtifacts.length,
+            defaultValue: '{{count}} artifacts',
+          }),
           tone: 'idle',
-          hint: 'Open the Evidence drawer to inspect screenshots, diffs, test runs and logs',
+          hint: t(
+            'agent.statusSlots.evidenceHint',
+            'Open the Evidence drawer to inspect screenshots, diffs, test runs and logs'
+          ),
         };
       }
       return slots;
@@ -1082,20 +1114,32 @@ ${content}`;
       suggestionsCount,
       doomLoopDetected,
       conversationArtifacts.length,
+      t,
     ]);
+
+    const shouldShowRunStatusStrip =
+      Boolean(activeConversationId) ||
+      timeline.length > 0 ||
+      isStreaming ||
+      tasks.length > 0 ||
+      pendingHitlRequests.length > 0 ||
+      conversationArtifacts.length > 0 ||
+      Boolean(doomLoopDetected);
 
     const statusBarWithLayout = (
       <div className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
-        <RunStatusStrip
-          run={runViewModel}
-          onStop={abortStream}
-          onOpenInspector={() => {
-            setLayoutMode('task');
-          }}
-          onOpenEvidence={() => {
-            setEvidenceOpen(true);
-          }}
-        />
+        {shouldShowRunStatusStrip && (
+          <RunStatusStrip
+            run={runViewModel}
+            onStop={abortStream}
+            onOpenInspector={() => {
+              setLayoutMode('task');
+            }}
+            onOpenEvidence={() => {
+              setEvidenceOpen(true);
+            }}
+          />
+        )}
         <div className="flex items-center min-w-0">
           <WorkspaceStatusBar
             {...workspaceStatusSlots}
