@@ -371,7 +371,7 @@ pub(crate) fn workspace_plan_outbox_handlers(
     workspace_plan_outbox_handlers_with_stage_runner(dispatch_store, None)
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn workspace_plan_outbox_handlers_with_stage_runner(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
     stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
@@ -379,7 +379,7 @@ pub(crate) fn workspace_plan_outbox_handlers_with_stage_runner(
     workspace_plan_outbox_handlers_with_runtime_state(dispatch_store, stage_runner, None)
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
     stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
