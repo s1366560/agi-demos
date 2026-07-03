@@ -34,6 +34,7 @@ mod memory_repo;
 mod project_repo;
 mod sandbox_repo;
 mod share_repo;
+mod skill_evolution_repo;
 mod skill_repo;
 mod tenant_repo;
 mod tenant_skill_config_repo;
@@ -56,6 +57,10 @@ pub use project_repo::{
 };
 pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
 pub use share_repo::{NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord};
+pub use skill_evolution_repo::{
+    PgSkillEvolutionRepository, SkillEvolutionJobRecord, SkillEvolutionOverviewStatsRecord,
+    SkillEvolutionSessionRecord, SkillEvolutionSkillSummaryRecord,
+};
 pub use skill_repo::{
     PgSkillRepository, PluginConfigRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
     SkillVersionRecord,

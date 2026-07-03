@@ -19,17 +19,17 @@ use agistack_adapters_postgres::{
     BlackboardReplyRecord, InvitationRecord, NewDecisionRecordRecord, NewShareRecord,
     NewTrustPolicyRecord, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
     PgMemoryRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
-    PgShareRepository, PgSkillRepository, PgTenantRepository, PgTenantSkillConfigRepository,
-    PgTrustRepository, PgUserStore, PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord,
-    ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord,
-    ProjectStatsLookup, ProjectUpdatePatch, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
-    SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantLookup,
-    TenantSkillConfigRecord, TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord,
-    TrustDecisionResolution, WorkspaceAccess, WorkspacePipelineRunRecord,
-    WorkspacePipelineStageRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
-    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
-    WorkspaceTaskSessionAttemptRecord,
+    PgShareRepository, PgSkillEvolutionRepository, PgSkillRepository, PgTenantRepository,
+    PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
+    PgWorkspaceRepository, ProjectCreateRecord, ProjectListForUserQuery, ProjectLookup,
+    ProjectMembersLookup, ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch,
+    SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus,
+    TenantAdminStatus, TenantLookup, TenantSkillConfigRecord, TenantUpdatePatch,
+    TopologyEdgeRecord, TopologyNodeRecord, TrustDecisionResolution, WorkspaceAccess,
+    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
+    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
@@ -1322,6 +1322,18 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             updated_at timestamptz)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_plugin_configs_tenant_plugin \
             ON plugin_configs (tenant_id, plugin_name)",
+        "CREATE TABLE IF NOT EXISTS skill_evolution_sessions (\
+            id text PRIMARY KEY, skill_name varchar(200) NOT NULL, tenant_id text NOT NULL, \
+            project_id text, conversation_id text NOT NULL, user_query text NOT NULL, \
+            trajectory json, summary text, judge_scores json, overall_score double precision, \
+            success boolean DEFAULT false NOT NULL, execution_time_ms integer DEFAULT 0 NOT NULL, \
+            tool_call_count integer DEFAULT 0 NOT NULL, processed boolean DEFAULT false NOT NULL, \
+            created_at timestamptz DEFAULT now())",
+        "CREATE TABLE IF NOT EXISTS skill_evolution_jobs (\
+            id text PRIMARY KEY, skill_name varchar(200) NOT NULL, tenant_id text NOT NULL, \
+            project_id text, action varchar(30) NOT NULL, candidate_content text, rationale text, \
+            session_ids json, status varchar(30) DEFAULT 'pending_review' NOT NULL, \
+            skill_version_id text, created_at timestamptz DEFAULT now(), applied_at timestamptz)",
         "CREATE TABLE IF NOT EXISTS workspaces (\
             id text PRIMARY KEY, tenant_id text NOT NULL, project_id text NOT NULL, \
             name varchar(255) NOT NULL, description text, created_by text NOT NULL, \
@@ -2238,6 +2250,172 @@ async fn skill_plugin_config_roundtrips_against_shared_schema() {
         .execute(&pool)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn skill_evolution_overview_queries_shared_schema() {
+    let Some(pool) = pool_or_skip("skill_evolution_overview_queries_shared_schema").await else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    for sql in [
+        "DELETE FROM skill_evolution_jobs WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM skill_evolution_sessions WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM skills WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM user_projects WHERE project_id IN ('p_skill_evo', 'p_skill_evo_other')",
+        "DELETE FROM projects WHERE id IN ('p_skill_evo', 'p_skill_evo_other')",
+        "DELETE FROM user_tenants WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM tenants WHERE id = 't_skill_evo'",
+        "DELETE FROM users WHERE id = 'u_skill_evo'",
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+
+    sqlx::query("INSERT INTO users (id, email) VALUES ('u_skill_evo', 'evo@example.com')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO tenants (id, name) VALUES ('t_skill_evo', 'Skill Evolution')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role) \
+         VALUES ('ut_skill_evo', 'u_skill_evo', 't_skill_evo', 'admin')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, tenant_id, name, owner_id) VALUES \
+         ('p_skill_evo', 't_skill_evo', 'Visible', 'u_skill_evo'), \
+         ('p_skill_evo_other', 't_skill_evo', 'Hidden', 'u_skill_evo')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_projects (user_id, project_id, role) \
+         VALUES ('u_skill_evo', 'p_skill_evo', 'member')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skills \
+         (id, tenant_id, project_id, name, description, tools, status, created_at, scope, is_system_skill) \
+         VALUES \
+         ('skill_evo_project', 't_skill_evo', 'p_skill_evo', 'code-review', 'Review code', '[\"read_file\"]'::json, 'active', '2026-01-02T03:00:00Z'::timestamptz, 'project', false), \
+         ('skill_evo_tenant', 't_skill_evo', NULL, 'review', 'Review tenant work', '[\"read_file\"]'::json, 'active', '2026-01-02T03:00:00Z'::timestamptz, 'tenant', false)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_evolution_sessions \
+         (id, skill_name, tenant_id, project_id, conversation_id, user_query, summary, judge_scores, overall_score, success, execution_time_ms, tool_call_count, processed, created_at) \
+         VALUES \
+         ('sess_skill_evo_tenant', 'review', 't_skill_evo', NULL, 'conv-tenant', 'tenant query', 'tenant summary', '{\"quality\":0.9}'::json, 0.9, true, 100, 2, true, '2026-01-02T03:05:00Z'::timestamptz), \
+         ('sess_skill_evo_project', 'code-review', 't_skill_evo', 'p_skill_evo', 'conv-project', 'project query', NULL, NULL, NULL, false, 200, 3, false, '2026-01-02T03:06:00Z'::timestamptz), \
+         ('sess_skill_evo_no_skill', '__no_skill__', 't_skill_evo', 'p_skill_evo', 'conv-none', 'no skill query', NULL, NULL, NULL, false, 50, 0, false, '2026-01-02T03:07:00Z'::timestamptz), \
+         ('sess_skill_evo_hidden', 'code-review', 't_skill_evo', 'p_skill_evo_other', 'conv-hidden', 'hidden query', NULL, NULL, NULL, false, 500, 4, false, '2026-01-02T03:08:00Z'::timestamptz)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_evolution_jobs \
+         (id, skill_name, tenant_id, project_id, action, candidate_content, rationale, session_ids, status, skill_version_id, created_at, applied_at) \
+         VALUES \
+         ('job_skill_evo_project', 'code-review', 't_skill_evo', 'p_skill_evo', 'update', 'candidate', 'rationale', '[\"sess_skill_evo_project\"]'::json, 'pending_review', NULL, '2026-01-02T03:09:00Z'::timestamptz, NULL), \
+         ('job_skill_evo_tenant', 'review', 't_skill_evo', NULL, 'update', 'candidate', 'rationale', '[\"sess_skill_evo_tenant\"]'::json, 'applied', 'version-1', '2026-01-02T03:10:00Z'::timestamptz, '2026-01-02T03:11:00Z'::timestamptz), \
+         ('job_skill_evo_hidden', 'code-review', 't_skill_evo', 'p_skill_evo_other', 'update', 'hidden', 'hidden', '[\"sess_skill_evo_hidden\"]'::json, 'pending_review', NULL, '2026-01-02T03:12:00Z'::timestamptz, NULL)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let repo = PgSkillEvolutionRepository::new(pool.clone());
+    let project_ids = repo
+        .accessible_project_ids("u_skill_evo", "t_skill_evo")
+        .await
+        .unwrap();
+    assert_eq!(project_ids, vec!["p_skill_evo".to_string()]);
+
+    let stats = repo
+        .overview_stats("t_skill_evo", &project_ids)
+        .await
+        .unwrap();
+    assert_eq!(stats.total_sessions, 3);
+    assert_eq!(stats.skill_sessions, 2);
+    assert_eq!(stats.no_skill_sessions, 1);
+    assert_eq!(stats.unprocessed_sessions, 1);
+    assert_eq!(stats.processed_sessions, 1);
+    assert_eq!(stats.scored_sessions, 1);
+    assert_eq!(stats.successful_sessions, 1);
+    assert!((stats.avg_score.unwrap() - 0.9).abs() < 0.000_001);
+    assert_eq!(stats.total_jobs, 2);
+    assert_eq!(stats.pending_jobs, 1);
+    assert_eq!(stats.applied_jobs, 1);
+
+    let summaries = repo
+        .skill_session_summaries("t_skill_evo", &project_ids, 10)
+        .await
+        .unwrap();
+    let project_summary = summaries
+        .iter()
+        .find(|summary| summary.skill_name == "code-review")
+        .expect("project skill summary");
+    assert_eq!(
+        project_summary.skill_id.as_deref(),
+        Some("skill_evo_project")
+    );
+    assert_eq!(project_summary.project_id.as_deref(), Some("p_skill_evo"));
+    assert_eq!(project_summary.session_count, 1);
+    assert_eq!(project_summary.job_count, 1);
+    assert_eq!(project_summary.pending_job_count, 1);
+    let tenant_summary = summaries
+        .iter()
+        .find(|summary| summary.skill_name == "review")
+        .expect("tenant skill summary");
+    assert_eq!(tenant_summary.skill_id.as_deref(), Some("skill_evo_tenant"));
+    assert_eq!(tenant_summary.job_count, 1);
+    assert_eq!(tenant_summary.pending_job_count, 0);
+
+    let sessions = repo
+        .list_recent_sessions("t_skill_evo", &project_ids, 10)
+        .await
+        .unwrap();
+    assert_eq!(sessions.len(), 3);
+    assert!(sessions
+        .iter()
+        .all(|session| session.project_id.as_deref() != Some("p_skill_evo_other")));
+
+    let jobs = repo
+        .list_jobs("t_skill_evo", &project_ids, 10)
+        .await
+        .unwrap();
+    assert_eq!(jobs.len(), 2);
+    assert!(jobs.iter().any(|job| job.id == "job_skill_evo_project"
+        && job.status == "pending_review"
+        && job.session_ids == vec!["sess_skill_evo_project".to_string()]));
+    assert!(jobs
+        .iter()
+        .all(|job| job.project_id.as_deref() != Some("p_skill_evo_other")));
+
+    for sql in [
+        "DELETE FROM skill_evolution_jobs WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM skill_evolution_sessions WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM skills WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM user_projects WHERE project_id IN ('p_skill_evo', 'p_skill_evo_other')",
+        "DELETE FROM projects WHERE id IN ('p_skill_evo', 'p_skill_evo_other')",
+        "DELETE FROM user_tenants WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM tenants WHERE id = 't_skill_evo'",
+        "DELETE FROM users WHERE id = 'u_skill_evo'",
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
 }
 
 #[tokio::test]

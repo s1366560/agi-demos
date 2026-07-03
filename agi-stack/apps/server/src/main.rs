@@ -60,9 +60,9 @@ use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
     PgMemoryRepository, PgPool, PgProjectReadRepository, PgProjectSandboxRepository,
-    PgProjectStore, PgShareRepository, PgSkillRepository, PgTenantRepository,
-    PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
-    PgWorkspaceRepository,
+    PgProjectStore, PgShareRepository, PgSkillEvolutionRepository, PgSkillRepository,
+    PgTenantRepository, PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore,
+    PgVectorIndex, PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -558,8 +558,10 @@ async fn build_memory_and_auth(
                 Arc::new(PgShareService::new(PgShareRepository::new(pool.clone())));
             let trust: SharedTrust =
                 Arc::new(PgTrustService::new(PgTrustRepository::new(pool.clone())));
-            let skills: SharedSkills =
-                Arc::new(PgSkillService::new(PgSkillRepository::new(pool.clone())));
+            let skills: SharedSkills = Arc::new(
+                PgSkillService::new(PgSkillRepository::new(pool.clone()))
+                    .with_evolution_repo(PgSkillEvolutionRepository::new(pool.clone())),
+            );
             let tenant_skill_configs: SharedTenantSkillConfigs = Arc::new(
                 PgTenantSkillConfigService::new(PgTenantSkillConfigRepository::new(pool.clone())),
             );

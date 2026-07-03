@@ -1,0 +1,137 @@
+{
+  "stats": {
+    "total_sessions": 3,
+    "skill_sessions": 2,
+    "no_skill_sessions": 1,
+    "unprocessed_sessions": 1,
+    "processed_sessions": 1,
+    "scored_sessions": 1,
+    "successful_sessions": 1,
+    "avg_score": 0.8,
+    "total_jobs": 2,
+    "pending_jobs": 1,
+    "applied_jobs": 1,
+    "skipped_jobs": 0,
+    "rejected_jobs": 0
+  },
+  "monitor": {
+    "refresh_interval_seconds": 15,
+    "latest_session_at": "2023-11-14T22:18:20Z",
+    "latest_job_at": "2023-11-14T22:20:00Z",
+    "backlog_count": 1,
+    "unscored_count": 0,
+    "blocked_by_review_count": 1,
+    "eligible_skill_count": 1,
+    "needs_attention": true
+  },
+  "stages": [
+    {
+      "id": "capture",
+      "label": "capture",
+      "status": "active",
+      "count": 3,
+      "backlog_count": 0,
+      "detail": "Captured agent turns available for evolution."
+    },
+    {
+      "id": "summarize",
+      "label": "summarize",
+      "status": "waiting",
+      "count": 1,
+      "backlog_count": 1,
+      "detail": "Captured turns are summarized into comparable trajectories."
+    },
+    {
+      "id": "judge",
+      "label": "judge",
+      "status": "complete",
+      "count": 1,
+      "backlog_count": 0,
+      "detail": "Summaries are judged and scored for evolution readiness."
+    },
+    {
+      "id": "review",
+      "label": "review",
+      "status": "blocked",
+      "count": 1,
+      "backlog_count": 1,
+      "detail": "Pending jobs require apply or reject before duplicate batches advance."
+    },
+    {
+      "id": "apply",
+      "label": "apply",
+      "status": "active",
+      "count": 1,
+      "backlog_count": 0,
+      "detail": "Applied jobs create skill versions attributed to evolution."
+    }
+  ],
+  "skills": [
+    {
+      "skill_id": "11111111-1111-4111-8111-111111111111",
+      "project_id": null,
+      "skill_name": "code-review",
+      "session_count": 2,
+      "success_count": 1,
+      "unprocessed_count": 1,
+      "scored_count": 1,
+      "avg_score": 0.8,
+      "latest_session_at": "2023-11-14T22:18:20Z",
+      "job_count": 2,
+      "pending_job_count": 1,
+      "latest_job_at": "2023-11-14T22:20:00Z"
+    }
+  ],
+  "recent_sessions": [
+    {
+      "id": "sess-1",
+      "skill_name": "code-review",
+      "conversation_id": "conv-1",
+      "project_id": null,
+      "user_query": "Review this patch",
+      "summary": "Reviewed ownership and error handling.",
+      "judge_scores": {
+        "quality": 0.8
+      },
+      "overall_score": 0.8,
+      "success": true,
+      "execution_time_ms": 1200,
+      "tool_call_count": 3,
+      "processed": true,
+      "created_at": "2023-11-14T22:18:20Z"
+    }
+  ],
+  "recent_jobs": [
+    {
+      "id": "job-1",
+      "project_id": null,
+      "skill_name": "code-review",
+      "action": "update",
+      "status": "pending_review",
+      "rationale": "Improve review checklist.",
+      "candidate_preview": "Updated skill content",
+      "candidate_content": "Updated skill content",
+      "blocked_by_review": true,
+      "session_ids": [
+        "sess-1",
+        "sess-2"
+      ],
+      "skill_version_id": null,
+      "created_at": "2023-11-14T22:20:00Z",
+      "applied_at": null
+    }
+  ],
+  "trigger": {
+    "capture_hook": "after_turn_complete",
+    "capture_timing": "After every agent turn completes, the plugin records matched skills, dynamically loaded skill_loader usage, conversation trajectory, tool calls, success, and latency.",
+    "scheduled_timing": "Every 30 minute(s), the scheduler summarizes, judges, aggregates, and evolves qualifying skill sessions.",
+    "manual_trigger": "/api/v1/skills/{skill_id}/evolution/run",
+    "min_sessions_per_skill": 2,
+    "scoring_min_sessions_per_skill": 2,
+    "min_avg_score": 0.7,
+    "max_sessions_per_batch": 10,
+    "publish_mode": "review",
+    "auto_apply": false,
+    "enabled": true
+  }
+}

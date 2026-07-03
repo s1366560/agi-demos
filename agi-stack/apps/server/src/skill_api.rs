@@ -3,8 +3,9 @@
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots,
 //! rollback/import/export, filesystem-backed system skill listing/package
-//! export, zip import, and the skill-evolution strategy config. Evolution jobs
-//! remain Python-owned until their full semantics are migrated.
+//! export, zip import, and the skill-evolution strategy config/overview.
+//! Evolution jobs and run actions remain Python-owned until their full
+//! semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -23,7 +24,10 @@ use serde_json::{json, Map, Value};
 use serde_yaml_ng::{Mapping as YamlMapping, Value as YamlValue};
 
 use agistack_adapters_postgres::{
-    PgSkillRepository, SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord,
+    PgSkillEvolutionRepository, PgSkillRepository, SkillEvolutionJobRecord,
+    SkillEvolutionOverviewStatsRecord, SkillEvolutionSessionRecord,
+    SkillEvolutionSkillSummaryRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
+    SkillVersionRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 
@@ -155,6 +159,12 @@ pub(crate) trait SkillService: Send + Sync {
         tenant_id: Option<&str>,
         body: SkillEvolutionConfigUpdatePayload,
     ) -> Result<SkillEvolutionConfigView, SkillApiError>;
+
+    async fn get_evolution_overview(
+        &self,
+        user_id: &str,
+        query: SkillEvolutionOverviewQuery,
+    ) -> Result<SkillEvolutionOverviewView, SkillApiError>;
 }
 
 #[derive(Debug)]
@@ -347,6 +357,28 @@ struct SkillVersionQuery {
     offset: Option<i64>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct SkillEvolutionOverviewQuery {
+    #[serde(default)]
+    tenant_id: Option<String>,
+    #[serde(default)]
+    skill_limit: Option<i64>,
+    #[serde(default)]
+    session_limit: Option<i64>,
+    #[serde(default)]
+    job_limit: Option<i64>,
+}
+
+impl SkillEvolutionOverviewQuery {
+    fn validated_limits(&self) -> Result<(i64, i64, i64), SkillApiError> {
+        Ok((
+            validate_overview_limit(self.skill_limit)?,
+            validate_overview_limit(self.session_limit)?,
+            validate_overview_limit(self.job_limit)?,
+        ))
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct SkillView {
     id: String,
@@ -525,13 +557,221 @@ impl From<SkillEvolutionConfig> for SkillEvolutionConfigView {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionOverviewStatsView {
+    total_sessions: i64,
+    skill_sessions: i64,
+    no_skill_sessions: i64,
+    unprocessed_sessions: i64,
+    processed_sessions: i64,
+    scored_sessions: i64,
+    successful_sessions: i64,
+    avg_score: Option<f64>,
+    total_jobs: i64,
+    pending_jobs: i64,
+    applied_jobs: i64,
+    skipped_jobs: i64,
+    rejected_jobs: i64,
+}
+
+impl From<SkillEvolutionOverviewStatsRecord> for SkillEvolutionOverviewStatsView {
+    fn from(record: SkillEvolutionOverviewStatsRecord) -> Self {
+        Self {
+            total_sessions: record.total_sessions,
+            skill_sessions: record.skill_sessions,
+            no_skill_sessions: record.no_skill_sessions,
+            unprocessed_sessions: record.unprocessed_sessions,
+            processed_sessions: record.processed_sessions,
+            scored_sessions: record.scored_sessions,
+            successful_sessions: record.successful_sessions,
+            avg_score: record.avg_score,
+            total_jobs: record.total_jobs,
+            pending_jobs: record.pending_jobs,
+            applied_jobs: record.applied_jobs,
+            skipped_jobs: record.skipped_jobs,
+            rejected_jobs: record.rejected_jobs,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionSkillSummaryView {
+    skill_id: Option<String>,
+    project_id: Option<String>,
+    skill_name: String,
+    session_count: i64,
+    success_count: i64,
+    unprocessed_count: i64,
+    scored_count: i64,
+    avg_score: Option<f64>,
+    latest_session_at: Option<String>,
+    job_count: i64,
+    pending_job_count: i64,
+    latest_job_at: Option<String>,
+}
+
+impl From<SkillEvolutionSkillSummaryRecord> for SkillEvolutionSkillSummaryView {
+    fn from(record: SkillEvolutionSkillSummaryRecord) -> Self {
+        Self {
+            skill_id: record.skill_id,
+            project_id: record.project_id,
+            skill_name: record.skill_name,
+            session_count: record.session_count,
+            success_count: record.success_count,
+            unprocessed_count: record.unprocessed_count,
+            scored_count: record.scored_count,
+            avg_score: record.avg_score,
+            latest_session_at: record.latest_session_at.map(iso8601),
+            job_count: record.job_count,
+            pending_job_count: record.pending_job_count,
+            latest_job_at: record.latest_job_at.map(iso8601),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionSessionView {
+    id: String,
+    skill_name: String,
+    conversation_id: String,
+    project_id: Option<String>,
+    user_query: String,
+    summary: Option<String>,
+    judge_scores: Option<Value>,
+    overall_score: Option<f64>,
+    success: bool,
+    execution_time_ms: i64,
+    tool_call_count: i64,
+    processed: bool,
+    created_at: String,
+}
+
+impl From<SkillEvolutionSessionRecord> for SkillEvolutionSessionView {
+    fn from(record: SkillEvolutionSessionRecord) -> Self {
+        Self {
+            id: record.id,
+            skill_name: record.skill_name,
+            conversation_id: record.conversation_id,
+            project_id: record.project_id,
+            user_query: record.user_query,
+            summary: record.summary,
+            judge_scores: record.judge_scores,
+            overall_score: record.overall_score,
+            success: record.success,
+            execution_time_ms: record.execution_time_ms,
+            tool_call_count: record.tool_call_count,
+            processed: record.processed,
+            created_at: iso8601(record.created_at),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionJobView {
+    id: String,
+    project_id: Option<String>,
+    skill_name: String,
+    action: String,
+    status: String,
+    rationale: Option<String>,
+    candidate_preview: Option<String>,
+    candidate_content: Option<String>,
+    blocked_by_review: bool,
+    session_ids: Vec<String>,
+    skill_version_id: Option<String>,
+    created_at: String,
+    applied_at: Option<String>,
+}
+
+impl From<SkillEvolutionJobRecord> for SkillEvolutionJobView {
+    fn from(record: SkillEvolutionJobRecord) -> Self {
+        let candidate_preview = record
+            .candidate_content
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .map(|value| value.chars().take(500).collect());
+        Self {
+            id: record.id,
+            project_id: record.project_id,
+            skill_name: record.skill_name,
+            action: record.action,
+            blocked_by_review: record.status == "pending_review",
+            status: record.status,
+            rationale: record.rationale,
+            candidate_preview,
+            candidate_content: record.candidate_content,
+            session_ids: record.session_ids,
+            skill_version_id: record.skill_version_id,
+            created_at: iso8601(record.created_at),
+            applied_at: record.applied_at.map(iso8601),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionTriggerView {
+    capture_hook: String,
+    capture_timing: String,
+    scheduled_timing: String,
+    manual_trigger: String,
+    min_sessions_per_skill: i64,
+    scoring_min_sessions_per_skill: i64,
+    min_avg_score: f64,
+    max_sessions_per_batch: i64,
+    publish_mode: String,
+    auto_apply: bool,
+    enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionMonitorView {
+    refresh_interval_seconds: i64,
+    latest_session_at: Option<String>,
+    latest_job_at: Option<String>,
+    backlog_count: i64,
+    unscored_count: i64,
+    blocked_by_review_count: i64,
+    eligible_skill_count: i64,
+    needs_attention: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionStageView {
+    id: String,
+    label: String,
+    status: String,
+    count: i64,
+    backlog_count: i64,
+    detail: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionOverviewView {
+    stats: SkillEvolutionOverviewStatsView,
+    monitor: SkillEvolutionMonitorView,
+    stages: Vec<SkillEvolutionStageView>,
+    skills: Vec<SkillEvolutionSkillSummaryView>,
+    recent_sessions: Vec<SkillEvolutionSessionView>,
+    recent_jobs: Vec<SkillEvolutionJobView>,
+    trigger: SkillEvolutionTriggerView,
+}
+
 pub(crate) struct PgSkillService {
     repo: PgSkillRepository,
+    evolution_repo: Option<PgSkillEvolutionRepository>,
 }
 
 impl PgSkillService {
     pub(crate) fn new(repo: PgSkillRepository) -> Self {
-        Self { repo }
+        Self {
+            repo,
+            evolution_repo: None,
+        }
+    }
+
+    pub(crate) fn with_evolution_repo(mut self, repo: PgSkillEvolutionRepository) -> Self {
+        self.evolution_repo = Some(repo);
+        self
     }
 }
 
@@ -1131,6 +1371,48 @@ impl SkillService for PgSkillService {
             .await
             .map_err(SkillApiError::internal)?;
         Ok(view)
+    }
+
+    async fn get_evolution_overview(
+        &self,
+        user_id: &str,
+        query: SkillEvolutionOverviewQuery,
+    ) -> Result<SkillEvolutionOverviewView, SkillApiError> {
+        let tenant_id = self
+            .resolve_tenant(user_id, query.tenant_id.as_deref())
+            .await?;
+        let (skill_limit, session_limit, job_limit) = query.validated_limits()?;
+        let config = self.load_evolution_config(&tenant_id).await?;
+        let Some(repo) = self.evolution_repo.as_ref() else {
+            return Ok(empty_evolution_overview(config));
+        };
+        let project_ids = repo
+            .accessible_project_ids(user_id, &tenant_id)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let stats = repo
+            .overview_stats(&tenant_id, &project_ids)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let skill_summaries = repo
+            .skill_session_summaries(&tenant_id, &project_ids, skill_limit)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let recent_sessions = repo
+            .list_recent_sessions(&tenant_id, &project_ids, session_limit)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let recent_jobs = repo
+            .list_jobs(&tenant_id, &project_ids, job_limit)
+            .await
+            .map_err(SkillApiError::internal)?;
+        Ok(evolution_overview_from_records(
+            config,
+            stats,
+            skill_summaries,
+            recent_sessions,
+            recent_jobs,
+        ))
     }
 }
 
@@ -1888,6 +2170,18 @@ impl SkillService for DevSkillService {
             .insert(tenant_id, next_config.clone());
         Ok(next_config.into())
     }
+
+    async fn get_evolution_overview(
+        &self,
+        _user_id: &str,
+        query: SkillEvolutionOverviewQuery,
+    ) -> Result<SkillEvolutionOverviewView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(query.tenant_id.as_deref());
+        query.validated_limits()?;
+        Ok(empty_evolution_overview(
+            self.evolution_config_for(&tenant_id)?,
+        ))
+    }
 }
 
 async fn create_skill(
@@ -2136,6 +2430,18 @@ async fn update_skill_evolution_config(
     ))
 }
 
+async fn get_skill_evolution_overview(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(query): Query<SkillEvolutionOverviewQuery>,
+) -> Result<Json<SkillEvolutionOverviewView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .get_evolution_overview(&identity.user_id, query)
+            .await?,
+    ))
+}
+
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/skills/", get(list_skills).post(create_skill))
@@ -2146,6 +2452,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/skills/evolution/config",
             get(get_skill_evolution_config).put(update_skill_evolution_config),
+        )
+        .route(
+            "/api/v1/skills/evolution/overview",
+            get(get_skill_evolution_overview),
         )
         .route(
             "/api/v1/skills/:skill_id/content",
@@ -2197,6 +2507,187 @@ fn filter_disabled_system_skills(view: &mut SkillListView, disabled_names: &Hash
     view.skills
         .retain(|skill| !disabled_names.contains(&skill.name));
     view.total = view.skills.len();
+}
+
+fn empty_evolution_overview(config: SkillEvolutionConfig) -> SkillEvolutionOverviewView {
+    evolution_overview_from_records(
+        config,
+        SkillEvolutionOverviewStatsRecord::default(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+}
+
+fn evolution_overview_from_records(
+    config: SkillEvolutionConfig,
+    stats: SkillEvolutionOverviewStatsRecord,
+    skill_summaries: Vec<SkillEvolutionSkillSummaryRecord>,
+    recent_sessions: Vec<SkillEvolutionSessionRecord>,
+    recent_jobs: Vec<SkillEvolutionJobRecord>,
+) -> SkillEvolutionOverviewView {
+    let stats = SkillEvolutionOverviewStatsView::from(stats);
+    let skills: Vec<SkillEvolutionSkillSummaryView> = skill_summaries
+        .into_iter()
+        .map(SkillEvolutionSkillSummaryView::from)
+        .collect();
+    let recent_sessions: Vec<SkillEvolutionSessionView> = recent_sessions
+        .into_iter()
+        .map(SkillEvolutionSessionView::from)
+        .collect();
+    let recent_jobs: Vec<SkillEvolutionJobView> = recent_jobs
+        .into_iter()
+        .map(SkillEvolutionJobView::from)
+        .collect();
+    let trigger = skill_evolution_trigger_view("", &config);
+    let monitor =
+        skill_evolution_monitor_view(&stats, &skills, &recent_sessions, &recent_jobs, &trigger);
+    let stages = skill_evolution_stage_views(&stats, &monitor);
+    SkillEvolutionOverviewView {
+        stats,
+        monitor,
+        stages,
+        skills,
+        recent_sessions,
+        recent_jobs,
+        trigger,
+    }
+}
+
+fn skill_evolution_trigger_view(
+    skill_id: &str,
+    config: &SkillEvolutionConfig,
+) -> SkillEvolutionTriggerView {
+    SkillEvolutionTriggerView {
+        capture_hook: "after_turn_complete".to_string(),
+        capture_timing: "After every agent turn completes, the plugin records matched skills, dynamically loaded skill_loader usage, conversation trajectory, tool calls, success, and latency.".to_string(),
+        scheduled_timing: format!(
+            "Every {} minute(s), the scheduler summarizes, judges, aggregates, and evolves qualifying skill sessions.",
+            config.evolution_interval_minutes
+        ),
+        manual_trigger: if skill_id.is_empty() {
+            "/api/v1/skills/{skill_id}/evolution/run".to_string()
+        } else {
+            format!("/api/v1/skills/{skill_id}/evolution/run")
+        },
+        min_sessions_per_skill: config.min_sessions_per_skill,
+        scoring_min_sessions_per_skill: config.scoring_min_sessions_per_skill,
+        min_avg_score: config.min_avg_score,
+        max_sessions_per_batch: config.max_sessions_per_batch,
+        publish_mode: config.publish_mode.as_str().to_string(),
+        auto_apply: config.auto_apply,
+        enabled: config.enabled,
+    }
+}
+
+fn skill_evolution_monitor_view(
+    stats: &SkillEvolutionOverviewStatsView,
+    skills: &[SkillEvolutionSkillSummaryView],
+    recent_sessions: &[SkillEvolutionSessionView],
+    recent_jobs: &[SkillEvolutionJobView],
+    trigger: &SkillEvolutionTriggerView,
+) -> SkillEvolutionMonitorView {
+    let backlog_count: i64 = skills
+        .iter()
+        .filter(|summary| {
+            summary.skill_name != "__no_skill__"
+                && summary.session_count >= trigger.scoring_min_sessions_per_skill
+        })
+        .map(|summary| summary.unprocessed_count)
+        .sum();
+    let unscored_count = (stats.processed_sessions - stats.scored_sessions).max(0);
+    let eligible_skill_count = skills
+        .iter()
+        .filter(|summary| {
+            summary.skill_name != "__no_skill__"
+                && summary.session_count >= trigger.min_sessions_per_skill
+                && summary
+                    .avg_score
+                    .is_some_and(|score| score >= trigger.min_avg_score)
+        })
+        .count() as i64;
+    let blocked_by_review_count = stats.pending_jobs;
+    SkillEvolutionMonitorView {
+        refresh_interval_seconds: 15,
+        latest_session_at: recent_sessions
+            .first()
+            .map(|session| session.created_at.clone()),
+        latest_job_at: recent_jobs.first().map(|job| job.created_at.clone()),
+        backlog_count,
+        unscored_count,
+        blocked_by_review_count,
+        eligible_skill_count,
+        needs_attention: backlog_count > 0 || unscored_count > 0 || blocked_by_review_count > 0,
+    }
+}
+
+fn skill_evolution_stage_views(
+    stats: &SkillEvolutionOverviewStatsView,
+    monitor: &SkillEvolutionMonitorView,
+) -> Vec<SkillEvolutionStageView> {
+    vec![
+        SkillEvolutionStageView {
+            id: "capture".to_string(),
+            label: "capture".to_string(),
+            status: if stats.total_sessions > 0 {
+                "active".to_string()
+            } else {
+                "waiting".to_string()
+            },
+            count: stats.total_sessions,
+            backlog_count: 0,
+            detail: "Captured agent turns available for evolution.".to_string(),
+        },
+        SkillEvolutionStageView {
+            id: "summarize".to_string(),
+            label: "summarize".to_string(),
+            status: if monitor.backlog_count > 0 {
+                "waiting".to_string()
+            } else {
+                "complete".to_string()
+            },
+            count: stats.processed_sessions,
+            backlog_count: monitor.backlog_count,
+            detail: "Captured turns are summarized into comparable trajectories.".to_string(),
+        },
+        SkillEvolutionStageView {
+            id: "judge".to_string(),
+            label: "judge".to_string(),
+            status: if monitor.unscored_count > 0 {
+                "waiting".to_string()
+            } else {
+                "complete".to_string()
+            },
+            count: stats.scored_sessions,
+            backlog_count: monitor.unscored_count,
+            detail: "Summaries are judged and scored for evolution readiness.".to_string(),
+        },
+        SkillEvolutionStageView {
+            id: "review".to_string(),
+            label: "review".to_string(),
+            status: if stats.pending_jobs > 0 {
+                "blocked".to_string()
+            } else {
+                "complete".to_string()
+            },
+            count: stats.pending_jobs,
+            backlog_count: stats.pending_jobs,
+            detail: "Pending jobs require apply or reject before duplicate batches advance."
+                .to_string(),
+        },
+        SkillEvolutionStageView {
+            id: "apply".to_string(),
+            label: "apply".to_string(),
+            status: if stats.applied_jobs > 0 {
+                "active".to_string()
+            } else {
+                "waiting".to_string()
+            },
+            count: stats.applied_jobs,
+            backlog_count: 0,
+            detail: "Applied jobs create skill versions attributed to evolution.".to_string(),
+        },
+    ]
 }
 
 fn normalize_scope(raw: &str, project_id: Option<&str>) -> Result<String, SkillApiError> {
@@ -2428,6 +2919,16 @@ fn validate_i64_bounds(value: Option<i64>, min: i64, max: i64) -> Result<(), Ski
         ));
     }
     Ok(())
+}
+
+fn validate_overview_limit(value: Option<i64>) -> Result<i64, SkillApiError> {
+    match value {
+        Some(value) if !(1..=200).contains(&value) => Err(SkillApiError::unprocessable(
+            "Invalid skill evolution overview query",
+        )),
+        Some(value) => Ok(value),
+        None => Ok(50),
+    }
 }
 
 fn env_bool(name: &str, default: bool) -> bool {
@@ -3108,6 +3609,91 @@ Use when managing Agent Skills packages.
         ))
         .unwrap();
         agistack_parity::assert_parity(&updated_golden, &updated_actual);
+    }
+
+    #[test]
+    fn skill_evolution_overview_matches_golden() {
+        let config = SkillEvolutionConfig {
+            enabled: true,
+            min_sessions_per_skill: 2,
+            scoring_min_sessions_per_skill: 2,
+            min_avg_score: 0.7,
+            max_sessions_per_batch: 10,
+            evolution_interval_minutes: 30,
+            publish_mode: SkillEvolutionPublishMode::Review,
+            auto_apply: false,
+        };
+        let stats = SkillEvolutionOverviewStatsRecord {
+            total_sessions: 3,
+            skill_sessions: 2,
+            no_skill_sessions: 1,
+            unprocessed_sessions: 1,
+            processed_sessions: 1,
+            scored_sessions: 1,
+            successful_sessions: 1,
+            avg_score: Some(0.8),
+            total_jobs: 2,
+            pending_jobs: 1,
+            applied_jobs: 1,
+            skipped_jobs: 0,
+            rejected_jobs: 0,
+        };
+        let skill_summaries = vec![SkillEvolutionSkillSummaryRecord {
+            skill_id: Some("11111111-1111-4111-8111-111111111111".to_string()),
+            project_id: None,
+            skill_name: "code-review".to_string(),
+            session_count: 2,
+            success_count: 1,
+            unprocessed_count: 1,
+            scored_count: 1,
+            avg_score: Some(0.8),
+            latest_session_at: Some(DateTime::<Utc>::from_timestamp(1_700_000_300, 0).unwrap()),
+            job_count: 2,
+            pending_job_count: 1,
+            latest_job_at: Some(DateTime::<Utc>::from_timestamp(1_700_000_400, 0).unwrap()),
+        }];
+        let recent_sessions = vec![SkillEvolutionSessionRecord {
+            id: "sess-1".to_string(),
+            skill_name: "code-review".to_string(),
+            conversation_id: "conv-1".to_string(),
+            project_id: None,
+            user_query: "Review this patch".to_string(),
+            summary: Some("Reviewed ownership and error handling.".to_string()),
+            judge_scores: Some(json!({"quality": 0.8})),
+            overall_score: Some(0.8),
+            success: true,
+            execution_time_ms: 1200,
+            tool_call_count: 3,
+            processed: true,
+            created_at: DateTime::<Utc>::from_timestamp(1_700_000_300, 0).unwrap(),
+        }];
+        let recent_jobs = vec![SkillEvolutionJobRecord {
+            id: "job-1".to_string(),
+            project_id: None,
+            skill_name: "code-review".to_string(),
+            action: "update".to_string(),
+            status: "pending_review".to_string(),
+            rationale: Some("Improve review checklist.".to_string()),
+            candidate_content: Some("Updated skill content".to_string()),
+            session_ids: vec!["sess-1".to_string(), "sess-2".to_string()],
+            skill_version_id: None,
+            created_at: DateTime::<Utc>::from_timestamp(1_700_000_400, 0).unwrap(),
+            applied_at: None,
+        }];
+
+        let actual = serde_json::to_value(evolution_overview_from_records(
+            config,
+            stats,
+            skill_summaries,
+            recent_sessions,
+            recent_jobs,
+        ))
+        .unwrap();
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/skill_evolution_overview.json"
+        ))
+        .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
     }
 
     #[tokio::test]
