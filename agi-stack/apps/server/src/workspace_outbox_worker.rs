@@ -94,6 +94,9 @@ const DEFAULT_WORKER_STREAM_REPLAY_BATCH_LIMIT: usize = 100;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
+const REJECTED_ATTEMPT_STATUS: &str = "rejected";
+const SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION: &str = "retry_same_node";
+const SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON: &str = "supervisor_decision_retry_same_node";
 const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
 const WORKTREE_INTEGRATION_DONE_STATUSES: [&str; 5] = [
     "merged",
@@ -9874,6 +9877,14 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_accepted = self
                 .reconcile_accepted_terminal_attempt_nodes(&workspace_id, &plan_id)
                 .await?;
+            let changed_supervisor_retry = self
+                .reconcile_supervisor_retry_same_node_attempt_nodes(
+                    &item,
+                    &payload,
+                    &workspace_id,
+                    &plan_id,
+                )
+                .await?;
             let changed_terminal = self
                 .reconcile_terminal_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
                 .await?;
@@ -9886,6 +9897,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             if changed_worktree_failed
                 + changed_missing
                 + changed_accepted
+                + changed_supervisor_retry
                 + changed_terminal
                 + changed_reported
                 + changed_dirty_main_dependency_dispatch
@@ -11231,6 +11243,149 @@ impl SupervisorTickAdmissionHandler {
         Ok(changed)
     }
 
+    async fn reconcile_supervisor_retry_same_node_attempt_nodes(
+        &self,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if !supervisor_retry_same_node_reconcilable_node(&node) {
+                continue;
+            }
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            if metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
+                != Some(SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION)
+            {
+                continue;
+            }
+            let Some(attempt_id) = node.current_attempt_id.clone() else {
+                continue;
+            };
+            let Some(attempt) = self.store.get_task_session_attempt(&attempt_id).await? else {
+                continue;
+            };
+            if attempt.status.trim().to_ascii_lowercase() != AWAITING_LEADER_ADJUDICATION_STATUS {
+                continue;
+            }
+            if !attempt_has_candidate_output(&attempt) {
+                continue;
+            }
+            let Some(context) = self
+                .retry_context_for_node(payload, workspace_id, &node)
+                .await?
+            else {
+                continue;
+            };
+
+            let now = Utc::now();
+            let summary = supervisor_retry_same_node_summary(&metadata, &attempt);
+            let retry_not_before =
+                future_metadata_datetime_utc(metadata.get("retry_not_before"), now);
+            let Some(rejected_attempt) = self
+                .store
+                .finish_task_session_attempt(
+                    &attempt_id,
+                    REJECTED_ATTEMPT_STATUS,
+                    Some(&summary),
+                    Some(SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON),
+                    now,
+                )
+                .await?
+            else {
+                continue;
+            };
+
+            let node_id = node.id.clone();
+            let retry_exhausted = release_node_for_terminal_retry(
+                &mut node,
+                SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON,
+                now,
+                plan_terminal_attempt_max_retries(),
+            );
+            metadata = object_or_empty(node.metadata_json.clone());
+            metadata.insert(
+                "supervisor_decision_retry_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert(
+                "supervisor_decision_retry_attempt_id".to_string(),
+                json!(rejected_attempt.id.clone()),
+            );
+            metadata.insert(
+                "supervisor_decision_retry_attempt_status".to_string(),
+                json!(REJECTED_ATTEMPT_STATUS),
+            );
+            node.metadata_json = Value::Object(metadata.clone());
+            self.store.save_plan_node(node).await?;
+            changed += 1;
+
+            self.store
+                .create_plan_event(WorkspacePlanEventRecord {
+                    id: generate_uuid_v4(),
+                    plan_id: plan_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    node_id: Some(node_id.clone()),
+                    attempt_id: Some(rejected_attempt.id.clone()),
+                    event_type: "supervisor_decision_retry_same_node_reconciled".to_string(),
+                    source: "workspace_plan_supervisor_tick".to_string(),
+                    actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                    payload_json: json!({
+                        "reason": SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON,
+                        "action": SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION,
+                        "rationale": metadata.get("last_supervisor_decision_rationale").cloned().unwrap_or(Value::Null),
+                        "confidence": metadata.get("last_supervisor_decision_confidence").cloned().unwrap_or(Value::Null),
+                        "feedback_items": metadata.get("last_supervisor_decision_feedback_items").cloned().unwrap_or(Value::Null),
+                        "workspace_task_id": context.task_id.clone(),
+                        "retry_exhausted": retry_exhausted,
+                    }),
+                    created_at: now,
+                })
+                .await?;
+
+            if retry_exhausted {
+                continue;
+            }
+            let mut retry_outbox = supervisor_retry_attempt_outbox(
+                item,
+                payload,
+                workspace_id,
+                plan_id,
+                &node_id,
+                &context.task_id,
+                &context.worker_agent_id,
+                &context.actor_user_id,
+                &context.leader_agent_id,
+                context.root_goal_task_id.as_deref(),
+                Some(&attempt_id),
+                SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON,
+                now,
+            );
+            if let Some(retry_at) = retry_not_before {
+                retry_outbox.next_attempt_at = Some(retry_at);
+                if let Value::Object(retry_payload) = &mut retry_outbox.payload_json {
+                    retry_payload
+                        .insert("retry_not_before".to_string(), json!(retry_at.to_rfc3339()));
+                }
+            }
+            self.store.enqueue_plan_outbox(retry_outbox).await?;
+        }
+        Ok(changed)
+    }
+
     async fn reconciling_accepted_attempt_for_terminal_attempt(
         &self,
         workspace_id: &str,
@@ -11685,6 +11840,46 @@ fn reported_reconcilable_node(node: &WorkspacePlanNodeRecord) -> bool {
         return true;
     }
     node.intent == "in_progress" && node.execution == "idle"
+}
+
+fn supervisor_retry_same_node_reconcilable_node(node: &WorkspacePlanNodeRecord) -> bool {
+    if node
+        .current_attempt_id
+        .as_deref()
+        .is_none_or(|attempt_id| attempt_id.trim().is_empty())
+    {
+        return false;
+    }
+    if matches!(
+        node.execution.as_str(),
+        "dispatched" | "running" | "reported" | "verifying"
+    ) {
+        return true;
+    }
+    node.intent == "in_progress" && node.execution == "idle"
+}
+
+fn supervisor_retry_same_node_summary(
+    metadata: &Map<String, Value>,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> String {
+    metadata_string(metadata.get("last_supervisor_decision_rationale"))
+        .or_else(|| attempt.leader_feedback.clone())
+        .or_else(|| attempt.candidate_summary.clone())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "supervisor requested same-node retry".to_string())
+}
+
+fn future_metadata_datetime_utc(
+    value: Option<&Value>,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let due = value
+        .and_then(Value::as_str)
+        .and_then(|raw| DateTime::parse_from_rfc3339(raw.trim()).ok())
+        .map(|parsed| parsed.with_timezone(&Utc))?;
+    (due > now).then_some(due)
 }
 
 fn is_worker_report_supervisor_tick(
@@ -19620,6 +19815,125 @@ steps:
             json!(["artifact:review-report", "worker_report:completed"])
         );
         assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_reconciles_retry_same_node_supervisor_decision() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-retry".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        node.metadata_json = json!({
+            "last_supervisor_decision_action": "retry_same_node",
+            "last_supervisor_decision_rationale": "retry after tightening the implementation",
+            "last_supervisor_decision_confidence": 0.72,
+            "last_supervisor_decision_feedback_items": [{
+                "target_layer": "implementation",
+                "recommended_action": "fix_regression",
+                "summary": "missing regression coverage"
+            }],
+            "retry_not_before": "2999-01-02T03:04:05Z"
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-retry",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("worker produced a candidate with a gap".to_string());
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempt = store.attempt("attempt-retry");
+        assert_eq!(attempt.status, REJECTED_ATTEMPT_STATUS);
+        assert_eq!(
+            attempt.leader_feedback.as_deref(),
+            Some("retry after tightening the implementation")
+        );
+        assert_eq!(
+            attempt.adjudication_reason.as_deref(),
+            Some(SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON)
+        );
+        assert!(attempt.completed_at.is_some());
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id, None);
+        assert_eq!(
+            node.metadata_json["terminal_attempt_retry_reason"],
+            SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON
+        );
+        assert_eq!(
+            node.metadata_json["supervisor_decision_retry_attempt_id"],
+            "attempt-retry"
+        );
+        assert_eq!(
+            node.metadata_json["supervisor_decision_retry_attempt_status"],
+            REJECTED_ATTEMPT_STATUS
+        );
+        assert!(node
+            .metadata_json
+            .get("reported_attempt_reconciled_at")
+            .is_none());
+        assert!(node.metadata_json.get("retry_not_before").is_none());
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].event_type,
+            "supervisor_decision_retry_same_node_reconciled"
+        );
+        assert_eq!(
+            events[0].payload_json["reason"],
+            SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON
+        );
+        assert_eq!(events[0].payload_json["action"], "retry_same_node");
+        assert_eq!(
+            events[0].payload_json["rationale"],
+            "retry after tightening the implementation"
+        );
+        assert_eq!(events[0].payload_json["retry_exhausted"], false);
+
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(queued[0].payload_json["node_id"], "node-test");
+        assert_eq!(queued[0].payload_json["task_id"], "task-test");
+        assert_eq!(
+            queued[0].payload_json["previous_attempt_id"],
+            "attempt-retry"
+        );
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON
+        );
+        assert_eq!(
+            queued[0].payload_json["retry_not_before"],
+            "2999-01-02T03:04:05+00:00"
+        );
+        assert_eq!(
+            queued[0].next_attempt_at,
+            Some(
+                DateTime::parse_from_rfc3339("2999-01-02T03:04:05Z")
+                    .unwrap()
+                    .with_timezone(&Utc)
+            )
+        );
     }
 
     #[tokio::test]
