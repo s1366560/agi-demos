@@ -430,6 +430,87 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
             excluded: &["sandboxes"],
         },
     },
+    // P5 skill store/versioning flip. Only database-backed CRUD, content,
+    // status, versions, and rollback are in Rust; filesystem/system import,
+    // export, package, clone/publish, and evolution siblings remain Python.
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills/system/list",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildExcept(&["system"]),
+    },
+    MethodRule {
+        method: "PUT",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildExcept(&["system"]),
+    },
+    MethodRule {
+        method: "DELETE",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildExcept(&["system"]),
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "content",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "PUT",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "content",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "PATCH",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "status",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "versions",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixAndGrandchildExcept {
+            suffix: "versions",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "rollback",
+            excluded: &["system"],
+        },
+    },
     MethodRule {
         method: "GET",
         path: "/api/v1/agent/ws",
@@ -1373,6 +1454,55 @@ mod unit {
             ),
             (Method::GET, "/api/v1/projects/p1/sandbox/terminal/proxy/ws"),
             (Method::GET, "/api/v1/projects/p1/sandbox/mcp/proxy"),
+        ] {
+            assert_eq!(
+                upstream_for_request(&method, path, &ups()),
+                "http://python:8000",
+                "{method} {path} should remain on python",
+            );
+        }
+    }
+
+    #[test]
+    fn p5_skill_store_rules_are_exact() {
+        for (method, path) in [
+            (Method::GET, "/api/v1/skills"),
+            (Method::GET, "/api/v1/skills/"),
+            (Method::POST, "/api/v1/skills"),
+            (Method::POST, "/api/v1/skills/"),
+            (Method::GET, "/api/v1/skills/system/list"),
+            (Method::GET, "/api/v1/skills/skill-1"),
+            (Method::PUT, "/api/v1/skills/skill-1"),
+            (Method::DELETE, "/api/v1/skills/skill-1"),
+            (Method::GET, "/api/v1/skills/skill-1/content"),
+            (Method::PUT, "/api/v1/skills/skill-1/content"),
+            (Method::PATCH, "/api/v1/skills/skill-1/status"),
+            (Method::GET, "/api/v1/skills/skill-1/versions"),
+            (Method::GET, "/api/v1/skills/skill-1/versions/2"),
+            (Method::POST, "/api/v1/skills/skill-1/rollback"),
+        ] {
+            assert_eq!(
+                upstream_for_request(&method, path, &ups()),
+                "http://rust:8088",
+                "{method} {path} should route to rust",
+            );
+        }
+
+        for (method, path) in [
+            (Method::PATCH, "/api/v1/skills"),
+            (Method::DELETE, "/api/v1/skills"),
+            (Method::POST, "/api/v1/skills/system/list"),
+            (Method::GET, "/api/v1/skills/system"),
+            (Method::GET, "/api/v1/skills/system/import"),
+            (Method::GET, "/api/v1/skills/system/list/extra"),
+            (Method::POST, "/api/v1/skills/skill-1/content"),
+            (Method::PUT, "/api/v1/skills/skill-1/status"),
+            (Method::POST, "/api/v1/skills/skill-1/versions"),
+            (Method::GET, "/api/v1/skills/skill-1/versions/2/extra"),
+            (Method::GET, "/api/v1/skills/skill-1/rollback"),
+            (Method::POST, "/api/v1/skills/skill-1/publish"),
+            (Method::POST, "/api/v1/skills/skill-1/clone"),
+            (Method::GET, "/api/v1/skills/skill-1/files"),
         ] {
             assert_eq!(
                 upstream_for_request(&method, path, &ups()),
