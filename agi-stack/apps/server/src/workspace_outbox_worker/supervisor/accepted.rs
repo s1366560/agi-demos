@@ -305,17 +305,17 @@ impl SupervisorTickAdmissionHandler {
             let test_commands = prefixed_refs(&evidence_refs, "test_run:");
             let summary = accepted_attempt_summary(&attempt);
             let Some(integration_metadata) = self
-                .project_accepted_attempt_to_task(
+                .project_accepted_attempt_to_task(AcceptedAttemptTaskProjection {
                     workspace_id,
-                    &node,
-                    &attempt,
-                    &summary,
-                    &evidence_refs,
-                    commit_ref.as_deref(),
-                    git_diff_summary.as_deref(),
-                    &test_commands,
+                    node: &node,
+                    attempt: &attempt,
+                    summary: &summary,
+                    evidence_refs: &evidence_refs,
+                    commit_ref: commit_ref.as_deref(),
+                    git_diff_summary: git_diff_summary.as_deref(),
+                    test_commands: &test_commands,
                     now,
-                )
+                })
                 .await?
             else {
                 continue;
@@ -369,16 +369,19 @@ impl SupervisorTickAdmissionHandler {
 
     pub(super) async fn project_accepted_attempt_to_task(
         &self,
-        workspace_id: &str,
-        node: &WorkspacePlanNodeRecord,
-        attempt: &WorkspaceTaskSessionAttemptRecord,
-        summary: &str,
-        evidence_refs: &[String],
-        commit_ref: Option<&str>,
-        git_diff_summary: Option<&str>,
-        test_commands: &[String],
-        now: DateTime<Utc>,
+        projection: AcceptedAttemptTaskProjection<'_>,
     ) -> CoreResult<Option<Map<String, Value>>> {
+        let AcceptedAttemptTaskProjection {
+            workspace_id,
+            node,
+            attempt,
+            summary,
+            evidence_refs,
+            commit_ref,
+            git_diff_summary,
+            test_commands,
+            now,
+        } = projection;
         let task_id = node
             .workspace_task_id
             .as_ref()
@@ -651,15 +654,15 @@ impl SupervisorTickAdmissionHandler {
                 now,
                 None,
             );
-            self.record_worktree_integration_event(
+            self.record_worktree_integration_event(WorktreeIntegrationEvent {
                 workspace_id,
                 node,
                 attempt_id,
                 task,
-                &metadata,
-                "accepted_worktree_integration_skipped",
+                metadata: &metadata,
+                event_type: "accepted_worktree_integration_skipped",
                 now,
-            )
+            })
             .await?;
             return Ok(Some(metadata));
         }
@@ -679,29 +682,32 @@ impl SupervisorTickAdmissionHandler {
             integration.dirty_signature.as_deref(),
         );
         let event_type = worktree_integration_event_type(&integration.status);
-        self.record_worktree_integration_event(
+        self.record_worktree_integration_event(WorktreeIntegrationEvent {
             workspace_id,
             node,
             attempt_id,
             task,
-            &metadata,
+            metadata: &metadata,
             event_type,
             now,
-        )
+        })
         .await?;
         Ok(Some(metadata))
     }
 
     async fn record_worktree_integration_event(
         &self,
-        workspace_id: &str,
-        node: &WorkspacePlanNodeRecord,
-        attempt_id: &str,
-        task: &WorkspaceTaskRecord,
-        metadata: &Map<String, Value>,
-        event_type: &str,
-        now: DateTime<Utc>,
+        event: WorktreeIntegrationEvent<'_>,
     ) -> CoreResult<()> {
+        let WorktreeIntegrationEvent {
+            workspace_id,
+            node,
+            attempt_id,
+            task,
+            metadata,
+            event_type,
+            now,
+        } = event;
         self.store
             .create_plan_event(WorkspacePlanEventRecord {
                 id: generate_uuid_v4(),

@@ -442,16 +442,16 @@ impl SupervisorTickAdmissionHandler {
             node.completed_at = None;
             node.updated_at = Some(now);
 
-            let replan_outbox = supervisor_replan_tick_outbox(
+            let replan_outbox = supervisor_replan_tick_outbox(SupervisorReplanTickOutboxInput {
                 workspace_id,
                 plan_id,
-                &node.id,
-                replan_task_id.as_deref(),
-                replan_worker_agent_id.as_deref(),
-                &summary,
-                previous_attempt_id.as_deref(),
+                node_id: &node.id,
+                task_id: replan_task_id.as_deref(),
+                worker_agent_id: replan_worker_agent_id.as_deref(),
+                reason: &summary,
+                previous_attempt_id: previous_attempt_id.as_deref(),
                 now,
-            );
+            });
             let replan_outbox_id = replan_outbox.id.clone();
             let mut node_metadata = object_or_empty(node.metadata_json.clone());
             node_metadata.insert(

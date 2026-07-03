@@ -156,18 +156,17 @@ async fn drone_stage_results_cli(
     external_url: &str,
 ) -> Vec<DronePipelineStageResult> {
     let Some(stages) = build.get("stages").and_then(Value::as_array) else {
-        return vec![drone_pipeline_stage_result(
+        return vec![drone_pipeline_stage_result(DronePipelineStageInput {
             config,
             build_number,
-            "drone",
-            "build",
-            drone_status(build.get("status")),
-            optional_i32(build.get("exit_code")),
-            String::new(),
-            build.get("error").and_then(Value::as_str).unwrap_or(""),
+            stage_name: "drone",
+            step_name: "build",
+            drone_status: drone_status(build.get("status")),
+            exit_code: optional_i32(build.get("exit_code")),
+            log_text: String::new(),
+            error_text: build.get("error").and_then(Value::as_str).unwrap_or(""),
             external_url,
-            config.deploy.as_ref(),
-        )];
+        })];
     };
     let mut output = Vec::new();
     for stage in stages {
@@ -199,47 +198,44 @@ async fn drone_stage_results_cli(
                 )
                 .await
                 .unwrap_or_default();
-                output.push(drone_pipeline_stage_result(
+                output.push(drone_pipeline_stage_result(DronePipelineStageInput {
                     config,
                     build_number,
                     stage_name,
                     step_name,
-                    drone_status(step.get("status")),
-                    optional_i32(step.get("exit_code")),
+                    drone_status: drone_status(step.get("status")),
+                    exit_code: optional_i32(step.get("exit_code")),
                     log_text,
-                    step.get("error").and_then(Value::as_str).unwrap_or(""),
+                    error_text: step.get("error").and_then(Value::as_str).unwrap_or(""),
                     external_url,
-                    config.deploy.as_ref(),
-                ));
+                }));
             }
         } else {
-            output.push(drone_pipeline_stage_result(
+            output.push(drone_pipeline_stage_result(DronePipelineStageInput {
                 config,
                 build_number,
                 stage_name,
-                stage_name,
-                drone_status(stage.get("status")),
-                optional_i32(stage.get("exit_code")),
-                String::new(),
-                stage.get("error").and_then(Value::as_str).unwrap_or(""),
+                step_name: stage_name,
+                drone_status: drone_status(stage.get("status")),
+                exit_code: optional_i32(stage.get("exit_code")),
+                log_text: String::new(),
+                error_text: stage.get("error").and_then(Value::as_str).unwrap_or(""),
                 external_url,
-                config.deploy.as_ref(),
-            ));
+            }));
         }
     }
     if output.is_empty() {
-        output.push(drone_pipeline_stage_result(
+        output.push(drone_pipeline_stage_result(DronePipelineStageInput {
             config,
             build_number,
-            "drone",
-            "build",
-            drone_status(build.get("status")),
-            optional_i32(build.get("exit_code")),
-            String::new(),
-            build.get("error").and_then(Value::as_str).unwrap_or(""),
+            stage_name: "drone",
+            step_name: "build",
+            drone_status: drone_status(build.get("status")),
+            exit_code: optional_i32(build.get("exit_code")),
+            log_text: String::new(),
+            error_text: build.get("error").and_then(Value::as_str).unwrap_or(""),
             external_url,
-            config.deploy.as_ref(),
-        ));
+        }));
     }
     output
 }

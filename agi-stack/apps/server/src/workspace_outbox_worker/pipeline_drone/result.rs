@@ -98,18 +98,33 @@ pub(super) fn drone_result_from_build_and_stages(
     })
 }
 
+pub(super) struct DronePipelineStageInput<'a> {
+    pub(super) config: &'a DronePipelineConfig,
+    pub(super) build_number: i64,
+    pub(super) stage_name: &'a str,
+    pub(super) step_name: &'a str,
+    pub(super) drone_status: String,
+    pub(super) exit_code: Option<i32>,
+    pub(super) log_text: String,
+    pub(super) error_text: &'a str,
+    pub(super) external_url: &'a str,
+}
+
 pub(super) fn drone_pipeline_stage_result(
-    config: &DronePipelineConfig,
-    build_number: i64,
-    stage_name: &str,
-    step_name: &str,
-    drone_status: String,
-    exit_code: Option<i32>,
-    log_text: String,
-    error_text: &str,
-    external_url: &str,
-    deploy: Option<&DroneDeployConfig>,
+    input: DronePipelineStageInput<'_>,
 ) -> DronePipelineStageResult {
+    let DronePipelineStageInput {
+        config,
+        build_number,
+        stage_name,
+        step_name,
+        drone_status,
+        exit_code,
+        log_text,
+        error_text,
+        external_url,
+    } = input;
+    let deploy = config.deploy.as_ref();
     let status = drone_internal_status(&drone_status);
     let stage = drone_stage_label(stage_name, step_name);
     let compact_log = compact_text(log_text.trim(), 4_000);

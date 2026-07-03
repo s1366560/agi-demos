@@ -232,16 +232,30 @@ pub(super) fn worker_report_supervisor_tick(
     }
 }
 
+pub(super) struct SupervisorReplanTickOutboxInput<'a> {
+    pub(super) workspace_id: &'a str,
+    pub(super) plan_id: &'a str,
+    pub(super) node_id: &'a str,
+    pub(super) task_id: Option<&'a str>,
+    pub(super) worker_agent_id: Option<&'a str>,
+    pub(super) reason: &'a str,
+    pub(super) previous_attempt_id: Option<&'a str>,
+    pub(super) now: DateTime<Utc>,
+}
+
 pub(super) fn supervisor_replan_tick_outbox(
-    workspace_id: &str,
-    plan_id: &str,
-    node_id: &str,
-    task_id: Option<&str>,
-    worker_agent_id: Option<&str>,
-    reason: &str,
-    previous_attempt_id: Option<&str>,
-    now: DateTime<Utc>,
+    input: SupervisorReplanTickOutboxInput<'_>,
 ) -> WorkspacePlanOutboxRecord {
+    let SupervisorReplanTickOutboxInput {
+        workspace_id,
+        plan_id,
+        node_id,
+        task_id,
+        worker_agent_id,
+        reason,
+        previous_attempt_id,
+        now,
+    } = input;
     let mut payload = Map::new();
     payload.insert("workspace_id".to_string(), json!(workspace_id));
     payload.insert("plan_id".to_string(), json!(plan_id));

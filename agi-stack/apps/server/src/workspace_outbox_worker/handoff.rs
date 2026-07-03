@@ -125,15 +125,15 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
         }
 
         if let (Some(plan_id), Some(node_id)) = (plan_id.as_deref(), node_id.as_deref()) {
-            self.project_attempt_to_plan_node(
-                &workspace_id,
+            self.project_attempt_to_plan_node(HandoffPlanProjection {
+                workspace_id: &workspace_id,
                 plan_id,
                 node_id,
-                &item,
-                &payload,
-                &attempt,
-                &worker_agent_id,
-            )
+                item: &item,
+                payload: &payload,
+                attempt: &attempt,
+                worker_agent_id: &worker_agent_id,
+            })
             .await?;
         }
 
@@ -198,14 +198,17 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
 impl DurableHandoffResumeHandler {
     async fn project_attempt_to_plan_node(
         &self,
-        workspace_id: &str,
-        plan_id: &str,
-        node_id: &str,
-        item: &WorkspacePlanOutboxRecord,
-        payload: &Map<String, Value>,
-        attempt: &WorkspaceTaskSessionAttemptRecord,
-        worker_agent_id: &str,
+        projection: HandoffPlanProjection<'_>,
     ) -> CoreResult<()> {
+        let HandoffPlanProjection {
+            workspace_id,
+            plan_id,
+            node_id,
+            item,
+            payload,
+            attempt,
+            worker_agent_id,
+        } = projection;
         let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
             CoreError::Storage(format!(
                 "workspace plan {plan_id} not found for workspace {workspace_id}"
@@ -266,4 +269,14 @@ impl DurableHandoffResumeHandler {
         self.store.save_plan_node(node).await?;
         Ok(())
     }
+}
+
+struct HandoffPlanProjection<'a> {
+    workspace_id: &'a str,
+    plan_id: &'a str,
+    node_id: &'a str,
+    item: &'a WorkspacePlanOutboxRecord,
+    payload: &'a Map<String, Value>,
+    attempt: &'a WorkspaceTaskSessionAttemptRecord,
+    worker_agent_id: &'a str,
 }

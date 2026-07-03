@@ -51,17 +51,17 @@ impl SupervisorTickAdmissionHandler {
                 let test_commands = prefixed_refs(&evidence_refs, "test_run:");
                 let summary = accepted_attempt_summary(&accepted_attempt);
                 let Some(integration_metadata) = self
-                    .project_accepted_attempt_to_task(
+                    .project_accepted_attempt_to_task(AcceptedAttemptTaskProjection {
                         workspace_id,
-                        &node,
-                        &accepted_attempt,
-                        &summary,
-                        &evidence_refs,
-                        commit_ref.as_deref(),
-                        git_diff_summary.as_deref(),
-                        &test_commands,
+                        node: &node,
+                        attempt: &accepted_attempt,
+                        summary: &summary,
+                        evidence_refs: &evidence_refs,
+                        commit_ref: commit_ref.as_deref(),
+                        git_diff_summary: git_diff_summary.as_deref(),
+                        test_commands: &test_commands,
                         now,
-                    )
+                    })
                     .await?
                 else {
                     continue;

@@ -10,6 +10,28 @@ pub(super) struct SupervisorTickAdmissionHandler {
     store: Arc<dyn WorkspacePlanDispatchStore>,
 }
 
+pub(super) struct AcceptedAttemptTaskProjection<'a> {
+    pub(super) workspace_id: &'a str,
+    pub(super) node: &'a WorkspacePlanNodeRecord,
+    pub(super) attempt: &'a WorkspaceTaskSessionAttemptRecord,
+    pub(super) summary: &'a str,
+    pub(super) evidence_refs: &'a [String],
+    pub(super) commit_ref: Option<&'a str>,
+    pub(super) git_diff_summary: Option<&'a str>,
+    pub(super) test_commands: &'a [String],
+    pub(super) now: DateTime<Utc>,
+}
+
+struct WorktreeIntegrationEvent<'a> {
+    workspace_id: &'a str,
+    node: &'a WorkspacePlanNodeRecord,
+    attempt_id: &'a str,
+    task: &'a WorkspaceTaskRecord,
+    metadata: &'a Map<String, Value>,
+    event_type: &'a str,
+    now: DateTime<Utc>,
+}
+
 impl SupervisorTickAdmissionHandler {
     pub(super) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
         Self { store }

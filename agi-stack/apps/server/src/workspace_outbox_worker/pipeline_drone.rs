@@ -16,6 +16,7 @@ use result::{
     drone_logs_text, drone_path_segment, drone_pipeline_stage_result,
     drone_result_from_build_and_stages, drone_status, is_drone_running_status,
     is_drone_terminal_status, log_part, looks_like_drone_not_found, optional_i32, required_i64,
+    DronePipelineStageInput,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
