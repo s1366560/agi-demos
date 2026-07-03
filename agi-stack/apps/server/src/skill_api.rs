@@ -2,10 +2,11 @@
 //!
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots, and
-//! rollback/export. Filesystem system skills, package import/zip, publish/clone,
-//! and evolution jobs remain Python-owned until their full semantics are migrated.
+//! rollback/import/export. Filesystem system skills, package zip import,
+//! publish/clone, and evolution jobs remain Python-owned until their full
+//! semantics are migrated.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -39,6 +40,13 @@ pub(crate) trait SkillService: Send + Sync {
         tenant_id: Option<&str>,
         body: SkillCreatePayload,
     ) -> Result<SkillView, SkillApiError>;
+
+    async fn import_package(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        body: SkillImportPayload,
+    ) -> Result<SkillLifecycleView, SkillApiError>;
 
     async fn list_skills(
         &self,
@@ -220,6 +228,21 @@ pub(crate) struct SkillContentUpdatePayload {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct SkillRollbackPayload {
     version_number: i32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct SkillImportPayload {
+    skill_md_content: String,
+    #[serde(default)]
+    resource_files: BTreeMap<String, String>,
+    #[serde(default = "default_scope")]
+    scope: String,
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    overwrite: bool,
+    #[serde(default)]
+    change_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -410,6 +433,14 @@ pub(crate) struct SkillPackageView {
     version_label: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillLifecycleView {
+    action: String,
+    skill: SkillView,
+    version_number: Option<i32>,
+    version_label: Option<String>,
+}
+
 pub(crate) struct PgSkillService {
     repo: PgSkillRepository,
 }
@@ -484,6 +515,122 @@ impl SkillService for PgSkillService {
             .await
             .map_err(SkillApiError::internal)?
             .into())
+    }
+
+    async fn import_package(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        body: SkillImportPayload,
+    ) -> Result<SkillLifecycleView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        let scope = normalize_scope(&body.scope, body.project_id.as_deref())?;
+        self.ensure_write_access(user_id, &tenant_id, &scope, body.project_id.as_deref())
+            .await?;
+        validate_change_summary(body.change_summary.as_deref())?;
+
+        let parsed = ParsedImportPackage::from_payload(&body)?;
+        let existing = self
+            .repo
+            .find_skill(&tenant_id, &parsed.name, &scope, body.project_id.as_deref())
+            .await
+            .map_err(SkillApiError::internal)?;
+        if existing.is_some() && !body.overwrite {
+            return Err(SkillApiError::conflict("Skill already exists"));
+        }
+
+        let now = Utc::now();
+        let resource_files = json!(body.resource_files);
+        let (skill, action, should_create) = match existing {
+            Some(skill) => (skill, "update".to_string(), false),
+            None => (
+                SkillRecord {
+                    id: generate_uuid_v4(),
+                    tenant_id,
+                    project_id: body.project_id.clone(),
+                    name: parsed.name.clone(),
+                    description: parsed.description.clone(),
+                    tools: parsed.tools.clone(),
+                    status: "active".to_string(),
+                    metadata_json: parsed.metadata.clone(),
+                    created_at: now,
+                    updated_at: Some(now),
+                    scope,
+                    is_system_skill: false,
+                    full_content: Some(body.skill_md_content.clone()),
+                    resource_files: resource_files.clone(),
+                    license: parsed.license.clone(),
+                    compatibility: parsed.compatibility.clone(),
+                    allowed_tools_raw: parsed.allowed_tools_raw.clone(),
+                    spec_version: parsed.spec_version.clone(),
+                    current_version: 0,
+                    version_label: parsed.version_label.clone(),
+                },
+                "import".to_string(),
+                true,
+            ),
+        };
+        let skill = if should_create {
+            self.repo
+                .create_skill(&skill)
+                .await
+                .map_err(SkillApiError::internal)?
+        } else {
+            skill
+        };
+
+        let next_version = self
+            .repo
+            .max_version_number(&skill.id)
+            .await
+            .map_err(SkillApiError::internal)?
+            + 1;
+        let version_label = parsed
+            .version_label
+            .clone()
+            .or_else(|| Some(next_version.to_string()));
+        let version = SkillVersionRecord {
+            id: generate_uuid_v4(),
+            skill_id: skill.id.clone(),
+            version_number: next_version,
+            version_label: version_label.clone(),
+            skill_md_content: body.skill_md_content.clone(),
+            resource_files: resource_files.clone(),
+            change_summary: import_change_summary(body.change_summary.as_deref(), next_version),
+            created_by: "import".to_string(),
+            created_at: now,
+        };
+        self.repo
+            .create_version(&version)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let updated = SkillUpdateRecord {
+            name: Some(parsed.name),
+            description: Some(parsed.description),
+            tools: Some(parsed.tools),
+            metadata_json: Some(parsed.metadata),
+            full_content: Some(Some(body.skill_md_content)),
+            resource_files: Some(resource_files),
+            license: Some(parsed.license),
+            compatibility: Some(parsed.compatibility),
+            allowed_tools_raw: Some(parsed.allowed_tools_raw),
+            spec_version: Some(parsed.spec_version),
+            current_version: Some(next_version),
+            version_label: Some(version_label.clone()),
+            ..Default::default()
+        }
+        .apply_to(skill, now);
+        let updated = self
+            .repo
+            .update_skill(&updated)
+            .await
+            .map_err(SkillApiError::internal)?;
+        Ok(SkillLifecycleView {
+            action,
+            skill: updated.into(),
+            version_number: Some(next_version),
+            version_label,
+        })
     }
 
     async fn list_skills(
@@ -1070,6 +1217,116 @@ impl SkillService for DevSkillService {
         Ok(record.into())
     }
 
+    async fn import_package(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+        body: SkillImportPayload,
+    ) -> Result<SkillLifecycleView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        let scope = normalize_scope(&body.scope, body.project_id.as_deref())?;
+        validate_change_summary(body.change_summary.as_deref())?;
+        let parsed = ParsedImportPackage::from_payload(&body)?;
+        let existing = {
+            let skills = self.skills.lock().map_err(SkillApiError::internal)?;
+            skills
+                .values()
+                .find(|skill| {
+                    skill.tenant_id == tenant_id
+                        && skill.name == parsed.name
+                        && skill.scope == scope
+                        && skill.project_id == body.project_id
+                })
+                .cloned()
+        };
+        if existing.is_some() && !body.overwrite {
+            return Err(SkillApiError::conflict("Skill already exists"));
+        }
+
+        let now = Utc::now();
+        let resource_files = json!(body.resource_files);
+        let (skill, action) = match existing {
+            Some(skill) => (skill, "update".to_string()),
+            None => (
+                SkillRecord {
+                    id: generate_uuid_v4(),
+                    tenant_id,
+                    project_id: body.project_id.clone(),
+                    name: parsed.name.clone(),
+                    description: parsed.description.clone(),
+                    tools: parsed.tools.clone(),
+                    status: "active".to_string(),
+                    metadata_json: parsed.metadata.clone(),
+                    created_at: now,
+                    updated_at: Some(now),
+                    scope,
+                    is_system_skill: false,
+                    full_content: Some(body.skill_md_content.clone()),
+                    resource_files: resource_files.clone(),
+                    license: parsed.license.clone(),
+                    compatibility: parsed.compatibility.clone(),
+                    allowed_tools_raw: parsed.allowed_tools_raw.clone(),
+                    spec_version: parsed.spec_version.clone(),
+                    current_version: 0,
+                    version_label: parsed.version_label.clone(),
+                },
+                "import".to_string(),
+            ),
+        };
+        let next_version = self
+            .versions
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .get(&skill.id)
+            .map(|versions| versions.iter().map(|v| v.version_number).max().unwrap_or(0))
+            .unwrap_or(0)
+            + 1;
+        let version_label = parsed
+            .version_label
+            .clone()
+            .or_else(|| Some(next_version.to_string()));
+        let updated = SkillUpdateRecord {
+            name: Some(parsed.name),
+            description: Some(parsed.description),
+            tools: Some(parsed.tools),
+            metadata_json: Some(parsed.metadata),
+            full_content: Some(Some(body.skill_md_content.clone())),
+            resource_files: Some(resource_files.clone()),
+            license: Some(parsed.license),
+            compatibility: Some(parsed.compatibility),
+            allowed_tools_raw: Some(parsed.allowed_tools_raw),
+            spec_version: Some(parsed.spec_version),
+            current_version: Some(next_version),
+            version_label: Some(version_label.clone()),
+            ..Default::default()
+        }
+        .apply_to(skill, now);
+        let version = SkillVersionRecord {
+            id: generate_uuid_v4(),
+            skill_id: updated.id.clone(),
+            version_number: next_version,
+            version_label: version_label.clone(),
+            skill_md_content: body.skill_md_content,
+            resource_files,
+            change_summary: import_change_summary(body.change_summary.as_deref(), next_version),
+            created_by: "import".to_string(),
+            created_at: now,
+        };
+        self.versions
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .entry(updated.id.clone())
+            .or_default()
+            .push(version);
+        let updated = self.write_record(updated)?;
+        Ok(SkillLifecycleView {
+            action,
+            skill: updated.into(),
+            version_number: Some(next_version),
+            version_label,
+        })
+    }
+
     async fn list_skills(
         &self,
         _user_id: &str,
@@ -1446,6 +1703,19 @@ async fn list_skills(
     ))
 }
 
+async fn import_skill_package(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    Json(body): Json<SkillImportPayload>,
+) -> Result<(StatusCode, Json<SkillLifecycleView>), SkillApiError> {
+    let view = app
+        .skills
+        .import_package(&identity.user_id, q.tenant_id.as_deref(), body)
+        .await?;
+    Ok((StatusCode::CREATED, Json(view)))
+}
+
 async fn list_system_skills() -> Json<SkillListView> {
     Json(SkillListView {
         skills: Vec::new(),
@@ -1605,6 +1875,7 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/skills/", get(list_skills).post(create_skill))
         .route("/api/v1/skills", get(list_skills).post(create_skill))
+        .route("/api/v1/skills/import", post(import_skill_package))
         .route("/api/v1/skills/system/list", get(list_system_skills))
         .route(
             "/api/v1/skills/:skill_id/content",
@@ -1705,12 +1976,27 @@ fn valid_skill_name(name: &str) -> bool {
     !last_dash
 }
 
+fn validate_change_summary(summary: Option<&str>) -> Result<(), SkillApiError> {
+    if summary.is_some_and(|summary| summary.chars().count() > 2_000) {
+        return Err(SkillApiError::bad_request("Invalid skill request"));
+    }
+    Ok(())
+}
+
+fn import_change_summary(summary: Option<&str>, version_number: i32) -> Option<String> {
+    Some(present(summary).map_or_else(|| format!("Version {version_number}"), ToString::to_string))
+}
+
 #[derive(Default)]
 struct ParsedSkillPayload {
     name: Option<String>,
     description: Option<String>,
     tools: Option<Vec<String>>,
     metadata: Option<Value>,
+    license: Option<String>,
+    compatibility: Option<String>,
+    allowed_tools_raw: Option<String>,
+    spec_version: Option<String>,
     version_label: Option<String>,
 }
 
@@ -1737,9 +2023,30 @@ impl ParsedSkillPayload {
                 "name" => parsed.name = Some(value.to_string()),
                 "description" => parsed.description = Some(value.to_string()),
                 "version" => parsed.version_label = Some(value.to_string()),
-                "license" | "compatibility" | "allowed_tools" | "allowed-tools"
-                | "spec_version" | "spec-version" => {
-                    metadata.insert(key.replace('-', "_"), Value::String(value.to_string()));
+                "license" => {
+                    parsed.license = Some(value.to_string());
+                    metadata.insert(key.to_string(), Value::String(value.to_string()));
+                }
+                "compatibility" => {
+                    parsed.compatibility = Some(value.to_string());
+                    metadata.insert(key.to_string(), Value::String(value.to_string()));
+                }
+                "allowed_tools" | "allowed-tools" => {
+                    parsed.allowed_tools_raw = Some(value.to_string());
+                    if parsed.tools.is_none() {
+                        let tools = parse_allowed_tools(value);
+                        if !tools.is_empty() {
+                            parsed.tools = Some(tools);
+                        }
+                    }
+                    metadata.insert(
+                        "allowed_tools".to_string(),
+                        Value::String(value.to_string()),
+                    );
+                }
+                "spec_version" | "spec-version" => {
+                    parsed.spec_version = Some(value.to_string());
+                    metadata.insert("spec_version".to_string(), Value::String(value.to_string()));
                 }
                 "tools" => {
                     let tools = parse_inline_list(value);
@@ -1760,6 +2067,58 @@ impl ParsedSkillPayload {
     }
 }
 
+struct ParsedImportPackage {
+    name: String,
+    description: String,
+    tools: Vec<String>,
+    metadata: Option<Value>,
+    license: Option<String>,
+    compatibility: Option<String>,
+    allowed_tools_raw: Option<String>,
+    spec_version: String,
+    version_label: Option<String>,
+}
+
+impl ParsedImportPackage {
+    fn from_payload(body: &SkillImportPayload) -> Result<Self, SkillApiError> {
+        if body.skill_md_content.trim().is_empty() {
+            return Err(SkillApiError::bad_request("Invalid Agent Skill package"));
+        }
+        let parsed = ParsedSkillPayload::from_content(Some(&body.skill_md_content));
+        let Some(name) = parsed.name else {
+            return Err(SkillApiError::bad_request("Invalid Agent Skill package"));
+        };
+        let Some(description) = parsed.description else {
+            return Err(SkillApiError::bad_request("Invalid Agent Skill package"));
+        };
+        let tools = parsed.tools.unwrap_or_else(|| vec!["*".to_string()]);
+        validate_skill_input(&name, &description, &tools)
+            .map_err(|_| SkillApiError::bad_request("Invalid Agent Skill package"))?;
+        let declared_spec_version = parsed.spec_version.clone();
+        let spec_version = declared_spec_version
+            .clone()
+            .unwrap_or_else(|| "1.0".to_string());
+        let metadata = merge_agentskills_metadata(
+            parsed.metadata,
+            parsed.license.as_deref(),
+            parsed.compatibility.as_deref(),
+            parsed.allowed_tools_raw.as_deref(),
+            declared_spec_version.as_deref(),
+        );
+        Ok(Self {
+            name,
+            description,
+            tools,
+            metadata,
+            license: parsed.license,
+            compatibility: parsed.compatibility,
+            allowed_tools_raw: parsed.allowed_tools_raw,
+            spec_version,
+            version_label: parsed.version_label,
+        })
+    }
+}
+
 fn frontmatter(content: &str) -> Option<&str> {
     let rest = content.strip_prefix("---\n")?;
     rest.split_once("\n---").map(|(frontmatter, _)| frontmatter)
@@ -1776,6 +2135,32 @@ fn parse_inline_list(value: &str) -> Vec<String> {
         .map(|item| item.trim().trim_matches('"').trim_matches('\''))
         .filter(|item| !item.is_empty())
         .map(ToString::to_string)
+        .collect()
+}
+
+fn parse_allowed_tools(value: &str) -> Vec<String> {
+    let raw_items = if value.contains(',') || value.trim_start().starts_with('[') {
+        parse_inline_list(value)
+    } else {
+        value
+            .split_whitespace()
+            .map(|item| item.trim().trim_matches('"').trim_matches('\'').to_string())
+            .collect()
+    };
+    raw_items
+        .into_iter()
+        .filter_map(|item| {
+            let name = item
+                .split_once('(')
+                .map(|(name, _)| name)
+                .unwrap_or(item.as_str())
+                .trim();
+            if name.is_empty() {
+                None
+            } else {
+                Some(name.to_string())
+            }
+        })
         .collect()
 }
 
@@ -1929,6 +2314,20 @@ fn fallback_frontmatter(record: &SkillRecord) -> String {
 mod tests {
     use super::*;
 
+    const SAMPLE_IMPORT_SKILL_MD: &str = r#"---
+name: alpha-skill
+description: Searches, installs, and exports agent skills.
+allowed-tools: Bash(git:*) Read
+metadata:
+  version: "1.2.3"
+  author: test-suite
+---
+
+# Alpha Skill
+
+Use when managing Agent Skills packages.
+"#;
+
     fn sample_skill_record() -> SkillRecord {
         let at = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         SkillRecord {
@@ -1968,6 +2367,22 @@ mod tests {
             created_by: "agent".to_string(),
             created_at: at,
         }
+    }
+
+    fn sample_imported_skill_record() -> SkillRecord {
+        let mut record = sample_skill_record();
+        record.name = "alpha-skill".to_string();
+        record.description = "Searches, installs, and exports agent skills.".to_string();
+        record.tools = vec!["Bash".to_string(), "Read".to_string()];
+        record.full_content = Some(SAMPLE_IMPORT_SKILL_MD.to_string());
+        record.resource_files = json!({"references/README.md":"details"});
+        record.metadata_json = Some(json!({"agentskills":{"allowed_tools":"Bash(git:*) Read"}}));
+        record.license = None;
+        record.compatibility = None;
+        record.allowed_tools_raw = Some("Bash(git:*) Read".to_string());
+        record.current_version = 1;
+        record.version_label = Some("1.2.3".to_string());
+        record
     }
 
     #[test]
@@ -2030,6 +2445,21 @@ mod tests {
         .unwrap();
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/skill_package_export.json"))
+                .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[test]
+    fn skill_import_lifecycle_matches_golden() {
+        let actual = serde_json::to_value(SkillLifecycleView {
+            action: "import".to_string(),
+            skill: SkillView::from(sample_imported_skill_record()),
+            version_number: Some(1),
+            version_label: Some("1.2.3".to_string()),
+        })
+        .unwrap();
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/skill_import_lifecycle.json"))
                 .unwrap();
         agistack_parity::assert_parity(&golden, &actual);
     }
@@ -2098,6 +2528,91 @@ mod tests {
             .unwrap();
         assert_eq!(rolled_back.current_version, 2);
         assert_eq!(rolled_back.full_content, updated.full_content);
+    }
+
+    #[tokio::test]
+    async fn dev_service_import_package_creates_version_and_honors_overwrite() {
+        let service = DevSkillService::new("tenant-1");
+        let resource_files =
+            BTreeMap::from([("references/README.md".to_string(), "details".to_string())]);
+
+        let imported = service
+            .import_package(
+                "u1",
+                Some("tenant-1"),
+                SkillImportPayload {
+                    skill_md_content: SAMPLE_IMPORT_SKILL_MD.to_string(),
+                    resource_files: resource_files.clone(),
+                    scope: "tenant".to_string(),
+                    project_id: None,
+                    overwrite: false,
+                    change_summary: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(imported.action, "import");
+        assert_eq!(imported.skill.name, "alpha-skill");
+        assert_eq!(imported.skill.tools, vec!["Bash", "Read"]);
+        assert_eq!(imported.skill.current_version, 1);
+        assert_eq!(imported.version_number, Some(1));
+        assert_eq!(imported.version_label.as_deref(), Some("1.2.3"));
+
+        let duplicate = service
+            .import_package(
+                "u1",
+                Some("tenant-1"),
+                SkillImportPayload {
+                    skill_md_content: SAMPLE_IMPORT_SKILL_MD.to_string(),
+                    resource_files: resource_files.clone(),
+                    scope: "tenant".to_string(),
+                    project_id: None,
+                    overwrite: false,
+                    change_summary: None,
+                },
+            )
+            .await;
+        assert!(matches!(
+            duplicate,
+            Err(SkillApiError {
+                status: StatusCode::CONFLICT,
+                ..
+            })
+        ));
+
+        let updated = service
+            .import_package(
+                "u1",
+                Some("tenant-1"),
+                SkillImportPayload {
+                    skill_md_content: SAMPLE_IMPORT_SKILL_MD.to_string(),
+                    resource_files,
+                    scope: "tenant".to_string(),
+                    project_id: None,
+                    overwrite: true,
+                    change_summary: Some("Re-import package".to_string()),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.action, "update");
+        assert_eq!(updated.skill.current_version, 2);
+
+        let versions = service
+            .list_versions("u1", Some("tenant-1"), &updated.skill.id, 50, 0)
+            .await
+            .unwrap();
+        assert_eq!(versions.total, 2);
+        let exported = service
+            .export_package("u1", Some("tenant-1"), &updated.skill.id)
+            .await
+            .unwrap();
+        assert_eq!(exported.version_number, Some(2));
+        assert_eq!(
+            exported.resource_files,
+            json!({"references/README.md":"details"})
+        );
     }
 
     #[test]
