@@ -132,10 +132,21 @@ pub struct ProjectListRecords {
 
 #[derive(Debug)]
 pub enum ProjectLookup {
-    Found(ProjectReadRecord),
+    Found(Box<ProjectReadRecord>),
     Forbidden,
     NotFound,
     TenantMismatch,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ProjectListForUserQuery<'a> {
+    pub user_id: &'a str,
+    pub tenant_id: Option<&'a str>,
+    pub search: Option<&'a str>,
+    pub visibility: &'a str,
+    pub owner_id: Option<&'a str>,
+    pub offset: i64,
+    pub limit: i64,
 }
 
 #[derive(Debug)]
@@ -164,22 +175,16 @@ impl PgProjectReadRepository {
 
     pub async fn list_for_user(
         &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        search: Option<&str>,
-        visibility: &str,
-        owner_id: Option<&str>,
-        offset: i64,
-        limit: i64,
+        query: ProjectListForUserQuery<'_>,
     ) -> CoreResult<ProjectListRecords> {
-        let tenant_id = blank_to_none(tenant_id);
-        let owner_id = blank_to_none(owner_id);
-        let search_value = search.unwrap_or("").trim();
+        let tenant_id = blank_to_none(query.tenant_id);
+        let owner_id = blank_to_none(query.owner_id);
+        let search_value = query.search.unwrap_or("").trim();
         let search_pattern = like(search_value);
-        let visibility = normalize_visibility(visibility);
+        let visibility = normalize_visibility(query.visibility);
 
         let total = sqlx::query_as::<_, (i64,)>(PROJECT_COUNT_SQL)
-            .bind(user_id)
+            .bind(query.user_id)
             .bind(tenant_id)
             .bind(search_value)
             .bind(&search_pattern)
@@ -191,7 +196,7 @@ impl PgProjectReadRepository {
             .0;
 
         let owner_rows = sqlx::query_as::<_, (String,)>(PROJECT_OWNER_IDS_SQL)
-            .bind(user_id)
+            .bind(query.user_id)
             .bind(tenant_id)
             .bind(search_value)
             .bind(&search_pattern)
@@ -202,14 +207,14 @@ impl PgProjectReadRepository {
         let owner_ids = owner_rows.into_iter().map(|(owner,)| owner).collect();
 
         let rows = sqlx::query(PROJECT_LIST_SQL)
-            .bind(user_id)
+            .bind(query.user_id)
             .bind(tenant_id)
             .bind(search_value)
             .bind(&search_pattern)
             .bind(visibility)
             .bind(owner_id)
-            .bind(offset)
-            .bind(limit)
+            .bind(query.offset)
+            .bind(query.limit)
             .fetch_all(&self.pool)
             .await
             .map_err(|e| CoreError::Storage(e.to_string()))?;
@@ -261,7 +266,7 @@ impl PgProjectReadRepository {
                 return Ok(ProjectLookup::TenantMismatch);
             }
         }
-        Ok(ProjectLookup::Found(record))
+        Ok(ProjectLookup::Found(Box::new(record)))
     }
 
     pub async fn get_by_id(&self, project_id: &str) -> CoreResult<Option<ProjectReadRecord>> {

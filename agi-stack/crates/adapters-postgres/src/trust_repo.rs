@@ -44,6 +44,17 @@ pub struct NewTrustPolicyRecord {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug)]
+pub struct TrustDecisionResolution<'a> {
+    pub record_id: &'a str,
+    pub reviewer_id: &'a str,
+    pub review_type: &'a str,
+    pub review_comment: &'a str,
+    pub outcome: &'a str,
+    pub resolved_at: DateTime<Utc>,
+    pub new_policy: Option<NewTrustPolicyRecord>,
+}
+
 #[derive(Debug, Clone)]
 pub struct DecisionRecordRecord {
     pub id: String,
@@ -342,17 +353,11 @@ impl PgTrustRepository {
 
     pub async fn resolve_decision(
         &self,
-        record_id: &str,
-        reviewer_id: &str,
-        review_type: &str,
-        review_comment: &str,
-        outcome: &str,
-        resolved_at: DateTime<Utc>,
-        new_policy: Option<NewTrustPolicyRecord>,
+        resolution: TrustDecisionResolution<'_>,
     ) -> CoreResult<Option<DecisionRecordRecord>> {
         let mut tx = self.pool.begin().await.map_err(storage_err)?;
 
-        if let Some(policy) = new_policy {
+        if let Some(policy) = resolution.new_policy {
             sqlx::query(
                 "INSERT INTO trust_policies \
                     (id, tenant_id, workspace_id, agent_instance_id, action_type, \
@@ -382,12 +387,12 @@ impl PgTrustRepository {
                        reviewer_id, review_type, review_comment, resolved_at, \
                        created_at, updated_at, deleted_at",
         )
-        .bind(record_id)
-        .bind(outcome)
-        .bind(reviewer_id)
-        .bind(review_type)
-        .bind(review_comment)
-        .bind(resolved_at)
+        .bind(resolution.record_id)
+        .bind(resolution.outcome)
+        .bind(resolution.reviewer_id)
+        .bind(resolution.review_type)
+        .bind(resolution.review_comment)
+        .bind(resolution.resolved_at)
         .fetch_optional(&mut *tx)
         .await
         .map_err(storage_err)?;

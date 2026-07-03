@@ -176,7 +176,7 @@ fn strip_fences(s: &str) -> &str {
         return t;
     };
     // Drop the optional language tag on the first line, then the trailing fence.
-    let rest = rest.splitn(2, '\n').nth(1).unwrap_or("");
+    let rest = rest.split_once('\n').map(|(_, rest)| rest).unwrap_or("");
     rest.trim().strip_suffix("```").unwrap_or(rest).trim()
 }
 

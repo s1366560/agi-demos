@@ -116,10 +116,11 @@ pub struct CompletedCall {
 }
 
 /// Lifecycle of an agent session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
     /// Loop is active (or interrupted mid-flight and resumable).
+    #[default]
     Running,
     /// Loop is **suspended** awaiting a human answer (HITL). Resumable via
     /// [`crate::ReActEngine::resume`] once the answer arrives.
@@ -128,12 +129,6 @@ pub enum SessionStatus {
     Finished,
     /// Loop hit a terminal error / round budget.
     Failed,
-}
-
-impl Default for SessionStatus {
-    fn default() -> Self {
-        SessionStatus::Running
-    }
 }
 
 /// The full, serializable state of a ReAct session — the checkpoint unit.

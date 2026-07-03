@@ -23,7 +23,7 @@ use serde_json::{json, Value};
 
 use agistack_adapters_postgres::{
     DecisionRecordRecord, NewDecisionRecordRecord, NewTrustPolicyRecord, PgTrustRepository,
-    TenantAccessStatus, TrustPolicyRecord,
+    TenantAccessStatus, TrustDecisionResolution, TrustPolicyRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 
@@ -436,15 +436,15 @@ impl TrustService for PgTrustService {
         };
 
         self.repo
-            .resolve_decision(
+            .resolve_decision(TrustDecisionResolution {
                 record_id,
-                user_id,
-                "human",
+                reviewer_id: user_id,
+                review_type: "human",
                 review_comment,
                 outcome,
-                now,
+                resolved_at: now,
                 new_policy,
-            )
+            })
             .await
             .map_err(TrustError::internal)?
             .map(DecisionRecordView::from)

@@ -20,14 +20,15 @@ use agistack_adapters_postgres::{
     NewTrustPolicyRecord, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
     PgMemoryRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
     PgShareRepository, PgSkillRepository, PgTenantRepository, PgTrustRepository, PgUserStore,
-    PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord, ProjectLookup, ProjectMembersLookup,
-    ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch, SkillProjectAccess, SkillRecord,
-    SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantLookup,
-    TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
-    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
-    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
-    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord, ProjectListForUserQuery,
+    ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord, ProjectStatsLookup,
+    ProjectUpdatePatch, SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord,
+    TenantAccessStatus, TenantAdminStatus, TenantLookup, TenantUpdatePatch, TopologyEdgeRecord,
+    TopologyNodeRecord, TrustDecisionResolution, WorkspaceAccess, WorkspacePipelineRunRecord,
+    WorkspacePipelineStageRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
+    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
@@ -2306,14 +2307,14 @@ async fn trust_repository_matches_python_governance_lifecycle() {
 
     let resolved_at = Utc::now();
     let resolved = repo
-        .resolve_decision(
-            "dr_trust_pg",
-            "u_trust_admin",
-            "human",
-            "Allowed always — trust policy created",
-            "success",
+        .resolve_decision(TrustDecisionResolution {
+            record_id: "dr_trust_pg",
+            reviewer_id: "u_trust_admin",
+            review_type: "human",
+            review_comment: "Allowed always — trust policy created",
+            outcome: "success",
             resolved_at,
-            Some(NewTrustPolicyRecord {
+            new_policy: Some(NewTrustPolicyRecord {
                 id: "tp_trust_pg_auto".into(),
                 tenant_id: "t_trust_pg".into(),
                 workspace_id: "w_trust_pg".into(),
@@ -2323,7 +2324,7 @@ async fn trust_repository_matches_python_governance_lifecycle() {
                 grant_type: "always".into(),
                 created_at: resolved_at,
             }),
-        )
+        })
         .await
         .unwrap()
         .expect("resolved decision");
@@ -2340,15 +2341,15 @@ async fn trust_repository_matches_python_governance_lifecycle() {
         .await
         .unwrap());
     assert!(repo
-        .resolve_decision(
-            "missing_decision",
-            "u_trust_admin",
-            "human",
-            "Allowed once",
-            "success",
-            Utc::now(),
-            None,
-        )
+        .resolve_decision(TrustDecisionResolution {
+            record_id: "missing_decision",
+            reviewer_id: "u_trust_admin",
+            review_type: "human",
+            review_comment: "Allowed once",
+            outcome: "success",
+            resolved_at: Utc::now(),
+            new_policy: None,
+        },)
         .await
         .unwrap()
         .is_none());
@@ -3480,15 +3481,15 @@ async fn project_reads_roundtrip_against_shared_schema() {
 
     let projects = PgProjectReadRepository::new(pool.clone());
     let page = projects
-        .list_for_user(
-            "u_p2_projects",
-            Some("t_p2_projects"),
-            None,
-            "all",
-            None,
-            0,
-            20,
-        )
+        .list_for_user(ProjectListForUserQuery {
+            user_id: "u_p2_projects",
+            tenant_id: Some("t_p2_projects"),
+            search: None,
+            visibility: "all",
+            owner_id: None,
+            offset: 0,
+            limit: 20,
+        })
         .await
         .unwrap();
     assert_eq!(page.total, 2);
@@ -3500,30 +3501,30 @@ async fn project_reads_roundtrip_against_shared_schema() {
     assert_eq!(page.owner_ids, vec!["u_p2_other", "u_p2_projects"]);
 
     let public = projects
-        .list_for_user(
-            "u_p2_projects",
-            Some("t_p2_projects"),
-            None,
-            "public",
-            None,
-            0,
-            20,
-        )
+        .list_for_user(ProjectListForUserQuery {
+            user_id: "u_p2_projects",
+            tenant_id: Some("t_p2_projects"),
+            search: None,
+            visibility: "public",
+            owner_id: None,
+            offset: 0,
+            limit: 20,
+        })
         .await
         .unwrap();
     assert_eq!(public.total, 1);
     assert_eq!(public.projects[0].id, "p_p2_other");
 
     let searched = projects
-        .list_for_user(
-            "u_p2_projects",
-            Some("t_p2_projects"),
-            Some("default"),
-            "all",
-            None,
-            0,
-            20,
-        )
+        .list_for_user(ProjectListForUserQuery {
+            user_id: "u_p2_projects",
+            tenant_id: Some("t_p2_projects"),
+            search: Some("default"),
+            visibility: "all",
+            owner_id: None,
+            offset: 0,
+            limit: 20,
+        })
         .await
         .unwrap();
     assert_eq!(searched.total, 1);

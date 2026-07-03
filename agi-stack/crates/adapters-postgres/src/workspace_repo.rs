@@ -2543,12 +2543,11 @@ impl PgWorkspaceRepository {
         lease_owner: Option<&str>,
         now: DateTime<Utc>,
     ) -> CoreResult<bool> {
-        let mut query = format!(
-            "UPDATE workspace_plan_outbox \
+        let mut query = "UPDATE workspace_plan_outbox \
              SET status = 'completed', lease_owner = NULL, lease_expires_at = NULL, \
                  last_error = NULL, next_attempt_at = NULL, processed_at = $2, updated_at = $2 \
              WHERE id = $1 AND status = 'processing'"
-        );
+            .to_string();
         if lease_owner.is_some() {
             query.push_str(" AND lease_owner = $3");
         }

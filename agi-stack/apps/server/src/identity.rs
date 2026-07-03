@@ -42,9 +42,9 @@ use serde_json::{json, Map, Value};
 use agistack_adapters_postgres::{
     normalize_email, InvitationRecord, PgInvitationRepository, PgProjectReadRepository,
     PgTenantRepository, PgUserStore, ProjectActivityRecord, ProjectCreateRecord,
-    ProjectDashboardStatsRecord, ProjectLookup, ProjectMemberRecord, ProjectMembersLookup,
-    ProjectMembersRecord, ProjectReadRecord, ProjectStatsLookup, ProjectUpdatePatch,
-    TenantAdminStatus, TenantLookup, TenantRecord, TenantUpdatePatch,
+    ProjectDashboardStatsRecord, ProjectListForUserQuery, ProjectLookup, ProjectMemberRecord,
+    ProjectMembersLookup, ProjectMembersRecord, ProjectReadRecord, ProjectStatsLookup,
+    ProjectUpdatePatch, TenantAdminStatus, TenantLookup, TenantRecord, TenantUpdatePatch,
 };
 use agistack_adapters_redis::{DeviceGrant, RedisDeviceGrantStore};
 use agistack_adapters_secrets::{
@@ -1524,9 +1524,15 @@ impl IdentityService for PgIdentityService {
         let offset = (page - 1) * page_size;
         let records = self
             .projects
-            .list_for_user(
-                user_id, tenant_id, search, visibility, owner_id, offset, page_size,
-            )
+            .list_for_user(ProjectListForUserQuery {
+                user_id,
+                tenant_id,
+                search,
+                visibility,
+                owner_id,
+                offset,
+                limit: page_size,
+            })
             .await
             .map_err(IdentityError::internal)?;
         Ok(ProjectPage {
@@ -1554,7 +1560,7 @@ impl IdentityService for PgIdentityService {
             .await
             .map_err(IdentityError::internal)?
         {
-            ProjectLookup::Found(record) => Ok(ProjectView::from(record)),
+            ProjectLookup::Found(record) => Ok(ProjectView::from(*record)),
             ProjectLookup::Forbidden => Err(IdentityError::forbidden("Access denied to project")),
             ProjectLookup::NotFound => Err(IdentityError::not_found("Project not found")),
             ProjectLookup::TenantMismatch => Err(IdentityError::not_found(

@@ -49,9 +49,9 @@ pub use invitation_repo::{
 pub use memory_repo::PgMemoryRepository;
 pub use project_repo::{
     PgProjectReadRepository, ProjectActivityRecord, ProjectCreateRecord,
-    ProjectDashboardStatsRecord, ProjectListRecords, ProjectLookup, ProjectMemberMutationRecord,
-    ProjectMemberRecord, ProjectMembersLookup, ProjectMembersRecord, ProjectReadRecord,
-    ProjectStatsLookup, ProjectStatsRecord, ProjectUpdatePatch,
+    ProjectDashboardStatsRecord, ProjectListForUserQuery, ProjectListRecords, ProjectLookup,
+    ProjectMemberMutationRecord, ProjectMemberRecord, ProjectMembersLookup, ProjectMembersRecord,
+    ProjectReadRecord, ProjectStatsLookup, ProjectStatsRecord, ProjectUpdatePatch,
 };
 pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
 pub use share_repo::{NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord};
@@ -61,7 +61,7 @@ pub use skill_repo::{
 pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord, TenantUpdatePatch};
 pub use trust_repo::{
     DecisionRecordRecord, NewDecisionRecordRecord, NewTrustPolicyRecord, PgTrustRepository,
-    TenantAccessStatus, TrustPolicyRecord,
+    TenantAccessStatus, TrustDecisionResolution, TrustPolicyRecord,
 };
 pub use user_store::{PgUserStore, UserAuthRecord};
 pub use vector_index::PgVectorIndex;
