@@ -119,7 +119,7 @@ export const InputToolbar = memo<InputToolbarProps>(
     return (
       <div
         data-testid="input-toolbar"
-        className="mt-auto flex min-w-0 flex-shrink-0 flex-wrap items-center gap-1.5 px-2 pt-1 pb-1.5 sm:px-3"
+        className="mt-auto flex min-w-0 flex-shrink-0 flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5 sm:px-3"
       >
         {/* Left Actions */}
         <div className="flex min-w-0 flex-wrap items-center gap-1">
@@ -129,7 +129,7 @@ export const InputToolbar = memo<InputToolbarProps>(
                 activeAgentId={activeAgentId}
                 onSelect={onAgentSelect}
                 disabled={!!(isStreaming || disabled)}
-                className="h-8 min-w-0 max-w-[112px] min-[520px]:max-w-[180px]"
+                className="h-8 min-w-0 max-w-[104px] min-[520px]:max-w-[176px]"
               />
               <div className="hidden min-[460px]:block w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
             </>
@@ -332,14 +332,14 @@ export const InputToolbar = memo<InputToolbarProps>(
               aria-label={t('agent.inputBar.send', 'Send message')}
               data-testid="send-button"
               className={`
-                rounded-lg flex items-center gap-1.5 h-8 px-2 min-[1280px]:px-3
+                rounded-lg flex items-center gap-1.5 h-8 px-2 min-[1180px]:px-3
                 bg-primary hover:bg-primary-600
                 shadow-sm
                 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
                 transition-colors duration-200
               `}
             >
-              <span className="hidden min-[1280px]:inline">{t('agent.inputBar.send', 'Send')}</span>
+              <span className="hidden min-[1180px]:inline">{t('agent.inputBar.send', 'Send')}</span>
             </LazyButton>
           )}
         </div>

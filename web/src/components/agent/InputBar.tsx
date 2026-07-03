@@ -501,7 +501,7 @@ export const InputBar = memo<InputBarProps>(
       isPlanMode;
 
     return (
-      <div className="h-full min-w-0 flex flex-col p-2 sm:p-4">
+      <div className="flex h-full min-w-0 flex-col p-2 sm:p-3">
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -524,8 +524,8 @@ export const InputBar = memo<InputBarProps>(
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`
-            flex-1 flex flex-col min-h-0 min-w-0 rounded-md border relative
-            bg-white dark:bg-slate-800
+            relative flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border
+            bg-white/95 dark:bg-slate-900/85
             transition-[border-color,box-shadow] duration-200 ease-out
             ${
               isDragging
@@ -537,7 +537,7 @@ export const InputBar = memo<InputBarProps>(
             ${disabled ? 'opacity-60 pointer-events-none' : ''}
           `}
         >
-          <div className="flex min-h-9 flex-shrink-0 items-center gap-2 border-b border-slate-200/55 px-3 py-1.5 dark:border-slate-700/55 sm:px-4">
+          <div className="flex min-h-8 flex-shrink-0 items-center gap-2 border-b border-slate-200/55 px-3 py-1 dark:border-slate-700/55">
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
               <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
                 {t('agent.inputBar.composer', 'Composer')}
@@ -598,7 +598,7 @@ export const InputBar = memo<InputBarProps>(
             {hasComposerContext && (
               <div className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400 min-[640px]:flex">
                 {attachments.length > 0 && (
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 dark:bg-slate-700/60">
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
                     {t('agent.inputBar.attachmentCount', {
                       count: attachments.length,
                       defaultValue: '{{count}} file',
@@ -606,7 +606,7 @@ export const InputBar = memo<InputBarProps>(
                   </span>
                 )}
                 {queue.length > 0 && (
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 dark:bg-slate-700/60">
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
                     {t('agent.inputBar.queuedCount', {
                       count: queue.length,
                       defaultValue: '{{count}} queued',
@@ -656,7 +656,7 @@ export const InputBar = memo<InputBarProps>(
           {/* Text Area */}
           <div
             data-testid="chat-input-body"
-            className="relative flex min-h-14 min-w-0 flex-1 px-3 py-2 sm:px-4 overflow-visible"
+            className="relative flex min-h-12 min-w-0 flex-1 overflow-visible px-3 py-1.5"
           >
             <SlashCommandDropdown
               ref={slashDropdownRef}
@@ -706,7 +706,7 @@ export const InputBar = memo<InputBarProps>(
             <div
               data-testid="chat-input-surface"
               className="
-                flex h-full min-h-11 w-full min-w-0 flex-wrap content-start items-start gap-1.5 rounded px-2 py-1.5
+                flex h-full min-h-10 w-full min-w-0 flex-wrap content-start items-start gap-1.5 rounded-md px-2 py-1.5
                 bg-slate-50/70 dark:bg-slate-900/40
                 transition-colors
               "
@@ -737,8 +737,8 @@ export const InputBar = memo<InputBarProps>(
                 dir="auto"
                 autoCapitalize="sentences"
                 className="
-                  h-auto min-w-40 flex-1 bg-transparent px-1 py-1
-                  text-sm leading-relaxed text-slate-800 dark:text-slate-100
+                  h-auto min-w-40 flex-1 bg-transparent px-1 py-0.5
+                  text-[13px] leading-6 text-slate-800 dark:text-slate-100 sm:text-sm
                   placeholder:text-slate-400 dark:placeholder:text-slate-500
                   focus:outline-none
                   overflow-y-auto overflow-x-hidden
@@ -749,7 +749,7 @@ export const InputBar = memo<InputBarProps>(
                 "
                 style={{
                   resize: 'none',
-                  minHeight: '32px',
+                  minHeight: '28px',
                   maxHeight: '100%',
                 }}
               />

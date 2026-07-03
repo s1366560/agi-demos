@@ -6676,6 +6676,7 @@
       "label": "推荐的后续问题"
     },
     "emptyState": {
+      "workbenchLabel": "智能体工作区",
       "greeting": "我能帮您做什么？",
       "subtitle": "您的智能 AI 助手已准备好协助您进行分析、编程、写作等工作。",
       "newConversation": "开始新对话",

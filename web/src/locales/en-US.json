@@ -6653,6 +6653,7 @@
       "label": "Suggested follow-ups"
     },
     "emptyState": {
+      "workbenchLabel": "Agent workspace",
       "greeting": "How can I help you today?",
       "subtitle": "Your intelligent AI assistant is ready to help with analysis, coding, writing, and more.",
       "newConversation": "Start New Conversation",

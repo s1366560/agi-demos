@@ -117,9 +117,9 @@ interface AgentChatContentProps {
 }
 
 // Constants for resize constraints
-const INPUT_MIN_HEIGHT = 176;
-const INPUT_MAX_HEIGHT = 560;
-const INPUT_DEFAULT_HEIGHT = 176;
+const INPUT_MIN_HEIGHT = 148;
+const INPUT_MAX_HEIGHT = 480;
+const INPUT_DEFAULT_HEIGHT = 156;
 
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   const value = metadata?.[key];
@@ -1127,7 +1127,7 @@ ${content}`;
       Boolean(doomLoopDetected);
 
     const statusBarWithLayout = (
-      <div className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
+      <div className="min-w-0 flex-shrink-0 border-t border-slate-200/60 bg-white/90 dark:border-slate-800/70 dark:bg-slate-950/85">
         {shouldShowRunStatusStrip && (
           <RunStatusStrip
             run={runViewModel}
@@ -1140,13 +1140,15 @@ ${content}`;
             }}
           />
         )}
-        <div className="flex items-center min-w-0">
+        <div className="flex min-w-0 items-center gap-2 px-2 py-1">
           <WorkspaceStatusBar
             {...workspaceStatusSlots}
-            className="min-w-0 flex-shrink border-0 bg-transparent px-2 py-0"
+            className="hidden min-w-0 flex-shrink border-0 bg-transparent px-0 py-0 min-[960px]:flex"
           />
-          <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
-          <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
+          <div className="hidden min-w-0 flex-1 overflow-hidden min-[1200px]:block">
+            {statusBar}
+          </div>
+          <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:gap-2">
             {conversationArtifacts.length > 0 && (
               <button
                 type="button"

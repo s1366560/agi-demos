@@ -115,7 +115,7 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
   return (
     <div
       data-tour="layout-selector"
-      className="flex items-center gap-0.5 bg-slate-200/60 dark:bg-slate-700/40 rounded-md p-0.5"
+      className="flex items-center gap-0.5 rounded-md border border-slate-200/70 bg-white/80 p-0.5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80"
     >
       {visibleModes.map((m) => {
         const Icon = m.icon;
@@ -147,7 +147,7 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
                 setMode(m.key);
               }}
               className={`
-                flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
+                flex h-7 min-w-7 items-center justify-center gap-1 rounded px-1.5 text-xs font-medium min-[1180px]:px-2
                 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 cursor-pointer
                 ${
                   isActive
@@ -162,7 +162,7 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
               })}
             >
               <Icon size={13} />
-              <span className="hidden sm:inline">{label}</span>
+              <span className="hidden min-[1180px]:inline">{label}</span>
             </button>
           </LazyTooltip>
         );
