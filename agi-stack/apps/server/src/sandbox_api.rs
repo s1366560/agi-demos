@@ -1938,17 +1938,12 @@ struct SandboxServiceStopResponse {
     success: bool,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum HttpServiceSourceType {
+    #[default]
     SandboxInternal,
     ExternalUrl,
-}
-
-impl Default for HttpServiceSourceType {
-    fn default() -> Self {
-        Self::SandboxInternal
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -2614,8 +2609,7 @@ fn ttyd_initial_terminal_message(size: TerminalSize) -> TungsteniteMessage {
             "rows": size.rows,
         })
         .to_string()
-        .into_bytes()
-        .into(),
+        .into_bytes(),
     )
 }
 
@@ -2623,7 +2617,7 @@ fn ttyd_input_message(data: &[u8]) -> TungsteniteMessage {
     let mut payload = Vec::with_capacity(data.len() + 1);
     payload.push(TTYD_INPUT_COMMAND);
     payload.extend_from_slice(data);
-    TungsteniteMessage::Binary(payload.into())
+    TungsteniteMessage::Binary(payload)
 }
 
 fn ttyd_resize_message(size: TerminalSize) -> TungsteniteMessage {
@@ -2637,13 +2631,11 @@ fn ttyd_resize_message(size: TerminalSize) -> TungsteniteMessage {
         .to_string()
         .as_bytes(),
     );
-    TungsteniteMessage::Binary(payload.into())
+    TungsteniteMessage::Binary(payload)
 }
 
 fn ttyd_output_payload(data: &[u8]) -> Option<String> {
-    let Some((&command, payload)) = data.split_first() else {
-        return None;
-    };
+    let (&command, payload) = data.split_first()?;
     match command {
         TTYD_INPUT_COMMAND => Some(String::from_utf8_lossy(payload).to_string()),
         TTYD_RESIZE_COMMAND | TTYD_PREFERENCES_COMMAND => None,
@@ -3887,9 +3879,7 @@ async fn close_http_service_ws_with_policy_error(mut socket: WebSocket, reason: 
 async fn close_http_service_ws_with_internal_error(mut socket: WebSocket) {
     let _ = socket
         .send(AxumWsMessage::Text(
-            json!({ "error": "HTTP service WebSocket proxy failed" })
-                .to_string()
-                .into(),
+            json!({ "error": "HTTP service WebSocket proxy failed" }).to_string(),
         ))
         .await;
     let _ = socket
@@ -3912,9 +3902,7 @@ async fn close_desktop_ws_with_policy_error(mut socket: WebSocket, reason: &'sta
 async fn close_desktop_ws_with_internal_error(mut socket: WebSocket) {
     let _ = socket
         .send(AxumWsMessage::Text(
-            json!({ "error": "Desktop WebSocket proxy failed" })
-                .to_string()
-                .into(),
+            json!({ "error": "Desktop WebSocket proxy failed" }).to_string(),
         ))
         .await;
     let _ = socket
@@ -3936,7 +3924,7 @@ async fn close_terminal_ws_with_policy_error(mut socket: WebSocket, reason: &'st
 
 async fn close_terminal_ws_with_internal_error(mut socket: WebSocket) {
     let _ = socket
-        .send(AxumWsMessage::Text(terminal_error_message().into()))
+        .send(AxumWsMessage::Text(terminal_error_message()))
         .await;
     let _ = socket
         .send(AxumWsMessage::Close(Some(AxumCloseFrame {
@@ -3958,9 +3946,7 @@ async fn close_mcp_ws_with_policy_error(mut socket: WebSocket, reason: &'static 
 async fn close_mcp_ws_with_internal_error(mut socket: WebSocket) {
     let _ = socket
         .send(AxumWsMessage::Text(
-            json!({ "error": "MCP WebSocket proxy failed" })
-                .to_string()
-                .into(),
+            json!({ "error": "MCP WebSocket proxy failed" }).to_string(),
         ))
         .await;
     let _ = socket
@@ -3974,9 +3960,7 @@ async fn close_mcp_ws_with_internal_error(mut socket: WebSocket) {
 async fn close_http_preview_host_ws_with_internal_error(mut socket: WebSocket) {
     let _ = socket
         .send(AxumWsMessage::Text(
-            json!({ "error": "HTTP preview host WS proxy failed" })
-                .to_string()
-                .into(),
+            json!({ "error": "HTTP preview host WS proxy failed" }).to_string(),
         ))
         .await;
     let _ = socket
@@ -4037,7 +4021,7 @@ async fn proxy_mcp_ws_session(socket: WebSocket, ws_target: String) {
                     Ok(TungsteniteMessage::Text(text)) => {
                         let normalized = normalize_mcp_resource_mime_type(&text);
                         if client_tx
-                            .send(AxumWsMessage::Text(normalized.into()))
+                            .send(AxumWsMessage::Text(normalized))
                             .await
                             .is_err()
                         {
@@ -4058,9 +4042,7 @@ async fn proxy_mcp_ws_session(socket: WebSocket, ws_target: String) {
                     Err(_) => {
                         let _ = client_tx
                             .send(AxumWsMessage::Text(
-                                json!({ "error": "MCP WebSocket proxy failed" })
-                                    .to_string()
-                                    .into(),
+                                json!({ "error": "MCP WebSocket proxy failed" }).to_string(),
                             ))
                             .await;
                         let _ = client_tx
@@ -4177,7 +4159,7 @@ async fn proxy_terminal_ws_session(
     let mut terminal_size = initial_size;
     if recorder.store(terminal_size, true).await.is_err() {
         let _ = client_tx
-            .send(AxumWsMessage::Text(terminal_error_message().into()))
+            .send(AxumWsMessage::Text(terminal_error_message()))
             .await;
         let _ = client_tx
             .send(AxumWsMessage::Close(Some(AxumCloseFrame {
@@ -4194,7 +4176,7 @@ async fn proxy_terminal_ws_session(
         .is_err()
     {
         let _ = client_tx
-            .send(AxumWsMessage::Text(terminal_error_message().into()))
+            .send(AxumWsMessage::Text(terminal_error_message()))
             .await;
         let _ = client_tx
             .send(AxumWsMessage::Close(Some(AxumCloseFrame {
@@ -4205,9 +4187,10 @@ async fn proxy_terminal_ws_session(
         return;
     }
     if client_tx
-        .send(AxumWsMessage::Text(
-            terminal_connected_message(&session_id, terminal_size).into(),
-        ))
+        .send(AxumWsMessage::Text(terminal_connected_message(
+            &session_id,
+            terminal_size,
+        )))
         .await
         .is_err()
     {
@@ -4227,7 +4210,7 @@ async fn proxy_terminal_ws_session(
                         let parsed = serde_json::from_str::<TerminalClientWsMessage>(&text);
                         let Ok(message) = parsed else {
                             let _ = client_tx
-                                .send(AxumWsMessage::Text(terminal_error_message().into()))
+                                .send(AxumWsMessage::Text(terminal_error_message()))
                                 .await;
                             let _ = client_tx
                                 .send(AxumWsMessage::Close(Some(AxumCloseFrame {
@@ -4260,7 +4243,7 @@ async fn proxy_terminal_ws_session(
                                 }
                                 if recorder.store(terminal_size, true).await.is_err() {
                                     let _ = client_tx
-                                        .send(AxumWsMessage::Text(terminal_error_message().into()))
+                                        .send(AxumWsMessage::Text(terminal_error_message()))
                                         .await;
                                     let _ = client_tx
                                         .send(AxumWsMessage::Close(Some(AxumCloseFrame {
@@ -4272,15 +4255,17 @@ async fn proxy_terminal_ws_session(
                                     break;
                                 }
                             }
-                            "ping" => {
+                            "ping"
                                 if client_tx
-                                    .send(AxumWsMessage::Text(json!({ "type": "pong" }).to_string().into()))
+                                    .send(AxumWsMessage::Text(
+                                        json!({ "type": "pong" }).to_string(),
+                                    ))
                                     .await
-                                    .is_err()
-                                {
-                                    break;
-                                }
+                                    .is_err() =>
+                            {
+                                break;
                             }
+                            "ping" => {}
                             _ => {}
                         }
                     }
@@ -4321,7 +4306,7 @@ async fn proxy_terminal_ws_session(
                     Ok(TungsteniteMessage::Text(text)) => {
                         if let Some(output) = ttyd_output_payload(text.as_bytes()) {
                             if client_tx
-                                .send(AxumWsMessage::Text(terminal_output_message(&output).into()))
+                                .send(AxumWsMessage::Text(terminal_output_message(&output)))
                                 .await
                                 .is_err()
                             {
@@ -4332,7 +4317,7 @@ async fn proxy_terminal_ws_session(
                     Ok(TungsteniteMessage::Binary(binary)) => {
                         if let Some(output) = ttyd_output_payload(binary.as_ref()) {
                             if client_tx
-                                .send(AxumWsMessage::Text(terminal_output_message(&output).into()))
+                                .send(AxumWsMessage::Text(terminal_output_message(&output)))
                                 .await
                                 .is_err()
                             {
@@ -4355,7 +4340,7 @@ async fn proxy_terminal_ws_session(
                     Ok(TungsteniteMessage::Frame(_)) => {}
                     Err(_) => {
                         let _ = client_tx
-                            .send(AxumWsMessage::Text(terminal_error_message().into()))
+                            .send(AxumWsMessage::Text(terminal_error_message()))
                             .await;
                         let _ = client_tx
                             .send(AxumWsMessage::Close(Some(AxumCloseFrame {
@@ -6656,7 +6641,7 @@ mod tests {
             while let Some(Ok(message)) = stream.next().await {
                 match message {
                     TungsteniteMessage::Text(text) => {
-                        sink.send(TungsteniteMessage::Text(format!("echo:{text}").into()))
+                        sink.send(TungsteniteMessage::Text(format!("echo:{text}")))
                             .await
                             .unwrap();
                         break;
@@ -6742,7 +6727,7 @@ mod tests {
             while let Some(Ok(message)) = stream.next().await {
                 match message {
                     TungsteniteMessage::Text(text) => {
-                        sink.send(TungsteniteMessage::Text(format!("echo:{text}").into()))
+                        sink.send(TungsteniteMessage::Text(format!("echo:{text}")))
                             .await
                             .unwrap();
                         break;
@@ -6825,9 +6810,7 @@ mod tests {
                         if frame.first() == Some(&TTYD_INPUT_COMMAND) {
                             let mut output = b"0echo:".to_vec();
                             output.extend_from_slice(&frame[1..]);
-                            sink.send(TungsteniteMessage::Binary(output.into()))
-                                .await
-                                .unwrap();
+                            sink.send(TungsteniteMessage::Binary(output)).await.unwrap();
                             break;
                         }
                     }
@@ -6837,9 +6820,7 @@ mod tests {
                         if frame.first() == Some(&TTYD_INPUT_COMMAND) {
                             let mut output = b"0echo:".to_vec();
                             output.extend_from_slice(&frame[1..]);
-                            sink.send(TungsteniteMessage::Binary(output.into()))
-                                .await
-                                .unwrap();
+                            sink.send(TungsteniteMessage::Binary(output)).await.unwrap();
                             break;
                         }
                     }
@@ -6943,7 +6924,7 @@ mod tests {
                             }]
                         }
                     });
-                    sink.send(TungsteniteMessage::Text(response.to_string().into()))
+                    sink.send(TungsteniteMessage::Text(response.to_string()))
                         .await
                         .unwrap();
                     break;
@@ -7070,11 +7051,11 @@ mod tests {
         );
 
         client
-            .send(TungsteniteMessage::Binary(vec![1_u8, 2, 3].into()))
+            .send(TungsteniteMessage::Binary(vec![1_u8, 2, 3]))
             .await
             .unwrap();
         let reply = client.next().await.unwrap().unwrap();
-        assert_eq!(reply, TungsteniteMessage::Binary(vec![1_u8, 2, 3].into()));
+        assert_eq!(reply, TungsteniteMessage::Binary(vec![1_u8, 2, 3]));
 
         let (uri, origin, protocol) = rx
             .recv_timeout(Duration::from_secs(2))
@@ -7152,7 +7133,7 @@ mod tests {
 
         client
             .send(TungsteniteMessage::Text(
-                json!({ "type": "ping" }).to_string().into(),
+                json!({ "type": "ping" }).to_string(),
             ))
             .await
             .unwrap();
@@ -7165,17 +7146,13 @@ mod tests {
 
         client
             .send(TungsteniteMessage::Text(
-                json!({ "type": "resize", "cols": 120, "rows": 40 })
-                    .to_string()
-                    .into(),
+                json!({ "type": "resize", "cols": 120, "rows": 40 }).to_string(),
             ))
             .await
             .unwrap();
         client
             .send(TungsteniteMessage::Text(
-                json!({ "type": "input", "data": "ls\n" })
-                    .to_string()
-                    .into(),
+                json!({ "type": "input", "data": "ls\n" }).to_string(),
             ))
             .await
             .unwrap();
@@ -7252,9 +7229,7 @@ mod tests {
         let (mut client, _response) = connect_async(&proxy_url).await.unwrap();
         client
             .send(TungsteniteMessage::Text(
-                json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/read" })
-                    .to_string()
-                    .into(),
+                json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/read" }).to_string(),
             ))
             .await
             .unwrap();
