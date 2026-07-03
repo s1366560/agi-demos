@@ -1335,6 +1335,80 @@ impl PgWorkspaceRepository {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn ensure_workspace_agent_conversation(
+        &self,
+        conversation_id: &str,
+        project_id: &str,
+        tenant_id: &str,
+        user_id: &str,
+        title: &str,
+        agent_config_json: &Value,
+        metadata_json: &Value,
+        workspace_id: &str,
+        linked_workspace_task_id: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        let existing = sqlx::query(
+            "SELECT workspace_id \
+             FROM conversations WHERE id = $1",
+        )
+        .bind(conversation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        if let Some(row) = existing {
+            let existing_workspace_id: Option<String> =
+                row.try_get("workspace_id").map_err(storage)?;
+            if existing_workspace_id
+                .as_deref()
+                .is_some_and(|candidate| candidate != workspace_id)
+            {
+                return Err(CoreError::Storage(format!(
+                    "workspace agent conversation {conversation_id} is linked to another workspace"
+                )));
+            }
+            sqlx::query(
+                "UPDATE conversations \
+                 SET agent_config = $2, meta = $3, workspace_id = $4, \
+                     linked_workspace_task_id = COALESCE($5, linked_workspace_task_id), \
+                     updated_at = $6 \
+                 WHERE id = $1",
+            )
+            .bind(conversation_id)
+            .bind(Json(agent_config_json))
+            .bind(Json(metadata_json))
+            .bind(workspace_id)
+            .bind(linked_workspace_task_id)
+            .bind(now)
+            .execute(&self.pool)
+            .await
+            .map_err(storage)?;
+            return Ok(());
+        }
+
+        sqlx::query(
+            "INSERT INTO conversations \
+                (id, project_id, tenant_id, user_id, title, status, agent_config, meta, \
+                 message_count, current_mode, workspace_id, linked_workspace_task_id, created_at, updated_at) \
+             VALUES ($1,$2,$3,$4,$5,'active',$6,$7,0,'build',$8,$9,$10,$10)",
+        )
+        .bind(conversation_id)
+        .bind(project_id)
+        .bind(tenant_id)
+        .bind(user_id)
+        .bind(title)
+        .bind(Json(agent_config_json))
+        .bind(Json(metadata_json))
+        .bind(workspace_id)
+        .bind(linked_workspace_task_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
+    }
+
     pub async fn bind_task_session_attempt_conversation(
         &self,
         attempt_id: &str,
@@ -2430,6 +2504,9 @@ impl PgWorkspaceRepository {
                    AND ( \
                      (status IN ('pending', 'failed') \
                       AND (next_attempt_at IS NULL OR next_attempt_at <= $1)) \
+                     OR (event_type = 'workspace_agent_mention' \
+                         AND status = 'pending_runtime' \
+                         AND (next_attempt_at IS NULL OR next_attempt_at <= $1)) \
                      OR (status = 'processing' \
                          AND lease_expires_at IS NOT NULL \
                          AND lease_expires_at <= $1) \
@@ -2548,6 +2625,36 @@ impl PgWorkspaceRepository {
         let mut query = sqlx::query(&query)
             .bind(outbox_id)
             .bind(error_message)
+            .bind(now);
+        if let Some(owner) = lease_owner {
+            query = query.bind(owner);
+        }
+        let result = query.execute(&self.pool).await.map_err(storage)?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn park_plan_outbox_processing(
+        &self,
+        outbox_id: &str,
+        status: &str,
+        metadata_patch: &Value,
+        lease_owner: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool> {
+        let mut query = String::from(
+            "UPDATE workspace_plan_outbox \
+             SET status = $2, lease_owner = NULL, lease_expires_at = NULL, \
+                 last_error = NULL, next_attempt_at = NULL, \
+                 metadata_json = COALESCE(metadata_json, '{}'::jsonb) || $3, updated_at = $4 \
+             WHERE id = $1 AND status = 'processing'",
+        );
+        if lease_owner.is_some() {
+            query.push_str(" AND lease_owner = $5");
+        }
+        let mut query = sqlx::query(&query)
+            .bind(outbox_id)
+            .bind(status)
+            .bind(Json(metadata_patch))
             .bind(now);
         if let Some(owner) = lease_owner {
             query = query.bind(owner);

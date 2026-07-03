@@ -38,6 +38,8 @@ const WORKER_LAUNCH_EVENT: &str = "worker_launch";
 const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
 const ATTEMPT_RETRY_EVENT: &str = "attempt_retry";
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
+const WORKSPACE_AGENT_MENTION_EVENT: &str = "workspace_agent_mention";
+const WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS: &str = "runtime_bound";
 const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
 const DRONE_PROVIDER: &str = "drone";
 const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
@@ -1019,6 +1021,9 @@ pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_event_stream
     let supervisor_tick = Arc::new(SupervisorTickAdmissionHandler::new(Arc::clone(
         &dispatch_store,
     )));
+    let workspace_agent_mention = Arc::new(WorkspaceAgentMentionBindingHandler::new(Arc::clone(
+        &dispatch_store,
+    )));
     let pipeline_run = Arc::new(PipelineRunAdmissionHandler::new(
         dispatch_store,
         stage_runner,
@@ -1043,6 +1048,10 @@ pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_event_stream
         (
             PIPELINE_RUN_REQUESTED_EVENT.to_string(),
             pipeline_run as Arc<dyn WorkspacePlanOutboxHandler>,
+        ),
+        (
+            WORKSPACE_AGENT_MENTION_EVENT.to_string(),
+            workspace_agent_mention as Arc<dyn WorkspacePlanOutboxHandler>,
         ),
     ])
 }
@@ -1094,6 +1103,7 @@ pub(crate) struct WorkspacePlanOutboxRunReport {
     pub completed: usize,
     pub failed: usize,
     pub released: usize,
+    pub parked: usize,
     pub missing_handler: usize,
     pub skipped: usize,
 }
@@ -1124,7 +1134,13 @@ impl Drop for WorkspacePlanOutboxWorkerRuntime {
 #[allow(dead_code)]
 pub(crate) enum WorkspacePlanOutboxHandlerOutcome {
     Complete,
-    Release { reason: Option<String> },
+    Release {
+        reason: Option<String>,
+    },
+    Park {
+        status: String,
+        metadata_patch: Value,
+    },
 }
 
 #[async_trait]
@@ -1230,6 +1246,15 @@ pub(crate) trait WorkspacePlanOutboxStore: Send + Sync {
         &self,
         outbox_id: &str,
         error_message: Option<&str>,
+        lease_owner: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool>;
+
+    async fn park_processing(
+        &self,
+        outbox_id: &str,
+        status: &str,
+        metadata_patch: &Value,
         lease_owner: Option<&str>,
         now: DateTime<Utc>,
     ) -> CoreResult<bool>;
@@ -1379,6 +1404,21 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         now: DateTime<Utc>,
     ) -> CoreResult<()>;
 
+    #[allow(clippy::too_many_arguments)]
+    async fn ensure_workspace_agent_conversation(
+        &self,
+        conversation_id: &str,
+        project_id: &str,
+        tenant_id: &str,
+        user_id: &str,
+        title: &str,
+        agent_config_json: &Value,
+        metadata_json: &Value,
+        workspace_id: &str,
+        linked_workspace_task_id: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()>;
+
     async fn bind_task_session_attempt_conversation(
         &self,
         attempt_id: &str,
@@ -1485,6 +1525,19 @@ impl WorkspacePlanOutboxStore for PgWorkspacePlanOutboxStore {
     ) -> CoreResult<bool> {
         self.repo
             .release_plan_outbox_processing(outbox_id, error_message, lease_owner, now)
+            .await
+    }
+
+    async fn park_processing(
+        &self,
+        outbox_id: &str,
+        status: &str,
+        metadata_patch: &Value,
+        lease_owner: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool> {
+        self.repo
+            .park_plan_outbox_processing(outbox_id, status, metadata_patch, lease_owner, now)
             .await
     }
 }
@@ -1741,6 +1794,35 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         .await
     }
 
+    async fn ensure_workspace_agent_conversation(
+        &self,
+        conversation_id: &str,
+        project_id: &str,
+        tenant_id: &str,
+        user_id: &str,
+        title: &str,
+        agent_config_json: &Value,
+        metadata_json: &Value,
+        workspace_id: &str,
+        linked_workspace_task_id: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        PgWorkspaceRepository::ensure_workspace_agent_conversation(
+            self,
+            conversation_id,
+            project_id,
+            tenant_id,
+            user_id,
+            title,
+            agent_config_json,
+            metadata_json,
+            workspace_id,
+            linked_workspace_task_id,
+            now,
+        )
+        .await
+    }
+
     async fn bind_task_session_attempt_conversation(
         &self,
         attempt_id: &str,
@@ -1836,6 +1918,83 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         item: WorkspacePlanOutboxRecord,
     ) -> CoreResult<WorkspacePlanOutboxRecord> {
         PgWorkspaceRepository::enqueue_plan_outbox(self, item).await
+    }
+}
+
+pub(crate) struct WorkspaceAgentMentionBindingHandler {
+    store: Arc<dyn WorkspacePlanDispatchStore>,
+}
+
+impl WorkspaceAgentMentionBindingHandler {
+    pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
+    async fn handle(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
+        let payload = object_or_empty(item.payload_json.clone());
+        let now = Utc::now();
+        let workspace_id =
+            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let project_id = required_string(&payload, "project_id")?;
+        let tenant_id = required_string(&payload, "tenant_id")?;
+        let sender_user_id = required_string(&payload, "sender_user_id")?;
+        let target_agent_id = required_string(&payload, "target_agent_id")?;
+        let conversation_id = required_string(&payload, "conversation_id")?;
+        let agent_name = string_from_map(&payload, "agent_name")
+            .or_else(|| string_from_map(&payload, "agent_display_name"))
+            .unwrap_or_else(|| target_agent_id.clone());
+        let linked_workspace_task_id = string_from_map(&payload, "linked_workspace_task_id")
+            .or_else(|| string_from_map(&payload, "workspace_task_id"));
+        let source = string_from_map(&payload, "source");
+        let workspace_llm_stage = string_from_map(&payload, "workspace_llm_stage");
+
+        let mut conversation_metadata = Map::new();
+        conversation_metadata.insert("workspace_id".to_string(), json!(workspace_id));
+        conversation_metadata.insert("agent_id".to_string(), json!(target_agent_id));
+        conversation_metadata.insert("created_at".to_string(), json!(now.to_rfc3339()));
+        if let Some(task_id) = linked_workspace_task_id.as_deref() {
+            conversation_metadata.insert("workspace_task_id".to_string(), json!(task_id));
+            conversation_metadata.insert("linked_workspace_task_id".to_string(), json!(task_id));
+        }
+        if let Some(source) = source.as_deref() {
+            conversation_metadata.insert("source".to_string(), json!(source));
+        }
+        if let Some(stage) = workspace_llm_stage.as_deref() {
+            conversation_metadata.insert("workspace_llm_stage".to_string(), json!(stage));
+        }
+
+        self.store
+            .ensure_workspace_agent_conversation(
+                &conversation_id,
+                &project_id,
+                &tenant_id,
+                &sender_user_id,
+                &format!("Workspace Chat - {agent_name}"),
+                &json!({ "selected_agent_id": target_agent_id }),
+                &Value::Object(conversation_metadata),
+                &workspace_id,
+                linked_workspace_task_id.as_deref(),
+                now,
+            )
+            .await?;
+
+        Ok(WorkspacePlanOutboxHandlerOutcome::Park {
+            status: WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS.to_string(),
+            metadata_patch: json!({
+                "runtime_bound_at": now.to_rfc3339(),
+                "runtime_binding": "workspace_agent_mention_conversation",
+                "runtime_bridge": "p3_workspace_mention",
+                "conversation_id": conversation_id,
+                "target_agent_id": target_agent_id,
+                "workspace_llm_stage": workspace_llm_stage,
+            }),
+        })
     }
 }
 
@@ -13119,6 +13278,26 @@ impl WorkspacePlanOutboxWorker {
                     report.skipped += 1;
                 }
             }
+            Ok(WorkspacePlanOutboxHandlerOutcome::Park {
+                status,
+                metadata_patch,
+            }) => {
+                if self
+                    .store
+                    .park_processing(
+                        &item.id,
+                        &status,
+                        &metadata_patch,
+                        Some(&self.config.worker_id),
+                        Utc::now(),
+                    )
+                    .await?
+                {
+                    report.parked += 1;
+                } else {
+                    report.skipped += 1;
+                }
+            }
             Err(err) => {
                 if self
                     .store
@@ -15493,8 +15672,11 @@ mod tests {
             let mut due = items
                 .values()
                 .filter(|item| {
+                    let pending_due = matches!(item.status.as_str(), "pending" | "failed")
+                        || (item.event_type == WORKSPACE_AGENT_MENTION_EVENT
+                            && item.status == "pending_runtime");
                     item.attempt_count < item.max_attempts
-                        && ((matches!(item.status.as_str(), "pending" | "failed")
+                        && ((pending_due
                             && item.next_attempt_at.map(|due| due <= now).unwrap_or(true))
                             || (item.status == "processing"
                                 && item
@@ -15592,6 +15774,35 @@ mod tests {
             item.last_error = error_message.map(str::to_string);
             item.next_attempt_at = None;
             item.attempt_count = (item.attempt_count - 1).max(0);
+            item.updated_at = Some(now);
+            Ok(true)
+        }
+
+        async fn park_processing(
+            &self,
+            outbox_id: &str,
+            status: &str,
+            metadata_patch: &Value,
+            lease_owner: Option<&str>,
+            now: DateTime<Utc>,
+        ) -> CoreResult<bool> {
+            let mut items = self.items.lock().unwrap();
+            let Some(item) = items.get_mut(outbox_id) else {
+                return Ok(false);
+            };
+            if item.status != "processing" || item.lease_owner.as_deref() != lease_owner {
+                return Ok(false);
+            }
+            item.status = status.to_string();
+            item.lease_owner = None;
+            item.lease_expires_at = None;
+            item.last_error = None;
+            item.next_attempt_at = None;
+            let mut metadata = object_or_empty(item.metadata_json.clone());
+            for (key, value) in object_or_empty(metadata_patch.clone()) {
+                metadata.insert(key, value);
+            }
+            item.metadata_json = Value::Object(metadata);
             item.updated_at = Some(now);
             Ok(true)
         }
@@ -15882,7 +16093,7 @@ mod tests {
         participant_agents_json: Vec<String>,
         focused_agent_id: String,
         workspace_id: String,
-        linked_workspace_task_id: String,
+        linked_workspace_task_id: Option<String>,
         updated_at: DateTime<Utc>,
     }
 
@@ -16457,7 +16668,8 @@ mod tests {
             let mut conversations = self.conversations.lock().unwrap();
             if let Some(existing) = conversations.get(conversation_id) {
                 if existing.workspace_id != workspace_id
-                    || existing.linked_workspace_task_id != linked_workspace_task_id
+                    || existing.linked_workspace_task_id.as_deref()
+                        != Some(linked_workspace_task_id)
                 {
                     return Err(CoreError::Storage(format!(
                         "worker launch conversation {conversation_id} is linked to another workspace task"
@@ -16477,7 +16689,55 @@ mod tests {
                     participant_agents_json: participant_agents_json.to_vec(),
                     focused_agent_id: focused_agent_id.to_string(),
                     workspace_id: workspace_id.to_string(),
-                    linked_workspace_task_id: linked_workspace_task_id.to_string(),
+                    linked_workspace_task_id: Some(linked_workspace_task_id.to_string()),
+                    updated_at: now,
+                },
+            );
+            Ok(())
+        }
+
+        async fn ensure_workspace_agent_conversation(
+            &self,
+            conversation_id: &str,
+            project_id: &str,
+            tenant_id: &str,
+            user_id: &str,
+            title: &str,
+            agent_config_json: &Value,
+            metadata_json: &Value,
+            workspace_id: &str,
+            linked_workspace_task_id: Option<&str>,
+            now: DateTime<Utc>,
+        ) -> CoreResult<()> {
+            let mut conversations = self.conversations.lock().unwrap();
+            if let Some(existing) = conversations.get_mut(conversation_id) {
+                if existing.workspace_id != workspace_id {
+                    return Err(CoreError::Storage(format!(
+                        "workspace agent conversation {conversation_id} is linked to another workspace"
+                    )));
+                }
+                existing.agent_config_json = agent_config_json.clone();
+                existing.metadata_json = metadata_json.clone();
+                if let Some(task_id) = linked_workspace_task_id {
+                    existing.linked_workspace_task_id = Some(task_id.to_string());
+                }
+                existing.updated_at = now;
+                return Ok(());
+            }
+            conversations.insert(
+                conversation_id.to_string(),
+                FakeWorkerConversationRecord {
+                    id: conversation_id.to_string(),
+                    project_id: project_id.to_string(),
+                    tenant_id: tenant_id.to_string(),
+                    user_id: user_id.to_string(),
+                    title: title.to_string(),
+                    agent_config_json: agent_config_json.clone(),
+                    metadata_json: metadata_json.clone(),
+                    participant_agents_json: Vec::new(),
+                    focused_agent_id: String::new(),
+                    workspace_id: workspace_id.to_string(),
+                    linked_workspace_task_id: linked_workspace_task_id.map(ToOwned::to_owned),
                     updated_at: now,
                 },
             );
@@ -17430,7 +17690,8 @@ esac
         let handlers = workspace_plan_outbox_handlers(store as Arc<dyn WorkspacePlanDispatchStore>);
 
         assert!(missing_required_handler_event_types(&handlers).is_empty());
-        assert_eq!(handlers.len(), required_handler_event_types().len());
+        assert!(handlers.contains_key(WORKSPACE_AGENT_MENTION_EVENT));
+        assert_eq!(handlers.len(), required_handler_event_types().len() + 1);
     }
 
     #[tokio::test]
@@ -18513,7 +18774,10 @@ esac
         );
         assert_eq!(conversation.participant_agents_json, vec!["agent-worker"]);
         assert_eq!(conversation.focused_agent_id, "agent-worker");
-        assert_eq!(conversation.linked_workspace_task_id, "task-test");
+        assert_eq!(
+            conversation.linked_workspace_task_id.as_deref(),
+            Some("task-test")
+        );
         let node = store.node("node-test");
         assert_eq!(node.execution, "running");
         assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-test"));
@@ -24137,6 +24401,216 @@ steps:
         assert_eq!(item.status, "pending");
         assert_eq!(item.last_error.as_deref(), Some("shutdown"));
         assert_eq!(item.attempt_count, 0);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_worker_binds_workspace_agent_mention_and_parks_runtime() {
+        let outbox_store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        let dispatch_store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut item = outbox("job-mention", WORKSPACE_AGENT_MENTION_EVENT);
+        item.plan_id = None;
+        item.status = "pending_runtime".to_string();
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "tenant_id": "tenant-test",
+            "project_id": "project-test",
+            "sender_user_id": "user-sender",
+            "target_agent_id": "agent-builder",
+            "agent_name": "Builder",
+            "conversation_id": "conversation-mention",
+            "message_id": "message-1",
+            "source": "workspace_chat_mention",
+            "workspace_llm_stage": "chat_mention"
+        });
+        outbox_store.insert(item);
+        let handlers = workspace_plan_outbox_handlers(
+            Arc::clone(&dispatch_store) as Arc<dyn WorkspacePlanDispatchStore>
+        );
+        let worker = worker(Arc::clone(&outbox_store), handlers);
+
+        let report = worker.run_once().await.unwrap();
+
+        assert_eq!(
+            report,
+            WorkspacePlanOutboxRunReport {
+                claimed: 1,
+                parked: 1,
+                ..Default::default()
+            }
+        );
+        let item = outbox_store.get("job-mention");
+        assert_eq!(item.status, WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS);
+        assert!(item.processed_at.is_none());
+        assert!(item.lease_owner.is_none());
+        assert!(item.lease_expires_at.is_none());
+        assert_eq!(item.attempt_count, 1);
+        assert_eq!(
+            item.metadata_json
+                .get("runtime_binding")
+                .and_then(Value::as_str),
+            Some("workspace_agent_mention_conversation")
+        );
+        assert_eq!(
+            item.metadata_json
+                .get("conversation_id")
+                .and_then(Value::as_str),
+            Some("conversation-mention")
+        );
+
+        let conversation = dispatch_store.conversation("conversation-mention");
+        assert_eq!(conversation.project_id, "project-test");
+        assert_eq!(conversation.tenant_id, "tenant-test");
+        assert_eq!(conversation.user_id, "user-sender");
+        assert_eq!(conversation.title, "Workspace Chat - Builder");
+        assert_eq!(
+            conversation
+                .agent_config_json
+                .get("selected_agent_id")
+                .and_then(Value::as_str),
+            Some("agent-builder")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("workspace_id")
+                .and_then(Value::as_str),
+            Some("workspace-test")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("agent_id")
+                .and_then(Value::as_str),
+            Some("agent-builder")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("source")
+                .and_then(Value::as_str),
+            Some("workspace_chat_mention")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("workspace_llm_stage")
+                .and_then(Value::as_str),
+            Some("chat_mention")
+        );
+        assert_eq!(dispatch_store.conversation_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn workspace_agent_mention_handler_patches_existing_conversation_linkage() {
+        let dispatch_store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        dispatch_store
+            .ensure_workspace_agent_conversation(
+                "conversation-mention",
+                "project-test",
+                "tenant-test",
+                "user-original",
+                "Workspace Chat - Old Agent",
+                &json!({ "selected_agent_id": "agent-old" }),
+                &json!({
+                    "workspace_id": "workspace-test",
+                    "agent_id": "agent-old",
+                    "created_at": "2026-01-02T03:04:05Z"
+                }),
+                "workspace-test",
+                None,
+                Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            )
+            .await
+            .unwrap();
+        let handler = WorkspaceAgentMentionBindingHandler::new(
+            Arc::clone(&dispatch_store) as Arc<dyn WorkspacePlanDispatchStore>
+        );
+        let mut item = outbox("job-mention", WORKSPACE_AGENT_MENTION_EVENT);
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "tenant_id": "tenant-test",
+            "project_id": "project-test",
+            "sender_user_id": "user-sender",
+            "target_agent_id": "agent-builder",
+            "agent_display_name": "Builder",
+            "conversation_id": "conversation-mention",
+            "linked_workspace_task_id": "root-task",
+            "source": "workspace_leader_mention",
+            "workspace_llm_stage": "leader_mention"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert!(matches!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Park { ref status, .. }
+                if status == WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS
+        ));
+        let conversation = dispatch_store.conversation("conversation-mention");
+        assert_eq!(conversation.title, "Workspace Chat - Old Agent");
+        assert_eq!(
+            conversation
+                .agent_config_json
+                .get("selected_agent_id")
+                .and_then(Value::as_str),
+            Some("agent-builder")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("agent_id")
+                .and_then(Value::as_str),
+            Some("agent-builder")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("workspace_task_id")
+                .and_then(Value::as_str),
+            Some("root-task")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("linked_workspace_task_id")
+                .and_then(Value::as_str),
+            Some("root-task")
+        );
+        assert_eq!(
+            conversation
+                .metadata_json
+                .get("source")
+                .and_then(Value::as_str),
+            Some("workspace_leader_mention")
+        );
+        assert_eq!(
+            conversation.linked_workspace_task_id.as_deref(),
+            Some("root-task")
+        );
+        assert_eq!(dispatch_store.conversation_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_worker_does_not_claim_unhandled_pending_runtime_events() {
+        let store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        let mut item = outbox("job-future-runtime", "future_runtime_event");
+        item.status = "pending_runtime".to_string();
+        store.insert(item);
+        let worker = worker(
+            Arc::clone(&store),
+            HashMap::from([(
+                "future_runtime_event".to_string(),
+                handler(HandlerBehavior::Complete),
+            )]),
+        );
+
+        let report = worker.run_once().await.unwrap();
+
+        assert_eq!(report, WorkspacePlanOutboxRunReport::default());
+        let item = store.get("job-future-runtime");
+        assert_eq!(item.status, "pending_runtime");
+        assert_eq!(item.attempt_count, 0);
+        assert!(item.lease_owner.is_none());
     }
 
     #[tokio::test]
