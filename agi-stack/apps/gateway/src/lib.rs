@@ -583,9 +583,7 @@ fn single_child_path(base: &str, path: &str) -> bool {
 }
 
 fn single_child_segment<'a>(base: &str, path: &'a str) -> Option<&'a str> {
-    let Some(rest) = path.strip_prefix(&format!("{base}/")) else {
-        return None;
-    };
+    let rest = path.strip_prefix(&format!("{base}/"))?;
     if !rest.is_empty() && !rest.contains('/') {
         Some(rest)
     } else {

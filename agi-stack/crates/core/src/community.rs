@@ -561,7 +561,7 @@ mod tests {
         let comms = detect_communities(&nodes, &[], 2);
         assert!(comms.is_empty());
         // Modularity of any partition on an edgeless graph is 0.
-        assert_eq!(modularity(&nodes, &[], &[nodes.clone()]), 0.0);
+        assert_eq!(modularity(&nodes, &[], std::slice::from_ref(&nodes)), 0.0);
     }
 
     #[test]
@@ -580,7 +580,7 @@ mod tests {
         let nodes: Vec<String> = ["a", "b"].iter().map(|s| s.to_string()).collect();
         let edges = vec![e("a", "b"), e("a", "b")];
         // Single community of the pair.
-        let q = modularity(&nodes, &edges, &[nodes.clone()]);
+        let q = modularity(&nodes, &edges, std::slice::from_ref(&nodes));
         // in_c = 2*2.0 = 4, tot = 4, m2 = 4 => 4/4 - (4/4)^2 = 1 - 1 = 0.
         assert!((q - 0.0).abs() < 1e-12);
         let comms = detect_communities(&nodes, &edges, 2);

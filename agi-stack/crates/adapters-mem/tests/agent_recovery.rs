@@ -145,12 +145,12 @@ fn resume_reuses_completed_tool_call_without_reinvoking() {
 #[test]
 fn round_budget_is_a_circuit_breaker() {
     // Script always calls a tool, never finishes.
-    let script = vec![AgentAction::CallTool {
+    let action = AgentAction::CallTool {
         tool: "noop".into(),
         input_json: "{}".into(),
-    }];
+    };
     // Pad the script so every round within the budget calls the tool again.
-    let script: Vec<AgentAction> = std::iter::repeat(script[0].clone()).take(10).collect();
+    let script: Vec<AgentAction> = std::iter::repeat_n(action, 10).collect();
 
     let tools = Arc::new(CountingToolHost::new(&["noop"]));
     let checkpoints = Arc::new(InMemoryCheckpointStore::new());

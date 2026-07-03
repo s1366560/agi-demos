@@ -138,8 +138,7 @@ fn main() {
             Some(b) => format!("{}(实测)", human_size(b)),
             None => "640 KB(评估值,见 04 §2;未构建则跑 `cargo build -p agistack-server --release`)"
                 .into(),
-        }
-        .into(),
+        },
         "✅",
     ));
     rows.push((
@@ -148,8 +147,7 @@ fn main() {
         match wasm_pkg {
             Some(b) => format!("{}(实测;gzip 更小)", human_size(b)),
             None => "124 KB raw / 60 KB gzip(见 04 #16;未构建 pkg)".into(),
-        }
-        .into(),
+        },
         "✅",
     ));
     rows.push((
