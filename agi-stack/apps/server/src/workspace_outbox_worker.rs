@@ -349,15 +349,20 @@ pub(crate) use pipeline_run::{
 };
 
 mod worker_launch;
+pub(crate) use worker_launch::WorkerLaunchAdmissionHandler;
 #[cfg(test)]
 use worker_launch::WorkerStreamTerminalPersistence;
 #[cfg(test)]
 pub(crate) use worker_launch::{worker_conversation_id, WorkerLaunchAdmissionConfig};
-pub(crate) use worker_launch::{
-    worker_launch_event_stream_source, WorkerLaunchAdmissionHandler, WorkerLaunchEventStream,
-    WorkerLaunchRuntimeStateStore,
+use worker_launch::{worker_launch_outbox, WorkerReportPayload};
+
+mod worker_launch_runtime;
+use worker_launch_runtime::NoopWorkerLaunchEventStream;
+pub(crate) use worker_launch_runtime::{
+    worker_launch_event_stream_source, WorkerLaunchEventStream, WorkerLaunchRuntimeStateStore,
 };
-use worker_launch::{worker_launch_outbox, NoopWorkerLaunchEventStream, WorkerReportPayload};
+
+mod worker_launch_worktree;
 
 #[cfg(test)]
 pub(crate) fn workspace_plan_outbox_handlers(
