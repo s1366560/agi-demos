@@ -1,10 +1,10 @@
 //! P5 skill-store and versioning foundation.
 //!
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
-//! router: tenant/project skill CRUD, content updates, version snapshots, and
-//! rollback/import/export. Filesystem system skills, package zip import,
-//! publish/clone, and evolution jobs remain Python-owned until their full
-//! semantics are migrated.
+//! router: tenant/project skill CRUD, content updates, version snapshots,
+//! rollback/import/export, and the skill-evolution strategy config. Filesystem
+//! system skills, package zip import, and evolution jobs remain Python-owned
+//! until their full semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
@@ -31,6 +31,8 @@ use crate::auth::Identity;
 use crate::AppState;
 
 pub(crate) type SharedSkills = Arc<dyn SkillService>;
+
+const SKILL_EVOLUTION_PLUGIN: &str = "skill_evolution";
 
 #[async_trait]
 pub(crate) trait SkillService: Send + Sync {
@@ -130,6 +132,19 @@ pub(crate) trait SkillService: Send + Sync {
         tenant_id: Option<&str>,
         skill_id: &str,
     ) -> Result<SkillPackageView, SkillApiError>;
+
+    async fn get_evolution_config(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<SkillEvolutionConfigView, SkillApiError>;
+
+    async fn update_evolution_config(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        body: SkillEvolutionConfigUpdatePayload,
+    ) -> Result<SkillEvolutionConfigView, SkillApiError>;
 }
 
 #[derive(Debug)]
@@ -160,6 +175,10 @@ impl SkillApiError {
 
     fn conflict(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::CONFLICT, detail)
+    }
+
+    fn unprocessable(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
     }
 
     fn internal(detail: impl std::fmt::Display) -> Self {
@@ -243,6 +262,26 @@ pub(crate) struct SkillImportPayload {
     overwrite: bool,
     #[serde(default)]
     change_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct SkillEvolutionConfigUpdatePayload {
+    #[serde(default)]
+    enabled: Option<bool>,
+    #[serde(default)]
+    min_sessions_per_skill: Option<i64>,
+    #[serde(default)]
+    scoring_min_sessions_per_skill: Option<i64>,
+    #[serde(default)]
+    min_avg_score: Option<f64>,
+    #[serde(default)]
+    max_sessions_per_batch: Option<i64>,
+    #[serde(default)]
+    evolution_interval_minutes: Option<i64>,
+    #[serde(default)]
+    publish_mode: Option<String>,
+    #[serde(default)]
+    auto_apply: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -439,6 +478,33 @@ pub(crate) struct SkillLifecycleView {
     skill: SkillView,
     version_number: Option<i32>,
     version_label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionConfigView {
+    enabled: bool,
+    min_sessions_per_skill: i64,
+    scoring_min_sessions_per_skill: i64,
+    min_avg_score: f64,
+    max_sessions_per_batch: i64,
+    evolution_interval_minutes: i64,
+    publish_mode: String,
+    auto_apply: bool,
+}
+
+impl From<SkillEvolutionConfig> for SkillEvolutionConfigView {
+    fn from(config: SkillEvolutionConfig) -> Self {
+        Self {
+            enabled: config.enabled,
+            min_sessions_per_skill: config.min_sessions_per_skill,
+            scoring_min_sessions_per_skill: config.scoring_min_sessions_per_skill,
+            min_avg_score: config.min_avg_score,
+            max_sessions_per_batch: config.max_sessions_per_batch,
+            evolution_interval_minutes: config.evolution_interval_minutes,
+            publish_mode: config.publish_mode.as_str().to_string(),
+            auto_apply: config.auto_apply,
+        }
+    }
 }
 
 pub(crate) struct PgSkillService {
@@ -995,6 +1061,41 @@ impl SkillService for PgSkillService {
             .map_err(SkillApiError::internal)?;
         Ok(skill_package_view(skill, version))
     }
+
+    async fn get_evolution_config(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<SkillEvolutionConfigView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        let config = self.load_evolution_config(&tenant_id).await?;
+        Ok(config.into())
+    }
+
+    async fn update_evolution_config(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        body: SkillEvolutionConfigUpdatePayload,
+    ) -> Result<SkillEvolutionConfigView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        self.ensure_write_access(user_id, &tenant_id, "tenant", None)
+            .await?;
+        body.validate()?;
+        let config = self.load_evolution_config(&tenant_id).await?;
+        let next_config = config.with_overrides(&body)?;
+        let view = SkillEvolutionConfigView::from(next_config);
+        self.repo
+            .upsert_plugin_config(
+                &generate_uuid_v4(),
+                &tenant_id,
+                SKILL_EVOLUTION_PLUGIN,
+                &serde_json::to_value(&view).map_err(SkillApiError::internal)?,
+            )
+            .await
+            .map_err(SkillApiError::internal)?;
+        Ok(view)
+    }
 }
 
 impl PgSkillService {
@@ -1114,6 +1215,22 @@ impl PgSkillService {
         .await?;
         Ok(skill)
     }
+
+    async fn load_evolution_config(
+        &self,
+        tenant_id: &str,
+    ) -> Result<SkillEvolutionConfig, SkillApiError> {
+        let base = SkillEvolutionConfig::from_env();
+        let Some(row) = self
+            .repo
+            .get_plugin_config(tenant_id, SKILL_EVOLUTION_PLUGIN)
+            .await
+            .map_err(SkillApiError::internal)?
+        else {
+            return Ok(base);
+        };
+        Ok(base.with_stored_overrides(&row.config))
+    }
 }
 
 #[derive(Default)]
@@ -1121,6 +1238,7 @@ pub(crate) struct DevSkillService {
     tenant_id: String,
     skills: Mutex<HashMap<String, SkillRecord>>,
     versions: Mutex<HashMap<String, Vec<SkillVersionRecord>>>,
+    evolution_configs: Mutex<HashMap<String, SkillEvolutionConfig>>,
 }
 
 impl DevSkillService {
@@ -1129,6 +1247,7 @@ impl DevSkillService {
             tenant_id: tenant_id.into(),
             skills: Mutex::new(HashMap::new()),
             versions: Mutex::new(HashMap::new()),
+            evolution_configs: Mutex::new(HashMap::new()),
         }
     }
 
@@ -1157,6 +1276,16 @@ impl DevSkillService {
             .map_err(SkillApiError::internal)?
             .insert(record.id.clone(), record.clone());
         Ok(record)
+    }
+
+    fn evolution_config_for(&self, tenant_id: &str) -> Result<SkillEvolutionConfig, SkillApiError> {
+        Ok(self
+            .evolution_configs
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .get(tenant_id)
+            .cloned()
+            .unwrap_or_else(SkillEvolutionConfig::from_env))
     }
 }
 
@@ -1678,6 +1807,33 @@ impl SkillService for DevSkillService {
             });
         Ok(skill_package_view(skill, version))
     }
+
+    async fn get_evolution_config(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<SkillEvolutionConfigView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        Ok(self.evolution_config_for(&tenant_id)?.into())
+    }
+
+    async fn update_evolution_config(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+        body: SkillEvolutionConfigUpdatePayload,
+    ) -> Result<SkillEvolutionConfigView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        body.validate()?;
+        let next_config = self
+            .evolution_config_for(&tenant_id)?
+            .with_overrides(&body)?;
+        self.evolution_configs
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .insert(tenant_id, next_config.clone());
+        Ok(next_config.into())
+    }
 }
 
 async fn create_skill(
@@ -1871,12 +2027,41 @@ async fn export_skill_package(
     ))
 }
 
+async fn get_skill_evolution_config(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+) -> Result<Json<SkillEvolutionConfigView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .get_evolution_config(&identity.user_id, q.tenant_id.as_deref())
+            .await?,
+    ))
+}
+
+async fn update_skill_evolution_config(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    Json(body): Json<SkillEvolutionConfigUpdatePayload>,
+) -> Result<Json<SkillEvolutionConfigView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .update_evolution_config(&identity.user_id, q.tenant_id.as_deref(), body)
+            .await?,
+    ))
+}
+
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/skills/", get(list_skills).post(create_skill))
         .route("/api/v1/skills", get(list_skills).post(create_skill))
         .route("/api/v1/skills/import", post(import_skill_package))
         .route("/api/v1/skills/system/list", get(list_system_skills))
+        .route(
+            "/api/v1/skills/evolution/config",
+            get(get_skill_evolution_config).put(update_skill_evolution_config),
+        )
         .route(
             "/api/v1/skills/:skill_id/content",
             get(get_skill_content).put(update_skill_content),
@@ -1985,6 +2170,212 @@ fn validate_change_summary(summary: Option<&str>) -> Result<(), SkillApiError> {
 
 fn import_change_summary(summary: Option<&str>, version_number: i32) -> Option<String> {
     Some(present(summary).map_or_else(|| format!("Version {version_number}"), ToString::to_string))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkillEvolutionPublishMode {
+    Review,
+    Direct,
+}
+
+impl SkillEvolutionPublishMode {
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "review" => Some(Self::Review),
+            "direct" => Some(Self::Direct),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Review => "review",
+            Self::Direct => "direct",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SkillEvolutionConfig {
+    enabled: bool,
+    min_sessions_per_skill: i64,
+    scoring_min_sessions_per_skill: i64,
+    min_avg_score: f64,
+    max_sessions_per_batch: i64,
+    evolution_interval_minutes: i64,
+    publish_mode: SkillEvolutionPublishMode,
+    auto_apply: bool,
+}
+
+impl SkillEvolutionConfig {
+    fn from_env() -> Self {
+        Self {
+            enabled: env_bool("SKILL_EVOLUTION_ENABLED", true),
+            min_sessions_per_skill: env_i64("SKILL_EVOLUTION_MIN_SESSIONS", 5),
+            scoring_min_sessions_per_skill: env_i64("SKILL_EVOLUTION_SCORING_MIN_SESSIONS", 5),
+            min_avg_score: env_f64("SKILL_EVOLUTION_MIN_AVG_SCORE", 0.6),
+            max_sessions_per_batch: env_i64("SKILL_EVOLUTION_MAX_SESSIONS_PER_BATCH", 50),
+            evolution_interval_minutes: env_i64("SKILL_EVOLUTION_INTERVAL_MINUTES", 60),
+            publish_mode: std::env::var("SKILL_EVOLUTION_PUBLISH_MODE")
+                .ok()
+                .and_then(|value| SkillEvolutionPublishMode::parse(value.as_str()))
+                .unwrap_or(SkillEvolutionPublishMode::Review),
+            auto_apply: env_bool("SKILL_EVOLUTION_AUTO_APPLY", false),
+        }
+    }
+
+    fn with_overrides(
+        mut self,
+        body: &SkillEvolutionConfigUpdatePayload,
+    ) -> Result<Self, SkillApiError> {
+        if let Some(value) = body.enabled {
+            self.enabled = value;
+        }
+        if let Some(value) = body.min_sessions_per_skill {
+            self.min_sessions_per_skill = value;
+        }
+        if let Some(value) = body.scoring_min_sessions_per_skill {
+            self.scoring_min_sessions_per_skill = value;
+        }
+        if let Some(value) = body.min_avg_score {
+            self.min_avg_score = value;
+        }
+        if let Some(value) = body.max_sessions_per_batch {
+            self.max_sessions_per_batch = value;
+        }
+        if let Some(value) = body.evolution_interval_minutes {
+            self.evolution_interval_minutes = value;
+        }
+        if let Some(mode) = body.publish_mode.as_deref() {
+            self.publish_mode = SkillEvolutionPublishMode::parse(mode).ok_or_else(|| {
+                SkillApiError::bad_request("Invalid skill evolution publish mode")
+            })?;
+        }
+        if let Some(value) = body.auto_apply {
+            self.auto_apply = value;
+        }
+        Ok(self)
+    }
+
+    fn with_stored_overrides(mut self, value: &Value) -> Self {
+        let Value::Object(map) = value else {
+            return self;
+        };
+        if let Some(value) = stored_bool(map, "enabled") {
+            self.enabled = value;
+        }
+        if let Some(value) = stored_i64(map, "min_sessions_per_skill") {
+            self.min_sessions_per_skill = value.max(1);
+        }
+        if let Some(value) = stored_i64(map, "scoring_min_sessions_per_skill") {
+            self.scoring_min_sessions_per_skill = value.max(1);
+        }
+        if let Some(value) = stored_f64(map, "min_avg_score") {
+            self.min_avg_score = value.clamp(0.0, 1.0);
+        }
+        if let Some(value) = stored_i64(map, "max_sessions_per_batch") {
+            self.max_sessions_per_batch = value.max(1);
+        }
+        if let Some(value) = stored_i64(map, "evolution_interval_minutes") {
+            self.evolution_interval_minutes = value.max(1);
+        }
+        if let Some(mode) = map
+            .get("publish_mode")
+            .and_then(Value::as_str)
+            .and_then(SkillEvolutionPublishMode::parse)
+        {
+            self.publish_mode = mode;
+        }
+        if let Some(value) = stored_bool(map, "auto_apply") {
+            self.auto_apply = value;
+        }
+        self
+    }
+}
+
+impl SkillEvolutionConfigUpdatePayload {
+    fn validate(&self) -> Result<(), SkillApiError> {
+        validate_i64_bounds(self.min_sessions_per_skill, 1, 100)?;
+        validate_i64_bounds(self.scoring_min_sessions_per_skill, 1, 100)?;
+        validate_i64_bounds(self.max_sessions_per_batch, 1, 100)?;
+        validate_i64_bounds(self.evolution_interval_minutes, 1, 10_080)?;
+        if self
+            .min_avg_score
+            .is_some_and(|value| !(0.0..=1.0).contains(&value))
+        {
+            return Err(SkillApiError::unprocessable(
+                "Invalid skill evolution config",
+            ));
+        }
+        if self
+            .publish_mode
+            .as_deref()
+            .is_some_and(|mode| SkillEvolutionPublishMode::parse(mode).is_none())
+        {
+            return Err(SkillApiError::bad_request(
+                "Invalid skill evolution publish mode",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn validate_i64_bounds(value: Option<i64>, min: i64, max: i64) -> Result<(), SkillApiError> {
+    if value.is_some_and(|value| value < min || value > max) {
+        return Err(SkillApiError::unprocessable(
+            "Invalid skill evolution config",
+        ));
+    }
+    Ok(())
+}
+
+fn env_bool(name: &str, default: bool) -> bool {
+    std::env::var(name)
+        .map(|value| value.eq_ignore_ascii_case("true"))
+        .unwrap_or(default)
+}
+
+fn env_i64(name: &str, default: i64) -> i64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(default)
+}
+
+fn env_f64(name: &str, default: f64) -> f64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(default)
+}
+
+fn stored_bool(map: &Map<String, Value>, key: &str) -> Option<bool> {
+    map.get(key).and_then(|value| match value {
+        Value::Bool(value) => Some(*value),
+        Value::Number(value) => value.as_i64().map(|value| value != 0),
+        Value::String(value) => Some(value.eq_ignore_ascii_case("true")),
+        _ => None,
+    })
+}
+
+fn stored_i64(map: &Map<String, Value>, key: &str) -> Option<i64> {
+    map.get(key).and_then(|value| match value {
+        Value::Number(value) => value
+            .as_i64()
+            .or_else(|| value.as_f64().map(|value| value as i64)),
+        Value::String(value) => value.parse::<i64>().ok(),
+        Value::Bool(value) => Some(i64::from(u8::from(*value))),
+        _ => None,
+    })
+}
+
+fn stored_f64(map: &Map<String, Value>, key: &str) -> Option<f64> {
+    map.get(key).and_then(|value| match value {
+        Value::Number(value) => value.as_f64(),
+        Value::String(value) => value.parse::<f64>().ok(),
+        Value::Bool(value) => Some(f64::from(u8::from(*value))),
+        _ => None,
+    })
 }
 
 #[derive(Default)]
@@ -2464,6 +2855,44 @@ Use when managing Agent Skills packages.
         agistack_parity::assert_parity(&golden, &actual);
     }
 
+    #[test]
+    fn skill_evolution_config_shapes_match_goldens() {
+        let default_actual =
+            serde_json::to_value(SkillEvolutionConfigView::from(SkillEvolutionConfig {
+                enabled: true,
+                min_sessions_per_skill: 5,
+                scoring_min_sessions_per_skill: 5,
+                min_avg_score: 0.6,
+                max_sessions_per_batch: 50,
+                evolution_interval_minutes: 60,
+                publish_mode: SkillEvolutionPublishMode::Review,
+                auto_apply: false,
+            }))
+            .unwrap();
+        let default_golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/skill_evolution_config.json"))
+                .unwrap();
+        agistack_parity::assert_parity(&default_golden, &default_actual);
+
+        let updated_actual =
+            serde_json::to_value(SkillEvolutionConfigView::from(SkillEvolutionConfig {
+                enabled: false,
+                min_sessions_per_skill: 7,
+                scoring_min_sessions_per_skill: 8,
+                min_avg_score: 0.75,
+                max_sessions_per_batch: 25,
+                evolution_interval_minutes: 120,
+                publish_mode: SkillEvolutionPublishMode::Direct,
+                auto_apply: true,
+            }))
+            .unwrap();
+        let updated_golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/skill_evolution_config_updated.json"
+        ))
+        .unwrap();
+        agistack_parity::assert_parity(&updated_golden, &updated_actual);
+    }
+
     #[tokio::test]
     async fn dev_service_content_update_creates_version_and_rollback() {
         let service = DevSkillService::new("tenant-1");
@@ -2613,6 +3042,58 @@ Use when managing Agent Skills packages.
             exported.resource_files,
             json!({"references/README.md":"details"})
         );
+    }
+
+    #[tokio::test]
+    async fn dev_service_evolution_config_roundtrips() {
+        let service = DevSkillService::new("tenant-1");
+        let updated = service
+            .update_evolution_config(
+                "u1",
+                Some("tenant-1"),
+                SkillEvolutionConfigUpdatePayload {
+                    enabled: Some(false),
+                    min_sessions_per_skill: Some(7),
+                    scoring_min_sessions_per_skill: Some(8),
+                    min_avg_score: Some(0.75),
+                    max_sessions_per_batch: Some(25),
+                    evolution_interval_minutes: Some(120),
+                    publish_mode: Some("direct".to_string()),
+                    auto_apply: Some(true),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!updated.enabled);
+        assert_eq!(updated.publish_mode, "direct");
+        assert_eq!(updated.evolution_interval_minutes, 120);
+
+        let fetched = service
+            .get_evolution_config("u1", Some("tenant-1"))
+            .await
+            .unwrap();
+        assert_eq!(fetched.publish_mode, "direct");
+        assert_eq!(fetched.min_sessions_per_skill, 7);
+    }
+
+    #[tokio::test]
+    async fn dev_service_evolution_config_rejects_invalid_publish_mode() {
+        let service = DevSkillService::new("tenant-1");
+        let err = service
+            .update_evolution_config(
+                "u1",
+                Some("tenant-1"),
+                SkillEvolutionConfigUpdatePayload {
+                    publish_mode: Some("invalid".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("invalid publish mode should fail");
+
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(err.detail, "Invalid skill evolution publish mode");
     }
 
     #[test]

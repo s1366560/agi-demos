@@ -57,7 +57,8 @@ pub use project_repo::{
 pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
 pub use share_repo::{NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord};
 pub use skill_repo::{
-    PgSkillRepository, SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord,
+    PgSkillRepository, PluginConfigRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
+    SkillVersionRecord,
 };
 pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord, TenantUpdatePatch};
 pub use tenant_skill_config_repo::{PgTenantSkillConfigRepository, TenantSkillConfigRecord};

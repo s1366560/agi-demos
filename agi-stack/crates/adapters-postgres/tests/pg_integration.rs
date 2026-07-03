@@ -1316,6 +1316,12 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             created_at timestamptz DEFAULT now(), updated_at timestamptz)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_skill_configs_tenant_skill \
             ON tenant_skill_configs (tenant_id, system_skill_name)",
+        "CREATE TABLE IF NOT EXISTS plugin_configs (\
+            id text PRIMARY KEY, tenant_id text NOT NULL, plugin_name varchar(255) NOT NULL, \
+            config json NOT NULL DEFAULT '{}'::json, created_at timestamptz DEFAULT now(), \
+            updated_at timestamptz)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_plugin_configs_tenant_plugin \
+            ON plugin_configs (tenant_id, plugin_name)",
         "CREATE TABLE IF NOT EXISTS workspaces (\
             id text PRIMARY KEY, tenant_id text NOT NULL, project_id text NOT NULL, \
             name varchar(255) NOT NULL, description text, created_by text NOT NULL, \
@@ -2155,6 +2161,83 @@ async fn skill_repository_roundtrips_against_shared_schema() {
         .await
         .unwrap();
     assert!(repo.get_skill("skill_pg_1").await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn skill_plugin_config_roundtrips_against_shared_schema() {
+    let Some(pool) = pool_or_skip("skill_plugin_config_roundtrips_against_shared_schema").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    for sql in [
+        "DELETE FROM plugin_configs WHERE tenant_id = 't_skill_plugin_cfg'",
+        "DELETE FROM tenants WHERE id = 't_skill_plugin_cfg'",
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+    sqlx::query("INSERT INTO tenants (id, name) VALUES ('t_skill_plugin_cfg', 'Skill Plugin')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let repo = PgSkillRepository::new(pool.clone());
+    assert!(repo
+        .get_plugin_config("t_skill_plugin_cfg", "skill_evolution")
+        .await
+        .unwrap()
+        .is_none());
+
+    let created = repo
+        .upsert_plugin_config(
+            "plugin_cfg_1",
+            "t_skill_plugin_cfg",
+            "skill_evolution",
+            &json!({
+                "enabled": true,
+                "min_sessions_per_skill": 5,
+                "publish_mode": "review"
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.id, "plugin_cfg_1");
+    assert_eq!(created.config["publish_mode"], "review");
+
+    let fetched = repo
+        .get_plugin_config("t_skill_plugin_cfg", "skill_evolution")
+        .await
+        .unwrap()
+        .expect("plugin config present");
+    assert_eq!(fetched.tenant_id, "t_skill_plugin_cfg");
+    assert_eq!(fetched.config["min_sessions_per_skill"], 5);
+
+    let updated = repo
+        .upsert_plugin_config(
+            "plugin_cfg_new_id",
+            "t_skill_plugin_cfg",
+            "skill_evolution",
+            &json!({
+                "enabled": false,
+                "min_sessions_per_skill": 7,
+                "publish_mode": "direct"
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.id, "plugin_cfg_1");
+    assert_eq!(updated.config["enabled"], false);
+    assert_eq!(updated.config["publish_mode"], "direct");
+
+    sqlx::query("DELETE FROM plugin_configs WHERE tenant_id = 't_skill_plugin_cfg'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tenants WHERE id = 't_skill_plugin_cfg'")
+        .execute(&pool)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

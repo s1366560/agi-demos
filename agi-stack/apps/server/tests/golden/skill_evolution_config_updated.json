@@ -1,0 +1,10 @@
+{
+  "enabled": false,
+  "min_sessions_per_skill": 7,
+  "scoring_min_sessions_per_skill": 8,
+  "min_avg_score": 0.75,
+  "max_sessions_per_batch": 25,
+  "evolution_interval_minutes": 120,
+  "publish_mode": "direct",
+  "auto_apply": true
+}

@@ -1,4 +1,5 @@
-//! Repository over Python-owned `skills` and `skill_versions`.
+//! Repository over Python-owned `skills`, `skill_versions`, and skill-adjacent
+//! plugin config rows.
 //!
 //! This is the P5 skill-store bridge for the strangler migration: Rust reads and
 //! writes the same database rows as the Python skill router, while keeping sqlx
@@ -21,6 +22,8 @@ const SKILL_COLS: &str = "id, tenant_id, project_id, name, description, tools, s
 
 const VERSION_COLS: &str = "id, skill_id, version_number, version_label, skill_md_content, \
     resource_files, change_summary, created_by, created_at";
+
+const PLUGIN_CONFIG_COLS: &str = "id, tenant_id, plugin_name, config";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkillRecord {
@@ -120,6 +123,14 @@ pub struct SkillVersionRecord {
     pub change_summary: Option<String>,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PluginConfigRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub plugin_name: String,
+    pub config: Value,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -460,6 +471,48 @@ impl PgSkillRepository {
             .map_err(storage)?;
         row.map(row_to_version).transpose()
     }
+
+    pub async fn get_plugin_config(
+        &self,
+        tenant_id: &str,
+        plugin_name: &str,
+    ) -> CoreResult<Option<PluginConfigRecord>> {
+        let sql = format!(
+            "SELECT {PLUGIN_CONFIG_COLS} FROM plugin_configs \
+             WHERE tenant_id = $1 AND plugin_name = $2"
+        );
+        let row = sqlx::query(&sql)
+            .bind(tenant_id)
+            .bind(plugin_name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(row_to_plugin_config).transpose()
+    }
+
+    pub async fn upsert_plugin_config(
+        &self,
+        id: &str,
+        tenant_id: &str,
+        plugin_name: &str,
+        config: &Value,
+    ) -> CoreResult<PluginConfigRecord> {
+        let row = sqlx::query(
+            "INSERT INTO plugin_configs (id, tenant_id, plugin_name, config) \
+             VALUES ($1, $2, $3, $4) \
+             ON CONFLICT (tenant_id, plugin_name) DO UPDATE \
+             SET config = EXCLUDED.config, updated_at = now() \
+             RETURNING id, tenant_id, plugin_name, config",
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .bind(plugin_name)
+        .bind(config)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)?;
+        row_to_plugin_config(row)
+    }
 }
 
 fn row_to_skill(row: PgRow) -> CoreResult<SkillRecord> {
@@ -507,6 +560,15 @@ fn row_to_version(row: PgRow) -> CoreResult<SkillVersionRecord> {
         change_summary: row.try_get("change_summary").map_err(storage)?,
         created_by: row.try_get("created_by").map_err(storage)?,
         created_at: row.try_get("created_at").map_err(storage)?,
+    })
+}
+
+fn row_to_plugin_config(row: PgRow) -> CoreResult<PluginConfigRecord> {
+    Ok(PluginConfigRecord {
+        id: row.try_get("id").map_err(storage)?,
+        tenant_id: row.try_get("tenant_id").map_err(storage)?,
+        plugin_name: row.try_get("plugin_name").map_err(storage)?,
+        config: row.try_get("config").map_err(storage)?,
     })
 }
 
