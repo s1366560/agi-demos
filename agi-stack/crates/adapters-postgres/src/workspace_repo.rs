@@ -2505,7 +2505,7 @@ impl PgWorkspaceRepository {
                      (status IN ('pending', 'failed') \
                       AND (next_attempt_at IS NULL OR next_attempt_at <= $1)) \
                      OR (event_type = 'workspace_agent_mention' \
-                         AND status = 'pending_runtime' \
+                         AND status IN ('pending_runtime', 'runtime_response_ready', 'runtime_error_ready') \
                          AND (next_attempt_at IS NULL OR next_attempt_at <= $1)) \
                      OR (status = 'processing' \
                          AND lease_expires_at IS NOT NULL \

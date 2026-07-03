@@ -12,14 +12,15 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use agistack_adapters_postgres::{
-    PgWorkspaceRepository, WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
-    WorkspacePlanEventRecord, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord,
-    WorkspacePlanRecord, WorkspaceRecord, WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    BlackboardOutboxRecord, PgWorkspaceRepository, WorkspaceMessageRecord,
+    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord, WorkspacePlanEventRecord,
+    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::{CoreError, CoreResult, EventStream, StreamEntry};
 use async_trait::async_trait;
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 use serde_yaml_ng::Value as YamlValue;
 use sha2::{Digest, Sha256};
@@ -40,6 +41,11 @@ const ATTEMPT_RETRY_EVENT: &str = "attempt_retry";
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
 const WORKSPACE_AGENT_MENTION_EVENT: &str = "workspace_agent_mention";
 const WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS: &str = "runtime_bound";
+#[allow(dead_code)]
+const WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS: &str = "runtime_response_ready";
+#[allow(dead_code)]
+const WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS: &str = "runtime_error_ready";
+const WORKSPACE_MESSAGE_CREATED_EVENT: &str = "workspace_message_created";
 const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
 const DRONE_PROVIDER: &str = "drone";
 const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
@@ -1419,6 +1425,15 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         now: DateTime<Utc>,
     ) -> CoreResult<()>;
 
+    async fn list_workspace_member_user_ids(&self, workspace_id: &str) -> CoreResult<Vec<String>>;
+
+    async fn create_workspace_message(
+        &self,
+        message: WorkspaceMessageRecord,
+    ) -> CoreResult<WorkspaceMessageRecord>;
+
+    async fn enqueue_blackboard_outbox(&self, outbox: BlackboardOutboxRecord) -> CoreResult<()>;
+
     async fn bind_task_session_attempt_conversation(
         &self,
         attempt_id: &str,
@@ -1823,6 +1838,21 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         .await
     }
 
+    async fn list_workspace_member_user_ids(&self, workspace_id: &str) -> CoreResult<Vec<String>> {
+        PgWorkspaceRepository::list_workspace_member_user_ids(self, workspace_id).await
+    }
+
+    async fn create_workspace_message(
+        &self,
+        message: WorkspaceMessageRecord,
+    ) -> CoreResult<WorkspaceMessageRecord> {
+        PgWorkspaceRepository::create_message(self, message).await
+    }
+
+    async fn enqueue_blackboard_outbox(&self, outbox: BlackboardOutboxRecord) -> CoreResult<()> {
+        PgWorkspaceRepository::enqueue_blackboard_outbox(self, outbox).await
+    }
+
     async fn bind_task_session_attempt_conversation(
         &self,
         attempt_id: &str,
@@ -1929,6 +1959,70 @@ impl WorkspaceAgentMentionBindingHandler {
     pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
         Self { store }
     }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn post_terminal_message(
+        &self,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        sender_user_id: &str,
+        target_agent_id: &str,
+        agent_name: &str,
+        content: String,
+        now: DateTime<Utc>,
+    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
+        let members = self
+            .store
+            .list_workspace_member_user_ids(workspace_id)
+            .await?;
+        if !members.iter().any(|member| member == sender_user_id) {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+
+        let parent_message_id = string_from_map(payload, "message_id")
+            .or_else(|| string_from_map(payload, "parent_message_id"));
+        let mentions = metadata_string_values(payload.get("response_mentions"));
+        let message = self
+            .store
+            .create_workspace_message(WorkspaceMessageRecord {
+                id: generate_uuid_v4(),
+                workspace_id: workspace_id.to_string(),
+                sender_id: target_agent_id.to_string(),
+                sender_type: "agent".to_string(),
+                content,
+                mentions_json: mentions,
+                parent_message_id,
+                metadata_json: json!({ "sender_name": agent_name }),
+                created_at: now,
+            })
+            .await?;
+        self.store
+            .enqueue_blackboard_outbox(BlackboardOutboxRecord {
+                id: generate_uuid_v4(),
+                workspace_id: workspace_id.to_string(),
+                tenant_id: tenant_id.to_string(),
+                project_id: project_id.to_string(),
+                event_type: WORKSPACE_MESSAGE_CREATED_EVENT.to_string(),
+                payload_json: json!({
+                    "message": workspace_message_event_payload(&message)
+                }),
+                metadata_json: json!({
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                    "surface_owner": "workspace-chat",
+                    "surface_boundary": "hosted",
+                    "authority_class": "non-authoritative",
+                    "signal_role": "sensing-capable",
+                    "runtime_bridge": "p3_workspace_mention"
+                }),
+                correlation_id: None,
+            })
+            .await?;
+
+        Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
+    }
 }
 
 #[async_trait]
@@ -1949,6 +2043,36 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
         let agent_name = string_from_map(&payload, "agent_name")
             .or_else(|| string_from_map(&payload, "agent_display_name"))
             .unwrap_or_else(|| target_agent_id.clone());
+        if let Some(error_detail) = workspace_agent_mention_error_detail(&payload) {
+            return self
+                .post_terminal_message(
+                    &payload,
+                    &workspace_id,
+                    &tenant_id,
+                    &project_id,
+                    &sender_user_id,
+                    &target_agent_id,
+                    &agent_name,
+                    format!("[Error] {agent_name} could not process your request: {error_detail}"),
+                    now,
+                )
+                .await;
+        }
+        if let Some(final_content) = workspace_agent_mention_final_content(&payload) {
+            return self
+                .post_terminal_message(
+                    &payload,
+                    &workspace_id,
+                    &tenant_id,
+                    &project_id,
+                    &sender_user_id,
+                    &target_agent_id,
+                    &agent_name,
+                    final_content,
+                    now,
+                )
+                .await;
+        }
         let linked_workspace_task_id = string_from_map(&payload, "linked_workspace_task_id")
             .or_else(|| string_from_map(&payload, "workspace_task_id"));
         let source = string_from_map(&payload, "source");
@@ -13392,6 +13516,36 @@ fn string_from_value_object(value: &Value, key: &str) -> Option<String> {
     value.as_object().and_then(|map| string_from_map(map, key))
 }
 
+fn workspace_agent_mention_final_content(payload: &Map<String, Value>) -> Option<String> {
+    string_from_map(payload, "final_content")
+        .or_else(|| string_from_map(payload, "runtime_final_content"))
+        .or_else(|| string_from_map(payload, "response_content"))
+}
+
+fn workspace_agent_mention_error_detail(payload: &Map<String, Value>) -> Option<String> {
+    string_from_map(payload, "error_detail")
+        .or_else(|| string_from_map(payload, "runtime_error_detail"))
+        .or_else(|| string_from_map(payload, "error_message"))
+}
+
+fn workspace_message_event_payload(message: &WorkspaceMessageRecord) -> Value {
+    json!({
+        "id": &message.id,
+        "workspace_id": &message.workspace_id,
+        "sender_id": &message.sender_id,
+        "sender_type": &message.sender_type,
+        "content": &message.content,
+        "mentions": &message.mentions_json,
+        "parent_message_id": &message.parent_message_id,
+        "metadata": &message.metadata_json,
+        "created_at": workspace_event_iso(message.created_at),
+    })
+}
+
+fn workspace_event_iso(value: DateTime<Utc>) -> String {
+    value.to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
 fn root_goal_task_id_for_progress(
     task: &WorkspaceTaskRecord,
     attempt: &WorkspaceTaskSessionAttemptRecord,
@@ -15674,7 +15828,12 @@ mod tests {
                 .filter(|item| {
                     let pending_due = matches!(item.status.as_str(), "pending" | "failed")
                         || (item.event_type == WORKSPACE_AGENT_MENTION_EVENT
-                            && item.status == "pending_runtime");
+                            && matches!(
+                                item.status.as_str(),
+                                "pending_runtime"
+                                    | WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS
+                                    | WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS
+                            ));
                     item.attempt_count < item.max_attempts
                         && ((pending_due
                             && item.next_attempt_at.map(|due| due <= now).unwrap_or(true))
@@ -16100,11 +16259,14 @@ mod tests {
     #[derive(Default)]
     struct FakeWorkspacePlanDispatchStore {
         workspaces: Mutex<HashMap<String, WorkspaceRecord>>,
+        members: Mutex<HashMap<String, HashSet<String>>>,
         tasks: Mutex<HashMap<String, WorkspaceTaskRecord>>,
         plans: Mutex<HashMap<String, WorkspacePlanRecord>>,
         nodes: Mutex<HashMap<String, WorkspacePlanNodeRecord>>,
         attempts: Mutex<HashMap<String, WorkspaceTaskSessionAttemptRecord>>,
         conversations: Mutex<HashMap<String, FakeWorkerConversationRecord>>,
+        messages: Mutex<HashMap<String, WorkspaceMessageRecord>>,
+        blackboard_outbox: Mutex<Vec<BlackboardOutboxRecord>>,
         pipeline_contracts: Mutex<HashMap<(String, String), FakePipelineContractRecord>>,
         pipeline_runs: Mutex<HashMap<String, WorkspacePipelineRunRecord>>,
         pipeline_stage_runs: Mutex<HashMap<String, WorkspacePipelineStageRunRecord>>,
@@ -16120,6 +16282,15 @@ mod tests {
                 .lock()
                 .unwrap()
                 .insert(workspace.id.clone(), workspace);
+        }
+
+        fn insert_member(&self, workspace_id: &str, user_id: &str) {
+            self.members
+                .lock()
+                .unwrap()
+                .entry(workspace_id.to_string())
+                .or_default()
+                .insert(user_id.to_string());
         }
 
         fn insert_task(&self, task: WorkspaceTaskRecord) {
@@ -16236,6 +16407,14 @@ mod tests {
 
         fn conversation_count(&self) -> usize {
             self.conversations.lock().unwrap().len()
+        }
+
+        fn messages(&self) -> Vec<WorkspaceMessageRecord> {
+            self.messages.lock().unwrap().values().cloned().collect()
+        }
+
+        fn blackboard_outbox(&self) -> Vec<BlackboardOutboxRecord> {
+            self.blackboard_outbox.lock().unwrap().clone()
         }
 
         fn plan_events(&self) -> Vec<WorkspacePlanEventRecord> {
@@ -16741,6 +16920,42 @@ mod tests {
                     updated_at: now,
                 },
             );
+            Ok(())
+        }
+
+        async fn list_workspace_member_user_ids(
+            &self,
+            workspace_id: &str,
+        ) -> CoreResult<Vec<String>> {
+            let mut members = self
+                .members
+                .lock()
+                .unwrap()
+                .get(workspace_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
+            members.sort();
+            Ok(members)
+        }
+
+        async fn create_workspace_message(
+            &self,
+            message: WorkspaceMessageRecord,
+        ) -> CoreResult<WorkspaceMessageRecord> {
+            self.messages
+                .lock()
+                .unwrap()
+                .insert(message.id.clone(), message.clone());
+            Ok(message)
+        }
+
+        async fn enqueue_blackboard_outbox(
+            &self,
+            outbox: BlackboardOutboxRecord,
+        ) -> CoreResult<()> {
+            self.blackboard_outbox.lock().unwrap().push(outbox);
             Ok(())
         }
 
@@ -24498,6 +24713,129 @@ steps:
             Some("chat_mention")
         );
         assert_eq!(dispatch_store.conversation_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_worker_posts_agent_response_when_runtime_result_ready() {
+        let outbox_store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        let dispatch_store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        dispatch_store.insert_member("workspace-test", "user-sender");
+        let mut item = outbox("job-mention-response", WORKSPACE_AGENT_MENTION_EVENT);
+        item.plan_id = None;
+        item.status = WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS.to_string();
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "tenant_id": "tenant-test",
+            "project_id": "project-test",
+            "sender_user_id": "user-sender",
+            "target_agent_id": "agent-builder",
+            "agent_name": "Builder",
+            "conversation_id": "conversation-mention",
+            "message_id": "message-1",
+            "final_content": "Done from runtime",
+            "response_mentions": ["agent-reviewer"]
+        });
+        outbox_store.insert(item);
+        let handlers = workspace_plan_outbox_handlers(
+            Arc::clone(&dispatch_store) as Arc<dyn WorkspacePlanDispatchStore>
+        );
+        let worker = worker(Arc::clone(&outbox_store), handlers);
+
+        let report = worker.run_once().await.unwrap();
+
+        assert_eq!(
+            report,
+            WorkspacePlanOutboxRunReport {
+                claimed: 1,
+                completed: 1,
+                ..Default::default()
+            }
+        );
+        let item = outbox_store.get("job-mention-response");
+        assert_eq!(item.status, "completed");
+        assert!(item.processed_at.is_some());
+        let messages = dispatch_store.messages();
+        assert_eq!(messages.len(), 1);
+        let message = &messages[0];
+        assert_eq!(message.workspace_id, "workspace-test");
+        assert_eq!(message.sender_id, "agent-builder");
+        assert_eq!(message.sender_type, "agent");
+        assert_eq!(message.content, "Done from runtime");
+        assert_eq!(message.mentions_json, vec!["agent-reviewer"]);
+        assert_eq!(message.parent_message_id.as_deref(), Some("message-1"));
+        assert_eq!(
+            message
+                .metadata_json
+                .get("sender_name")
+                .and_then(Value::as_str),
+            Some("Builder")
+        );
+        let events = dispatch_store.blackboard_outbox();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, WORKSPACE_MESSAGE_CREATED_EVENT);
+        assert_eq!(
+            events[0].payload_json["message"]["content"],
+            "Done from runtime"
+        );
+        assert_eq!(events[0].payload_json["message"]["sender_type"], "agent");
+        assert_eq!(
+            events[0].metadata_json["runtime_bridge"],
+            "p3_workspace_mention"
+        );
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_worker_posts_agent_error_when_runtime_error_ready() {
+        let outbox_store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        let dispatch_store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        dispatch_store.insert_member("workspace-test", "user-sender");
+        let mut item = outbox("job-mention-error", WORKSPACE_AGENT_MENTION_EVENT);
+        item.plan_id = None;
+        item.status = WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS.to_string();
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "tenant_id": "tenant-test",
+            "project_id": "project-test",
+            "sender_user_id": "user-sender",
+            "target_agent_id": "agent-builder",
+            "agent_display_name": "Builder",
+            "conversation_id": "conversation-mention",
+            "message_id": "message-1",
+            "runtime_error_detail": "model unavailable"
+        });
+        outbox_store.insert(item);
+        let handlers = workspace_plan_outbox_handlers(
+            Arc::clone(&dispatch_store) as Arc<dyn WorkspacePlanDispatchStore>
+        );
+        let worker = worker(Arc::clone(&outbox_store), handlers);
+
+        let report = worker.run_once().await.unwrap();
+
+        assert_eq!(
+            report,
+            WorkspacePlanOutboxRunReport {
+                claimed: 1,
+                completed: 1,
+                ..Default::default()
+            }
+        );
+        let item = outbox_store.get("job-mention-error");
+        assert_eq!(item.status, "completed");
+        let messages = dispatch_store.messages();
+        assert_eq!(messages.len(), 1);
+        let message = &messages[0];
+        assert_eq!(
+            message.content,
+            "[Error] Builder could not process your request: model unavailable"
+        );
+        assert_eq!(message.sender_id, "agent-builder");
+        assert_eq!(message.parent_message_id.as_deref(), Some("message-1"));
+        let events = dispatch_store.blackboard_outbox();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].payload_json["message"]["content"],
+            "[Error] Builder could not process your request: model unavailable"
+        );
     }
 
     #[tokio::test]

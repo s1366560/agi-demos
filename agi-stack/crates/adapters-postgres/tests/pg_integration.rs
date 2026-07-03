@@ -925,6 +925,46 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     .await
     .unwrap();
     repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6_mention_response".to_string(),
+        plan_id: None,
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "workspace_agent_mention".to_string(),
+        payload_json: json!({"final_content": "done"}),
+        status: "runtime_response_ready".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "mention-response"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6_mention_error".to_string(),
+        plan_id: None,
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "workspace_agent_mention".to_string(),
+        payload_json: json!({"runtime_error_detail": "model unavailable"}),
+        status: "runtime_error_ready".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "mention-error"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
         id: "plan_outbox_p6_future_runtime".to_string(),
         plan_id: None,
         workspace_id: "ws_p6_repo".to_string(),
@@ -957,6 +997,8 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     assert!(claimed_ids.contains(&"plan_outbox_p6_expired"));
     assert!(claimed_ids.contains(&"plan_outbox_p6_release"));
     assert!(claimed_ids.contains(&"plan_outbox_p6_mention_runtime"));
+    assert!(claimed_ids.contains(&"plan_outbox_p6_mention_response"));
+    assert!(claimed_ids.contains(&"plan_outbox_p6_mention_error"));
     assert!(!claimed_ids.contains(&"plan_outbox_p6_delayed"));
     assert!(!claimed_ids.contains(&"plan_outbox_p6_dead"));
     assert!(!claimed_ids.contains(&"plan_outbox_p6_future_runtime"));
@@ -1088,6 +1130,25 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         parked_runtime.metadata_json["runtime_binding"],
         "workspace_agent_mention_conversation"
     );
+    assert!(repo
+        .mark_plan_outbox_completed(
+            "plan_outbox_p6_mention_response",
+            Some("worker-a"),
+            outbox_now
+        )
+        .await
+        .unwrap());
+    let completed_response = repo
+        .get_plan_outbox("plan_outbox_p6_mention_response")
+        .await
+        .unwrap()
+        .expect("completed mention response");
+    assert_eq!(completed_response.status, "completed");
+    assert_eq!(completed_response.processed_at, Some(outbox_now));
+    assert!(repo
+        .mark_plan_outbox_completed("plan_outbox_p6_mention_error", Some("worker-a"), outbox_now)
+        .await
+        .unwrap());
     let future_runtime = repo
         .get_plan_outbox("plan_outbox_p6_future_runtime")
         .await
