@@ -315,11 +315,19 @@ use pipeline_shared::{
 mod pipeline_drone;
 use pipeline_drone::{finish_drone_pipeline_result, run_drone_pipeline_if_configured};
 
+mod pipeline_git;
+use pipeline_git::{
+    compact_git_error, current_worktree_dirty_signature, finish_drone_provider_unavailable,
+    finish_drone_source_publish_failure, host_code_root_from_workspace,
+    integrate_accepted_attempt_worktree_with_git, pipeline_contract_metadata,
+    pipeline_run_metadata, prepare_drone_source_publish, run_git_command, short_git_head,
+    source_publish_source_commit_ref, DroneSourcePublishOutcome,
+};
+
 mod pipeline_run;
 use pipeline_run::{
-    build_worker_report_payload, compact_git_error, compact_text, current_worktree_dirty_signature,
-    integrate_accepted_attempt_worktree_with_git, is_stale_terminal_worker_report, run_git_command,
-    short_git_head, worker_execution_state, PipelineRunAdmissionHandler,
+    build_worker_report_payload, compact_text, is_stale_terminal_worker_report,
+    worker_execution_state, PipelineRunAdmissionHandler,
 };
 pub(crate) use pipeline_run::{
     PipelineContractFoundation, PipelineStageResult, PipelineStageSpec,

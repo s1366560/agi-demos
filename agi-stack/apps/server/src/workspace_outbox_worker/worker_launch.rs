@@ -2296,7 +2296,7 @@ async fn prepare_worker_launch_worktree_with_git(
     }
 
     if let Some(parent) = worktree_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| {
+        tokio::fs::create_dir_all(parent).await.map_err(|err| {
             CoreError::Storage(format!(
                 "create attempt worktree parent {}: {err}",
                 parent.display()

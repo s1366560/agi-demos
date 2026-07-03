@@ -13,9 +13,9 @@ pub(super) fn merge_object_values(left: &Value, right: &Value) -> Value {
     Value::Object(merged)
 }
 
-pub(super) fn source_publish_dotenv_value(token_env: &str) -> Option<String> {
+pub(super) async fn source_publish_dotenv_value(token_env: &str) -> Option<String> {
     let path = std::env::var("MEMSTACK_DRONE_DOTENV_PATH").unwrap_or_else(|_| ".env".to_string());
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = tokio::fs::read_to_string(path).await.ok()?;
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {

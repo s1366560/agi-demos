@@ -72,7 +72,7 @@ struct DronePipelineStageResult {
 pub(super) async fn run_drone_pipeline_if_configured(
     contract: &PipelineContractFoundation,
 ) -> CoreResult<Option<DronePipelineResult>> {
-    let Some(config) = drone_pipeline_config(contract)? else {
+    let Some(config) = drone_pipeline_config(contract).await? else {
         return Ok(None);
     };
     let result = match run_drone_pipeline(&config).await {
@@ -82,7 +82,7 @@ pub(super) async fn run_drone_pipeline_if_configured(
     Ok(Some(result))
 }
 
-fn drone_pipeline_config(
+async fn drone_pipeline_config(
     contract: &PipelineContractFoundation,
 ) -> CoreResult<Option<DronePipelineConfig>> {
     let provider_config = object_or_empty(contract.provider_config_json.clone());
@@ -108,15 +108,15 @@ fn drone_pipeline_config(
         .or_else(|| string_from_map(&provider_config, "server_env"))
         .or_else(|| string_from_map(&provider_config, "server_url_env"))
         .unwrap_or_else(|| DRONE_SERVER_ENV.to_string());
-    let server_url = string_from_map(&provider_config, "server_url")
-        .or_else(|| drone_config_value_env(&server_env))
-        .or_else(|| {
-            if server_env == DRONE_SERVER_URL_ENV {
-                None
-            } else {
-                drone_config_value_env(DRONE_SERVER_URL_ENV)
-            }
-        });
+    let server_url = if let Some(server_url) = string_from_map(&provider_config, "server_url") {
+        Some(server_url)
+    } else if let Some(server_url) = drone_config_value_env(&server_env).await {
+        Some(server_url)
+    } else if server_env == DRONE_SERVER_URL_ENV {
+        None
+    } else {
+        drone_config_value_env(DRONE_SERVER_URL_ENV).await
+    };
     let Some(server_url) = server_url else {
         return Ok(None);
     };
@@ -124,7 +124,7 @@ fn drone_pipeline_config(
     let token_env = string_from_map(&provider_config, "drone_token_env")
         .or_else(|| string_from_map(&provider_config, "token_env"))
         .unwrap_or_else(|| DRONE_TOKEN_ENV.to_string());
-    let Some(token) = drone_config_value_env(&token_env) else {
+    let Some(token) = drone_config_value_env(&token_env).await else {
         return Ok(None);
     };
 
@@ -148,7 +148,7 @@ fn drone_pipeline_config(
         server_url: server_url.trim_end_matches('/').to_string(),
         token,
         client: drone_client_from_config(&provider_config),
-        cli_command: drone_cli_command_from_config(&provider_config),
+        cli_command: drone_cli_command_from_config(&provider_config).await,
         host_code_root: contract.host_code_root.as_deref().map(PathBuf::from),
         branch: string_from_map(&provider_config, "branch"),
         commit: string_from_map(&provider_config, "commit"),
@@ -179,11 +179,15 @@ fn drone_client_from_config(provider_config: &Map<String, Value>) -> String {
     }
 }
 
-fn drone_cli_command_from_config(provider_config: &Map<String, Value>) -> String {
-    string_from_map(provider_config, "drone_command")
+async fn drone_cli_command_from_config(provider_config: &Map<String, Value>) -> String {
+    if let Some(command) = string_from_map(provider_config, "drone_command")
         .or_else(|| string_from_map(provider_config, "cli_command"))
         .or_else(|| string_from_map(provider_config, "command"))
-        .or_else(|| drone_config_value_env("DRONE_CLI"))
+    {
+        return command;
+    }
+    drone_config_value_env("DRONE_CLI")
+        .await
         .unwrap_or_else(|| "drone".to_string())
 }
 
@@ -329,12 +333,12 @@ fn drone_config_failure_config(message: &str) -> DronePipelineConfig {
     }
 }
 
-fn drone_yaml_preflight_failure_result(
+async fn drone_yaml_preflight_failure_result(
     config: &DronePipelineConfig,
 ) -> Option<DronePipelineResult> {
     let host_code_root = config.host_code_root.as_ref()?;
     let path = host_code_root.join(".drone.yml");
-    let content = match std::fs::read_to_string(&path) {
+    let content = match tokio::fs::read_to_string(&path).await {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return Some(drone_preflight_failure_result(
@@ -598,7 +602,7 @@ async fn run_drone_pipeline(config: &DronePipelineConfig) -> CoreResult<DronePip
     {
         return Ok(drone_configuration_failure_result(message));
     }
-    if let Some(result) = drone_yaml_preflight_failure_result(config) {
+    if let Some(result) = drone_yaml_preflight_failure_result(config).await {
         return Ok(result);
     }
 
@@ -1688,11 +1692,14 @@ fn looks_like_drone_not_found(message: &str) -> bool {
     lower.contains(" 404") || lower.contains("not found") || lower.contains("not enabled")
 }
 
-fn drone_config_value_env(name: &str) -> Option<String> {
-    std::env::var(name)
+async fn drone_config_value_env(name: &str) -> Option<String> {
+    if let Some(value) = std::env::var(name)
         .ok()
         .and_then(|value| metadata_string(Some(&Value::String(value))))
-        .or_else(|| source_publish_dotenv_value(name))
+    {
+        return Some(value);
+    }
+    source_publish_dotenv_value(name).await
 }
 
 fn string_pairs_from_map(value: Option<&Value>) -> Vec<(String, String)> {
