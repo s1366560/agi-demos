@@ -104,6 +104,8 @@ const SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON: &str =
 const SUPERVISOR_BLOCKED_HUMAN_VERDICT: &str = "blocked_human_required";
 const SUPERVISOR_DECISION_REQUEST_PIPELINE_ACTION: &str = "request_pipeline";
 const SUPERVISOR_DECISION_REQUEST_PIPELINE_REASON: &str = "supervisor_decision_request_pipeline";
+const SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION: &str = "wait_pipeline";
+const SUPERVISOR_DECISION_WAIT_PIPELINE_REASON: &str = "supervisor_decision_wait_pipeline";
 const SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION: &str = "create_repair_node";
 const SUPERVISOR_DECISION_CREATE_REPAIR_NODE_REASON: &str =
     "supervisor_decision_create_repair_node";
@@ -9907,6 +9909,9 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_request_pipeline = self
                 .reconcile_supervisor_request_pipeline_nodes(&workspace_id, &plan_id)
                 .await?;
+            let changed_wait_pipeline = self
+                .reconcile_supervisor_wait_pipeline_nodes(&workspace_id, &plan_id)
+                .await?;
             let changed_create_repair = self
                 .reconcile_supervisor_create_repair_nodes(&workspace_id, &plan_id)
                 .await?;
@@ -9940,6 +9945,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                 + changed_missing
                 + changed_blocked_human
                 + changed_request_pipeline
+                + changed_wait_pipeline
                 + changed_create_repair
                 + changed_replan
                 + changed_disposed
@@ -10872,6 +10878,152 @@ impl SupervisorTickAdmissionHandler {
                         "workspace_task_id": node.workspace_task_id.clone(),
                         "attempt_id": attempt_id,
                         "outbox_id": outbox_id,
+                    }),
+                    created_at: now,
+                })
+                .await?;
+            changed += 1;
+        }
+        Ok(changed)
+    }
+
+    async fn reconcile_supervisor_wait_pipeline_nodes(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if node.intent == "done" {
+                continue;
+            }
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            if !supervisor_wait_pipeline_metadata_present(&metadata) {
+                continue;
+            }
+            if supervisor_wait_pipeline_projection_complete(&metadata) {
+                continue;
+            }
+
+            let attempt_id = node
+                .current_attempt_id
+                .clone()
+                .or_else(|| metadata_string(metadata.get("last_verification_attempt_id")));
+            let mut evidence_refs = Vec::new();
+            let summary = supervisor_wait_pipeline_summary(&metadata);
+            if let Some(attempt_id) = attempt_id.as_deref() {
+                if let Some(attempt) = self.store.get_task_session_attempt(attempt_id).await? {
+                    evidence_refs = accepted_attempt_evidence_refs(&attempt);
+                    if !attempt.candidate_artifacts_json.is_empty() {
+                        metadata.insert(
+                            "candidate_artifacts".to_string(),
+                            json!(attempt.candidate_artifacts_json.clone()),
+                        );
+                    }
+                    if !attempt.candidate_verifications_json.is_empty() {
+                        metadata.insert(
+                            "candidate_verifications".to_string(),
+                            json!(attempt.candidate_verifications_json.clone()),
+                        );
+                    }
+                }
+            }
+            for value in metadata_string_values(metadata.get("verification_evidence_refs")) {
+                if !value.trim().is_empty() {
+                    evidence_refs.push(value);
+                }
+            }
+            if let Some(commit_ref) = supervisor_pipeline_source_commit_ref(&metadata) {
+                evidence_refs.push(format!("commit_ref:{commit_ref}"));
+                metadata.insert("verified_commit_ref".to_string(), json!(commit_ref.clone()));
+                metadata.insert(
+                    "source_publish_source_commit_ref".to_string(),
+                    json!(commit_ref),
+                );
+            }
+            dedup_strings(&mut evidence_refs);
+
+            metadata.insert(
+                "last_supervisor_decision_action".to_string(),
+                json!(SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION),
+            );
+            metadata.insert(
+                "last_supervisor_decision_rationale".to_string(),
+                json!(summary.clone()),
+            );
+            metadata.insert("pipeline_required".to_string(), json!(true));
+            let provider = metadata_string(metadata.get("pipeline_provider"))
+                .unwrap_or_else(|| "sandbox_native".to_string());
+            let pipeline_status = metadata_string(metadata.get("pipeline_status"))
+                .unwrap_or_else(|| "requested".to_string());
+            let pipeline_gate_status = metadata_string(metadata.get("pipeline_gate_status"))
+                .unwrap_or_else(|| "requested".to_string());
+            metadata.insert("pipeline_provider".to_string(), json!(provider));
+            metadata.insert("pipeline_status".to_string(), json!(pipeline_status));
+            metadata.insert(
+                "pipeline_gate_status".to_string(),
+                json!(pipeline_gate_status),
+            );
+            metadata.insert(
+                "pipeline_wait_reason".to_string(),
+                json!(SUPERVISOR_DECISION_WAIT_PIPELINE_REASON),
+            );
+            metadata.insert(
+                "supervisor_wait_pipeline_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert(
+                "last_verification_summary".to_string(),
+                json!(summary.clone()),
+            );
+            metadata.insert("last_verification_passed".to_string(), json!(false));
+            metadata.insert("last_verification_hard_fail".to_string(), json!(false));
+            if let Some(attempt_id) = attempt_id.as_deref() {
+                metadata.insert(
+                    "last_verification_attempt_id".to_string(),
+                    json!(attempt_id),
+                );
+                metadata.insert("pipeline_wait_attempt_id".to_string(), json!(attempt_id));
+            }
+            if !evidence_refs.is_empty() {
+                metadata.insert(
+                    "verification_evidence_refs".to_string(),
+                    json!(evidence_refs),
+                );
+            }
+            node.intent = "in_progress".to_string();
+            node.execution = "reported".to_string();
+            node.metadata_json = Value::Object(metadata);
+            node.updated_at = Some(now);
+            self.store.save_plan_node(node.clone()).await?;
+            self.store
+                .create_plan_event(WorkspacePlanEventRecord {
+                    id: generate_uuid_v4(),
+                    plan_id: plan_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    node_id: Some(node.id.clone()),
+                    attempt_id: attempt_id.clone(),
+                    event_type: "supervisor_wait_pipeline_reconciled".to_string(),
+                    source: "workspace_plan_supervisor_tick".to_string(),
+                    actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                    payload_json: json!({
+                        "action": SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION,
+                        "reason": SUPERVISOR_DECISION_WAIT_PIPELINE_REASON,
+                        "rationale": summary,
+                        "workspace_task_id": node.workspace_task_id.clone(),
+                        "attempt_id": attempt_id,
                     }),
                     created_at: now,
                 })
@@ -13144,6 +13296,35 @@ fn supervisor_request_pipeline_summary(metadata: &Map<String, Value>) -> String 
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "supervisor requested platform pipeline".to_string())
+}
+
+fn supervisor_wait_pipeline_metadata_present(metadata: &Map<String, Value>) -> bool {
+    metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
+        == Some(SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION)
+}
+
+fn supervisor_wait_pipeline_projection_complete(metadata: &Map<String, Value>) -> bool {
+    let status = metadata_string(metadata.get("pipeline_gate_status"))
+        .or_else(|| metadata_string(metadata.get("pipeline_status")))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if matches!(
+        status.as_str(),
+        "success" | "failed" | "failure" | "error" | "skipped" | "suspended"
+    ) {
+        return true;
+    }
+    metadata_string(metadata.get("supervisor_wait_pipeline_reconciled_at")).is_some()
+        && matches!(status.as_str(), "requested" | "running" | "processing")
+}
+
+fn supervisor_wait_pipeline_summary(metadata: &Map<String, Value>) -> String {
+    metadata_string(metadata.get("last_supervisor_decision_rationale"))
+        .or_else(|| metadata_string(metadata.get("last_verification_summary")))
+        .or_else(|| metadata_string(metadata.get(LAST_WORKER_REPORT_SUMMARY)))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "supervisor waiting for platform pipeline".to_string())
 }
 
 fn metadata_positive_i64(value: Option<&Value>) -> i64 {
@@ -21956,6 +22137,139 @@ steps:
         assert_eq!(
             events[0].payload_json["reason"],
             SUPERVISOR_DECISION_REQUEST_PIPELINE_REASON
+        );
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "in_progress");
+        assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], true);
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_waits_for_pipeline_from_supervisor_decision() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut task = task_with_plan_metadata();
+        task.status = "in_progress".to_string();
+        task.metadata_json = json!({
+            WORKSPACE_PLAN_ID: "plan-test",
+            WORKSPACE_PLAN_NODE_ID: "node-test",
+            CURRENT_ATTEMPT_ID: "attempt-wait-pipeline",
+            PENDING_LEADER_ADJUDICATION: true,
+            "last_attempt_status": AWAITING_LEADER_ADJUDICATION_STATUS
+        });
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-wait-pipeline".to_string());
+        node.metadata_json = json!({
+            "last_supervisor_decision_action": "wait_pipeline",
+            "last_supervisor_decision_rationale": "Pipeline is already running; wait for the result.",
+            "last_supervisor_decision_confidence": 0.88,
+            "last_supervisor_decision_feedback_items": [{
+                "target_layer": "runtime",
+                "recommended_action": "wait_pipeline",
+                "summary": "The requested CI run has not completed."
+            }],
+            "last_supervisor_decision_event_payload": {
+                "source_commit_ref": "f00dbabe12345678"
+            },
+            "pipeline_provider": "drone",
+            "pipeline_status": "running",
+            "pipeline_gate_status": "running",
+            "pipeline_request_count": 1,
+            "verification_evidence_refs": ["pipeline_run:run-1"]
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-wait-pipeline",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("candidate is waiting for CI".to_string());
+        attempt.candidate_artifacts_json = vec!["artifact:diff-summary".to_string()];
+        attempt.candidate_verifications_json = vec!["worker_report:completed".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempt = store.attempt("attempt-wait-pipeline");
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        assert!(attempt.completed_at.is_none());
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(
+            node.current_attempt_id.as_deref(),
+            Some("attempt-wait-pipeline")
+        );
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_action"],
+            "wait_pipeline"
+        );
+        assert_eq!(node.metadata_json["pipeline_required"], true);
+        assert_eq!(node.metadata_json["pipeline_provider"], "drone");
+        assert_eq!(node.metadata_json["pipeline_status"], "running");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "running");
+        assert_eq!(node.metadata_json["pipeline_request_count"], 1);
+        assert_eq!(
+            node.metadata_json["pipeline_wait_reason"],
+            SUPERVISOR_DECISION_WAIT_PIPELINE_REASON
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_summary"],
+            "Pipeline is already running; wait for the result."
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_attempt_id"],
+            "attempt-wait-pipeline"
+        );
+        assert_eq!(
+            node.metadata_json["verified_commit_ref"],
+            "f00dbabe12345678"
+        );
+        assert_eq!(
+            node.metadata_json["source_publish_source_commit_ref"],
+            "f00dbabe12345678"
+        );
+        assert_eq!(
+            node.metadata_json["candidate_artifacts"],
+            json!(["artifact:diff-summary"])
+        );
+        assert_eq!(
+            node.metadata_json["candidate_verifications"],
+            json!(["worker_report:completed"])
+        );
+        assert_eq!(
+            node.metadata_json["verification_evidence_refs"],
+            json!([
+                "artifact:diff-summary",
+                "worker_report:completed",
+                "pipeline_run:run-1",
+                "commit_ref:f00dbabe12345678"
+            ])
+        );
+        assert!(store.outbox().is_empty());
+        assert!(node
+            .metadata_json
+            .get("supervisor_pipeline_outbox_id")
+            .is_none());
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "supervisor_wait_pipeline_reconciled");
+        assert_eq!(events[0].payload_json["action"], "wait_pipeline");
+        assert_eq!(
+            events[0].payload_json["reason"],
+            SUPERVISOR_DECISION_WAIT_PIPELINE_REASON
         );
 
         let task = store.task("task-test");
