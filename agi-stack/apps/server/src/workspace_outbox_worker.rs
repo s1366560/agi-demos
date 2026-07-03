@@ -312,6 +312,11 @@ use pipeline_shared::{
     bool_from_map_default, merge_object_values, source_publish_dotenv_value, GitCommandOutput,
 };
 
+mod pipeline_contract;
+use pipeline_contract::{
+    pipeline_contract_foundation, positive_i32_from_map, PipelineContractFoundation,
+};
+
 mod pipeline_drone;
 use pipeline_drone::{finish_drone_pipeline_result, run_drone_pipeline_if_configured};
 
@@ -324,14 +329,19 @@ use pipeline_git::{
     source_publish_source_commit_ref, DroneSourcePublishOutcome,
 };
 
-mod pipeline_run;
-use pipeline_run::{
-    build_worker_report_payload, compact_text, is_stale_terminal_worker_report,
-    worker_execution_state, PipelineRunAdmissionHandler,
+mod pipeline_projection;
+use pipeline_projection::{
+    build_worker_report_payload, can_reflect_existing_pipeline_run, finish_pipeline_on_node,
+    is_stale_terminal_worker_report, mark_existing_pipeline_run_running, mark_pipeline_requested,
+    pipeline_completed_supervisor_tick, pipeline_completed_supervisor_tick_with_source,
+    pipeline_run_matches_node_expected_commit, reflect_existing_pipeline_run_to_node,
+    stale_pipeline_run_failure_metadata, worker_execution_state,
 };
+
+mod pipeline_run;
+use pipeline_run::{compact_text, PipelineRunAdmissionHandler};
 pub(crate) use pipeline_run::{
-    PipelineContractFoundation, PipelineStageResult, PipelineStageSpec,
-    ProjectSandboxPipelineStageRunner,
+    PipelineStageResult, PipelineStageSpec, ProjectSandboxPipelineStageRunner,
 };
 
 mod worker_launch;
