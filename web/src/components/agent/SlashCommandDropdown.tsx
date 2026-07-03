@@ -26,46 +26,6 @@ import { skillAPI } from '@/services/skillService';
 
 import type { CommandInfo, SkillResponse, SlashItem } from '@/types/agent';
 
-const COMMAND_HINTS: Record<
-  string,
-  { labelKey: string; fallback: string; tone: 'blue' | 'amber' | 'slate' }
-> = {
-  plan: {
-    labelKey: 'agent.slashCommand.hint.mode',
-    fallback: 'Mode',
-    tone: 'blue',
-  },
-  goal: {
-    labelKey: 'agent.slashCommand.hint.checkpoint',
-    fallback: 'Checkpoint',
-    tone: 'blue',
-  },
-  status: {
-    labelKey: 'agent.slashCommand.hint.readOnly',
-    fallback: 'Read-only',
-    tone: 'slate',
-  },
-  review: {
-    labelKey: 'agent.slashCommand.hint.review',
-    fallback: 'Review',
-    tone: 'amber',
-  },
-};
-
-function commandHint(command: CommandInfo) {
-  return COMMAND_HINTS[command.name] ?? null;
-}
-
-function commandHintClass(tone: 'blue' | 'amber' | 'slate'): string {
-  if (tone === 'blue') {
-    return 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300';
-  }
-  if (tone === 'amber') {
-    return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300';
-  }
-  return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
-}
-
 export interface SlashCommandDropdownHandle {
   getSelectedItem: () => SlashItem | null;
 }
@@ -231,7 +191,6 @@ export const SlashCommandDropdown = memo(
               {unifiedList.map((item, index) => {
                 const isFirstCommand = item.kind === 'command' && index === 0;
                 const isFirstSkill = item.kind === 'skill' && index === filteredCommands.length;
-                const hint = item.kind === 'command' ? commandHint(item.data) : null;
 
                 return (
                   <Fragment
@@ -281,22 +240,9 @@ export const SlashCommandDropdown = memo(
                               <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
                                 {item.data.category}
                               </span>
-                              {hint ? (
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-2xs font-medium ${commandHintClass(hint.tone)}`}
-                                >
-                                  {t(hint.labelKey, hint.fallback)}
-                                </span>
-                              ) : null}
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
                               {item.data.description}
-                            </p>
-                            <p className="mt-1 text-2xs text-slate-400 dark:text-slate-500">
-                              {t('agent.slashCommand.commandBehavior', {
-                                defaultValue:
-                                  'Runs as a slash command; mutations still follow project permissions.',
-                              })}
                             </p>
                           </div>
                         </>
@@ -317,18 +263,9 @@ export const SlashCommandDropdown = memo(
                                   {item.data.scope}
                                 </span>
                               )}
-                              <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                                {t('agent.slashCommand.hint.skill', 'Skill')}
-                              </span>
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
                               {item.data.description}
-                            </p>
-                            <p className="mt-1 text-2xs text-slate-400 dark:text-slate-500">
-                              {t('agent.slashCommand.skillBehavior', {
-                                defaultValue:
-                                  'Pins this skill to the next prompt without sending immediately.',
-                              })}
                             </p>
                           </div>
                         </>

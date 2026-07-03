@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react';
+import { useState, useRef, useCallback, useEffect, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -40,8 +40,6 @@ import { MentionPicker } from './MentionPicker';
 import { QueuedPromptStrip } from './QueuedPromptStrip';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
-import type { AgentRunMode } from './run/agentRunViewModel';
-
 interface InputBarProps {
   onSend: (
     content: string,
@@ -58,8 +56,6 @@ interface InputBarProps {
   conversationId?: string | undefined;
   onTogglePlanMode?: (() => void) | undefined;
   isPlanMode?: boolean | undefined;
-  runMode?: AgentRunMode | undefined;
-  onRunModeChange?: ((mode: AgentRunMode) => void) | undefined;
   activeAgentId?: string | undefined;
   onAgentSelect?: ((agentId: string) => void) | undefined;
   ref?: React.Ref<HTMLTextAreaElement>;
@@ -101,8 +97,6 @@ export const InputBar = memo<InputBarProps>(
     conversationId,
     onTogglePlanMode,
     isPlanMode,
-    runMode,
-    onRunModeChange,
     activeAgentId,
     onAgentSelect,
     ref,
@@ -207,41 +201,6 @@ export const InputBar = memo<InputBarProps>(
     const enqueuePrompt = usePendingPromptStore((s) => s.enqueue);
     const shiftPrompt = usePendingPromptStore((s) => s.shift);
     const canQueue = isStreaming && !disabled && content.trim().length > 0 && Boolean(queueConvId);
-    const displayRunMode = runMode ?? (isPlanMode ? 'plan' : 'build');
-    const runModeMeta = useMemo(() => {
-      switch (displayRunMode) {
-        case 'plan':
-          return {
-            label: t('agent.inputBar.runMode.plan', 'Plan'),
-            icon: ListChecks,
-            className:
-              'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-300',
-          };
-        case 'readOnly':
-          return {
-            label: t('agent.inputBar.runMode.readOnly', 'Read-only'),
-            icon: FileText,
-            className:
-              'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-          };
-        case 'auto':
-          return {
-            label: t('agent.inputBar.runMode.auto', 'Auto'),
-            icon: Zap,
-            className:
-              'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/25 dark:text-emerald-300',
-          };
-        case 'build':
-        default:
-          return {
-            label: t('agent.inputBar.runMode.build', 'Build'),
-            icon: Zap,
-            className:
-              'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-          };
-      }
-    }, [displayRunMode, t]);
-    const RunModeIcon = runModeMeta.icon;
 
     const clearInputContent = useCallback(() => {
       setContent('');
@@ -493,15 +452,23 @@ export const InputBar = memo<InputBarProps>(
     );
 
     const charCount = content.length;
-    const hasComposerContext =
-      Boolean(selectedSkill) ||
-      Boolean(selectedSubAgent) ||
-      attachments.length > 0 ||
-      queue.length > 0 ||
-      isPlanMode;
 
     return (
-      <div className="flex h-full min-w-0 flex-col p-2 sm:p-3">
+      <div className="h-full min-w-0 flex flex-col p-2 sm:p-4">
+        {/* Plan Mode indicator */}
+        {isPlanMode && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-sm">
+            <ListChecks size={14} />
+            <span className="font-medium">{t('agent.inputBar.planModeLabel', 'Plan Mode')}</span>
+            <span className="text-blue-500 dark:text-blue-400 text-xs">
+              {t(
+                'agent.inputBar.planModeHint',
+                'Read-only analysis. Agent will plan without making changes.'
+              )}
+            </span>
+          </div>
+        )}
+
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -524,8 +491,8 @@ export const InputBar = memo<InputBarProps>(
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`
-            relative flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border
-            bg-white/95 dark:bg-slate-900/85
+            flex-1 flex flex-col min-h-0 min-w-0 rounded-md border relative
+            bg-white dark:bg-slate-800
             transition-[border-color,box-shadow] duration-200 ease-out
             ${
               isDragging
@@ -537,86 +504,6 @@ export const InputBar = memo<InputBarProps>(
             ${disabled ? 'opacity-60 pointer-events-none' : ''}
           `}
         >
-          <div className="flex min-h-8 flex-shrink-0 items-center gap-2 border-b border-slate-200/55 px-3 py-1 dark:border-slate-700/55">
-            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-              <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
-                {t('agent.inputBar.composer', 'Composer')}
-              </span>
-              <span
-                className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium ${runModeMeta.className}`}
-                title={t('agent.inputBar.runModeAria', {
-                  mode: runModeMeta.label,
-                  defaultValue: 'Run mode: {{mode}}',
-                })}
-              >
-                <RunModeIcon size={12} />
-                {runModeMeta.label}
-              </span>
-              {selectedSkill && (
-                <span className="inline-flex h-6 max-w-[10rem] shrink-0 items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-2 text-xs font-medium text-primary dark:border-primary/30 dark:bg-primary/10">
-                  <Zap size={12} />
-                  <span className="truncate">/{selectedSkill.name}</span>
-                  <button
-                    type="button"
-                    onClick={handleRemoveSkill}
-                    aria-label={t('agent.inputBar.removeSelectedSkill', {
-                      name: selectedSkill.name,
-                      defaultValue: 'Remove /{{name}} skill',
-                    })}
-                    title={t('agent.inputBar.removeSelectedSkill', {
-                      name: selectedSkill.name,
-                      defaultValue: 'Remove /{{name}} skill',
-                    })}
-                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  >
-                    <X size={10} />
-                  </button>
-                </span>
-              )}
-              {selectedSubAgent && (
-                <span className="inline-flex h-6 max-w-[10rem] shrink-0 items-center gap-1 rounded-md border border-violet-500/20 bg-violet-500/5 px-2 text-xs font-medium text-violet-600 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
-                  <Workflow size={12} />
-                  <span className="truncate">@{selectedSubAgent}</span>
-                  <button
-                    type="button"
-                    onClick={handleRemoveSubAgent}
-                    aria-label={t('agent.inputBar.removeSelectedSubAgent', {
-                      name: selectedSubAgent,
-                      defaultValue: 'Remove @{{name}} subagent',
-                    })}
-                    title={t('agent.inputBar.removeSelectedSubAgent', {
-                      name: selectedSubAgent,
-                      defaultValue: 'Remove @{{name}} subagent',
-                    })}
-                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-violet-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  >
-                    <X size={10} />
-                  </button>
-                </span>
-              )}
-            </div>
-            {hasComposerContext && (
-              <div className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400 min-[640px]:flex">
-                {attachments.length > 0 && (
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
-                    {t('agent.inputBar.attachmentCount', {
-                      count: attachments.length,
-                      defaultValue: '{{count}} file',
-                    })}
-                  </span>
-                )}
-                {queue.length > 0 && (
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
-                    {t('agent.inputBar.queuedCount', {
-                      count: queue.length,
-                      defaultValue: '{{count}} queued',
-                    })}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Drag overlay */}
           {isDragging && (
             <div className="absolute inset-0 z-20 rounded-md bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
@@ -656,7 +543,7 @@ export const InputBar = memo<InputBarProps>(
           {/* Text Area */}
           <div
             data-testid="chat-input-body"
-            className="relative flex min-h-12 min-w-0 flex-1 overflow-visible px-3 py-1.5"
+            className="relative flex min-h-0 min-w-0 flex-1 px-3 py-2 sm:px-4 overflow-visible"
           >
             <SlashCommandDropdown
               ref={slashDropdownRef}
@@ -706,11 +593,53 @@ export const InputBar = memo<InputBarProps>(
             <div
               data-testid="chat-input-surface"
               className="
-                flex h-full min-h-10 w-full min-w-0 flex-wrap content-start items-start gap-1.5 rounded-md px-2 py-1.5
+                flex h-full min-h-11 w-full min-w-0 flex-wrap content-start items-start gap-1.5 rounded px-2 py-1.5
                 bg-slate-50/70 dark:bg-slate-900/40
                 transition-colors
               "
             >
+              {selectedSkill && (
+                <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/5 px-2 py-1 text-xs font-medium text-primary dark:border-primary/30 dark:bg-primary/10">
+                  <Zap size={12} />
+                  <span className="max-w-[12rem] truncate">/{selectedSkill.name}</span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveSkill}
+                    aria-label={t('agent.inputBar.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                      defaultValue: 'Remove /{{name}} skill',
+                    })}
+                    title={t('agent.inputBar.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                      defaultValue: 'Remove /{{name}} skill',
+                    })}
+                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
+              {selectedSubAgent && (
+                <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded border border-purple-500/20 bg-purple-500/5 px-2 py-1 text-xs font-medium text-purple-600 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-400">
+                  <Workflow size={12} />
+                  <span className="max-w-[10rem] truncate">@{selectedSubAgent}</span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveSubAgent}
+                    aria-label={t('agent.inputBar.removeSelectedSubAgent', {
+                      name: selectedSubAgent,
+                      defaultValue: 'Remove @{{name}} subagent',
+                    })}
+                    title={t('agent.inputBar.removeSelectedSubAgent', {
+                      name: selectedSubAgent,
+                      defaultValue: 'Remove @{{name}} subagent',
+                    })}
+                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-purple-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
               <textarea
                 id="agent-message-input"
                 ref={mergedRef}
@@ -737,8 +666,8 @@ export const InputBar = memo<InputBarProps>(
                 dir="auto"
                 autoCapitalize="sentences"
                 className="
-                  h-auto min-w-40 flex-1 bg-transparent px-1 py-0.5
-                  text-[13px] leading-6 text-slate-800 dark:text-slate-100 sm:text-sm
+                  h-auto min-w-40 flex-1 bg-transparent px-1 py-1
+                  text-sm leading-relaxed text-slate-800 dark:text-slate-100
                   placeholder:text-slate-400 dark:placeholder:text-slate-500
                   focus:outline-none
                   overflow-y-auto overflow-x-hidden
@@ -749,7 +678,7 @@ export const InputBar = memo<InputBarProps>(
                 "
                 style={{
                   resize: 'none',
-                  minHeight: '28px',
+                  minHeight: '32px',
                   maxHeight: '100%',
                 }}
               />
@@ -773,8 +702,6 @@ export const InputBar = memo<InputBarProps>(
             disabled={disabled}
             onTogglePlanMode={onTogglePlanMode}
             isPlanMode={isPlanMode}
-            runMode={runMode}
-            onRunModeChange={onRunModeChange}
             onAgentSelect={onAgentSelect}
             activeAgentId={activeAgentId}
             charCount={charCount}

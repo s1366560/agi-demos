@@ -38,14 +38,14 @@ interface EmptyStateProps {
   projectId?: string | undefined;
 }
 
-function formatRelativeTime(dateStr: string, locale: string): string {
+function formatRelativeTime(dateStr: string): string {
   try {
     const now = Date.now();
     const then = new Date(dateStr).getTime();
     if (isNaN(then)) return '';
     const diffSeconds = Math.round((now - then) / 1000);
 
-    const rtf = new Intl.RelativeTimeFormat(locale || undefined, { numeric: 'auto' });
+    const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 
     if (diffSeconds < 60) return rtf.format(-diffSeconds, 'second');
     const diffMinutes = Math.round(diffSeconds / 60);
@@ -66,7 +66,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onResumeConversation,
   projectId,
 }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   const handleCardClick = (prompt: string) => {
     if (onSendPrompt) {
@@ -116,137 +116,175 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   ];
 
   return (
-    <div className="relative flex h-full w-full overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
-        <section className="rounded-lg border border-slate-200/70 bg-white/90 px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] dark:border-slate-800/70 dark:bg-slate-900/70 sm:px-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
-                <Bot size={22} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-normal text-primary">
-                  {t('agent.emptyState.workbenchLabel', 'Agent workspace')}
-                </p>
-                <h2 className="mt-1 text-xl font-semibold leading-tight text-slate-950 dark:text-slate-100 sm:text-2xl">
-                  {t('agent.emptyState.greeting', 'What are you working on?')}
-                </h2>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-                  {t(
-                    'agent.emptyState.subtitle',
-                    'Start a conversation or pick a suggestion below.'
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <LazyButton
-              type="primary"
-              size="large"
-              icon={<Plus size={18} />}
-              onClick={onNewConversation}
-              className="h-10 shrink-0 rounded-lg px-5 text-sm font-medium shadow-sm"
-            >
-              {t('agent.emptyState.newConversation', 'Start New Conversation')}
-            </LazyButton>
+    <div className="h-full w-full flex flex-col items-center justify-center p-6 overflow-y-auto relative">
+      {/* Main Content */}
+      <div className="text-center mb-10 relative z-10">
+        {/* Logo/Icon with glow effect */}
+        <div className="relative inline-block mb-6">
+          <div className="relative w-16 h-16 rounded-xl bg-primary flex items-center justify-center shadow-md">
+            <Bot size={32} className="text-white" />
           </div>
-        </section>
+        </div>
 
-        {lastConversation && onResumeConversation && (
+        {/* Title */}
+        <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+          {t('agent.emptyState.greeting', 'What are you working on?')}
+        </h2>
+
+        {/* Subtitle */}
+        <p className="text-slate-400 dark:text-slate-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
+          {t('agent.emptyState.subtitle', 'Start a conversation or pick a suggestion below.')}
+        </p>
+
+        {/* New Chat Button */}
+        <LazyButton
+          type="primary"
+          size="large"
+          icon={<Plus size={20} />}
+          onClick={onNewConversation}
+          className="
+            h-12 px-8 rounded-xl
+            bg-primary hover:bg-primary-600
+            shadow-sm hover:shadow-md
+            text-base font-medium
+            transition-colors duration-200
+          "
+        >
+          {t('agent.emptyState.newConversation', 'Start New Conversation')}
+        </LazyButton>
+      </div>
+
+      {/* Resume Card */}
+      {lastConversation && onResumeConversation && (
+        <div className="max-w-2xl w-full relative z-10 mb-4">
           <button
             type="button"
             onClick={() => {
               onResumeConversation(lastConversation.id);
             }}
-            className="group flex w-full items-center gap-3 rounded-lg border border-primary/25 bg-white px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow-md dark:border-primary/25 dark:bg-slate-900/70"
+            className="
+              group w-full flex items-center gap-4 p-4 rounded-xl
+              bg-white dark:bg-slate-800/50
+              border border-primary/30 dark:border-primary/25
+              hover:shadow-lg hover:shadow-primary/10
+              transition-shadow duration-200 ease-out
+              text-left
+            "
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary dark:bg-primary/20">
-              <History size={18} />
+            <div
+              className="
+              flex-shrink-0 w-10 h-10 rounded-lg
+              bg-primary/10 dark:bg-primary/20
+              flex items-center justify-center
+              text-primary
+              transition-colors duration-200 group-hover:bg-primary/15
+            "
+            >
+              <History size={20} />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
                 {t('agent.emptyState.continueTitle', 'Continue where you left off')}
               </p>
-              <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100 truncate">
                 {lastConversation.title}
               </p>
               {lastConversation.updated_at && (
-                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                  {formatRelativeTime(lastConversation.updated_at, i18n.language)}
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  {formatRelativeTime(lastConversation.updated_at)}
                 </p>
               )}
             </div>
-            <span className="hidden shrink-0 items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors group-hover:bg-primary group-hover:text-white sm:inline-flex">
-              {t('agent.emptyState.continueAction', 'Resume')}
-              <ArrowRight size={13} />
-            </span>
-          </button>
-        )}
-
-        {projectId && (
-          <section className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1.25fr]">
-            <ProjectContextCard projectId={projectId} />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <TrendingEntities projectId={projectId} onEntityClick={onSendPrompt} />
-              <RecentSkills projectId={projectId} onSkillClick={onSendPrompt} />
-            </div>
-          </section>
-        )}
-
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {suggestionCards.map((card) => (
-            <button
-              key={card.title}
-              type="button"
-              onClick={() => {
-                handleCardClick(card.prompt);
-              }}
-              className="group flex min-h-24 items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.025)] transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/35 hover:bg-slate-50 dark:border-slate-800/70 dark:bg-slate-900/65 dark:hover:bg-slate-800/60"
+            <div
+              className="
+              flex-shrink-0 px-4 py-1.5 rounded-lg
+              bg-primary/10 dark:bg-primary/20
+              text-primary text-sm font-medium
+              group-hover:bg-primary group-hover:text-white
+              transition-colors duration-300
+            "
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary dark:bg-primary/15">
-                {card.icon}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {card.title}
-                </h3>
-
-                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                  {card.description}
-                </p>
-              </div>
-              <ArrowRight
-                size={14}
-                className="mt-1 shrink-0 text-slate-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100 dark:text-slate-600"
-              />
-            </button>
-          ))}
-        </section>
-
-        <div className="pb-2 text-center">
-          <p className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400 dark:text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <MessageSquare size={12} />
-              {t('agent.emptyState.naturalLanguage', 'Natural language conversations')}
-            </span>
-            <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-            <span className="flex items-center gap-1.5">
-              <kbd className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-sans text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                /
-              </kbd>
-              {t('agent.emptyState.forCommands', 'for commands')}
-            </span>
-            <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-            <span className="flex items-center gap-1.5">
-              <Keyboard size={12} />
-              <kbd className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-sans text-2xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                {t('agent.emptyState.cmdKey', 'Cmd')}+1-5
-              </kbd>
-              {t('agent.emptyState.layoutModes', 'layout modes')}
-            </span>
-          </p>
+              {t('agent.emptyState.continueAction', 'Resume')}
+            </div>
+          </button>
         </div>
+      )}
+
+      {/* Project Context — shown above suggestions when available */}
+      {projectId && (
+        <div className="space-y-4 mb-6 max-w-2xl w-full relative z-10">
+          <ProjectContextCard projectId={projectId} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <TrendingEntities projectId={projectId} onEntityClick={onSendPrompt} />
+            <RecentSkills projectId={projectId} onSkillClick={onSendPrompt} />
+          </div>
+        </div>
+      )}
+
+      {/* Suggestion list */}
+      <div className="max-w-2xl w-full relative z-10 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700/70 dark:bg-slate-800/50">
+        {suggestionCards.map((card) => (
+          <button
+            key={card.title}
+            type="button"
+            onClick={() => {
+              handleCardClick(card.prompt);
+            }}
+            className="
+              group flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left
+              last:border-b-0 hover:bg-slate-50 dark:border-slate-700/60 dark:hover:bg-slate-700/30
+              transition-[color,background-color,border-color,box-shadow,opacity] duration-150
+            "
+          >
+            <div
+              className="
+                flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md
+                bg-primary/8 text-primary dark:bg-primary/15
+              "
+            >
+              {card.icon}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                {card.title}
+              </h3>
+
+              <p className="mt-0.5 text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+                {card.description}
+              </p>
+            </div>
+            <ArrowRight
+              size={14}
+              className="flex-shrink-0 text-slate-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100 dark:text-slate-600"
+            />
+          </button>
+        ))}
+      </div>
+
+      {/* Footer tips */}
+      <div className="mt-10 text-center relative z-10">
+        <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center justify-center gap-3 flex-wrap">
+          <span className="flex items-center gap-1.5">
+            <MessageSquare size={12} />
+            {t('agent.emptyState.naturalLanguage', 'Natural language conversations')}
+          </span>
+          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400 font-sans">
+              /
+            </kbd>
+            {t('agent.emptyState.forCommands', 'for commands')}
+          </span>
+          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+          <span className="flex items-center gap-1.5">
+            <Keyboard size={12} />
+            <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400 font-sans text-2xs">
+              {t('agent.emptyState.cmdKey', 'Cmd')}+1-5
+            </kbd>
+            {t('agent.emptyState.layoutModes', 'layout modes')}
+          </span>
+        </p>
       </div>
     </div>
   );

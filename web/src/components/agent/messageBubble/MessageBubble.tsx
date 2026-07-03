@@ -123,7 +123,7 @@ const USER_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[85%] md:max-w-[75%] lg:max-w-[70%
 const SANDBOX_FILE_LINK_PREFIX = '#sandbox-file:';
 const CANVAS_FORCE_VIEW_MODE_EVENT = 'canvas:force-view-mode';
 const SANDBOX_FILE_PATH_PATTERN =
-  /(^|[\s:\uFF1A|])((?:\/workspace\/|~\/|(?:output|outputs|artifacts|input|inputs|tmp|workspace)\/)[^\s)\]\uFF09}>`"']*\.[A-Za-z0-9]{1,12})/g;
+  /(^|[\s:：|])((?:\/workspace\/|~\/|(?:output|outputs|artifacts|input|inputs|tmp|workspace)\/)[^\s)\]）}>`"']*\.[A-Za-z0-9]{1,12})/g;
 const TEXT_FILE_EXTENSIONS = new Set([
   'txt',
   'md',

@@ -8,8 +8,6 @@
 import type { FC } from 'react';
 import { useEffect, useCallback, useMemo } from 'react';
 
-import { useTranslation } from 'react-i18next';
-
 import { MessageSquareText, ListTodo, TerminalSquare, PanelRight, Users } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -22,57 +20,45 @@ import type { LucideIcon } from 'lucide-react';
 const ALL_MODES: Array<{
   key: LayoutMode;
   icon: LucideIcon;
-  labelKey: string;
-  labelFallback: string;
+  label: string;
   shortcut: string;
-  descriptionKey: string;
-  descriptionFallback: string;
+  description: string;
   requiresWorkspace?: boolean;
 }> = [
   {
     key: 'chat',
     icon: MessageSquareText,
-    labelKey: 'agent.layoutModes.chat.label',
-    labelFallback: 'Chat',
+    label: 'Chat',
     shortcut: '1',
-    descriptionKey: 'agent.layoutModes.chat.description',
-    descriptionFallback: 'Full chat view',
+    description: 'Full chat view with optional plan panel',
   },
   {
     key: 'task',
     icon: ListTodo,
-    labelKey: 'agent.layoutModes.task.label',
-    labelFallback: 'Task',
+    label: 'Task',
     shortcut: '2',
-    descriptionKey: 'agent.layoutModes.task.description',
-    descriptionFallback: 'Chat with inspector',
+    description: 'Split view: chat + task panel (50/50)',
   },
   {
     key: 'code',
     icon: TerminalSquare,
-    labelKey: 'agent.layoutModes.code.label',
-    labelFallback: 'Code',
+    label: 'Code',
     shortcut: '3',
-    descriptionKey: 'agent.layoutModes.code.description',
-    descriptionFallback: 'Chat with terminal',
+    description: 'Split view: chat + terminal (50/50)',
   },
   {
     key: 'canvas',
     icon: PanelRight,
-    labelKey: 'agent.layoutModes.canvas.label',
-    labelFallback: 'Canvas',
+    label: 'Canvas',
     shortcut: '4',
-    descriptionKey: 'agent.layoutModes.canvas.description',
-    descriptionFallback: 'Chat with canvas',
+    description: 'Split view: chat + artifact canvas (35/65)',
   },
   {
     key: 'collab',
     icon: Users,
-    labelKey: 'agent.layoutModes.collab.label',
-    labelFallback: 'Collab',
+    label: 'Collab',
     shortcut: '5',
-    descriptionKey: 'agent.layoutModes.collab.description',
-    descriptionFallback: 'Chat with workspace',
+    description: 'Split view: chat + workspace group chat (55/45)',
     requiresWorkspace: true,
   },
 ];
@@ -82,7 +68,6 @@ interface LayoutModeSelectorProps {
 }
 
 export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace = false }) => {
-  const { t } = useTranslation();
   const { mode, setMode } = useLayoutModeStore(
     useShallow((state) => ({ mode: state.mode, setMode: state.setMode }))
   );
@@ -115,29 +100,24 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
   return (
     <div
       data-tour="layout-selector"
-      className="flex items-center gap-0.5 rounded-md border border-slate-200/70 bg-white/80 p-0.5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80"
+      className="flex items-center gap-0.5 bg-slate-200/60 dark:bg-slate-700/40 rounded-md p-0.5"
     >
       {visibleModes.map((m) => {
         const Icon = m.icon;
         const isActive = mode === m.key;
-        const label = t(m.labelKey, m.labelFallback);
-        const description = t(m.descriptionKey, m.descriptionFallback);
         return (
           <LazyTooltip
             key={m.key}
             title={
               <div>
                 <div className="font-medium">
-                  {t('agent.layoutModes.tooltipTitle', {
-                    mode: label,
-                    defaultValue: '{{mode}} mode',
-                  })}{' '}
+                  {m.label} Mode{' '}
                   <span className="opacity-60 ml-1">
                     {/(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent) ? 'Cmd' : 'Ctrl'}+
                     {m.shortcut}
                   </span>
                 </div>
-                <div className="text-xs opacity-80">{description}</div>
+                <div className="text-xs opacity-80">{m.description}</div>
               </div>
             }
           >
@@ -147,7 +127,7 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
                 setMode(m.key);
               }}
               className={`
-                flex h-7 min-w-7 items-center justify-center gap-1 rounded px-1.5 text-xs font-medium min-[1180px]:px-2
+                flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
                 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 cursor-pointer
                 ${
                   isActive
@@ -156,13 +136,10 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
                 }
               `}
               aria-pressed={isActive}
-              aria-label={t('agent.layoutModes.aria', {
-                mode: label,
-                defaultValue: '{{mode}} mode',
-              })}
+              aria-label={`${m.label} mode`}
             >
               <Icon size={13} />
-              <span className="hidden min-[1180px]:inline">{label}</span>
+              <span className="hidden sm:inline">{m.label}</span>
             </button>
           </LazyTooltip>
         );

@@ -11,16 +11,7 @@ import { useCallback, useEffect, memo, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  Bot,
-  Filter,
-  FolderOpen,
-  GitBranch,
-  ListTodo,
-  Route,
-  ShieldQuestion,
-  X,
-} from 'lucide-react';
+import { Bot, Filter, GitBranch, ListTodo, Route, X } from 'lucide-react';
 
 import { useActiveGraphRunForConversation } from '@/stores/graphStore';
 import { useTenantStore } from '@/stores/tenant';
@@ -41,8 +32,6 @@ import { AgentGraphView } from './AgentGraphView';
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { buildWorkspaceAgentNodes } from './multiAgent/workspaceAgentPanelModel';
 import { ResizeHandle } from './RightPanelComponents';
-import { AgentRunOverview } from './run/AgentRunOverview';
-import { PermissionHitlCenter } from './run/PermissionHitlCenter';
 import { TaskList } from './TaskList';
 import { TaskLanePanel } from './tasks/TaskLanePanel';
 import { WorkspaceTaskPlanPanel } from './workspace/WorkspaceTaskPlanPanel';
@@ -50,7 +39,6 @@ import { buildWorkspaceTaskPlanRows } from './workspace/WorkspaceTaskPlanPanelMo
 
 import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
 
-import type { AgentRunViewModel } from './run/agentRunViewModel';
 import type {
   AgentTask,
   ExecutionNarrativeEntry,
@@ -79,7 +67,6 @@ export interface RightPanelProps {
   executionNarrative?: ExecutionNarrativeEntry[] | undefined;
   latestToolsetChange?: ToolsetChangedEventData | null | undefined;
   agentNodes?: Map<string, AgentNode> | undefined;
-  runViewModel?: AgentRunViewModel | undefined;
   onClose?: (() => void) | undefined;
   onFileClick?: ((filePath: string) => void) | undefined;
   collapsed?: boolean | undefined;
@@ -89,15 +76,7 @@ export interface RightPanelProps {
   maxWidth?: number | undefined;
 }
 
-type PanelTab =
-  | 'overview'
-  | 'tasks'
-  | 'agent'
-  | 'insights'
-  | 'agents'
-  | 'decisions'
-  | 'evidence'
-  | 'graph';
+type PanelTab = 'tasks' | 'agent' | 'insights' | 'agents' | 'graph';
 
 function tFallback(t: TFunction, key: string, fallback: string): string {
   const translated = t(key, fallback);
@@ -469,7 +448,6 @@ export const RightPanel = memo<RightPanelProps>(
     executionNarrative,
     latestToolsetChange,
     agentNodes,
-    runViewModel,
     onClose,
     collapsed,
     width = 360,
@@ -485,9 +463,6 @@ export const RightPanel = memo<RightPanelProps>(
       latestToolsetChange ||
       (executionNarrative && executionNarrative.length > 0)
     );
-    const hasRunOverview = Boolean(runViewModel);
-    const hasPendingDecisions = Boolean(runViewModel && runViewModel.pendingRequests.length > 0);
-    const hasEvidence = Boolean(runViewModel && runViewModel.evidence.total > 0);
     const hasAgentSession = Boolean(selectedAgentSessionId);
     const tenantId = useTenantStore((state) => state.currentTenant?.id);
     const storeWorkspaceId = useWorkspaceStore((state) => state.currentWorkspace?.id);
@@ -557,48 +532,31 @@ export const RightPanel = memo<RightPanelProps>(
       [activeWorkspaceTasks, activeWorkspaceSnapshot, currentWorkspaceTaskId]
     );
     const visibleTaskCount = isWorkspaceActive ? workspaceRows.length : tasks.length;
-    const initialTab: PanelTab = hasRunOverview
-      ? 'overview'
-      : isWorkspaceActive
-        ? hasAgentSession
-          ? 'agent'
-          : 'tasks'
-        : hasGraph && tasks.length === 0
-          ? 'graph'
-          : hasInsights && tasks.length === 0
-            ? 'insights'
-            : 'tasks';
+    const initialTab: PanelTab = isWorkspaceActive
+      ? hasAgentSession
+        ? 'agent'
+        : 'tasks'
+      : hasGraph && tasks.length === 0
+        ? 'graph'
+        : hasInsights && tasks.length === 0
+          ? 'insights'
+          : 'tasks';
     const [preferredTab, setPreferredTab] = useUrlState<PanelTab>('panel', initialTab, {
-      allowed: [
-        'overview',
-        'tasks',
-        'agent',
-        'insights',
-        'agents',
-        'decisions',
-        'evidence',
-        'graph',
-      ],
+      allowed: ['tasks', 'agent', 'insights', 'agents', 'graph'],
     });
     const [taskView, setTaskView] = useUrlState<'flat' | 'lanes'>('tasks', 'flat', {
       allowed: ['flat', 'lanes'],
     });
     const activeTab: PanelTab =
-      preferredTab === 'overview' && !hasRunOverview
+      preferredTab === 'agent' && !hasAgentSession
         ? 'tasks'
-        : preferredTab === 'agent' && !hasAgentSession
+        : preferredTab === 'insights' && !hasInsights
           ? 'tasks'
-          : preferredTab === 'insights' && !hasInsights
+          : preferredTab === 'agents' && !hasAgents
             ? 'tasks'
-            : preferredTab === 'agents' && !hasAgents
+            : preferredTab === 'graph' && !hasGraph
               ? 'tasks'
-              : preferredTab === 'decisions' && !hasRunOverview
-                ? 'tasks'
-                : preferredTab === 'evidence' && !hasRunOverview
-                  ? 'tasks'
-                  : preferredTab === 'graph' && !hasGraph
-                    ? 'tasks'
-                    : preferredTab;
+              : preferredTab;
 
     useEffect(() => {
       if (selectedAgentSessionId) {
@@ -690,69 +648,26 @@ export const RightPanel = memo<RightPanelProps>(
 
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
-          <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
-            <div className="flex items-center justify-between gap-3 min-w-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                  {hasRunOverview ? (
-                    <Bot size={16} className="text-slate-600 dark:text-slate-300" />
-                  ) : (
-                    <ListTodo size={16} className="text-slate-600 dark:text-slate-300" />
-                  )}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <h2 className="font-semibold text-slate-900 dark:text-slate-100 leading-tight">
-                    {hasRunOverview
-                      ? tFallback(t, 'agent.rightPanel.tabs.overview', 'Agent Run')
-                      : tFallback(t, 'agent.rightPanel.tabs.tasks', 'Tasks')}
-                  </h2>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {hasRunOverview && runViewModel
-                      ? t('agent.rightPanel.runSummary', {
-                          defaultValue: '{{tasks}} tasks - {{agents}} agents - {{hitl}} waiting',
-                          tasks: runViewModel.taskSummary.total,
-                          agents: runViewModel.agentSummary.total,
-                          hitl: runViewModel.pendingRequests.length,
-                        })
-                      : t('agent.rightPanel.taskCount', {
-                          defaultValue: '{{count}} item',
-                          count: visibleTaskCount,
-                        })}
-                  </span>
-                </div>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                <ListTodo size={16} className="text-slate-600 dark:text-slate-300" />
               </div>
-
-              <div className="flex items-center gap-1">
-                {onClose ? (
-                  <LazyButton
-                    type="text"
-                    size="small"
-                    icon={<X size={18} />}
-                    onClick={onClose}
-                    className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                    data-testid="close-button"
-                  />
-                ) : null}
+              <div className="flex flex-col min-w-0">
+                <h2 className="font-semibold text-slate-900 dark:text-slate-100 leading-tight">
+                  {tFallback(t, 'agent.rightPanel.tabs.tasks', 'Tasks')}
+                </h2>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('agent.rightPanel.taskCount', {
+                    defaultValue: '{{count}} item',
+                    count: visibleTaskCount,
+                  })}
+                </span>
               </div>
             </div>
 
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="inline-flex max-w-full items-center overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-50 dark:bg-slate-800/70">
-                {hasRunOverview ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreferredTab('overview');
-                    }}
-                    className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                      activeTab === 'overview'
-                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
-                        : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    {tFallback(t, 'agent.rightPanel.tabs.overviewShort', 'Overview')}
-                  </button>
-                ) : null}
+            <div className="flex items-center gap-2">
+              <div className="inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-50 dark:bg-slate-800/70">
                 <button
                   type="button"
                   onClick={() => {
@@ -764,9 +679,7 @@ export const RightPanel = memo<RightPanelProps>(
                       : 'text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  {hasRunOverview
-                    ? tFallback(t, 'agent.rightPanel.tabs.plan', 'Plan')
-                    : tFallback(t, 'agent.rightPanel.tabs.tasks', 'Tasks')}
+                  {tFallback(t, 'agent.rightPanel.tabs.tasks', 'Tasks')}
                 </button>
                 {activeTab === 'tasks' ? (
                   <button
@@ -820,9 +733,7 @@ export const RightPanel = memo<RightPanelProps>(
                       : 'text-slate-500 dark:text-slate-400'
                   } ${!hasInsights ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {hasRunOverview
-                    ? tFallback(t, 'agent.rightPanel.tabs.trace', 'Trace')
-                    : tFallback(t, 'agent.rightPanel.tabs.insights', 'Insights')}
+                  {tFallback(t, 'agent.rightPanel.tabs.insights', 'Insights')}
                 </button>
                 <button
                   type="button"
@@ -840,46 +751,6 @@ export const RightPanel = memo<RightPanelProps>(
                 >
                   {tFallback(t, 'agent.rightPanel.tabs.agents', 'Agents')}
                 </button>
-                {hasRunOverview ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreferredTab('decisions');
-                    }}
-                    className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                      activeTab === 'decisions'
-                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
-                        : hasPendingDecisions
-                          ? 'text-amber-600 dark:text-amber-300'
-                          : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      <ShieldQuestion size={12} aria-hidden />
-                      {tFallback(t, 'agent.rightPanel.tabs.decisions', 'HITL')}
-                    </span>
-                  </button>
-                ) : null}
-                {hasRunOverview ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreferredTab('evidence');
-                    }}
-                    className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                      activeTab === 'evidence'
-                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
-                        : hasEvidence
-                          ? 'text-emerald-600 dark:text-emerald-300'
-                          : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      <FolderOpen size={12} aria-hidden />
-                      {tFallback(t, 'agent.rightPanel.tabs.evidence', 'Evidence')}
-                    </span>
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -900,67 +771,23 @@ export const RightPanel = memo<RightPanelProps>(
                   </span>
                 </button>
               </div>
+
+              <div className="flex items-center gap-1">
+                {onClose ? (
+                  <LazyButton
+                    type="text"
+                    size="small"
+                    icon={<X size={18} />}
+                    onClick={onClose}
+                    className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    data-testid="close-button"
+                  />
+                ) : null}
+              </div>
             </div>
           </div>
 
-          {activeTab === 'overview' && runViewModel ? (
-            <div className="flex-1 overflow-y-auto">
-              <AgentRunOverview run={runViewModel} />
-            </div>
-          ) : activeTab === 'decisions' && runViewModel ? (
-            <div className="flex-1 overflow-y-auto p-3">
-              <PermissionHitlCenter requests={runViewModel.pendingRequests} />
-            </div>
-          ) : activeTab === 'evidence' && runViewModel ? (
-            <div className="flex-1 overflow-y-auto p-3">
-              <div className="space-y-3" data-testid="agent-run-evidence-summary">
-                <div className="rounded-lg border border-slate-200/70 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/35">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {tFallback(t, 'agent.rightPanel.evidence.title', 'Evidence summary')}
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                    {tFallback(
-                      t,
-                      'agent.rightPanel.evidence.description',
-                      'Use the Evidence drawer for artifact files, screenshots, diffs, test runs, and logs.'
-                    )}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    [
-                      tFallback(t, 'agent.rightPanel.evidence.tests', 'Tests'),
-                      runViewModel.evidence.testRuns,
-                    ],
-                    [
-                      tFallback(t, 'agent.rightPanel.evidence.diffs', 'Diffs'),
-                      runViewModel.evidence.diffs,
-                    ],
-                    [
-                      tFallback(t, 'agent.rightPanel.evidence.screenshots', 'Screenshots'),
-                      runViewModel.evidence.screenshots,
-                    ],
-                    [
-                      tFallback(t, 'agent.rightPanel.evidence.logs', 'Logs'),
-                      runViewModel.evidence.logs,
-                    ],
-                  ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="rounded-lg border border-slate-200/70 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/35"
-                    >
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        {label}
-                      </p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'agent' ? (
+          {activeTab === 'agent' ? (
             <div className="min-h-0 flex-1 overflow-hidden">
               <AgentSessionMessagesPanel projectId={projectId} sessionId={selectedAgentSessionId} />
             </div>

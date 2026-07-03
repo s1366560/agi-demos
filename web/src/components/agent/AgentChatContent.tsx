@@ -43,7 +43,6 @@ import {
 } from '@/stores/agent/timelineStore';
 import { useDefinitions } from '@/stores/agentDefinitions';
 import { useAgentV3Store } from '@/stores/agentV3';
-import { usePendingRequests } from '@/stores/hitlStore.unified';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxStore } from '@/stores/sandbox';
@@ -82,13 +81,11 @@ import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { MessageArea } from './MessageArea';
 import { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 import { Resizer } from './Resizer';
-import { RunStatusStrip, buildAgentRunViewModel } from './run';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 import { useProjectConversationLoader } from './useProjectConversationLoader';
 
-import type { AgentRunMode } from './run';
 import type {
   AgentTask,
   Conversation,
@@ -117,9 +114,9 @@ interface AgentChatContentProps {
 }
 
 // Constants for resize constraints
-const INPUT_MIN_HEIGHT = 148;
-const INPUT_MAX_HEIGHT = 480;
-const INPUT_DEFAULT_HEIGHT = 156;
+const INPUT_MIN_HEIGHT = 160;
+const INPUT_MAX_HEIGHT = 560;
+const INPUT_DEFAULT_HEIGHT = 160;
 
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   const value = metadata?.[key];
@@ -434,21 +431,18 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
     const [chatSearchVisible, setChatSearchVisible] = useState(false);
     const [selectedAgentSessionId, setSelectedAgentSessionId] = useState<string | null>(null);
-    const [runMode, setRunMode] = useState<AgentRunMode>('build');
     const [showOnboarding, setShowOnboarding] = useState(
       () => !localStorage.getItem('memstack_onboarding_complete')
     );
 
     const inputBarRef = useRef<HTMLTextAreaElement>(null);
-    const isEmptyConversationSurface = !activeConversationId && timeline.length === 0;
 
-    // Keep the first screen conversation-first. Inspector modes are useful once
-    // there is a run, task, terminal, or artifact to inspect.
+    // Auto-switch to task mode when tasks appear
     useEffect(() => {
-      if (isEmptyConversationSurface && layoutMode !== 'chat') {
-        setLayoutMode('chat');
+      if (tasks.length > 0 && layoutMode === 'chat') {
+        // Don't auto-switch, just let the user know via the layout selector
       }
-    }, [isEmptyConversationSurface, layoutMode, setLayoutMode]);
+    }, [tasks.length, layoutMode]);
 
     useEffect(() => {
       return subscribeToAgentChatSearchRequests(() => {
@@ -493,7 +487,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
                   isPlanMode: newMode === 'plan',
                 });
                 useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
-                setRunMode(newMode === 'plan' ? 'plan' : 'build');
               })
               .catch((err: unknown) => {
                 void message.error(
@@ -788,120 +781,63 @@ ${content}`;
     // Plan Mode toggle
     const isPlanMode = useIsPlanMode();
 
-    const applyPlanMode = useCallback(
-      async (nextIsPlanMode: boolean) => {
-        const targetConversationId = activeConversationId || conversationId;
-        if (!targetConversationId) return;
-        const newMode = nextIsPlanMode ? 'plan' : 'build';
-        try {
-          const { planService } = await import('@/services/planService');
-          await planService.switchMode(targetConversationId, newMode);
-          useAgentV3Store.getState().updateConversationState(targetConversationId, {
-            isPlanMode: nextIsPlanMode,
-          });
-          useExecutionStore.getState().setAgentIsPlanMode(nextIsPlanMode);
-        } catch (err) {
-          void message.error(
-            err instanceof Error ? err.message : t('agent.chat.errors.switchPlanModeFailed')
-          );
-          console.error('Failed to switch plan mode:', err);
-          throw err;
-        }
-      },
-      [activeConversationId, conversationId, t]
-    );
-
     const handleTogglePlanMode = useCallback(async () => {
-      const nextIsPlanMode = !isPlanMode;
+      const targetConversationId = activeConversationId || conversationId;
+      if (!targetConversationId) return;
+      const newMode = isPlanMode ? 'build' : 'plan';
       try {
-        await applyPlanMode(nextIsPlanMode);
-        setRunMode(nextIsPlanMode ? 'plan' : 'build');
-      } catch {
-        // applyPlanMode already reported the failure.
+        const { planService } = await import('@/services/planService');
+        await planService.switchMode(targetConversationId, newMode);
+        useAgentV3Store.getState().updateConversationState(targetConversationId, {
+          isPlanMode: newMode === 'plan',
+        });
+        useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
+      } catch (err) {
+        void message.error(
+          err instanceof Error ? err.message : t('agent.chat.errors.switchPlanModeFailed')
+        );
+        console.error('Failed to switch plan mode:', err);
       }
-    }, [applyPlanMode, isPlanMode]);
-
-    const handleRunModeChange = useCallback(
-      async (nextMode: AgentRunMode) => {
-        const previousMode = runMode;
-        const nextIsPlanMode = nextMode === 'plan' || nextMode === 'readOnly';
-        setRunMode(nextMode);
-        if (nextIsPlanMode === isPlanMode) return;
-        try {
-          await applyPlanMode(nextIsPlanMode);
-        } catch {
-          setRunMode(previousMode);
-        }
-      },
-      [applyPlanMode, isPlanMode, runMode]
-    );
-
-    useEffect(() => {
-      setRunMode((current) => {
-        if (isPlanMode) {
-          return current === 'readOnly' ? current : 'plan';
-        }
-        return current === 'auto' ? current : 'build';
-      });
-    }, [isPlanMode]);
+    }, [activeConversationId, conversationId, isPlanMode, t]);
 
     const chatColumn = (
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative bg-slate-50/65 dark:bg-slate-950/45">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         {headerExtra && (
           <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 px-4 py-2 flex items-center gap-2">
             {headerExtra}
           </div>
         )}
         {(currentConversation || activeAgentNode?.name) && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 bg-white/90 px-4 py-2 dark:border-slate-800/70 dark:bg-slate-950/75 sm:px-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <ConversationAgentBadge conversation={currentConversation} />
-              {currentConversation && (
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
-                  <span
-                    className="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-slate-100"
-                    title={conversationTitle}
-                  >
-                    {conversationTitle}
-                  </span>
-                  <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    {conversationCreatedAt && (
-                      <span
-                        className="hidden shrink-0 items-center gap-1 sm:inline-flex"
-                        title={conversationCreatedAt}
-                      >
-                        <Clock3 size={12} />
-                        {t('agent.chat.header.createdAt', {
-                          date: conversationCreatedAt,
-                          defaultValue: 'Created {{date}}',
-                        })}
-                      </span>
-                    )}
-                    <span className="truncate">
-                      {t('agent.chat.header.messageCount', {
-                        count: timeline.length,
-                        defaultValue: '{{count}} timeline item',
-                      })}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {activeAgentNode?.name && (
-                <span className="flex shrink-0 items-center gap-1.5 rounded-md bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                  <Bot size={12} />
-                  {activeAgentNode.name}
+          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-1.5 flex items-center gap-2 min-w-0">
+            <ConversationAgentBadge conversation={currentConversation} />
+            {currentConversation && (
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                <span
+                  className="min-w-0 truncate text-sm font-medium text-slate-800 dark:text-slate-100"
+                  title={conversationTitle}
+                >
+                  {conversationTitle}
                 </span>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setLayoutMode('task');
-                }}
-                className="hidden h-7 shrink-0 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 min-[920px]:inline-flex"
-              >
-                {t('agent.run.openInspector', { defaultValue: 'Inspector' })}
-              </button>
-            </div>
+                {conversationCreatedAt && (
+                  <span
+                    className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400 sm:inline-flex"
+                    title={conversationCreatedAt}
+                  >
+                    <Clock3 size={12} />
+                    {t('agent.chat.header.createdAt', {
+                      date: conversationCreatedAt,
+                      defaultValue: 'Created {{date}}',
+                    })}
+                  </span>
+                )}
+              </div>
+            )}
+            {activeAgentNode?.name && (
+              <span className="flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-medium px-2 py-0.5 rounded-full">
+                <Bot size={12} />
+                {activeAgentNode.name}
+              </span>
+            )}
           </div>
         )}
         <div className="flex-1 overflow-hidden relative min-h-0">
@@ -945,10 +881,6 @@ ${content}`;
               void handleTogglePlanMode();
             }}
             isPlanMode={isPlanMode}
-            runMode={runMode}
-            onRunModeChange={(nextMode) => {
-              void handleRunModeChange(nextMode);
-            }}
             activeAgentId={activeAgentId}
             onAgentSelect={setActiveAgentId}
           />
@@ -1002,40 +934,6 @@ ${content}`;
     const sandboxConnectionStatus = useSandboxStore((s) => s.connectionStatus);
     const currentTool = useSandboxStore((s) => s.currentTool);
     const suggestionsCount = suggestions.length;
-    const pendingHitlRequests = usePendingRequests(activeConversationId ?? '');
-    const runViewModel = useMemo(
-      () =>
-        buildAgentRunViewModel({
-          conversationId: activeConversationId,
-          mode: runMode,
-          isPlanMode,
-          isStreaming,
-          tasks,
-          pendingRequests: pendingHitlRequests,
-          agentNodes: rawAgentNodes,
-          artifacts: conversationArtifacts,
-          sandboxConnectionStatus,
-          currentToolName: currentTool?.name ?? null,
-          doomLoopDetected,
-          executionNarrative,
-          latestToolsetChange,
-        }),
-      [
-        activeConversationId,
-        conversationArtifacts,
-        currentTool?.name,
-        doomLoopDetected,
-        executionNarrative,
-        isPlanMode,
-        isStreaming,
-        latestToolsetChange,
-        pendingHitlRequests,
-        rawAgentNodes,
-        runMode,
-        sandboxConnectionStatus,
-        tasks,
-      ]
-    );
 
     const workspaceStatusSlots = useMemo(() => {
       const slots: Parameters<typeof WorkspaceStatusBar>[0] = {};
@@ -1045,7 +943,7 @@ ${content}`;
             ? Math.round((taskProgress.current / taskProgress.total) * 100)
             : 0;
         slots.task = {
-          label: t('agent.statusSlots.task', 'Task'),
+          label: 'Task',
           value: `${String(taskProgress.current)}/${String(taskProgress.total)} · ${String(taskPercent)}%`,
           tone:
             taskProgress.status === 'failed'
@@ -1053,16 +951,12 @@ ${content}`;
               : taskProgress.status === 'completed'
                 ? 'ok'
                 : 'running',
-          hint: taskProgress.label ?? t('agent.statusSlots.taskProgress', 'Task progress'),
+          hint: taskProgress.label ?? 'Task progress',
           progressPercent: taskPercent,
         };
       }
       if (isStreaming) {
-        slots.llm = {
-          label: t('agent.statusSlots.llm', 'LLM'),
-          value: t('agent.statusSlots.streaming', 'streaming'),
-          tone: 'running',
-        };
+        slots.llm = { label: 'LLM', value: 'streaming', tone: 'running' };
       }
       if (sandboxConnectionStatus !== 'idle') {
         const tone: 'ok' | 'error' | 'running' =
@@ -1072,7 +966,7 @@ ${content}`;
               ? 'error'
               : 'running';
         slots.sandbox = {
-          label: t('agent.statusSlots.sandbox', 'Sandbox'),
+          label: 'Sandbox',
           value: currentTool
             ? `${sandboxConnectionStatus} · ${currentTool.name}`
             : sandboxConnectionStatus,
@@ -1081,28 +975,21 @@ ${content}`;
       }
       if (suggestionsCount > 0 || doomLoopDetected) {
         slots.hitl = {
-          label: t('agent.statusSlots.hitl', 'HITL'),
+          label: 'HITL',
           value: doomLoopDetected
-            ? t('agent.statusSlots.doomLoop', 'doom-loop')
-            : t('agent.statusSlots.suggestions', {
-                count: suggestionsCount,
-                defaultValue: '{{count}} suggestions',
-              }),
+            ? 'doom-loop'
+            : `${String(suggestionsCount)} suggestion${suggestionsCount === 1 ? '' : 's'}`,
           tone: doomLoopDetected ? 'error' : 'warning',
         };
       }
       if (conversationArtifacts.length > 0) {
         slots.friction = {
-          label: t('agent.statusSlots.evidence', 'Evidence'),
-          value: t('agent.statusSlots.artifacts', {
-            count: conversationArtifacts.length,
-            defaultValue: '{{count}} artifacts',
-          }),
+          label: 'Evidence',
+          value: `${String(conversationArtifacts.length)} artifact${
+            conversationArtifacts.length === 1 ? '' : 's'
+          }`,
           tone: 'idle',
-          hint: t(
-            'agent.statusSlots.evidenceHint',
-            'Open the Evidence drawer to inspect screenshots, diffs, test runs and logs'
-          ),
+          hint: 'Open the Evidence drawer to inspect screenshots, diffs, test runs and logs',
         };
       }
       return slots;
@@ -1114,41 +1001,17 @@ ${content}`;
       suggestionsCount,
       doomLoopDetected,
       conversationArtifacts.length,
-      t,
     ]);
 
-    const shouldShowRunStatusStrip =
-      Boolean(activeConversationId) ||
-      timeline.length > 0 ||
-      isStreaming ||
-      tasks.length > 0 ||
-      pendingHitlRequests.length > 0 ||
-      conversationArtifacts.length > 0 ||
-      Boolean(doomLoopDetected);
-
     const statusBarWithLayout = (
-      <div className="min-w-0 flex-shrink-0 border-t border-slate-200/60 bg-white/90 dark:border-slate-800/70 dark:bg-slate-950/85">
-        {shouldShowRunStatusStrip && (
-          <RunStatusStrip
-            run={runViewModel}
-            onStop={abortStream}
-            onOpenInspector={() => {
-              setLayoutMode('task');
-            }}
-            onOpenEvidence={() => {
-              setEvidenceOpen(true);
-            }}
-          />
-        )}
-        <div className="flex min-w-0 items-center gap-2 px-2 py-1">
+      <div className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
+        <div className="flex items-center min-w-0">
           <WorkspaceStatusBar
             {...workspaceStatusSlots}
-            className="hidden min-w-0 flex-shrink border-0 bg-transparent px-0 py-0 min-[960px]:flex"
+            className="min-w-0 flex-shrink border-0 bg-transparent px-2 py-0"
           />
-          <div className="hidden min-w-0 flex-1 overflow-hidden min-[1200px]:block">
-            {statusBar}
-          </div>
-          <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:gap-2">
+          <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
+          <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
             {conversationArtifacts.length > 0 && (
               <button
                 type="button"
@@ -1289,7 +1152,6 @@ ${content}`;
                 executionNarrative={executionNarrative}
                 latestToolsetChange={latestToolsetChange}
                 agentNodes={rawAgentNodes}
-                runViewModel={runViewModel}
                 collapsed={false}
               />
             </Suspense>
