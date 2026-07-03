@@ -532,6 +532,16 @@ pub struct ProjectCreateInput {
     pub agent_conversation_mode: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ProjectListInput<'a> {
+    pub tenant_id: Option<&'a str>,
+    pub search: Option<&'a str>,
+    pub visibility: &'a str,
+    pub owner_id: Option<&'a str>,
+    pub page: i64,
+    pub page_size: i64,
+}
+
 /// Format a UTC timestamp as ISO-8601 with a trailing `Z`, consistent with P1's
 /// `prod_api::rfc3339`. (Exact pydantic format parity — `Z` vs `+00:00`,
 /// sub-second precision — is a shared F3 golden-capture item; tenants read is not
@@ -640,10 +650,8 @@ impl InMemoryDeviceGrantStore {
         let expired: Vec<(String, String)> = state
             .device
             .iter()
-            .filter_map(|(device_code, entry)| {
-                (entry.expires_at_ms <= now_ms)
-                    .then(|| (device_code.clone(), entry.grant.user_code.clone()))
-            })
+            .filter(|(_, entry)| entry.expires_at_ms <= now_ms)
+            .map(|(device_code, entry)| (device_code.clone(), entry.grant.user_code.clone()))
             .collect();
         for (device_code, user_code) in expired {
             state.device.remove(&device_code);
@@ -818,12 +826,7 @@ pub trait IdentityService: Send + Sync {
     async fn list_projects(
         &self,
         user_id: &str,
-        tenant_id: Option<&str>,
-        search: Option<&str>,
-        visibility: &str,
-        owner_id: Option<&str>,
-        page: i64,
-        page_size: i64,
+        input: ProjectListInput<'_>,
     ) -> Result<ProjectPage, IdentityError>;
 
     async fn get_project(
@@ -1513,13 +1516,16 @@ impl IdentityService for PgIdentityService {
     async fn list_projects(
         &self,
         user_id: &str,
-        tenant_id: Option<&str>,
-        search: Option<&str>,
-        visibility: &str,
-        owner_id: Option<&str>,
-        page: i64,
-        page_size: i64,
+        input: ProjectListInput<'_>,
     ) -> Result<ProjectPage, IdentityError> {
+        let ProjectListInput {
+            tenant_id,
+            search,
+            visibility,
+            owner_id,
+            page,
+            page_size,
+        } = input;
         let (page, page_size) = clamp_pagination(page, page_size);
         let offset = (page - 1) * page_size;
         let records = self
@@ -2424,13 +2430,16 @@ impl IdentityService for DevIdentityService {
     async fn list_projects(
         &self,
         _user_id: &str,
-        tenant_id: Option<&str>,
-        search: Option<&str>,
-        visibility: &str,
-        owner_id: Option<&str>,
-        page: i64,
-        page_size: i64,
+        input: ProjectListInput<'_>,
     ) -> Result<ProjectPage, IdentityError> {
+        let ProjectListInput {
+            tenant_id,
+            search,
+            visibility,
+            owner_id,
+            page,
+            page_size,
+        } = input;
         let (page, page_size) = clamp_pagination(page, page_size);
         let project = self.dev_project();
         let search_matches = search
@@ -3149,12 +3158,14 @@ mod unit {
         let page = svc
             .list_projects(
                 "dev-user",
-                Some("dev-tenant"),
-                Some("Default"),
-                "all",
-                None,
-                1,
-                20,
+                ProjectListInput {
+                    tenant_id: Some("dev-tenant"),
+                    search: Some("Default"),
+                    visibility: "all",
+                    owner_id: None,
+                    page: 1,
+                    page_size: 20,
+                },
             )
             .await
             .unwrap();
@@ -3163,7 +3174,17 @@ mod unit {
         assert_eq!(page.owner_ids, vec!["dev-user"]);
 
         let empty = svc
-            .list_projects("dev-user", Some("other"), None, "all", None, 1, 20)
+            .list_projects(
+                "dev-user",
+                ProjectListInput {
+                    tenant_id: Some("other"),
+                    search: None,
+                    visibility: "all",
+                    owner_id: None,
+                    page: 1,
+                    page_size: 20,
+                },
+            )
             .await
             .unwrap();
         assert_eq!(empty.total, 0);
@@ -3171,7 +3192,17 @@ mod unit {
         assert!(empty.owner_ids.is_empty());
 
         let private = svc
-            .list_projects("dev-user", None, None, "private", None, 2, 20)
+            .list_projects(
+                "dev-user",
+                ProjectListInput {
+                    tenant_id: None,
+                    search: None,
+                    visibility: "private",
+                    owner_id: None,
+                    page: 2,
+                    page_size: 20,
+                },
+            )
             .await
             .unwrap();
         assert_eq!(private.total, 1);

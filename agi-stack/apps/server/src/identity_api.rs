@@ -25,9 +25,9 @@ use agistack_adapters_postgres::{ProjectUpdatePatch, TenantUpdatePatch};
 use crate::auth::Identity;
 use crate::identity::{
     DeviceApproveView, DeviceCodeView, DeviceTokenView, IdentityError, InvitationListView,
-    InvitationVerifyView, InvitationView, ProjectCreateInput, ProjectMemberMutationView,
-    ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView, TenantMemberMutationView,
-    TenantPage, TenantView,
+    InvitationVerifyView, InvitationView, ProjectCreateInput, ProjectListInput,
+    ProjectMemberMutationView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
+    TenantMemberMutationView, TenantPage, TenantView,
 };
 use crate::AppState;
 
@@ -38,7 +38,7 @@ impl IntoResponse for IdentityError {
     fn into_response(self) -> Response {
         let detail = self
             .detail_value
-            .unwrap_or_else(|| serde_json::Value::String(self.detail));
+            .unwrap_or(serde_json::Value::String(self.detail));
         let body = Json(json!({ "detail": detail }));
         if self.www_authenticate {
             (self.status, [("WWW-Authenticate", "Bearer")], body).into_response()
@@ -484,12 +484,14 @@ async fn list_projects(
         .identity
         .list_projects(
             &identity.user_id,
-            q.tenant_id.as_deref(),
-            q.search.as_deref(),
-            &q.visibility,
-            q.owner_id.as_deref(),
-            q.page,
-            q.page_size,
+            ProjectListInput {
+                tenant_id: q.tenant_id.as_deref(),
+                search: q.search.as_deref(),
+                visibility: &q.visibility,
+                owner_id: q.owner_id.as_deref(),
+                page: q.page,
+                page_size: q.page_size,
+            },
         )
         .await?;
     Ok(Json(page))

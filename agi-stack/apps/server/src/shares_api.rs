@@ -546,7 +546,7 @@ impl ShareService for DevShareService {
             .filter(|s| s.memory_id == memory_id)
             .cloned()
             .collect::<Vec<_>>();
-        shares.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        shares.sort_by_key(|share| std::cmp::Reverse(share.created_at));
         Ok(ShareList {
             shares: shares.into_iter().map(ShareListItem::from).collect(),
         })

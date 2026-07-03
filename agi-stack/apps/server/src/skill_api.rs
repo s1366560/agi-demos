@@ -479,13 +479,9 @@ impl SkillService for PgSkillService {
         let scope = query
             .scope
             .as_deref()
-            .map(|raw| normalize_scope_filter(raw))
+            .map(normalize_scope_filter)
             .transpose()?;
-        let status = query
-            .status
-            .as_deref()
-            .map(|raw| normalize_status(raw))
-            .transpose()?;
+        let status = query.status.as_deref().map(normalize_status).transpose()?;
         if let Some(project_id) = query.project_id.as_deref() {
             self.ensure_project_access(user_id, &tenant_id, project_id, SkillProjectAccess::Read)
                 .await?;
@@ -1284,7 +1280,7 @@ impl SkillService for DevSkillService {
             .get(skill_id)
             .cloned()
             .unwrap_or_default();
-        versions.sort_by(|a, b| b.version_number.cmp(&a.version_number));
+        versions.sort_by_key(|version| std::cmp::Reverse(version.version_number));
         let total = versions.len() as i64;
         let versions = versions
             .into_iter()

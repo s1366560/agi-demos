@@ -568,7 +568,7 @@ impl TrustService for DevTrustService {
             })
             .cloned()
             .collect::<Vec<_>>();
-        policies.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        policies.sort_by_key(|policy| std::cmp::Reverse(policy.created_at));
         Ok(TrustPolicyListView {
             items: policies.into_iter().map(TrustPolicyView::from).collect(),
         })
@@ -734,7 +734,7 @@ impl TrustService for DevTrustService {
             })
             .cloned()
             .collect::<Vec<_>>();
-        records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        records.sort_by_key(|record| std::cmp::Reverse(record.created_at));
         Ok(DecisionRecordListView {
             items: records.into_iter().map(DecisionRecordView::from).collect(),
         })
