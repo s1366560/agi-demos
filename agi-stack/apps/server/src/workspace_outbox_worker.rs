@@ -307,6 +307,14 @@ mod worker_stream_watchdog;
 mod supervisor;
 use supervisor::SupervisorTickAdmissionHandler;
 
+mod pipeline_shared;
+use pipeline_shared::{
+    bool_from_map_default, merge_object_values, source_publish_dotenv_value, GitCommandOutput,
+};
+
+mod pipeline_drone;
+use pipeline_drone::{finish_drone_pipeline_result, run_drone_pipeline_if_configured};
+
 mod pipeline_run;
 use pipeline_run::{
     build_worker_report_payload, compact_git_error, compact_text, current_worktree_dirty_signature,
