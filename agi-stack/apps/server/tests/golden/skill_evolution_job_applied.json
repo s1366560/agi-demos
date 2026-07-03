@@ -1,0 +1,18 @@
+{
+  "id": "job-1",
+  "project_id": null,
+  "skill_name": "code-review",
+  "action": "improve_skill",
+  "status": "applied",
+  "rationale": "Improve review checklist.",
+  "candidate_preview": "Updated skill content",
+  "candidate_content": "Updated skill content",
+  "blocked_by_review": false,
+  "session_ids": [
+    "sess-1",
+    "sess-2"
+  ],
+  "skill_version_id": "22222222-2222-4222-8222-222222222222",
+  "created_at": "2023-11-14T22:20:00Z",
+  "applied_at": "2023-11-14T22:21:40Z"
+}

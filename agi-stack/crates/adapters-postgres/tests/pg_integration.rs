@@ -2427,6 +2427,42 @@ async fn skill_evolution_overview_queries_shared_schema() {
         .unwrap();
     assert_eq!(tenant_session_count, 1);
 
+    let pending_job = repo
+        .get_job_for_tenant("t_skill_evo", "job_skill_evo_project")
+        .await
+        .unwrap()
+        .expect("pending project job");
+    assert_eq!(pending_job.tenant_id, "t_skill_evo");
+    assert_eq!(pending_job.status, "pending_review");
+    let applied_job = repo
+        .update_job_status(
+            "t_skill_evo",
+            "job_skill_evo_project",
+            "applied",
+            Some("version-rust"),
+        )
+        .await
+        .unwrap()
+        .expect("applied project job");
+    assert_eq!(applied_job.status, "applied");
+    assert_eq!(
+        applied_job.skill_version_id.as_deref(),
+        Some("version-rust")
+    );
+    assert!(applied_job.applied_at.is_some());
+    let rejected_job = repo
+        .update_job_status("t_skill_evo", "job_skill_evo_hidden", "rejected", None)
+        .await
+        .unwrap()
+        .expect("rejected hidden job");
+    assert_eq!(rejected_job.status, "rejected");
+    assert!(rejected_job.applied_at.is_none());
+    assert!(repo
+        .get_job_for_tenant("other-tenant", "job_skill_evo_project")
+        .await
+        .unwrap()
+        .is_none());
+
     for sql in [
         "DELETE FROM skill_evolution_jobs WHERE tenant_id = 't_skill_evo'",
         "DELETE FROM skill_evolution_sessions WHERE tenant_id = 't_skill_evo'",

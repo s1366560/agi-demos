@@ -535,9 +535,10 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         match_kind: MethodMatchKind::Exact,
     },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
-    // status, versions, rollback, JSON/zip package import, package export, and
-    // skill-evolution config/overview/detail are in Rust; filesystem/system import
-    // and evolution job/run siblings remain Python.
+    // status, versions, rollback, JSON/zip package import, package export,
+    // skill-evolution config/overview/detail, and evolution job apply/reject
+    // are in Rust; filesystem/system import and evolution run siblings remain
+    // Python.
     MethodRule {
         method: "GET",
         path: "/api/v1/skills",
@@ -577,6 +578,22 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         method: "GET",
         path: "/api/v1/skills/evolution/overview",
         match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills/evolution/jobs",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "apply",
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills/evolution/jobs",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "reject",
+            excluded: &[],
+        },
     },
     MethodRule {
         method: "GET",
@@ -1729,6 +1746,8 @@ mod unit {
             (Method::GET, "/api/v1/skills/evolution/config"),
             (Method::PUT, "/api/v1/skills/evolution/config"),
             (Method::GET, "/api/v1/skills/evolution/overview"),
+            (Method::POST, "/api/v1/skills/evolution/jobs/job-1/apply"),
+            (Method::POST, "/api/v1/skills/evolution/jobs/job-1/reject"),
             (Method::GET, "/api/v1/skills/skill-1"),
             (Method::PUT, "/api/v1/skills/skill-1"),
             (Method::DELETE, "/api/v1/skills/skill-1"),
@@ -1761,7 +1780,12 @@ mod unit {
             (Method::GET, "/api/v1/skills/evolution/config/extra"),
             (Method::POST, "/api/v1/skills/evolution/overview"),
             (Method::GET, "/api/v1/skills/evolution/overview/extra"),
-            (Method::POST, "/api/v1/skills/evolution/jobs/job-1/apply"),
+            (Method::GET, "/api/v1/skills/evolution/jobs/job-1/apply"),
+            (
+                Method::POST,
+                "/api/v1/skills/evolution/jobs/job-1/apply/extra",
+            ),
+            (Method::POST, "/api/v1/skills/evolution/jobs/job-1/cancel"),
             (Method::POST, "/api/v1/skills/evolution/run"),
             (Method::POST, "/api/v1/skills/skill-1/content"),
             (Method::PUT, "/api/v1/skills/skill-1/status"),

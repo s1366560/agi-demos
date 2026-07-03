@@ -3,9 +3,9 @@
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots,
 //! rollback/import/export, filesystem-backed system skill listing/package
-//! export, zip import, and the skill-evolution strategy config/overview/detail.
-//! Evolution jobs and run actions remain Python-owned until their full
-//! semantics are migrated.
+//! export, zip import, and the skill-evolution strategy config/overview/detail
+//! plus apply/reject review job actions. Evolution run actions remain
+//! Python-owned until their full scheduler semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -172,6 +172,20 @@ pub(crate) trait SkillService: Send + Sync {
         query: SkillEvolutionDetailQuery,
         skill_id: &str,
     ) -> Result<SkillEvolutionDetailView, SkillApiError>;
+
+    async fn apply_evolution_job(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobView, SkillApiError>;
+
+    async fn reject_evolution_job(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobView, SkillApiError>;
 }
 
 #[derive(Debug)]
@@ -1502,6 +1516,48 @@ impl SkillService for PgSkillService {
             captured_session_count,
         ))
     }
+
+    async fn apply_evolution_job(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        let job = self.pending_evolution_job(&tenant_id, job_id).await?;
+        self.ensure_evolution_job_write_access(user_id, &tenant_id, &job)
+            .await?;
+        let version_id = self
+            .apply_pending_evolution_job(&tenant_id, &job)
+            .await?
+            .ok_or_else(|| SkillApiError::bad_request("Skill evolution job cannot be applied"))?;
+        let repo = self.evolution_repo()?;
+        let updated = repo
+            .update_job_status(&tenant_id, &job.id, "applied", Some(&version_id))
+            .await
+            .map_err(SkillApiError::internal)?
+            .ok_or_else(|| SkillApiError::not_found("Skill evolution job not found"))?;
+        Ok(updated.into())
+    }
+
+    async fn reject_evolution_job(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        let job = self.pending_evolution_job(&tenant_id, job_id).await?;
+        self.ensure_evolution_job_write_access(user_id, &tenant_id, &job)
+            .await?;
+        let updated = self
+            .evolution_repo()?
+            .update_job_status(&tenant_id, &job.id, "rejected", None)
+            .await
+            .map_err(SkillApiError::internal)?
+            .ok_or_else(|| SkillApiError::not_found("Skill evolution job not found"))?;
+        Ok(updated.into())
+    }
 }
 
 impl PgSkillService {
@@ -1637,6 +1693,252 @@ impl PgSkillService {
         };
         Ok(base.with_stored_overrides(&row.config))
     }
+
+    fn evolution_repo(&self) -> Result<&PgSkillEvolutionRepository, SkillApiError> {
+        self.evolution_repo
+            .as_ref()
+            .ok_or_else(|| SkillApiError::internal("skill evolution repository unavailable"))
+    }
+
+    async fn pending_evolution_job(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobRecord, SkillApiError> {
+        let job = self
+            .evolution_repo()?
+            .get_job_for_tenant(tenant_id, job_id)
+            .await
+            .map_err(SkillApiError::internal)?
+            .ok_or_else(|| SkillApiError::not_found("Skill evolution job not found"))?;
+        if job.status != "pending_review" {
+            return Err(SkillApiError::bad_request(
+                "Skill evolution job is not pending review",
+            ));
+        }
+        Ok(job)
+    }
+
+    async fn ensure_evolution_job_write_access(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<(), SkillApiError> {
+        match job.project_id.as_deref() {
+            Some(project_id) => {
+                self.ensure_project_access(
+                    user_id,
+                    tenant_id,
+                    project_id,
+                    SkillProjectAccess::Write,
+                )
+                .await
+            }
+            None => {
+                self.ensure_write_access(user_id, tenant_id, "tenant", None)
+                    .await
+            }
+        }
+    }
+
+    async fn apply_pending_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<String>, SkillApiError> {
+        match job.action.as_str() {
+            "create_skill" => self.create_skill_from_evolution_job(tenant_id, job).await,
+            "improve_skill" | "optimize_description" => {
+                self.update_skill_from_evolution_job(tenant_id, job).await
+            }
+            _ => Ok(None),
+        }
+    }
+
+    async fn create_skill_from_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<String>, SkillApiError> {
+        let Some(candidate_content) = job
+            .candidate_content
+            .as_deref()
+            .filter(|content| !content.is_empty())
+        else {
+            return Ok(None);
+        };
+        let payload = SkillImportPayload {
+            skill_md_content: candidate_content.to_string(),
+            resource_files: BTreeMap::new(),
+            scope: evolution_job_scope(job).to_string(),
+            project_id: job.project_id.clone(),
+            overwrite: false,
+            change_summary: None,
+        };
+        let Ok(parsed) = ParsedImportPackage::from_payload(&payload) else {
+            return Ok(None);
+        };
+        if parsed.name != job.skill_name {
+            return Ok(None);
+        }
+        if self
+            .repo
+            .find_skill(
+                tenant_id,
+                &parsed.name,
+                evolution_job_scope(job),
+                job.project_id.as_deref(),
+            )
+            .await
+            .map_err(SkillApiError::internal)?
+            .is_some()
+        {
+            return Ok(None);
+        }
+
+        let now = Utc::now();
+        let version_label = parsed
+            .version_label
+            .clone()
+            .or_else(|| Some("1".to_string()));
+        let skill = SkillRecord {
+            id: generate_uuid_v4(),
+            tenant_id: tenant_id.to_string(),
+            project_id: job.project_id.clone(),
+            name: parsed.name.clone(),
+            description: parsed.description,
+            tools: parsed.tools,
+            status: "active".to_string(),
+            metadata_json: parsed.metadata,
+            created_at: now,
+            updated_at: Some(now),
+            scope: evolution_job_scope(job).to_string(),
+            is_system_skill: false,
+            full_content: Some(candidate_content.to_string()),
+            resource_files: json!({}),
+            license: parsed.license,
+            compatibility: parsed.compatibility,
+            allowed_tools_raw: parsed.allowed_tools_raw,
+            spec_version: parsed.spec_version,
+            current_version: 0,
+            version_label: parsed.version_label,
+        };
+        let created = self
+            .repo
+            .create_skill(&skill)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let version = SkillVersionRecord {
+            id: generate_uuid_v4(),
+            skill_id: created.id.clone(),
+            version_number: 1,
+            version_label: version_label.clone(),
+            skill_md_content: candidate_content.to_string(),
+            resource_files: json!({}),
+            change_summary: evolution_change_summary(job, "create_skill"),
+            created_by: "evolution".to_string(),
+            created_at: now,
+        };
+        let version_id = version.id.clone();
+        self.repo
+            .create_version(&version)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let updated = SkillUpdateRecord {
+            current_version: Some(1),
+            version_label: Some(version_label),
+            ..Default::default()
+        }
+        .apply_to(created, now);
+        self.repo
+            .update_skill(&updated)
+            .await
+            .map_err(SkillApiError::internal)?;
+        Ok(Some(version_id))
+    }
+
+    async fn update_skill_from_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<String>, SkillApiError> {
+        let Some(candidate_content) = job
+            .candidate_content
+            .as_deref()
+            .filter(|content| !content.is_empty())
+        else {
+            return Ok(None);
+        };
+        let Some(skill) = self.skill_for_evolution_job(tenant_id, job).await? else {
+            return Ok(None);
+        };
+        let updated_content = if job.action == "optimize_description" {
+            replace_frontmatter_description(
+                skill.full_content.as_deref().unwrap_or_default(),
+                candidate_content,
+            )
+        } else {
+            candidate_content.to_string()
+        };
+        let next_version = self
+            .repo
+            .max_version_number(&skill.id)
+            .await
+            .map_err(SkillApiError::internal)?
+            + 1;
+        let now = Utc::now();
+        let version_label = Some(next_version.to_string());
+        let version = SkillVersionRecord {
+            id: generate_uuid_v4(),
+            skill_id: skill.id.clone(),
+            version_number: next_version,
+            version_label: version_label.clone(),
+            skill_md_content: updated_content.clone(),
+            resource_files: json!({}),
+            change_summary: evolution_change_summary(job, &job.action),
+            created_by: "evolution".to_string(),
+            created_at: now,
+        };
+        let version_id = version.id.clone();
+        self.repo
+            .create_version(&version)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let updated = SkillUpdateRecord {
+            full_content: Some(Some(updated_content)),
+            current_version: Some(next_version),
+            version_label: Some(version_label),
+            ..Default::default()
+        }
+        .apply_to(skill, now);
+        self.repo
+            .update_skill(&updated)
+            .await
+            .map_err(SkillApiError::internal)?;
+        Ok(Some(version_id))
+    }
+
+    async fn skill_for_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<SkillRecord>, SkillApiError> {
+        if let Some(project_id) = job.project_id.as_deref() {
+            if let Some(skill) = self
+                .repo
+                .find_skill(tenant_id, &job.skill_name, "project", Some(project_id))
+                .await
+                .map_err(SkillApiError::internal)?
+            {
+                return Ok(Some(skill));
+            }
+        }
+        self.repo
+            .find_skill(tenant_id, &job.skill_name, "tenant", None)
+            .await
+            .map_err(SkillApiError::internal)
+    }
 }
 
 #[derive(Default)]
@@ -1644,6 +1946,7 @@ pub(crate) struct DevSkillService {
     tenant_id: String,
     skills: Mutex<HashMap<String, SkillRecord>>,
     versions: Mutex<HashMap<String, Vec<SkillVersionRecord>>>,
+    evolution_jobs: Mutex<HashMap<String, SkillEvolutionJobRecord>>,
     evolution_configs: Mutex<HashMap<String, SkillEvolutionConfig>>,
 }
 
@@ -1653,6 +1956,7 @@ impl DevSkillService {
             tenant_id: tenant_id.into(),
             skills: Mutex::new(HashMap::new()),
             versions: Mutex::new(HashMap::new()),
+            evolution_jobs: Mutex::new(HashMap::new()),
             evolution_configs: Mutex::new(HashMap::new()),
         }
     }
@@ -2303,6 +2607,269 @@ impl SkillService for DevSkillService {
             0,
         ))
     }
+
+    async fn apply_evolution_job(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        let job = self.pending_dev_evolution_job(&tenant_id, job_id)?;
+        let version_id = self
+            .apply_dev_evolution_job(&tenant_id, &job)?
+            .ok_or_else(|| SkillApiError::bad_request("Skill evolution job cannot be applied"))?;
+        self.update_dev_evolution_job_status(&tenant_id, job_id, "applied", Some(&version_id))
+    }
+
+    async fn reject_evolution_job(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        let _job = self.pending_dev_evolution_job(&tenant_id, job_id)?;
+        self.update_dev_evolution_job_status(&tenant_id, job_id, "rejected", None)
+    }
+}
+
+impl DevSkillService {
+    fn pending_dev_evolution_job(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+    ) -> Result<SkillEvolutionJobRecord, SkillApiError> {
+        let job = self
+            .evolution_jobs
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .get(job_id)
+            .cloned()
+            .filter(|job| job.tenant_id == tenant_id)
+            .ok_or_else(|| SkillApiError::not_found("Skill evolution job not found"))?;
+        if job.status != "pending_review" {
+            return Err(SkillApiError::bad_request(
+                "Skill evolution job is not pending review",
+            ));
+        }
+        Ok(job)
+    }
+
+    fn update_dev_evolution_job_status(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        status: &str,
+        skill_version_id: Option<&str>,
+    ) -> Result<SkillEvolutionJobView, SkillApiError> {
+        let mut jobs = self
+            .evolution_jobs
+            .lock()
+            .map_err(SkillApiError::internal)?;
+        let job = jobs
+            .get_mut(job_id)
+            .filter(|job| job.tenant_id == tenant_id)
+            .ok_or_else(|| SkillApiError::not_found("Skill evolution job not found"))?;
+        job.status = status.to_string();
+        if let Some(skill_version_id) = skill_version_id {
+            job.skill_version_id = Some(skill_version_id.to_string());
+        }
+        if status == "applied" {
+            job.applied_at = Some(Utc::now());
+        }
+        Ok(job.clone().into())
+    }
+
+    fn apply_dev_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<String>, SkillApiError> {
+        match job.action.as_str() {
+            "create_skill" => self.create_dev_skill_from_evolution_job(tenant_id, job),
+            "improve_skill" | "optimize_description" => {
+                self.update_dev_skill_from_evolution_job(tenant_id, job)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn create_dev_skill_from_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<String>, SkillApiError> {
+        let Some(candidate_content) = job
+            .candidate_content
+            .as_deref()
+            .filter(|content| !content.is_empty())
+        else {
+            return Ok(None);
+        };
+        let payload = SkillImportPayload {
+            skill_md_content: candidate_content.to_string(),
+            resource_files: BTreeMap::new(),
+            scope: evolution_job_scope(job).to_string(),
+            project_id: job.project_id.clone(),
+            overwrite: false,
+            change_summary: None,
+        };
+        let Ok(parsed) = ParsedImportPackage::from_payload(&payload) else {
+            return Ok(None);
+        };
+        if parsed.name != job.skill_name {
+            return Ok(None);
+        }
+        let mut skills = self.skills.lock().map_err(SkillApiError::internal)?;
+        if skills.values().any(|skill| {
+            skill.tenant_id == tenant_id
+                && skill.name == parsed.name
+                && skill.scope == evolution_job_scope(job)
+                && skill.project_id == job.project_id
+        }) {
+            return Ok(None);
+        }
+
+        let now = Utc::now();
+        let version_label = parsed
+            .version_label
+            .clone()
+            .or_else(|| Some("1".to_string()));
+        let mut skill = SkillRecord {
+            id: generate_uuid_v4(),
+            tenant_id: tenant_id.to_string(),
+            project_id: job.project_id.clone(),
+            name: parsed.name,
+            description: parsed.description,
+            tools: parsed.tools,
+            status: "active".to_string(),
+            metadata_json: parsed.metadata,
+            created_at: now,
+            updated_at: Some(now),
+            scope: evolution_job_scope(job).to_string(),
+            is_system_skill: false,
+            full_content: Some(candidate_content.to_string()),
+            resource_files: json!({}),
+            license: parsed.license,
+            compatibility: parsed.compatibility,
+            allowed_tools_raw: parsed.allowed_tools_raw,
+            spec_version: parsed.spec_version,
+            current_version: 1,
+            version_label: version_label.clone(),
+        };
+        let version = SkillVersionRecord {
+            id: generate_uuid_v4(),
+            skill_id: skill.id.clone(),
+            version_number: 1,
+            version_label: version_label.clone(),
+            skill_md_content: candidate_content.to_string(),
+            resource_files: json!({}),
+            change_summary: evolution_change_summary(job, "create_skill"),
+            created_by: "evolution".to_string(),
+            created_at: now,
+        };
+        let version_id = version.id.clone();
+        skill.version_label = version_label;
+        self.versions
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .entry(skill.id.clone())
+            .or_default()
+            .push(version);
+        skills.insert(skill.id.clone(), skill);
+        Ok(Some(version_id))
+    }
+
+    fn update_dev_skill_from_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<String>, SkillApiError> {
+        let Some(candidate_content) = job
+            .candidate_content
+            .as_deref()
+            .filter(|content| !content.is_empty())
+        else {
+            return Ok(None);
+        };
+        let Some(skill) = self.dev_skill_for_evolution_job(tenant_id, job)? else {
+            return Ok(None);
+        };
+        let updated_content = if job.action == "optimize_description" {
+            replace_frontmatter_description(
+                skill.full_content.as_deref().unwrap_or_default(),
+                candidate_content,
+            )
+        } else {
+            candidate_content.to_string()
+        };
+        let mut versions = self.versions.lock().map_err(SkillApiError::internal)?;
+        let next_version = versions
+            .get(&skill.id)
+            .map(|versions| {
+                versions
+                    .iter()
+                    .map(|version| version.version_number)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0)
+            + 1;
+        let now = Utc::now();
+        let version_label = Some(next_version.to_string());
+        let version = SkillVersionRecord {
+            id: generate_uuid_v4(),
+            skill_id: skill.id.clone(),
+            version_number: next_version,
+            version_label: version_label.clone(),
+            skill_md_content: updated_content.clone(),
+            resource_files: json!({}),
+            change_summary: evolution_change_summary(job, &job.action),
+            created_by: "evolution".to_string(),
+            created_at: now,
+        };
+        let version_id = version.id.clone();
+        versions.entry(skill.id.clone()).or_default().push(version);
+        drop(versions);
+
+        let updated = SkillUpdateRecord {
+            full_content: Some(Some(updated_content)),
+            current_version: Some(next_version),
+            version_label: Some(version_label),
+            ..Default::default()
+        }
+        .apply_to(skill, now);
+        self.write_record(updated)?;
+        Ok(Some(version_id))
+    }
+
+    fn dev_skill_for_evolution_job(
+        &self,
+        tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<SkillRecord>, SkillApiError> {
+        let skills = self.skills.lock().map_err(SkillApiError::internal)?;
+        if let Some(project_id) = job.project_id.as_deref() {
+            if let Some(skill) = skills.values().find(|skill| {
+                skill.tenant_id == tenant_id
+                    && skill.name == job.skill_name
+                    && skill.scope == "project"
+                    && skill.project_id.as_deref() == Some(project_id)
+            }) {
+                return Ok(Some(skill.clone()));
+            }
+        }
+        Ok(skills
+            .values()
+            .find(|skill| {
+                skill.tenant_id == tenant_id
+                    && skill.name == job.skill_name
+                    && skill.scope == "tenant"
+                    && skill.project_id.is_none()
+            })
+            .cloned())
+    }
 }
 
 async fn create_skill(
@@ -2576,6 +3143,32 @@ async fn get_skill_evolution_detail(
     ))
 }
 
+async fn apply_skill_evolution_job(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    Path(job_id): Path<String>,
+) -> Result<Json<SkillEvolutionJobView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .apply_evolution_job(&identity.user_id, q.tenant_id.as_deref(), &job_id)
+            .await?,
+    ))
+}
+
+async fn reject_skill_evolution_job(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    Path(job_id): Path<String>,
+) -> Result<Json<SkillEvolutionJobView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .reject_evolution_job(&identity.user_id, q.tenant_id.as_deref(), &job_id)
+            .await?,
+    ))
+}
+
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/skills/", get(list_skills).post(create_skill))
@@ -2590,6 +3183,14 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/skills/evolution/overview",
             get(get_skill_evolution_overview),
+        )
+        .route(
+            "/api/v1/skills/evolution/jobs/:job_id/apply",
+            post(apply_skill_evolution_job),
+        )
+        .route(
+            "/api/v1/skills/evolution/jobs/:job_id/reject",
+            post(reject_skill_evolution_job),
         )
         .route(
             "/api/v1/skills/:skill_id/evolution",
@@ -2978,6 +3579,57 @@ fn validate_change_summary(summary: Option<&str>) -> Result<(), SkillApiError> {
 
 fn import_change_summary(summary: Option<&str>, version_number: i32) -> Option<String> {
     Some(present(summary).map_or_else(|| format!("Version {version_number}"), ToString::to_string))
+}
+
+fn evolution_job_scope(job: &SkillEvolutionJobRecord) -> &'static str {
+    if job.project_id.is_some() {
+        "project"
+    } else {
+        "tenant"
+    }
+}
+
+fn evolution_change_summary(job: &SkillEvolutionJobRecord, action: &str) -> Option<String> {
+    Some(
+        job.rationale
+            .as_deref()
+            .filter(|rationale| !rationale.is_empty())
+            .map_or_else(|| format!("Evolution {action}"), ToString::to_string),
+    )
+}
+
+fn replace_frontmatter_description(content: &str, description: &str) -> String {
+    let Some(rest) = content.strip_prefix("---\n") else {
+        return if content.is_empty() {
+            description.to_string()
+        } else {
+            content.to_string()
+        };
+    };
+    let Some((frontmatter, body)) = rest.split_once("\n---") else {
+        return if content.is_empty() {
+            description.to_string()
+        } else {
+            content.to_string()
+        };
+    };
+    let Ok(value) = serde_yaml_ng::from_str::<YamlValue>(frontmatter.trim()) else {
+        return content.to_string();
+    };
+    let mut map = match value {
+        YamlValue::Mapping(map) => map,
+        YamlValue::Null => YamlMapping::new(),
+        _ => return content.to_string(),
+    };
+    map.insert(
+        YamlValue::String("description".to_string()),
+        YamlValue::String(description.to_string()),
+    );
+    let value = YamlValue::Mapping(map);
+    let Ok(yaml_text) = serde_yaml_ng::to_string(&value) else {
+        return content.to_string();
+    };
+    format!("---\n{}\n---{}", yaml_text.trim(), body)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3606,6 +4258,7 @@ Use when managing Agent Skills packages.
     fn sample_evolution_job_record() -> SkillEvolutionJobRecord {
         SkillEvolutionJobRecord {
             id: "job-1".to_string(),
+            tenant_id: "tenant-1".to_string(),
             project_id: None,
             skill_name: "code-review".to_string(),
             action: "update".to_string(),
@@ -3911,6 +4564,7 @@ Use when managing Agent Skills packages.
         }];
         let recent_jobs = vec![SkillEvolutionJobRecord {
             id: "job-1".to_string(),
+            tenant_id: "tenant-1".to_string(),
             project_id: None,
             skill_name: "code-review".to_string(),
             action: "update".to_string(),
@@ -3967,6 +4621,143 @@ Use when managing Agent Skills packages.
             serde_json::from_str(include_str!("../tests/golden/skill_evolution_detail.json"))
                 .unwrap();
         agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[test]
+    fn skill_evolution_applied_job_matches_golden() {
+        // Arrange
+        let mut record = sample_evolution_job_record();
+        record.action = "improve_skill".to_string();
+        record.status = "applied".to_string();
+        record.skill_version_id = Some("22222222-2222-4222-8222-222222222222".to_string());
+        record.applied_at = Some(DateTime::<Utc>::from_timestamp(1_700_000_500, 0).unwrap());
+
+        // Act
+        let actual = serde_json::to_value(SkillEvolutionJobView::from(record)).unwrap();
+
+        // Assert
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/skill_evolution_job_applied.json"
+        ))
+        .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[test]
+    fn replace_frontmatter_description_updates_only_description() {
+        // Arrange
+        let content = "---\nname: code-review\ndescription: Old description\n---\n# Body\n";
+
+        // Act
+        let actual = replace_frontmatter_description(content, "New description");
+
+        // Assert
+        assert!(actual.contains("name: code-review"));
+        assert!(actual.contains("description: New description"));
+        assert!(actual.ends_with("\n# Body\n"));
+    }
+
+    #[tokio::test]
+    async fn dev_service_applies_and_rejects_evolution_jobs() {
+        // Arrange
+        let service = DevSkillService::new("tenant-1");
+        let created = service
+            .create_skill(
+                "u1",
+                Some("tenant-1"),
+                SkillCreatePayload {
+                    name: "code-review".to_string(),
+                    description: "Review code".to_string(),
+                    tools: vec!["read_file".to_string()],
+                    full_content: Some("# Code Review\n".to_string()),
+                    project_id: None,
+                    scope: "tenant".to_string(),
+                    metadata: None,
+                    license: None,
+                    compatibility: None,
+                    allowed_tools_raw: None,
+                    spec_version: None,
+                },
+            )
+            .await
+            .unwrap();
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_400, 0).unwrap();
+        service.evolution_jobs.lock().unwrap().insert(
+            "job-apply".to_string(),
+            SkillEvolutionJobRecord {
+                id: "job-apply".to_string(),
+                tenant_id: "tenant-1".to_string(),
+                project_id: None,
+                skill_name: "code-review".to_string(),
+                action: "improve_skill".to_string(),
+                status: "pending_review".to_string(),
+                rationale: Some("Improve review checklist.".to_string()),
+                candidate_content: Some("# Updated Code Review\n".to_string()),
+                session_ids: vec!["sess-1".to_string()],
+                skill_version_id: None,
+                created_at: now,
+                applied_at: None,
+            },
+        );
+        service.evolution_jobs.lock().unwrap().insert(
+            "job-reject".to_string(),
+            SkillEvolutionJobRecord {
+                id: "job-reject".to_string(),
+                tenant_id: "tenant-1".to_string(),
+                project_id: None,
+                skill_name: "code-review".to_string(),
+                action: "improve_skill".to_string(),
+                status: "pending_review".to_string(),
+                rationale: None,
+                candidate_content: Some("# Rejected\n".to_string()),
+                session_ids: vec!["sess-2".to_string()],
+                skill_version_id: None,
+                created_at: now,
+                applied_at: None,
+            },
+        );
+
+        // Act
+        let applied = service
+            .apply_evolution_job("u1", Some("tenant-1"), "job-apply")
+            .await
+            .unwrap();
+        let rejected = service
+            .reject_evolution_job("u1", Some("tenant-1"), "job-reject")
+            .await
+            .unwrap();
+        let repeated_apply = service
+            .apply_evolution_job("u1", Some("tenant-1"), "job-apply")
+            .await
+            .unwrap_err();
+
+        // Assert
+        assert_eq!(applied.status, "applied");
+        assert!(!applied.blocked_by_review);
+        assert!(applied.skill_version_id.is_some());
+        assert!(applied.applied_at.is_some());
+        assert_eq!(rejected.status, "rejected");
+        assert!(!rejected.blocked_by_review);
+        assert_eq!(rejected.skill_version_id, None);
+        assert_eq!(repeated_apply.status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            repeated_apply.detail,
+            "Skill evolution job is not pending review"
+        );
+        let content = service
+            .get_content("u1", Some("tenant-1"), &created.id)
+            .await
+            .unwrap();
+        assert_eq!(
+            content.full_content.as_deref(),
+            Some("# Updated Code Review\n")
+        );
+        let versions = service
+            .list_versions("u1", Some("tenant-1"), &created.id, 50, 0)
+            .await
+            .unwrap();
+        assert_eq!(versions.total, 1);
+        assert_eq!(versions.versions[0].created_by, "evolution");
     }
 
     #[tokio::test]

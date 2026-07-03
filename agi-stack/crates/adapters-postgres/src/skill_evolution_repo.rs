@@ -1,9 +1,9 @@
-//! Read-only repository for Python-owned skill evolution tables.
+//! Repository for Python-owned skill evolution tables.
 //!
 //! The skill evolution plugin stores capture sessions and review jobs in
-//! `skill_evolution_sessions` and `skill_evolution_jobs`. Rust reads those rows
-//! verbatim for the P5 strangler overview endpoint; it does not create or alter
-//! the Python-owned schema.
+//! `skill_evolution_sessions` and `skill_evolution_jobs`. Rust reads and
+//! updates those rows verbatim for the P5 strangler skill-evolution endpoints;
+//! it does not create or alter the Python-owned schema.
 
 use std::collections::HashMap;
 
@@ -15,6 +15,9 @@ use sqlx::{Postgres, QueryBuilder, Row};
 use agistack_core::ports::{CoreError, CoreResult};
 
 use crate::PgPool;
+
+const JOB_COLS: &str = "id, tenant_id, project_id, skill_name, action, status, rationale, \
+    candidate_content, session_ids, skill_version_id, created_at, applied_at";
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SkillEvolutionOverviewStatsRecord {
@@ -69,6 +72,7 @@ pub struct SkillEvolutionSessionRecord {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkillEvolutionJobRecord {
     pub id: String,
+    pub tenant_id: String,
     pub project_id: Option<String>,
     pub skill_name: String,
     pub action: String,
@@ -243,11 +247,9 @@ impl PgSkillEvolutionRepository {
         project_ids: &[String],
         limit: i64,
     ) -> CoreResult<Vec<SkillEvolutionJobRecord>> {
-        let mut query = QueryBuilder::new(
-            "SELECT id, project_id, skill_name, action, status, rationale, candidate_content, \
-                session_ids, skill_version_id, created_at, applied_at \
-             FROM skill_evolution_jobs WHERE tenant_id = ",
-        );
+        let mut query = QueryBuilder::new(format!(
+            "SELECT {JOB_COLS} FROM skill_evolution_jobs WHERE tenant_id = "
+        ));
         query.push_bind(tenant_id);
         push_project_access_filter(&mut query, "project_id", project_ids);
         query.push(" ORDER BY created_at DESC LIMIT ");
@@ -263,11 +265,9 @@ impl PgSkillEvolutionRepository {
         project_id: Option<&str>,
         limit: i64,
     ) -> CoreResult<Vec<SkillEvolutionJobRecord>> {
-        let mut query = QueryBuilder::new(
-            "SELECT id, project_id, skill_name, action, status, rationale, candidate_content, \
-                session_ids, skill_version_id, created_at, applied_at \
-             FROM skill_evolution_jobs WHERE tenant_id = ",
-        );
+        let mut query = QueryBuilder::new(format!(
+            "SELECT {JOB_COLS} FROM skill_evolution_jobs WHERE tenant_id = "
+        ));
         query.push_bind(tenant_id);
         query.push(" AND skill_name = ");
         query.push_bind(skill_name);
@@ -276,6 +276,48 @@ impl PgSkillEvolutionRepository {
         query.push_bind(limit);
         let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
         rows.into_iter().map(row_to_job).collect()
+    }
+
+    pub async fn get_job_for_tenant(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+    ) -> CoreResult<Option<SkillEvolutionJobRecord>> {
+        let sql =
+            format!("SELECT {JOB_COLS} FROM skill_evolution_jobs WHERE tenant_id = $1 AND id = $2");
+        let row = sqlx::query(&sql)
+            .bind(tenant_id)
+            .bind(job_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(row_to_job).transpose()
+    }
+
+    pub async fn update_job_status(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        status: &str,
+        skill_version_id: Option<&str>,
+    ) -> CoreResult<Option<SkillEvolutionJobRecord>> {
+        let sql = format!(
+            "UPDATE skill_evolution_jobs \
+             SET status = $3, \
+                 skill_version_id = COALESCE($4, skill_version_id), \
+                 applied_at = CASE WHEN $3 = 'applied' THEN now() ELSE applied_at END \
+             WHERE tenant_id = $1 AND id = $2 \
+             RETURNING {JOB_COLS}"
+        );
+        let row = sqlx::query(&sql)
+            .bind(tenant_id)
+            .bind(job_id)
+            .bind(status)
+            .bind(skill_version_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(row_to_job).transpose()
     }
 
     pub async fn count_sessions_by_skill(
@@ -424,6 +466,7 @@ fn row_to_session(row: PgRow) -> CoreResult<SkillEvolutionSessionRecord> {
 fn row_to_job(row: PgRow) -> CoreResult<SkillEvolutionJobRecord> {
     Ok(SkillEvolutionJobRecord {
         id: row.try_get("id").map_err(storage)?,
+        tenant_id: row.try_get("tenant_id").map_err(storage)?,
         project_id: row.try_get("project_id").map_err(storage)?,
         skill_name: row.try_get("skill_name").map_err(storage)?,
         action: row.try_get("action").map_err(storage)?,
