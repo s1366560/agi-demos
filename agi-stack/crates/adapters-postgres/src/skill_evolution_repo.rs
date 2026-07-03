@@ -256,6 +256,46 @@ impl PgSkillEvolutionRepository {
         rows.into_iter().map(row_to_job).collect()
     }
 
+    pub async fn list_jobs_for_skill(
+        &self,
+        tenant_id: &str,
+        skill_name: &str,
+        project_id: Option<&str>,
+        limit: i64,
+    ) -> CoreResult<Vec<SkillEvolutionJobRecord>> {
+        let mut query = QueryBuilder::new(
+            "SELECT id, project_id, skill_name, action, status, rationale, candidate_content, \
+                session_ids, skill_version_id, created_at, applied_at \
+             FROM skill_evolution_jobs WHERE tenant_id = ",
+        );
+        query.push_bind(tenant_id);
+        query.push(" AND skill_name = ");
+        query.push_bind(skill_name);
+        push_exact_project_filter(&mut query, "project_id", project_id);
+        query.push(" ORDER BY created_at DESC LIMIT ");
+        query.push_bind(limit);
+        let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
+        rows.into_iter().map(row_to_job).collect()
+    }
+
+    pub async fn count_sessions_by_skill(
+        &self,
+        tenant_id: &str,
+        skill_name: &str,
+        project_id: Option<&str>,
+    ) -> CoreResult<i64> {
+        let mut query = QueryBuilder::new(
+            "SELECT count(id) AS captured_session_count \
+             FROM skill_evolution_sessions WHERE tenant_id = ",
+        );
+        query.push_bind(tenant_id);
+        query.push(" AND skill_name = ");
+        query.push_bind(skill_name);
+        push_exact_project_filter(&mut query, "project_id", project_id);
+        let row = query.build().fetch_one(&self.pool).await.map_err(storage)?;
+        row.try_get("captured_session_count").map_err(storage)
+    }
+
     async fn job_counts_by_skill(
         &self,
         tenant_id: &str,
@@ -318,6 +358,21 @@ fn push_project_access_filter<'q>(
         separated.push_bind(project_id);
     }
     separated.push_unseparated("))");
+}
+
+fn push_exact_project_filter<'q>(
+    query: &mut QueryBuilder<'q, Postgres>,
+    column: &str,
+    project_id: Option<&'q str>,
+) {
+    query.push(" AND ");
+    query.push(column);
+    if let Some(project_id) = project_id {
+        query.push(" = ");
+        query.push_bind(project_id);
+    } else {
+        query.push(" IS NULL");
+    }
 }
 
 fn row_to_skill_summary(

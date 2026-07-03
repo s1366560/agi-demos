@@ -1,0 +1,72 @@
+{
+  "skill_id": "11111111-1111-4111-8111-111111111111",
+  "skill_name": "code-review",
+  "captured_session_count": 2,
+  "jobs": [
+    {
+      "id": "job-1",
+      "project_id": null,
+      "skill_name": "code-review",
+      "action": "update",
+      "status": "pending_review",
+      "rationale": "Improve review checklist.",
+      "candidate_preview": "Updated skill content",
+      "candidate_content": "Updated skill content",
+      "blocked_by_review": true,
+      "session_ids": [
+        "sess-1",
+        "sess-2"
+      ],
+      "skill_version_id": null,
+      "created_at": "2023-11-14T22:20:00Z",
+      "applied_at": null
+    }
+  ],
+  "route": [
+    {
+      "kind": "evolution_job",
+      "id": "job-1",
+      "label": "update:pending_review",
+      "project_id": null,
+      "status": "pending_review",
+      "action": "update",
+      "version_number": null,
+      "version_label": null,
+      "skill_version_id": null,
+      "change_summary": null,
+      "rationale": "Improve review checklist.",
+      "candidate_preview": "Updated skill content",
+      "created_by": "skill-evolution",
+      "created_at": "2023-11-14T22:20:00Z"
+    },
+    {
+      "kind": "version",
+      "id": "22222222-2222-4222-8222-222222222222",
+      "label": "1.2.0",
+      "project_id": null,
+      "status": null,
+      "action": null,
+      "version_number": 2,
+      "version_label": "1.2.0",
+      "skill_version_id": null,
+      "change_summary": "Manual content update",
+      "rationale": null,
+      "candidate_preview": null,
+      "created_by": "agent",
+      "created_at": "2023-11-14T22:15:00Z"
+    }
+  ],
+  "trigger": {
+    "capture_hook": "after_turn_complete",
+    "capture_timing": "After every agent turn completes, the plugin records matched skills, dynamically loaded skill_loader usage, conversation trajectory, tool calls, success, and latency.",
+    "scheduled_timing": "Every 30 minute(s), the scheduler summarizes, judges, aggregates, and evolves qualifying skill sessions.",
+    "manual_trigger": "/api/v1/skills/11111111-1111-4111-8111-111111111111/evolution/run",
+    "min_sessions_per_skill": 2,
+    "scoring_min_sessions_per_skill": 2,
+    "min_avg_score": 0.7,
+    "max_sessions_per_batch": 10,
+    "publish_mode": "review",
+    "auto_apply": false,
+    "enabled": true
+  }
+}

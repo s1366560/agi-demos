@@ -3,7 +3,7 @@
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots,
 //! rollback/import/export, filesystem-backed system skill listing/package
-//! export, zip import, and the skill-evolution strategy config/overview.
+//! export, zip import, and the skill-evolution strategy config/overview/detail.
 //! Evolution jobs and run actions remain Python-owned until their full
 //! semantics are migrated.
 
@@ -165,6 +165,13 @@ pub(crate) trait SkillService: Send + Sync {
         user_id: &str,
         query: SkillEvolutionOverviewQuery,
     ) -> Result<SkillEvolutionOverviewView, SkillApiError>;
+
+    async fn get_evolution_detail(
+        &self,
+        user_id: &str,
+        query: SkillEvolutionDetailQuery,
+        skill_id: &str,
+    ) -> Result<SkillEvolutionDetailView, SkillApiError>;
 }
 
 #[derive(Debug)]
@@ -376,6 +383,20 @@ impl SkillEvolutionOverviewQuery {
             validate_overview_limit(self.session_limit)?,
             validate_overview_limit(self.job_limit)?,
         ))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct SkillEvolutionDetailQuery {
+    #[serde(default)]
+    tenant_id: Option<String>,
+    #[serde(default)]
+    limit: Option<i64>,
+}
+
+impl SkillEvolutionDetailQuery {
+    fn validated_limit(&self) -> Result<i64, SkillApiError> {
+        validate_evolution_detail_limit(self.limit)
     }
 }
 
@@ -685,11 +706,7 @@ pub(crate) struct SkillEvolutionJobView {
 
 impl From<SkillEvolutionJobRecord> for SkillEvolutionJobView {
     fn from(record: SkillEvolutionJobRecord) -> Self {
-        let candidate_preview = record
-            .candidate_content
-            .as_deref()
-            .filter(|value| !value.is_empty())
-            .map(|value| value.chars().take(500).collect());
+        let candidate_preview = candidate_content_preview(record.candidate_content.as_deref());
         Self {
             id: record.id,
             project_id: record.project_id,
@@ -706,6 +723,34 @@ impl From<SkillEvolutionJobRecord> for SkillEvolutionJobView {
             applied_at: record.applied_at.map(iso8601),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionRouteEntryView {
+    kind: String,
+    id: String,
+    label: String,
+    project_id: Option<String>,
+    status: Option<String>,
+    action: Option<String>,
+    version_number: Option<i32>,
+    version_label: Option<String>,
+    skill_version_id: Option<String>,
+    change_summary: Option<String>,
+    rationale: Option<String>,
+    candidate_preview: Option<String>,
+    created_by: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillEvolutionDetailView {
+    skill_id: String,
+    skill_name: String,
+    captured_session_count: i64,
+    jobs: Vec<SkillEvolutionJobView>,
+    route: Vec<SkillEvolutionRouteEntryView>,
+    trigger: SkillEvolutionTriggerView,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1412,6 +1457,49 @@ impl SkillService for PgSkillService {
             skill_summaries,
             recent_sessions,
             recent_jobs,
+        ))
+    }
+
+    async fn get_evolution_detail(
+        &self,
+        user_id: &str,
+        query: SkillEvolutionDetailQuery,
+        skill_id: &str,
+    ) -> Result<SkillEvolutionDetailView, SkillApiError> {
+        let tenant_id = self
+            .resolve_tenant(user_id, query.tenant_id.as_deref())
+            .await?;
+        let limit = query.validated_limit()?;
+        let config = self.load_evolution_config(&tenant_id).await?;
+        let skill = self.readable_skill(user_id, &tenant_id, skill_id).await?;
+        let versions = self
+            .repo
+            .list_versions(skill_id, limit, 0)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let Some(repo) = self.evolution_repo.as_ref() else {
+            return Ok(evolution_detail_from_records(
+                &skill,
+                config,
+                versions,
+                Vec::new(),
+                0,
+            ));
+        };
+        let jobs = repo
+            .list_jobs_for_skill(&tenant_id, &skill.name, skill.project_id.as_deref(), limit)
+            .await
+            .map_err(SkillApiError::internal)?;
+        let captured_session_count = repo
+            .count_sessions_by_skill(&tenant_id, &skill.name, skill.project_id.as_deref())
+            .await
+            .map_err(SkillApiError::internal)?;
+        Ok(evolution_detail_from_records(
+            &skill,
+            config,
+            versions,
+            jobs,
+            captured_session_count,
         ))
     }
 }
@@ -2182,6 +2270,39 @@ impl SkillService for DevSkillService {
             self.evolution_config_for(&tenant_id)?,
         ))
     }
+
+    async fn get_evolution_detail(
+        &self,
+        _user_id: &str,
+        query: SkillEvolutionDetailQuery,
+        skill_id: &str,
+    ) -> Result<SkillEvolutionDetailView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(query.tenant_id.as_deref());
+        let limit = query.validated_limit()? as usize;
+        let config = self.evolution_config_for(&tenant_id)?;
+        let skill = self.get_owned(&tenant_id, skill_id)?;
+        let mut versions = self
+            .versions
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .get(skill_id)
+            .cloned()
+            .unwrap_or_default();
+        versions.sort_by(|left, right| {
+            right
+                .version_number
+                .cmp(&left.version_number)
+                .then_with(|| right.created_at.cmp(&left.created_at))
+        });
+        versions.truncate(limit);
+        Ok(evolution_detail_from_records(
+            &skill,
+            config,
+            versions,
+            Vec::new(),
+            0,
+        ))
+    }
 }
 
 async fn create_skill(
@@ -2442,6 +2563,19 @@ async fn get_skill_evolution_overview(
     ))
 }
 
+async fn get_skill_evolution_detail(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(query): Query<SkillEvolutionDetailQuery>,
+    Path(skill_id): Path<String>,
+) -> Result<Json<SkillEvolutionDetailView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .get_evolution_detail(&identity.user_id, query, &skill_id)
+            .await?,
+    ))
+}
+
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/skills/", get(list_skills).post(create_skill))
@@ -2456,6 +2590,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/skills/evolution/overview",
             get(get_skill_evolution_overview),
+        )
+        .route(
+            "/api/v1/skills/:skill_id/evolution",
+            get(get_skill_evolution_detail),
         )
         .route(
             "/api/v1/skills/:skill_id/content",
@@ -2517,6 +2655,84 @@ fn empty_evolution_overview(config: SkillEvolutionConfig) -> SkillEvolutionOverv
         Vec::new(),
         Vec::new(),
     )
+}
+
+fn evolution_detail_from_records(
+    skill: &SkillRecord,
+    config: SkillEvolutionConfig,
+    versions: Vec<SkillVersionRecord>,
+    jobs: Vec<SkillEvolutionJobRecord>,
+    captured_session_count: i64,
+) -> SkillEvolutionDetailView {
+    let route = skill_evolution_route(&versions, &jobs);
+    let jobs = jobs.into_iter().map(SkillEvolutionJobView::from).collect();
+    let trigger = skill_evolution_trigger_view(&skill.id, &config);
+    SkillEvolutionDetailView {
+        skill_id: skill.id.clone(),
+        skill_name: skill.name.clone(),
+        captured_session_count,
+        jobs,
+        route,
+        trigger,
+    }
+}
+
+fn skill_evolution_route(
+    versions: &[SkillVersionRecord],
+    jobs: &[SkillEvolutionJobRecord],
+) -> Vec<SkillEvolutionRouteEntryView> {
+    let mut route = Vec::with_capacity(versions.len() + jobs.len());
+    route.extend(versions.iter().map(skill_version_route_entry));
+    route.extend(jobs.iter().map(skill_evolution_job_route_entry));
+    route.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    route
+}
+
+fn skill_version_route_entry(version: &SkillVersionRecord) -> SkillEvolutionRouteEntryView {
+    let label = present(version.version_label.as_deref())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| format!("v{}", version.version_number));
+    SkillEvolutionRouteEntryView {
+        kind: "version".to_string(),
+        id: version.id.clone(),
+        label,
+        project_id: None,
+        status: None,
+        action: None,
+        version_number: Some(version.version_number),
+        version_label: version.version_label.clone(),
+        skill_version_id: None,
+        change_summary: version.change_summary.clone(),
+        rationale: None,
+        candidate_preview: None,
+        created_by: Some(version.created_by.clone()),
+        created_at: iso8601(version.created_at),
+    }
+}
+
+fn skill_evolution_job_route_entry(job: &SkillEvolutionJobRecord) -> SkillEvolutionRouteEntryView {
+    SkillEvolutionRouteEntryView {
+        kind: "evolution_job".to_string(),
+        id: job.id.clone(),
+        label: format!("{}:{}", job.action, job.status),
+        project_id: job.project_id.clone(),
+        status: Some(job.status.clone()),
+        action: Some(job.action.clone()),
+        version_number: None,
+        version_label: None,
+        skill_version_id: job.skill_version_id.clone(),
+        change_summary: None,
+        rationale: job.rationale.clone(),
+        candidate_preview: candidate_content_preview(job.candidate_content.as_deref()),
+        created_by: Some("skill-evolution".to_string()),
+        created_at: iso8601(job.created_at),
+    }
+}
+
+fn candidate_content_preview(value: Option<&str>) -> Option<String> {
+    value
+        .filter(|value| !value.is_empty())
+        .map(|value| value.chars().take(500).collect())
 }
 
 fn evolution_overview_from_records(
@@ -2928,6 +3144,16 @@ fn validate_overview_limit(value: Option<i64>) -> Result<i64, SkillApiError> {
         )),
         Some(value) => Ok(value),
         None => Ok(50),
+    }
+}
+
+fn validate_evolution_detail_limit(value: Option<i64>) -> Result<i64, SkillApiError> {
+    match value {
+        Some(value) if !(1..=100).contains(&value) => Err(SkillApiError::unprocessable(
+            "Invalid skill evolution detail query",
+        )),
+        Some(value) => Ok(value),
+        None => Ok(20),
     }
 }
 
@@ -3377,6 +3603,22 @@ Use when managing Agent Skills packages.
         }
     }
 
+    fn sample_evolution_job_record() -> SkillEvolutionJobRecord {
+        SkillEvolutionJobRecord {
+            id: "job-1".to_string(),
+            project_id: None,
+            skill_name: "code-review".to_string(),
+            action: "update".to_string(),
+            status: "pending_review".to_string(),
+            rationale: Some("Improve review checklist.".to_string()),
+            candidate_content: Some("Updated skill content".to_string()),
+            session_ids: vec!["sess-1".to_string(), "sess-2".to_string()],
+            skill_version_id: None,
+            created_at: DateTime::<Utc>::from_timestamp(1_700_000_400, 0).unwrap(),
+            applied_at: None,
+        }
+    }
+
     fn sample_imported_skill_record() -> SkillRecord {
         let mut record = sample_skill_record();
         record.name = "alpha-skill".to_string();
@@ -3696,6 +3938,37 @@ Use when managing Agent Skills packages.
         agistack_parity::assert_parity(&golden, &actual);
     }
 
+    #[test]
+    fn skill_evolution_detail_matches_golden() {
+        // Arrange
+        let config = SkillEvolutionConfig {
+            enabled: true,
+            min_sessions_per_skill: 2,
+            scoring_min_sessions_per_skill: 2,
+            min_avg_score: 0.7,
+            max_sessions_per_batch: 10,
+            evolution_interval_minutes: 30,
+            publish_mode: SkillEvolutionPublishMode::Review,
+            auto_apply: false,
+        };
+
+        // Act
+        let actual = serde_json::to_value(evolution_detail_from_records(
+            &sample_skill_record(),
+            config,
+            vec![sample_version_record()],
+            vec![sample_evolution_job_record()],
+            2,
+        ))
+        .unwrap();
+
+        // Assert
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/skill_evolution_detail.json"))
+                .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
     #[tokio::test]
     async fn dev_service_content_update_creates_version_and_rollback() {
         let service = DevSkillService::new("tenant-1");
@@ -3760,6 +4033,69 @@ Use when managing Agent Skills packages.
             .unwrap();
         assert_eq!(rolled_back.current_version, 2);
         assert_eq!(rolled_back.full_content, updated.full_content);
+    }
+
+    #[tokio::test]
+    async fn dev_service_evolution_detail_returns_versions_and_skill_trigger() {
+        // Arrange
+        let service = DevSkillService::new("tenant-1");
+        let created = service
+            .create_skill(
+                "u1",
+                Some("tenant-1"),
+                SkillCreatePayload {
+                    name: "code-review".to_string(),
+                    description: "Review code".to_string(),
+                    tools: vec!["read_file".to_string()],
+                    full_content: Some("# Code Review\n".to_string()),
+                    project_id: None,
+                    scope: "tenant".to_string(),
+                    metadata: None,
+                    license: None,
+                    compatibility: None,
+                    allowed_tools_raw: None,
+                    spec_version: None,
+                },
+            )
+            .await
+            .unwrap();
+        service
+            .update_content(
+                "u1",
+                Some("tenant-1"),
+                &created.id,
+                SkillContentUpdatePayload {
+                    full_content: "---\nversion: 1.0.0\n---\n# New\n".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        // Act
+        let detail = service
+            .get_evolution_detail(
+                "u1",
+                SkillEvolutionDetailQuery {
+                    tenant_id: Some("tenant-1".to_string()),
+                    limit: Some(20),
+                },
+                &created.id,
+            )
+            .await
+            .unwrap();
+
+        // Assert
+        assert_eq!(detail.skill_id, created.id);
+        assert_eq!(detail.skill_name, "code-review");
+        assert_eq!(detail.captured_session_count, 0);
+        assert!(detail.jobs.is_empty());
+        assert_eq!(detail.route.len(), 1);
+        assert_eq!(detail.route[0].kind, "version");
+        assert_eq!(detail.route[0].version_number, Some(1));
+        assert_eq!(
+            detail.trigger.manual_trigger,
+            format!("/api/v1/skills/{}/evolution/run", created.id)
+        );
     }
 
     #[tokio::test]

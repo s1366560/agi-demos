@@ -2404,6 +2404,29 @@ async fn skill_evolution_overview_queries_shared_schema() {
         .iter()
         .all(|job| job.project_id.as_deref() != Some("p_skill_evo_other")));
 
+    let project_jobs = repo
+        .list_jobs_for_skill("t_skill_evo", "code-review", Some("p_skill_evo"), 10)
+        .await
+        .unwrap();
+    assert_eq!(project_jobs.len(), 1);
+    assert_eq!(project_jobs[0].id, "job_skill_evo_project");
+    let tenant_jobs = repo
+        .list_jobs_for_skill("t_skill_evo", "review", None, 10)
+        .await
+        .unwrap();
+    assert_eq!(tenant_jobs.len(), 1);
+    assert_eq!(tenant_jobs[0].id, "job_skill_evo_tenant");
+    let project_session_count = repo
+        .count_sessions_by_skill("t_skill_evo", "code-review", Some("p_skill_evo"))
+        .await
+        .unwrap();
+    assert_eq!(project_session_count, 1);
+    let tenant_session_count = repo
+        .count_sessions_by_skill("t_skill_evo", "review", None)
+        .await
+        .unwrap();
+    assert_eq!(tenant_session_count, 1);
+
     for sql in [
         "DELETE FROM skill_evolution_jobs WHERE tenant_id = 't_skill_evo'",
         "DELETE FROM skill_evolution_sessions WHERE tenant_id = 't_skill_evo'",

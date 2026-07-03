@@ -536,8 +536,8 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
     },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
     // status, versions, rollback, JSON/zip package import, package export, and
-    // skill-evolution config/overview are in Rust; filesystem/system import and
-    // evolution job/run siblings remain Python.
+    // skill-evolution config/overview/detail are in Rust; filesystem/system import
+    // and evolution job/run siblings remain Python.
     MethodRule {
         method: "GET",
         path: "/api/v1/skills",
@@ -646,6 +646,14 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/skills",
         match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
             suffix: "export",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "evolution",
             excluded: &["system"],
         },
     },
@@ -1731,6 +1739,7 @@ mod unit {
             (Method::GET, "/api/v1/skills/skill-1/versions/2"),
             (Method::POST, "/api/v1/skills/skill-1/rollback"),
             (Method::GET, "/api/v1/skills/skill-1/export"),
+            (Method::GET, "/api/v1/skills/skill-1/evolution"),
         ] {
             assert_eq!(
                 upstream_for_request(&method, path, &ups()),
@@ -1760,6 +1769,9 @@ mod unit {
             (Method::GET, "/api/v1/skills/skill-1/versions/2/extra"),
             (Method::GET, "/api/v1/skills/skill-1/rollback"),
             (Method::POST, "/api/v1/skills/skill-1/export"),
+            (Method::POST, "/api/v1/skills/skill-1/evolution"),
+            (Method::GET, "/api/v1/skills/skill-1/evolution/run"),
+            (Method::POST, "/api/v1/skills/skill-1/evolution/run"),
             (Method::POST, "/api/v1/skills/skill-1/publish"),
             (Method::POST, "/api/v1/skills/skill-1/clone"),
             (Method::GET, "/api/v1/skills/skill-1/files"),
