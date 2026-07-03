@@ -9,7 +9,7 @@
 //! linger after explicit human acceptance.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use async_trait::async_trait;
 use axum::{
@@ -3702,6 +3702,12 @@ impl DevWorkspaceService {
         }
     }
 
+    fn lock_state(&self) -> Result<MutexGuard<'_, DevWorkspaceState>, WorkspaceApiError> {
+        self.state
+            .lock()
+            .map_err(|_| WorkspaceApiError::internal("workspace dev state unavailable"))
+    }
+
     fn workspace_matches(
         &self,
         workspace: &WorkspaceRecord,
@@ -3744,9 +3750,7 @@ impl WorkspaceService for DevWorkspaceService {
             created_at: now,
             updated_at: None,
         };
-        self.state
-            .lock()
-            .expect("workspace dev state")
+        self.lock_state()?
             .workspaces
             .insert(workspace.id.clone(), workspace.clone());
         Ok(workspace.into())
@@ -3763,9 +3767,7 @@ impl WorkspaceService for DevWorkspaceService {
         let limit = clamp_limit(query.limit, 50, 500) as usize;
         let offset = query.offset.unwrap_or(0).max(0) as usize;
         let mut items: Vec<_> = self
-            .state
-            .lock()
-            .expect("workspace dev state")
+            .lock_state()?
             .workspaces
             .values()
             .filter(|workspace| self.workspace_matches(workspace, tenant_id, project_id))
@@ -3788,7 +3790,7 @@ impl WorkspaceService for DevWorkspaceService {
         workspace_id: &str,
     ) -> Result<WorkspaceView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         let workspace = state
             .workspaces
             .get(workspace_id)
@@ -3814,7 +3816,7 @@ impl WorkspaceService for DevWorkspaceService {
                 "Invalid workspace chat request",
             ));
         }
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .workspaces
             .get(workspace_id)
@@ -3889,7 +3891,7 @@ impl WorkspaceService for DevWorkspaceService {
         query: MessageListQuery,
     ) -> Result<MessageListView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         let in_scope = state
             .workspaces
             .get(workspace_id)
@@ -3939,7 +3941,7 @@ impl WorkspaceService for DevWorkspaceService {
         query: MessageMentionQuery,
     ) -> Result<MessageListView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         let in_scope = state
             .workspaces
             .get(workspace_id)
@@ -3979,7 +3981,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspacePlanSnapshotView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
         let recover_stale_attempts = query.recover_stale_attempts.unwrap_or(false);
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -4107,7 +4109,7 @@ impl WorkspaceService for DevWorkspaceService {
         validate_plan_action_request(&body)?;
         self.require_dev_user(user_id)?;
         let now = Utc::now();
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -4186,7 +4188,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
         validate_plan_action_request(&body)?;
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -4224,7 +4226,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
         validate_plan_pipeline_request(&body)?;
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -4272,7 +4274,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
         validate_plan_action_request(&body)?;
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let plan = latest_plan_for_workspace(&state, workspace_id)
             .cloned()
             .ok_or_else(WorkspaceApiError::plan_not_found)?;
@@ -4340,7 +4342,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
         validate_plan_action_request(&body)?;
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let mut plan = latest_plan_for_workspace(&state, workspace_id)
             .cloned()
             .ok_or_else(WorkspaceApiError::plan_not_found)?;
@@ -4406,7 +4408,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
         validate_plan_action_request(&body)?;
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let mut plan = latest_plan_for_workspace(&state, workspace_id)
             .cloned()
             .ok_or_else(WorkspaceApiError::plan_not_found)?;
@@ -4477,7 +4479,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
         validate_plan_action_request(&body)?;
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let plan = latest_plan_for_workspace(&state, workspace_id)
             .cloned()
             .ok_or_else(WorkspaceApiError::plan_not_found)?;
@@ -4559,7 +4561,7 @@ impl WorkspaceService for DevWorkspaceService {
         body: WorkspaceUpdatePayload,
     ) -> Result<WorkspaceView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let workspace = state
             .workspaces
             .get_mut(workspace_id)
@@ -4590,7 +4592,7 @@ impl WorkspaceService for DevWorkspaceService {
         workspace_id: &str,
     ) -> Result<(), WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .workspaces
             .get(workspace_id)
@@ -4631,7 +4633,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<WorkspaceTaskView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
         validate_non_empty(&body.title, "title")?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -4674,9 +4676,7 @@ impl WorkspaceService for DevWorkspaceService {
         let limit = clamp_limit(query.limit, 100, 500) as usize;
         let offset = query.offset.unwrap_or(0).max(0) as usize;
         let mut tasks: Vec<_> = self
-            .state
-            .lock()
-            .expect("workspace dev state")
+            .lock_state()?
             .tasks
             .values()
             .filter(|task| {
@@ -4705,7 +4705,7 @@ impl WorkspaceService for DevWorkspaceService {
         task_id: &str,
     ) -> Result<WorkspaceTaskView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         state
             .tasks
             .get(task_id)
@@ -4723,7 +4723,7 @@ impl WorkspaceService for DevWorkspaceService {
         body: WorkspaceTaskUpdatePayload,
     ) -> Result<WorkspaceTaskView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let task = state
             .tasks
             .get_mut(task_id)
@@ -4740,7 +4740,7 @@ impl WorkspaceService for DevWorkspaceService {
         task_id: &str,
     ) -> Result<(), WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .tasks
             .get(task_id)
@@ -4760,7 +4760,7 @@ impl WorkspaceService for DevWorkspaceService {
         action: TaskTransitionAction,
     ) -> Result<WorkspaceTaskView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let task = state
             .tasks
             .get_mut(task_id)
@@ -4778,7 +4778,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<TopologyNodeView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
         validate_node_type(&body.node_type)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -4812,9 +4812,7 @@ impl WorkspaceService for DevWorkspaceService {
         let limit = clamp_limit(query.limit, 1000, 2000) as usize;
         let offset = query.offset.unwrap_or(0).max(0) as usize;
         let mut nodes: Vec<_> = self
-            .state
-            .lock()
-            .expect("workspace dev state")
+            .lock_state()?
             .nodes
             .values()
             .filter(|node| node.workspace_id == workspace_id)
@@ -4836,7 +4834,7 @@ impl WorkspaceService for DevWorkspaceService {
         node_id: &str,
     ) -> Result<TopologyNodeView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         state
             .nodes
             .get(node_id)
@@ -4854,7 +4852,7 @@ impl WorkspaceService for DevWorkspaceService {
         body: TopologyNodeUpdatePayload,
     ) -> Result<TopologyNodeView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let node = state
             .nodes
             .get_mut(node_id)
@@ -4902,7 +4900,7 @@ impl WorkspaceService for DevWorkspaceService {
         node_id: &str,
     ) -> Result<(), WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .nodes
             .get(node_id)
@@ -4924,7 +4922,7 @@ impl WorkspaceService for DevWorkspaceService {
         body: TopologyEdgeCreatePayload,
     ) -> Result<TopologyEdgeView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let Some(source) = state
             .nodes
             .get(&body.source_node_id)
@@ -4973,9 +4971,7 @@ impl WorkspaceService for DevWorkspaceService {
         let limit = clamp_limit(query.limit, 2000, 4000) as usize;
         let offset = query.offset.unwrap_or(0).max(0) as usize;
         let mut edges: Vec<_> = self
-            .state
-            .lock()
-            .expect("workspace dev state")
+            .lock_state()?
             .edges
             .values()
             .filter(|edge| edge.workspace_id == workspace_id)
@@ -4997,7 +4993,7 @@ impl WorkspaceService for DevWorkspaceService {
         edge_id: &str,
     ) -> Result<TopologyEdgeView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         state
             .edges
             .get(edge_id)
@@ -5015,7 +5011,7 @@ impl WorkspaceService for DevWorkspaceService {
         body: TopologyEdgeUpdatePayload,
     ) -> Result<TopologyEdgeView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let mut edge = state
             .edges
             .get(edge_id)
@@ -5072,7 +5068,7 @@ impl WorkspaceService for DevWorkspaceService {
         edge_id: &str,
     ) -> Result<(), WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .edges
             .get(edge_id)
@@ -5096,7 +5092,7 @@ impl WorkspaceService for DevWorkspaceService {
         validate_non_empty(&body.title, "title")?;
         validate_non_empty(&body.content, "content")?;
         validate_post_status(&body.status)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .workspaces
             .get(workspace_id)
@@ -5141,7 +5137,7 @@ impl WorkspaceService for DevWorkspaceService {
         query: LimitOffset,
     ) -> Result<BlackboardPostListView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         let in_scope = state
             .workspaces
             .get(workspace_id)
@@ -5183,9 +5179,7 @@ impl WorkspaceService for DevWorkspaceService {
         post_id: &str,
     ) -> Result<BlackboardPostView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        self.state
-            .lock()
-            .expect("workspace dev state")
+        self.lock_state()?
             .posts
             .get(post_id)
             .filter(|post| post.workspace_id == workspace_id)
@@ -5204,7 +5198,7 @@ impl WorkspaceService for DevWorkspaceService {
         body: BlackboardPostUpdatePayload,
     ) -> Result<BlackboardPostView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let post = state
             .posts
             .get_mut(post_id)
@@ -5241,7 +5235,7 @@ impl WorkspaceService for DevWorkspaceService {
         post_id: &str,
     ) -> Result<DeletedView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .posts
             .get(post_id)
@@ -5265,7 +5259,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<BlackboardReplyView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
         validate_non_empty(&body.content, "content")?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !state
             .posts
             .get(post_id)
@@ -5301,9 +5295,7 @@ impl WorkspaceService for DevWorkspaceService {
         let limit = clamp_limit(query.limit, 200, 500) as usize;
         let offset = query.offset.unwrap_or(0).max(0) as usize;
         let mut replies: Vec<_> = self
-            .state
-            .lock()
-            .expect("workspace dev state")
+            .lock_state()?
             .replies
             .values()
             .filter(|reply| reply.workspace_id == workspace_id && reply.post_id == post_id)
@@ -5334,7 +5326,7 @@ impl WorkspaceService for DevWorkspaceService {
         } = input;
         self.require_dev_user(user_id)?;
         validate_non_empty(&body.content, "content")?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let reply = state
             .replies
             .get_mut(reply_id)
@@ -5358,7 +5350,7 @@ impl WorkspaceService for DevWorkspaceService {
         reply_id: &str,
     ) -> Result<DeletedView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let in_scope = state
             .replies
             .get(reply_id)
@@ -5380,7 +5372,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<BlackboardFileListView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
         let parent_path = validate_file_path(query.parent_path.as_deref().unwrap_or("/"))?;
-        let state = self.state.lock().expect("workspace dev state");
+        let state = self.lock_state()?;
         if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -5407,7 +5399,7 @@ impl WorkspaceService for DevWorkspaceService {
         self.require_dev_user(user_id)?;
         let parent_path = validate_file_path(&body.parent_path)?;
         let name = validate_filename(&body.name)?;
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -5463,7 +5455,7 @@ impl WorkspaceService for DevWorkspaceService {
         let parent_path = validate_file_path(&upload.parent_path)?;
         let filename = validate_filename(&upload.filename)?;
         {
-            let state = self.state.lock().expect("workspace dev state");
+            let state = self.lock_state()?;
             if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
                 return Err(WorkspaceApiError::workspace_not_found());
             }
@@ -5503,7 +5495,7 @@ impl WorkspaceService for DevWorkspaceService {
             mime_type_detected: None,
             created_at: Utc::now(),
         };
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         state.files.insert(file.id.clone(), file.clone());
         let view = BlackboardFileView::from(file);
         state.outbox.push(BlackboardOutboxRecord {
@@ -5529,7 +5521,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<BlackboardFileDownload, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
         let file = {
-            let state = self.state.lock().expect("workspace dev state");
+            let state = self.lock_state()?;
             if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
                 return Err(WorkspaceApiError::workspace_not_found());
             }
@@ -5584,7 +5576,7 @@ impl WorkspaceService for DevWorkspaceService {
                 "Provide at least one of 'name' or 'parent_path'",
             ));
         }
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
@@ -5660,7 +5652,7 @@ impl WorkspaceService for DevWorkspaceService {
         let target_parent = validate_file_path(&body.target_parent_path)?;
         let copy_name;
         {
-            let state = self.state.lock().expect("workspace dev state");
+            let state = self.lock_state()?;
             if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
                 return Err(WorkspaceApiError::workspace_not_found());
             }
@@ -5697,7 +5689,7 @@ impl WorkspaceService for DevWorkspaceService {
             )
             .await?
         };
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         let view = BlackboardFileView::from(copied);
         state.outbox.push(BlackboardOutboxRecord {
             id: new_id(),
@@ -5723,7 +5715,7 @@ impl WorkspaceService for DevWorkspaceService {
     ) -> Result<DeletedView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
         let (file, descendants) = {
-            let state = self.state.lock().expect("workspace dev state");
+            let state = self.lock_state()?;
             if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
                 return Err(WorkspaceApiError::workspace_not_found());
             }
@@ -5759,7 +5751,7 @@ impl WorkspaceService for DevWorkspaceService {
                 .await
                 .map_err(WorkspaceApiError::internal)?;
         }
-        let mut state = self.state.lock().expect("workspace dev state");
+        let mut state = self.lock_state()?;
         for descendant in descendants {
             state.files.remove(&descendant.id);
         }
@@ -8426,9 +8418,7 @@ async fn copy_single_file_dev(
         created_at: Utc::now(),
     };
     service
-        .state
-        .lock()
-        .expect("workspace dev state")
+        .lock_state()?
         .files
         .insert(clone.id.clone(), clone.clone());
     Ok(clone)
@@ -8444,7 +8434,7 @@ async fn copy_directory_dev(
 ) -> Result<BlackboardFileRecord, WorkspaceApiError> {
     let old_prefix = join_child_path(&source.parent_path, &source.name)?;
     let descendants = {
-        let state = service.state.lock().expect("workspace dev state");
+        let state = service.lock_state()?;
         find_descendants_dev(&state, workspace_id, &old_prefix)
     };
     if descendants.len() + 1 > MAX_COPY_ENTRIES {
@@ -8469,9 +8459,7 @@ async fn copy_directory_dev(
         created_at: Utc::now(),
     };
     service
-        .state
-        .lock()
-        .expect("workspace dev state")
+        .lock_state()?
         .files
         .insert(root.id.clone(), root.clone());
     let new_prefix = join_child_path(target_parent, copy_name)?;
@@ -8495,12 +8483,7 @@ async fn copy_directory_dev(
                 mime_type_detected: None,
                 created_at: Utc::now(),
             };
-            service
-                .state
-                .lock()
-                .expect("workspace dev state")
-                .files
-                .insert(clone.id.clone(), clone);
+            service.lock_state()?.files.insert(clone.id.clone(), clone);
         } else {
             copy_single_file_dev(
                 service,
@@ -9532,1515 +9515,4 @@ pub(crate) fn router() -> Router<AppState> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use agistack_parity::compare;
-
-    fn canonical_workspace() -> WorkspaceRecord {
-        WorkspaceRecord {
-            id: "ws-00000000-0000-4000-8000-000000000001".to_string(),
-            tenant_id: "tenant-1".to_string(),
-            project_id: "project-1".to_string(),
-            name: "Core Workspace".to_string(),
-            description: Some("Shared P6 surface".to_string()),
-            created_by: "user-1".to_string(),
-            is_archived: false,
-            metadata_json: json!({
-                "workspace_use_case": "programming",
-                "workspace_type": "software_development",
-                "collaboration_mode": "multi_agent_shared",
-                "agent_conversation_mode": "multi_agent_shared",
-                "autonomy_profile": {"workspace_type": "software_development"}
-            }),
-            office_status: "inactive".to_string(),
-            hex_layout_config_json: json!({}),
-            default_blocking_categories_json: Vec::new(),
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-            updated_at: None,
-        }
-    }
-
-    fn assert_golden<T: Serialize>(actual: &T, golden: Value) {
-        let actual = serde_json::to_value(actual).unwrap();
-        let report = compare(&golden, &actual);
-        assert!(report.is_match(), "{report:#?}\nactual={actual:#}");
-    }
-
-    #[test]
-    fn workspace_response_matches_golden() {
-        assert_golden(
-            &WorkspaceView::from(canonical_workspace()),
-            serde_json::from_str(include_str!("../tests/golden/workspace_response.json")).unwrap(),
-        );
-    }
-
-    #[test]
-    fn workspace_task_response_matches_golden() {
-        let task = WorkspaceTaskRecord {
-            id: "task-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            title: "Port P6".to_string(),
-            description: Some("Move core workspace ledger".to_string()),
-            created_by: "user-1".to_string(),
-            assignee_user_id: Some("user-2".to_string()),
-            assignee_agent_id: None,
-            status: "todo".to_string(),
-            priority: 2,
-            estimated_effort: Some("M".to_string()),
-            blocker_reason: None,
-            metadata_json: json!({
-                "workspace_agent_binding_id": "wa-1",
-                "pending_leader_adjudication": true,
-                "last_worker_report_artifacts": ["artifact-1"]
-            }),
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-            updated_at: None,
-            completed_at: None,
-            archived_at: None,
-        };
-        assert_golden(
-            &WorkspaceTaskView::from(task),
-            serde_json::from_str(include_str!("../tests/golden/workspace_task_response.json"))
-                .unwrap(),
-        );
-    }
-
-    #[test]
-    fn workspace_message_responses_match_goldens() {
-        let message = WorkspaceMessageRecord {
-            id: "msg-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            sender_id: "user-1".to_string(),
-            sender_type: "human".to_string(),
-            content: "Ship P6 chat".to_string(),
-            mentions_json: vec!["user-2".to_string(), "agent-1".to_string()],
-            parent_message_id: None,
-            metadata_json: json!({"sender_name": "Alice"}),
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-        };
-        let view = MessageView::from(message);
-        assert_golden(
-            &view,
-            serde_json::from_str(include_str!(
-                "../tests/golden/workspace_message_response.json"
-            ))
-            .unwrap(),
-        );
-        assert_golden(
-            &MessageListView { items: vec![view] },
-            serde_json::from_str(include_str!("../tests/golden/workspace_message_list.json"))
-                .unwrap(),
-        );
-    }
-
-    #[test]
-    fn workspace_agent_mention_outbox_matches_golden() {
-        let message = MessageView {
-            id: "msg-1".to_string(),
-            workspace_id: "ws-mention".to_string(),
-            sender_id: "user-1".to_string(),
-            sender_type: "human".to_string(),
-            content: "Ship the workspace runtime bridge".to_string(),
-            mentions: vec!["user-1".to_string(), "agent-1".to_string()],
-            parent_message_id: Some("msg-parent".to_string()),
-            metadata: json!({
-                "sender_name": "Alice",
-                "conversation_scope": "objective:root-1"
-            }),
-            created_at: "2026-01-02T03:04:05.000Z".to_string(),
-        };
-        let agents = vec![WorkspaceAgentRecord {
-            id: "wa-1".to_string(),
-            workspace_id: "ws-mention".to_string(),
-            agent_id: "agent-1".to_string(),
-            display_name: Some("Builder".to_string()),
-        }];
-        let records = workspace_agent_mention_outbox_records(WorkspaceAgentMentionOutboxInput {
-            tenant_id: "tenant-1",
-            project_id: "project-1",
-            workspace_id: "ws-mention",
-            sender_user_id: "user-1",
-            sender_name: "Alice",
-            message: &message,
-            agents: &agents,
-            now: "2026-01-02T03:04:06Z".parse().unwrap(),
-        });
-        assert_eq!(records.len(), 1);
-        let record = &records[0];
-        assert_golden(
-            &json!({
-                "event_type": &record.event_type,
-                "status": &record.status,
-                "payload": &record.payload_json,
-                "metadata": &record.metadata_json,
-            }),
-            serde_json::from_str(include_str!(
-                "../tests/golden/workspace_agent_mention_outbox.json"
-            ))
-            .unwrap(),
-        );
-    }
-
-    #[test]
-    fn topology_responses_match_goldens() {
-        let node = TopologyNodeRecord {
-            id: "node-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            node_type: "task".to_string(),
-            ref_id: Some("task-1".to_string()),
-            title: "Port P6".to_string(),
-            position_x: 1.5,
-            position_y: -2.0,
-            hex_q: Some(1),
-            hex_r: Some(-1),
-            status: "active".to_string(),
-            tags_json: vec!["p6".to_string()],
-            data_json: json!({"lane": "foundation"}),
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-            updated_at: None,
-        };
-        let edge = TopologyEdgeRecord {
-            id: "edge-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            source_node_id: "node-1".to_string(),
-            target_node_id: "node-2".to_string(),
-            label: Some("depends_on".to_string()),
-            source_hex_q: Some(1),
-            source_hex_r: Some(-1),
-            target_hex_q: Some(2),
-            target_hex_r: Some(-1),
-            direction: Some("forward".to_string()),
-            auto_created: false,
-            data_json: json!({}),
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-            updated_at: None,
-        };
-        assert_golden(
-            &TopologyNodeView::from(node),
-            serde_json::from_str(include_str!("../tests/golden/topology_node_response.json"))
-                .unwrap(),
-        );
-        assert_golden(
-            &TopologyEdgeView::from(edge),
-            serde_json::from_str(include_str!("../tests/golden/topology_edge_response.json"))
-                .unwrap(),
-        );
-    }
-
-    #[test]
-    fn blackboard_responses_match_goldens() {
-        let post = BlackboardPostRecord {
-            id: "post-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            author_id: "user-1".to_string(),
-            title: "Status".to_string(),
-            content: "P6 started".to_string(),
-            status: "open".to_string(),
-            is_pinned: true,
-            metadata_json: json!({"lane": "p6"}),
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-            updated_at: None,
-        };
-        let reply = BlackboardReplyRecord {
-            id: "reply-1".to_string(),
-            post_id: "post-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            author_id: "user-2".to_string(),
-            content: "ack".to_string(),
-            metadata_json: json!({}),
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-            updated_at: None,
-        };
-        let file = BlackboardFileRecord {
-            id: "file-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            parent_path: "/docs/".to_string(),
-            name: "status.txt".to_string(),
-            is_directory: false,
-            file_size: 11,
-            content_type: "text/plain".to_string(),
-            storage_key: "file-1/status.txt".to_string(),
-            uploader_type: "user".to_string(),
-            uploader_id: "user-1".to_string(),
-            uploader_name: "Owner".to_string(),
-            checksum_sha256: None,
-            mime_type_detected: None,
-            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
-        };
-        assert_golden(
-            &BlackboardPostListView {
-                items: vec![BlackboardPostView::from(post)],
-            },
-            serde_json::from_str(include_str!("../tests/golden/blackboard_post_list.json"))
-                .unwrap(),
-        );
-        assert_golden(
-            &BlackboardReplyListView {
-                items: vec![BlackboardReplyView::from(reply)],
-            },
-            serde_json::from_str(include_str!("../tests/golden/blackboard_reply_list.json"))
-                .unwrap(),
-        );
-        assert_golden(
-            &BlackboardFileListView {
-                items: vec![BlackboardFileView::from(file)],
-            },
-            serde_json::from_str(include_str!("../tests/golden/blackboard_file_list.json"))
-                .unwrap(),
-        );
-    }
-
-    #[test]
-    fn workspace_plan_snapshot_matches_golden() {
-        let created_at = "2026-01-02T03:04:05Z".parse().unwrap();
-        let plan = WorkspacePlanRecord {
-            id: "plan-1".to_string(),
-            workspace_id: "ws-1".to_string(),
-            goal_id: "node-1".to_string(),
-            status: "active".to_string(),
-            created_at,
-            updated_at: None,
-        };
-        let node = WorkspacePlanNodeRecord {
-            id: "node-1".to_string(),
-            plan_id: "plan-1".to_string(),
-            parent_id: None,
-            kind: "task".to_string(),
-            title: "Implement P6 plans".to_string(),
-            description: "Port snapshot ledger".to_string(),
-            depends_on_json: Vec::new(),
-            inputs_schema_json: json!({}),
-            outputs_schema_json: json!({}),
-            acceptance_criteria_json: Vec::new(),
-            feature_checkpoint_json: None,
-            handoff_package_json: None,
-            recommended_capabilities_json: Vec::new(),
-            preferred_agent_id: None,
-            estimated_effort_json: json!({"minutes": 30, "confidence": 0.7}),
-            priority: 1,
-            intent: "todo".to_string(),
-            execution: "idle".to_string(),
-            progress_json: json!({"percent": 0.0, "confidence": 0.8, "note": "queued"}),
-            assignee_agent_id: None,
-            current_attempt_id: None,
-            workspace_task_id: None,
-            metadata_json: json!({
-                "iteration_phase": "plan",
-                "evidence_refs": ["ci_pipeline:passed"],
-                "changed_files": ["agi-stack/apps/server/src/workspace_api.rs"],
-                "last_verification_summary": "golden locked"
-            }),
-            created_at,
-            updated_at: None,
-            completed_at: None,
-        };
-        let snapshot = build_plan_snapshot(
-            "ws-1",
-            vec![(plan, vec![node])],
-            "plan-1",
-            true,
-            vec![WorkspacePlanBlackboardEntryRecord {
-                id: "bb-1".to_string(),
-                plan_id: "plan-1".to_string(),
-                key: "research.summary".to_string(),
-                value_json: Some(json!({"summary": "ready"})),
-                published_by: "agent-1".to_string(),
-                version: 2,
-                schema_ref: Some("workspace.plan.summary.v1".to_string()),
-                metadata_json: json!({"source": "planner"}),
-                created_at,
-            }],
-            vec![WorkspacePlanOutboxRecord {
-                id: "outbox-1".to_string(),
-                plan_id: Some("plan-1".to_string()),
-                workspace_id: "ws-1".to_string(),
-                event_type: "supervisor_tick".to_string(),
-                payload_json: json!({"node_id": "node-1"}),
-                status: "failed".to_string(),
-                attempt_count: 1,
-                max_attempts: 5,
-                lease_owner: None,
-                lease_expires_at: None,
-                last_error: Some("provider unavailable".to_string()),
-                next_attempt_at: None,
-                processed_at: None,
-                metadata_json: json!({"source": "workspace_plan_api"}),
-                created_at,
-                updated_at: None,
-            }],
-            vec![WorkspacePlanEventRecord {
-                id: "event-1".to_string(),
-                plan_id: "plan-1".to_string(),
-                workspace_id: "ws-1".to_string(),
-                node_id: Some("node-1".to_string()),
-                attempt_id: None,
-                event_type: "workspace_plan_updated".to_string(),
-                source: "system".to_string(),
-                actor_id: Some("agent-1".to_string()),
-                payload_json: json!({"status": "active"}),
-                created_at,
-            }],
-        );
-        assert_golden(
-            &snapshot,
-            serde_json::from_str(include_str!("../tests/golden/workspace_plan_snapshot.json"))
-                .unwrap(),
-        );
-        assert_golden(
-            &WorkspacePlanActionResultView {
-                ok: true,
-                message: "Outbox job queued for retry.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: None,
-                outbox_id: Some("outbox-1".to_string()),
-            },
-            serde_json::from_str(include_str!(
-                "../tests/golden/workspace_plan_action_result.json"
-            ))
-            .unwrap(),
-        );
-        let delivery_results = json!({
-            "pipeline": serde_json::to_value(WorkspacePlanActionResultView {
-                ok: true,
-                message: "Harness-native pipeline run requested.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: Some("node-1".to_string()),
-                outbox_id: Some("outbox-pipeline".to_string()),
-            }).unwrap(),
-            "regenerate_contract": serde_json::to_value(WorkspacePlanActionResultView {
-                ok: true,
-                message: "Delivery contract regeneration requested.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: None,
-                outbox_id: Some("outbox-contract".to_string()),
-            }).unwrap()
-        });
-        assert_golden(
-            &delivery_results,
-            serde_json::from_str(include_str!(
-                "../tests/golden/workspace_plan_delivery_action_results.json"
-            ))
-            .unwrap(),
-        );
-        let node_action_results = json!({
-            "request_replan": serde_json::to_value(WorkspacePlanActionResultView {
-                ok: true,
-                message: "Plan node sent back for supervisor recovery.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: Some("node-1".to_string()),
-                outbox_id: None,
-            }).unwrap(),
-            "reopen": serde_json::to_value(WorkspacePlanActionResultView {
-                ok: true,
-                message: "Blocked plan node reopened.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: Some("node-1".to_string()),
-                outbox_id: None,
-            }).unwrap(),
-            "accept_review": serde_json::to_value(WorkspacePlanActionResultView {
-                ok: true,
-                message: "Plan node accepted after human review.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: Some("node-1".to_string()),
-                outbox_id: None,
-            }).unwrap()
-        });
-        assert_golden(
-            &node_action_results,
-            serde_json::from_str(include_str!(
-                "../tests/golden/workspace_plan_node_action_results.json"
-            ))
-            .unwrap(),
-        );
-        let recover_stale_results = json!({
-            "queued": serde_json::to_value(WorkspacePlanActionResultView {
-                ok: true,
-                message: "Workspace plan stale attempt recovery queued.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: None,
-                outbox_id: None,
-            }).unwrap(),
-            "noop": serde_json::to_value(WorkspacePlanActionResultView {
-                ok: true,
-                message: "No stale workspace plan attempts needed recovery.".to_string(),
-                plan_id: "plan-1".to_string(),
-                node_id: None,
-                outbox_id: None,
-            }).unwrap()
-        });
-        assert_golden(
-            &recover_stale_results,
-            serde_json::from_str(include_str!(
-                "../tests/golden/workspace_plan_recover_stale_action_results.json"
-            ))
-            .unwrap(),
-        );
-    }
-
-    #[tokio::test]
-    async fn dev_service_roundtrips_workspace_chat_messages() {
-        let service = DevWorkspaceService::new("user-1");
-        let workspace = service
-            .create_workspace(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                WorkspaceCreatePayload {
-                    name: "Chat Workspace".to_string(),
-                    description: None,
-                    metadata: json!({}),
-                    use_case: Some("programming".to_string()),
-                    collaboration_mode: Some("multi_agent_shared".to_string()),
-                    autonomy_profile: None,
-                    sandbox_code_root: None,
-                },
-            )
-            .await
-            .unwrap();
-        let first = service
-            .send_message(
-                "user-1",
-                "Alice",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                SendMessagePayload {
-                    content: "hello".to_string(),
-                    sender_type: "human".to_string(),
-                    parent_message_id: None,
-                    mentions: vec![" user-1 ".to_string(), "user-1".to_string()],
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(first.mentions, vec!["user-1"]);
-        assert_eq!(first.metadata["sender_name"], "Alice");
-        let second = service
-            .send_message(
-                "user-1",
-                "Alice",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                SendMessagePayload {
-                    content: "broadcast".to_string(),
-                    sender_type: "human".to_string(),
-                    parent_message_id: Some(first.id.clone()),
-                    mentions: vec!["all".to_string()],
-                },
-            )
-            .await
-            .unwrap();
-        assert!(second.mentions.is_empty());
-
-        let listed = service
-            .list_messages(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                MessageListQuery::default(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(listed.items.len(), 2);
-        assert_eq!(listed.items[0].id, first.id);
-        assert_eq!(listed.items[1].id, second.id);
-
-        let before_second = service
-            .list_messages(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                MessageListQuery {
-                    limit: None,
-                    before: Some(second.id.clone()),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(before_second.items.len(), 1);
-        assert_eq!(before_second.items[0].id, first.id);
-
-        let mentions = service
-            .list_mentions(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                "user-1",
-                MessageMentionQuery::default(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(mentions.items.len(), 1);
-        assert_eq!(mentions.items[0].id, first.id);
-
-        let invalid_mention = service
-            .send_message(
-                "user-1",
-                "Alice",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                SendMessagePayload {
-                    content: "bad".to_string(),
-                    sender_type: "human".to_string(),
-                    parent_message_id: None,
-                    mentions: vec!["missing-user".to_string()],
-                },
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(invalid_mention.status, StatusCode::BAD_REQUEST);
-        assert_eq!(invalid_mention.detail, "Invalid workspace chat request");
-
-        let invalid_sender = service
-            .send_message(
-                "user-1",
-                "Alice",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                SendMessagePayload {
-                    content: "bad".to_string(),
-                    sender_type: "agent".to_string(),
-                    parent_message_id: None,
-                    mentions: Vec::new(),
-                },
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(invalid_sender.status, StatusCode::BAD_REQUEST);
-        assert_eq!(invalid_sender.detail, "Invalid workspace chat request");
-
-        let state = service.state.lock().expect("workspace dev state");
-        let chat_events = state
-            .outbox
-            .iter()
-            .filter(|event| event.event_type == "workspace_message_created")
-            .count();
-        assert_eq!(chat_events, 2);
-    }
-
-    #[tokio::test]
-    async fn dev_service_enqueues_agent_mention_runtime_admissions() {
-        let service = DevWorkspaceService::new("user-1");
-        let workspace = service
-            .create_workspace(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                WorkspaceCreatePayload {
-                    name: "Mention Workspace".to_string(),
-                    description: None,
-                    metadata: json!({}),
-                    use_case: Some("programming".to_string()),
-                    collaboration_mode: Some("multi_agent_shared".to_string()),
-                    autonomy_profile: None,
-                    sandbox_code_root: None,
-                },
-            )
-            .await
-            .unwrap();
-        {
-            let mut state = service.state.lock().expect("workspace dev state");
-            state.workspace_agents.push(WorkspaceAgentRecord {
-                id: "wa-1".to_string(),
-                workspace_id: workspace.id.clone(),
-                agent_id: "agent-1".to_string(),
-                display_name: Some("Builder".to_string()),
-            });
-            state.workspace_agents.push(WorkspaceAgentRecord {
-                id: "wa-2".to_string(),
-                workspace_id: workspace.id.clone(),
-                agent_id: "agent-2".to_string(),
-                display_name: None,
-            });
-        }
-
-        let message = service
-            .send_message(
-                "user-1",
-                "Alice",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                SendMessagePayload {
-                    content: "please help".to_string(),
-                    sender_type: "human".to_string(),
-                    parent_message_id: None,
-                    mentions: vec![
-                        "user-1".to_string(),
-                        "agent-1".to_string(),
-                        "agent-2".to_string(),
-                    ],
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(message.mentions, vec!["user-1", "agent-1", "agent-2"]);
-
-        let state = service.state.lock().expect("workspace dev state");
-        let mention_jobs: Vec<_> = state
-            .plan_outbox
-            .iter()
-            .filter(|item| item.event_type == WORKSPACE_AGENT_MENTION_EVENT)
-            .collect();
-        assert_eq!(mention_jobs.len(), 2);
-        assert!(mention_jobs.iter().all(|item| {
-            item.plan_id.is_none() && item.status == WORKSPACE_AGENT_MENTION_STATUS
-        }));
-
-        let first = mention_jobs[0];
-        assert_eq!(first.payload_json["message_id"], message.id);
-        assert_eq!(first.payload_json["sender_user_id"], "user-1");
-        assert_eq!(first.payload_json["sender_name"], "Alice");
-        assert_eq!(first.payload_json["target_agent_id"], "agent-1");
-        assert_eq!(first.payload_json["target_workspace_agent_id"], "wa-1");
-        assert_eq!(first.payload_json["agent_name"], "Builder");
-        assert_eq!(
-            first.payload_json["conversation_id"],
-            workspace_conversation_id(&workspace.id, "agent-1", None)
-        );
-        assert_eq!(
-            first.payload_json["user_prompt"],
-            "[Workspace Chat] Alice mentioned you:\n\nplease help"
-        );
-        assert_eq!(
-            first.metadata_json["runtime_bridge"],
-            "p3_workspace_mention"
-        );
-        assert_eq!(first.metadata_json["target_agent_id"], "agent-1");
-
-        let second = mention_jobs[1];
-        assert_eq!(second.payload_json["target_agent_id"], "agent-2");
-        assert_eq!(second.payload_json["agent_name"], "agent-2");
-    }
-
-    #[test]
-    fn workspace_conversation_id_matches_python_uuid5_contract() {
-        assert_eq!(
-            workspace_conversation_id("ws-mention", "agent-1", None),
-            "ef99c6b6-cccc-5451-aecd-4fd3540b79f8"
-        );
-        assert_eq!(
-            workspace_conversation_id("ws-mention", "agent-1", Some("objective:root-1")),
-            "fff68776-271e-5a89-9a5b-def41746ef56"
-        );
-    }
-
-    #[tokio::test]
-    async fn dev_service_roundtrips_workspace_task_topology_blackboard() {
-        let service = DevWorkspaceService::new("user-1");
-        let workspace = service
-            .create_workspace(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                WorkspaceCreatePayload {
-                    name: "Core Workspace".to_string(),
-                    description: None,
-                    metadata: json!({}),
-                    use_case: Some("programming".to_string()),
-                    collaboration_mode: Some("multi_agent_shared".to_string()),
-                    autonomy_profile: None,
-                    sandbox_code_root: None,
-                },
-            )
-            .await
-            .unwrap();
-        let task = service
-            .create_task(
-                "user-1",
-                &workspace.id,
-                WorkspaceTaskCreatePayload {
-                    title: "Implement P6".to_string(),
-                    description: None,
-                    assignee_user_id: None,
-                    metadata: json!({}),
-                    priority: Some("P1".to_string()),
-                    estimated_effort: None,
-                    blocker_reason: None,
-                    preferred_language: None,
-                },
-            )
-            .await
-            .unwrap();
-        let node = service
-            .create_node(
-                "user-1",
-                &workspace.id,
-                TopologyNodeCreatePayload {
-                    node_type: "task".to_string(),
-                    ref_id: Some(task.id.clone()),
-                    title: Some(task.title.clone()),
-                    position_x: None,
-                    position_y: None,
-                    hex_q: Some(0),
-                    hex_r: Some(0),
-                    status: None,
-                    tags: vec![],
-                    data: json!({}),
-                },
-            )
-            .await
-            .unwrap();
-        let node2 = service
-            .create_node(
-                "user-1",
-                &workspace.id,
-                TopologyNodeCreatePayload {
-                    node_type: "note".to_string(),
-                    ref_id: None,
-                    title: Some("Context".to_string()),
-                    position_x: None,
-                    position_y: None,
-                    hex_q: Some(1),
-                    hex_r: Some(0),
-                    status: None,
-                    tags: vec![],
-                    data: json!({}),
-                },
-            )
-            .await
-            .unwrap();
-        let edge = service
-            .create_edge(
-                "user-1",
-                &workspace.id,
-                TopologyEdgeCreatePayload {
-                    source_node_id: node.id,
-                    target_node_id: node2.id,
-                    label: Some("relates".to_string()),
-                    direction: None,
-                    auto_created: false,
-                    data: json!({}),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(edge.source_hex_q, Some(0));
-        let post = service
-            .create_post(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                BlackboardPostCreatePayload {
-                    title: "Status".to_string(),
-                    content: "P6 started".to_string(),
-                    status: "open".to_string(),
-                    is_pinned: true,
-                    metadata: json!({}),
-                },
-            )
-            .await
-            .unwrap();
-        let reply = service
-            .create_reply(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                &post.id,
-                BlackboardReplyCreatePayload {
-                    content: "ack".to_string(),
-                    metadata: json!({}),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(reply.post_id, post.id);
-        let dir = service
-            .create_directory(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                MkdirPayload {
-                    parent_path: "/".to_string(),
-                    name: "docs".to_string(),
-                },
-            )
-            .await
-            .unwrap();
-        assert!(dir.is_directory);
-        let file = service
-            .upload_file(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                BlackboardUpload {
-                    parent_path: "/docs/".to_string(),
-                    filename: "status.txt".to_string(),
-                    content_type: Some("text/plain".to_string()),
-                    bytes: b"P6 file ok".to_vec(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(file.file_size, 10);
-        let listed = service
-            .list_files(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                BlackboardFileListQuery {
-                    parent_path: Some("/docs/".to_string()),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(listed.items.len(), 1);
-        let download = service
-            .download_file("user-1", "tenant-1", "project-1", &workspace.id, &file.id)
-            .await
-            .unwrap();
-        assert_eq!(download.bytes, b"P6 file ok");
-        let renamed = service
-            .patch_file(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                &file.id,
-                RenameOrMoveFilePayload {
-                    name: Some("renamed.txt".to_string()),
-                    parent_path: None,
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(renamed.name, "renamed.txt");
-        let copied = service
-            .copy_file(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                &renamed.id,
-                CopyFilePayload {
-                    target_parent_path: "/".to_string(),
-                    name: Some("copy.txt".to_string()),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(copied.parent_path, "/");
-        let deleted = service
-            .delete_file(
-                "user-1",
-                "tenant-1",
-                "project-1",
-                &workspace.id,
-                &renamed.id,
-                DeleteFileQuery { recursive: false },
-            )
-            .await
-            .unwrap();
-        assert!(deleted.deleted);
-        {
-            let mut state = service.state.lock().expect("workspace dev state");
-            let now = "2026-01-02T03:04:05Z".parse().unwrap();
-            state.plans.insert(
-                "plan-dev".to_string(),
-                WorkspacePlanRecord {
-                    id: "plan-dev".to_string(),
-                    workspace_id: workspace.id.clone(),
-                    goal_id: "plan-node-dev".to_string(),
-                    status: "active".to_string(),
-                    created_at: now,
-                    updated_at: None,
-                },
-            );
-            state.plan_nodes.insert(
-                "plan-node-dev".to_string(),
-                WorkspacePlanNodeRecord {
-                    id: "plan-node-dev".to_string(),
-                    plan_id: "plan-dev".to_string(),
-                    parent_id: None,
-                    kind: "task".to_string(),
-                    title: "Plan state".to_string(),
-                    description: "Durable P6 snapshot".to_string(),
-                    depends_on_json: Vec::new(),
-                    inputs_schema_json: json!({}),
-                    outputs_schema_json: json!({}),
-                    acceptance_criteria_json: Vec::new(),
-                    feature_checkpoint_json: None,
-                    handoff_package_json: None,
-                    recommended_capabilities_json: Vec::new(),
-                    preferred_agent_id: None,
-                    estimated_effort_json: json!({}),
-                    priority: 1,
-                    intent: "todo".to_string(),
-                    execution: "idle".to_string(),
-                    progress_json: json!({}),
-                    assignee_agent_id: None,
-                    current_attempt_id: None,
-                    workspace_task_id: Some(task.id.clone()),
-                    metadata_json: json!({"iteration_phase": "plan", "pipeline_required": true}),
-                    created_at: now,
-                    updated_at: None,
-                    completed_at: None,
-                },
-            );
-            state
-                .plan_blackboard
-                .push(WorkspacePlanBlackboardEntryRecord {
-                    id: "plan-bb-dev".to_string(),
-                    plan_id: "plan-dev".to_string(),
-                    key: "plan.summary".to_string(),
-                    value_json: Some(json!({"ok": true})),
-                    published_by: "user-1".to_string(),
-                    version: 1,
-                    schema_ref: None,
-                    metadata_json: json!({}),
-                    created_at: now,
-                });
-            state.plan_outbox.push(WorkspacePlanOutboxRecord {
-                id: "outbox-dev".to_string(),
-                plan_id: Some("plan-dev".to_string()),
-                workspace_id: workspace.id.clone(),
-                event_type: "supervisor_tick".to_string(),
-                payload_json: json!({"node_id": "plan-node-dev"}),
-                status: "failed".to_string(),
-                attempt_count: 1,
-                max_attempts: 5,
-                lease_owner: None,
-                lease_expires_at: None,
-                last_error: Some("provider unavailable".to_string()),
-                next_attempt_at: None,
-                processed_at: None,
-                metadata_json: json!({"source": "workspace_plan_api"}),
-                created_at: now,
-                updated_at: None,
-            });
-        }
-        let snapshot = service
-            .get_plan_snapshot(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanSnapshotQuery::default(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            snapshot.plan.as_ref().map(|plan| plan.id.as_str()),
-            Some("plan-dev")
-        );
-        assert_eq!(snapshot.blackboard.len(), 1);
-        assert_eq!(snapshot.outbox.len(), 1);
-        assert!(snapshot.outbox[0].actions["retry_outbox"].enabled);
-        let retried = service
-            .retry_plan_outbox(
-                "user-1",
-                &workspace.id,
-                "outbox-dev",
-                WorkspacePlanActionRequest {
-                    reason: Some("operator retry".to_string()),
-                    evidence_refs: Vec::new(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(retried.plan_id, "plan-dev");
-        let retried_snapshot = service
-            .get_plan_snapshot(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanSnapshotQuery::default(),
-            )
-            .await
-            .unwrap();
-        let retried_outbox = retried_snapshot
-            .outbox
-            .iter()
-            .find(|item| item.id == "outbox-dev")
-            .expect("retried outbox in snapshot");
-        assert_eq!(retried_outbox.status, "pending");
-        assert!(retried_outbox.last_error.is_none());
-        assert_eq!(
-            retried_outbox.metadata["operator_retry"]["previous_status"],
-            "failed"
-        );
-        assert!(retried_snapshot
-            .events
-            .iter()
-            .any(|event| event.event_type == "operator_retry_outbox"
-                && event.payload["outbox_id"] == "outbox-dev"));
-        let pipeline = service
-            .request_delivery_pipeline_run(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanPipelineRunRequest {
-                    reason: Some("run CI".to_string()),
-                    evidence_refs: Vec::new(),
-                    node_id: None,
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(pipeline.message, "Harness-native pipeline run requested.");
-        assert_eq!(pipeline.node_id.as_deref(), Some("plan-node-dev"));
-        let regenerated = service
-            .request_delivery_contract_regeneration(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanActionRequest {
-                    reason: Some("refresh contract".to_string()),
-                    evidence_refs: Vec::new(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            regenerated.message,
-            "Delivery contract regeneration requested."
-        );
-        let delivery_snapshot = service
-            .get_plan_snapshot(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanSnapshotQuery::default(),
-            )
-            .await
-            .unwrap();
-        assert!(delivery_snapshot.outbox.iter().any(|item| {
-            item.event_type == PIPELINE_RUN_REQUESTED_EVENT
-                && item.payload["node_id"] == "plan-node-dev"
-                && item.payload["reason"] == "run CI"
-        }));
-        assert!(delivery_snapshot.outbox.iter().any(|item| item.event_type
-            == SUPERVISOR_TICK_EVENT
-            && item.metadata["source"] == "workspace_plan.operator_delivery_regenerate_contract"));
-        assert!(delivery_snapshot.events.iter().any(|event| {
-            event.event_type == "delivery_contract_regeneration_requested"
-                && event.payload["requested_by"] == "user-1"
-        }));
-        {
-            let state = service.state.lock().expect("workspace dev state");
-            let delivery = &state.workspaces[&workspace.id].metadata_json["delivery_cicd"];
-            assert_eq!(delivery["contract_source"], "agent_regeneration_requested");
-            assert_eq!(delivery["regenerate_reason"], "refresh contract");
-        }
-        let replan = service
-            .request_plan_node_replan(
-                "user-1",
-                &workspace.id,
-                "plan-node-dev",
-                WorkspacePlanActionRequest {
-                    reason: Some("needs another attempt".to_string()),
-                    evidence_refs: Vec::new(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            replan.message,
-            "Plan node sent back for supervisor recovery."
-        );
-        let replan_snapshot = service
-            .get_plan_snapshot(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanSnapshotQuery::default(),
-            )
-            .await
-            .unwrap();
-        let replan_node = &replan_snapshot.plan.as_ref().unwrap().nodes[0];
-        assert_eq!(
-            replan_node.metadata["operator_action"]["action"],
-            "operator_replan_requested"
-        );
-        assert!(replan_node.current_attempt_id.is_none());
-        assert!(replan_snapshot.outbox.iter().any(|item| {
-            item.event_type == SUPERVISOR_TICK_EVENT
-                && item.payload["operator_action"] == "operator_replan_requested"
-                && item.metadata["source"] == "operator_action"
-        }));
-        assert!(replan_snapshot.events.iter().any(|event| {
-            event.event_type == "operator_replan_requested"
-                && event.payload["reason"] == "needs another attempt"
-        }));
-        {
-            let mut state = service.state.lock().expect("workspace dev state");
-            state.plans.get_mut("plan-dev").unwrap().status = "suspended".to_string();
-            let node = state.plan_nodes.get_mut("plan-node-dev").unwrap();
-            node.intent = "blocked".to_string();
-            node.execution = "running".to_string();
-            node.assignee_agent_id = Some("agent-1".to_string());
-            node.current_attempt_id = Some("attempt-blocked".to_string());
-            node.feature_checkpoint_json = Some(json!({
-                "worktree_path": "/tmp/work",
-                "branch_name": "feature/p6",
-                "base_ref": "main",
-                "commit_ref": "abc123"
-            }));
-            node.metadata_json = json!({
-                "retry_count": 2,
-                "candidate_artifacts": ["old"],
-                "last_verification_passed": false
-            });
-        }
-        let reopened = service
-            .reopen_plan_node(
-                "user-1",
-                &workspace.id,
-                "plan-node-dev",
-                WorkspacePlanActionRequest {
-                    reason: Some("human unblocked".to_string()),
-                    evidence_refs: Vec::new(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(reopened.message, "Blocked plan node reopened.");
-        {
-            let state = service.state.lock().expect("workspace dev state");
-            let plan = state.plans.get("plan-dev").unwrap();
-            let node = state.plan_nodes.get("plan-node-dev").unwrap();
-            assert_eq!(plan.status, "active");
-            assert_eq!(node.intent, "todo");
-            assert_eq!(node.execution, "idle");
-            assert!(node.assignee_agent_id.is_none());
-            assert!(node.current_attempt_id.is_none());
-            assert!(node.metadata_json.get("retry_count").is_none());
-            assert!(node.metadata_json.get("candidate_artifacts").is_none());
-            assert_eq!(
-                node.metadata_json["operator_action"]["action"],
-                "operator_node_reopened"
-            );
-            assert_eq!(
-                node.feature_checkpoint_json.as_ref().unwrap()["base_ref"],
-                "HEAD"
-            );
-            assert!(state.plan_events.iter().any(|event| {
-                event.event_type == "operator_node_reopened"
-                    && event.attempt_id.as_deref() == Some("attempt-blocked")
-            }));
-        }
-        {
-            let mut state = service.state.lock().expect("workspace dev state");
-            let node = state.plan_nodes.get_mut("plan-node-dev").unwrap();
-            node.intent = "blocked".to_string();
-            node.execution = "reported".to_string();
-            node.current_attempt_id = Some("attempt-review".to_string());
-            node.metadata_json = json!({
-                "retry_count": 1,
-                "last_verification_passed": false,
-                "verification_evidence_refs": ["ci:previous"]
-            });
-            let task = state.tasks.get_mut(&task.id).unwrap();
-            task.status = "blocked".to_string();
-            task.completed_at = None;
-        }
-        let accepted = service
-            .accept_plan_node_review(
-                "user-1",
-                &workspace.id,
-                "plan-node-dev",
-                WorkspacePlanActionRequest {
-                    reason: Some("operator accepts evidence".to_string()),
-                    evidence_refs: vec![
-                        "ci:new".to_string(),
-                        "ci:previous".to_string(),
-                        " ".to_string(),
-                    ],
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(accepted.message, "Plan node accepted after human review.");
-        {
-            let state = service.state.lock().expect("workspace dev state");
-            let node = state.plan_nodes.get("plan-node-dev").unwrap();
-            let task = state.tasks.get(&task.id).unwrap();
-            assert_eq!(node.intent, "done");
-            assert_eq!(node.execution, "idle");
-            assert!(node.current_attempt_id.is_none());
-            assert!(node.completed_at.is_some());
-            assert_eq!(
-                node.metadata_json["human_review_acceptance"]["reason"],
-                "operator accepts evidence"
-            );
-            assert_eq!(
-                node.metadata_json["verification_evidence_refs"],
-                json!(["ci:previous", "ci:new"])
-            );
-            assert!(node.metadata_json.get("retry_count").is_none());
-            assert_eq!(task.status, "done");
-            assert_eq!(task.metadata_json["durable_plan_verdict"], "accepted");
-            assert_eq!(
-                task.metadata_json["evidence_refs"],
-                json!(["ci:previous", "ci:new"])
-            );
-            assert!(state.plan_events.iter().any(|event| {
-                event.event_type == "operator_review_accepted"
-                    && event.attempt_id.as_deref() == Some("attempt-review")
-                    && event.payload_json["evidence_refs"] == json!(["ci:new", "ci:previous"])
-            }));
-        }
-        {
-            let mut state = service.state.lock().expect("workspace dev state");
-            let now = "2026-01-02T03:05:05Z".parse().unwrap();
-            state.plan_nodes.insert(
-                "plan-node-stale".to_string(),
-                WorkspacePlanNodeRecord {
-                    id: "plan-node-stale".to_string(),
-                    plan_id: "plan-dev".to_string(),
-                    parent_id: Some("plan-node-dev".to_string()),
-                    kind: "task".to_string(),
-                    title: "Recover stale node".to_string(),
-                    description: "Queue recovery without a linked attempt".to_string(),
-                    depends_on_json: Vec::new(),
-                    inputs_schema_json: json!({}),
-                    outputs_schema_json: json!({}),
-                    acceptance_criteria_json: Vec::new(),
-                    feature_checkpoint_json: None,
-                    handoff_package_json: None,
-                    recommended_capabilities_json: Vec::new(),
-                    preferred_agent_id: None,
-                    estimated_effort_json: json!({}),
-                    priority: 2,
-                    intent: "blocked".to_string(),
-                    execution: "idle".to_string(),
-                    progress_json: json!({}),
-                    assignee_agent_id: Some("agent-1".to_string()),
-                    current_attempt_id: None,
-                    workspace_task_id: Some(task.id.clone()),
-                    metadata_json: json!({
-                        "terminal_attempt_retry_reason": "worker did not report terminal state",
-                        "last_verification_passed": false
-                    }),
-                    created_at: now,
-                    updated_at: None,
-                    completed_at: None,
-                },
-            );
-        }
-        let recovered = service
-            .recover_stale_attempts(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanActionRequest {
-                    reason: Some("recover stale node".to_string()),
-                    evidence_refs: Vec::new(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            recovered.message,
-            "Workspace plan stale attempt recovery queued."
-        );
-        let stale_snapshot = service
-            .get_plan_snapshot(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanSnapshotQuery::default(),
-            )
-            .await
-            .unwrap();
-        assert!(stale_snapshot.outbox.iter().any(|item| {
-            item.event_type == SUPERVISOR_TICK_EVENT
-                && item.payload["retry_node_id"] == "plan-node-stale"
-                && item.payload["retry_attempt_id"].is_null()
-                && item.payload["retry_reason"] == "stale_plan_node_no_terminal_worker_report"
-                && item.metadata["source"] == "workspace_plan.snapshot_stale_node_recovery"
-        }));
-        assert!(stale_snapshot.events.iter().any(|event| {
-            event.event_type == "auto_stale_node_recovery_queued"
-                && event.node_id.as_deref() == Some("plan-node-stale")
-                && event.attempt_id.is_none()
-                && event.payload["reason"] == "stale_plan_node_without_recoverable_attempt"
-                && event.payload["execution"] == "idle"
-        }));
-        let duplicate = service
-            .recover_stale_attempts(
-                "user-1",
-                &workspace.id,
-                WorkspacePlanActionRequest {
-                    reason: Some("recover stale node again".to_string()),
-                    evidence_refs: Vec::new(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            duplicate.message,
-            "No stale workspace plan attempts needed recovery."
-        );
-        let done = service
-            .transition_task(
-                "user-1",
-                &workspace.id,
-                &task.id,
-                TaskTransitionAction::Complete,
-            )
-            .await
-            .unwrap();
-        assert_eq!(done.status, "done");
-        assert!(done.completed_at.is_some());
-    }
-
-    #[tokio::test]
-    async fn accept_review_marks_linked_attempt_accepted() {
-        let service = DevWorkspaceService::new("user-1");
-        let now = "2026-01-02T03:04:05Z".parse().unwrap();
-        {
-            let mut state = service.state.lock().expect("workspace dev state");
-            state.tasks.insert(
-                "task-review".to_string(),
-                WorkspaceTaskRecord {
-                    id: "task-review".to_string(),
-                    workspace_id: "workspace-review".to_string(),
-                    title: "Review worker report".to_string(),
-                    description: None,
-                    created_by: "user-1".to_string(),
-                    assignee_user_id: None,
-                    assignee_agent_id: Some("agent-worker".to_string()),
-                    status: "blocked".to_string(),
-                    priority: 1,
-                    estimated_effort: None,
-                    blocker_reason: None,
-                    metadata_json: json!({
-                        "pending_leader_adjudication": true,
-                        "current_attempt_id": "attempt-review",
-                        "current_attempt_number": 1,
-                        "last_attempt_status": "awaiting_leader_adjudication",
-                        "last_worker_report_summary": "candidate is acceptable after manual review"
-                    }),
-                    created_at: now,
-                    updated_at: None,
-                    completed_at: None,
-                    archived_at: None,
-                },
-            );
-            state.plans.insert(
-                "plan-review".to_string(),
-                WorkspacePlanRecord {
-                    id: "plan-review".to_string(),
-                    workspace_id: "workspace-review".to_string(),
-                    goal_id: "node-review".to_string(),
-                    status: "active".to_string(),
-                    created_at: now,
-                    updated_at: None,
-                },
-            );
-            state.plan_nodes.insert(
-                "node-review".to_string(),
-                WorkspacePlanNodeRecord {
-                    id: "node-review".to_string(),
-                    plan_id: "plan-review".to_string(),
-                    parent_id: None,
-                    kind: "task".to_string(),
-                    title: "Review worker report".to_string(),
-                    description: "Accept the candidate after human review".to_string(),
-                    depends_on_json: Vec::new(),
-                    inputs_schema_json: json!({}),
-                    outputs_schema_json: json!({}),
-                    acceptance_criteria_json: Vec::new(),
-                    feature_checkpoint_json: None,
-                    handoff_package_json: None,
-                    recommended_capabilities_json: Vec::new(),
-                    preferred_agent_id: None,
-                    estimated_effort_json: json!({}),
-                    priority: 1,
-                    intent: "blocked".to_string(),
-                    execution: "reported".to_string(),
-                    progress_json: json!({"percent": 60, "confidence": 0.8, "note": "review"}),
-                    assignee_agent_id: Some("agent-worker".to_string()),
-                    current_attempt_id: Some("attempt-review".to_string()),
-                    workspace_task_id: Some("task-review".to_string()),
-                    metadata_json: json!({
-                        "last_verification_passed": false,
-                        "verification_evidence_refs": ["ci:previous"]
-                    }),
-                    created_at: now,
-                    updated_at: None,
-                    completed_at: None,
-                },
-            );
-            state.task_attempts.insert(
-                "attempt-review".to_string(),
-                WorkspaceTaskSessionAttemptRecord {
-                    id: "attempt-review".to_string(),
-                    workspace_task_id: "task-review".to_string(),
-                    root_goal_task_id: "root-review".to_string(),
-                    workspace_id: "workspace-review".to_string(),
-                    attempt_number: 1,
-                    status: "awaiting_leader_adjudication".to_string(),
-                    conversation_id: Some("conversation-review".to_string()),
-                    worker_agent_id: Some("agent-worker".to_string()),
-                    leader_agent_id: Some("agent-leader".to_string()),
-                    candidate_summary: Some(
-                        "candidate is acceptable after manual review".to_string(),
-                    ),
-                    candidate_artifacts_json: vec!["artifact:report".to_string()],
-                    candidate_verifications_json: vec!["worker_report:completed".to_string()],
-                    leader_feedback: None,
-                    adjudication_reason: None,
-                    created_at: now,
-                    updated_at: None,
-                    completed_at: None,
-                },
-            );
-        }
-
-        let result = service
-            .accept_plan_node_review(
-                "user-1",
-                "workspace-review",
-                "node-review",
-                WorkspacePlanActionRequest {
-                    reason: Some("operator accepts evidence".to_string()),
-                    evidence_refs: vec!["ci:new".to_string()],
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(result.message, "Plan node accepted after human review.");
-        let state = service.state.lock().expect("workspace dev state");
-        let attempt = state.task_attempts.get("attempt-review").unwrap();
-        assert_eq!(attempt.status, "accepted");
-        assert_eq!(
-            attempt.leader_feedback.as_deref(),
-            Some("operator accepts evidence")
-        );
-        assert_eq!(
-            attempt.adjudication_reason.as_deref(),
-            Some("operator_review_accepted")
-        );
-        assert!(attempt.completed_at.is_some());
-        let node = state.plan_nodes.get("node-review").unwrap();
-        assert_eq!(node.intent, "done");
-        assert!(node.current_attempt_id.is_none());
-        assert_eq!(node.metadata_json["last_attempt_status"], "accepted");
-        assert_eq!(node.metadata_json["accepted_attempt_id"], "attempt-review");
-        assert_eq!(
-            node.metadata_json["verification_evidence_refs"],
-            json!(["ci:previous", "ci:new"])
-        );
-        let task = state.tasks.get("task-review").unwrap();
-        assert_eq!(task.status, "done");
-        assert_eq!(task.metadata_json["pending_leader_adjudication"], false);
-        assert_eq!(task.metadata_json["last_attempt_status"], "accepted");
-        assert_eq!(task.metadata_json["last_attempt_id"], "attempt-review");
-        assert_eq!(task.metadata_json["current_attempt_id"], "attempt-review");
-        assert_eq!(task.metadata_json["current_attempt_number"], 1);
-        assert!(state.plan_events.iter().any(|event| {
-            event.event_type == "operator_review_accepted"
-                && event.attempt_id.as_deref() == Some("attempt-review")
-        }));
-    }
-
-    #[test]
-    fn workspace_router_builds() {
-        let _router: Router<AppState> = router();
-    }
-}
+mod tests;
