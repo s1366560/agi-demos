@@ -10547,11 +10547,28 @@ impl SupervisorTickAdmissionHandler {
             let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
                 continue;
             };
-            let Some(attempt) = self.store.get_task_session_attempt(&attempt_id).await? else {
+            let Some(mut attempt) = self.store.get_task_session_attempt(&attempt_id).await? else {
                 continue;
             };
             if attempt.status.trim().to_ascii_lowercase() != ACCEPTED_ATTEMPT_STATUS {
-                continue;
+                if !done_idle_node_has_accepted_supervisor_judge(&node) {
+                    continue;
+                }
+                let summary = accepted_supervisor_judge_summary(&node, &attempt);
+                let Some(updated) = self
+                    .store
+                    .finish_task_session_attempt(
+                        &attempt_id,
+                        ACCEPTED_ATTEMPT_STATUS,
+                        Some(&summary),
+                        Some("supervisor_decision_accept_node_reconciled"),
+                        now,
+                    )
+                    .await?
+                else {
+                    continue;
+                };
+                attempt = updated;
             }
             if self
                 .accepted_projection_already_complete(workspace_id, &node, &attempt)
@@ -11740,6 +11757,30 @@ fn accepted_attempt_summary(attempt: &WorkspaceTaskSessionAttemptRecord) -> Stri
         .filter(|value| !value.is_empty())
         .unwrap_or("accepted terminal attempt")
         .to_string()
+}
+
+fn done_idle_node_has_accepted_supervisor_judge(node: &WorkspacePlanNodeRecord) -> bool {
+    if node.intent != "done" || node.execution != "idle" || node.current_attempt_id.is_none() {
+        return false;
+    }
+    metadata_string(
+        object_or_empty(node.metadata_json.clone()).get("last_verification_judge_verdict"),
+    )
+    .map(|value| value.eq_ignore_ascii_case(ACCEPTED_ATTEMPT_STATUS))
+    .unwrap_or(false)
+}
+
+fn accepted_supervisor_judge_summary(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> String {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    metadata_string(metadata.get("last_verification_summary"))
+        .or_else(|| attempt.leader_feedback.clone())
+        .or_else(|| attempt.candidate_summary.clone())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "accepted terminal attempt".to_string())
 }
 
 fn accepted_attempt_projection_base_metadata(
@@ -13622,6 +13663,10 @@ mod tests {
 
         fn attempts(&self) -> Vec<WorkspaceTaskSessionAttemptRecord> {
             self.attempts.lock().unwrap().values().cloned().collect()
+        }
+
+        fn attempt(&self, id: &str) -> WorkspaceTaskSessionAttemptRecord {
+            self.attempts.lock().unwrap().get(id).unwrap().clone()
         }
 
         fn conversation(&self, id: &str) -> FakeWorkerConversationRecord {
@@ -19470,6 +19515,110 @@ steps:
         );
         assert_eq!(node.metadata_json["worktree_integration_status"], "skipped");
         assert!(store.plan_events().is_empty());
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_reconciles_accepted_supervisor_judge_attempt() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        task.status = "in_progress".to_string();
+        task.metadata_json = json!({
+            WORKSPACE_PLAN_ID: "plan-test",
+            WORKSPACE_PLAN_NODE_ID: "node-test",
+            ROOT_GOAL_TASK_ID: "root-task",
+            CURRENT_ATTEMPT_ID: "attempt-judge",
+            PENDING_LEADER_ADJUDICATION: true,
+            "last_attempt_status": AWAITING_LEADER_ADJUDICATION_STATUS,
+            "last_worker_report_summary": "candidate satisfies the acceptance criteria"
+        });
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "done".to_string();
+        node.execution = "idle".to_string();
+        node.current_attempt_id = Some("attempt-judge".to_string());
+        node.metadata_json = json!({
+            "last_verification_judge_verdict": "accepted",
+            "last_verification_summary": "supervisor accepted current evidence",
+            "last_verification_passed": true,
+            "verification_evidence_refs": ["worker_report:completed"]
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-judge",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("candidate satisfies the acceptance criteria".to_string());
+        attempt.candidate_artifacts_json = vec!["artifact:review-report".to_string()];
+        attempt.candidate_verifications_json = vec!["worker_report:completed".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempt = store.attempt("attempt-judge");
+        assert_eq!(attempt.status, ACCEPTED_ATTEMPT_STATUS);
+        assert_eq!(
+            attempt.leader_feedback.as_deref(),
+            Some("supervisor accepted current evidence")
+        );
+        assert_eq!(
+            attempt.adjudication_reason.as_deref(),
+            Some("supervisor_decision_accept_node_reconciled")
+        );
+        assert!(attempt.completed_at.is_some());
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-judge"));
+        assert_eq!(
+            node.metadata_json["terminal_attempt_status"],
+            ACCEPTED_ATTEMPT_STATUS
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_summary"],
+            "supervisor accepted current evidence"
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_attempt_id"],
+            "attempt-judge"
+        );
+        assert_eq!(
+            node.metadata_json["candidate_artifacts"],
+            json!(["artifact:review-report"])
+        );
+        let task = store.task("task-test");
+        assert_eq!(task.status, "done");
+        assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], false);
+        assert_eq!(task.metadata_json["durable_plan_verdict"], "accepted");
+        assert_eq!(
+            task.metadata_json["durable_plan_verification_summary"],
+            "supervisor accepted current evidence"
+        );
+        assert_eq!(
+            task.metadata_json["last_attempt_status"],
+            ACCEPTED_ATTEMPT_STATUS
+        );
+        assert_eq!(task.metadata_json["last_attempt_id"], "attempt-judge");
+        assert_eq!(task.metadata_json[CURRENT_ATTEMPT_ID], "attempt-judge");
+        assert_eq!(
+            task.metadata_json["last_leader_adjudication_status"],
+            ACCEPTED_ATTEMPT_STATUS
+        );
+        assert_eq!(
+            task.metadata_json["evidence_refs"],
+            json!(["artifact:review-report", "worker_report:completed"])
+        );
         assert!(store.outbox().is_empty());
     }
 
