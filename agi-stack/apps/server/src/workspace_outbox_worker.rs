@@ -546,5 +546,11 @@ use supervisor_reconcile::*;
 mod task_lifecycle;
 use task_lifecycle::*;
 
+mod task_metadata;
+use task_metadata::*;
+
+mod task_retry;
+use task_retry::*;
+
 #[cfg(test)]
 mod tests;
