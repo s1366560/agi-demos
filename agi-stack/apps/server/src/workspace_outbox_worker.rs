@@ -291,12 +291,16 @@ use outbox_core::{
 #[cfg(test)]
 use outbox_core::{
     missing_required_handler_event_types, required_handler_event_types,
-    WorkspacePlanOutboxRunReport, WorkspacePlanOutboxStore,
+    WorkspacePlanOutboxRunReport,
 };
 pub(crate) use outbox_core::{
-    PgWorkspacePlanOutboxStore, WorkspacePipelineStageRunner, WorkspacePlanDispatchStore,
-    WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome, WorkspacePlanOutboxWorker,
-    WorkspacePlanOutboxWorkerConfig,
+    WorkspacePipelineStageRunner, WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
+    WorkspacePlanOutboxWorker, WorkspacePlanOutboxWorkerConfig,
+};
+
+mod outbox_store;
+pub(crate) use outbox_store::{
+    PgWorkspacePlanOutboxStore, WorkspacePlanDispatchStore, WorkspacePlanOutboxStore,
 };
 
 mod handoff;
