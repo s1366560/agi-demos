@@ -430,6 +430,110 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
             excluded: &["sandboxes"],
         },
     },
+    // P4 graph/search foundation flip. These are project-scoped GraphStore
+    // read/write surfaces already covered by Rust goldens; broader graph
+    // migration/export/import and tenant fan-out contracts stay in Python.
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/communities",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/graph/communities/rebuild",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/communities",
+        match_kind: MethodMatchKind::SingleChildExcept(&["rebuild"]),
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/communities",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "members",
+            excluded: &["rebuild"],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/entities",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/graph/entities",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/entities/types",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/entities",
+        match_kind: MethodMatchKind::SingleChildExcept(&["types"]),
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/entities",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "relationships",
+            excluded: &["types"],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/graph/relationships",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/graph/memory/graph",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/graph/memory/graph/subgraph",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/search-enhanced/advanced",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/search-enhanced/graph-traversal",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/search-enhanced/community",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/search-enhanced/temporal",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/search-enhanced/faceted",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/search-enhanced/capabilities",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/memory/search",
+        match_kind: MethodMatchKind::Exact,
+    },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
     // status, versions, and rollback are in Rust; filesystem/system import,
     // export, package, clone/publish, and evolution siblings remain Python.
@@ -1454,6 +1558,75 @@ mod unit {
             ),
             (Method::GET, "/api/v1/projects/p1/sandbox/terminal/proxy/ws"),
             (Method::GET, "/api/v1/projects/p1/sandbox/mcp/proxy"),
+        ] {
+            assert_eq!(
+                upstream_for_request(&method, path, &ups()),
+                "http://python:8000",
+                "{method} {path} should remain on python",
+            );
+        }
+    }
+
+    #[test]
+    fn p4_graph_search_rules_are_exact() {
+        for (method, path) in [
+            (Method::GET, "/api/v1/graph/communities"),
+            (Method::GET, "/api/v1/graph/communities/"),
+            (Method::POST, "/api/v1/graph/communities/rebuild"),
+            (Method::GET, "/api/v1/graph/communities/community-1"),
+            (Method::GET, "/api/v1/graph/communities/community-1/members"),
+            (Method::GET, "/api/v1/graph/entities"),
+            (Method::GET, "/api/v1/graph/entities/"),
+            (Method::POST, "/api/v1/graph/entities"),
+            (Method::POST, "/api/v1/graph/entities/"),
+            (Method::GET, "/api/v1/graph/entities/types"),
+            (Method::GET, "/api/v1/graph/entities/entity-1"),
+            (Method::GET, "/api/v1/graph/entities/entity-1/relationships"),
+            (Method::POST, "/api/v1/graph/relationships"),
+            (Method::POST, "/api/v1/graph/relationships/"),
+            (Method::GET, "/api/v1/graph/memory/graph"),
+            (Method::POST, "/api/v1/graph/memory/graph/subgraph"),
+            (Method::POST, "/api/v1/search-enhanced/advanced"),
+            (Method::POST, "/api/v1/search-enhanced/graph-traversal"),
+            (Method::POST, "/api/v1/search-enhanced/community"),
+            (Method::POST, "/api/v1/search-enhanced/temporal"),
+            (Method::POST, "/api/v1/search-enhanced/faceted"),
+            (Method::GET, "/api/v1/search-enhanced/capabilities"),
+            (Method::POST, "/api/v1/memory/search"),
+        ] {
+            assert_eq!(
+                upstream_for_request(&method, path, &ups()),
+                "http://rust:8088",
+                "{method} {path} should route to rust",
+            );
+        }
+
+        for (method, path) in [
+            (Method::POST, "/api/v1/graph/communities"),
+            (Method::GET, "/api/v1/graph/communities/rebuild"),
+            (
+                Method::POST,
+                "/api/v1/graph/communities/community-1/members",
+            ),
+            (Method::GET, "/api/v1/graph/communities/community-1/extra"),
+            (Method::DELETE, "/api/v1/graph/entities"),
+            (Method::POST, "/api/v1/graph/entities/types"),
+            (Method::GET, "/api/v1/graph/entities/types/extra"),
+            (Method::POST, "/api/v1/graph/entities/entity-1"),
+            (
+                Method::POST,
+                "/api/v1/graph/entities/entity-1/relationships",
+            ),
+            (Method::GET, "/api/v1/graph/relationships"),
+            (Method::POST, "/api/v1/graph/relationships/rel-1"),
+            (Method::POST, "/api/v1/graph/memory/graph"),
+            (Method::GET, "/api/v1/graph/memory/graph/subgraph"),
+            (Method::POST, "/api/v1/graph/export"),
+            (Method::POST, "/api/v1/graph/import"),
+            (Method::GET, "/api/v1/search-enhanced/advanced"),
+            (Method::POST, "/api/v1/search-enhanced/capabilities"),
+            (Method::GET, "/api/v1/memory/search"),
+            (Method::POST, "/api/v1/memory/search/extra"),
         ] {
             assert_eq!(
                 upstream_for_request(&method, path, &ups()),
