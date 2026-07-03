@@ -94,7 +94,10 @@ const DEFAULT_WORKER_STREAM_REPLAY_BATCH_LIMIT: usize = 100;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
+const DISPOSED_ATTEMPT_STATUS: &str = "disposed";
 const REJECTED_ATTEMPT_STATUS: &str = "rejected";
+const SUPERVISOR_DECISION_DISPOSE_NODE_ACTION: &str = "dispose_node";
+const SUPERVISOR_DISPOSED_NODE_DISPOSITION: &str = "supervisor_agent_disposed_node";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION: &str = "retry_same_node";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON: &str = "supervisor_decision_retry_same_node";
 const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
@@ -9874,6 +9877,9 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_missing = self
                 .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
                 .await?;
+            let changed_disposed = self
+                .reconcile_supervisor_disposed_nodes(&workspace_id, &plan_id)
+                .await?;
             let changed_accepted = self
                 .reconcile_accepted_terminal_attempt_nodes(&workspace_id, &plan_id)
                 .await?;
@@ -9896,6 +9902,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                 .await?;
             if changed_worktree_failed
                 + changed_missing
+                + changed_disposed
                 + changed_accepted
                 + changed_supervisor_retry
                 + changed_terminal
@@ -10658,6 +10665,195 @@ impl SupervisorTickAdmissionHandler {
             changed += 1;
         }
         Ok(changed)
+    }
+
+    async fn reconcile_supervisor_disposed_nodes(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
+                continue;
+            }
+            let has_dispose_metadata = supervisor_dispose_metadata_present(&node);
+            let has_dispose_event = self
+                .store
+                .has_supervisor_dispose_decision_for_node(workspace_id, plan_id, &node.id)
+                .await?;
+            if !has_dispose_metadata && !has_dispose_event {
+                continue;
+            }
+
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            let disposition = supervisor_disposition_value(&metadata);
+            let summary = supervisor_disposition_summary(&metadata);
+            let already_projected_node = node.intent == "done"
+                && node.execution == "idle"
+                && metadata_string(metadata.get("verification_feedback_disposition")).as_deref()
+                    == Some(disposition.as_str())
+                && metadata_string(metadata.get("workspace_task_projection_status")).as_deref()
+                    == Some("done");
+
+            metadata.insert(
+                "verification_feedback_disposition".to_string(),
+                json!(disposition.clone()),
+            );
+            metadata.insert(
+                "last_supervisor_decision_action".to_string(),
+                json!(SUPERVISOR_DECISION_DISPOSE_NODE_ACTION),
+            );
+            metadata.insert(
+                "last_supervisor_decision_rationale".to_string(),
+                json!(summary.clone()),
+            );
+            metadata.insert(
+                "supervisor_disposition_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert(
+                "workspace_task_projection_status".to_string(),
+                json!("done"),
+            );
+            metadata.insert(
+                "workspace_task_projected_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            node.intent = "done".to_string();
+            node.execution = "idle".to_string();
+            node.metadata_json = Value::Object(metadata.clone());
+            node.updated_at = Some(now);
+            if node.completed_at.is_none() {
+                node.completed_at = Some(now);
+            }
+
+            let task_projected = self
+                .project_supervisor_disposition_to_task(
+                    workspace_id,
+                    &node,
+                    &summary,
+                    &disposition,
+                    now,
+                )
+                .await?;
+            if !already_projected_node || task_projected {
+                self.store.save_plan_node(node.clone()).await?;
+                self.store
+                    .create_plan_event(WorkspacePlanEventRecord {
+                        id: generate_uuid_v4(),
+                        plan_id: plan_id.to_string(),
+                        workspace_id: workspace_id.to_string(),
+                        node_id: Some(node.id.clone()),
+                        attempt_id: node.current_attempt_id.clone(),
+                        event_type: "supervisor_disposition_reconciled".to_string(),
+                        source: "workspace_plan_supervisor_tick".to_string(),
+                        actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                        payload_json: json!({
+                            "action": SUPERVISOR_DECISION_DISPOSE_NODE_ACTION,
+                            "disposition": disposition,
+                            "rationale": summary,
+                            "workspace_task_id": node.workspace_task_id.clone(),
+                            "task_projected": task_projected,
+                            "had_dispose_event": has_dispose_event,
+                        }),
+                        created_at: now,
+                    })
+                    .await?;
+                changed += 1;
+            }
+        }
+        Ok(changed)
+    }
+
+    async fn project_supervisor_disposition_to_task(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        summary: &str,
+        disposition: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool> {
+        let Some(task_id) = node.workspace_task_id.as_deref() else {
+            return Ok(false);
+        };
+        let Some(mut task) = self.store.get_task(workspace_id, task_id).await? else {
+            return Ok(false);
+        };
+        if task.workspace_id != workspace_id {
+            return Ok(false);
+        }
+        let mut metadata = object_or_empty(task.metadata_json.clone());
+        if task.status == "done"
+            && metadata_string(metadata.get("durable_plan_verdict")).as_deref() == Some("disposed")
+            && metadata_string(metadata.get("durable_plan_disposition")).as_deref()
+                == Some(disposition)
+            && metadata_string(metadata.get("durable_plan_verification_summary")).as_deref()
+                == Some(summary)
+        {
+            return Ok(false);
+        }
+
+        metadata.insert(PENDING_LEADER_ADJUDICATION.to_string(), json!(false));
+        metadata.insert("durable_plan_verdict".to_string(), json!("disposed"));
+        metadata.insert("durable_plan_disposition".to_string(), json!(disposition));
+        metadata.insert(
+            "durable_plan_verification_summary".to_string(),
+            json!(summary),
+        );
+        metadata.insert(
+            "durable_plan_verified_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.insert(
+            "last_attempt_status".to_string(),
+            json!(DISPOSED_ATTEMPT_STATUS),
+        );
+        metadata.insert(
+            "last_worker_report_type".to_string(),
+            json!(DISPOSED_ATTEMPT_STATUS),
+        );
+        metadata.insert(LAST_WORKER_REPORT_SUMMARY.to_string(), json!(summary));
+        metadata.insert(
+            "last_leader_adjudication_status".to_string(),
+            json!(DISPOSED_ATTEMPT_STATUS),
+        );
+        if let Some(attempt_id) = node.current_attempt_id.as_deref() {
+            metadata.insert("last_attempt_id".to_string(), json!(attempt_id));
+            metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
+        }
+        copy_supervisor_disposition_event_payload_fields(
+            &object_or_empty(node.metadata_json.clone()),
+            &mut metadata,
+        );
+
+        task.metadata_json = Value::Object(metadata);
+        task.status = "done".to_string();
+        task.blocker_reason = None;
+        task.completed_at = Some(now);
+        task.updated_at = Some(now);
+        let saved_task = self.store.save_task(task).await?;
+        if let Some(root_goal_task_id) =
+            string_from_value_object(&saved_task.metadata_json, ROOT_GOAL_TASK_ID)
+        {
+            if root_goal_task_id != saved_task.id {
+                self.reconcile_root_goal_progress(workspace_id, &root_goal_task_id, now)
+                    .await?;
+            }
+        }
+        Ok(true)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -11976,6 +12172,56 @@ fn accepted_supervisor_judge_summary(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "accepted terminal attempt".to_string())
+}
+
+fn supervisor_dispose_metadata_present(node: &WorkspacePlanNodeRecord) -> bool {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
+        == Some(SUPERVISOR_DECISION_DISPOSE_NODE_ACTION)
+        || metadata_string(metadata.get("verification_feedback_disposition")).as_deref()
+            == Some(SUPERVISOR_DISPOSED_NODE_DISPOSITION)
+}
+
+fn supervisor_disposition_value(metadata: &Map<String, Value>) -> String {
+    let event_payload = supervisor_disposition_event_payload(metadata);
+    if let Some(disposition) = metadata_string(event_payload.get("disposition")) {
+        return disposition.chars().take(120).collect();
+    }
+    metadata_string(metadata.get("verification_feedback_disposition"))
+        .map(|value| value.chars().take(120).collect::<String>())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| SUPERVISOR_DISPOSED_NODE_DISPOSITION.to_string())
+}
+
+fn supervisor_disposition_summary(metadata: &Map<String, Value>) -> String {
+    metadata_string(metadata.get("last_supervisor_decision_rationale"))
+        .or_else(|| metadata_string(metadata.get("last_verification_summary")))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "disposed by workspace supervisor".to_string())
+}
+
+fn supervisor_disposition_event_payload(metadata: &Map<String, Value>) -> Map<String, Value> {
+    match metadata.get("last_supervisor_decision_event_payload") {
+        Some(Value::Object(payload)) => payload.clone(),
+        _ => Map::new(),
+    }
+}
+
+fn copy_supervisor_disposition_event_payload_fields(
+    node_metadata: &Map<String, Value>,
+    task_metadata: &mut Map<String, Value>,
+) {
+    let event_payload = supervisor_disposition_event_payload(node_metadata);
+    for key in [
+        "superseded_by_task_id",
+        "superseded_by_node_id",
+        "disposed_node_id",
+    ] {
+        if let Some(value) = metadata_string(event_payload.get(key)) {
+            task_metadata.insert(key.to_string(), json!(value));
+        }
+    }
 }
 
 fn accepted_attempt_projection_base_metadata(
@@ -13791,6 +14037,19 @@ mod tests {
                 .lock()
                 .unwrap()
                 .insert(attempt.id.clone(), attempt);
+        }
+
+        fn insert_supervisor_dispose_decision(
+            &self,
+            workspace_id: &str,
+            plan_id: &str,
+            node_id: &str,
+        ) {
+            self.supervisor_dispose_nodes.lock().unwrap().insert((
+                workspace_id.to_string(),
+                plan_id.to_string(),
+                node_id.to_string(),
+            ));
         }
 
         fn insert_pipeline_run(&self, run: WorkspacePipelineRunRecord) {
@@ -19814,6 +20073,129 @@ steps:
             task.metadata_json["evidence_refs"],
             json!(["artifact:review-report", "worker_report:completed"])
         );
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_projects_dispose_node_supervisor_decision() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut task = task_with_plan_metadata();
+        task.status = "in_progress".to_string();
+        task.metadata_json = json!({
+            WORKSPACE_PLAN_ID: "plan-test",
+            WORKSPACE_PLAN_NODE_ID: "node-test",
+            ROOT_GOAL_TASK_ID: "root-task",
+            CURRENT_ATTEMPT_ID: "attempt-dispose",
+            PENDING_LEADER_ADJUDICATION: true,
+            "last_attempt_status": AWAITING_LEADER_ADJUDICATION_STATUS
+        });
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-dispose".to_string());
+        node.metadata_json = json!({
+            "last_supervisor_decision_action": "dispose_node",
+            "last_supervisor_decision_rationale": "repair node superseded this obsolete node",
+            "last_supervisor_decision_confidence": 0.81,
+            "last_supervisor_decision_feedback_items": [{
+                "target_layer": "planner",
+                "recommended_action": "obsolete_node",
+                "summary": "repair alternative already covers the requirement"
+            }],
+            "last_supervisor_decision_event_payload": {
+                "disposed_node_id": "node-test",
+                "superseded_by_node_id": "repair-node",
+                "superseded_by_task_id": "repair-task"
+            },
+            "last_verification_summary": "obsolete after repair alternative"
+        });
+        store.insert_node(node);
+        store.insert_supervisor_dispose_decision("workspace-test", "plan-test", "node-test");
+        let mut attempt = task_session_attempt(
+            "attempt-dispose",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("obsolete candidate".to_string());
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempt = store.attempt("attempt-dispose");
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        assert_eq!(attempt.completed_at, None);
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-dispose"));
+        assert!(node.completed_at.is_some());
+        assert_eq!(
+            node.metadata_json["verification_feedback_disposition"],
+            SUPERVISOR_DISPOSED_NODE_DISPOSITION
+        );
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_action"],
+            "dispose_node"
+        );
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_rationale"],
+            "repair node superseded this obsolete node"
+        );
+        assert_eq!(
+            node.metadata_json["workspace_task_projection_status"],
+            "done"
+        );
+        assert!(node.metadata_json["workspace_task_projected_at"].is_string());
+        assert!(node
+            .metadata_json
+            .get("reported_attempt_reconciled_at")
+            .is_none());
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "done");
+        assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], false);
+        assert_eq!(task.metadata_json["durable_plan_verdict"], "disposed");
+        assert_eq!(
+            task.metadata_json["durable_plan_disposition"],
+            SUPERVISOR_DISPOSED_NODE_DISPOSITION
+        );
+        assert_eq!(
+            task.metadata_json["durable_plan_verification_summary"],
+            "repair node superseded this obsolete node"
+        );
+        assert_eq!(task.metadata_json["last_attempt_status"], "disposed");
+        assert_eq!(task.metadata_json["last_worker_report_type"], "disposed");
+        assert_eq!(
+            task.metadata_json[LAST_WORKER_REPORT_SUMMARY],
+            "repair node superseded this obsolete node"
+        );
+        assert_eq!(
+            task.metadata_json["last_leader_adjudication_status"],
+            "disposed"
+        );
+        assert_eq!(task.metadata_json["last_attempt_id"], "attempt-dispose");
+        assert_eq!(task.metadata_json[CURRENT_ATTEMPT_ID], "attempt-dispose");
+        assert_eq!(task.metadata_json["disposed_node_id"], "node-test");
+        assert_eq!(task.metadata_json["superseded_by_node_id"], "repair-node");
+        assert_eq!(task.metadata_json["superseded_by_task_id"], "repair-task");
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "supervisor_disposition_reconciled");
+        assert_eq!(events[0].payload_json["action"], "dispose_node");
+        assert_eq!(events[0].payload_json["had_dispose_event"], true);
+        assert_eq!(events[0].payload_json["task_projected"], true);
         assert!(store.outbox().is_empty());
     }
 
