@@ -108,6 +108,10 @@ impl TenantSkillConfigApiError {
     fn internal(detail: impl std::fmt::Display) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, detail.to_string())
     }
+
+    pub(crate) fn into_parts(self) -> (StatusCode, String) {
+        (self.status, self.detail)
+    }
 }
 
 impl IntoResponse for TenantSkillConfigApiError {
@@ -163,6 +167,16 @@ impl From<TenantSkillConfigRecord> for TenantSkillConfigView {
 pub(crate) struct TenantSkillConfigListView {
     configs: Vec<TenantSkillConfigView>,
     total: i64,
+}
+
+impl TenantSkillConfigListView {
+    pub(crate) fn disabled_system_skill_names(&self) -> HashSet<String> {
+        self.configs
+            .iter()
+            .filter(|config| config.action == "disable")
+            .map(|config| config.system_skill_name.clone())
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

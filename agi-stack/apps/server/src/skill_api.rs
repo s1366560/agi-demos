@@ -2,11 +2,11 @@
 //!
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots,
-//! rollback/import/export, and the skill-evolution strategy config. Filesystem
-//! system skills, package zip import, and evolution jobs remain Python-owned
-//! until their full semantics are migrated.
+//! rollback/import/export, filesystem-backed system skill listing, and the
+//! skill-evolution strategy config. Package zip import and evolution jobs remain
+//! Python-owned until their full semantics are migrated.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -34,6 +34,8 @@ pub(crate) type SharedSkills = Arc<dyn SkillService>;
 
 const SKILL_EVOLUTION_PLUGIN: &str = "skill_evolution";
 
+mod system_skills;
+
 #[async_trait]
 pub(crate) trait SkillService: Send + Sync {
     async fn create_skill(
@@ -54,6 +56,13 @@ pub(crate) trait SkillService: Send + Sync {
         &self,
         user_id: &str,
         query: SkillListQuery,
+    ) -> Result<SkillListView, SkillApiError>;
+
+    async fn list_system_skills(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        status: Option<&str>,
     ) -> Result<SkillListView, SkillApiError>;
 
     async fn get_skill(
@@ -304,6 +313,14 @@ pub(crate) struct SkillListQuery {
     offset: Option<i64>,
     #[serde(default)]
     limit: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SystemSkillListQuery {
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    tenant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -745,6 +762,16 @@ impl SkillService for PgSkillService {
             .map(SkillView::from)
             .collect();
         Ok(SkillListView { skills, total })
+    }
+
+    async fn list_system_skills(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        status: Option<&str>,
+    ) -> Result<SkillListView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        system_skills::list_filesystem_system_skills(&tenant_id, status).await
     }
 
     async fn get_skill(
@@ -1519,6 +1546,16 @@ impl SkillService for DevSkillService {
         Ok(SkillListView { skills, total })
     }
 
+    async fn list_system_skills(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+        status: Option<&str>,
+    ) -> Result<SkillListView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        system_skills::list_filesystem_system_skills(&tenant_id, status).await
+    }
+
     async fn get_skill(
         &self,
         _user_id: &str,
@@ -1872,11 +1909,27 @@ async fn import_skill_package(
     Ok((StatusCode::CREATED, Json(view)))
 }
 
-async fn list_system_skills() -> Json<SkillListView> {
-    Json(SkillListView {
-        skills: Vec::new(),
-        total: 0,
-    })
+async fn list_system_skills(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<SystemSkillListQuery>,
+) -> Result<Json<SkillListView>, SkillApiError> {
+    let mut view = app
+        .skills
+        .list_system_skills(
+            &identity.user_id,
+            q.tenant_id.as_deref(),
+            q.status.as_deref(),
+        )
+        .await?;
+    let disabled_names = app
+        .tenant_skill_configs
+        .list_configs(&identity.user_id, q.tenant_id.as_deref())
+        .await
+        .map_err(tenant_skill_config_error)?
+        .disabled_system_skill_names();
+    filter_disabled_system_skills(&mut view, &disabled_names);
+    Ok(Json(view))
 }
 
 async fn get_skill(
@@ -2096,6 +2149,22 @@ fn iso8601(value: DateTime<Utc>) -> String {
 
 fn present(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn tenant_skill_config_error(
+    error: crate::tenant_skill_config_api::TenantSkillConfigApiError,
+) -> SkillApiError {
+    let (status, detail) = error.into_parts();
+    SkillApiError::new(status, detail)
+}
+
+fn filter_disabled_system_skills(view: &mut SkillListView, disabled_names: &HashSet<String>) {
+    if disabled_names.is_empty() {
+        return;
+    }
+    view.skills
+        .retain(|skill| !disabled_names.contains(&skill.name));
+    view.total = view.skills.len();
 }
 
 fn normalize_scope(raw: &str, project_id: Option<&str>) -> Result<String, SkillApiError> {
@@ -2704,6 +2773,7 @@ fn fallback_frontmatter(record: &SkillRecord) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path as FsPath;
 
     const SAMPLE_IMPORT_SKILL_MD: &str = r#"---
 name: alpha-skill
@@ -2794,6 +2864,68 @@ Use when managing Agent Skills packages.
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/skill_list.json")).unwrap();
         agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[tokio::test]
+    async fn system_skill_list_matches_golden() {
+        let at = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let skills = vec![
+            system_skills::system_skill_view_from_content(
+                "tenant-1",
+                FsPath::new("/repo/src/builtin/skills/code-review/SKILL.md"),
+                include_str!("../../../../src/builtin/skills/code-review/SKILL.md"),
+                at,
+            )
+            .await
+            .unwrap(),
+            system_skills::system_skill_view_from_content(
+                "tenant-1",
+                FsPath::new("/repo/src/builtin/skills/memory-capture-extraction/SKILL.md"),
+                include_str!("../../../../src/builtin/skills/memory-capture-extraction/SKILL.md"),
+                at,
+            )
+            .await
+            .unwrap(),
+            system_skills::system_skill_view_from_content(
+                "tenant-1",
+                FsPath::new("/repo/src/builtin/skills/memory-flush-extraction/SKILL.md"),
+                include_str!("../../../../src/builtin/skills/memory-flush-extraction/SKILL.md"),
+                at,
+            )
+            .await
+            .unwrap(),
+        ];
+        let actual = serde_json::to_value(SkillListView { skills, total: 3 }).unwrap();
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/skill_system_list.json")).unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[tokio::test]
+    async fn filesystem_system_skill_list_filters_non_active_statuses() {
+        let view = system_skills::list_filesystem_system_skills("tenant-1", Some("disabled"))
+            .await
+            .unwrap();
+        assert!(view.skills.is_empty());
+        assert_eq!(view.total, 0);
+    }
+
+    #[test]
+    fn disabled_system_skill_filter_updates_total() {
+        let mut view = SkillListView {
+            skills: vec![
+                SkillView::from(sample_skill_record()),
+                SkillView {
+                    name: "memory-capture-extraction".to_string(),
+                    ..SkillView::from(sample_skill_record())
+                },
+            ],
+            total: 2,
+        };
+        let disabled_names = HashSet::from(["memory-capture-extraction".to_string()]);
+        filter_disabled_system_skills(&mut view, &disabled_names);
+        assert_eq!(view.total, 1);
+        assert_eq!(view.skills[0].name, "code-review");
     }
 
     #[test]
