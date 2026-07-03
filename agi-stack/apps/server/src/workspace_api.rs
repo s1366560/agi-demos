@@ -29,15 +29,16 @@ use axum::{
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use uuid::Uuid;
 
 #[cfg(test)]
 use agistack_adapters_mem::InMemoryObjectStore;
 use agistack_adapters_postgres::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceMessageRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
-    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceAgentRecord, WorkspaceMessageRecord, WorkspacePlanBlackboardEntryRecord,
+    WorkspacePlanEventRecord, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord,
+    WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
     WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
@@ -52,6 +53,10 @@ const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
 const SUPERVISOR_TICK_EVENT: &str = "supervisor_tick";
 const WORKER_LAUNCH_EVENT: &str = "worker_launch";
 const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
+const WORKSPACE_AGENT_MENTION_EVENT: &str = "workspace_agent_mention";
+const WORKSPACE_AGENT_MENTION_STATUS: &str = "pending_runtime";
+const WORKSPACE_AGENT_MENTION_SOURCE: &str = "workspace_chat_mention";
+const WORKSPACE_AGENT_MENTION_STAGE: &str = "chat_mention";
 const STALE_RECOVERY_DISPATCH_STALE_SECONDS: i64 = 180;
 const STALE_RECOVERY_RUNNING_STALE_SECONDS: i64 = 300;
 const STALE_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS: i64 = 300;
@@ -1581,11 +1586,12 @@ impl WorkspaceService for PgWorkspaceService {
             .list_workspace_member_user_ids(workspace_id)
             .await
             .map_err(WorkspaceApiError::internal)?;
-        let agent_ids = self
+        let agents = self
             .repo
-            .list_workspace_agent_ids(workspace_id)
+            .list_active_workspace_agents(workspace_id)
             .await
             .map_err(WorkspaceApiError::internal)?;
+        let agent_ids: Vec<_> = agents.iter().map(|agent| agent.agent_id.clone()).collect();
         let mentions = resolve_structured_mentions(&body.mentions, &member_ids, &agent_ids)?;
         let sender_name = self
             .repo
@@ -1618,6 +1624,23 @@ impl WorkspaceService for PgWorkspaceService {
             json!({ "message": &view }),
         )
         .await?;
+        let mention_outbox =
+            workspace_agent_mention_outbox_records(WorkspaceAgentMentionOutboxInput {
+                tenant_id,
+                project_id,
+                workspace_id,
+                sender_user_id: user_id,
+                sender_name: &sender_name,
+                message: &view,
+                agents: &agents,
+                now,
+            });
+        for outbox in mention_outbox {
+            self.repo
+                .enqueue_plan_outbox(outbox)
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+        }
         Ok(view)
     }
 
@@ -3624,6 +3647,7 @@ impl WorkspaceService for PgWorkspaceService {
 #[derive(Default)]
 struct DevWorkspaceState {
     workspaces: HashMap<String, WorkspaceRecord>,
+    workspace_agents: Vec<WorkspaceAgentRecord>,
     tasks: HashMap<String, WorkspaceTaskRecord>,
     messages: HashMap<String, WorkspaceMessageRecord>,
     task_attempts: HashMap<String, WorkspaceTaskSessionAttemptRecord>,
@@ -3793,8 +3817,15 @@ impl WorkspaceService for DevWorkspaceService {
             return Err(WorkspaceApiError::workspace_not_found());
         }
         let member_ids = vec![self.dev_user_id.clone()];
-        let agent_ids = Vec::new();
+        let agents: Vec<_> = state
+            .workspace_agents
+            .iter()
+            .filter(|agent| agent.workspace_id == workspace_id)
+            .cloned()
+            .collect();
+        let agent_ids: Vec<_> = agents.iter().map(|agent| agent.agent_id.clone()).collect();
         let mentions = resolve_structured_mentions(&body.mentions, &member_ids, &agent_ids)?;
+        let now = Utc::now();
         let message = WorkspaceMessageRecord {
             id: new_id(),
             workspace_id: workspace_id.to_string(),
@@ -3804,7 +3835,7 @@ impl WorkspaceService for DevWorkspaceService {
             mentions_json: mentions,
             parent_message_id: body.parent_message_id,
             metadata_json: json!({ "sender_name": sender_name }),
-            created_at: Utc::now(),
+            created_at: now,
         };
         state.messages.insert(message.id.clone(), message.clone());
         let view = MessageView::from(message);
@@ -3825,6 +3856,20 @@ impl WorkspaceService for DevWorkspaceService {
             }),
             correlation_id: None,
         });
+        state
+            .plan_outbox
+            .extend(workspace_agent_mention_outbox_records(
+                WorkspaceAgentMentionOutboxInput {
+                    tenant_id,
+                    project_id,
+                    workspace_id,
+                    sender_user_id: user_id,
+                    sender_name,
+                    message: &view,
+                    agents: &agents,
+                    now,
+                },
+            ));
         Ok(view)
     }
 
@@ -7726,6 +7771,127 @@ fn resolve_structured_mentions(
     Ok(mentions)
 }
 
+struct WorkspaceAgentMentionOutboxInput<'a> {
+    tenant_id: &'a str,
+    project_id: &'a str,
+    workspace_id: &'a str,
+    sender_user_id: &'a str,
+    sender_name: &'a str,
+    message: &'a MessageView,
+    agents: &'a [WorkspaceAgentRecord],
+    now: DateTime<Utc>,
+}
+
+fn workspace_agent_mention_outbox_records(
+    input: WorkspaceAgentMentionOutboxInput<'_>,
+) -> Vec<WorkspacePlanOutboxRecord> {
+    let conversation_scope = workspace_message_conversation_scope(&input.message.metadata);
+    input
+        .message
+        .mentions
+        .iter()
+        .filter_map(|mention| input.agents.iter().find(|agent| agent.agent_id == *mention))
+        .map(|agent| {
+            let agent_name = workspace_agent_display_name(agent).to_string();
+            let conversation_id = workspace_conversation_id(
+                input.workspace_id,
+                &agent.agent_id,
+                conversation_scope.as_deref(),
+            );
+            let payload_json = json!({
+                "workspace_id": input.workspace_id,
+                "tenant_id": input.tenant_id,
+                "project_id": input.project_id,
+                "message_id": &input.message.id,
+                "parent_message_id": &input.message.parent_message_id,
+                "sender_user_id": input.sender_user_id,
+                "sender_name": input.sender_name,
+                "target_agent_id": &agent.agent_id,
+                "target_workspace_agent_id": &agent.id,
+                "agent_display_name": &agent.display_name,
+                "agent_name": &agent_name,
+                "conversation_id": &conversation_id,
+                "conversation_scope": conversation_scope.clone(),
+                "user_prompt": format!(
+                    "[Workspace Chat] {} mentioned you:\n\n{}",
+                    input.sender_name, input.message.content
+                ),
+                "source_message": {
+                    "id": &input.message.id,
+                    "content": &input.message.content,
+                    "created_at": &input.message.created_at,
+                    "mentions": &input.message.mentions,
+                },
+                "chain_depth": 0,
+                "source": WORKSPACE_AGENT_MENTION_SOURCE,
+                "workspace_llm_stage": WORKSPACE_AGENT_MENTION_STAGE,
+            });
+            WorkspacePlanOutboxRecord {
+                id: new_id(),
+                plan_id: None,
+                workspace_id: input.workspace_id.to_string(),
+                event_type: WORKSPACE_AGENT_MENTION_EVENT.to_string(),
+                payload_json,
+                status: WORKSPACE_AGENT_MENTION_STATUS.to_string(),
+                attempt_count: 0,
+                max_attempts: 5,
+                lease_owner: None,
+                lease_expires_at: None,
+                last_error: None,
+                next_attempt_at: None,
+                processed_at: None,
+                metadata_json: json!({
+                    "tenant_id": input.tenant_id,
+                    "project_id": input.project_id,
+                    "surface_owner": "workspace-chat",
+                    "surface_boundary": "hosted",
+                    "authority_class": "agent-runtime-admission",
+                    "signal_role": "runtime-trigger",
+                    "runtime_bridge": "p3_workspace_mention",
+                    "target_agent_id": &agent.agent_id,
+                    "conversation_id": &conversation_id,
+                    "message_id": &input.message.id,
+                }),
+                created_at: input.now,
+                updated_at: None,
+            }
+        })
+        .collect()
+}
+
+fn workspace_agent_display_name(agent: &WorkspaceAgentRecord) -> &str {
+    agent
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&agent.agent_id)
+}
+
+fn workspace_message_conversation_scope(metadata: &Value) -> Option<String> {
+    metadata
+        .get("conversation_scope")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn workspace_conversation_id(
+    workspace_id: &str,
+    agent_id: &str,
+    conversation_scope: Option<&str>,
+) -> String {
+    let scope_suffix = conversation_scope
+        .map(|scope| format!(":scope:{scope}"))
+        .unwrap_or_default();
+    Uuid::new_v5(
+        &Uuid::NAMESPACE_DNS,
+        format!("workspace:{workspace_id}:agent:{agent_id}{scope_suffix}").as_bytes(),
+    )
+    .to_string()
+}
+
 fn root_path() -> String {
     "/".to_string()
 }
@@ -9441,6 +9607,54 @@ mod tests {
     }
 
     #[test]
+    fn workspace_agent_mention_outbox_matches_golden() {
+        let message = MessageView {
+            id: "msg-1".to_string(),
+            workspace_id: "ws-mention".to_string(),
+            sender_id: "user-1".to_string(),
+            sender_type: "human".to_string(),
+            content: "Ship the workspace runtime bridge".to_string(),
+            mentions: vec!["user-1".to_string(), "agent-1".to_string()],
+            parent_message_id: Some("msg-parent".to_string()),
+            metadata: json!({
+                "sender_name": "Alice",
+                "conversation_scope": "objective:root-1"
+            }),
+            created_at: "2026-01-02T03:04:05.000Z".to_string(),
+        };
+        let agents = vec![WorkspaceAgentRecord {
+            id: "wa-1".to_string(),
+            workspace_id: "ws-mention".to_string(),
+            agent_id: "agent-1".to_string(),
+            display_name: Some("Builder".to_string()),
+        }];
+        let records = workspace_agent_mention_outbox_records(WorkspaceAgentMentionOutboxInput {
+            tenant_id: "tenant-1",
+            project_id: "project-1",
+            workspace_id: "ws-mention",
+            sender_user_id: "user-1",
+            sender_name: "Alice",
+            message: &message,
+            agents: &agents,
+            now: "2026-01-02T03:04:06Z".parse().unwrap(),
+        });
+        assert_eq!(records.len(), 1);
+        let record = &records[0];
+        assert_golden(
+            &json!({
+                "event_type": &record.event_type,
+                "status": &record.status,
+                "payload": &record.payload_json,
+                "metadata": &record.metadata_json,
+            }),
+            serde_json::from_str(include_str!(
+                "../tests/golden/workspace_agent_mention_outbox.json"
+            ))
+            .unwrap(),
+        );
+    }
+
+    #[test]
     fn topology_responses_match_goldens() {
         let node = TopologyNodeRecord {
             id: "node-1".to_string(),
@@ -9881,6 +10095,113 @@ mod tests {
             .filter(|event| event.event_type == "workspace_message_created")
             .count();
         assert_eq!(chat_events, 2);
+    }
+
+    #[tokio::test]
+    async fn dev_service_enqueues_agent_mention_runtime_admissions() {
+        let service = DevWorkspaceService::new("user-1");
+        let workspace = service
+            .create_workspace(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                WorkspaceCreatePayload {
+                    name: "Mention Workspace".to_string(),
+                    description: None,
+                    metadata: json!({}),
+                    use_case: Some("programming".to_string()),
+                    collaboration_mode: Some("multi_agent_shared".to_string()),
+                    autonomy_profile: None,
+                    sandbox_code_root: None,
+                },
+            )
+            .await
+            .unwrap();
+        {
+            let mut state = service.state.lock().expect("workspace dev state");
+            state.workspace_agents.push(WorkspaceAgentRecord {
+                id: "wa-1".to_string(),
+                workspace_id: workspace.id.clone(),
+                agent_id: "agent-1".to_string(),
+                display_name: Some("Builder".to_string()),
+            });
+            state.workspace_agents.push(WorkspaceAgentRecord {
+                id: "wa-2".to_string(),
+                workspace_id: workspace.id.clone(),
+                agent_id: "agent-2".to_string(),
+                display_name: None,
+            });
+        }
+
+        let message = service
+            .send_message(
+                "user-1",
+                "Alice",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                SendMessagePayload {
+                    content: "please help".to_string(),
+                    sender_type: "human".to_string(),
+                    parent_message_id: None,
+                    mentions: vec![
+                        "user-1".to_string(),
+                        "agent-1".to_string(),
+                        "agent-2".to_string(),
+                    ],
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(message.mentions, vec!["user-1", "agent-1", "agent-2"]);
+
+        let state = service.state.lock().expect("workspace dev state");
+        let mention_jobs: Vec<_> = state
+            .plan_outbox
+            .iter()
+            .filter(|item| item.event_type == WORKSPACE_AGENT_MENTION_EVENT)
+            .collect();
+        assert_eq!(mention_jobs.len(), 2);
+        assert!(mention_jobs.iter().all(|item| {
+            item.plan_id.is_none() && item.status == WORKSPACE_AGENT_MENTION_STATUS
+        }));
+
+        let first = mention_jobs[0];
+        assert_eq!(first.payload_json["message_id"], message.id);
+        assert_eq!(first.payload_json["sender_user_id"], "user-1");
+        assert_eq!(first.payload_json["sender_name"], "Alice");
+        assert_eq!(first.payload_json["target_agent_id"], "agent-1");
+        assert_eq!(first.payload_json["target_workspace_agent_id"], "wa-1");
+        assert_eq!(first.payload_json["agent_name"], "Builder");
+        assert_eq!(
+            first.payload_json["conversation_id"],
+            workspace_conversation_id(&workspace.id, "agent-1", None)
+        );
+        assert_eq!(
+            first.payload_json["user_prompt"],
+            "[Workspace Chat] Alice mentioned you:\n\nplease help"
+        );
+        assert_eq!(
+            first.metadata_json["runtime_bridge"],
+            "p3_workspace_mention"
+        );
+        assert_eq!(first.metadata_json["target_agent_id"], "agent-1");
+
+        let second = mention_jobs[1];
+        assert_eq!(second.payload_json["target_agent_id"], "agent-2");
+        assert_eq!(second.payload_json["agent_name"], "agent-2");
+    }
+
+    #[test]
+    fn workspace_conversation_id_matches_python_uuid5_contract() {
+        assert_eq!(
+            workspace_conversation_id("ws-mention", "agent-1", None),
+            "ef99c6b6-cccc-5451-aecd-4fd3540b79f8"
+        );
+        assert_eq!(
+            workspace_conversation_id("ws-mention", "agent-1", Some("objective:root-1")),
+            "fff68776-271e-5a89-9a5b-def41746ef56"
+        );
     }
 
     #[tokio::test]

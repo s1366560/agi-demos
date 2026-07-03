@@ -87,6 +87,14 @@ pub struct WorkspaceMemberRecord {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceAgentRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub agent_id: String,
+    pub display_name: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceTaskRecord {
     pub id: String,
@@ -571,8 +579,20 @@ impl PgWorkspaceRepository {
     }
 
     pub async fn list_workspace_agent_ids(&self, workspace_id: &str) -> CoreResult<Vec<String>> {
-        let rows = sqlx::query_as::<_, (String,)>(
-            "SELECT agent_id FROM workspace_agents \
+        Ok(self
+            .list_active_workspace_agents(workspace_id)
+            .await?
+            .into_iter()
+            .map(|agent| agent.agent_id)
+            .collect())
+    }
+
+    pub async fn list_active_workspace_agents(
+        &self,
+        workspace_id: &str,
+    ) -> CoreResult<Vec<WorkspaceAgentRecord>> {
+        let rows = sqlx::query(
+            "SELECT id, workspace_id, agent_id, display_name FROM workspace_agents \
              WHERE workspace_id = $1 AND is_active = true \
              ORDER BY created_at ASC, id ASC",
         )
@@ -580,7 +600,16 @@ impl PgWorkspaceRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(storage)?;
-        Ok(rows.into_iter().map(|(agent_id,)| agent_id).collect())
+        rows.into_iter()
+            .map(|row| {
+                Ok(WorkspaceAgentRecord {
+                    id: row.try_get("id").map_err(storage)?,
+                    workspace_id: row.try_get("workspace_id").map_err(storage)?,
+                    agent_id: row.try_get("agent_id").map_err(storage)?,
+                    display_name: row.try_get("display_name").map_err(storage)?,
+                })
+            })
+            .collect()
     }
 
     pub async fn get_user_email(&self, user_id: &str) -> CoreResult<Option<String>> {

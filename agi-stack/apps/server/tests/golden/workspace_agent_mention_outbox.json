@@ -1,0 +1,44 @@
+{
+  "event_type": "workspace_agent_mention",
+  "status": "pending_runtime",
+  "payload": {
+    "agent_display_name": "Builder",
+    "agent_name": "Builder",
+    "chain_depth": 0,
+    "conversation_id": "fff68776-271e-5a89-9a5b-def41746ef56",
+    "conversation_scope": "objective:root-1",
+    "message_id": "msg-1",
+    "parent_message_id": "msg-parent",
+    "project_id": "project-1",
+    "sender_name": "Alice",
+    "sender_user_id": "user-1",
+    "source": "workspace_chat_mention",
+    "source_message": {
+      "content": "Ship the workspace runtime bridge",
+      "created_at": "2026-01-02T03:04:05.000Z",
+      "id": "msg-1",
+      "mentions": [
+        "user-1",
+        "agent-1"
+      ]
+    },
+    "target_agent_id": "agent-1",
+    "target_workspace_agent_id": "wa-1",
+    "tenant_id": "tenant-1",
+    "user_prompt": "[Workspace Chat] Alice mentioned you:\n\nShip the workspace runtime bridge",
+    "workspace_id": "ws-mention",
+    "workspace_llm_stage": "chat_mention"
+  },
+  "metadata": {
+    "authority_class": "agent-runtime-admission",
+    "conversation_id": "fff68776-271e-5a89-9a5b-def41746ef56",
+    "message_id": "msg-1",
+    "project_id": "project-1",
+    "runtime_bridge": "p3_workspace_mention",
+    "signal_role": "runtime-trigger",
+    "surface_boundary": "hosted",
+    "surface_owner": "workspace-chat",
+    "target_agent_id": "agent-1",
+    "tenant_id": "tenant-1"
+  }
+}
