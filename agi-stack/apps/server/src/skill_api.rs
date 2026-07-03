@@ -5,7 +5,7 @@
 //! rollback/import/export, filesystem-backed system skill listing/package
 //! export, zip import, and the skill-evolution strategy config/overview/detail
 //! plus apply/reject review job actions. Evolution run actions remain
-//! Python-owned until their full scheduler semantics are migrated.
+//! Python-owned until the scheduler/evolution-engine semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -69,6 +69,13 @@ pub(crate) trait SkillService: Send + Sync {
         tenant_id: Option<&str>,
         status: Option<&str>,
     ) -> Result<SkillListView, SkillApiError>;
+
+    async fn import_system_skill(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        body: SystemSkillImportPayload,
+    ) -> Result<SkillLifecycleView, SkillApiError>;
 
     async fn get_skill(
         &self,
@@ -303,6 +310,43 @@ pub(crate) struct SkillImportPayload {
     overwrite: bool,
     #[serde(default)]
     change_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct SystemSkillImportPayload {
+    #[serde(default)]
+    skill_id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default = "default_scope")]
+    scope: String,
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    overwrite: bool,
+    #[serde(default)]
+    change_summary: Option<String>,
+}
+
+impl Default for SystemSkillImportPayload {
+    fn default() -> Self {
+        Self {
+            skill_id: None,
+            name: None,
+            scope: default_scope(),
+            project_id: None,
+            overwrite: false,
+            change_summary: None,
+        }
+    }
+}
+
+impl SystemSkillImportPayload {
+    fn target(&self) -> Result<&str, SkillApiError> {
+        present(self.skill_id.as_deref())
+            .or_else(|| present(self.name.as_deref()))
+            .ok_or_else(|| SkillApiError::bad_request("system skill id or name is required"))
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -1072,6 +1116,29 @@ impl SkillService for PgSkillService {
     ) -> Result<SkillListView, SkillApiError> {
         let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
         system_skills::list_filesystem_system_skills(&tenant_id, status).await
+    }
+
+    async fn import_system_skill(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        body: SystemSkillImportPayload,
+    ) -> Result<SkillLifecycleView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        let target = body.target()?.to_string();
+        let package = system_skills::export_filesystem_system_skill(&tenant_id, &target)
+            .await?
+            .ok_or_else(|| SkillApiError::not_found("Skill not found"))?;
+        let import_payload = SkillImportPayload {
+            skill_md_content: package.skill_md_content,
+            resource_files: resource_files_map(package.resource_files)?,
+            scope: body.scope,
+            project_id: body.project_id,
+            overwrite: body.overwrite,
+            change_summary: body.change_summary,
+        };
+        self.import_package(user_id, Some(&tenant_id), import_payload)
+            .await
     }
 
     async fn get_skill(
@@ -2239,6 +2306,29 @@ impl SkillService for DevSkillService {
         system_skills::list_filesystem_system_skills(&tenant_id, status).await
     }
 
+    async fn import_system_skill(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        body: SystemSkillImportPayload,
+    ) -> Result<SkillLifecycleView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        let target = body.target()?.to_string();
+        let package = system_skills::export_filesystem_system_skill(&tenant_id, &target)
+            .await?
+            .ok_or_else(|| SkillApiError::not_found("Skill not found"))?;
+        let import_payload = SkillImportPayload {
+            skill_md_content: package.skill_md_content,
+            resource_files: resource_files_map(package.resource_files)?,
+            scope: body.scope,
+            project_id: body.project_id,
+            overwrite: body.overwrite,
+            change_summary: body.change_summary,
+        };
+        self.import_package(user_id, Some(&tenant_id), import_payload)
+            .await
+    }
+
     async fn get_skill(
         &self,
         _user_id: &str,
@@ -2922,6 +3012,19 @@ async fn import_skill_zip_package(
     Ok((StatusCode::CREATED, Json(view)))
 }
 
+async fn import_system_skill(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    Json(body): Json<SystemSkillImportPayload>,
+) -> Result<(StatusCode, Json<SkillLifecycleView>), SkillApiError> {
+    let view = app
+        .skills
+        .import_system_skill(&identity.user_id, q.tenant_id.as_deref(), body)
+        .await?;
+    Ok((StatusCode::CREATED, Json(view)))
+}
+
 async fn list_system_skills(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -3176,6 +3279,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/v1/skills/import", post(import_skill_package))
         .route("/api/v1/skills/import/zip", post(import_skill_zip_package))
         .route("/api/v1/skills/system/list", get(list_system_skills))
+        .route("/api/v1/skills/system/import", post(import_system_skill))
         .route(
             "/api/v1/skills/evolution/config",
             get(get_skill_evolution_config).put(update_skill_evolution_config),
@@ -3579,6 +3683,21 @@ fn validate_change_summary(summary: Option<&str>) -> Result<(), SkillApiError> {
 
 fn import_change_summary(summary: Option<&str>, version_number: i32) -> Option<String> {
     Some(present(summary).map_or_else(|| format!("Version {version_number}"), ToString::to_string))
+}
+
+fn resource_files_map(value: Value) -> Result<BTreeMap<String, String>, SkillApiError> {
+    let Value::Object(files) = value else {
+        return Ok(BTreeMap::new());
+    };
+
+    let mut resource_files = BTreeMap::new();
+    for (path, content) in files {
+        let Value::String(content) = content else {
+            return Err(SkillApiError::bad_request("Invalid Agent Skill package"));
+        };
+        resource_files.insert(path, content);
+    }
+    Ok(resource_files)
 }
 
 fn evolution_job_scope(job: &SkillEvolutionJobRecord) -> &'static str {
@@ -4451,6 +4570,51 @@ Use when managing Agent Skills packages.
         assert_eq!(by_name.version_number, None);
         assert_eq!(by_name.resource_files, json!({}));
         assert_eq!(by_id.skill.name, by_name.skill.name);
+    }
+
+    #[tokio::test]
+    async fn dev_service_imports_filesystem_system_skill_as_managed_skill() {
+        // Arrange
+        let service = DevSkillService::new("tenant-1");
+        let payload = SystemSkillImportPayload {
+            name: Some("code-review".to_string()),
+            scope: "tenant".to_string(),
+            ..Default::default()
+        };
+
+        // Act
+        let imported = service
+            .import_system_skill("u1", Some("tenant-1"), payload.clone())
+            .await
+            .unwrap();
+        let repeated = service
+            .import_system_skill("u1", Some("tenant-1"), payload)
+            .await
+            .unwrap_err();
+        let versions = service
+            .list_versions("u1", Some("tenant-1"), &imported.skill.id, 50, 0)
+            .await
+            .unwrap();
+
+        // Assert
+        assert_eq!(imported.action, "import");
+        assert_eq!(imported.skill.name, "code-review");
+        assert_eq!(imported.skill.scope, "tenant");
+        assert!(!imported.skill.is_system_skill);
+        assert_eq!(imported.skill.source, "database");
+        assert_eq!(imported.skill.file_path, None);
+        assert_eq!(imported.skill.current_version, 1);
+        assert_eq!(versions.total, 1);
+        assert_eq!(versions.versions[0].created_by, "import");
+        assert_eq!(repeated.status, StatusCode::CONFLICT);
+        assert_eq!(repeated.detail, "Skill already exists");
+
+        let actual = serde_json::to_value(imported).unwrap();
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/skill_system_import_lifecycle.json"
+        ))
+        .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
     }
 
     #[test]

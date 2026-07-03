@@ -536,9 +536,9 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
     },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
     // status, versions, rollback, JSON/zip package import, package export,
-    // skill-evolution config/overview/detail, and evolution job apply/reject
-    // are in Rust; filesystem/system import and evolution run siblings remain
-    // Python.
+    // filesystem system import, skill-evolution config/overview/detail, and
+    // evolution job apply/reject are in Rust; evolution run siblings remain
+    // Python until scheduler semantics move.
     MethodRule {
         method: "GET",
         path: "/api/v1/skills",
@@ -552,6 +552,11 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
     MethodRule {
         method: "GET",
         path: "/api/v1/skills/system/list",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills/system/import",
         match_kind: MethodMatchKind::Exact,
     },
     MethodRule {
@@ -1741,6 +1746,7 @@ mod unit {
             (Method::POST, "/api/v1/skills"),
             (Method::POST, "/api/v1/skills/"),
             (Method::GET, "/api/v1/skills/system/list"),
+            (Method::POST, "/api/v1/skills/system/import"),
             (Method::POST, "/api/v1/skills/import"),
             (Method::POST, "/api/v1/skills/import/zip"),
             (Method::GET, "/api/v1/skills/evolution/config"),
@@ -1773,6 +1779,7 @@ mod unit {
             (Method::POST, "/api/v1/skills/system/list"),
             (Method::GET, "/api/v1/skills/system"),
             (Method::GET, "/api/v1/skills/system/import"),
+            (Method::POST, "/api/v1/skills/system/import/extra"),
             (Method::GET, "/api/v1/skills/system/list/extra"),
             (Method::GET, "/api/v1/skills/import/zip"),
             (Method::POST, "/api/v1/skills/import/zip/extra"),
