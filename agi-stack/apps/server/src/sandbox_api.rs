@@ -32,6 +32,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+#[cfg(test)]
 use tokio_tungstenite::tungstenite::protocol::Message as TungsteniteMessage;
 #[cfg(test)]
 use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
@@ -49,8 +50,9 @@ use crate::AppState;
 mod ws_proxy;
 
 use ws_proxy::{
-    proxy_desktop_ws_session, proxy_http_service_ws_session, proxy_mcp_ws_session,
-    proxy_terminal_ws_session, TerminalSessionRecorder,
+    new_terminal_session_id, proxy_desktop_ws_session, proxy_http_service_ws_session,
+    proxy_mcp_ws_session, proxy_terminal_ws_session, terminal_error_message, TerminalSessionRecord,
+    TerminalSessionRecorder, TerminalSize,
 };
 
 const SANDBOX_NOT_FOUND: &str = "Sandbox not found";
@@ -1990,45 +1992,6 @@ pub(crate) struct PreviewSessionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TerminalSessionRecord {
-    project_id: String,
-    session_id: String,
-    cols: u16,
-    rows: u16,
-    connected: bool,
-    last_seen_at_ms: i64,
-    expires_at_ms: i64,
-}
-
-impl TerminalSessionRecord {
-    fn new(
-        project_id: String,
-        session_id: String,
-        size: TerminalSize,
-        connected: bool,
-        now_ms: i64,
-        ttl_seconds: i64,
-    ) -> Self {
-        Self {
-            project_id,
-            session_id,
-            cols: size.cols,
-            rows: size.rows,
-            connected,
-            last_seen_at_ms: now_ms,
-            expires_at_ms: now_ms + ttl_seconds.max(1) * 1000,
-        }
-    }
-
-    fn size(&self) -> TerminalSize {
-        TerminalSize {
-            cols: self.cols.max(1),
-            rows: self.rows.max(1),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct McpUpstreamTokenRecord {
     token: String,
     project_id: String,
@@ -2533,106 +2496,6 @@ fn normalize_mcp_resource_mime_type(message: &str) -> String {
         data.to_string()
     } else {
         message.to_string()
-    }
-}
-
-fn new_terminal_session_id() -> String {
-    agistack_adapters_secrets::generate_uuid_v4()
-        .replace('-', "")
-        .chars()
-        .take(12)
-        .collect()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct TerminalSize {
-    cols: u16,
-    rows: u16,
-}
-
-impl Default for TerminalSize {
-    fn default() -> Self {
-        Self {
-            cols: TERMINAL_DEFAULT_COLS,
-            rows: TERMINAL_DEFAULT_ROWS,
-        }
-    }
-}
-
-impl TerminalSize {
-    fn update(self, cols: Option<u16>, rows: Option<u16>) -> Self {
-        Self {
-            cols: cols.unwrap_or(self.cols).max(1),
-            rows: rows.unwrap_or(self.rows).max(1),
-        }
-    }
-}
-
-fn terminal_connected_message(session_id: &str, size: TerminalSize) -> String {
-    json!({
-        "type": "connected",
-        "session_id": session_id,
-        "cols": size.cols,
-        "rows": size.rows,
-    })
-    .to_string()
-}
-
-fn terminal_output_message(data: &str) -> String {
-    json!({
-        "type": "output",
-        "data": data,
-    })
-    .to_string()
-}
-
-fn terminal_error_message() -> String {
-    json!({
-        "type": "error",
-        "message": "Terminal WebSocket proxy failed",
-    })
-    .to_string()
-}
-
-fn ttyd_initial_terminal_message(size: TerminalSize) -> TungsteniteMessage {
-    TungsteniteMessage::Binary(
-        json!({
-            "AuthToken": "",
-            "columns": size.cols,
-            "rows": size.rows,
-        })
-        .to_string()
-        .into_bytes(),
-    )
-}
-
-fn ttyd_input_message(data: &[u8]) -> TungsteniteMessage {
-    let mut payload = Vec::with_capacity(data.len() + 1);
-    payload.push(TTYD_INPUT_COMMAND);
-    payload.extend_from_slice(data);
-    TungsteniteMessage::Binary(payload)
-}
-
-fn ttyd_resize_message(size: TerminalSize) -> TungsteniteMessage {
-    let mut payload = Vec::with_capacity(32);
-    payload.push(TTYD_RESIZE_COMMAND);
-    payload.extend_from_slice(
-        json!({
-            "columns": size.cols,
-            "rows": size.rows,
-        })
-        .to_string()
-        .as_bytes(),
-    );
-    TungsteniteMessage::Binary(payload)
-}
-
-fn ttyd_output_payload(data: &[u8]) -> Option<String> {
-    let (&command, payload) = data.split_first()?;
-    match command {
-        TTYD_INPUT_COMMAND => Some(String::from_utf8_lossy(payload).to_string()),
-        TTYD_RESIZE_COMMAND | TTYD_PREFERENCES_COMMAND => None,
-        _ => Some(String::from_utf8_lossy(data).to_string()),
     }
 }
 
