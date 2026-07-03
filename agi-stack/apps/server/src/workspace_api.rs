@@ -3,8 +3,10 @@
 //! This deliberately covers only precise, database-backed resources:
 //! workspaces, workspace tasks, topology nodes/edges, and blackboard
 //! posts/replies/files plus transactional plan action/outbox rows. Runtime-heavy
-//! siblings (execution diagnostics, leader adjudication, chat, autonomy) remain
-//! Python-owned until their full semantics are migrated.
+//! siblings (execution diagnostics, full leader adjudication, chat, autonomy)
+//! remain Python-owned until their full semantics are migrated; accept-review
+//! already projects linked attempts to accepted so pending adjudication does not
+//! linger after explicit human acceptance.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -35,7 +37,7 @@ use agistack_adapters_postgres::{
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
     WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
     WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
-    WorkspaceTaskRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::ObjectStore;
@@ -1973,8 +1975,25 @@ impl WorkspaceService for PgWorkspaceService {
             .unwrap_or_else(|| "Accepted after operator review.".to_string());
         let evidence_refs = trimmed_evidence_refs(&body.evidence_refs);
         let now = Utc::now();
-        let updated =
+        let mut updated =
             accept_node_for_operator_review(node, user_id, &reason, evidence_refs.clone(), now)?;
+        let accepted_attempt = if let Some(attempt_id) = attempt_id.as_deref() {
+            self.repo
+                .finish_task_session_attempt(
+                    attempt_id,
+                    "accepted",
+                    Some(&reason),
+                    Some("operator_review_accepted"),
+                    now,
+                )
+                .await
+                .map_err(WorkspaceApiError::internal)?
+        } else {
+            None
+        };
+        if let Some(attempt) = accepted_attempt.as_ref() {
+            apply_human_review_acceptance_to_node_attempt(&mut updated, attempt);
+        }
         self.repo
             .save_plan_node(updated.clone())
             .await
@@ -1986,7 +2005,13 @@ impl WorkspaceService for PgWorkspaceService {
                 .await
                 .map_err(WorkspaceApiError::internal)?
                 .ok_or_else(WorkspaceApiError::task_not_found)?;
-            apply_human_review_acceptance_to_task(&mut task, &reason, &updated.metadata_json, now);
+            apply_human_review_acceptance_to_task(
+                &mut task,
+                &reason,
+                &updated.metadata_json,
+                accepted_attempt.as_ref(),
+                now,
+            );
             self.repo
                 .save_task(task)
                 .await
@@ -3372,6 +3397,7 @@ impl WorkspaceService for PgWorkspaceService {
 struct DevWorkspaceState {
     workspaces: HashMap<String, WorkspaceRecord>,
     tasks: HashMap<String, WorkspaceTaskRecord>,
+    task_attempts: HashMap<String, WorkspaceTaskSessionAttemptRecord>,
     nodes: HashMap<String, TopologyNodeRecord>,
     edges: HashMap<String, TopologyEdgeRecord>,
     posts: HashMap<String, BlackboardPostRecord>,
@@ -4032,8 +4058,23 @@ impl WorkspaceService for DevWorkspaceService {
             .unwrap_or_else(|| "Accepted after operator review.".to_string());
         let evidence_refs = trimmed_evidence_refs(&body.evidence_refs);
         let now = Utc::now();
-        let updated =
+        let mut updated =
             accept_node_for_operator_review(node, user_id, &reason, evidence_refs.clone(), now)?;
+        let accepted_attempt = if let Some(attempt_id) = attempt_id.as_deref() {
+            state.task_attempts.get_mut(attempt_id).map(|attempt| {
+                attempt.status = "accepted".to_string();
+                attempt.leader_feedback = Some(reason.clone());
+                attempt.adjudication_reason = Some("operator_review_accepted".to_string());
+                attempt.completed_at = Some(now);
+                attempt.updated_at = Some(now);
+                attempt.clone()
+            })
+        } else {
+            None
+        };
+        if let Some(attempt) = accepted_attempt.as_ref() {
+            apply_human_review_acceptance_to_node_attempt(&mut updated, attempt);
+        }
         state
             .plan_nodes
             .insert(node_id.to_string(), updated.clone());
@@ -4043,7 +4084,13 @@ impl WorkspaceService for DevWorkspaceService {
                 .get_mut(&task_id)
                 .filter(|task| task.workspace_id == workspace_id)
                 .ok_or_else(WorkspaceApiError::task_not_found)?;
-            apply_human_review_acceptance_to_task(task, &reason, &updated.metadata_json, now);
+            apply_human_review_acceptance_to_task(
+                task,
+                &reason,
+                &updated.metadata_json,
+                accepted_attempt.as_ref(),
+                now,
+            );
         }
         state.plan_events.push(operator_plan_event(
             &plan.id,
@@ -6784,6 +6831,7 @@ fn apply_human_review_acceptance_to_task(
     task: &mut WorkspaceTaskRecord,
     reason: &str,
     node_metadata: &Value,
+    accepted_attempt: Option<&WorkspaceTaskSessionAttemptRecord>,
     now: DateTime<Utc>,
 ) {
     let mut metadata = metadata_map(task.metadata_json.clone());
@@ -6802,6 +6850,18 @@ fn apply_human_review_acceptance_to_task(
             .unwrap_or(Value::Null),
     );
     metadata.insert("pending_leader_adjudication".to_string(), json!(false));
+    if let Some(attempt) = accepted_attempt {
+        metadata.insert(
+            "last_attempt_status".to_string(),
+            json!(attempt.status.clone()),
+        );
+        metadata.insert("last_attempt_id".to_string(), json!(attempt.id.clone()));
+        metadata.insert("current_attempt_id".to_string(), json!(attempt.id.clone()));
+        metadata.insert(
+            "current_attempt_number".to_string(),
+            json!(attempt.attempt_number),
+        );
+    }
     let evidence_refs = string_values(node_metadata.get("verification_evidence_refs"));
     if !evidence_refs.is_empty() {
         metadata.insert("evidence_refs".to_string(), json!(evidence_refs));
@@ -6810,6 +6870,24 @@ fn apply_human_review_acceptance_to_task(
     task.metadata_json = Value::Object(metadata);
     task.completed_at = Some(now);
     task.updated_at = Some(now);
+}
+
+fn apply_human_review_acceptance_to_node_attempt(
+    node: &mut WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) {
+    let mut metadata = metadata_map(node.metadata_json.clone());
+    metadata.insert(
+        "last_attempt_status".to_string(),
+        json!(attempt.status.clone()),
+    );
+    metadata.insert("last_attempt_id".to_string(), json!(attempt.id.clone()));
+    metadata.insert("accepted_attempt_id".to_string(), json!(attempt.id.clone()));
+    metadata.insert(
+        "accepted_attempt_number".to_string(),
+        json!(attempt.attempt_number),
+    );
+    node.metadata_json = Value::Object(metadata);
 }
 
 fn reset_feature_checkpoint(value: Option<Value>) -> Option<Value> {
@@ -9776,6 +9854,158 @@ mod tests {
             .unwrap();
         assert_eq!(done.status, "done");
         assert!(done.completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn accept_review_marks_linked_attempt_accepted() {
+        let service = DevWorkspaceService::new("user-1");
+        let now = "2026-01-02T03:04:05Z".parse().unwrap();
+        {
+            let mut state = service.state.lock().expect("workspace dev state");
+            state.tasks.insert(
+                "task-review".to_string(),
+                WorkspaceTaskRecord {
+                    id: "task-review".to_string(),
+                    workspace_id: "workspace-review".to_string(),
+                    title: "Review worker report".to_string(),
+                    description: None,
+                    created_by: "user-1".to_string(),
+                    assignee_user_id: None,
+                    assignee_agent_id: Some("agent-worker".to_string()),
+                    status: "blocked".to_string(),
+                    priority: 1,
+                    estimated_effort: None,
+                    blocker_reason: None,
+                    metadata_json: json!({
+                        "pending_leader_adjudication": true,
+                        "current_attempt_id": "attempt-review",
+                        "current_attempt_number": 1,
+                        "last_attempt_status": "awaiting_leader_adjudication",
+                        "last_worker_report_summary": "candidate is acceptable after manual review"
+                    }),
+                    created_at: now,
+                    updated_at: None,
+                    completed_at: None,
+                    archived_at: None,
+                },
+            );
+            state.plans.insert(
+                "plan-review".to_string(),
+                WorkspacePlanRecord {
+                    id: "plan-review".to_string(),
+                    workspace_id: "workspace-review".to_string(),
+                    goal_id: "node-review".to_string(),
+                    status: "active".to_string(),
+                    created_at: now,
+                    updated_at: None,
+                },
+            );
+            state.plan_nodes.insert(
+                "node-review".to_string(),
+                WorkspacePlanNodeRecord {
+                    id: "node-review".to_string(),
+                    plan_id: "plan-review".to_string(),
+                    parent_id: None,
+                    kind: "task".to_string(),
+                    title: "Review worker report".to_string(),
+                    description: "Accept the candidate after human review".to_string(),
+                    depends_on_json: Vec::new(),
+                    inputs_schema_json: json!({}),
+                    outputs_schema_json: json!({}),
+                    acceptance_criteria_json: Vec::new(),
+                    feature_checkpoint_json: None,
+                    handoff_package_json: None,
+                    recommended_capabilities_json: Vec::new(),
+                    preferred_agent_id: None,
+                    estimated_effort_json: json!({}),
+                    priority: 1,
+                    intent: "blocked".to_string(),
+                    execution: "reported".to_string(),
+                    progress_json: json!({"percent": 60, "confidence": 0.8, "note": "review"}),
+                    assignee_agent_id: Some("agent-worker".to_string()),
+                    current_attempt_id: Some("attempt-review".to_string()),
+                    workspace_task_id: Some("task-review".to_string()),
+                    metadata_json: json!({
+                        "last_verification_passed": false,
+                        "verification_evidence_refs": ["ci:previous"]
+                    }),
+                    created_at: now,
+                    updated_at: None,
+                    completed_at: None,
+                },
+            );
+            state.task_attempts.insert(
+                "attempt-review".to_string(),
+                WorkspaceTaskSessionAttemptRecord {
+                    id: "attempt-review".to_string(),
+                    workspace_task_id: "task-review".to_string(),
+                    root_goal_task_id: "root-review".to_string(),
+                    workspace_id: "workspace-review".to_string(),
+                    attempt_number: 1,
+                    status: "awaiting_leader_adjudication".to_string(),
+                    conversation_id: Some("conversation-review".to_string()),
+                    worker_agent_id: Some("agent-worker".to_string()),
+                    leader_agent_id: Some("agent-leader".to_string()),
+                    candidate_summary: Some(
+                        "candidate is acceptable after manual review".to_string(),
+                    ),
+                    candidate_artifacts_json: vec!["artifact:report".to_string()],
+                    candidate_verifications_json: vec!["worker_report:completed".to_string()],
+                    leader_feedback: None,
+                    adjudication_reason: None,
+                    created_at: now,
+                    updated_at: None,
+                    completed_at: None,
+                },
+            );
+        }
+
+        let result = service
+            .accept_plan_node_review(
+                "user-1",
+                "workspace-review",
+                "node-review",
+                WorkspacePlanActionRequest {
+                    reason: Some("operator accepts evidence".to_string()),
+                    evidence_refs: vec!["ci:new".to_string()],
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.message, "Plan node accepted after human review.");
+        let state = service.state.lock().expect("workspace dev state");
+        let attempt = state.task_attempts.get("attempt-review").unwrap();
+        assert_eq!(attempt.status, "accepted");
+        assert_eq!(
+            attempt.leader_feedback.as_deref(),
+            Some("operator accepts evidence")
+        );
+        assert_eq!(
+            attempt.adjudication_reason.as_deref(),
+            Some("operator_review_accepted")
+        );
+        assert!(attempt.completed_at.is_some());
+        let node = state.plan_nodes.get("node-review").unwrap();
+        assert_eq!(node.intent, "done");
+        assert!(node.current_attempt_id.is_none());
+        assert_eq!(node.metadata_json["last_attempt_status"], "accepted");
+        assert_eq!(node.metadata_json["accepted_attempt_id"], "attempt-review");
+        assert_eq!(
+            node.metadata_json["verification_evidence_refs"],
+            json!(["ci:previous", "ci:new"])
+        );
+        let task = state.tasks.get("task-review").unwrap();
+        assert_eq!(task.status, "done");
+        assert_eq!(task.metadata_json["pending_leader_adjudication"], false);
+        assert_eq!(task.metadata_json["last_attempt_status"], "accepted");
+        assert_eq!(task.metadata_json["last_attempt_id"], "attempt-review");
+        assert_eq!(task.metadata_json["current_attempt_id"], "attempt-review");
+        assert_eq!(task.metadata_json["current_attempt_number"], 1);
+        assert!(state.plan_events.iter().any(|event| {
+            event.event_type == "operator_review_accepted"
+                && event.attempt_id.as_deref() == Some("attempt-review")
+        }));
     }
 
     #[test]
