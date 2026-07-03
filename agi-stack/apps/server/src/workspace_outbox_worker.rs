@@ -98,6 +98,10 @@ const DISPOSED_ATTEMPT_STATUS: &str = "disposed";
 const REJECTED_ATTEMPT_STATUS: &str = "rejected";
 const SUPERVISOR_DECISION_DISPOSE_NODE_ACTION: &str = "dispose_node";
 const SUPERVISOR_DISPOSED_NODE_DISPOSITION: &str = "supervisor_agent_disposed_node";
+const SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION: &str = "mark_blocked_human";
+const SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON: &str =
+    "supervisor_decision_mark_blocked_human";
+const SUPERVISOR_BLOCKED_HUMAN_VERDICT: &str = "blocked_human_required";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION: &str = "retry_same_node";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON: &str = "supervisor_decision_retry_same_node";
 const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
@@ -9877,6 +9881,9 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_missing = self
                 .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
                 .await?;
+            let changed_blocked_human = self
+                .reconcile_supervisor_blocked_human_nodes(&workspace_id, &plan_id)
+                .await?;
             let changed_disposed = self
                 .reconcile_supervisor_disposed_nodes(&workspace_id, &plan_id)
                 .await?;
@@ -9902,6 +9909,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                 .await?;
             if changed_worktree_failed
                 + changed_missing
+                + changed_blocked_human
                 + changed_disposed
                 + changed_accepted
                 + changed_supervisor_retry
@@ -10381,6 +10389,11 @@ impl SupervisorTickAdmissionHandler {
 
         let mut changed = 0;
         for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if supervisor_blocked_human_metadata_present(&object_or_empty(
+                node.metadata_json.clone(),
+            )) {
+                continue;
+            }
             let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
                 continue;
             };
@@ -10563,6 +10576,11 @@ impl SupervisorTickAdmissionHandler {
         let now = Utc::now();
         let mut changed = 0;
         for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if supervisor_blocked_human_metadata_present(&object_or_empty(
+                node.metadata_json.clone(),
+            )) {
+                continue;
+            }
             let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
                 continue;
             };
@@ -10665,6 +10683,238 @@ impl SupervisorTickAdmissionHandler {
             changed += 1;
         }
         Ok(changed)
+    }
+
+    async fn reconcile_supervisor_blocked_human_nodes(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
+                continue;
+            }
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            if !supervisor_blocked_human_metadata_present(&metadata) {
+                continue;
+            }
+
+            let summary = supervisor_blocked_human_summary(&metadata);
+            let already_projected_node = node.intent == "blocked"
+                && node.execution == "idle"
+                && metadata_string(metadata.get("last_verification_judge_verdict")).as_deref()
+                    == Some(SUPERVISOR_BLOCKED_HUMAN_VERDICT)
+                && metadata_string(metadata.get("workspace_task_projection_status")).as_deref()
+                    == Some("blocked");
+            let mut attempt_projected = false;
+            let mut evidence_refs = Vec::new();
+            if let Some(attempt_id) = node.current_attempt_id.as_deref() {
+                if let Some(attempt) = self.store.get_task_session_attempt(attempt_id).await? {
+                    evidence_refs = accepted_attempt_evidence_refs(&attempt);
+                    let status = attempt.status.trim().to_ascii_lowercase();
+                    if status == AWAITING_LEADER_ADJUDICATION_STATUS {
+                        self.store
+                            .finish_task_session_attempt(
+                                attempt_id,
+                                "blocked",
+                                Some(&summary),
+                                Some(SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON),
+                                now,
+                            )
+                            .await?;
+                        attempt_projected = true;
+                    }
+                    if !attempt.candidate_artifacts_json.is_empty() {
+                        metadata.insert(
+                            "candidate_artifacts".to_string(),
+                            json!(attempt.candidate_artifacts_json.clone()),
+                        );
+                    }
+                    if !attempt.candidate_verifications_json.is_empty() {
+                        metadata.insert(
+                            "candidate_verifications".to_string(),
+                            json!(attempt.candidate_verifications_json.clone()),
+                        );
+                    }
+                }
+            }
+            for value in metadata_string_values(metadata.get("verification_evidence_refs")) {
+                if !value.trim().is_empty() {
+                    evidence_refs.push(value);
+                }
+            }
+            dedup_strings(&mut evidence_refs);
+
+            metadata.insert(
+                "last_supervisor_decision_action".to_string(),
+                json!(SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION),
+            );
+            metadata.insert(
+                "last_supervisor_decision_rationale".to_string(),
+                json!(summary.clone()),
+            );
+            metadata.insert(
+                "last_verification_judge_verdict".to_string(),
+                json!(SUPERVISOR_BLOCKED_HUMAN_VERDICT),
+            );
+            metadata.insert("last_verification_passed".to_string(), json!(false));
+            metadata.insert("last_verification_hard_fail".to_string(), json!(true));
+            metadata.insert(
+                "last_verification_summary".to_string(),
+                json!(summary.clone()),
+            );
+            if let Some(attempt_id) = node.current_attempt_id.as_deref() {
+                metadata.insert(
+                    "last_verification_attempt_id".to_string(),
+                    json!(attempt_id),
+                );
+                metadata.insert("terminal_attempt_status".to_string(), json!("blocked"));
+            }
+            metadata.insert(
+                "supervisor_blocked_human_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert(
+                "workspace_task_projection_status".to_string(),
+                json!("blocked"),
+            );
+            metadata.insert(
+                "workspace_task_projected_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            if !evidence_refs.is_empty() {
+                metadata.insert(
+                    "verification_evidence_refs".to_string(),
+                    json!(evidence_refs),
+                );
+            }
+
+            node.intent = "blocked".to_string();
+            node.execution = "idle".to_string();
+            node.metadata_json = Value::Object(metadata.clone());
+            node.updated_at = Some(now);
+
+            let task_projected = self
+                .project_supervisor_blocked_human_to_task(workspace_id, &node, &summary, now)
+                .await?;
+            if !already_projected_node || task_projected || attempt_projected {
+                self.store.save_plan_node(node.clone()).await?;
+                self.store
+                    .create_plan_event(WorkspacePlanEventRecord {
+                        id: generate_uuid_v4(),
+                        plan_id: plan_id.to_string(),
+                        workspace_id: workspace_id.to_string(),
+                        node_id: Some(node.id.clone()),
+                        attempt_id: node.current_attempt_id.clone(),
+                        event_type: "supervisor_blocked_human_reconciled".to_string(),
+                        source: "workspace_plan_supervisor_tick".to_string(),
+                        actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                        payload_json: json!({
+                            "action": SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION,
+                            "reason": SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON,
+                            "rationale": summary,
+                            "workspace_task_id": node.workspace_task_id.clone(),
+                            "task_projected": task_projected,
+                            "attempt_projected": attempt_projected,
+                        }),
+                        created_at: now,
+                    })
+                    .await?;
+                changed += 1;
+            }
+        }
+        Ok(changed)
+    }
+
+    async fn project_supervisor_blocked_human_to_task(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        summary: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool> {
+        let Some(task_id) = node.workspace_task_id.as_deref() else {
+            return Ok(false);
+        };
+        let Some(mut task) = self.store.get_task(workspace_id, task_id).await? else {
+            return Ok(false);
+        };
+        if task.workspace_id != workspace_id {
+            return Ok(false);
+        }
+        let mut metadata = object_or_empty(task.metadata_json.clone());
+        if task.status == "blocked"
+            && task.blocker_reason.as_deref() == Some(summary)
+            && metadata_string(metadata.get("durable_plan_verdict")).as_deref() == Some("blocked")
+            && metadata_string(metadata.get("durable_plan_verification_summary")).as_deref()
+                == Some(summary)
+        {
+            return Ok(false);
+        }
+
+        metadata.insert(PENDING_LEADER_ADJUDICATION.to_string(), json!(false));
+        metadata.insert("durable_plan_verdict".to_string(), json!("blocked"));
+        metadata.insert(
+            "durable_plan_verification_summary".to_string(),
+            json!(summary),
+        );
+        metadata.insert(
+            "durable_plan_verified_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.insert("last_attempt_status".to_string(), json!("blocked"));
+        metadata.insert("last_worker_report_type".to_string(), json!("blocked"));
+        metadata.insert(LAST_WORKER_REPORT_SUMMARY.to_string(), json!(summary));
+        metadata.insert(
+            "last_leader_adjudication_status".to_string(),
+            json!("blocked"),
+        );
+        metadata.insert(
+            "last_supervisor_decision_action".to_string(),
+            json!(SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION),
+        );
+        metadata.insert(
+            "last_verification_judge_verdict".to_string(),
+            json!(SUPERVISOR_BLOCKED_HUMAN_VERDICT),
+        );
+        if let Some(attempt_id) = node.current_attempt_id.as_deref() {
+            metadata.insert("last_attempt_id".to_string(), json!(attempt_id));
+            metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
+        }
+        let node_metadata = object_or_empty(node.metadata_json.clone());
+        let evidence_refs = metadata_string_values(node_metadata.get("verification_evidence_refs"));
+        if !evidence_refs.is_empty() {
+            metadata.insert("evidence_refs".to_string(), json!(evidence_refs));
+        }
+
+        task.metadata_json = Value::Object(metadata);
+        task.status = "blocked".to_string();
+        task.blocker_reason = Some(summary.to_string());
+        task.completed_at = None;
+        task.updated_at = Some(now);
+        let saved_task = self.store.save_task(task).await?;
+        if let Some(root_goal_task_id) =
+            string_from_value_object(&saved_task.metadata_json, ROOT_GOAL_TASK_ID)
+        {
+            if root_goal_task_id != saved_task.id {
+                self.reconcile_root_goal_progress(workspace_id, &root_goal_task_id, now)
+                    .await?;
+            }
+        }
+        Ok(true)
     }
 
     async fn reconcile_supervisor_disposed_nodes(
@@ -11292,6 +11542,11 @@ impl SupervisorTickAdmissionHandler {
 
         let mut changed = 0;
         for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if supervisor_blocked_human_metadata_present(&object_or_empty(
+                node.metadata_json.clone(),
+            )) {
+                continue;
+            }
             let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
                 continue;
             };
@@ -12065,6 +12320,47 @@ fn supervisor_retry_same_node_summary(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "supervisor requested same-node retry".to_string())
+}
+
+fn supervisor_blocked_human_metadata_present(metadata: &Map<String, Value>) -> bool {
+    if metadata_string(metadata.get("last_verification_judge_verdict")).as_deref()
+        == Some(SUPERVISOR_BLOCKED_HUMAN_VERDICT)
+    {
+        return true;
+    }
+    metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
+        == Some(SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION)
+        && supervisor_decision_allows_human_block(metadata)
+}
+
+fn supervisor_decision_allows_human_block(metadata: &Map<String, Value>) -> bool {
+    if supervisor_disposition_event_payload(metadata)
+        .get("human_required")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        return true;
+    }
+    let Some(Value::Array(items)) = metadata.get("last_supervisor_decision_feedback_items") else {
+        return false;
+    };
+    items.iter().any(|item| {
+        let Some(item) = item.as_object() else {
+            return false;
+        };
+        metadata_string(item.get("target_layer")).as_deref() == Some("human")
+            || metadata_string(item.get("recommended_action")).as_deref() == Some("escalate_human")
+            || metadata_string(item.get("next_action")).as_deref() == Some("human_required")
+    })
+}
+
+fn supervisor_blocked_human_summary(metadata: &Map<String, Value>) -> String {
+    metadata_string(metadata.get("last_supervisor_decision_rationale"))
+        .or_else(|| metadata_string(metadata.get("last_verification_summary")))
+        .or_else(|| metadata_string(metadata.get(LAST_WORKER_REPORT_SUMMARY)))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "human intervention required by workspace supervisor".to_string())
 }
 
 fn future_metadata_datetime_utc(
@@ -20073,6 +20369,150 @@ steps:
             task.metadata_json["evidence_refs"],
             json!(["artifact:review-report", "worker_report:completed"])
         );
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_reconciles_mark_blocked_human_supervisor_decision() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut root_task = root_goal_task();
+        root_task.status = "in_progress".to_string();
+        store.insert_task(root_task);
+        let mut task = task_with_plan_metadata();
+        task.status = "in_progress".to_string();
+        task.metadata_json = json!({
+            WORKSPACE_PLAN_ID: "plan-test",
+            WORKSPACE_PLAN_NODE_ID: "node-test",
+            ROOT_GOAL_TASK_ID: "root-task",
+            CURRENT_ATTEMPT_ID: "attempt-human-block",
+            PENDING_LEADER_ADJUDICATION: true,
+            "last_attempt_status": AWAITING_LEADER_ADJUDICATION_STATUS
+        });
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-human-block".to_string());
+        node.metadata_json = json!({
+            "last_supervisor_decision_action": "mark_blocked_human",
+            "last_supervisor_decision_rationale": "production deploy approval is required",
+            "last_supervisor_decision_confidence": 0.93,
+            "last_supervisor_decision_feedback_items": [{
+                "target_layer": "human",
+                "recommended_action": "escalate_human",
+                "summary": "approval gate is outside the worker authority"
+            }],
+            "last_supervisor_decision_event_payload": {
+                "human_required": true,
+                "approval_scope": "production_deploy"
+            },
+            "verification_evidence_refs": ["approval:production_deploy"]
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-human-block",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("candidate needs production approval".to_string());
+        attempt.candidate_artifacts_json = vec!["artifact:release-plan".to_string()];
+        attempt.candidate_verifications_json = vec!["approval:production_deploy".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempt = store.attempt("attempt-human-block");
+        assert_eq!(attempt.status, "blocked");
+        assert_eq!(
+            attempt.leader_feedback.as_deref(),
+            Some("production deploy approval is required")
+        );
+        assert_eq!(
+            attempt.adjudication_reason.as_deref(),
+            Some(SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON)
+        );
+        assert!(attempt.completed_at.is_some());
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "blocked");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(
+            node.current_attempt_id.as_deref(),
+            Some("attempt-human-block")
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_judge_verdict"],
+            SUPERVISOR_BLOCKED_HUMAN_VERDICT
+        );
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_action"],
+            "mark_blocked_human"
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_summary"],
+            "production deploy approval is required"
+        );
+        assert_eq!(node.metadata_json["terminal_attempt_status"], "blocked");
+        assert_eq!(
+            node.metadata_json["workspace_task_projection_status"],
+            "blocked"
+        );
+        assert_eq!(
+            node.metadata_json["verification_evidence_refs"],
+            json!(["artifact:release-plan", "approval:production_deploy"])
+        );
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "blocked");
+        assert_eq!(
+            task.blocker_reason.as_deref(),
+            Some("production deploy approval is required")
+        );
+        assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], false);
+        assert_eq!(task.metadata_json["durable_plan_verdict"], "blocked");
+        assert_eq!(
+            task.metadata_json["durable_plan_verification_summary"],
+            "production deploy approval is required"
+        );
+        assert_eq!(task.metadata_json["last_attempt_status"], "blocked");
+        assert_eq!(task.metadata_json["last_worker_report_type"], "blocked");
+        assert_eq!(
+            task.metadata_json["last_leader_adjudication_status"],
+            "blocked"
+        );
+        assert_eq!(task.metadata_json["last_attempt_id"], "attempt-human-block");
+        assert_eq!(
+            task.metadata_json[CURRENT_ATTEMPT_ID],
+            "attempt-human-block"
+        );
+        assert_eq!(
+            task.metadata_json["evidence_refs"],
+            json!(["artifact:release-plan", "approval:production_deploy"])
+        );
+
+        let root = store.task("root-task");
+        assert_eq!(root.metadata_json["goal_health"], "blocked");
+        assert_eq!(root.metadata_json[REMEDIATION_STATUS], "replan_required");
+        assert_eq!(
+            root.metadata_json["blocked_child_task_ids"],
+            json!(["task-test"])
+        );
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "supervisor_blocked_human_reconciled");
+        assert_eq!(events[0].payload_json["action"], "mark_blocked_human");
+        assert_eq!(events[0].payload_json["attempt_projected"], true);
+        assert_eq!(events[0].payload_json["task_projected"], true);
         assert!(store.outbox().is_empty());
     }
 
