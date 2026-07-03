@@ -2663,6 +2663,39 @@ impl PgWorkspaceRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    pub async fn park_plan_outbox_processing_with_payload_patch(
+        &self,
+        outbox_id: &str,
+        status: &str,
+        metadata_patch: &Value,
+        payload_patch: &Value,
+        lease_owner: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool> {
+        let mut query = String::from(
+            "UPDATE workspace_plan_outbox \
+             SET status = $2, lease_owner = NULL, lease_expires_at = NULL, \
+                 last_error = NULL, next_attempt_at = NULL, \
+                 payload_json = COALESCE(payload_json, '{}'::jsonb) || $3, \
+                 metadata_json = COALESCE(metadata_json, '{}'::jsonb) || $4, updated_at = $5 \
+             WHERE id = $1 AND status = 'processing'",
+        );
+        if lease_owner.is_some() {
+            query.push_str(" AND lease_owner = $6");
+        }
+        let mut query = sqlx::query(&query)
+            .bind(outbox_id)
+            .bind(status)
+            .bind(Json(payload_patch))
+            .bind(Json(metadata_patch))
+            .bind(now);
+        if let Some(owner) = lease_owner {
+            query = query.bind(owner);
+        }
+        let result = query.execute(&self.pool).await.map_err(storage)?;
+        Ok(result.rows_affected() > 0)
+    }
+
     pub async fn renew_plan_outbox_lease(
         &self,
         outbox_id: &str,

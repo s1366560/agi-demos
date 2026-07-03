@@ -90,7 +90,7 @@ use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
 use crate::workspace_outbox_worker::{
-    worker_launch_event_stream_source,
+    worker_launch_event_stream_source, workspace_agent_mention_runtime_from_env,
     workspace_plan_outbox_handlers_with_runtime_state_and_event_stream, PgWorkspacePlanOutboxStore,
     ProjectSandboxPipelineStageRunner, SharedWorkspacePlanOutboxWorker,
     WorkerLaunchRuntimeStateStore, WorkspacePipelineStageRunner, WorkspacePlanOutboxWorker,
@@ -781,6 +781,7 @@ async fn build_state() -> AppState {
     let sandbox_runtime = build_container_runtime().await;
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
     let worker_launch_runtime_state = build_worker_launch_runtime_state_store().await;
+    let workspace_mention_runtime = workspace_agent_mention_runtime_from_env(Arc::clone(&llm));
     let sandbox_image =
         std::env::var("AGISTACK_SANDBOX_IMAGE").unwrap_or_else(|_| "redis:7-alpine".to_string());
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
@@ -810,6 +811,7 @@ async fn build_state() -> AppState {
                     Some(Arc::clone(&stage_runner)),
                     Some(runtime_state),
                     Some(Arc::clone(&worker_stream_events)),
+                    workspace_mention_runtime.clone(),
                 )
             }
             None => workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
@@ -817,6 +819,7 @@ async fn build_state() -> AppState {
                 Some(Arc::clone(&stage_runner)),
                 None,
                 Some(worker_stream_events),
+                workspace_mention_runtime.clone(),
             ),
         };
         Arc::new(WorkspacePlanOutboxWorker::new(

@@ -18,7 +18,8 @@ use agistack_adapters_postgres::{
     WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
-use agistack_core::ports::{CoreError, CoreResult, EventStream, StreamEntry};
+use agistack_core::agent::types::AgentAction;
+use agistack_core::ports::{CoreError, CoreResult, EventStream, LlmPort, StreamEntry};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
@@ -46,6 +47,7 @@ const WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS: &str = "runtime_response_re
 #[allow(dead_code)]
 const WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS: &str = "runtime_error_ready";
 const WORKSPACE_MESSAGE_CREATED_EVENT: &str = "workspace_message_created";
+const WORKSPACE_MENTION_RUNTIME_ENABLED_ENV: &str = "AGISTACK_WORKSPACE_MENTION_RUNTIME_ENABLED";
 const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
 const DRONE_PROVIDER: &str = "drone";
 const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
@@ -999,6 +1001,7 @@ pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state(
         stage_runner,
         worker_launch_state,
         None,
+        None,
     )
 }
 
@@ -1007,6 +1010,7 @@ pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_event_stream
     stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
     worker_launch_state: Option<Arc<dyn WorkerLaunchRuntimeStateStore>>,
     worker_stream_events: Option<Arc<dyn WorkerLaunchEventStream>>,
+    workspace_mention_runtime: Option<Arc<dyn WorkspaceAgentMentionRuntime>>,
 ) -> WorkspacePlanOutboxHandlers {
     let handoff = Arc::new(DurableHandoffResumeHandler::new(Arc::clone(
         &dispatch_store,
@@ -1027,9 +1031,12 @@ pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_event_stream
     let supervisor_tick = Arc::new(SupervisorTickAdmissionHandler::new(Arc::clone(
         &dispatch_store,
     )));
-    let workspace_agent_mention = Arc::new(WorkspaceAgentMentionBindingHandler::new(Arc::clone(
-        &dispatch_store,
-    )));
+    let workspace_agent_mention = Arc::new(match workspace_mention_runtime {
+        Some(runtime) => {
+            WorkspaceAgentMentionBindingHandler::with_runtime(Arc::clone(&dispatch_store), runtime)
+        }
+        None => WorkspaceAgentMentionBindingHandler::new(Arc::clone(&dispatch_store)),
+    });
     let pipeline_run = Arc::new(PipelineRunAdmissionHandler::new(
         dispatch_store,
         stage_runner,
@@ -1147,6 +1154,11 @@ pub(crate) enum WorkspacePlanOutboxHandlerOutcome {
         status: String,
         metadata_patch: Value,
     },
+    ParkWithPayload {
+        status: String,
+        metadata_patch: Value,
+        payload_patch: Value,
+    },
 }
 
 #[async_trait]
@@ -1261,6 +1273,16 @@ pub(crate) trait WorkspacePlanOutboxStore: Send + Sync {
         outbox_id: &str,
         status: &str,
         metadata_patch: &Value,
+        lease_owner: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool>;
+
+    async fn park_processing_with_payload_patch(
+        &self,
+        outbox_id: &str,
+        status: &str,
+        metadata_patch: &Value,
+        payload_patch: &Value,
         lease_owner: Option<&str>,
         now: DateTime<Utc>,
     ) -> CoreResult<bool>;
@@ -1553,6 +1575,27 @@ impl WorkspacePlanOutboxStore for PgWorkspacePlanOutboxStore {
     ) -> CoreResult<bool> {
         self.repo
             .park_plan_outbox_processing(outbox_id, status, metadata_patch, lease_owner, now)
+            .await
+    }
+
+    async fn park_processing_with_payload_patch(
+        &self,
+        outbox_id: &str,
+        status: &str,
+        metadata_patch: &Value,
+        payload_patch: &Value,
+        lease_owner: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool> {
+        self.repo
+            .park_plan_outbox_processing_with_payload_patch(
+                outbox_id,
+                status,
+                metadata_patch,
+                payload_patch,
+                lease_owner,
+                now,
+            )
             .await
     }
 }
@@ -1951,13 +1994,101 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
     }
 }
 
+pub(crate) struct WorkspaceAgentMentionRuntimeInput {
+    workspace_id: String,
+    conversation_id: String,
+    target_agent_id: String,
+    agent_name: String,
+    sender_name: Option<String>,
+    user_prompt: String,
+}
+
+#[async_trait]
+pub(crate) trait WorkspaceAgentMentionRuntime: Send + Sync {
+    async fn complete(&self, input: WorkspaceAgentMentionRuntimeInput) -> CoreResult<String>;
+}
+
+pub(crate) fn workspace_agent_mention_runtime_from_env(
+    llm: Arc<dyn LlmPort>,
+) -> Option<Arc<dyn WorkspaceAgentMentionRuntime>> {
+    if bool_env(WORKSPACE_MENTION_RUNTIME_ENABLED_ENV, false) {
+        Some(Arc::new(LlmWorkspaceAgentMentionRuntime { llm }))
+    } else {
+        None
+    }
+}
+
+struct LlmWorkspaceAgentMentionRuntime {
+    llm: Arc<dyn LlmPort>,
+}
+
+#[async_trait]
+impl WorkspaceAgentMentionRuntime for LlmWorkspaceAgentMentionRuntime {
+    async fn complete(&self, input: WorkspaceAgentMentionRuntimeInput) -> CoreResult<String> {
+        let goal = render_workspace_agent_mention_goal(&input);
+        match self.llm.decide(&goal, 0, &[], &[]).await? {
+            AgentAction::Finish { answer } => {
+                let answer = answer.trim();
+                if answer.is_empty() {
+                    Err(CoreError::Llm(
+                        "workspace mention runtime returned an empty answer".to_string(),
+                    ))
+                } else {
+                    Ok(answer.to_string())
+                }
+            }
+            AgentAction::CallTool { tool, .. } => Err(CoreError::Llm(format!(
+                "workspace mention runtime requested unsupported tool call: {tool}"
+            ))),
+            AgentAction::RequestHuman { request } => Err(CoreError::Llm(format!(
+                "workspace mention runtime requested HITL ({:?}): {}",
+                request.kind, request.prompt
+            ))),
+        }
+    }
+}
+
+fn render_workspace_agent_mention_goal(input: &WorkspaceAgentMentionRuntimeInput) -> String {
+    let sender = input
+        .sender_name
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("workspace user");
+    format!(
+        "You are {agent_name} ({agent_id}) replying inside workspace {workspace_id}. \
+Respond directly to {sender}'s message in the same language. \
+Return a concise final answer for the workspace chat only; do not request tools or human input.\n\n\
+Conversation: {conversation_id}\nUser message:\n{user_prompt}",
+        agent_name = input.agent_name,
+        agent_id = input.target_agent_id,
+        workspace_id = input.workspace_id,
+        sender = sender,
+        conversation_id = input.conversation_id,
+        user_prompt = input.user_prompt
+    )
+}
+
 pub(crate) struct WorkspaceAgentMentionBindingHandler {
     store: Arc<dyn WorkspacePlanDispatchStore>,
+    runtime: Option<Arc<dyn WorkspaceAgentMentionRuntime>>,
 }
 
 impl WorkspaceAgentMentionBindingHandler {
     pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
-        Self { store }
+        Self {
+            store,
+            runtime: None,
+        }
+    }
+
+    pub(crate) fn with_runtime(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        runtime: Arc<dyn WorkspaceAgentMentionRuntime>,
+    ) -> Self {
+        Self {
+            store,
+            runtime: Some(runtime),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2108,16 +2239,59 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
             )
             .await?;
 
+        let base_metadata_patch = json!({
+            "runtime_bound_at": now.to_rfc3339(),
+            "runtime_binding": "workspace_agent_mention_conversation",
+            "runtime_bridge": "p3_workspace_mention",
+            "conversation_id": conversation_id,
+            "target_agent_id": target_agent_id,
+            "workspace_llm_stage": workspace_llm_stage,
+        });
+        if let Some(runtime) = self.runtime.as_ref() {
+            let user_prompt = workspace_agent_mention_user_prompt(&payload);
+            let status;
+            let payload_patch;
+            let mut metadata_patch = object_or_empty(base_metadata_patch);
+            metadata_patch.insert("runtime_writer".to_string(), json!("llm_port_single_turn"));
+            metadata_patch.insert("runtime_ready_at".to_string(), json!(now.to_rfc3339()));
+            match runtime
+                .complete(WorkspaceAgentMentionRuntimeInput {
+                    workspace_id: workspace_id.clone(),
+                    conversation_id: conversation_id.clone(),
+                    target_agent_id: target_agent_id.clone(),
+                    agent_name: agent_name.clone(),
+                    sender_name: string_from_map(&payload, "sender_name"),
+                    user_prompt,
+                })
+                .await
+            {
+                Ok(final_content) => {
+                    status = WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS.to_string();
+                    payload_patch = json!({
+                        "final_content": final_content,
+                        "runtime_final_content": final_content,
+                    });
+                    metadata_patch.insert("runtime_writer_status".to_string(), json!("ok"));
+                }
+                Err(err) => {
+                    status = WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS.to_string();
+                    let error_detail = compact_text(&err.to_string(), 4_000);
+                    payload_patch = json!({
+                        "runtime_error_detail": error_detail,
+                    });
+                    metadata_patch.insert("runtime_writer_status".to_string(), json!("error"));
+                }
+            }
+            return Ok(WorkspacePlanOutboxHandlerOutcome::ParkWithPayload {
+                status,
+                metadata_patch: Value::Object(metadata_patch),
+                payload_patch,
+            });
+        }
+
         Ok(WorkspacePlanOutboxHandlerOutcome::Park {
             status: WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS.to_string(),
-            metadata_patch: json!({
-                "runtime_bound_at": now.to_rfc3339(),
-                "runtime_binding": "workspace_agent_mention_conversation",
-                "runtime_bridge": "p3_workspace_mention",
-                "conversation_id": conversation_id,
-                "target_agent_id": target_agent_id,
-                "workspace_llm_stage": workspace_llm_stage,
-            }),
+            metadata_patch: base_metadata_patch,
         })
     }
 }
@@ -13422,6 +13596,28 @@ impl WorkspacePlanOutboxWorker {
                     report.skipped += 1;
                 }
             }
+            Ok(WorkspacePlanOutboxHandlerOutcome::ParkWithPayload {
+                status,
+                metadata_patch,
+                payload_patch,
+            }) => {
+                if self
+                    .store
+                    .park_processing_with_payload_patch(
+                        &item.id,
+                        &status,
+                        &metadata_patch,
+                        &payload_patch,
+                        Some(&self.config.worker_id),
+                        Utc::now(),
+                    )
+                    .await?
+                {
+                    report.parked += 1;
+                } else {
+                    report.skipped += 1;
+                }
+            }
             Err(err) => {
                 if self
                     .store
@@ -13526,6 +13722,18 @@ fn workspace_agent_mention_error_detail(payload: &Map<String, Value>) -> Option<
     string_from_map(payload, "error_detail")
         .or_else(|| string_from_map(payload, "runtime_error_detail"))
         .or_else(|| string_from_map(payload, "error_message"))
+}
+
+fn workspace_agent_mention_user_prompt(payload: &Map<String, Value>) -> String {
+    string_from_map(payload, "user_prompt")
+        .or_else(|| {
+            payload
+                .get("source_message")
+                .and_then(|value| value.as_object())
+                .and_then(|source| string_from_map(source, "content"))
+        })
+        .or_else(|| string_from_map(payload, "message"))
+        .unwrap_or_default()
 }
 
 fn workspace_message_event_payload(message: &WorkspaceMessageRecord) -> Value {
@@ -15965,6 +16173,41 @@ mod tests {
             item.updated_at = Some(now);
             Ok(true)
         }
+
+        async fn park_processing_with_payload_patch(
+            &self,
+            outbox_id: &str,
+            status: &str,
+            metadata_patch: &Value,
+            payload_patch: &Value,
+            lease_owner: Option<&str>,
+            now: DateTime<Utc>,
+        ) -> CoreResult<bool> {
+            let mut items = self.items.lock().unwrap();
+            let Some(item) = items.get_mut(outbox_id) else {
+                return Ok(false);
+            };
+            if item.status != "processing" || item.lease_owner.as_deref() != lease_owner {
+                return Ok(false);
+            }
+            item.status = status.to_string();
+            item.lease_owner = None;
+            item.lease_expires_at = None;
+            item.last_error = None;
+            item.next_attempt_at = None;
+            let mut metadata = object_or_empty(item.metadata_json.clone());
+            for (key, value) in object_or_empty(metadata_patch.clone()) {
+                metadata.insert(key, value);
+            }
+            item.metadata_json = Value::Object(metadata);
+            let mut payload = object_or_empty(item.payload_json.clone());
+            for (key, value) in object_or_empty(payload_patch.clone()) {
+                payload.insert(key, value);
+            }
+            item.payload_json = Value::Object(payload);
+            item.updated_at = Some(now);
+            Ok(true)
+        }
     }
 
     #[derive(Clone)]
@@ -15991,6 +16234,41 @@ mod tests {
                 }),
                 HandlerBehavior::Fail => Err(CoreError::Storage("handler boom".to_string())),
             }
+        }
+    }
+
+    struct FakeWorkspaceAgentMentionRuntime {
+        result: Result<String, String>,
+        prompts: Mutex<Vec<String>>,
+    }
+
+    impl FakeWorkspaceAgentMentionRuntime {
+        fn ok(answer: &str) -> Self {
+            Self {
+                result: Ok(answer.to_string()),
+                prompts: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn err(message: &str) -> Self {
+            Self {
+                result: Err(message.to_string()),
+                prompts: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn prompts(&self) -> Vec<String> {
+            self.prompts.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl WorkspaceAgentMentionRuntime for FakeWorkspaceAgentMentionRuntime {
+        async fn complete(&self, input: WorkspaceAgentMentionRuntimeInput) -> CoreResult<String> {
+            self.prompts.lock().unwrap().push(input.user_prompt);
+            self.result
+                .clone()
+                .map_err(|message| CoreError::Llm(message.to_string()))
         }
     }
 
@@ -24713,6 +24991,143 @@ steps:
             Some("chat_mention")
         );
         assert_eq!(dispatch_store.conversation_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_worker_writes_agent_mention_runtime_response_ready() {
+        let outbox_store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        let dispatch_store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        dispatch_store.insert_member("workspace-test", "user-sender");
+        let runtime = Arc::new(FakeWorkspaceAgentMentionRuntime::ok("Runtime answer"));
+        let mut item = outbox("job-mention-runtime", WORKSPACE_AGENT_MENTION_EVENT);
+        item.plan_id = None;
+        item.status = "pending_runtime".to_string();
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "tenant_id": "tenant-test",
+            "project_id": "project-test",
+            "sender_user_id": "user-sender",
+            "sender_name": "Ada",
+            "target_agent_id": "agent-builder",
+            "agent_name": "Builder",
+            "conversation_id": "conversation-mention",
+            "message_id": "message-1",
+            "user_prompt": "Please summarize this plan.",
+            "source": "workspace_chat_mention",
+            "workspace_llm_stage": "chat_mention"
+        });
+        outbox_store.insert(item);
+        let handlers = workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
+            Arc::clone(&dispatch_store) as Arc<dyn WorkspacePlanDispatchStore>,
+            None,
+            None,
+            None,
+            Some(Arc::clone(&runtime) as Arc<dyn WorkspaceAgentMentionRuntime>),
+        );
+        let worker = worker(Arc::clone(&outbox_store), handlers);
+
+        let first = worker.run_once().await.unwrap();
+
+        assert_eq!(
+            first,
+            WorkspacePlanOutboxRunReport {
+                claimed: 1,
+                parked: 1,
+                ..Default::default()
+            }
+        );
+        assert_eq!(runtime.prompts(), vec!["Please summarize this plan."]);
+        let item = outbox_store.get("job-mention-runtime");
+        assert_eq!(item.status, WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS);
+        assert_eq!(item.payload_json["final_content"], "Runtime answer");
+        assert_eq!(item.metadata_json["runtime_writer"], "llm_port_single_turn");
+        assert_eq!(dispatch_store.messages().len(), 0);
+
+        let second = worker.run_once().await.unwrap();
+
+        assert_eq!(
+            second,
+            WorkspacePlanOutboxRunReport {
+                claimed: 1,
+                completed: 1,
+                ..Default::default()
+            }
+        );
+        let item = outbox_store.get("job-mention-runtime");
+        assert_eq!(item.status, "completed");
+        let messages = dispatch_store.messages();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "Runtime answer");
+        let events = dispatch_store.blackboard_outbox();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, WORKSPACE_MESSAGE_CREATED_EVENT);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_worker_writes_agent_mention_runtime_error_ready() {
+        let outbox_store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        let dispatch_store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        dispatch_store.insert_member("workspace-test", "user-sender");
+        let runtime = Arc::new(FakeWorkspaceAgentMentionRuntime::err(
+            "provider unavailable",
+        ));
+        let mut item = outbox("job-mention-runtime-error", WORKSPACE_AGENT_MENTION_EVENT);
+        item.plan_id = None;
+        item.status = "pending_runtime".to_string();
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "tenant_id": "tenant-test",
+            "project_id": "project-test",
+            "sender_user_id": "user-sender",
+            "target_agent_id": "agent-builder",
+            "agent_name": "Builder",
+            "conversation_id": "conversation-mention",
+            "message_id": "message-1",
+            "source_message": {"content": "Please run this."}
+        });
+        outbox_store.insert(item);
+        let handlers = workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
+            Arc::clone(&dispatch_store) as Arc<dyn WorkspacePlanDispatchStore>,
+            None,
+            None,
+            None,
+            Some(runtime as Arc<dyn WorkspaceAgentMentionRuntime>),
+        );
+        let worker = worker(Arc::clone(&outbox_store), handlers);
+
+        let first = worker.run_once().await.unwrap();
+
+        assert_eq!(
+            first,
+            WorkspacePlanOutboxRunReport {
+                claimed: 1,
+                parked: 1,
+                ..Default::default()
+            }
+        );
+        let item = outbox_store.get("job-mention-runtime-error");
+        assert_eq!(item.status, WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS);
+        assert_eq!(
+            item.payload_json["runtime_error_detail"],
+            "llm error: provider unavailable"
+        );
+
+        let second = worker.run_once().await.unwrap();
+
+        assert_eq!(
+            second,
+            WorkspacePlanOutboxRunReport {
+                claimed: 1,
+                completed: 1,
+                ..Default::default()
+            }
+        );
+        let messages = dispatch_store.messages();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(
+            messages[0].content,
+            "[Error] Builder could not process your request: llm error: provider unavailable"
+        );
     }
 
     #[tokio::test]

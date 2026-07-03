@@ -945,6 +945,26 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     .await
     .unwrap();
     repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6_mention_writer".to_string(),
+        plan_id: None,
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "workspace_agent_mention".to_string(),
+        payload_json: json!({"conversation_id": "conv_p6_writer"}),
+        status: "pending_runtime".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "mention-writer"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
         id: "plan_outbox_p6_mention_error".to_string(),
         plan_id: None,
         workspace_id: "ws_p6_repo".to_string(),
@@ -998,6 +1018,7 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     assert!(claimed_ids.contains(&"plan_outbox_p6_release"));
     assert!(claimed_ids.contains(&"plan_outbox_p6_mention_runtime"));
     assert!(claimed_ids.contains(&"plan_outbox_p6_mention_response"));
+    assert!(claimed_ids.contains(&"plan_outbox_p6_mention_writer"));
     assert!(claimed_ids.contains(&"plan_outbox_p6_mention_error"));
     assert!(!claimed_ids.contains(&"plan_outbox_p6_delayed"));
     assert!(!claimed_ids.contains(&"plan_outbox_p6_dead"));
@@ -1130,6 +1151,32 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         parked_runtime.metadata_json["runtime_binding"],
         "workspace_agent_mention_conversation"
     );
+    assert!(repo
+        .park_plan_outbox_processing_with_payload_patch(
+            "plan_outbox_p6_mention_writer",
+            "runtime_response_ready",
+            &json!({"runtime_writer": "llm_port_single_turn"}),
+            &json!({"final_content": "ready from writer"}),
+            Some("worker-a"),
+            outbox_now,
+        )
+        .await
+        .unwrap());
+    let writer_ready = repo
+        .get_plan_outbox("plan_outbox_p6_mention_writer")
+        .await
+        .unwrap()
+        .expect("writer-ready mention outbox");
+    assert_eq!(writer_ready.status, "runtime_response_ready");
+    assert_eq!(
+        writer_ready.payload_json["final_content"],
+        "ready from writer"
+    );
+    assert_eq!(
+        writer_ready.metadata_json["runtime_writer"],
+        "llm_port_single_turn"
+    );
+    assert!(writer_ready.processed_at.is_none());
     assert!(repo
         .mark_plan_outbox_completed(
             "plan_outbox_p6_mention_response",
