@@ -41,8 +41,9 @@ import {
   useIsLoadingEarlier,
   useHasEarlier,
 } from '@/stores/agent/timelineStore';
-import { useAgentV3Store } from '@/stores/agentV3';
 import { useDefinitions } from '@/stores/agentDefinitions';
+import { useAgentV3Store } from '@/stores/agentV3';
+import { usePendingRequests } from '@/stores/hitlStore.unified';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxStore } from '@/stores/sandbox';
@@ -81,11 +82,13 @@ import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { MessageArea } from './MessageArea';
 import { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 import { Resizer } from './Resizer';
+import { RunStatusStrip, buildAgentRunViewModel } from './run';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 import { useProjectConversationLoader } from './useProjectConversationLoader';
 
+import type { AgentRunMode } from './run';
 import type {
   AgentTask,
   Conversation,
@@ -431,6 +434,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
     const [chatSearchVisible, setChatSearchVisible] = useState(false);
     const [selectedAgentSessionId, setSelectedAgentSessionId] = useState<string | null>(null);
+    const [runMode, setRunMode] = useState<AgentRunMode>('build');
     const [showOnboarding, setShowOnboarding] = useState(
       () => !localStorage.getItem('memstack_onboarding_complete')
     );
@@ -487,6 +491,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
                   isPlanMode: newMode === 'plan',
                 });
                 useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
+                setRunMode(newMode === 'plan' ? 'plan' : 'build');
               })
               .catch((err: unknown) => {
                 void message.error(
@@ -781,24 +786,62 @@ ${content}`;
     // Plan Mode toggle
     const isPlanMode = useIsPlanMode();
 
+    const applyPlanMode = useCallback(
+      async (nextIsPlanMode: boolean) => {
+        const targetConversationId = activeConversationId || conversationId;
+        if (!targetConversationId) return;
+        const newMode = nextIsPlanMode ? 'plan' : 'build';
+        try {
+          const { planService } = await import('@/services/planService');
+          await planService.switchMode(targetConversationId, newMode);
+          useAgentV3Store.getState().updateConversationState(targetConversationId, {
+            isPlanMode: nextIsPlanMode,
+          });
+          useExecutionStore.getState().setAgentIsPlanMode(nextIsPlanMode);
+        } catch (err) {
+          void message.error(
+            err instanceof Error ? err.message : t('agent.chat.errors.switchPlanModeFailed')
+          );
+          console.error('Failed to switch plan mode:', err);
+          throw err;
+        }
+      },
+      [activeConversationId, conversationId, t]
+    );
+
     const handleTogglePlanMode = useCallback(async () => {
-      const targetConversationId = activeConversationId || conversationId;
-      if (!targetConversationId) return;
-      const newMode = isPlanMode ? 'build' : 'plan';
+      const nextIsPlanMode = !isPlanMode;
       try {
-        const { planService } = await import('@/services/planService');
-        await planService.switchMode(targetConversationId, newMode);
-        useAgentV3Store.getState().updateConversationState(targetConversationId, {
-          isPlanMode: newMode === 'plan',
-        });
-        useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
-      } catch (err) {
-        void message.error(
-          err instanceof Error ? err.message : t('agent.chat.errors.switchPlanModeFailed')
-        );
-        console.error('Failed to switch plan mode:', err);
+        await applyPlanMode(nextIsPlanMode);
+        setRunMode(nextIsPlanMode ? 'plan' : 'build');
+      } catch {
+        // applyPlanMode already reported the failure.
       }
-    }, [activeConversationId, conversationId, isPlanMode, t]);
+    }, [applyPlanMode, isPlanMode]);
+
+    const handleRunModeChange = useCallback(
+      async (nextMode: AgentRunMode) => {
+        const previousMode = runMode;
+        const nextIsPlanMode = nextMode === 'plan' || nextMode === 'readOnly';
+        setRunMode(nextMode);
+        if (nextIsPlanMode === isPlanMode) return;
+        try {
+          await applyPlanMode(nextIsPlanMode);
+        } catch {
+          setRunMode(previousMode);
+        }
+      },
+      [applyPlanMode, isPlanMode, runMode]
+    );
+
+    useEffect(() => {
+      setRunMode((current) => {
+        if (isPlanMode) {
+          return current === 'readOnly' ? current : 'plan';
+        }
+        return current === 'auto' ? current : 'build';
+      });
+    }, [isPlanMode]);
 
     const chatColumn = (
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
@@ -881,6 +924,10 @@ ${content}`;
               void handleTogglePlanMode();
             }}
             isPlanMode={isPlanMode}
+            runMode={runMode}
+            onRunModeChange={(nextMode) => {
+              void handleRunModeChange(nextMode);
+            }}
             activeAgentId={activeAgentId}
             onAgentSelect={setActiveAgentId}
           />
@@ -934,6 +981,40 @@ ${content}`;
     const sandboxConnectionStatus = useSandboxStore((s) => s.connectionStatus);
     const currentTool = useSandboxStore((s) => s.currentTool);
     const suggestionsCount = suggestions.length;
+    const pendingHitlRequests = usePendingRequests(activeConversationId ?? '');
+    const runViewModel = useMemo(
+      () =>
+        buildAgentRunViewModel({
+          conversationId: activeConversationId,
+          mode: runMode,
+          isPlanMode,
+          isStreaming,
+          tasks,
+          pendingRequests: pendingHitlRequests,
+          agentNodes: rawAgentNodes,
+          artifacts: conversationArtifacts,
+          sandboxConnectionStatus,
+          currentToolName: currentTool?.name ?? null,
+          doomLoopDetected,
+          executionNarrative,
+          latestToolsetChange,
+        }),
+      [
+        activeConversationId,
+        conversationArtifacts,
+        currentTool?.name,
+        doomLoopDetected,
+        executionNarrative,
+        isPlanMode,
+        isStreaming,
+        latestToolsetChange,
+        pendingHitlRequests,
+        rawAgentNodes,
+        runMode,
+        sandboxConnectionStatus,
+        tasks,
+      ]
+    );
 
     const workspaceStatusSlots = useMemo(() => {
       const slots: Parameters<typeof WorkspaceStatusBar>[0] = {};
@@ -1005,6 +1086,16 @@ ${content}`;
 
     const statusBarWithLayout = (
       <div className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
+        <RunStatusStrip
+          run={runViewModel}
+          onStop={abortStream}
+          onOpenInspector={() => {
+            setLayoutMode('task');
+          }}
+          onOpenEvidence={() => {
+            setEvidenceOpen(true);
+          }}
+        />
         <div className="flex items-center min-w-0">
           <WorkspaceStatusBar
             {...workspaceStatusSlots}
@@ -1152,6 +1243,7 @@ ${content}`;
                 executionNarrative={executionNarrative}
                 latestToolsetChange={latestToolsetChange}
                 agentNodes={rawAgentNodes}
+                runViewModel={runViewModel}
                 collapsed={false}
               />
             </Suspense>

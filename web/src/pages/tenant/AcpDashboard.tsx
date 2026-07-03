@@ -230,12 +230,12 @@ export const AcpDashboard: React.FC = () => {
       setTestResult(null);
       testForm.setFieldsValue({
         cwd: '/tmp',
-        prompt: '请只回复 PONG',
+        prompt: t('tenant.acp.test.defaultPrompt', { defaultValue: 'Reply with PONG only.' }),
         timeoutSeconds: 30,
       });
       setTestDrawerOpen(true);
     },
-    [testForm]
+    [t, testForm]
   );
 
   const submitAgent = useCallback(async () => {

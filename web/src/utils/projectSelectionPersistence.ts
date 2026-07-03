@@ -2,7 +2,7 @@ import type { Project } from '@/types/memory';
 
 export const LEGACY_LAST_PROJECT_ID_KEY = 'agent:lastProjectId';
 export const MANUAL_PROJECT_SELECTION_SOURCE = 'manual';
-export const DEFAULT_PROJECT_NAMES = new Set(['default project', '默认项目']);
+export const DEFAULT_PROJECT_NAMES = new Set(['default project', '\u9ED8\u8BA4\u9879\u76EE']);
 
 export type ProjectSelectionSource = typeof MANUAL_PROJECT_SELECTION_SOURCE;
 

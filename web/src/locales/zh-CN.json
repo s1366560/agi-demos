@@ -981,6 +981,7 @@
         "cwd": "工作目录",
         "projectId": "Project ID",
         "prompt": "提示词",
+        "defaultPrompt": "请只回复 PONG。",
         "timeout": "超时时间（秒）",
         "success": "ACP 测试成功",
         "failure": "ACP 测试失败",
@@ -1003,6 +1004,9 @@
         "urlRequired": "WebSocket 传输必须填写 URL。",
         "cwdRequired": "工作目录必填。"
       }
+    },
+    "backendStores": {
+      "testSucceeded": "连接测试成功。版本：{{version}}"
     },
     "create_modal": {
       "title": "创建租户",
@@ -6073,7 +6077,82 @@
         "aborted": "已中止"
       }
     },
+    "run": {
+      "status": {
+        "running": "运行中",
+        "waiting": "等待输入",
+        "blocked": "已阻塞",
+        "idle": "空闲"
+      },
+      "mode": {
+        "plan": "规划",
+        "build": "构建",
+        "auto": "自动",
+        "readOnly": "只读",
+        "planDescription": "先探索并提出计划，再进行编辑。",
+        "buildDescription": "执行常规编辑和验证循环。",
+        "autoDescription": "在策略允许时减少打断的构建模式。",
+        "readOnlyDescription": "映射到规划模式，不进行文件修改。"
+      },
+      "modeSelector": {
+        "title": "Agent 模式",
+        "description": "当前版本中，自动和只读是 UI 层意图预设；后端批准仍使用 HITL。",
+        "tooltip": "选择 Agent 执行模式",
+        "aria": "选择 Agent 执行模式"
+      },
+      "checkpoint": {
+        "finished": "所有检查点已完成",
+        "none": "暂无检查点",
+        "progress": "{{done}}/{{total}} - {{checkpoint}}"
+      },
+      "blocker": {
+        "doomLoop": "检测到重复工具循环",
+        "hitl": "{{count}} 个用户输入请求待处理",
+        "taskFailed": "任务失败，需要检查"
+      },
+      "verification": {
+        "tests": "测试证据已就绪",
+        "diff": "差异证据已就绪",
+        "artifacts": "产物已就绪",
+        "none": "暂无验证证据"
+      },
+      "statusStrip": {
+        "aria": "Agent 运行状态"
+      },
+      "agents": {
+        "summary": "{{running}} 个运行中 / 共 {{total}} 个 Agent"
+      },
+      "evidence": {
+        "summary": "{{count}} 个证据"
+      },
+      "openInspector": "检查器",
+      "overview": {
+        "status": "状态",
+        "currentTool": "当前工具：{{tool}}",
+        "mode": "模式",
+        "policyHint": "执行仍遵循 HITL 批准和项目策略。",
+        "plan": "计划",
+        "taskProgress": "{{done}}/{{total}} 已完成",
+        "noTasks": "暂无任务",
+        "agents": "Agent",
+        "agentCount": "{{running}} 个运行中 / 共 {{total}} 个",
+        "userInput": "用户输入",
+        "hitlCount": "{{count}} 个待处理",
+        "hitlBreakdown": "{{permissions}} 个权限，{{decisions}} 个决策，{{configs}} 个配置",
+        "evidence": "证据",
+        "evidenceCount": "{{count}} 项",
+        "evidenceBreakdown": "{{tests}} 个测试，{{diffs}} 个差异，{{screenshots}} 个截图，{{logs}} 个日志",
+        "latestTrace": "最新轨迹"
+      },
+      "hitl": {
+        "title": "权限与 HITL 中心",
+        "empty": "暂无待处理的批准、决策、配置或澄清请求。",
+        "singleUseNotice": "请在聊天内联卡片中响应。当前版本尚未启用持久化权限规则，因此记住选择会按单次响应处理，除非后端记录策略。",
+        "permissionAction": "动作：{{action}} - 风险：{{risk}}"
+      }
+    },
     "rightPanel": {
+      "runSummary": "{{tasks}} 个任务 - {{agents}} 个 Agent - {{hitl}} 个等待",
       "taskCount": "{{count}} 项",
       "taskCount_one": "{{count}} 项",
       "taskCount_other": "{{count}} 项",
@@ -6082,11 +6161,25 @@
       "list": "列表",
       "lanes": "泳道",
       "tabs": {
+        "overview": "Agent 运行",
+        "overviewShort": "概览",
+        "plan": "计划",
         "tasks": "任务",
         "agent": "会话",
+        "trace": "轨迹",
         "insights": "洞察",
         "agents": "团队",
+        "decisions": "HITL",
+        "evidence": "证据",
         "graph": "图谱"
+      },
+      "evidence": {
+        "title": "证据摘要",
+        "description": "从产物中收集到的证据。打开证据抽屉可查看详情和预览。",
+        "tests": "测试",
+        "diffs": "差异",
+        "screenshots": "截图",
+        "logs": "日志"
       },
       "workspacePlan": {
         "planSummary": "{{done}}/{{total}} 个计划节点已完成",
@@ -6718,14 +6811,23 @@
       "searchFailed": "搜索提及项失败"
     },
     "slashCommand": {
-      "title": "技能",
-      "loading": "加载技能中...",
-      "matching": "匹配 \"{{query}}\" 的技能",
-      "noMatch": "没有匹配 \"{{query}}\" 的技能",
+      "title": "命令与技能",
+      "loading": "加载中...",
+      "matching": "匹配 \"{{query}}\"",
+      "noMatch": "没有匹配 \"{{query}}\" 的结果",
       "noSkills": "没有可用的活动技能",
       "noItems": "暂无可用命令或技能",
       "groupCommands": "命令",
-      "groupSkills": "技能"
+      "groupSkills": "技能",
+      "commandBehavior": "作为斜杠命令运行；修改仍遵循项目权限。",
+      "skillBehavior": "将此技能固定到下一条提示词，不会立即发送。",
+      "hint": {
+        "mode": "模式",
+        "checkpoint": "检查点",
+        "readOnly": "只读",
+        "review": "审查",
+        "skill": "技能"
+      }
     },
     "shortcuts": {
       "title": "键盘快捷键",

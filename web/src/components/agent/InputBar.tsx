@@ -40,6 +40,8 @@ import { MentionPicker } from './MentionPicker';
 import { QueuedPromptStrip } from './QueuedPromptStrip';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
+import type { AgentRunMode } from './run/agentRunViewModel';
+
 interface InputBarProps {
   onSend: (
     content: string,
@@ -56,6 +58,8 @@ interface InputBarProps {
   conversationId?: string | undefined;
   onTogglePlanMode?: (() => void) | undefined;
   isPlanMode?: boolean | undefined;
+  runMode?: AgentRunMode | undefined;
+  onRunModeChange?: ((mode: AgentRunMode) => void) | undefined;
   activeAgentId?: string | undefined;
   onAgentSelect?: ((agentId: string) => void) | undefined;
   ref?: React.Ref<HTMLTextAreaElement>;
@@ -97,6 +101,8 @@ export const InputBar = memo<InputBarProps>(
     conversationId,
     onTogglePlanMode,
     isPlanMode,
+    runMode,
+    onRunModeChange,
     activeAgentId,
     onAgentSelect,
     ref,
@@ -702,6 +708,8 @@ export const InputBar = memo<InputBarProps>(
             disabled={disabled}
             onTogglePlanMode={onTogglePlanMode}
             isPlanMode={isPlanMode}
+            runMode={runMode}
+            onRunModeChange={onRunModeChange}
             onAgentSelect={onAgentSelect}
             activeAgentId={activeAgentId}
             charCount={charCount}

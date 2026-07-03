@@ -24,8 +24,10 @@ import { AgentSwitcher } from './AgentSwitcher';
 import { LlmOverridePopover } from './chat/LlmOverridePopover';
 import { ModelSwitchPopover } from './chat/ModelSwitchPopover';
 import { VoiceWaveform } from './chat/VoiceWaveform';
+import { AgentRunModeSelector } from './run/AgentRunModeSelector';
 
 import type { PendingAttachment } from './FileUploader';
+import type { AgentRunMode } from './run/agentRunViewModel';
 
 export interface InputToolbarProps {
   /** Ref to the hidden file input */
@@ -52,6 +54,8 @@ export interface InputToolbarProps {
   /** Plan mode */
   onTogglePlanMode?: (() => void) | undefined;
   isPlanMode?: boolean | undefined;
+  runMode?: AgentRunMode | undefined;
+  onRunModeChange?: ((mode: AgentRunMode) => void) | undefined;
   /** Agent switcher */
   onAgentSelect?: ((agentId: string) => void) | undefined;
   activeAgentId?: string | undefined;
@@ -81,6 +85,8 @@ export const InputToolbar = memo<InputToolbarProps>(
     disabled,
     onTogglePlanMode,
     isPlanMode,
+    runMode,
+    onRunModeChange,
     onAgentSelect,
     activeAgentId,
     charCount,
@@ -258,24 +264,31 @@ export const InputToolbar = memo<InputToolbarProps>(
           data-testid="input-toolbar-actions"
           className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1"
         >
-          {onTogglePlanMode && (
-            <LazyTooltip
-              title={
-                isPlanMode
-                  ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')
-                  : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
-              }
-            >
-              <button
-                type="button"
-                onClick={onTogglePlanMode}
-                disabled={isStreaming}
-                aria-label={
+          {onRunModeChange ? (
+            <AgentRunModeSelector
+              mode={runMode ?? (isPlanMode ? 'plan' : 'build')}
+              onModeChange={onRunModeChange}
+              disabled={isStreaming}
+            />
+          ) : (
+            onTogglePlanMode && (
+              <LazyTooltip
+                title={
                   isPlanMode
                     ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')
                     : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
                 }
-                className={`
+              >
+                <button
+                  type="button"
+                  onClick={onTogglePlanMode}
+                  disabled={isStreaming}
+                  aria-label={
+                    isPlanMode
+                      ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')
+                      : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
+                  }
+                  className={`
                   flex items-center justify-center h-8 w-8 rounded-lg transition-colors
                   ${
                     isPlanMode
@@ -283,10 +296,11 @@ export const InputToolbar = memo<InputToolbarProps>(
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 disabled:opacity-40'
                   }
                 `}
-              >
-                <ListChecks size={16} />
-              </button>
-            </LazyTooltip>
+                >
+                  <ListChecks size={16} />
+                </button>
+              </LazyTooltip>
+            )
           )}
 
           {charCount > 0 && (
@@ -325,9 +339,7 @@ export const InputToolbar = memo<InputToolbarProps>(
                 transition-colors duration-200
               `}
             >
-              <span className="hidden min-[1280px]:inline">
-                {t('agent.inputBar.send', 'Send')}
-              </span>
+              <span className="hidden min-[1280px]:inline">{t('agent.inputBar.send', 'Send')}</span>
             </LazyButton>
           )}
         </div>

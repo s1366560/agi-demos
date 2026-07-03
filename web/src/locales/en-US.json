@@ -981,6 +981,7 @@
         "cwd": "Working directory",
         "projectId": "Project ID",
         "prompt": "Prompt",
+        "defaultPrompt": "Reply with PONG only.",
         "timeout": "Timeout seconds",
         "success": "ACP test succeeded",
         "failure": "ACP test failed",
@@ -1003,6 +1004,9 @@
         "urlRequired": "URL is required for WebSocket transport.",
         "cwdRequired": "Working directory is required."
       }
+    },
+    "backendStores": {
+      "testSucceeded": "Connection test succeeded. Version: {{version}}"
     },
     "create_modal": {
       "title": "Create Tenant",
@@ -6050,7 +6054,82 @@
         "aborted": "Aborted"
       }
     },
+    "run": {
+      "status": {
+        "running": "Running",
+        "waiting": "Needs input",
+        "blocked": "Blocked",
+        "idle": "Idle"
+      },
+      "mode": {
+        "plan": "Plan",
+        "build": "Build",
+        "auto": "Auto",
+        "readOnly": "Read-only",
+        "planDescription": "Explore and propose a plan before editing.",
+        "buildDescription": "Run the normal edit and verify loop.",
+        "autoDescription": "Build mode with fewer interruptions when policy allows.",
+        "readOnlyDescription": "Plan-mode execution with no file mutations."
+      },
+      "modeSelector": {
+        "title": "Agent mode",
+        "description": "Auto and Read-only are UI-level intent presets in this release; backend approvals still use HITL.",
+        "tooltip": "Choose agent execution mode",
+        "aria": "Choose agent execution mode"
+      },
+      "checkpoint": {
+        "finished": "All checkpoints complete",
+        "none": "No checkpoint yet",
+        "progress": "{{done}}/{{total}} - {{checkpoint}}"
+      },
+      "blocker": {
+        "doomLoop": "Repeated tool loop detected",
+        "hitl": "{{count}} user input request pending",
+        "taskFailed": "Task failure needs review"
+      },
+      "verification": {
+        "tests": "Tests evidence ready",
+        "diff": "Diff evidence ready",
+        "artifacts": "Artifacts ready",
+        "none": "No verification evidence"
+      },
+      "statusStrip": {
+        "aria": "Agent run status"
+      },
+      "agents": {
+        "summary": "{{running}} running / {{total}} agents"
+      },
+      "evidence": {
+        "summary": "{{count}} evidence"
+      },
+      "openInspector": "Inspector",
+      "overview": {
+        "status": "Status",
+        "currentTool": "Current tool: {{tool}}",
+        "mode": "Mode",
+        "policyHint": "Execution still respects HITL approvals and project policy.",
+        "plan": "Plan",
+        "taskProgress": "{{done}}/{{total}} done",
+        "noTasks": "No tasks",
+        "agents": "Agents",
+        "agentCount": "{{running}} running / {{total}} total",
+        "userInput": "User input",
+        "hitlCount": "{{count}} pending",
+        "hitlBreakdown": "{{permissions}} permissions, {{decisions}} decisions, {{configs}} configs",
+        "evidence": "Evidence",
+        "evidenceCount": "{{count}} items",
+        "evidenceBreakdown": "{{tests}} tests, {{diffs}} diffs, {{screenshots}} screenshots, {{logs}} logs",
+        "latestTrace": "Latest trace"
+      },
+      "hitl": {
+        "title": "Permission & HITL center",
+        "empty": "No pending approvals, decisions, configuration, or clarification requests.",
+        "singleUseNotice": "Respond in the inline chat card. Persistent permission rules are not enabled in this release, so remembered choices are treated as single-use unless the backend records a policy.",
+        "permissionAction": "Action: {{action}} - Risk: {{risk}}"
+      }
+    },
     "rightPanel": {
+      "runSummary": "{{tasks}} tasks - {{agents}} agents - {{hitl}} waiting",
       "taskCount": "{{count}} item",
       "taskCount_one": "{{count}} item",
       "taskCount_other": "{{count}} items",
@@ -6059,11 +6138,25 @@
       "list": "List",
       "lanes": "Lanes",
       "tabs": {
+        "overview": "Agent Run",
+        "overviewShort": "Overview",
+        "plan": "Plan",
         "tasks": "Tasks",
         "agent": "Session",
+        "trace": "Trace",
         "insights": "Insights",
         "agents": "Agents",
+        "decisions": "HITL",
+        "evidence": "Evidence",
         "graph": "Graph"
+      },
+      "evidence": {
+        "title": "Evidence summary",
+        "description": "Evidence collected from artifacts. Open the evidence drawer for details and previews.",
+        "tests": "Tests",
+        "diffs": "Diffs",
+        "screenshots": "Screenshots",
+        "logs": "Logs"
       },
       "workspacePlan": {
         "planSummary": "{{done}}/{{total}} plan nodes done",
@@ -6695,14 +6788,23 @@
       "searchFailed": "Failed to search mentions"
     },
     "slashCommand": {
-      "title": "Skills",
-      "loading": "Loading skills...",
-      "matching": "Skills matching \"{{query}}\"",
-      "noMatch": "No skills matching \"{{query}}\"",
+      "title": "Commands & Skills",
+      "loading": "Loading...",
+      "matching": "Matching \"{{query}}\"",
+      "noMatch": "No matches for \"{{query}}\"",
       "noSkills": "No active skills available",
       "noItems": "No commands or skills available",
       "groupCommands": "Commands",
-      "groupSkills": "Skills"
+      "groupSkills": "Skills",
+      "commandBehavior": "Runs as a slash command; mutations still follow project permissions.",
+      "skillBehavior": "Pins this skill to the next prompt without sending immediately.",
+      "hint": {
+        "mode": "Mode",
+        "checkpoint": "Checkpoint",
+        "readOnly": "Read-only",
+        "review": "Review",
+        "skill": "Skill"
+      }
     },
     "shortcuts": {
       "title": "Keyboard Shortcuts",
