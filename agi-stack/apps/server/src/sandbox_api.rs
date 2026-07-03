@@ -3462,18 +3462,34 @@ async fn proxy_project_desktop_response(
     Ok(response)
 }
 
-async fn proxy_http_service_response(
-    project_id: &str,
-    service_id: &str,
-    service_info: &HttpServiceProxyInfo,
-    path: &str,
-    raw_query: Option<&str>,
+struct HttpServiceProxyResponseInput<'a> {
+    project_id: &'a str,
+    service_id: &'a str,
+    service_info: &'a HttpServiceProxyInfo,
+    path: &'a str,
+    raw_query: Option<&'a str>,
     method: Method,
     request_headers: HeaderMap,
     request_body: Vec<u8>,
-    raw_key: &str,
+    raw_key: &'a str,
     secure_cookie: bool,
+}
+
+async fn proxy_http_service_response(
+    input: HttpServiceProxyResponseInput<'_>,
 ) -> SandboxApiResult<Response> {
+    let HttpServiceProxyResponseInput {
+        project_id,
+        service_id,
+        service_info,
+        path,
+        raw_query,
+        method,
+        request_headers,
+        request_body,
+        raw_key,
+        secure_cookie,
+    } = input;
     if service_info.source_type != HttpServiceSourceType::SandboxInternal {
         return Err(SandboxApiError::bad_request(
             "HTTP proxy is only available for sandbox_internal services",
@@ -5026,7 +5042,7 @@ async fn stop_project_http_service(
     }))
 }
 
-async fn proxy_project_http_service_impl(
+struct HttpServiceRouteRequest {
     app: AppState,
     identity: Identity,
     raw_key: RawApiKey,
@@ -5035,7 +5051,21 @@ async fn proxy_project_http_service_impl(
     path: String,
     raw_query: Option<String>,
     req: Request<Body>,
+}
+
+async fn proxy_project_http_service_impl(
+    input: HttpServiceRouteRequest,
 ) -> SandboxApiResult<Response> {
+    let HttpServiceRouteRequest {
+        app,
+        identity,
+        raw_key,
+        project_id,
+        service_id,
+        path,
+        raw_query,
+        req,
+    } = input;
     ensure_project_access(&app, &identity, &project_id).await?;
     let service_info = app
         .sandboxes
@@ -5049,18 +5079,18 @@ async fn proxy_project_http_service_impl(
         .await
         .map_err(|_| SandboxApiError::bad_request("Request body too large"))?
         .to_vec();
-    proxy_http_service_response(
-        &project_id,
-        &service_id,
-        &service_info,
-        &path,
-        raw_query.as_deref(),
+    proxy_http_service_response(HttpServiceProxyResponseInput {
+        project_id: &project_id,
+        service_id: &service_id,
+        service_info: &service_info,
+        path: &path,
+        raw_query: raw_query.as_deref(),
         method,
-        headers,
-        body,
-        &raw_key.0,
+        request_headers: headers,
+        request_body: body,
+        raw_key: &raw_key.0,
         secure_cookie,
-    )
+    })
     .await
 }
 
@@ -5072,16 +5102,16 @@ async fn proxy_project_http_service_root(
     RawQuery(raw_query): RawQuery,
     req: Request<Body>,
 ) -> SandboxApiResult<Response> {
-    proxy_project_http_service_impl(
+    proxy_project_http_service_impl(HttpServiceRouteRequest {
         app,
         identity,
         raw_key,
         project_id,
         service_id,
-        String::new(),
+        path: String::new(),
         raw_query,
         req,
-    )
+    })
     .await
 }
 
@@ -5093,13 +5123,20 @@ async fn proxy_project_http_service_path(
     RawQuery(raw_query): RawQuery,
     req: Request<Body>,
 ) -> SandboxApiResult<Response> {
-    proxy_project_http_service_impl(
-        app, identity, raw_key, project_id, service_id, path, raw_query, req,
-    )
+    proxy_project_http_service_impl(HttpServiceRouteRequest {
+        app,
+        identity,
+        raw_key,
+        project_id,
+        service_id,
+        path,
+        raw_query,
+        req,
+    })
     .await
 }
 
-async fn proxy_project_http_service_ws_impl(
+struct HttpServiceWsRouteRequest {
     app: AppState,
     identity: Identity,
     project_id: String,
@@ -5108,7 +5145,21 @@ async fn proxy_project_http_service_ws_impl(
     raw_query: Option<String>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
+}
+
+async fn proxy_project_http_service_ws_impl(
+    input: HttpServiceWsRouteRequest,
 ) -> SandboxApiResult<Response> {
+    let HttpServiceWsRouteRequest {
+        app,
+        identity,
+        project_id,
+        service_id,
+        path,
+        raw_query,
+        headers,
+        ws,
+    } = input;
     ensure_project_access(&app, &identity, &project_id).await?;
     let Some(service_info) = app
         .sandboxes
@@ -5147,16 +5198,16 @@ async fn proxy_project_http_service_ws_root(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> SandboxApiResult<Response> {
-    proxy_project_http_service_ws_impl(
+    proxy_project_http_service_ws_impl(HttpServiceWsRouteRequest {
         app,
         identity,
         project_id,
         service_id,
-        String::new(),
+        path: String::new(),
         raw_query,
         headers,
         ws,
-    )
+    })
     .await
 }
 
@@ -5168,9 +5219,16 @@ async fn proxy_project_http_service_ws_path(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> SandboxApiResult<Response> {
-    proxy_project_http_service_ws_impl(
-        app, identity, project_id, service_id, path, raw_query, headers, ws,
-    )
+    proxy_project_http_service_ws_impl(HttpServiceWsRouteRequest {
+        app,
+        identity,
+        project_id,
+        service_id,
+        path,
+        raw_query,
+        headers,
+        ws,
+    })
     .await
 }
 
@@ -5321,6 +5379,63 @@ mod tests {
     use super::*;
     use agistack_adapters_mem::InMemoryContainerRuntime;
     use agistack_core::ports::CoreResult;
+    use tokio_tungstenite::tungstenite::handshake::server::{
+        ErrorResponse as WsHandshakeErrorResponse, Request as WsHandshakeRequest,
+        Response as WsHandshakeResponse,
+    };
+
+    type WsHandshakeResult = Result<WsHandshakeResponse, WsHandshakeErrorResponse>;
+    type WsOriginRequestSender = std::sync::mpsc::Sender<(String, Option<String>)>;
+    type WsDesktopRequestSender = std::sync::mpsc::Sender<(String, Option<String>, Option<String>)>;
+
+    #[allow(clippy::result_large_err)]
+    fn capture_ws_origin_request(
+        req: &WsHandshakeRequest,
+        response: WsHandshakeResponse,
+        tx: &WsOriginRequestSender,
+    ) -> WsHandshakeResult {
+        let origin = req
+            .headers()
+            .get("origin")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        tx.send((req.uri().to_string(), origin)).unwrap();
+        Ok(response)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn capture_desktop_ws_request(
+        req: &WsHandshakeRequest,
+        mut response: WsHandshakeResponse,
+        tx: &WsDesktopRequestSender,
+    ) -> WsHandshakeResult {
+        let origin = req
+            .headers()
+            .get("origin")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let protocol = req
+            .headers()
+            .get("sec-websocket-protocol")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        response.headers_mut().insert(
+            "sec-websocket-protocol",
+            HeaderValue::from_static(DESKTOP_WEBSOCKET_SUBPROTOCOL),
+        );
+        tx.send((req.uri().to_string(), origin, protocol)).unwrap();
+        Ok(response)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn capture_mcp_ws_request(
+        req: &WsHandshakeRequest,
+        response: WsHandshakeResponse,
+        tx: &std::sync::mpsc::Sender<String>,
+    ) -> WsHandshakeResult {
+        tx.send(req.uri().to_string()).unwrap();
+        Ok(response)
+    }
 
     #[derive(Default)]
     struct StaticConfigSource {
@@ -6410,18 +6525,18 @@ mod tests {
         headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
         headers.insert("x-trace-id", HeaderValue::from_static("trace-1"));
 
-        let response = proxy_http_service_response(
-            "p1",
-            "web",
-            &service_info,
-            "echo",
-            Some("token=ms_sk_secret&q=hello+world"),
-            Method::POST,
-            headers,
-            b"payload".to_vec(),
-            "ms_sk_secret",
-            true,
-        )
+        let response = proxy_http_service_response(HttpServiceProxyResponseInput {
+            project_id: "p1",
+            service_id: "web",
+            service_info: &service_info,
+            path: "echo",
+            raw_query: Some("token=ms_sk_secret&q=hello+world"),
+            method: Method::POST,
+            request_headers: headers,
+            request_body: b"payload".to_vec(),
+            raw_key: "ms_sk_secret",
+            secure_cookie: true,
+        })
         .await
         .unwrap();
 
@@ -6621,19 +6736,11 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
+            // accept_hdr_async fixes this callback result type to tungstenite's ErrorResponse.
+            #[allow(clippy::result_large_err)]
             let ws = tokio_tungstenite::accept_hdr_async(
                 stream,
-                |req: &tokio_tungstenite::tungstenite::handshake::server::Request, response| {
-                    let origin = req
-                        .headers()
-                        .get("origin")
-                        .and_then(|value| value.to_str().ok())
-                        .map(str::to_string);
-                    tx.send((req.uri().to_string(), origin)).unwrap();
-                    Ok::<_, tokio_tungstenite::tungstenite::handshake::server::ErrorResponse>(
-                        response,
-                    )
-                },
+                |req: &WsHandshakeRequest, response| capture_ws_origin_request(req, response, &tx),
             )
             .await
             .unwrap();
@@ -6697,29 +6804,11 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
+            // accept_hdr_async fixes this callback result type to tungstenite's ErrorResponse.
+            #[allow(clippy::result_large_err)]
             let ws = tokio_tungstenite::accept_hdr_async(
                 stream,
-                |req: &tokio_tungstenite::tungstenite::handshake::server::Request,
-                 mut response: tokio_tungstenite::tungstenite::handshake::server::Response| {
-                    let origin = req
-                        .headers()
-                        .get("origin")
-                        .and_then(|value| value.to_str().ok())
-                        .map(str::to_string);
-                    let protocol = req
-                        .headers()
-                        .get("sec-websocket-protocol")
-                        .and_then(|value| value.to_str().ok())
-                        .map(str::to_string);
-                    response.headers_mut().insert(
-                        "sec-websocket-protocol",
-                        HeaderValue::from_static(DESKTOP_WEBSOCKET_SUBPROTOCOL),
-                    );
-                    tx.send((req.uri().to_string(), origin, protocol)).unwrap();
-                    Ok::<_, tokio_tungstenite::tungstenite::handshake::server::ErrorResponse>(
-                        response,
-                    )
-                },
+                |req: &WsHandshakeRequest, response| capture_desktop_ws_request(req, response, &tx),
             )
             .await
             .unwrap();
@@ -6785,18 +6874,12 @@ mod tests {
         let (frame_tx, frame_rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
+            // accept_hdr_async fixes this callback result type to tungstenite's ErrorResponse.
+            #[allow(clippy::result_large_err)]
             let ws = tokio_tungstenite::accept_hdr_async(
                 stream,
-                |req: &tokio_tungstenite::tungstenite::handshake::server::Request, response| {
-                    let origin = req
-                        .headers()
-                        .get("origin")
-                        .and_then(|value| value.to_str().ok())
-                        .map(str::to_string);
-                    request_tx.send((req.uri().to_string(), origin)).unwrap();
-                    Ok::<_, tokio_tungstenite::tungstenite::handshake::server::ErrorResponse>(
-                        response,
-                    )
+                |req: &WsHandshakeRequest, response| {
+                    capture_ws_origin_request(req, response, &request_tx)
                 },
             )
             .await
@@ -6899,14 +6982,11 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
+            // accept_hdr_async fixes this callback result type to tungstenite's ErrorResponse.
+            #[allow(clippy::result_large_err)]
             let ws = tokio_tungstenite::accept_hdr_async(
                 stream,
-                |req: &tokio_tungstenite::tungstenite::handshake::server::Request, response| {
-                    tx.send(req.uri().to_string()).unwrap();
-                    Ok::<_, tokio_tungstenite::tungstenite::handshake::server::ErrorResponse>(
-                        response,
-                    )
-                },
+                |req: &WsHandshakeRequest, response| capture_mcp_ws_request(req, response, &tx),
             )
             .await
             .unwrap();

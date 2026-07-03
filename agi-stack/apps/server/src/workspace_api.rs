@@ -134,6 +134,16 @@ const OPERATOR_CLEARED_ATTEMPT_KEYS: &[&str] = &[
     "worktree_integration_worktree_path",
 ];
 
+pub(crate) struct WorkspaceReplyUpdateInput<'a> {
+    pub(crate) user_id: &'a str,
+    pub(crate) tenant_id: &'a str,
+    pub(crate) project_id: &'a str,
+    pub(crate) workspace_id: &'a str,
+    pub(crate) post_id: &'a str,
+    pub(crate) reply_id: &'a str,
+    pub(crate) body: BlackboardReplyUpdatePayload,
+}
+
 #[async_trait]
 pub(crate) trait WorkspaceService: Send + Sync {
     async fn create_workspace(
@@ -450,13 +460,7 @@ pub(crate) trait WorkspaceService: Send + Sync {
 
     async fn update_reply(
         &self,
-        user_id: &str,
-        tenant_id: &str,
-        project_id: &str,
-        workspace_id: &str,
-        post_id: &str,
-        reply_id: &str,
-        body: BlackboardReplyUpdatePayload,
+        input: WorkspaceReplyUpdateInput<'_>,
     ) -> Result<BlackboardReplyView, WorkspaceApiError>;
 
     async fn delete_reply(
@@ -2072,16 +2076,16 @@ impl WorkspaceService for PgWorkspaceService {
                 .map_err(WorkspaceApiError::internal)?;
         }
         self.repo
-            .create_plan_event(operator_plan_event(
-                &plan.id,
+            .create_plan_event(operator_plan_event(OperatorPlanEventInput {
+                plan_id: &plan.id,
                 workspace_id,
                 node_id,
                 attempt_id,
-                "operator_replan_requested",
-                user_id,
-                json!({"reason": reason}),
-                now,
-            ))
+                event_type: "operator_replan_requested",
+                actor_id: user_id,
+                payload_json: json!({"reason": reason}),
+                created_at: now,
+            }))
             .await
             .map_err(WorkspaceApiError::internal)?;
         self.repo
@@ -2159,16 +2163,16 @@ impl WorkspaceService for PgWorkspaceService {
                 .map_err(WorkspaceApiError::internal)?;
         }
         self.repo
-            .create_plan_event(operator_plan_event(
-                &plan.id,
+            .create_plan_event(operator_plan_event(OperatorPlanEventInput {
+                plan_id: &plan.id,
                 workspace_id,
                 node_id,
                 attempt_id,
-                "operator_node_reopened",
-                user_id,
-                json!({"reason": reason}),
-                now,
-            ))
+                event_type: "operator_node_reopened",
+                actor_id: user_id,
+                payload_json: json!({"reason": reason}),
+                created_at: now,
+            }))
             .await
             .map_err(WorkspaceApiError::internal)?;
         self.repo
@@ -2269,16 +2273,16 @@ impl WorkspaceService for PgWorkspaceService {
                 .map_err(WorkspaceApiError::internal)?;
         }
         self.repo
-            .create_plan_event(operator_plan_event(
-                &plan.id,
+            .create_plan_event(operator_plan_event(OperatorPlanEventInput {
+                plan_id: &plan.id,
                 workspace_id,
                 node_id,
                 attempt_id,
-                "operator_review_accepted",
-                user_id,
-                json!({"reason": reason, "evidence_refs": evidence_refs}),
-                now,
-            ))
+                event_type: "operator_review_accepted",
+                actor_id: user_id,
+                payload_json: json!({"reason": reason, "evidence_refs": evidence_refs}),
+                created_at: now,
+            }))
             .await
             .map_err(WorkspaceApiError::internal)?;
         Ok(WorkspacePlanActionResultView {
@@ -3097,14 +3101,17 @@ impl WorkspaceService for PgWorkspaceService {
 
     async fn update_reply(
         &self,
-        user_id: &str,
-        tenant_id: &str,
-        project_id: &str,
-        workspace_id: &str,
-        post_id: &str,
-        reply_id: &str,
-        body: BlackboardReplyUpdatePayload,
+        input: WorkspaceReplyUpdateInput<'_>,
     ) -> Result<BlackboardReplyView, WorkspaceApiError> {
+        let WorkspaceReplyUpdateInput {
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            post_id,
+            reply_id,
+            body,
+        } = input;
         self.ensure_workspace_scope_and_access(
             user_id,
             tenant_id,
@@ -4359,16 +4366,18 @@ impl WorkspaceService for DevWorkspaceService {
         if plan_changed {
             state.plans.insert(plan.id.clone(), plan.clone());
         }
-        state.plan_events.push(operator_plan_event(
-            &plan.id,
-            workspace_id,
-            node_id,
-            attempt_id,
-            "operator_replan_requested",
-            user_id,
-            json!({"reason": reason}),
-            now,
-        ));
+        state
+            .plan_events
+            .push(operator_plan_event(OperatorPlanEventInput {
+                plan_id: &plan.id,
+                workspace_id,
+                node_id,
+                attempt_id,
+                event_type: "operator_replan_requested",
+                actor_id: user_id,
+                payload_json: json!({"reason": reason}),
+                created_at: now,
+            }));
         let outbox = operator_tick_outbox(
             &plan.id,
             workspace_id,
@@ -4428,16 +4437,18 @@ impl WorkspaceService for DevWorkspaceService {
         if plan_changed {
             state.plans.insert(plan.id.clone(), plan.clone());
         }
-        state.plan_events.push(operator_plan_event(
-            &plan.id,
-            workspace_id,
-            node_id,
-            attempt_id,
-            "operator_node_reopened",
-            user_id,
-            json!({"reason": reason}),
-            now,
-        ));
+        state
+            .plan_events
+            .push(operator_plan_event(OperatorPlanEventInput {
+                plan_id: &plan.id,
+                workspace_id,
+                node_id,
+                attempt_id,
+                event_type: "operator_node_reopened",
+                actor_id: user_id,
+                payload_json: json!({"reason": reason}),
+                created_at: now,
+            }));
         let outbox = operator_tick_outbox(
             &plan.id,
             workspace_id,
@@ -4518,16 +4529,18 @@ impl WorkspaceService for DevWorkspaceService {
                 now,
             );
         }
-        state.plan_events.push(operator_plan_event(
-            &plan.id,
-            workspace_id,
-            node_id,
-            attempt_id,
-            "operator_review_accepted",
-            user_id,
-            json!({"reason": reason, "evidence_refs": evidence_refs}),
-            now,
-        ));
+        state
+            .plan_events
+            .push(operator_plan_event(OperatorPlanEventInput {
+                plan_id: &plan.id,
+                workspace_id,
+                node_id,
+                attempt_id,
+                event_type: "operator_review_accepted",
+                actor_id: user_id,
+                payload_json: json!({"reason": reason, "evidence_refs": evidence_refs}),
+                created_at: now,
+            }));
         Ok(WorkspacePlanActionResultView {
             ok: true,
             message: "Plan node accepted after human review.".to_string(),
@@ -5309,14 +5322,16 @@ impl WorkspaceService for DevWorkspaceService {
 
     async fn update_reply(
         &self,
-        user_id: &str,
-        _tenant_id: &str,
-        _project_id: &str,
-        workspace_id: &str,
-        post_id: &str,
-        reply_id: &str,
-        body: BlackboardReplyUpdatePayload,
+        input: WorkspaceReplyUpdateInput<'_>,
     ) -> Result<BlackboardReplyView, WorkspaceApiError> {
+        let WorkspaceReplyUpdateInput {
+            user_id,
+            workspace_id,
+            post_id,
+            reply_id,
+            body,
+            ..
+        } = input;
         self.require_dev_user(user_id)?;
         validate_non_empty(&body.content, "content")?;
         let mut state = self.state.lock().expect("workspace dev state");
@@ -7077,16 +7092,28 @@ fn operator_tick_outbox(
     )
 }
 
-fn operator_plan_event(
-    plan_id: &str,
-    workspace_id: &str,
-    node_id: &str,
+struct OperatorPlanEventInput<'a> {
+    plan_id: &'a str,
+    workspace_id: &'a str,
+    node_id: &'a str,
     attempt_id: Option<String>,
-    event_type: &str,
-    actor_id: &str,
+    event_type: &'a str,
+    actor_id: &'a str,
     payload_json: Value,
     created_at: DateTime<Utc>,
-) -> WorkspacePlanEventRecord {
+}
+
+fn operator_plan_event(input: OperatorPlanEventInput<'_>) -> WorkspacePlanEventRecord {
+    let OperatorPlanEventInput {
+        plan_id,
+        workspace_id,
+        node_id,
+        attempt_id,
+        event_type,
+        actor_id,
+        payload_json,
+        created_at,
+    } = input;
     WorkspacePlanEventRecord {
         id: new_id(),
         plan_id: plan_id.to_string(),
@@ -9041,15 +9068,15 @@ async fn update_reply(
     Json(body): Json<BlackboardReplyUpdatePayload>,
 ) -> Result<Json<BlackboardReplyView>, WorkspaceApiError> {
     app.workspaces
-        .update_reply(
-            &identity.user_id,
-            &tenant_id,
-            &project_id,
-            &workspace_id,
-            &post_id,
-            &reply_id,
+        .update_reply(WorkspaceReplyUpdateInput {
+            user_id: &identity.user_id,
+            tenant_id: &tenant_id,
+            project_id: &project_id,
+            workspace_id: &workspace_id,
+            post_id: &post_id,
+            reply_id: &reply_id,
             body,
-        )
+        })
         .await
         .map(Json)
 }
