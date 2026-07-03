@@ -226,7 +226,7 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
                 &workspace,
                 &contract,
                 &run,
-                &source_publish_failure,
+                source_publish_failure,
                 completed_at,
             )
             .await?;

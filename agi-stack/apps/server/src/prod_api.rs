@@ -73,7 +73,7 @@ type ApiResult<T> = Result<T, ApiError>;
 /// pydantic serializes the Python `created_at` (`DateTime(timezone=True)`).
 fn rfc3339(ms: i64) -> String {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
-        .unwrap_or_else(|| chrono::DateTime::<chrono::Utc>::from_timestamp_millis(0).unwrap())
+        .unwrap_or(chrono::DateTime::<chrono::Utc>::UNIX_EPOCH)
         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 

@@ -2181,7 +2181,7 @@ struct ListProjectSandboxesQuery {
 
 fn rfc3339(ms: i64) -> String {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
-        .unwrap_or_else(|| chrono::DateTime::<chrono::Utc>::from_timestamp_millis(0).unwrap())
+        .unwrap_or(chrono::DateTime::<chrono::Utc>::UNIX_EPOCH)
         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
@@ -2884,7 +2884,7 @@ fn rewrite_http_service_location(
 
 fn datetime_from_ms(ms: i64) -> chrono::DateTime<chrono::Utc> {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
-        .unwrap_or_else(|| chrono::DateTime::<chrono::Utc>::from_timestamp_millis(0).unwrap())
+        .unwrap_or(chrono::DateTime::<chrono::Utc>::UNIX_EPOCH)
 }
 
 fn profile_from_metadata(metadata: &serde_json::Value) -> SandboxProfile {

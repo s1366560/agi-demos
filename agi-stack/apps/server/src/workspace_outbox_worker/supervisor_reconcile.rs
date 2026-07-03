@@ -634,7 +634,7 @@ pub(super) fn accepted_projection_already_complete_base(
             .get("last_verification_attempt_id")
             .and_then(Value::as_str)
             == Some(attempt.id.as_str())
-        && accepted_worktree_projection_complete_for_node(node, attempt, &metadata)
+        && accepted_worktree_projection_complete_for_node(node, attempt, metadata)
 }
 
 pub(super) fn accepted_attempt_summary(attempt: &WorkspaceTaskSessionAttemptRecord) -> String {

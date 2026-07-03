@@ -174,9 +174,11 @@ impl WorkerLaunchAdmissionHandler {
         if !worker_stream_replay_metadata_matches_attempt(&metadata, input.attempt_id) {
             return Ok((worker_stream_watchdog::StreamState::default(), None));
         }
-        let mut state = worker_stream_watchdog::StreamState::default();
-        state.stream_message_id = string_from_map(&metadata, "worker_stream_message_id");
-        state.last_stream_event_type = string_from_map(&metadata, "worker_stream_last_event_type");
+        let state = worker_stream_watchdog::StreamState {
+            stream_message_id: string_from_map(&metadata, "worker_stream_message_id"),
+            last_stream_event_type: string_from_map(&metadata, "worker_stream_last_event_type"),
+            ..Default::default()
+        };
         let last_event_time_us = metadata
             .get("worker_stream_last_event_time_us")
             .and_then(Value::as_i64);
@@ -263,10 +265,10 @@ impl WorkerLaunchAdmissionHandler {
         })
         .await?;
         self.patch_worker_stream_replay_metadata(
-            &input,
+            input,
             last_entry_id,
             last_event_time_us,
-            &state,
+            state,
             Some(&outcome),
         )
         .await?;

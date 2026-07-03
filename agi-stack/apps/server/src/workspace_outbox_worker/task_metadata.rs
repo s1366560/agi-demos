@@ -37,7 +37,7 @@ pub(super) fn attempt_cancelled_because_parent_done_without_output(
 pub(super) fn attempt_cancelled_because_parent_done(
     attempt: &WorkspaceTaskSessionAttemptRecord,
 ) -> bool {
-    if attempt.status.trim().to_ascii_lowercase() != "cancelled" {
+    if !attempt.status.trim().eq_ignore_ascii_case("cancelled") {
         return false;
     }
     attempt.adjudication_reason.as_deref() == Some("recovery:parent_done")
@@ -207,12 +207,12 @@ pub(super) fn node_metadata_commit_refs(metadata: &Map<String, Value>) -> Vec<St
 
 pub(super) fn prefixed_ref(reference: &str, prefix: &str) -> Option<String> {
     let trimmed = reference.trim();
-    if trimmed.starts_with(prefix) {
-        return Some(trimmed[prefix.len()..].trim().to_string());
+    if let Some(stripped) = trimmed.strip_prefix(prefix) {
+        return Some(stripped.trim().to_string());
     }
     let artifact_prefix = format!("artifact:{prefix}");
-    if trimmed.starts_with(&artifact_prefix) {
-        return Some(trimmed[artifact_prefix.len()..].trim().to_string());
+    if let Some(stripped) = trimmed.strip_prefix(&artifact_prefix) {
+        return Some(stripped.trim().to_string());
     }
     None
 }
