@@ -1,0 +1,36 @@
+{
+  "action": "import",
+  "skill": {
+    "id": "<uuid>",
+    "tenant_id": "tenant-1",
+    "project_id": null,
+    "name": "alpha-skill",
+    "description": "Searches, installs, and exports agent skills.",
+    "tools": ["Bash", "Read"],
+    "full_content": "---\nname: alpha-skill\ndescription: Searches, installs, and exports agent skills.\nallowed-tools: Bash(git:*) Read\nmetadata:\n  version: \"1.2.3\"\n  author: test-suite\n---\n\n# Alpha Skill\n\nUse when managing Agent Skills packages.\n",
+    "status": "active",
+    "scope": "tenant",
+    "is_system_skill": false,
+    "source": "database",
+    "file_path": null,
+    "created_at": "<iso8601>",
+    "updated_at": "<iso8601>",
+    "metadata": {
+      "agentskills": {
+        "allowed_tools": "Bash(git:*) Read"
+      }
+    },
+    "resource_files": {
+      "references/README.md": "details"
+    },
+    "agent_modes": ["*"],
+    "license": null,
+    "compatibility": null,
+    "allowed_tools_raw": "Bash(git:*) Read",
+    "spec_version": "1.0",
+    "current_version": 1,
+    "version_label": "1.2.3"
+  },
+  "version_number": 1,
+  "version_label": "1.2.3"
+}

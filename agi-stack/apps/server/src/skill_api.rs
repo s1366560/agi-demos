@@ -2,16 +2,16 @@
 //!
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots,
-//! rollback/import/export, filesystem-backed system skill listing, and the
-//! skill-evolution strategy config. Package zip import and evolution jobs remain
-//! Python-owned until their full semantics are migrated.
+//! rollback/import/export, filesystem-backed system skill listing, zip import,
+//! and the skill-evolution strategy config. Evolution jobs remain Python-owned
+//! until their full semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, patch, post},
@@ -35,6 +35,7 @@ pub(crate) type SharedSkills = Arc<dyn SkillService>;
 const SKILL_EVOLUTION_PLUGIN: &str = "skill_evolution";
 
 mod system_skills;
+mod zip_import;
 
 #[async_trait]
 pub(crate) trait SkillService: Send + Sync {
@@ -1909,6 +1910,20 @@ async fn import_skill_package(
     Ok((StatusCode::CREATED, Json(view)))
 }
 
+async fn import_skill_zip_package(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    multipart: Multipart,
+) -> Result<(StatusCode, Json<SkillLifecycleView>), SkillApiError> {
+    let body = zip_import::skill_import_payload_from_multipart(multipart).await?;
+    let view = app
+        .skills
+        .import_package(&identity.user_id, q.tenant_id.as_deref(), body)
+        .await?;
+    Ok((StatusCode::CREATED, Json(view)))
+}
+
 async fn list_system_skills(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -2110,6 +2125,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/v1/skills/", get(list_skills).post(create_skill))
         .route("/api/v1/skills", get(list_skills).post(create_skill))
         .route("/api/v1/skills/import", post(import_skill_package))
+        .route("/api/v1/skills/import/zip", post(import_skill_zip_package))
         .route("/api/v1/skills/system/list", get(list_system_skills))
         .route(
             "/api/v1/skills/evolution/config",
@@ -2773,7 +2789,10 @@ fn fallback_frontmatter(record: &SkillRecord) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Cursor, Write};
     use std::path::Path as FsPath;
+
+    use zip::write::SimpleFileOptions;
 
     const SAMPLE_IMPORT_SKILL_MD: &str = r#"---
 name: alpha-skill
@@ -2788,6 +2807,17 @@ metadata:
 
 Use when managing Agent Skills packages.
 "#;
+
+    fn zip_package(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        for (path, content) in entries {
+            writer.start_file(*path, options).unwrap();
+            writer.write_all(content).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
 
     fn sample_skill_record() -> SkillRecord {
         let at = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
@@ -3174,6 +3204,78 @@ Use when managing Agent Skills packages.
             exported.resource_files,
             json!({"references/README.md":"details"})
         );
+    }
+
+    #[tokio::test]
+    async fn zip_import_package_matches_lifecycle_golden() {
+        let bytes = zip_package(&[
+            ("alpha-skill/SKILL.md", SAMPLE_IMPORT_SKILL_MD.as_bytes()),
+            ("alpha-skill/references/README.md", b"details"),
+            ("outside.txt", b"ignored"),
+        ]);
+        let (skill_md_content, resource_files) =
+            zip_import::parse_skill_zip_package(bytes).await.unwrap();
+        assert_eq!(skill_md_content, SAMPLE_IMPORT_SKILL_MD);
+        assert_eq!(
+            resource_files,
+            BTreeMap::from([("references/README.md".to_string(), "details".to_string())])
+        );
+
+        let service = DevSkillService::new("tenant-1");
+        let imported = service
+            .import_package(
+                "u1",
+                Some("tenant-1"),
+                SkillImportPayload {
+                    skill_md_content,
+                    resource_files,
+                    scope: "tenant".to_string(),
+                    project_id: None,
+                    overwrite: false,
+                    change_summary: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        let actual = serde_json::to_value(imported).unwrap();
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/skill_zip_import_lifecycle.json"
+        ))
+        .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[tokio::test]
+    async fn zip_import_encodes_binary_resources_like_python() {
+        let bytes = zip_package(&[
+            ("skill/SKILL.md", SAMPLE_IMPORT_SKILL_MD.as_bytes()),
+            ("skill/assets/logo.bin", &[0, 159, 146, 150]),
+            ("__MACOSX/ignored", b"ignored"),
+            ("skill/.DS_Store", b"ignored"),
+        ]);
+        let (_, resource_files) = zip_import::parse_skill_zip_package(bytes).await.unwrap();
+        assert_eq!(resource_files.len(), 1);
+        let encoded = resource_files.get("assets/logo.bin").unwrap();
+        assert!(encoded.starts_with("base64:"));
+    }
+
+    #[tokio::test]
+    async fn zip_import_rejects_invalid_archives_and_unsafe_paths() {
+        let invalid = zip_import::parse_skill_zip_package(b"not a zip".to_vec()).await;
+        assert!(matches!(
+            invalid,
+            Err(SkillApiError {
+                status: StatusCode::BAD_REQUEST,
+                ..
+            })
+        ));
+
+        let unsafe_path =
+            zip_import::parse_skill_zip_package(zip_package(&[("../SKILL.md", b"x")])).await;
+        let err = unsafe_path.unwrap_err();
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(err.detail, "Invalid skill zip package");
     }
 
     #[tokio::test]

@@ -535,9 +535,9 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         match_kind: MethodMatchKind::Exact,
     },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
-    // status, versions, rollback, JSON package import, package export, and
-    // skill-evolution config are in Rust; filesystem/system import, zip import,
-    // and evolution job/run/overview siblings remain Python.
+    // status, versions, rollback, JSON/zip package import, package export, and
+    // skill-evolution config are in Rust; filesystem/system import and evolution
+    // job/run/overview siblings remain Python.
     MethodRule {
         method: "GET",
         path: "/api/v1/skills",
@@ -556,6 +556,11 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
     MethodRule {
         method: "POST",
         path: "/api/v1/skills/import",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills/import/zip",
         match_kind: MethodMatchKind::Exact,
     },
     MethodRule {
@@ -1707,6 +1712,7 @@ mod unit {
             (Method::POST, "/api/v1/skills/"),
             (Method::GET, "/api/v1/skills/system/list"),
             (Method::POST, "/api/v1/skills/import"),
+            (Method::POST, "/api/v1/skills/import/zip"),
             (Method::GET, "/api/v1/skills/evolution/config"),
             (Method::PUT, "/api/v1/skills/evolution/config"),
             (Method::GET, "/api/v1/skills/skill-1"),
@@ -1734,7 +1740,8 @@ mod unit {
             (Method::GET, "/api/v1/skills/system"),
             (Method::GET, "/api/v1/skills/system/import"),
             (Method::GET, "/api/v1/skills/system/list/extra"),
-            (Method::POST, "/api/v1/skills/import/zip"),
+            (Method::GET, "/api/v1/skills/import/zip"),
+            (Method::POST, "/api/v1/skills/import/zip/extra"),
             (Method::POST, "/api/v1/skills/evolution/config"),
             (Method::GET, "/api/v1/skills/evolution/config/extra"),
             (Method::GET, "/api/v1/skills/evolution/overview"),
