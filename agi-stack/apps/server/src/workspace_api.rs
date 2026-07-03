@@ -1,14 +1,14 @@
 //! P6 workspace foundation over Python-owned workspace tables.
 //!
 //! This deliberately covers only precise, database-backed resources:
-//! workspaces, workspace tasks, topology nodes/edges, and blackboard
+//! workspaces, workspace chat messages, workspace tasks, topology nodes/edges, and blackboard
 //! posts/replies/files plus transactional plan action/outbox rows. Runtime-heavy
-//! siblings (execution diagnostics, full leader adjudication, chat, autonomy)
+//! siblings (execution diagnostics, full leader adjudication, autonomy)
 //! remain Python-owned until their full semantics are migrated; accept-review
 //! already projects linked attempts to accepted so pending adjudication does not
 //! linger after explicit human acceptance.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -35,9 +35,10 @@ use agistack_adapters_mem::InMemoryObjectStore;
 use agistack_adapters_postgres::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
-    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
-    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    WorkspaceMessageRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
+    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::ObjectStore;
@@ -153,6 +154,35 @@ pub(crate) trait WorkspaceService: Send + Sync {
         project_id: &str,
         workspace_id: &str,
     ) -> Result<WorkspaceView, WorkspaceApiError>;
+
+    async fn send_message(
+        &self,
+        user_id: &str,
+        sender_name: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        body: SendMessagePayload,
+    ) -> Result<MessageView, WorkspaceApiError>;
+
+    async fn list_messages(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: MessageListQuery,
+    ) -> Result<MessageListView, WorkspaceApiError>;
+
+    async fn list_mentions(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        target_id: &str,
+        query: MessageMentionQuery,
+    ) -> Result<MessageListView, WorkspaceApiError>;
 
     async fn get_plan_snapshot(
         &self,
@@ -599,6 +629,31 @@ pub(crate) struct WorkspaceUpdatePayload {
     metadata: Option<Value>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct SendMessagePayload {
+    content: String,
+    #[serde(default = "default_sender_type")]
+    sender_type: String,
+    #[serde(default)]
+    parent_message_id: Option<String>,
+    #[serde(default)]
+    mentions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct MessageListQuery {
+    #[serde(default)]
+    limit: Option<i64>,
+    #[serde(default)]
+    before: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct MessageMentionQuery {
+    #[serde(default)]
+    limit: Option<i64>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct TaskListQuery {
     #[serde(default, rename = "status")]
@@ -893,6 +948,24 @@ pub(crate) struct WorkspaceTaskView {
     blocker_reason: Option<String>,
     completed_at: Option<String>,
     archived_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct MessageView {
+    id: String,
+    workspace_id: String,
+    sender_id: String,
+    sender_type: String,
+    content: String,
+    mentions: Vec<String>,
+    parent_message_id: Option<String>,
+    metadata: Value,
+    created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct MessageListView {
+    items: Vec<MessageView>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1352,6 +1425,36 @@ impl PgWorkspaceService {
             .map_err(WorkspaceApiError::internal)
     }
 
+    async fn enqueue_chat_event(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        event_type: &str,
+        payload: Value,
+    ) -> Result<(), WorkspaceApiError> {
+        self.repo
+            .enqueue_blackboard_outbox(BlackboardOutboxRecord {
+                id: new_id(),
+                workspace_id: workspace_id.to_string(),
+                tenant_id: tenant_id.to_string(),
+                project_id: project_id.to_string(),
+                event_type: event_type.to_string(),
+                payload_json: payload,
+                metadata_json: json!({
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                    "surface_owner": "workspace-chat",
+                    "surface_boundary": "hosted",
+                    "authority_class": "non-authoritative",
+                    "signal_role": "sensing-capable"
+                }),
+                correlation_id: None,
+            })
+            .await
+            .map_err(WorkspaceApiError::internal)
+    }
+
     fn object_key(&self, workspace_id: &str, storage_key: &str) -> String {
         object_key(workspace_id, storage_key)
     }
@@ -1448,6 +1551,131 @@ impl WorkspaceService for PgWorkspaceService {
             .map_err(WorkspaceApiError::internal)?
             .map(WorkspaceView::from)
             .ok_or_else(WorkspaceApiError::workspace_not_found)
+    }
+
+    async fn send_message(
+        &self,
+        user_id: &str,
+        sender_name: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        body: SendMessagePayload,
+    ) -> Result<MessageView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Write,
+        )
+        .await?;
+        validate_non_empty(&body.content, "content")?;
+        if body.sender_type != "human" {
+            return Err(WorkspaceApiError::bad_request(
+                "Invalid workspace chat request",
+            ));
+        }
+        let member_ids = self
+            .repo
+            .list_workspace_member_user_ids(workspace_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let agent_ids = self
+            .repo
+            .list_workspace_agent_ids(workspace_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let mentions = resolve_structured_mentions(&body.mentions, &member_ids, &agent_ids)?;
+        let sender_name = self
+            .repo
+            .get_user_email(user_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .unwrap_or_else(|| sender_name.to_string());
+        let now = Utc::now();
+        let message = self
+            .repo
+            .create_message(WorkspaceMessageRecord {
+                id: new_id(),
+                workspace_id: workspace_id.to_string(),
+                sender_id: user_id.to_string(),
+                sender_type: "human".to_string(),
+                content: body.content,
+                mentions_json: mentions,
+                parent_message_id: body.parent_message_id,
+                metadata_json: json!({ "sender_name": sender_name }),
+                created_at: now,
+            })
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let view = MessageView::from(message);
+        self.enqueue_chat_event(
+            tenant_id,
+            project_id,
+            workspace_id,
+            "workspace_message_created",
+            json!({ "message": &view }),
+        )
+        .await?;
+        Ok(view)
+    }
+
+    async fn list_messages(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: MessageListQuery,
+    ) -> Result<MessageListView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Read,
+        )
+        .await?;
+        let messages = self
+            .repo
+            .list_messages(
+                workspace_id,
+                clamp_limit(query.limit, 50, 200),
+                query.before.as_deref(),
+            )
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(MessageListView {
+            items: messages.into_iter().map(MessageView::from).collect(),
+        })
+    }
+
+    async fn list_mentions(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        target_id: &str,
+        query: MessageMentionQuery,
+    ) -> Result<MessageListView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Read,
+        )
+        .await?;
+        let messages = self
+            .repo
+            .list_messages_mentioning(workspace_id, target_id, clamp_limit(query.limit, 50, 200))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(MessageListView {
+            items: messages.into_iter().map(MessageView::from).collect(),
+        })
     }
 
     async fn get_plan_snapshot(
@@ -3397,6 +3625,7 @@ impl WorkspaceService for PgWorkspaceService {
 struct DevWorkspaceState {
     workspaces: HashMap<String, WorkspaceRecord>,
     tasks: HashMap<String, WorkspaceTaskRecord>,
+    messages: HashMap<String, WorkspaceMessageRecord>,
     task_attempts: HashMap<String, WorkspaceTaskSessionAttemptRecord>,
     nodes: HashMap<String, TopologyNodeRecord>,
     edges: HashMap<String, TopologyEdgeRecord>,
@@ -3536,6 +3765,158 @@ impl WorkspaceService for DevWorkspaceService {
             .cloned()
             .ok_or_else(WorkspaceApiError::workspace_not_found)?;
         Ok(workspace.into())
+    }
+
+    async fn send_message(
+        &self,
+        user_id: &str,
+        sender_name: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        body: SendMessagePayload,
+    ) -> Result<MessageView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        validate_non_empty(&body.content, "content")?;
+        if body.sender_type != "human" {
+            return Err(WorkspaceApiError::bad_request(
+                "Invalid workspace chat request",
+            ));
+        }
+        let mut state = self.state.lock().expect("workspace dev state");
+        let in_scope = state
+            .workspaces
+            .get(workspace_id)
+            .map(|workspace| self.workspace_matches(workspace, tenant_id, project_id))
+            .unwrap_or(false);
+        if !in_scope {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let member_ids = vec![self.dev_user_id.clone()];
+        let agent_ids = Vec::new();
+        let mentions = resolve_structured_mentions(&body.mentions, &member_ids, &agent_ids)?;
+        let message = WorkspaceMessageRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            sender_id: user_id.to_string(),
+            sender_type: "human".to_string(),
+            content: body.content,
+            mentions_json: mentions,
+            parent_message_id: body.parent_message_id,
+            metadata_json: json!({ "sender_name": sender_name }),
+            created_at: Utc::now(),
+        };
+        state.messages.insert(message.id.clone(), message.clone());
+        let view = MessageView::from(message);
+        state.outbox.push(BlackboardOutboxRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            project_id: project_id.to_string(),
+            event_type: "workspace_message_created".to_string(),
+            payload_json: json!({ "message": &view }),
+            metadata_json: json!({
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "surface_owner": "workspace-chat",
+                "surface_boundary": "hosted",
+                "authority_class": "non-authoritative",
+                "signal_role": "sensing-capable"
+            }),
+            correlation_id: None,
+        });
+        Ok(view)
+    }
+
+    async fn list_messages(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: MessageListQuery,
+    ) -> Result<MessageListView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let state = self.state.lock().expect("workspace dev state");
+        let in_scope = state
+            .workspaces
+            .get(workspace_id)
+            .map(|workspace| self.workspace_matches(workspace, tenant_id, project_id))
+            .unwrap_or(false);
+        if !in_scope {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let before = query
+            .before
+            .as_deref()
+            .and_then(|id| state.messages.get(id))
+            .map(|message| (message.created_at, message.id.clone()));
+        let limit = clamp_limit(query.limit, 50, 200) as usize;
+        let mut messages: Vec<_> = state
+            .messages
+            .values()
+            .filter(|message| {
+                message.workspace_id == workspace_id
+                    && before
+                        .as_ref()
+                        .map(|(created_at, id)| {
+                            message.created_at < *created_at
+                                || (message.created_at == *created_at && message.id < *id)
+                        })
+                        .unwrap_or(true)
+            })
+            .cloned()
+            .collect();
+        messages.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
+        Ok(MessageListView {
+            items: messages
+                .into_iter()
+                .take(limit)
+                .map(MessageView::from)
+                .collect(),
+        })
+    }
+
+    async fn list_mentions(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        target_id: &str,
+        query: MessageMentionQuery,
+    ) -> Result<MessageListView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let state = self.state.lock().expect("workspace dev state");
+        let in_scope = state
+            .workspaces
+            .get(workspace_id)
+            .map(|workspace| self.workspace_matches(workspace, tenant_id, project_id))
+            .unwrap_or(false);
+        if !in_scope {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let limit = clamp_limit(query.limit, 50, 200) as usize;
+        let mut messages: Vec<_> = state
+            .messages
+            .values()
+            .filter(|message| {
+                message.workspace_id == workspace_id
+                    && message
+                        .mentions_json
+                        .iter()
+                        .any(|mention| mention == target_id)
+            })
+            .cloned()
+            .collect();
+        messages.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
+        Ok(MessageListView {
+            items: messages
+                .into_iter()
+                .take(limit)
+                .map(MessageView::from)
+                .collect(),
+        })
     }
 
     async fn get_plan_snapshot(
@@ -4163,6 +4544,9 @@ impl WorkspaceService for DevWorkspaceService {
         state
             .tasks
             .retain(|_, task| task.workspace_id != workspace_id);
+        state
+            .messages
+            .retain(|_, message| message.workspace_id != workspace_id);
         state
             .nodes
             .retain(|_, node| node.workspace_id != workspace_id);
@@ -5418,6 +5802,22 @@ impl From<WorkspaceTaskRecord> for WorkspaceTaskView {
             blocker_reason: record.blocker_reason,
             completed_at: record.completed_at.map(iso),
             archived_at: record.archived_at.map(iso),
+        }
+    }
+}
+
+impl From<WorkspaceMessageRecord> for MessageView {
+    fn from(record: WorkspaceMessageRecord) -> Self {
+        Self {
+            id: record.id,
+            workspace_id: record.workspace_id,
+            sender_id: record.sender_id,
+            sender_type: record.sender_type,
+            content: record.content,
+            mentions: record.mentions_json,
+            parent_message_id: record.parent_message_id,
+            metadata: record.metadata_json,
+            created_at: iso(record.created_at),
         }
     }
 }
@@ -7282,6 +7682,50 @@ fn default_post_status() -> String {
     "open".to_string()
 }
 
+fn default_sender_type() -> String {
+    "human".to_string()
+}
+
+fn resolve_structured_mentions(
+    requested: &[String],
+    member_ids: &[String],
+    agent_ids: &[String],
+) -> Result<Vec<String>, WorkspaceApiError> {
+    let requested: Vec<_> = requested
+        .iter()
+        .map(|mention| mention.trim())
+        .filter(|mention| !mention.is_empty())
+        .map(ToOwned::to_owned)
+        .collect();
+    if requested.is_empty() {
+        return Ok(Vec::new());
+    }
+    if requested
+        .iter()
+        .any(|mention| mention.eq_ignore_ascii_case("all"))
+    {
+        return Ok(agent_ids.to_vec());
+    }
+    let valid: HashSet<&str> = member_ids
+        .iter()
+        .chain(agent_ids.iter())
+        .map(String::as_str)
+        .collect();
+    let mut seen = HashSet::new();
+    let mut mentions = Vec::new();
+    for mention in requested {
+        if !valid.contains(mention.as_str()) {
+            return Err(WorkspaceApiError::bad_request(
+                "Invalid workspace chat request",
+            ));
+        }
+        if seen.insert(mention.clone()) {
+            mentions.push(mention);
+        }
+    }
+    Ok(mentions)
+}
+
 fn root_path() -> String {
     "/".to_string()
 }
@@ -7920,6 +8364,62 @@ async fn get_workspace(
 ) -> Result<Json<WorkspaceView>, WorkspaceApiError> {
     app.workspaces
         .get_workspace(&identity.user_id, &tenant_id, &project_id, &workspace_id)
+        .await
+        .map(Json)
+}
+
+async fn send_message(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    Json(body): Json<SendMessagePayload>,
+) -> Result<(StatusCode, Json<MessageView>), WorkspaceApiError> {
+    app.workspaces
+        .send_message(
+            &identity.user_id,
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            body,
+        )
+        .await
+        .map(|view| (StatusCode::CREATED, Json(view)))
+}
+
+async fn list_messages(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    Query(query): Query<MessageListQuery>,
+) -> Result<Json<MessageListView>, WorkspaceApiError> {
+    app.workspaces
+        .list_messages(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            query,
+        )
+        .await
+        .map(Json)
+}
+
+async fn list_mentions(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id, target_id)): Path<(String, String, String, String)>,
+    Query(query): Query<MessageMentionQuery>,
+) -> Result<Json<MessageListView>, WorkspaceApiError> {
+    app.workspaces
+        .list_mentions(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            &target_id,
+            query,
+        )
         .await
         .map(Json)
 }
@@ -8716,6 +9216,14 @@ pub(crate) fn router() -> Router<AppState> {
             get(get_workspace).patch(update_workspace).delete(delete_workspace),
         )
         .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/messages",
+            post(send_message).get(list_messages),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/messages/mentions/:target_id",
+            get(list_mentions),
+        )
+        .route(
             "/api/v1/workspaces/:workspace_id/plan",
             get(get_plan_snapshot),
         )
@@ -8900,6 +9408,34 @@ mod tests {
         assert_golden(
             &WorkspaceTaskView::from(task),
             serde_json::from_str(include_str!("../tests/golden/workspace_task_response.json"))
+                .unwrap(),
+        );
+    }
+
+    #[test]
+    fn workspace_message_responses_match_goldens() {
+        let message = WorkspaceMessageRecord {
+            id: "msg-1".to_string(),
+            workspace_id: "ws-1".to_string(),
+            sender_id: "user-1".to_string(),
+            sender_type: "human".to_string(),
+            content: "Ship P6 chat".to_string(),
+            mentions_json: vec!["user-2".to_string(), "agent-1".to_string()],
+            parent_message_id: None,
+            metadata_json: json!({"sender_name": "Alice"}),
+            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
+        };
+        let view = MessageView::from(message);
+        assert_golden(
+            &view,
+            serde_json::from_str(include_str!(
+                "../tests/golden/workspace_message_response.json"
+            ))
+            .unwrap(),
+        );
+        assert_golden(
+            &MessageListView { items: vec![view] },
+            serde_json::from_str(include_str!("../tests/golden/workspace_message_list.json"))
                 .unwrap(),
         );
     }
@@ -9198,6 +9734,153 @@ mod tests {
             ))
             .unwrap(),
         );
+    }
+
+    #[tokio::test]
+    async fn dev_service_roundtrips_workspace_chat_messages() {
+        let service = DevWorkspaceService::new("user-1");
+        let workspace = service
+            .create_workspace(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                WorkspaceCreatePayload {
+                    name: "Chat Workspace".to_string(),
+                    description: None,
+                    metadata: json!({}),
+                    use_case: Some("programming".to_string()),
+                    collaboration_mode: Some("multi_agent_shared".to_string()),
+                    autonomy_profile: None,
+                    sandbox_code_root: None,
+                },
+            )
+            .await
+            .unwrap();
+        let first = service
+            .send_message(
+                "user-1",
+                "Alice",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                SendMessagePayload {
+                    content: "hello".to_string(),
+                    sender_type: "human".to_string(),
+                    parent_message_id: None,
+                    mentions: vec![" user-1 ".to_string(), "user-1".to_string()],
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.mentions, vec!["user-1"]);
+        assert_eq!(first.metadata["sender_name"], "Alice");
+        let second = service
+            .send_message(
+                "user-1",
+                "Alice",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                SendMessagePayload {
+                    content: "broadcast".to_string(),
+                    sender_type: "human".to_string(),
+                    parent_message_id: Some(first.id.clone()),
+                    mentions: vec!["all".to_string()],
+                },
+            )
+            .await
+            .unwrap();
+        assert!(second.mentions.is_empty());
+
+        let listed = service
+            .list_messages(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                MessageListQuery::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(listed.items.len(), 2);
+        assert_eq!(listed.items[0].id, first.id);
+        assert_eq!(listed.items[1].id, second.id);
+
+        let before_second = service
+            .list_messages(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                MessageListQuery {
+                    limit: None,
+                    before: Some(second.id.clone()),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(before_second.items.len(), 1);
+        assert_eq!(before_second.items[0].id, first.id);
+
+        let mentions = service
+            .list_mentions(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                "user-1",
+                MessageMentionQuery::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(mentions.items.len(), 1);
+        assert_eq!(mentions.items[0].id, first.id);
+
+        let invalid_mention = service
+            .send_message(
+                "user-1",
+                "Alice",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                SendMessagePayload {
+                    content: "bad".to_string(),
+                    sender_type: "human".to_string(),
+                    parent_message_id: None,
+                    mentions: vec!["missing-user".to_string()],
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(invalid_mention.status, StatusCode::BAD_REQUEST);
+        assert_eq!(invalid_mention.detail, "Invalid workspace chat request");
+
+        let invalid_sender = service
+            .send_message(
+                "user-1",
+                "Alice",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                SendMessagePayload {
+                    content: "bad".to_string(),
+                    sender_type: "agent".to_string(),
+                    parent_message_id: None,
+                    mentions: Vec::new(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(invalid_sender.status, StatusCode::BAD_REQUEST);
+        assert_eq!(invalid_sender.detail, "Invalid workspace chat request");
+
+        let state = service.state.lock().expect("workspace dev state");
+        let chat_events = state
+            .outbox
+            .iter()
+            .filter(|event| event.event_type == "workspace_message_created")
+            .count();
+        assert_eq!(chat_events, 2);
     }
 
     #[tokio::test]

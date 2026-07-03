@@ -37,6 +37,8 @@ const REPLY_COLS: &str = "id, post_id, workspace_id, author_id, content, metadat
 const FILE_COLS: &str = "id, workspace_id, parent_path, name, is_directory, file_size, \
     content_type, storage_key, uploader_type, uploader_id, uploader_name, checksum_sha256, \
     mime_type_detected, created_at";
+const MESSAGE_COLS: &str = "id, workspace_id, sender_id, sender_type, content, mentions_json, \
+    parent_message_id, metadata_json, created_at";
 const PLAN_COLS: &str = "id, workspace_id, goal_id, status, created_at, updated_at";
 const PLAN_NODE_COLS: &str = "id, plan_id, parent_id, kind, title, description, depends_on, \
     inputs_schema, outputs_schema, acceptance_criteria, feature_checkpoint, handoff_package, \
@@ -124,6 +126,19 @@ pub struct WorkspaceTaskSessionAttemptRecord {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceMessageRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub sender_id: String,
+    pub sender_type: String,
+    pub content: String,
+    pub mentions_json: Vec<String>,
+    pub parent_message_id: Option<String>,
+    pub metadata_json: Value,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -541,6 +556,42 @@ impl PgWorkspaceRepository {
         .transpose()
     }
 
+    pub async fn list_workspace_member_user_ids(
+        &self,
+        workspace_id: &str,
+    ) -> CoreResult<Vec<String>> {
+        let rows = sqlx::query_as::<_, (String,)>(
+            "SELECT user_id FROM workspace_members WHERE workspace_id = $1 ORDER BY created_at ASC, id ASC",
+        )
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(rows.into_iter().map(|(user_id,)| user_id).collect())
+    }
+
+    pub async fn list_workspace_agent_ids(&self, workspace_id: &str) -> CoreResult<Vec<String>> {
+        let rows = sqlx::query_as::<_, (String,)>(
+            "SELECT agent_id FROM workspace_agents \
+             WHERE workspace_id = $1 AND is_active = true \
+             ORDER BY created_at ASC, id ASC",
+        )
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(rows.into_iter().map(|(agent_id,)| agent_id).collect())
+    }
+
+    pub async fn get_user_email(&self, user_id: &str) -> CoreResult<Option<String>> {
+        sqlx::query_as::<_, (String,)>("SELECT email FROM users WHERE id = $1 LIMIT 1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)
+            .map(|row| row.map(|(email,)| email))
+    }
+
     pub async fn save_workspace(&self, workspace: WorkspaceRecord) -> CoreResult<WorkspaceRecord> {
         sqlx::query(&format!(
             "UPDATE workspaces SET name=$2, description=$3, is_archived=$4, metadata_json=$5, \
@@ -604,6 +655,97 @@ impl PgWorkspaceRepository {
         .await
         .map_err(storage)
         .and_then(row_to_task)
+    }
+
+    pub async fn create_message(
+        &self,
+        message: WorkspaceMessageRecord,
+    ) -> CoreResult<WorkspaceMessageRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_messages \
+                (id, workspace_id, sender_id, sender_type, content, mentions_json, \
+                 parent_message_id, metadata_json, created_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) \
+             RETURNING {MESSAGE_COLS}"
+        ))
+        .bind(&message.id)
+        .bind(&message.workspace_id)
+        .bind(&message.sender_id)
+        .bind(&message.sender_type)
+        .bind(&message.content)
+        .bind(Json(&message.mentions_json))
+        .bind(&message.parent_message_id)
+        .bind(Json(&message.metadata_json))
+        .bind(message.created_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)
+        .and_then(row_to_workspace_message)
+    }
+
+    pub async fn list_messages(
+        &self,
+        workspace_id: &str,
+        limit: i64,
+        before: Option<&str>,
+    ) -> CoreResult<Vec<WorkspaceMessageRecord>> {
+        let rows = if let Some(before) = before {
+            sqlx::query(&format!(
+                "WITH before_message AS ( \
+                    SELECT created_at FROM workspace_messages \
+                    WHERE workspace_id = $1 AND id = $2 \
+                 ) \
+                 SELECT {MESSAGE_COLS} FROM workspace_messages \
+                 WHERE workspace_id = $1 \
+                   AND ( \
+                     NOT EXISTS (SELECT 1 FROM before_message) \
+                     OR created_at < (SELECT created_at FROM before_message) \
+                     OR (created_at = (SELECT created_at FROM before_message) AND id < $2) \
+                   ) \
+                 ORDER BY created_at ASC, id ASC \
+                 LIMIT $3"
+            ))
+            .bind(workspace_id)
+            .bind(before)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+        } else {
+            sqlx::query(&format!(
+                "SELECT {MESSAGE_COLS} FROM workspace_messages \
+                 WHERE workspace_id = $1 \
+                 ORDER BY created_at ASC, id ASC \
+                 LIMIT $2"
+            ))
+            .bind(workspace_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+        };
+        rows.into_iter().map(row_to_workspace_message).collect()
+    }
+
+    pub async fn list_messages_mentioning(
+        &self,
+        workspace_id: &str,
+        target_id: &str,
+        limit: i64,
+    ) -> CoreResult<Vec<WorkspaceMessageRecord>> {
+        let rows = sqlx::query(&format!(
+            "SELECT {MESSAGE_COLS} FROM workspace_messages \
+             WHERE workspace_id = $1 AND mentions_json::jsonb @> $2::jsonb \
+             ORDER BY created_at ASC, id ASC \
+             LIMIT $3"
+        ))
+        .bind(workspace_id)
+        .bind(serde_json::to_string(&vec![target_id]).map_err(storage)?)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_workspace_message).collect()
     }
 
     pub async fn list_tasks(
@@ -2575,6 +2717,20 @@ fn row_to_task_session_attempt(row: PgRow) -> CoreResult<WorkspaceTaskSessionAtt
         created_at: row.try_get("created_at").map_err(storage)?,
         updated_at: row.try_get("updated_at").map_err(storage)?,
         completed_at: row.try_get("completed_at").map_err(storage)?,
+    })
+}
+
+fn row_to_workspace_message(row: PgRow) -> CoreResult<WorkspaceMessageRecord> {
+    Ok(WorkspaceMessageRecord {
+        id: row.try_get("id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        sender_id: row.try_get("sender_id").map_err(storage)?,
+        sender_type: row.try_get("sender_type").map_err(storage)?,
+        content: row.try_get("content").map_err(storage)?,
+        mentions_json: json_vec_string(&row, "mentions_json")?,
+        parent_message_id: row.try_get("parent_message_id").map_err(storage)?,
+        metadata_json: json_value(&row, "metadata_json")?,
+        created_at: row.try_get("created_at").map_err(storage)?,
     })
 }
 

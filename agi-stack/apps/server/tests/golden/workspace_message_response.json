@@ -1,0 +1,13 @@
+{
+  "id": "msg-1",
+  "workspace_id": "ws-1",
+  "sender_id": "user-1",
+  "sender_type": "human",
+  "content": "Ship P6 chat",
+  "mentions": ["user-2", "agent-1"],
+  "parent_message_id": null,
+  "metadata": {
+    "sender_name": "Alice"
+  },
+  "created_at": "<iso8601>"
+}
