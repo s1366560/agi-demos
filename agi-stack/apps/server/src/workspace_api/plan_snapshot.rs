@@ -711,7 +711,7 @@ impl From<WorkspacePlanBlackboardEntryRecord> for WorkspacePlanBlackboardEntryVi
 
 impl From<WorkspacePlanOutboxRecord> for WorkspacePlanOutboxItemView {
     fn from(record: WorkspacePlanOutboxRecord) -> Self {
-        let actions = outbox_actions(&record);
+        let actions = super::plan_actions::outbox_actions(&record);
         Self {
             id: record.id,
             plan_id: record.plan_id,
