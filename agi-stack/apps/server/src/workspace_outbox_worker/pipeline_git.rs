@@ -1,13 +1,16 @@
 use super::*;
 
+mod accepted;
 mod commands;
 
+pub(super) use self::accepted::integrate_accepted_attempt_worktree_with_git;
+use self::commands::{
+    compact_git_error as compact_git_error_for_publish, create_git_askpass_script,
+    is_non_fast_forward_push_rejection, is_unrelated_history_merge_rejection,
+    run_git_command_owned,
+};
 pub(super) use self::commands::{
     compact_git_error, current_worktree_dirty_signature, run_git_command, short_git_head,
-};
-use self::commands::{
-    create_git_askpass_script, git_blob_hash, is_non_fast_forward_push_rejection,
-    is_unrelated_history_merge_rejection, run_git_command_owned,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,14 +74,6 @@ struct GitPublishResult {
 struct GitRemoteMergeResult {
     status: String,
     reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct AcceptedWorktreeIntegrationResult {
-    pub(super) status: String,
-    pub(super) summary: String,
-    pub(super) commit_ref: String,
-    pub(super) dirty_signature: Option<String>,
 }
 
 pub(super) async fn finish_drone_source_publish_failure(
@@ -718,7 +713,7 @@ async fn publish_git_ref_to_source_control_with_env(
     if exists.exit_code != 0 {
         return Ok(GitPublishResult {
             status: "failed".to_string(),
-            reason: Some(compact_git_error(&exists)),
+            reason: Some(compact_git_error_for_publish(&exists)),
             published_commit: None,
         });
     }
@@ -767,7 +762,7 @@ async fn publish_git_ref_to_source_control_with_env(
             }
             return Ok(GitPublishResult {
                 status: "failed".to_string(),
-                reason: Some(compact_git_error(&fast_forward)),
+                reason: Some(compact_git_error_for_publish(&fast_forward)),
                 published_commit: None,
             });
         }
@@ -777,7 +772,7 @@ async fn publish_git_ref_to_source_control_with_env(
     if head.exit_code != 0 {
         return Ok(GitPublishResult {
             status: "failed".to_string(),
-            reason: Some(compact_git_error(&head)),
+            reason: Some(compact_git_error_for_publish(&head)),
             published_commit: None,
         });
     }
@@ -815,7 +810,7 @@ async fn push_git_head_to_source_branch(
     }
     Ok(GitPublishResult {
         status: "failed".to_string(),
-        reason: Some(compact_git_error(&push)),
+        reason: Some(compact_git_error_for_publish(&push)),
         published_commit: Some(published_commit.to_string()),
     })
 }
@@ -858,7 +853,7 @@ async fn publish_git_ref_from_temporary_worktree(
         if add.exit_code != 0 {
             return Ok(GitPublishResult {
                 status: "failed".to_string(),
-                reason: Some(compact_git_error(&add)),
+                reason: Some(compact_git_error_for_publish(&add)),
                 published_commit: None,
             });
         }
@@ -882,7 +877,7 @@ async fn publish_git_ref_from_temporary_worktree(
         if head.exit_code != 0 {
             return Ok(GitPublishResult {
                 status: "failed".to_string(),
-                reason: Some(compact_git_error(&head)),
+                reason: Some(compact_git_error_for_publish(&head)),
                 published_commit: None,
             });
         }
@@ -906,7 +901,7 @@ async fn publish_git_ref_from_temporary_worktree(
             }
             return Ok(GitPublishResult {
                 status: "failed".to_string(),
-                reason: Some(compact_git_error(&push)),
+                reason: Some(compact_git_error_for_publish(&push)),
                 published_commit: Some(published_commit),
             });
         }
@@ -961,7 +956,7 @@ async fn retry_temporary_worktree_push_after_non_fast_forward(
     if retry_head.exit_code != 0 {
         return Ok(Some(GitPublishResult {
             status: "failed".to_string(),
-            reason: Some(compact_git_error(&retry_head)),
+            reason: Some(compact_git_error_for_publish(&retry_head)),
             published_commit: Some(candidate_ref.to_string()),
         }));
     }
@@ -1000,7 +995,7 @@ async fn merge_remote_branch_for_publish(
     )
     .await?;
     if fetch.exit_code != 0 {
-        let reason = compact_git_error(&fetch);
+        let reason = compact_git_error_for_publish(&fetch);
         let normalized = reason.to_ascii_lowercase();
         if normalized.contains("couldn't find remote ref")
             || normalized.contains("could not find remote ref")
@@ -1100,7 +1095,7 @@ async fn merge_remote_branch_preserving_local_tree(
     }
     Ok(GitRemoteMergeResult {
         status: "failed".to_string(),
-        reason: Some(compact_git_error(&merge_ours_strategy)),
+        reason: Some(compact_git_error_for_publish(&merge_ours_strategy)),
     })
 }
 
@@ -1140,7 +1135,7 @@ async fn restore_candidate_publish_paths_after_merge(
         if checkout.exit_code != 0 {
             return Ok(GitRemoteMergeResult {
                 status: "failed".to_string(),
-                reason: Some(compact_git_error(&checkout)),
+                reason: Some(compact_git_error_for_publish(&checkout)),
             });
         }
     }
@@ -1156,7 +1151,7 @@ async fn restore_candidate_publish_paths_after_merge(
         if remove.exit_code != 0 {
             return Ok(GitRemoteMergeResult {
                 status: "failed".to_string(),
-                reason: Some(compact_git_error(&remove)),
+                reason: Some(compact_git_error_for_publish(&remove)),
             });
         }
     }
@@ -1178,7 +1173,7 @@ async fn restore_candidate_publish_paths_after_merge(
     if changed.exit_code != 1 {
         return Ok(GitRemoteMergeResult {
             status: "failed".to_string(),
-            reason: Some(compact_git_error(&changed)),
+            reason: Some(compact_git_error_for_publish(&changed)),
         });
     }
 
@@ -1192,7 +1187,7 @@ async fn restore_candidate_publish_paths_after_merge(
     if commit.exit_code != 0 {
         return Ok(GitRemoteMergeResult {
             status: "failed".to_string(),
-            reason: Some(compact_git_error(&commit)),
+            reason: Some(compact_git_error_for_publish(&commit)),
         });
     }
     Ok(GitRemoteMergeResult {
@@ -1340,199 +1335,11 @@ async fn merge_remote_branch_with_local_preference(
         }
         return Ok(GitRemoteMergeResult {
             status: "failed".to_string(),
-            reason: Some(compact_git_error(&merge_unrelated_ours)),
+            reason: Some(compact_git_error_for_publish(&merge_unrelated_ours)),
         });
     }
     Ok(GitRemoteMergeResult {
         status: "failed".to_string(),
-        reason: Some(compact_git_error(&merge_ours)),
+        reason: Some(compact_git_error_for_publish(&merge_ours)),
     })
-}
-
-pub(super) async fn integrate_accepted_attempt_worktree_with_git(
-    sandbox_code_root: &Path,
-    worktree_path: &Path,
-    commit_ref: &str,
-) -> CoreResult<AcceptedWorktreeIntegrationResult> {
-    let env = vec![("GIT_TERMINAL_PROMPT".to_string(), "0".to_string())];
-    if !sandbox_code_root.exists() {
-        return Ok(AcceptedWorktreeIntegrationResult {
-            status: "failed".to_string(),
-            summary: format!(
-                "sandbox_code_root does not exist: {}",
-                sandbox_code_root.display()
-            ),
-            commit_ref: commit_ref.to_string(),
-            dirty_signature: None,
-        });
-    }
-    if !worktree_path.exists() {
-        return Ok(AcceptedWorktreeIntegrationResult {
-            status: "failed".to_string(),
-            summary: format!(
-                "accepted worktree does not exist: {}",
-                worktree_path.display()
-            ),
-            commit_ref: commit_ref.to_string(),
-            dirty_signature: None,
-        });
-    }
-
-    let resolved_commit = resolve_accepted_worktree_commit(worktree_path, commit_ref, &env).await?;
-    let Some(resolved_commit) = resolved_commit else {
-        return Ok(AcceptedWorktreeIntegrationResult {
-            status: "failed".to_string(),
-            summary: "status=failed\nreason=commit_ref not found in attempt worktree".to_string(),
-            commit_ref: commit_ref.to_string(),
-            dirty_signature: None,
-        });
-    };
-
-    let already_merged = run_git_command(
-        sandbox_code_root,
-        &["merge-base", "--is-ancestor", &resolved_commit, "HEAD"],
-        &env,
-        60,
-    )
-    .await?;
-    if already_merged.exit_code == 0 {
-        let git_head = short_git_head(sandbox_code_root, &env).await?;
-        return Ok(AcceptedWorktreeIntegrationResult {
-            status: "already_merged".to_string(),
-            summary: format!(
-                "resolved_commit_ref={resolved_commit}\nstatus=already_merged\ngit_head={git_head}"
-            ),
-            commit_ref: resolved_commit,
-            dirty_signature: None,
-        });
-    }
-
-    let dirty = run_git_command(sandbox_code_root, &["status", "--porcelain"], &env, 60).await?;
-    if dirty.exit_code != 0 {
-        return Ok(AcceptedWorktreeIntegrationResult {
-            status: "failed".to_string(),
-            summary: compact_git_error(&dirty),
-            commit_ref: resolved_commit,
-            dirty_signature: None,
-        });
-    }
-    if !dirty.stdout.trim().is_empty() {
-        let signature = git_blob_hash(sandbox_code_root, &dirty.stdout, &env).await?;
-        return Ok(AcceptedWorktreeIntegrationResult {
-            status: "blocked_dirty_main".to_string(),
-            summary: compact_text(
-                &format!(
-                    "status=blocked_dirty_main\nreason=sandbox_code_root has uncommitted changes\ndirty_signature={}\n{}",
-                    signature,
-                    dirty.stdout.trim()
-                ),
-                1200,
-            ),
-            commit_ref: resolved_commit,
-            dirty_signature: Some(signature),
-        });
-    }
-
-    let merge = run_git_command(
-        sandbox_code_root,
-        &["merge", "--no-edit", &resolved_commit],
-        &env,
-        120,
-    )
-    .await?;
-    let merge = if merge.exit_code != 0 && is_unrelated_history_merge_rejection(&merge) {
-        let _ = run_git_command(sandbox_code_root, &["merge", "--abort"], &env, 60).await;
-        run_git_command(
-            sandbox_code_root,
-            &[
-                "merge",
-                "--no-edit",
-                "--allow-unrelated-histories",
-                "-X",
-                "theirs",
-                &resolved_commit,
-            ],
-            &env,
-            120,
-        )
-        .await?
-    } else {
-        merge
-    };
-    if merge.exit_code != 0 {
-        let summary = compact_text(
-            &format!(
-                "{}\nstatus=failed\nreason=merge_failed_aborted",
-                compact_git_error(&merge)
-            ),
-            1200,
-        );
-        let _ = run_git_command(sandbox_code_root, &["merge", "--abort"], &env, 60).await;
-        return Ok(AcceptedWorktreeIntegrationResult {
-            status: "failed".to_string(),
-            summary,
-            commit_ref: resolved_commit,
-            dirty_signature: None,
-        });
-    }
-
-    let git_head = short_git_head(sandbox_code_root, &env).await?;
-    Ok(AcceptedWorktreeIntegrationResult {
-        status: "merged".to_string(),
-        summary: compact_text(
-            &format!(
-                "resolved_commit_ref={resolved_commit}\n{}\nstatus=merged\ngit_head={git_head}",
-                merge.stdout.trim()
-            ),
-            1200,
-        ),
-        commit_ref: resolved_commit,
-        dirty_signature: None,
-    })
-}
-
-async fn resolve_accepted_worktree_commit(
-    worktree_path: &Path,
-    commit_ref: &str,
-    env: &[(String, String)],
-) -> CoreResult<Option<String>> {
-    let exists = run_git_command(
-        worktree_path,
-        &["cat-file", "-e", &format!("{commit_ref}^{{commit}}")],
-        env,
-        60,
-    )
-    .await?;
-    if exists.exit_code == 0 {
-        let resolved = run_git_command(
-            worktree_path,
-            &["rev-parse", &format!("{commit_ref}^{{commit}}")],
-            env,
-            60,
-        )
-        .await?;
-        if resolved.exit_code == 0 {
-            return Ok(Some(resolved.stdout.trim().to_string()));
-        }
-    }
-    let short_commit = commit_ref.chars().take(12).collect::<String>();
-    let repaired = run_git_command(
-        worktree_path,
-        &[
-            "rev-parse",
-            "--verify",
-            "--quiet",
-            &format!("{short_commit}^{{commit}}"),
-        ],
-        env,
-        60,
-    )
-    .await?;
-    if repaired.exit_code == 0 {
-        let value = repaired.stdout.trim();
-        if !value.is_empty() {
-            return Ok(Some(value.to_string()));
-        }
-    }
-    Ok(None)
 }
