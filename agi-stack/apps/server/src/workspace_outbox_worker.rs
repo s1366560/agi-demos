@@ -102,6 +102,9 @@ const SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION: &str = "mark_blocked_human"
 const SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON: &str =
     "supervisor_decision_mark_blocked_human";
 const SUPERVISOR_BLOCKED_HUMAN_VERDICT: &str = "blocked_human_required";
+const SUPERVISOR_DECISION_REPLAN_NODE_ACTION: &str = "replan_node";
+const SUPERVISOR_DECISION_REPLAN_NODE_REASON: &str = "supervisor_decision_replan_node";
+const SUPERVISOR_REPLAN_REQUESTED_VERDICT: &str = "replan_requested";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION: &str = "retry_same_node";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON: &str = "supervisor_decision_retry_same_node";
 const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
@@ -9884,6 +9887,9 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_blocked_human = self
                 .reconcile_supervisor_blocked_human_nodes(&workspace_id, &plan_id)
                 .await?;
+            let changed_replan = self
+                .reconcile_supervisor_replan_nodes(&workspace_id, &plan_id)
+                .await?;
             let changed_disposed = self
                 .reconcile_supervisor_disposed_nodes(&workspace_id, &plan_id)
                 .await?;
@@ -9910,6 +9916,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             if changed_worktree_failed
                 + changed_missing
                 + changed_blocked_human
+                + changed_replan
                 + changed_disposed
                 + changed_accepted
                 + changed_supervisor_retry
@@ -10683,6 +10690,290 @@ impl SupervisorTickAdmissionHandler {
             changed += 1;
         }
         Ok(changed)
+    }
+
+    async fn reconcile_supervisor_replan_nodes(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
+                continue;
+            }
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            if !supervisor_replan_metadata_present(&metadata) {
+                continue;
+            }
+            if node.current_attempt_id.is_none()
+                && node.intent == "todo"
+                && node.execution == "idle"
+                && metadata_string(metadata.get("workspace_task_projection_status")).as_deref()
+                    == Some(SUPERVISOR_REPLAN_REQUESTED_VERDICT)
+                && metadata_string(metadata.get("supervisor_replan_outbox_id")).is_some()
+            {
+                continue;
+            }
+
+            let previous_attempt_id = node.current_attempt_id.clone();
+            let replan_task_id = node.workspace_task_id.clone();
+            let replan_worker_agent_id = node.assignee_agent_id.clone();
+            let mut evidence_refs = Vec::new();
+            let summary = supervisor_replan_summary(&metadata);
+            let mut attempt_projected = false;
+            if let Some(attempt_id) = previous_attempt_id.as_deref() {
+                if let Some(attempt) = self.store.get_task_session_attempt(attempt_id).await? {
+                    evidence_refs = accepted_attempt_evidence_refs(&attempt);
+                    let status = attempt.status.trim().to_ascii_lowercase();
+                    if matches!(
+                        status.as_str(),
+                        "pending" | "running" | AWAITING_LEADER_ADJUDICATION_STATUS
+                    ) {
+                        self.store
+                            .finish_task_session_attempt(
+                                attempt_id,
+                                REJECTED_ATTEMPT_STATUS,
+                                Some(&summary),
+                                Some(SUPERVISOR_DECISION_REPLAN_NODE_REASON),
+                                now,
+                            )
+                            .await?;
+                        attempt_projected = true;
+                    }
+                    if !attempt.candidate_artifacts_json.is_empty() {
+                        metadata.insert(
+                            "candidate_artifacts".to_string(),
+                            json!(attempt.candidate_artifacts_json.clone()),
+                        );
+                    }
+                    if !attempt.candidate_verifications_json.is_empty() {
+                        metadata.insert(
+                            "candidate_verifications".to_string(),
+                            json!(attempt.candidate_verifications_json.clone()),
+                        );
+                    }
+                }
+            }
+            for value in metadata_string_values(metadata.get("verification_evidence_refs")) {
+                if !value.trim().is_empty() {
+                    evidence_refs.push(value);
+                }
+            }
+            dedup_strings(&mut evidence_refs);
+
+            let task_projected = self
+                .project_supervisor_replan_to_task(
+                    workspace_id,
+                    &node,
+                    previous_attempt_id.as_deref(),
+                    &summary,
+                    &evidence_refs,
+                    now,
+                )
+                .await?;
+
+            clear_supervisor_replan_node_metadata(&mut metadata);
+            let confidence = node
+                .progress_json
+                .get("confidence")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
+            metadata.insert(
+                "last_supervisor_decision_action".to_string(),
+                json!(SUPERVISOR_DECISION_REPLAN_NODE_ACTION),
+            );
+            metadata.insert(
+                "last_supervisor_decision_rationale".to_string(),
+                json!(summary.clone()),
+            );
+            metadata.insert(
+                "supervisor_replan_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert(
+                "workspace_task_projection_status".to_string(),
+                json!(SUPERVISOR_REPLAN_REQUESTED_VERDICT),
+            );
+            metadata.insert(
+                "workspace_task_projected_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            if let Some(attempt_id) = previous_attempt_id.as_deref() {
+                metadata.insert(
+                    "supervisor_replan_previous_attempt_id".to_string(),
+                    json!(attempt_id),
+                );
+            }
+            if !evidence_refs.is_empty() {
+                metadata.insert(
+                    "verification_evidence_refs".to_string(),
+                    json!(evidence_refs),
+                );
+            }
+            metadata.insert(
+                "operator_action".to_string(),
+                json!({
+                    "action": "operator_replan_requested",
+                    "actor_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                    "reason": summary,
+                    "created_at": now.to_rfc3339(),
+                    "source": "supervisor_decision"
+                }),
+            );
+
+            node.intent = "todo".to_string();
+            node.execution = "idle".to_string();
+            node.progress_json = json!({
+                "percent": 0,
+                "confidence": confidence,
+                "note": "Supervisor requested replan."
+            });
+            node.assignee_agent_id = None;
+            node.current_attempt_id = None;
+            node.feature_checkpoint_json = reset_feature_checkpoint(node.feature_checkpoint_json);
+            node.metadata_json = Value::Object(metadata);
+            node.completed_at = None;
+            node.updated_at = Some(now);
+
+            let replan_outbox = supervisor_replan_tick_outbox(
+                workspace_id,
+                plan_id,
+                &node.id,
+                replan_task_id.as_deref(),
+                replan_worker_agent_id.as_deref(),
+                &summary,
+                previous_attempt_id.as_deref(),
+                now,
+            );
+            let replan_outbox_id = replan_outbox.id.clone();
+            let mut node_metadata = object_or_empty(node.metadata_json.clone());
+            node_metadata.insert(
+                "supervisor_replan_outbox_id".to_string(),
+                json!(replan_outbox_id.clone()),
+            );
+            node.metadata_json = Value::Object(node_metadata);
+            self.store.save_plan_node(node.clone()).await?;
+            self.store.enqueue_plan_outbox(replan_outbox).await?;
+            self.store
+                .create_plan_event(WorkspacePlanEventRecord {
+                    id: generate_uuid_v4(),
+                    plan_id: plan_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    node_id: Some(node.id.clone()),
+                    attempt_id: previous_attempt_id.clone(),
+                    event_type: "supervisor_replan_reconciled".to_string(),
+                    source: "workspace_plan_supervisor_tick".to_string(),
+                    actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                    payload_json: json!({
+                        "action": SUPERVISOR_DECISION_REPLAN_NODE_ACTION,
+                        "reason": SUPERVISOR_DECISION_REPLAN_NODE_REASON,
+                        "rationale": summary,
+                        "workspace_task_id": node.workspace_task_id.clone(),
+                        "previous_attempt_id": previous_attempt_id,
+                        "task_projected": task_projected,
+                        "attempt_projected": attempt_projected,
+                        "outbox_id": replan_outbox_id,
+                    }),
+                    created_at: now,
+                })
+                .await?;
+            changed += 1;
+        }
+        Ok(changed)
+    }
+
+    async fn project_supervisor_replan_to_task(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        attempt_id: Option<&str>,
+        summary: &str,
+        evidence_refs: &[String],
+        now: DateTime<Utc>,
+    ) -> CoreResult<bool> {
+        let Some(task_id) = node.workspace_task_id.as_deref() else {
+            return Ok(false);
+        };
+        let Some(mut task) = self.store.get_task(workspace_id, task_id).await? else {
+            return Ok(false);
+        };
+        if task.workspace_id != workspace_id {
+            return Ok(false);
+        }
+        let mut metadata = object_or_empty(task.metadata_json.clone());
+        if task.status == "in_progress"
+            && metadata_string(metadata.get("durable_plan_verdict")).as_deref()
+                == Some(SUPERVISOR_REPLAN_REQUESTED_VERDICT)
+            && metadata_string(metadata.get("durable_plan_verification_summary")).as_deref()
+                == Some(summary)
+            && metadata_string(metadata.get("supervisor_replan_requested_at")).is_some()
+        {
+            return Ok(false);
+        }
+
+        metadata.insert(PENDING_LEADER_ADJUDICATION.to_string(), json!(false));
+        metadata.remove("retry_verification_only");
+        metadata.insert(
+            "durable_plan_verdict".to_string(),
+            json!(SUPERVISOR_REPLAN_REQUESTED_VERDICT),
+        );
+        metadata.insert(
+            "durable_plan_verification_summary".to_string(),
+            json!(summary),
+        );
+        metadata.insert(
+            "durable_plan_verified_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.insert(
+            "supervisor_replan_requested_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.insert(
+            "last_attempt_status".to_string(),
+            json!(REJECTED_ATTEMPT_STATUS),
+        );
+        metadata.insert(
+            "last_worker_report_type".to_string(),
+            json!(SUPERVISOR_REPLAN_REQUESTED_VERDICT),
+        );
+        metadata.insert(LAST_WORKER_REPORT_SUMMARY.to_string(), json!(summary));
+        metadata.insert(
+            "last_leader_adjudication_status".to_string(),
+            json!(REJECTED_ATTEMPT_STATUS),
+        );
+        metadata.insert(
+            "last_supervisor_decision_action".to_string(),
+            json!(SUPERVISOR_DECISION_REPLAN_NODE_ACTION),
+        );
+        if let Some(attempt_id) = attempt_id {
+            metadata.insert("last_attempt_id".to_string(), json!(attempt_id));
+            metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
+        }
+        if !evidence_refs.is_empty() {
+            metadata.insert("evidence_refs".to_string(), json!(evidence_refs));
+        }
+
+        task.metadata_json = Value::Object(metadata);
+        task.status = "in_progress".to_string();
+        task.blocker_reason = None;
+        task.completed_at = None;
+        task.updated_at = Some(now);
+        self.store.save_task(task).await?;
+        Ok(true)
     }
 
     async fn reconcile_supervisor_blocked_human_nodes(
@@ -12354,6 +12645,97 @@ fn supervisor_decision_allows_human_block(metadata: &Map<String, Value>) -> bool
     })
 }
 
+fn supervisor_replan_metadata_present(metadata: &Map<String, Value>) -> bool {
+    metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
+        == Some(SUPERVISOR_DECISION_REPLAN_NODE_ACTION)
+}
+
+fn supervisor_replan_summary(metadata: &Map<String, Value>) -> String {
+    metadata_string(metadata.get("last_supervisor_decision_rationale"))
+        .or_else(|| metadata_string(metadata.get("last_verification_summary")))
+        .or_else(|| metadata_string(metadata.get(LAST_WORKER_REPORT_SUMMARY)))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "supervisor requested replan".to_string())
+}
+
+fn clear_supervisor_replan_node_metadata(metadata: &mut Map<String, Value>) {
+    for key in [
+        "candidate_artifacts",
+        "candidate_verifications",
+        "deploy_mode",
+        "deployment_status",
+        "evidence_refs",
+        "execution_verifications",
+        "external_id",
+        "external_provider",
+        "external_url",
+        "current_repair_turn",
+        "last_verification_attempt_id",
+        "last_verification_feedback_items",
+        "last_verification_hard_fail",
+        "last_verification_judge_confidence",
+        "last_verification_judge_failed_criteria",
+        "last_verification_judge_next_action_kind",
+        "last_verification_judge_rationale",
+        "last_verification_judge_repair_brief",
+        "last_verification_judge_required_next_action",
+        "last_verification_judge_verdict",
+        "last_verification_passed",
+        "last_verification_ran_at",
+        "last_verification_summary",
+        "last_worker_report_attempt_id",
+        "last_worker_report_artifacts",
+        "last_worker_report_summary",
+        "last_worker_report_type",
+        "last_worker_report_verifications",
+        "obsolete_by_verifier_feedback",
+        "obsolete_feedback_items",
+        "pipeline_evidence_refs",
+        "pipeline_finished_at",
+        "pipeline_gate_status",
+        "pipeline_last_summary",
+        "pipeline_request_count",
+        "pipeline_requested_at",
+        "pipeline_run_id",
+        "pipeline_status",
+        "reported_attempt_reconciled_at",
+        "reported_attempt_status",
+        "retry_count",
+        "retry_last_reason",
+        "retry_not_before",
+        "source_publish_branch",
+        "source_publish_commit_ref",
+        "source_publish_provider",
+        "source_publish_reason",
+        "source_publish_source_commit_ref",
+        "source_publish_status",
+        "source_publish_token_env",
+        "terminal_attempt_reconciled_at",
+        "terminal_attempt_retry_count",
+        "terminal_attempt_retry_reason",
+        "terminal_attempt_status",
+        "terminal_attempt_superseded_attempt_id",
+        "terminal_attempt_superseded_reason",
+        "terminal_attempt_superseded_status",
+        "verification_evidence_refs",
+        "verification_feedback_disposition",
+        "verified_commit_ref",
+        "verified_git_diff_summary",
+        "verified_test_commands",
+        "worktree_integration_attempt_id",
+        "worktree_integration_commit_ref",
+        "worktree_integration_dirty_signature",
+        "worktree_integration_ran_at",
+        "worktree_integration_status",
+        "worktree_integration_summary",
+        "worktree_integration_worktree_path",
+    ] {
+        metadata.remove(key);
+    }
+    clear_attempt_retry_worker_stream_state(metadata);
+}
+
 fn supervisor_blocked_human_summary(metadata: &Map<String, Value>) -> String {
     metadata_string(metadata.get("last_supervisor_decision_rationale"))
         .or_else(|| metadata_string(metadata.get("last_verification_summary")))
@@ -13780,6 +14162,75 @@ fn worker_report_supervisor_tick(
             "source": "worker_report",
             "node_id": node_id,
             "attempt_id": attempt_id
+        }),
+        created_at: now,
+        updated_at: None,
+    }
+}
+
+fn supervisor_replan_tick_outbox(
+    workspace_id: &str,
+    plan_id: &str,
+    node_id: &str,
+    task_id: Option<&str>,
+    worker_agent_id: Option<&str>,
+    reason: &str,
+    previous_attempt_id: Option<&str>,
+    now: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    let mut payload = Map::new();
+    payload.insert("workspace_id".to_string(), json!(workspace_id));
+    payload.insert("plan_id".to_string(), json!(plan_id));
+    payload.insert("node_id".to_string(), json!(node_id));
+    payload.insert(
+        "actor_user_id".to_string(),
+        json!(WORKSPACE_PLAN_SYSTEM_ACTOR_ID),
+    );
+    payload.insert(
+        "operator_action".to_string(),
+        json!("operator_replan_requested"),
+    );
+    payload.insert(
+        "supervisor_action".to_string(),
+        json!(SUPERVISOR_DECISION_REPLAN_NODE_ACTION),
+    );
+    payload.insert(
+        "retry_reason".to_string(),
+        json!(SUPERVISOR_DECISION_REPLAN_NODE_REASON),
+    );
+    payload.insert("reason".to_string(), json!(reason));
+    if let Some(task_id) = task_id {
+        payload.insert("task_id".to_string(), json!(task_id));
+    }
+    if let Some(worker_agent_id) = worker_agent_id {
+        payload.insert("worker_agent_id".to_string(), json!(worker_agent_id));
+    }
+    if let Some(previous_attempt_id) = previous_attempt_id {
+        payload.insert(
+            "previous_attempt_id".to_string(),
+            json!(previous_attempt_id),
+        );
+        payload.insert("retry_attempt_id".to_string(), json!(previous_attempt_id));
+    }
+
+    WorkspacePlanOutboxRecord {
+        id: generate_uuid_v4(),
+        plan_id: Some(plan_id.to_string()),
+        workspace_id: workspace_id.to_string(),
+        event_type: SUPERVISOR_TICK_EVENT.to_string(),
+        payload_json: Value::Object(payload),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({
+            "source": "workspace_plan.supervisor_decision_replan",
+            "node_id": node_id,
+            "previous_attempt_id": previous_attempt_id
         }),
         created_at: now,
         updated_at: None,
@@ -20514,6 +20965,208 @@ steps:
         assert_eq!(events[0].payload_json["attempt_projected"], true);
         assert_eq!(events[0].payload_json["task_projected"], true);
         assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_reconciles_replan_node_supervisor_decision() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut root_task = root_goal_task();
+        root_task.status = "in_progress".to_string();
+        store.insert_task(root_task);
+        let mut task = task_with_plan_metadata();
+        task.status = "in_progress".to_string();
+        task.metadata_json = json!({
+            WORKSPACE_PLAN_ID: "plan-test",
+            WORKSPACE_PLAN_NODE_ID: "node-test",
+            ROOT_GOAL_TASK_ID: "root-task",
+            CURRENT_ATTEMPT_ID: "attempt-replan",
+            PENDING_LEADER_ADJUDICATION: true,
+            "last_attempt_status": AWAITING_LEADER_ADJUDICATION_STATUS
+        });
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.progress_json = json!({"percent": 80, "confidence": 0.62});
+        node.current_attempt_id = Some("attempt-replan".to_string());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": "/tmp/replan-worktree",
+            "branch_name": "worker/replan",
+            "base_ref": "main",
+            "commit_ref": "abc1234"
+        }));
+        node.metadata_json = json!({
+            "last_supervisor_decision_action": "replan_node",
+            "last_supervisor_decision_rationale": "implementation direction must be replanned",
+            "last_supervisor_decision_confidence": 0.88,
+            "last_supervisor_decision_repair_brief": "split the risky migration before retrying",
+            "last_verification_summary": "old verifier summary should not override rationale",
+            "candidate_artifacts": ["artifact:stale"],
+            "candidate_verifications": ["stale-check"],
+            "terminal_attempt_status": "rejected",
+            "terminal_attempt_retry_count": 2,
+            "retry_count": 2,
+            "retry_not_before": "2026-01-02T03:05:05Z",
+            "verification_evidence_refs": ["supervisor_decision:replan_node"],
+            "worker_stream_last_entry_id": "99-0"
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-replan",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("candidate needs a replan".to_string());
+        attempt.candidate_artifacts_json = vec!["artifact:replan-diff".to_string()];
+        attempt.candidate_verifications_json = vec!["worker_report:needs-replan".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempt = store.attempt("attempt-replan");
+        assert_eq!(attempt.status, REJECTED_ATTEMPT_STATUS);
+        assert_eq!(
+            attempt.leader_feedback.as_deref(),
+            Some("implementation direction must be replanned")
+        );
+        assert_eq!(
+            attempt.adjudication_reason.as_deref(),
+            Some(SUPERVISOR_DECISION_REPLAN_NODE_REASON)
+        );
+        assert!(attempt.completed_at.is_some());
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.assignee_agent_id, None);
+        assert_eq!(node.current_attempt_id, None);
+        assert_eq!(node.completed_at, None);
+        let checkpoint = node.feature_checkpoint_json.as_ref().unwrap();
+        assert_eq!(checkpoint["worktree_path"], Value::Null);
+        assert_eq!(checkpoint["branch_name"], Value::Null);
+        assert_eq!(checkpoint["base_ref"], "HEAD");
+        assert_eq!(checkpoint["commit_ref"], Value::Null);
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_action"],
+            "replan_node"
+        );
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_rationale"],
+            "implementation direction must be replanned"
+        );
+        assert_eq!(
+            node.metadata_json["supervisor_replan_previous_attempt_id"],
+            "attempt-replan"
+        );
+        assert_eq!(
+            node.metadata_json["workspace_task_projection_status"],
+            SUPERVISOR_REPLAN_REQUESTED_VERDICT
+        );
+        assert_eq!(
+            node.metadata_json["operator_action"]["action"],
+            "operator_replan_requested"
+        );
+        assert_eq!(
+            node.metadata_json["operator_action"]["source"],
+            "supervisor_decision"
+        );
+        assert!(node.metadata_json["supervisor_replan_outbox_id"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()));
+        assert!(node.metadata_json.get("candidate_artifacts").is_none());
+        assert!(node
+            .metadata_json
+            .get("terminal_attempt_retry_count")
+            .is_none());
+        assert!(node.metadata_json.get("retry_not_before").is_none());
+        assert!(node
+            .metadata_json
+            .get("worker_stream_last_entry_id")
+            .is_none());
+        assert_eq!(
+            node.metadata_json["verification_evidence_refs"],
+            json!([
+                "artifact:replan-diff",
+                "worker_report:needs-replan",
+                "supervisor_decision:replan_node"
+            ])
+        );
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "in_progress");
+        assert_eq!(task.blocker_reason, None);
+        assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], false);
+        assert_eq!(
+            task.metadata_json["durable_plan_verdict"],
+            SUPERVISOR_REPLAN_REQUESTED_VERDICT
+        );
+        assert_eq!(
+            task.metadata_json["durable_plan_verification_summary"],
+            "implementation direction must be replanned"
+        );
+        assert_eq!(
+            task.metadata_json["last_attempt_status"],
+            REJECTED_ATTEMPT_STATUS
+        );
+        assert_eq!(
+            task.metadata_json["last_worker_report_type"],
+            SUPERVISOR_REPLAN_REQUESTED_VERDICT
+        );
+        assert_eq!(
+            task.metadata_json["last_leader_adjudication_status"],
+            REJECTED_ATTEMPT_STATUS
+        );
+        assert_eq!(task.metadata_json["last_attempt_id"], "attempt-replan");
+        assert_eq!(task.metadata_json[CURRENT_ATTEMPT_ID], "attempt-replan");
+        assert_eq!(
+            task.metadata_json["evidence_refs"],
+            json!([
+                "artifact:replan-diff",
+                "worker_report:needs-replan",
+                "supervisor_decision:replan_node"
+            ])
+        );
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "supervisor_replan_reconciled");
+        assert_eq!(events[0].payload_json["action"], "replan_node");
+        assert_eq!(events[0].payload_json["task_projected"], true);
+        assert_eq!(events[0].payload_json["attempt_projected"], true);
+
+        let outbox = store.outbox();
+        assert_eq!(outbox.len(), 1);
+        assert_eq!(outbox[0].event_type, SUPERVISOR_TICK_EVENT);
+        assert_eq!(
+            outbox[0].metadata_json["source"],
+            "workspace_plan.supervisor_decision_replan"
+        );
+        assert_eq!(outbox[0].payload_json["node_id"], "node-test");
+        assert_eq!(outbox[0].payload_json["task_id"], "task-test");
+        assert_eq!(outbox[0].payload_json["worker_agent_id"], "agent-worker");
+        assert_eq!(
+            outbox[0].payload_json["operator_action"],
+            "operator_replan_requested"
+        );
+        assert_eq!(outbox[0].payload_json["supervisor_action"], "replan_node");
+        assert_eq!(
+            outbox[0].payload_json["retry_reason"],
+            SUPERVISOR_DECISION_REPLAN_NODE_REASON
+        );
+        assert_eq!(
+            outbox[0].payload_json["previous_attempt_id"],
+            "attempt-replan"
+        );
+        assert_eq!(outbox[0].payload_json["retry_attempt_id"], "attempt-replan");
     }
 
     #[tokio::test]
