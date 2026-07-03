@@ -106,6 +106,8 @@ const SUPERVISOR_DECISION_REQUEST_PIPELINE_ACTION: &str = "request_pipeline";
 const SUPERVISOR_DECISION_REQUEST_PIPELINE_REASON: &str = "supervisor_decision_request_pipeline";
 const SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION: &str = "wait_pipeline";
 const SUPERVISOR_DECISION_WAIT_PIPELINE_REASON: &str = "supervisor_decision_wait_pipeline";
+const SUPERVISOR_DECISION_NOOP_ACTION: &str = "noop";
+const SUPERVISOR_DECISION_NOOP_REASON: &str = "supervisor_decision_noop";
 const SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION: &str = "create_repair_node";
 const SUPERVISOR_DECISION_CREATE_REPAIR_NODE_REASON: &str =
     "supervisor_decision_create_repair_node";
@@ -9912,6 +9914,9 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_wait_pipeline = self
                 .reconcile_supervisor_wait_pipeline_nodes(&workspace_id, &plan_id)
                 .await?;
+            let changed_noop = self
+                .reconcile_supervisor_noop_nodes(&workspace_id, &plan_id)
+                .await?;
             let changed_create_repair = self
                 .reconcile_supervisor_create_repair_nodes(&workspace_id, &plan_id)
                 .await?;
@@ -9946,6 +9951,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                 + changed_blocked_human
                 + changed_request_pipeline
                 + changed_wait_pipeline
+                + changed_noop
                 + changed_create_repair
                 + changed_replan
                 + changed_disposed
@@ -11021,6 +11027,89 @@ impl SupervisorTickAdmissionHandler {
                     payload_json: json!({
                         "action": SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION,
                         "reason": SUPERVISOR_DECISION_WAIT_PIPELINE_REASON,
+                        "rationale": summary,
+                        "workspace_task_id": node.workspace_task_id.clone(),
+                        "attempt_id": attempt_id,
+                    }),
+                    created_at: now,
+                })
+                .await?;
+            changed += 1;
+        }
+        Ok(changed)
+    }
+
+    async fn reconcile_supervisor_noop_nodes(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            if node.intent == "done" {
+                continue;
+            }
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            if !supervisor_noop_metadata_present(&metadata) {
+                continue;
+            }
+            if supervisor_noop_projection_complete(&metadata) {
+                continue;
+            }
+
+            let attempt_id = node
+                .current_attempt_id
+                .clone()
+                .or_else(|| metadata_string(metadata.get("last_verification_attempt_id")));
+            let summary = supervisor_noop_summary(&metadata);
+            metadata.insert(
+                "last_supervisor_decision_action".to_string(),
+                json!(SUPERVISOR_DECISION_NOOP_ACTION),
+            );
+            metadata.insert(
+                "last_supervisor_decision_rationale".to_string(),
+                json!(summary.clone()),
+            );
+            metadata.insert(
+                "supervisor_noop_reason".to_string(),
+                json!(SUPERVISOR_DECISION_NOOP_REASON),
+            );
+            metadata.insert(
+                "supervisor_noop_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            if let Some(attempt_id) = attempt_id.as_deref() {
+                metadata.insert("supervisor_noop_attempt_id".to_string(), json!(attempt_id));
+            }
+
+            node.metadata_json = Value::Object(metadata);
+            node.updated_at = Some(now);
+            self.store.save_plan_node(node.clone()).await?;
+            self.store
+                .create_plan_event(WorkspacePlanEventRecord {
+                    id: generate_uuid_v4(),
+                    plan_id: plan_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    node_id: Some(node.id.clone()),
+                    attempt_id: attempt_id.clone(),
+                    event_type: "supervisor_noop_reconciled".to_string(),
+                    source: "workspace_plan_supervisor_tick".to_string(),
+                    actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                    payload_json: json!({
+                        "action": SUPERVISOR_DECISION_NOOP_ACTION,
+                        "reason": SUPERVISOR_DECISION_NOOP_REASON,
                         "rationale": summary,
                         "workspace_task_id": node.workspace_task_id.clone(),
                         "attempt_id": attempt_id,
@@ -13201,6 +13290,10 @@ fn reported_reconcilable_node(node: &WorkspacePlanNodeRecord) -> bool {
     {
         return false;
     }
+    let metadata = object_or_empty(node.metadata_json.clone());
+    if supervisor_noop_metadata_present(&metadata) {
+        return false;
+    }
     if node_has_pipeline_gate_in_flight(node, AWAITING_LEADER_ADJUDICATION_STATUS) {
         return false;
     }
@@ -13325,6 +13418,24 @@ fn supervisor_wait_pipeline_summary(metadata: &Map<String, Value>) -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "supervisor waiting for platform pipeline".to_string())
+}
+
+fn supervisor_noop_metadata_present(metadata: &Map<String, Value>) -> bool {
+    metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
+        == Some(SUPERVISOR_DECISION_NOOP_ACTION)
+}
+
+fn supervisor_noop_projection_complete(metadata: &Map<String, Value>) -> bool {
+    metadata_string(metadata.get("supervisor_noop_reconciled_at")).is_some()
+}
+
+fn supervisor_noop_summary(metadata: &Map<String, Value>) -> String {
+    metadata_string(metadata.get("last_supervisor_decision_rationale"))
+        .or_else(|| metadata_string(metadata.get("last_verification_summary")))
+        .or_else(|| metadata_string(metadata.get(LAST_WORKER_REPORT_SUMMARY)))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "supervisor chose no state transition".to_string())
 }
 
 fn metadata_positive_i64(value: Option<&Value>) -> i64 {
@@ -22275,6 +22386,135 @@ steps:
         let task = store.task("task-test");
         assert_eq!(task.status, "in_progress");
         assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], true);
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_preserves_noop_supervisor_decision() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let mut task = task_with_plan_metadata();
+        task.status = "in_progress".to_string();
+        task.metadata_json = json!({
+            WORKSPACE_PLAN_ID: "plan-test",
+            WORKSPACE_PLAN_NODE_ID: "node-test",
+            CURRENT_ATTEMPT_ID: "attempt-noop",
+            PENDING_LEADER_ADJUDICATION: true,
+            "last_attempt_status": AWAITING_LEADER_ADJUDICATION_STATUS
+        });
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-noop".to_string());
+        node.metadata_json = json!({
+            "last_supervisor_decision_action": "noop",
+            "last_supervisor_decision_rationale": "No durable state transition is needed yet.",
+            "last_supervisor_decision_confidence": 0.76,
+            "last_supervisor_decision_feedback_items": [{
+                "target_layer": "runtime",
+                "recommended_action": "continue_observing",
+                "summary": "The supervisor intentionally left the plan unchanged."
+            }],
+            "last_verification_summary": "old verifier summary should not override noop rationale",
+            "verification_evidence_refs": ["worker_report:completed"]
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-noop",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("candidate remains under observation".to_string());
+        attempt.candidate_artifacts_json = vec!["artifact:diff-summary".to_string()];
+        attempt.candidate_verifications_json = vec!["worker_report:completed".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let attempt = store.attempt("attempt-noop");
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        assert!(attempt.completed_at.is_none());
+        assert_eq!(
+            attempt.candidate_summary.as_deref(),
+            Some("candidate remains under observation")
+        );
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-noop"));
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_action"],
+            SUPERVISOR_DECISION_NOOP_ACTION
+        );
+        assert_eq!(
+            node.metadata_json["last_supervisor_decision_rationale"],
+            "No durable state transition is needed yet."
+        );
+        assert_eq!(
+            node.metadata_json["supervisor_noop_reason"],
+            SUPERVISOR_DECISION_NOOP_REASON
+        );
+        assert_eq!(
+            node.metadata_json["supervisor_noop_attempt_id"],
+            "attempt-noop"
+        );
+        assert!(node
+            .metadata_json
+            .get("supervisor_noop_reconciled_at")
+            .is_some());
+        assert_eq!(
+            node.metadata_json["last_verification_summary"],
+            "old verifier summary should not override noop rationale"
+        );
+        assert!(node.metadata_json.get("pipeline_required").is_none());
+        assert!(node
+            .metadata_json
+            .get("supervisor_pipeline_outbox_id")
+            .is_none());
+        assert!(store.outbox().is_empty());
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "in_progress");
+        assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], true);
+        assert_eq!(
+            task.metadata_json["last_attempt_status"],
+            AWAITING_LEADER_ADJUDICATION_STATUS
+        );
+
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "supervisor_noop_reconciled");
+        assert_eq!(events[0].payload_json["action"], "noop");
+        assert_eq!(
+            events[0].payload_json["reason"],
+            SUPERVISOR_DECISION_NOOP_REASON
+        );
+        assert_eq!(events[0].payload_json["attempt_id"], "attempt-noop");
+
+        let mut item = outbox("job-supervisor-tick-again", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string())
+            }
+        );
+        assert_eq!(store.plan_events().len(), 1);
+        assert!(store.outbox().is_empty());
     }
 
     #[tokio::test]
