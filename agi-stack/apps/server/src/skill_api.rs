@@ -2,8 +2,8 @@
 //!
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots, and
-//! rollback. Filesystem/system skills, package import/export, and evolution jobs
-//! remain Python-owned until their full semantics are migrated.
+//! rollback/export. Filesystem system skills, package import/zip, publish/clone,
+//! and evolution jobs remain Python-owned until their full semantics are migrated.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -19,6 +19,7 @@ use axum::{
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use serde_yaml_ng::{Mapping as YamlMapping, Value as YamlValue};
 
 use agistack_adapters_postgres::{
     PgSkillRepository, SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord,
@@ -114,6 +115,13 @@ pub(crate) trait SkillService: Send + Sync {
         skill_id: &str,
         body: SkillRollbackPayload,
     ) -> Result<SkillView, SkillApiError>;
+
+    async fn export_package(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        skill_id: &str,
+    ) -> Result<SkillPackageView, SkillApiError>;
 }
 
 #[derive(Debug)]
@@ -390,6 +398,16 @@ impl From<SkillVersionRecord> for SkillVersionDetailView {
 pub(crate) struct SkillVersionListView {
     versions: Vec<SkillVersionView>,
     total: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SkillPackageView {
+    format: String,
+    skill: SkillView,
+    skill_md_content: String,
+    resource_files: Value,
+    version_number: Option<i32>,
+    version_label: Option<String>,
 }
 
 pub(crate) struct PgSkillService {
@@ -813,6 +831,22 @@ impl SkillService for PgSkillService {
             .await
             .map_err(SkillApiError::internal)?
             .into())
+    }
+
+    async fn export_package(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        skill_id: &str,
+    ) -> Result<SkillPackageView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        let skill = self.readable_skill(user_id, &tenant_id, skill_id).await?;
+        let version = self
+            .repo
+            .get_latest_version(skill_id)
+            .await
+            .map_err(SkillApiError::internal)?;
+        Ok(skill_package_view(skill, version))
     }
 }
 
@@ -1365,6 +1399,28 @@ impl SkillService for DevSkillService {
         .apply_to(skill, now);
         Ok(self.write_record(updated)?.into())
     }
+
+    async fn export_package(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+        skill_id: &str,
+    ) -> Result<SkillPackageView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        let skill = self.get_owned(&tenant_id, skill_id)?;
+        let version = self
+            .versions
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .get(skill_id)
+            .and_then(|versions| {
+                versions
+                    .iter()
+                    .max_by_key(|version| version.version_number)
+                    .cloned()
+            });
+        Ok(skill_package_view(skill, version))
+    }
 }
 
 async fn create_skill(
@@ -1532,6 +1588,19 @@ async fn rollback_skill(
     ))
 }
 
+async fn export_skill_package(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    Path(skill_id): Path<String>,
+) -> Result<Json<SkillPackageView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .export_package(&identity.user_id, q.tenant_id.as_deref(), &skill_id)
+            .await?,
+    ))
+}
+
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/skills/", get(list_skills).post(create_skill))
@@ -1554,6 +1623,7 @@ pub(crate) fn router() -> Router<AppState> {
             get(get_skill_version),
         )
         .route("/api/v1/skills/:skill_id/rollback", post(rollback_skill))
+        .route("/api/v1/skills/:skill_id/export", get(export_skill_package))
         .route(
             "/api/v1/skills/:skill_id",
             get(get_skill).put(update_skill).delete(delete_skill),
@@ -1763,6 +1833,98 @@ fn skill_matches_search(record: &SkillRecord, needle: &str) -> bool {
     .any(|part| part.to_ascii_lowercase().contains(needle))
 }
 
+fn skill_package_view(skill: SkillRecord, version: Option<SkillVersionRecord>) -> SkillPackageView {
+    let skill_view = SkillView::from(skill.clone());
+    let (skill_md_content, resource_files, version_number, version_label) = match version {
+        Some(version) => (
+            version.skill_md_content,
+            version.resource_files,
+            Some(version.version_number),
+            version.version_label,
+        ),
+        None => (
+            skill
+                .full_content
+                .clone()
+                .unwrap_or_else(|| build_skill_md_from_record(&skill)),
+            skill.resource_files.clone(),
+            None,
+            skill.version_label.clone(),
+        ),
+    };
+    SkillPackageView {
+        format: "agentskills.io/skill-package".to_string(),
+        skill: skill_view,
+        skill_md_content,
+        resource_files,
+        version_number,
+        version_label,
+    }
+}
+
+fn build_skill_md_from_record(record: &SkillRecord) -> String {
+    let mut frontmatter = YamlMapping::new();
+    insert_yaml_string(&mut frontmatter, "name", &record.name);
+    insert_yaml_string(&mut frontmatter, "description", &record.description);
+    if let Some(value) = record.license.as_deref().filter(|value| !value.is_empty()) {
+        insert_yaml_string(&mut frontmatter, "license", value);
+    }
+    if let Some(value) = record
+        .compatibility
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        insert_yaml_string(&mut frontmatter, "compatibility", value);
+    }
+    if let Some(value) = record
+        .allowed_tools_raw
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        insert_yaml_string(&mut frontmatter, "allowed-tools", value);
+    } else if !record.tools.is_empty() {
+        insert_yaml_string(&mut frontmatter, "allowed-tools", &record.tools.join(" "));
+    }
+    if let Some(metadata) = export_metadata_value(record) {
+        frontmatter.insert(YamlValue::String("metadata".to_string()), metadata);
+    }
+    let body = format!("# {}\n\n{}", record.name, record.description);
+    let yaml_text =
+        serde_yaml_ng::to_string(&frontmatter).unwrap_or_else(|_| fallback_frontmatter(record));
+    format!("---\n{}\n---\n\n{}\n", yaml_text.trim_end(), body.trim())
+}
+
+fn insert_yaml_string(map: &mut YamlMapping, key: &str, value: &str) {
+    map.insert(
+        YamlValue::String(key.to_string()),
+        YamlValue::String(value.to_string()),
+    );
+}
+
+fn export_metadata_value(record: &SkillRecord) -> Option<YamlValue> {
+    let mut metadata = match record.metadata_json.clone() {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    };
+    if let Some(version_label) = record
+        .version_label
+        .as_deref()
+        .filter(|version_label| !version_label.is_empty())
+    {
+        metadata
+            .entry("version".to_string())
+            .or_insert_with(|| Value::String(version_label.to_string()));
+    }
+    if metadata.is_empty() {
+        return None;
+    }
+    serde_yaml_ng::to_value(Value::Object(metadata)).ok()
+}
+
+fn fallback_frontmatter(record: &SkillRecord) -> String {
+    format!("name: {}\ndescription: {}", record.name, record.description)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1859,6 +2021,19 @@ mod tests {
         agistack_parity::assert_parity(&golden, &actual);
     }
 
+    #[test]
+    fn skill_package_export_matches_golden() {
+        let actual = serde_json::to_value(skill_package_view(
+            sample_skill_record(),
+            Some(sample_version_record()),
+        ))
+        .unwrap();
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/skill_package_export.json"))
+                .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
     #[tokio::test]
     async fn dev_service_content_update_creates_version_and_rollback() {
         let service = DevSkillService::new("tenant-1");
@@ -1897,6 +2072,15 @@ mod tests {
             .unwrap();
         assert_eq!(updated.current_version, 1);
         assert_eq!(updated.version_label.as_deref(), Some("1.0.0"));
+        let exported = service
+            .export_package("u1", Some("tenant-1"), &created.id)
+            .await
+            .unwrap();
+        assert_eq!(exported.version_number, Some(1));
+        assert_eq!(
+            Some(exported.skill_md_content.as_str()),
+            updated.full_content.as_deref()
+        );
         let versions = service
             .list_versions("u1", Some("tenant-1"), &created.id, 50, 0)
             .await

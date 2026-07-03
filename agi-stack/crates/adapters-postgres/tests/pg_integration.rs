@@ -2133,6 +2133,13 @@ async fn skill_repository_roundtrips_against_shared_schema() {
         fetched_version.resource_files["README.md"],
         "v1 resource details"
     );
+    let latest_version = repo
+        .get_latest_version("skill_pg_1")
+        .await
+        .unwrap()
+        .expect("latest version present");
+    assert_eq!(latest_version.version_number, 1);
+    assert_eq!(latest_version.skill_md_content, "Updated skill content");
 
     assert!(repo.delete_skill("skill_pg_project").await.unwrap());
     assert!(repo.delete_skill("skill_pg_1").await.unwrap());

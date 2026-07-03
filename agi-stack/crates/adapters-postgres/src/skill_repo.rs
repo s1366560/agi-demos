@@ -444,6 +444,22 @@ impl PgSkillRepository {
             .map_err(storage)?;
         row.map(row_to_version).transpose()
     }
+
+    pub async fn get_latest_version(
+        &self,
+        skill_id: &str,
+    ) -> CoreResult<Option<SkillVersionRecord>> {
+        let sql = format!(
+            "SELECT {VERSION_COLS} FROM skill_versions WHERE skill_id = $1 \
+             ORDER BY version_number DESC LIMIT 1"
+        );
+        let row = sqlx::query(&sql)
+            .bind(skill_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(row_to_version).transpose()
+    }
 }
 
 fn row_to_skill(row: PgRow) -> CoreResult<SkillRecord> {

@@ -535,8 +535,9 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         match_kind: MethodMatchKind::Exact,
     },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
-    // status, versions, and rollback are in Rust; filesystem/system import,
-    // export, package, clone/publish, and evolution siblings remain Python.
+    // status, versions, rollback, and package export are in Rust;
+    // filesystem/system import, package import/zip, clone/publish, and
+    // evolution siblings remain Python.
     MethodRule {
         method: "GET",
         path: "/api/v1/skills",
@@ -612,6 +613,14 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/skills",
         match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
             suffix: "rollback",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "export",
             excluded: &["system"],
         },
     },
@@ -1653,6 +1662,7 @@ mod unit {
             (Method::GET, "/api/v1/skills/skill-1/versions"),
             (Method::GET, "/api/v1/skills/skill-1/versions/2"),
             (Method::POST, "/api/v1/skills/skill-1/rollback"),
+            (Method::GET, "/api/v1/skills/skill-1/export"),
         ] {
             assert_eq!(
                 upstream_for_request(&method, path, &ups()),
@@ -1673,6 +1683,7 @@ mod unit {
             (Method::POST, "/api/v1/skills/skill-1/versions"),
             (Method::GET, "/api/v1/skills/skill-1/versions/2/extra"),
             (Method::GET, "/api/v1/skills/skill-1/rollback"),
+            (Method::POST, "/api/v1/skills/skill-1/export"),
             (Method::POST, "/api/v1/skills/skill-1/publish"),
             (Method::POST, "/api/v1/skills/skill-1/clone"),
             (Method::GET, "/api/v1/skills/skill-1/files"),
