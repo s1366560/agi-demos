@@ -19,12 +19,13 @@ use agistack_adapters_postgres::{
     BlackboardReplyRecord, InvitationRecord, NewDecisionRecordRecord, NewShareRecord,
     NewTrustPolicyRecord, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
     PgMemoryRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
-    PgShareRepository, PgSkillRepository, PgTenantRepository, PgTrustRepository, PgUserStore,
-    PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord, ProjectListForUserQuery,
-    ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord, ProjectStatsLookup,
-    ProjectUpdatePatch, SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord,
-    TenantAccessStatus, TenantAdminStatus, TenantLookup, TenantUpdatePatch, TopologyEdgeRecord,
-    TopologyNodeRecord, TrustDecisionResolution, WorkspaceAccess, WorkspacePipelineRunRecord,
+    PgShareRepository, PgSkillRepository, PgTenantRepository, PgTenantSkillConfigRepository,
+    PgTrustRepository, PgUserStore, PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord,
+    ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord,
+    ProjectStatsLookup, ProjectUpdatePatch, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
+    SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantLookup,
+    TenantSkillConfigRecord, TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord,
+    TrustDecisionResolution, WorkspaceAccess, WorkspacePipelineRunRecord,
     WorkspacePipelineStageRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
     WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
     WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
@@ -1309,6 +1310,12 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             version_label varchar(50), skill_md_content text NOT NULL, resource_files json, \
             change_summary text, created_by varchar(20) DEFAULT 'agent' NOT NULL, \
             created_at timestamptz DEFAULT now())",
+        "CREATE TABLE IF NOT EXISTS tenant_skill_configs (\
+            id text PRIMARY KEY, tenant_id text NOT NULL, system_skill_name varchar(200) NOT NULL, \
+            action varchar(20) NOT NULL, override_skill_id text, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_skill_configs_tenant_skill \
+            ON tenant_skill_configs (tenant_id, system_skill_name)",
         "CREATE TABLE IF NOT EXISTS workspaces (\
             id text PRIMARY KEY, tenant_id text NOT NULL, project_id text NOT NULL, \
             name varchar(255) NOT NULL, description text, created_by text NOT NULL, \
@@ -2148,6 +2155,144 @@ async fn skill_repository_roundtrips_against_shared_schema() {
         .await
         .unwrap();
     assert!(repo.get_skill("skill_pg_1").await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn tenant_skill_config_repository_roundtrips_against_shared_schema() {
+    let Some(pool) =
+        pool_or_skip("tenant_skill_config_repository_roundtrips_against_shared_schema").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    for sql in [
+        "DELETE FROM tenant_skill_configs WHERE tenant_id IN ('t_tenant_skill_cfg', 't_tenant_skill_other')",
+        "DELETE FROM skills WHERE id IN ('skill_cfg_override', 'skill_cfg_other')",
+        "DELETE FROM user_tenants WHERE tenant_id IN ('t_tenant_skill_cfg', 't_tenant_skill_other') OR user_id LIKE 'u_tenant_skill_%'",
+        "DELETE FROM tenants WHERE id IN ('t_tenant_skill_cfg', 't_tenant_skill_other')",
+        "DELETE FROM users WHERE id IN ('u_tenant_skill_admin', 'u_tenant_skill_other')",
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+
+    sqlx::query(
+        "INSERT INTO users (id, email) VALUES \
+         ('u_tenant_skill_admin', 'tenant-skill-admin@x'), \
+         ('u_tenant_skill_other', 'tenant-skill-other@x')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO tenants (id, name) VALUES \
+         ('t_tenant_skill_cfg', 'Tenant Skill Config'), \
+         ('t_tenant_skill_other', 'Other Tenant')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role) VALUES \
+         ('ut_tenant_skill_admin', 'u_tenant_skill_admin', 't_tenant_skill_cfg', 'admin'), \
+         ('ut_tenant_skill_other', 'u_tenant_skill_other', 't_tenant_skill_other', 'admin')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skills (id, tenant_id, name, description) VALUES \
+         ('skill_cfg_override', 't_tenant_skill_cfg', 'Tenant override', 'override skill'), \
+         ('skill_cfg_other', 't_tenant_skill_other', 'Other override', 'wrong tenant skill')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let repo = PgTenantSkillConfigRepository::new(pool.clone());
+    assert_eq!(
+        repo.first_tenant_for_user("u_tenant_skill_admin")
+            .await
+            .unwrap(),
+        Some("t_tenant_skill_cfg".to_string())
+    );
+    assert!(repo
+        .user_has_tenant_access("u_tenant_skill_admin", "t_tenant_skill_cfg")
+        .await
+        .unwrap());
+    assert!(!repo
+        .user_has_tenant_access("u_tenant_skill_admin", "t_tenant_skill_other")
+        .await
+        .unwrap());
+    assert!(repo
+        .user_is_tenant_admin("u_tenant_skill_admin", "t_tenant_skill_cfg")
+        .await
+        .unwrap());
+    assert_eq!(
+        repo.override_skill_belongs_to_tenant("skill_cfg_override", "t_tenant_skill_cfg")
+            .await
+            .unwrap(),
+        Some(true)
+    );
+    assert_eq!(
+        repo.override_skill_belongs_to_tenant("skill_cfg_other", "t_tenant_skill_cfg")
+            .await
+            .unwrap(),
+        Some(false)
+    );
+    assert_eq!(
+        repo.override_skill_belongs_to_tenant("skill_cfg_missing", "t_tenant_skill_cfg")
+            .await
+            .unwrap(),
+        None
+    );
+
+    let created_at = ts(2026, 2, 4, 5, 6, 7);
+    let record = TenantSkillConfigRecord {
+        id: "tenant_skill_cfg_1".to_string(),
+        tenant_id: "t_tenant_skill_cfg".to_string(),
+        system_skill_name: "code-review".to_string(),
+        action: "disable".to_string(),
+        override_skill_id: None,
+        created_at,
+        updated_at: None,
+    };
+    let created = repo.create(&record).await.unwrap();
+    assert_eq!(created.action, "disable");
+    assert_eq!(repo.count_by_tenant("t_tenant_skill_cfg").await.unwrap(), 1);
+
+    let loaded = repo
+        .get_by_tenant_and_skill("t_tenant_skill_cfg", "code-review")
+        .await
+        .unwrap()
+        .expect("tenant skill config present");
+    assert_eq!(loaded.id, "tenant_skill_cfg_1");
+    let listed = repo.list_by_tenant("t_tenant_skill_cfg").await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].system_skill_name, "code-review");
+
+    let updated_at = ts(2026, 2, 4, 6, 6, 7);
+    let updated = TenantSkillConfigRecord {
+        action: "override".to_string(),
+        override_skill_id: Some("skill_cfg_override".to_string()),
+        updated_at: Some(updated_at),
+        ..loaded
+    };
+    let updated = repo.update(&updated).await.unwrap();
+    assert_eq!(updated.action, "override");
+    assert_eq!(
+        updated.override_skill_id.as_deref(),
+        Some("skill_cfg_override")
+    );
+
+    assert!(repo
+        .delete_by_tenant_and_skill("t_tenant_skill_cfg", "code-review")
+        .await
+        .unwrap());
+    assert!(!repo
+        .delete_by_tenant_and_skill("t_tenant_skill_cfg", "code-review")
+        .await
+        .unwrap());
 }
 
 #[tokio::test]

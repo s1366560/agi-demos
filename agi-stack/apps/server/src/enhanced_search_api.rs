@@ -824,6 +824,7 @@ mod tests {
     use crate::sandbox_api::ProjectSandboxService;
     use crate::shares_api::{DevShareService, SharedShares};
     use crate::skill_api::{DevSkillService, SharedSkills};
+    use crate::tenant_skill_config_api::{DevTenantSkillConfigService, SharedTenantSkillConfigs};
     use crate::trust_api::{DevTrustService, SharedTrust};
     use crate::workspace_api::{DevWorkspaceService, SharedWorkspaces};
 
@@ -853,6 +854,8 @@ mod tests {
         let shares: SharedShares = Arc::new(DevShareService::new("dev-user"));
         let trust: SharedTrust = Arc::new(DevTrustService::new("dev-user"));
         let skills: SharedSkills = Arc::new(DevSkillService::new("dev-tenant"));
+        let tenant_skill_configs: SharedTenantSkillConfigs =
+            Arc::new(DevTenantSkillConfigService::new("dev-tenant"));
         let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::new("dev-user"));
         let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
 
@@ -875,6 +878,7 @@ mod tests {
             shares,
             trust,
             skills,
+            tenant_skill_configs,
             workspaces,
             workspace_plan_outbox_worker: None,
             graph: Arc::new(InMemoryGraphStore::new()),

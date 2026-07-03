@@ -629,6 +629,44 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
             excluded: &["system"],
         },
     },
+    // P5 tenant skill config flip. This owns only the tenant disable/override
+    // collection and its exact action/status children; other `/tenant/*`
+    // resources continue to fall back to Python. Rollback = delete this block.
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/tenant/skills/config",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/tenant/skills/config/disable",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/tenant/skills/config/override",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/tenant/skills/config/enable",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/tenant/skills/config",
+        match_kind: MethodMatchKind::SingleChild,
+    },
+    MethodRule {
+        method: "DELETE",
+        path: "/api/v1/tenant/skills/config",
+        match_kind: MethodMatchKind::SingleChild,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/tenant/skills/config",
+        match_kind: MethodMatchKind::FixedChildWithGrandchild { child: "status" },
+    },
     MethodRule {
         method: "GET",
         path: "/api/v1/agent/ws",
@@ -1694,6 +1732,58 @@ mod unit {
             (Method::POST, "/api/v1/skills/skill-1/publish"),
             (Method::POST, "/api/v1/skills/skill-1/clone"),
             (Method::GET, "/api/v1/skills/skill-1/files"),
+        ] {
+            assert_eq!(
+                upstream_for_request(&method, path, &ups()),
+                "http://python:8000",
+                "{method} {path} should remain on python",
+            );
+        }
+    }
+
+    #[test]
+    fn p5_tenant_skill_config_rules_are_exact() {
+        for (method, path) in [
+            (Method::GET, "/api/v1/tenant/skills/config"),
+            (Method::GET, "/api/v1/tenant/skills/config/"),
+            (Method::GET, "/api/v1/tenant/skills/config/code-review"),
+            (Method::GET, "/api/v1/tenant/skills/config/status"),
+            (
+                Method::GET,
+                "/api/v1/tenant/skills/config/status/code-review",
+            ),
+            (Method::POST, "/api/v1/tenant/skills/config/disable"),
+            (Method::POST, "/api/v1/tenant/skills/config/override"),
+            (Method::POST, "/api/v1/tenant/skills/config/enable"),
+            (Method::DELETE, "/api/v1/tenant/skills/config/code-review"),
+        ] {
+            assert_eq!(
+                upstream_for_request(&method, path, &ups()),
+                "http://rust:8088",
+                "{method} {path} should route to rust",
+            );
+        }
+
+        for (method, path) in [
+            (Method::POST, "/api/v1/tenant/skills/config"),
+            (Method::PUT, "/api/v1/tenant/skills/config"),
+            (Method::PATCH, "/api/v1/tenant/skills/config"),
+            (Method::GET, "/api/v1/tenant/skills"),
+            (
+                Method::GET,
+                "/api/v1/tenant/skills/config/status/code-review/extra",
+            ),
+            (
+                Method::POST,
+                "/api/v1/tenant/skills/config/status/code-review",
+            ),
+            (Method::POST, "/api/v1/tenant/skills/config/code-review"),
+            (Method::PUT, "/api/v1/tenant/skills/config/code-review"),
+            (Method::DELETE, "/api/v1/tenant/skills/config"),
+            (
+                Method::GET,
+                "/api/v1/tenant/skills/config/code-review/content",
+            ),
         ] {
             assert_eq!(
                 upstream_for_request(&method, path, &ups()),

@@ -1,0 +1,6 @@
+{
+  "system_skill_name": "code-review",
+  "status": "overridden",
+  "action": "override",
+  "override_skill_id": "skill-override-1"
+}

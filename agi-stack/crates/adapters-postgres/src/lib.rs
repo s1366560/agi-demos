@@ -36,6 +36,7 @@ mod sandbox_repo;
 mod share_repo;
 mod skill_repo;
 mod tenant_repo;
+mod tenant_skill_config_repo;
 mod trust_repo;
 mod user_store;
 mod vector_index;
@@ -59,6 +60,7 @@ pub use skill_repo::{
     PgSkillRepository, SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord,
 };
 pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord, TenantUpdatePatch};
+pub use tenant_skill_config_repo::{PgTenantSkillConfigRepository, TenantSkillConfigRecord};
 pub use trust_repo::{
     DecisionRecordRecord, NewDecisionRecordRecord, NewTrustPolicyRecord, PgTrustRepository,
     TenantAccessStatus, TrustDecisionResolution, TrustPolicyRecord,

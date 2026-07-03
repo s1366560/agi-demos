@@ -44,6 +44,7 @@ mod prod_api;
 mod sandbox_api;
 mod shares_api;
 mod skill_api;
+mod tenant_skill_config_api;
 mod trust_api;
 mod workspace_api;
 mod workspace_outbox_worker;
@@ -59,8 +60,9 @@ use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
     PgMemoryRepository, PgPool, PgProjectReadRepository, PgProjectSandboxRepository,
-    PgProjectStore, PgShareRepository, PgSkillRepository, PgTenantRepository, PgTrustRepository,
-    PgUserStore, PgVectorIndex, PgWorkspaceRepository,
+    PgProjectStore, PgShareRepository, PgSkillRepository, PgTenantRepository,
+    PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
+    PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -87,6 +89,9 @@ use crate::sandbox_api::{
 };
 use crate::shares_api::{DevShareService, PgShareService, SharedShares};
 use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
+use crate::tenant_skill_config_api::{
+    DevTenantSkillConfigService, PgTenantSkillConfigService, SharedTenantSkillConfigs,
+};
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
 use crate::workspace_outbox_worker::{
@@ -122,6 +127,9 @@ pub(crate) struct AppState {
     pub(crate) trust: SharedTrust,
     /// P5 skill store/versioning service over Python-owned `skills` tables.
     pub(crate) skills: SharedSkills,
+    /// P5 tenant skill disable/override config over Python-owned
+    /// `tenant_skill_configs`.
+    pub(crate) tenant_skill_configs: SharedTenantSkillConfigs,
     /// P6 workspace/task/topology/blackboard foundation over Python-owned
     /// workspace tables.
     pub(crate) workspaces: SharedWorkspaces,
@@ -500,6 +508,7 @@ async fn build_memory_and_auth(
     SharedShares,
     SharedTrust,
     SharedSkills,
+    SharedTenantSkillConfigs,
     SharedWorkspaces,
     Option<PgPool>,
     Option<PgProjectSandboxRepository>,
@@ -551,6 +560,9 @@ async fn build_memory_and_auth(
                 Arc::new(PgTrustService::new(PgTrustRepository::new(pool.clone())));
             let skills: SharedSkills =
                 Arc::new(PgSkillService::new(PgSkillRepository::new(pool.clone())));
+            let tenant_skill_configs: SharedTenantSkillConfigs = Arc::new(
+                PgTenantSkillConfigService::new(PgTenantSkillConfigRepository::new(pool.clone())),
+            );
             let workspaces: SharedWorkspaces = Arc::new(PgWorkspaceService::new(
                 PgWorkspaceRepository::new(pool.clone()),
                 object_store,
@@ -566,6 +578,7 @@ async fn build_memory_and_auth(
                 shares,
                 trust,
                 skills,
+                tenant_skill_configs,
                 workspaces,
                 Some(pool),
                 sandbox_repo,
@@ -591,6 +604,8 @@ async fn build_memory_and_auth(
             let shares: SharedShares = Arc::new(DevShareService::new("dev-user"));
             let trust: SharedTrust = Arc::new(DevTrustService::new("dev-user"));
             let skills: SharedSkills = Arc::new(DevSkillService::new("dev-tenant"));
+            let tenant_skill_configs: SharedTenantSkillConfigs =
+                Arc::new(DevTenantSkillConfigService::new("dev-tenant"));
             let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::with_object_store(
                 "dev-user",
                 object_store,
@@ -604,6 +619,7 @@ async fn build_memory_and_auth(
                 shares,
                 trust,
                 skills,
+                tenant_skill_configs,
                 workspaces,
                 None,
                 None,
@@ -771,6 +787,7 @@ async fn build_state() -> AppState {
         shares,
         trust,
         skills,
+        tenant_skill_configs,
         workspaces,
         workspace_plan_pool,
         sandbox_repo,
@@ -855,6 +872,7 @@ async fn build_state() -> AppState {
         shares,
         trust,
         skills,
+        tenant_skill_configs,
         workspaces,
         workspace_plan_outbox_worker,
         graph,
@@ -910,6 +928,7 @@ fn router(state: AppState) -> Router {
         .merge(sandbox_api::router())
         .merge(shares_api::router_authed())
         .merge(skill_api::router())
+        .merge(tenant_skill_config_api::router())
         .merge(trust_api::router_authed())
         .merge(workspace_api::router())
         .layer(axum::middleware::from_fn_with_state(
