@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 
+use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
 use super::{
     frontmatter, iso8601, normalize_status, parse_allowed_tools, parse_inline_list,
-    validate_skill_input, SkillApiError, SkillListView, SkillView,
+    validate_skill_input, SkillApiError, SkillListView, SkillPackageView, SkillView,
 };
 
 pub(super) async fn list_filesystem_system_skills(
@@ -44,6 +45,36 @@ pub(super) async fn list_filesystem_system_skills(
     skills.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
     let total = skills.len();
     Ok(SkillListView { skills, total })
+}
+
+pub(super) async fn export_filesystem_system_skill(
+    tenant_id: &str,
+    skill_id_or_name: &str,
+) -> Result<Option<SkillPackageView>, SkillApiError> {
+    let Some(root) = find_system_skills_dir().await? else {
+        return Ok(None);
+    };
+
+    let skill_files = collect_system_skill_files(&root).await?;
+    let now = Utc::now();
+    for path in skill_files {
+        let content = match tokio::fs::read_to_string(&path).await {
+            Ok(content) => content,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => continue,
+        };
+        let skill = match system_skill_view_from_content(tenant_id, &path, &content, now).await {
+            Ok(skill) => skill,
+            Err(_) => continue,
+        };
+        if system_skill_matches(&skill, skill_id_or_name) {
+            return system_skill_package_view(skill, &path, content)
+                .await
+                .map(Some);
+        }
+    }
+
+    Ok(None)
 }
 
 async fn find_system_skills_dir() -> Result<Option<PathBuf>, SkillApiError> {
@@ -114,6 +145,104 @@ async fn collect_system_skill_files(root: &Path) -> Result<Vec<PathBuf>, SkillAp
 
 async fn path_is_file(path: &Path) -> bool {
     matches!(tokio::fs::metadata(path).await, Ok(metadata) if metadata.is_file())
+}
+
+async fn system_skill_package_view(
+    mut skill: SkillView,
+    skill_md_path: &Path,
+    skill_md_content: String,
+) -> Result<SkillPackageView, SkillApiError> {
+    let resource_files = filesystem_skill_resource_files(skill_md_path).await?;
+    skill.full_content = Some(skill_md_content.clone());
+    Ok(SkillPackageView {
+        format: "agentskills.io/skill-package".to_string(),
+        skill,
+        skill_md_content,
+        resource_files,
+        version_number: None,
+        version_label: None,
+    })
+}
+
+async fn filesystem_skill_resource_files(skill_md_path: &Path) -> Result<Value, SkillApiError> {
+    let Some(skill_dir) = skill_md_path.parent() else {
+        return Ok(json!({}));
+    };
+    if !path_is_dir(skill_dir).await {
+        return Ok(json!({}));
+    }
+
+    let mut resource_files = Map::new();
+    let mut pending = vec![skill_dir.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let mut entries = match tokio::fs::read_dir(&dir).await {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(SkillApiError::internal(err)),
+        };
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(SkillApiError::internal)?
+        {
+            let file_type = match entry.file_type().await {
+                Ok(file_type) => file_type,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(SkillApiError::internal(err)),
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+
+            let path = entry.path();
+            if file_type.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+
+            let Ok(relative_path) = path.strip_prefix(skill_dir) else {
+                continue;
+            };
+            if relative_path == Path::new("SKILL.md") {
+                continue;
+            }
+
+            let bytes = match tokio::fs::read(&path).await {
+                Ok(bytes) => bytes,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(SkillApiError::internal(err)),
+            };
+            resource_files.insert(
+                path_to_posix(relative_path),
+                Value::String(resource_text(&bytes)),
+            );
+        }
+    }
+
+    Ok(Value::Object(resource_files))
+}
+
+async fn path_is_dir(path: &Path) -> bool {
+    matches!(tokio::fs::metadata(path).await, Ok(metadata) if metadata.is_dir())
+}
+
+fn path_to_posix(path: &Path) -> String {
+    path.iter()
+        .map(|part| part.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn resource_text(bytes: &[u8]) -> String {
+    String::from_utf8(bytes.to_vec())
+        .unwrap_or_else(|_| format!("base64:{}", general_purpose::STANDARD.encode(bytes)))
+}
+
+fn system_skill_matches(skill: &SkillView, skill_id_or_name: &str) -> bool {
+    skill.id == skill_id_or_name || skill.name == skill_id_or_name
 }
 
 pub(super) async fn system_skill_view_from_content(
@@ -274,4 +403,87 @@ fn system_skill_id(name: &str) -> String {
         format!("agistack://system-skill/{name}").as_bytes(),
     )
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    struct TempSkillDir {
+        root: PathBuf,
+    }
+
+    impl TempSkillDir {
+        fn new() -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock must be after unix epoch")
+                .as_nanos();
+            let root = std::env::temp_dir().join(format!(
+                "agistack-system-skill-export-{}-{nonce}",
+                std::process::id()
+            ));
+            Self { root }
+        }
+    }
+
+    impl Drop for TempSkillDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[tokio::test]
+    async fn filesystem_skill_resource_files_preserves_text_and_encodes_binary() {
+        // Arrange
+        let temp = TempSkillDir::new();
+        let skill_md = temp.root.join("SKILL.md");
+        tokio::fs::create_dir_all(temp.root.join("references"))
+            .await
+            .expect("test skill references directory should be created");
+        tokio::fs::write(&skill_md, "# Skill\n")
+            .await
+            .expect("test skill markdown should be written");
+        tokio::fs::write(temp.root.join("env.sh"), "export A=1\n")
+            .await
+            .expect("text resource should be written");
+        tokio::fs::write(temp.root.join("references/README.md"), "details\n")
+            .await
+            .expect("nested text resource should be written");
+        tokio::fs::write(temp.root.join("asset.bin"), [0xff, 0x00, 0x01])
+            .await
+            .expect("binary resource should be written");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(temp.root.join("env.sh"), temp.root.join("skip-link.sh"))
+            .expect("test symlink should be created");
+
+        // Act
+        let resources = filesystem_skill_resource_files(&skill_md)
+            .await
+            .expect("filesystem resources should be collected");
+        let resources = resources
+            .as_object()
+            .expect("filesystem resources should be a JSON object");
+
+        // Assert
+        assert_eq!(
+            resources.get("env.sh").and_then(Value::as_str),
+            Some("export A=1\n")
+        );
+        assert_eq!(
+            resources
+                .get("references/README.md")
+                .and_then(Value::as_str),
+            Some("details\n")
+        );
+        assert_eq!(
+            resources.get("asset.bin").and_then(Value::as_str),
+            Some("base64:/wAB")
+        );
+        assert!(!resources.contains_key("SKILL.md"));
+        assert!(!resources.contains_key("skip-link.sh"));
+    }
 }

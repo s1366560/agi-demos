@@ -1,0 +1,38 @@
+{
+  "format": "agentskills.io/skill-package",
+  "skill": {
+    "id": "f012eae7-dcfd-541a-8547-7f938a832fd0",
+    "tenant_id": "tenant-1",
+    "project_id": null,
+    "name": "code-review",
+    "description": "Perform comprehensive code review with best practices analysis. Use when user asks for code review, code quality check, or wants to analyze their code for issues.",
+    "tools": ["memory_search", "graph_query"],
+    "full_content": "<string>",
+    "status": "active",
+    "scope": "system",
+    "is_system_skill": true,
+    "source": "filesystem",
+    "file_path": "<string>",
+    "created_at": "<iso8601>",
+    "updated_at": "<iso8601>",
+    "metadata": {
+      "source_type": "system",
+      "context": "shared",
+      "user_invocable": true,
+      "author": "memstack-team",
+      "version": "1.0"
+    },
+    "resource_files": {},
+    "agent_modes": ["*"],
+    "license": "Apache-2.0",
+    "compatibility": "Requires access to code files",
+    "allowed_tools_raw": "memory_search graph_query",
+    "spec_version": "1.0",
+    "current_version": 0,
+    "version_label": null
+  },
+  "skill_md_content": "<string>",
+  "resource_files": {},
+  "version_number": null,
+  "version_label": null
+}

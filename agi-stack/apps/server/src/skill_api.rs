@@ -2,9 +2,9 @@
 //!
 //! This module mirrors the database-backed subset of Python's `/api/v1/skills`
 //! router: tenant/project skill CRUD, content updates, version snapshots,
-//! rollback/import/export, filesystem-backed system skill listing, zip import,
-//! and the skill-evolution strategy config. Evolution jobs remain Python-owned
-//! until their full semantics are migrated.
+//! rollback/import/export, filesystem-backed system skill listing/package
+//! export, zip import, and the skill-evolution strategy config. Evolution jobs
+//! remain Python-owned until their full semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -1081,7 +1081,15 @@ impl SkillService for PgSkillService {
         skill_id: &str,
     ) -> Result<SkillPackageView, SkillApiError> {
         let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
-        let skill = self.readable_skill(user_id, &tenant_id, skill_id).await?;
+        let skill = match self.readable_skill(user_id, &tenant_id, skill_id).await {
+            Ok(skill) => skill,
+            Err(err) if err.status == StatusCode::NOT_FOUND => {
+                return system_skills::export_filesystem_system_skill(&tenant_id, skill_id)
+                    .await?
+                    .ok_or_else(|| SkillApiError::not_found("Skill not found"));
+            }
+            Err(err) => return Err(err),
+        };
         let version = self
             .repo
             .get_latest_version(skill_id)
@@ -1831,7 +1839,15 @@ impl SkillService for DevSkillService {
         skill_id: &str,
     ) -> Result<SkillPackageView, SkillApiError> {
         let tenant_id = self.resolve_tenant(tenant_id);
-        let skill = self.get_owned(&tenant_id, skill_id)?;
+        let skill = match self.get_owned(&tenant_id, skill_id) {
+            Ok(skill) => skill,
+            Err(err) if err.status == StatusCode::NOT_FOUND => {
+                return system_skills::export_filesystem_system_skill(&tenant_id, skill_id)
+                    .await?
+                    .ok_or_else(|| SkillApiError::not_found("Skill not found"));
+            }
+            Err(err) => return Err(err),
+        };
         let version = self
             .versions
             .lock()
@@ -3000,6 +3016,45 @@ Use when managing Agent Skills packages.
             serde_json::from_str(include_str!("../tests/golden/skill_package_export.json"))
                 .unwrap();
         agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[tokio::test]
+    async fn system_skill_package_export_matches_golden() {
+        let package = system_skills::export_filesystem_system_skill("tenant-1", "code-review")
+            .await
+            .unwrap()
+            .unwrap();
+        let actual = serde_json::to_value(package).unwrap();
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/skill_system_package_export.json"
+        ))
+        .unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[tokio::test]
+    async fn dev_service_exports_filesystem_system_skill_packages() {
+        let service = DevSkillService::new("tenant-1");
+
+        let by_name = service
+            .export_package("u1", Some("tenant-1"), "code-review")
+            .await
+            .unwrap();
+        let by_id = service
+            .export_package(
+                "u1",
+                Some("tenant-1"),
+                "f012eae7-dcfd-541a-8547-7f938a832fd0",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(by_name.skill.name, "code-review");
+        assert_eq!(by_name.skill.scope, "system");
+        assert!(by_name.skill.is_system_skill);
+        assert_eq!(by_name.version_number, None);
+        assert_eq!(by_name.resource_files, json!({}));
+        assert_eq!(by_id.skill.name, by_name.skill.name);
     }
 
     #[test]
