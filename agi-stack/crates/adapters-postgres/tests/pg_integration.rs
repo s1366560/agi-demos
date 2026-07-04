@@ -13,6 +13,8 @@
 //! assert round-trips. This proves shared-DB compatibility without standing up
 //! the full 110-table Python schema.
 
+#[path = "pg_integration/hitl.rs"]
+mod hitl;
 #[path = "pg_integration/identity.rs"]
 mod identity;
 #[path = "pg_integration/memory.rs"]

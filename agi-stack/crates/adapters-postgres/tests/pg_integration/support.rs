@@ -2,19 +2,20 @@ pub(super) use agistack_adapters_postgres::PgPool;
 pub(super) use agistack_adapters_postgres::{
     connect, ensure_aux_schema, BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord,
     BlackboardReplyRecord, InvitationRecord, NewDecisionRecordRecord, NewShareRecord,
-    NewTrustPolicyRecord, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
-    PgMemoryRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
-    PgShareRepository, PgSkillEvolutionRepository, PgSkillRepository, PgTenantRepository,
-    PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
-    PgWorkspaceRepository, ProjectCreateRecord, ProjectListForUserQuery, ProjectLookup,
-    ProjectMembersLookup, ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch,
-    SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus,
-    TenantAdminStatus, TenantLookup, TenantSkillConfigRecord, TenantUpdatePatch,
-    TopologyEdgeRecord, TopologyNodeRecord, TrustDecisionResolution, WorkspaceAccess,
-    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
-    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
-    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
-    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    NewTrustPolicyRecord, PgApiKeyStore, PgCheckpointStore, PgHitlRequestRepository,
+    PgInvitationRepository, PgMemoryRepository, PgProjectReadRepository,
+    PgProjectSandboxRepository, PgProjectStore, PgShareRepository, PgSkillEvolutionRepository,
+    PgSkillRepository, PgTenantRepository, PgTenantSkillConfigRepository, PgTrustRepository,
+    PgUserStore, PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord,
+    ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord,
+    ProjectStatsLookup, ProjectUpdatePatch, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
+    SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantLookup,
+    TenantSkillConfigRecord, TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord,
+    TrustDecisionResolution, WorkspaceAccess, WorkspacePipelineRunRecord,
+    WorkspacePipelineStageRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
+    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceTaskSessionAttemptRecord,
 };
 pub(super) use agistack_core::agent::types::{SessionState, SessionStatus};
 pub(super) use agistack_core::model::{Entity, Memory};
@@ -419,6 +420,30 @@ pub(super) async fn ensure_project_read_tables(pool: &PgPool) {
             .execute(pool)
             .await
             .unwrap_or_else(|e| panic!("project read ddl failed: {ddl}\n{e}"));
+    }
+}
+
+pub(super) async fn ensure_hitl_tables(pool: &PgPool) {
+    ensure_project_read_tables(pool).await;
+    for ddl in [
+        "CREATE TABLE IF NOT EXISTS hitl_requests (\
+            id text PRIMARY KEY, request_type varchar(50) NOT NULL, \
+            conversation_id text NOT NULL, message_id text, tenant_id text NOT NULL, \
+            project_id text NOT NULL, user_id text, question text NOT NULL, options json, \
+            context json, request_metadata json, status varchar(20) DEFAULT 'pending' NOT NULL, \
+            response text, response_metadata json, created_at timestamptz DEFAULT now() NOT NULL, \
+            expires_at timestamptz, answered_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_hitl_requests_conversation_status \
+            ON hitl_requests (conversation_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_hitl_requests_tenant_project_status \
+            ON hitl_requests (tenant_id, project_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_hitl_requests_expires_at \
+            ON hitl_requests (expires_at)",
+    ] {
+        sqlx::query(ddl)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("hitl ddl failed: {ddl}\n{e}"));
     }
 }
 

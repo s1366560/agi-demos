@@ -21,6 +21,7 @@ use serde_json::{json, Value};
 use tokio::time::{self, Duration};
 
 use crate::auth::{AuthRejection, Identity};
+use crate::hitl_api::{ws_ack_message, HitlResponsePayload};
 use crate::AppState;
 use agistack_core::agent::events::{derive_event_id, AgentEventType, EventEnvelope};
 use subscriptions::{flush_event_subscriptions, ConnectionSubscriptions};
@@ -61,6 +62,35 @@ enum ClientMessage {
     },
     StopSession {
         conversation_id: String,
+    },
+    ClarificationRespond {
+        request_id: String,
+        answer: Value,
+    },
+    DecisionRespond {
+        request_id: String,
+        decision: Value,
+    },
+    EnvVarRespond {
+        request_id: String,
+        #[serde(default)]
+        values: Option<Value>,
+        #[serde(default)]
+        cancelled: bool,
+        #[serde(default)]
+        timeout: bool,
+    },
+    PermissionRespond {
+        request_id: String,
+        granted: bool,
+    },
+    A2uiActionRespond {
+        request_id: String,
+        action_name: Value,
+        #[serde(default)]
+        source_component_id: Option<String>,
+        #[serde(default)]
+        context: Option<Value>,
     },
     SubscribeStatus {
         project_id: String,
@@ -374,8 +404,102 @@ async fn handle_client_message(
             )
             .await;
         }
+        ClientMessage::ClarificationRespond { request_id, answer } => {
+            let request = HitlResponsePayload {
+                request_id,
+                hitl_type: "clarification".to_string(),
+                response_data: json!({"answer": answer}),
+            };
+            let _ =
+                handle_hitl_response(app, identity, socket, request, "clarification_response_ack")
+                    .await;
+        }
+        ClientMessage::DecisionRespond {
+            request_id,
+            decision,
+        } => {
+            let request = HitlResponsePayload {
+                request_id,
+                hitl_type: "decision".to_string(),
+                response_data: json!({"decision": decision}),
+            };
+            let _ =
+                handle_hitl_response(app, identity, socket, request, "decision_response_ack").await;
+        }
+        ClientMessage::EnvVarRespond {
+            request_id,
+            values,
+            cancelled,
+            timeout,
+        } => {
+            let response_data = match (values, cancelled, timeout) {
+                (Some(values), false, false) => json!({"values": values}),
+                (None, true, false) => json!({"cancelled": true}),
+                (None, false, true) => json!({"timeout": true}),
+                _ => {
+                    let _ = send_error(
+                        socket,
+                        "Missing required fields: request_id and exactly one of values/cancelled/timeout",
+                    )
+                    .await;
+                    return true;
+                }
+            };
+            let request = HitlResponsePayload {
+                request_id,
+                hitl_type: "env_var".to_string(),
+                response_data,
+            };
+            let _ =
+                handle_hitl_response(app, identity, socket, request, "env_var_response_ack").await;
+        }
+        ClientMessage::PermissionRespond {
+            request_id,
+            granted,
+        } => {
+            let action = if granted { "allow" } else { "deny" };
+            let request = HitlResponsePayload {
+                request_id,
+                hitl_type: "permission".to_string(),
+                response_data: json!({"granted": granted, "action": action}),
+            };
+            let _ = handle_hitl_response(app, identity, socket, request, "permission_response_ack")
+                .await;
+        }
+        ClientMessage::A2uiActionRespond {
+            request_id,
+            action_name,
+            source_component_id,
+            context,
+        } => {
+            let request = HitlResponsePayload {
+                request_id,
+                hitl_type: "a2ui_action".to_string(),
+                response_data: json!({
+                    "action_name": action_name,
+                    "source_component_id": source_component_id.unwrap_or_default(),
+                    "context": context.unwrap_or_else(|| json!({})),
+                }),
+            };
+            let _ =
+                handle_hitl_response(app, identity, socket, request, "a2ui_action_response_ack")
+                    .await;
+        }
     }
     true
+}
+
+async fn handle_hitl_response(
+    app: &AppState,
+    identity: &Identity,
+    socket: &mut WebSocket,
+    request: HitlResponsePayload,
+    ack_type: &str,
+) -> Result<(), axum::Error> {
+    match app.hitl.respond(&identity.user_id, request).await {
+        Ok(outcome) => send_json(socket, ws_ack_message(ack_type, &outcome)).await,
+        Err(err) => send_error(socket, err.detail()).await,
+    }
 }
 
 async fn run_agent_message(
@@ -608,5 +732,30 @@ mod tests {
         assert_eq!(message["data"]["is_active"], false);
         assert_eq!(message["data"]["is_initialized"], false);
         assert!(message["timestamp"].as_str().is_some());
+    }
+
+    #[test]
+    fn parses_python_hitl_response_messages() {
+        let clarification: ClientMessage = serde_json::from_value(json!({
+            "type": "clarification_respond",
+            "request_id": "req1",
+            "answer": "yes",
+        }))
+        .unwrap();
+        assert!(matches!(
+            clarification,
+            ClientMessage::ClarificationRespond { .. }
+        ));
+
+        let permission: ClientMessage = serde_json::from_value(json!({
+            "type": "permission_respond",
+            "request_id": "req2",
+            "granted": true,
+        }))
+        .unwrap();
+        assert!(matches!(
+            permission,
+            ClientMessage::PermissionRespond { .. }
+        ));
     }
 }

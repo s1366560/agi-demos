@@ -13,6 +13,7 @@ use agistack_plugin_host::{ControlPlane, DataPlaneReconciler, PluginHost};
 
 use super::*;
 use crate::auth::{DevAuthenticator, SharedAuthenticator};
+use crate::hitl_api::{DevHitlResponseService, SharedHitlResponses};
 use crate::identity::{DevIdentityService, SharedIdentity};
 use crate::sandbox_api::ProjectSandboxService;
 use crate::shares_api::{DevShareService, SharedShares};
@@ -51,6 +52,7 @@ fn test_state() -> AppState {
         Arc::new(DevTenantSkillConfigService::new("dev-tenant"));
     let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::new("dev-user"));
     let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
+    let hitl: SharedHitlResponses = Arc::new(DevHitlResponseService::new(Arc::clone(&events)));
 
     AppState {
         memory,
@@ -73,6 +75,7 @@ fn test_state() -> AppState {
         skills,
         tenant_skill_configs,
         workspaces,
+        hitl,
         workspace_plan_outbox_worker: None,
         graph: Arc::new(InMemoryGraphStore::new()),
         sandboxes: Arc::new(ProjectSandboxService::new(

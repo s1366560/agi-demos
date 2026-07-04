@@ -29,6 +29,7 @@ pub use sqlx::postgres::PgPool;
 
 mod auth_store;
 mod checkpoint;
+mod hitl_repo;
 mod invitation_repo;
 mod memory_repo;
 mod project_repo;
@@ -45,6 +46,7 @@ mod workspace_repo;
 
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
 pub use checkpoint::PgCheckpointStore;
+pub use hitl_repo::{HitlRequestRecord, PgHitlRequestRepository};
 pub use invitation_repo::{
     normalize_email, InvitationRecord, PgInvitationRepository, TenantAdminStatus,
 };

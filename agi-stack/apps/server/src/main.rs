@@ -30,6 +30,7 @@ mod auth;
 mod demo_api;
 mod enhanced_search_api;
 mod graph_api;
+mod hitl_api;
 mod identity;
 mod identity_api;
 mod prod_api;
@@ -68,6 +69,7 @@ use agistack_plugin_host::{
 };
 
 use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
+use crate::hitl_api::{build_hitl_response_service, SharedHitlResponses};
 use crate::identity::{
     DevIdentityService, InMemoryDeviceGrantStore, PgIdentityService, SharedDeviceGrantStore,
     SharedIdentity,
@@ -122,6 +124,9 @@ pub(crate) struct AppState {
     /// P6 workspace/task/topology/blackboard foundation over Python-owned
     /// workspace tables.
     pub(crate) workspaces: SharedWorkspaces,
+    /// P3/F7 HITL response ingress over Python-owned `hitl_requests` plus the
+    /// shared Redis/EventStream continuation channel.
+    pub(crate) hitl: SharedHitlResponses,
     /// P6 server-only outbox worker foundation. It is wired for explicit
     /// one-shot/loop use once handlers are migrated, but is not auto-started.
     pub(crate) workspace_plan_outbox_worker: Option<SharedWorkspacePlanOutboxWorker>,
@@ -590,6 +595,7 @@ async fn build_state() -> ServerResult<AppState> {
         project_config_repo,
     ) = build_memory_and_auth(llm.clone(), embedding, object_store).await?;
     let events = build_event_stream().await;
+    let hitl = build_hitl_response_service(workspace_plan_pool.clone(), Arc::clone(&events));
     let graph = build_graph_store().await;
     let sandbox_runtime = build_container_runtime().await;
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
@@ -670,6 +676,7 @@ async fn build_state() -> ServerResult<AppState> {
         skills,
         tenant_skill_configs,
         workspaces,
+        hitl,
         workspace_plan_outbox_worker,
         graph,
         sandboxes,
