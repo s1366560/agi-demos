@@ -32,6 +32,7 @@ use uuid::Uuid;
 use crate::sandbox_api::{ExecuteToolResponse, ProjectSandboxService};
 
 mod agent_mention;
+use agent_mention::WORKSPACE_AGENT_MENTION_EVENT;
 
 #[cfg(test)]
 pub(crate) use agent_mention::{
@@ -40,6 +41,13 @@ pub(crate) use agent_mention::{
 pub(crate) use agent_mention::{
     workspace_agent_mention_runtime_from_env, WorkspaceAgentMentionBindingHandler,
     WorkspaceAgentMentionRuntime,
+};
+#[cfg(test)]
+use agent_mention::{
+    MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH, WORKSPACE_AGENT_CHAIN_MENTION_SOURCE,
+    WORKSPACE_AGENT_CHAIN_MENTION_STAGE, WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS,
+    WORKSPACE_AGENT_MENTION_PENDING_RUNTIME_STATUS, WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS,
+    WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS, WORKSPACE_MESSAGE_CREATED_EVENT,
 };
 
 pub(crate) type SharedWorkspacePlanOutboxWorker = Arc<WorkspacePlanOutboxWorker>;
@@ -50,18 +58,6 @@ const WORKER_LAUNCH_EVENT: &str = "worker_launch";
 const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
 const ATTEMPT_RETRY_EVENT: &str = "attempt_retry";
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
-const WORKSPACE_AGENT_MENTION_EVENT: &str = "workspace_agent_mention";
-const WORKSPACE_AGENT_MENTION_PENDING_RUNTIME_STATUS: &str = "pending_runtime";
-const WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS: &str = "runtime_bound";
-#[allow(dead_code)]
-const WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS: &str = "runtime_response_ready";
-#[allow(dead_code)]
-const WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS: &str = "runtime_error_ready";
-const WORKSPACE_MESSAGE_CREATED_EVENT: &str = "workspace_message_created";
-const WORKSPACE_MENTION_RUNTIME_ENABLED_ENV: &str = "AGISTACK_WORKSPACE_MENTION_RUNTIME_ENABLED";
-const MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH: i64 = 3;
-const WORKSPACE_AGENT_CHAIN_MENTION_SOURCE: &str = "workspace_agent_chain_mention";
-const WORKSPACE_AGENT_CHAIN_MENTION_STAGE: &str = "agent_chain_mention";
 const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
 const DRONE_PROVIDER: &str = "drone";
 const DRONE_SERVER_ENV: &str = "DRONE_SERVER";

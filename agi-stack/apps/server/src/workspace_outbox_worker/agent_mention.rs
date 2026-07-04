@@ -16,12 +16,18 @@ use super::{
     bool_env, compact_text, metadata_string_values, object_or_empty, required_string,
     string_from_map, workspace_event_iso, workspace_message_event_payload,
     WorkspacePlanDispatchStore, WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
-    MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH, WORKSPACE_AGENT_CHAIN_MENTION_SOURCE,
-    WORKSPACE_AGENT_CHAIN_MENTION_STAGE, WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS,
-    WORKSPACE_AGENT_MENTION_EVENT, WORKSPACE_AGENT_MENTION_PENDING_RUNTIME_STATUS,
-    WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS, WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS,
-    WORKSPACE_MENTION_RUNTIME_ENABLED_ENV, WORKSPACE_MESSAGE_CREATED_EVENT,
 };
+
+pub(super) const WORKSPACE_AGENT_MENTION_EVENT: &str = "workspace_agent_mention";
+pub(super) const WORKSPACE_AGENT_MENTION_PENDING_RUNTIME_STATUS: &str = "pending_runtime";
+pub(super) const WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS: &str = "runtime_bound";
+pub(super) const WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS: &str = "runtime_response_ready";
+pub(super) const WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS: &str = "runtime_error_ready";
+pub(super) const WORKSPACE_MESSAGE_CREATED_EVENT: &str = "workspace_message_created";
+const WORKSPACE_MENTION_RUNTIME_ENABLED_ENV: &str = "AGISTACK_WORKSPACE_MENTION_RUNTIME_ENABLED";
+pub(super) const MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH: i64 = 3;
+pub(super) const WORKSPACE_AGENT_CHAIN_MENTION_SOURCE: &str = "workspace_agent_chain_mention";
+pub(super) const WORKSPACE_AGENT_CHAIN_MENTION_STAGE: &str = "agent_chain_mention";
 
 pub(crate) struct WorkspaceAgentMentionRuntimeInput {
     pub(crate) workspace_id: String,
