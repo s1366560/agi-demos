@@ -372,6 +372,14 @@ fn p5_skill_store_rules_are_exact() {
 fn p5_channel_config_rules_are_exact() {
     for (method, path) in [
         (Method::GET, "/api/v1/channels/projects/project-1/configs"),
+        (
+            Method::GET,
+            "/api/v1/channels/projects/project-1/observability/outbox",
+        ),
+        (
+            Method::GET,
+            "/api/v1/channels/projects/project-1/observability/session-bindings",
+        ),
         (Method::GET, "/api/v1/channels/configs/config-1"),
         (Method::GET, "/api/v1/channels/configs/config-1/status"),
     ] {
@@ -388,6 +396,14 @@ fn p5_channel_config_rules_are_exact() {
         (
             Method::GET,
             "/api/v1/channels/projects/project-1/observability/summary",
+        ),
+        (
+            Method::POST,
+            "/api/v1/channels/projects/project-1/observability/outbox",
+        ),
+        (
+            Method::GET,
+            "/api/v1/channels/projects/project-1/observability/outbox/extra",
         ),
         (Method::PUT, "/api/v1/channels/configs/config-1"),
         (Method::DELETE, "/api/v1/channels/configs/config-1"),

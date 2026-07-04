@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use agistack_adapters_postgres::{
-    ChannelConfigListQuery, ChannelConfigRecord, ChannelStatusRecord, PgChannelRepository,
+    ChannelConfigListQuery, ChannelConfigRecord, ChannelOutboxListQuery, ChannelOutboxRecord,
+    ChannelPageQuery, ChannelSessionBindingRecord, ChannelStatusRecord, PgChannelRepository,
 };
 
 use crate::{auth::Identity, AppState};
@@ -70,6 +71,78 @@ impl ChannelConfigQuery {
 pub(crate) struct ValidatedChannelConfigQuery<'a> {
     channel_type: Option<&'a str>,
     enabled_only: bool,
+    limit: i64,
+    offset: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ChannelOutboxQuery {
+    #[serde(rename = "status")]
+    status_filter: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+impl ChannelOutboxQuery {
+    fn validated(&self) -> Result<ValidatedChannelOutboxQuery<'_>, ChannelApiError> {
+        let page = ChannelPageQueryParams {
+            limit: self.limit,
+            offset: self.offset,
+        }
+        .validated(200)?;
+        let status_filter = self
+            .status_filter
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if let Some(status) = status_filter {
+            if !is_valid_outbox_status(status) {
+                return Err(ChannelApiError::unprocessable(
+                    "status must be one of pending, failed, sent, dead_letter",
+                ));
+            }
+        }
+        Ok(ValidatedChannelOutboxQuery {
+            status_filter,
+            limit: page.limit,
+            offset: page.offset,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ValidatedChannelOutboxQuery<'a> {
+    status_filter: Option<&'a str>,
+    limit: i64,
+    offset: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ChannelPageQueryParams {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+impl ChannelPageQueryParams {
+    fn validated(&self, max_limit: i64) -> Result<ValidatedChannelPageQuery, ChannelApiError> {
+        let limit = self.limit.unwrap_or(50);
+        if !(1..=max_limit).contains(&limit) {
+            return Err(ChannelApiError::unprocessable(format!(
+                "limit must be greater than or equal to 1 and less than or equal to {max_limit}",
+            )));
+        }
+        let offset = self.offset.unwrap_or(0);
+        if offset < 0 {
+            return Err(ChannelApiError::unprocessable(
+                "offset must be greater than or equal to 0",
+            ));
+        }
+        Ok(ValidatedChannelPageQuery { limit, offset })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ValidatedChannelPageQuery {
     limit: i64,
     offset: i64,
 }
@@ -162,6 +235,86 @@ impl From<ChannelStatusRecord> for ChannelStatusView {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChannelOutboxItemView {
+    id: String,
+    channel_config_id: String,
+    conversation_id: String,
+    chat_id: String,
+    status: String,
+    attempt_count: i32,
+    max_attempts: i32,
+    sent_channel_message_id: Option<String>,
+    last_error: Option<String>,
+    next_retry_at: Option<String>,
+    created_at: String,
+    updated_at: Option<String>,
+}
+
+impl From<ChannelOutboxRecord> for ChannelOutboxItemView {
+    fn from(record: ChannelOutboxRecord) -> Self {
+        Self {
+            id: record.id,
+            channel_config_id: record.channel_config_id,
+            conversation_id: record.conversation_id,
+            chat_id: record.chat_id,
+            status: record.status,
+            attempt_count: record.attempt_count,
+            max_attempts: record.max_attempts,
+            sent_channel_message_id: record.sent_channel_message_id,
+            last_error: record.last_error,
+            next_retry_at: record.next_retry_at.map(iso8601),
+            created_at: iso8601(record.created_at),
+            updated_at: record.updated_at.map(iso8601),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChannelOutboxListView {
+    items: Vec<ChannelOutboxItemView>,
+    total: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChannelSessionBindingItemView {
+    id: String,
+    channel_config_id: String,
+    conversation_id: String,
+    channel_type: String,
+    chat_id: String,
+    chat_type: String,
+    thread_id: Option<String>,
+    topic_id: Option<String>,
+    session_key: String,
+    created_at: String,
+    updated_at: Option<String>,
+}
+
+impl From<ChannelSessionBindingRecord> for ChannelSessionBindingItemView {
+    fn from(record: ChannelSessionBindingRecord) -> Self {
+        Self {
+            id: record.id,
+            channel_config_id: record.channel_config_id,
+            conversation_id: record.conversation_id,
+            channel_type: record.channel_type,
+            chat_id: record.chat_id,
+            chat_type: record.chat_type,
+            thread_id: record.thread_id,
+            topic_id: record.topic_id,
+            session_key: record.session_key,
+            created_at: iso8601(record.created_at),
+            updated_at: record.updated_at.map(iso8601),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChannelSessionBindingListView {
+    items: Vec<ChannelSessionBindingItemView>,
+    total: i64,
+}
+
 #[derive(Debug)]
 pub(crate) struct ChannelApiError {
     status: StatusCode,
@@ -219,6 +372,20 @@ pub(crate) trait ChannelService: Send + Sync {
         user_id: &str,
         config_id: &str,
     ) -> Result<ChannelStatusView, ChannelApiError>;
+
+    async fn list_project_outbox(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        query: ValidatedChannelOutboxQuery<'_>,
+    ) -> Result<ChannelOutboxListView, ChannelApiError>;
+
+    async fn list_project_session_bindings(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        query: ValidatedChannelPageQuery,
+    ) -> Result<ChannelSessionBindingListView, ChannelApiError>;
 }
 
 pub(crate) struct PgChannelService {
@@ -238,6 +405,23 @@ impl PgChannelService {
         if self
             .repo
             .user_has_project_access(user_id, project_id)
+            .await
+            .map_err(ChannelApiError::internal)?
+        {
+            Ok(())
+        } else {
+            Err(ChannelApiError::forbidden("Access denied to project"))
+        }
+    }
+
+    async fn ensure_project_admin(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<(), ChannelApiError> {
+        if self
+            .repo
+            .user_is_project_admin(user_id, project_id)
             .await
             .map_err(ChannelApiError::internal)?
         {
@@ -310,6 +494,64 @@ impl ChannelService for PgChannelService {
             .await?;
         Ok(ChannelStatusView::from(status))
     }
+
+    async fn list_project_outbox(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        query: ValidatedChannelOutboxQuery<'_>,
+    ) -> Result<ChannelOutboxListView, ChannelApiError> {
+        self.ensure_project_admin(user_id, project_id).await?;
+        let rows = self
+            .repo
+            .list_outbox(ChannelOutboxListQuery {
+                project_id,
+                status_filter: query.status_filter,
+                limit: query.limit,
+                offset: query.offset,
+            })
+            .await
+            .map_err(ChannelApiError::internal)?;
+        let total = self
+            .repo
+            .count_outbox(project_id, query.status_filter)
+            .await
+            .map_err(ChannelApiError::internal)?;
+        Ok(ChannelOutboxListView {
+            items: rows.into_iter().map(ChannelOutboxItemView::from).collect(),
+            total,
+        })
+    }
+
+    async fn list_project_session_bindings(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        query: ValidatedChannelPageQuery,
+    ) -> Result<ChannelSessionBindingListView, ChannelApiError> {
+        self.ensure_project_admin(user_id, project_id).await?;
+        let rows = self
+            .repo
+            .list_session_bindings(ChannelPageQuery {
+                project_id,
+                limit: query.limit,
+                offset: query.offset,
+            })
+            .await
+            .map_err(ChannelApiError::internal)?;
+        let total = self
+            .repo
+            .count_session_bindings(project_id)
+            .await
+            .map_err(ChannelApiError::internal)?;
+        Ok(ChannelSessionBindingListView {
+            items: rows
+                .into_iter()
+                .map(ChannelSessionBindingItemView::from)
+                .collect(),
+            total,
+        })
+    }
 }
 
 #[derive(Default)]
@@ -350,6 +592,30 @@ impl ChannelService for DevChannelService {
     ) -> Result<ChannelStatusView, ChannelApiError> {
         Err(ChannelApiError::not_found("Configuration not found"))
     }
+
+    async fn list_project_outbox(
+        &self,
+        _user_id: &str,
+        _project_id: &str,
+        _query: ValidatedChannelOutboxQuery<'_>,
+    ) -> Result<ChannelOutboxListView, ChannelApiError> {
+        Ok(ChannelOutboxListView {
+            items: Vec::new(),
+            total: 0,
+        })
+    }
+
+    async fn list_project_session_bindings(
+        &self,
+        _user_id: &str,
+        _project_id: &str,
+        _query: ValidatedChannelPageQuery,
+    ) -> Result<ChannelSessionBindingListView, ChannelApiError> {
+        Ok(ChannelSessionBindingListView {
+            items: Vec::new(),
+            total: 0,
+        })
+    }
 }
 
 pub(crate) fn router() -> Router<AppState> {
@@ -365,6 +631,14 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/channels/configs/:config_id/status",
             get(get_channel_config_status),
+        )
+        .route(
+            "/api/v1/channels/projects/:project_id/observability/outbox",
+            get(list_project_channel_outbox),
+        )
+        .route(
+            "/api/v1/channels/projects/:project_id/observability/session-bindings",
+            get(list_project_channel_session_bindings),
         )
 }
 
@@ -406,8 +680,40 @@ async fn get_channel_config_status(
         .map(Json)
 }
 
+async fn list_project_channel_outbox(
+    State(state): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(project_id): Path<String>,
+    Query(query): Query<ChannelOutboxQuery>,
+) -> Result<Json<ChannelOutboxListView>, ChannelApiError> {
+    let query = query.validated()?;
+    state
+        .channels
+        .list_project_outbox(&identity.user_id, &project_id, query)
+        .await
+        .map(Json)
+}
+
+async fn list_project_channel_session_bindings(
+    State(state): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(project_id): Path<String>,
+    Query(query): Query<ChannelPageQueryParams>,
+) -> Result<Json<ChannelSessionBindingListView>, ChannelApiError> {
+    let query = query.validated(200)?;
+    state
+        .channels
+        .list_project_session_bindings(&identity.user_id, &project_id, query)
+        .await
+        .map(Json)
+}
+
 fn iso8601(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+}
+
+fn is_valid_outbox_status(status: &str) -> bool {
+    matches!(status, "pending" | "failed" | "sent" | "dead_letter")
 }
 
 fn mask_extra_settings(settings: Option<Value>) -> Option<Value> {

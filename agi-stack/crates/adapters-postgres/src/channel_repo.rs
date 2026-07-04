@@ -42,11 +42,57 @@ pub struct ChannelStatusRecord {
     pub last_error: Option<String>,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct ChannelOutboxRecord {
+    pub id: String,
+    pub channel_config_id: String,
+    pub conversation_id: String,
+    pub chat_id: String,
+    pub status: String,
+    pub attempt_count: i32,
+    pub max_attempts: i32,
+    pub sent_channel_message_id: Option<String>,
+    pub last_error: Option<String>,
+    pub next_retry_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct ChannelSessionBindingRecord {
+    pub id: String,
+    pub channel_config_id: String,
+    pub conversation_id: String,
+    pub channel_type: String,
+    pub chat_id: String,
+    pub chat_type: String,
+    pub thread_id: Option<String>,
+    pub topic_id: Option<String>,
+    pub session_key: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ChannelConfigListQuery<'a> {
     pub project_id: &'a str,
     pub channel_type: Option<&'a str>,
     pub enabled_only: bool,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ChannelOutboxListQuery<'a> {
+    pub project_id: &'a str,
+    pub status_filter: Option<&'a str>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ChannelPageQuery<'a> {
+    pub project_id: &'a str,
     pub limit: i64,
     pub offset: i64,
 }
@@ -67,6 +113,20 @@ impl PgChannelRepository {
     ) -> CoreResult<bool> {
         let count = sqlx::query_as::<_, (i64,)>(
             "SELECT count(*) FROM user_projects WHERE user_id = $1 AND project_id = $2",
+        )
+        .bind(user_id)
+        .bind(project_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?
+        .0;
+        Ok(count > 0)
+    }
+
+    pub async fn user_is_project_admin(&self, user_id: &str, project_id: &str) -> CoreResult<bool> {
+        let count = sqlx::query_as::<_, (i64,)>(
+            "SELECT count(*) FROM user_projects \
+             WHERE user_id = $1 AND project_id = $2 AND role IN ('owner', 'admin')",
         )
         .bind(user_id)
         .bind(project_id)
@@ -138,6 +198,83 @@ impl PgChannelRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| CoreError::Storage(e.to_string()))
+    }
+
+    pub async fn list_outbox(
+        &self,
+        query: ChannelOutboxListQuery<'_>,
+    ) -> CoreResult<Vec<ChannelOutboxRecord>> {
+        sqlx::query_as::<_, ChannelOutboxRecord>(
+            "SELECT \
+                id, channel_config_id, conversation_id, chat_id, status, attempt_count, \
+                max_attempts, sent_channel_message_id, last_error, next_retry_at, \
+                created_at, updated_at \
+             FROM channel_outbox \
+             WHERE project_id = $1 \
+               AND ($2::text IS NULL OR status = $2) \
+             ORDER BY created_at DESC \
+             LIMIT $3 OFFSET $4",
+        )
+        .bind(query.project_id)
+        .bind(query.status_filter)
+        .bind(query.limit)
+        .bind(query.offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))
+    }
+
+    pub async fn count_outbox(
+        &self,
+        project_id: &str,
+        status_filter: Option<&str>,
+    ) -> CoreResult<i64> {
+        sqlx::query_as::<_, (i64,)>(
+            "SELECT count(*) \
+             FROM channel_outbox \
+             WHERE project_id = $1 \
+               AND ($2::text IS NULL OR status = $2)",
+        )
+        .bind(project_id)
+        .bind(status_filter)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))
+        .map(|(count,)| count)
+    }
+
+    pub async fn list_session_bindings(
+        &self,
+        query: ChannelPageQuery<'_>,
+    ) -> CoreResult<Vec<ChannelSessionBindingRecord>> {
+        sqlx::query_as::<_, ChannelSessionBindingRecord>(
+            "SELECT \
+                id, channel_config_id, conversation_id, channel_type, chat_id, chat_type, \
+                thread_id, topic_id, session_key, created_at, updated_at \
+             FROM channel_session_bindings \
+             WHERE project_id = $1 \
+             ORDER BY created_at DESC \
+             LIMIT $2 OFFSET $3",
+        )
+        .bind(query.project_id)
+        .bind(query.limit)
+        .bind(query.offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))
+    }
+
+    pub async fn count_session_bindings(&self, project_id: &str) -> CoreResult<i64> {
+        sqlx::query_as::<_, (i64,)>(
+            "SELECT count(*) \
+             FROM channel_session_bindings \
+             WHERE project_id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))
+        .map(|(count,)| count)
     }
 }
 
