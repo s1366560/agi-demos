@@ -17,9 +17,8 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use chrono::Utc;
+use serde_json::json;
 
 use agistack_adapters_postgres::{
     DecisionRecordRecord, NewDecisionRecordRecord, NewTrustPolicyRecord, PgTrustRepository,
@@ -28,6 +27,12 @@ use agistack_adapters_postgres::{
 use agistack_adapters_secrets::generate_uuid_v4;
 
 use crate::{auth::Identity, AppState};
+
+#[cfg(test)]
+mod tests;
+mod views;
+
+use views::*;
 
 pub(crate) type SharedTrust = Arc<dyn TrustService>;
 
@@ -116,143 +121,6 @@ impl IntoResponse for TrustError {
     fn into_response(self) -> Response {
         (self.status, Json(json!({ "detail": self.detail }))).into_response()
     }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct TrustPolicyListQuery {
-    workspace_id: String,
-    #[serde(default)]
-    agent_instance_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct TrustPolicyCreatePayload {
-    workspace_id: String,
-    agent_instance_id: String,
-    action_type: String,
-    grant_type: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct TrustCheckQuery {
-    workspace_id: String,
-    agent_instance_id: String,
-    action_type: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct ApprovalRequestCreatePayload {
-    workspace_id: String,
-    agent_instance_id: String,
-    action_type: String,
-    #[serde(default = "empty_object")]
-    proposal: Value,
-    #[serde(default)]
-    context_summary: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct ApprovalResolvePayload {
-    decision: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct DecisionRecordListQuery {
-    workspace_id: String,
-    #[serde(default)]
-    agent_id: Option<String>,
-    #[serde(default)]
-    decision_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct DecisionRecordGetQuery {
-    workspace_id: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TrustPolicyView {
-    id: String,
-    tenant_id: String,
-    workspace_id: String,
-    agent_instance_id: String,
-    action_type: String,
-    granted_by: String,
-    grant_type: String,
-    created_at: String,
-    deleted_at: Option<String>,
-}
-
-impl From<TrustPolicyRecord> for TrustPolicyView {
-    fn from(record: TrustPolicyRecord) -> Self {
-        Self {
-            id: record.id,
-            tenant_id: record.tenant_id,
-            workspace_id: record.workspace_id,
-            agent_instance_id: record.agent_instance_id,
-            action_type: record.action_type,
-            granted_by: record.granted_by,
-            grant_type: record.grant_type,
-            created_at: iso8601(record.created_at),
-            deleted_at: record.deleted_at.map(iso8601),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TrustPolicyListView {
-    items: Vec<TrustPolicyView>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TrustCheckView {
-    trusted: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DecisionRecordView {
-    id: String,
-    tenant_id: String,
-    workspace_id: String,
-    agent_instance_id: String,
-    decision_type: String,
-    context_summary: Option<String>,
-    proposal: Value,
-    outcome: String,
-    reviewer_id: Option<String>,
-    review_type: Option<String>,
-    review_comment: Option<String>,
-    resolved_at: Option<String>,
-    created_at: String,
-    updated_at: Option<String>,
-    deleted_at: Option<String>,
-}
-
-impl From<DecisionRecordRecord> for DecisionRecordView {
-    fn from(record: DecisionRecordRecord) -> Self {
-        Self {
-            id: record.id,
-            tenant_id: record.tenant_id,
-            workspace_id: record.workspace_id,
-            agent_instance_id: record.agent_instance_id,
-            decision_type: record.decision_type,
-            context_summary: record.context_summary,
-            proposal: record.proposal,
-            outcome: record.outcome,
-            reviewer_id: record.reviewer_id,
-            review_type: record.review_type,
-            review_comment: record.review_comment,
-            resolved_at: record.resolved_at.map(iso8601),
-            created_at: iso8601(record.created_at),
-            updated_at: record.updated_at.map(iso8601),
-            deleted_at: record.deleted_at.map(iso8601),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DecisionRecordListView {
-    items: Vec<DecisionRecordView>,
 }
 
 pub(crate) struct PgTrustService {
@@ -767,19 +635,6 @@ fn approval_not_found() -> TrustError {
     TrustError::not_found("Approval request not found")
 }
 
-fn empty_object() -> Value {
-    json!({})
-}
-
-fn iso8601(dt: DateTime<Utc>) -> String {
-    dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
-
-#[cfg(test)]
-fn sample_dt() -> DateTime<Utc> {
-    DateTime::<Utc>::from_timestamp_millis(1_700_000_000_000).unwrap()
-}
-
 async fn list_policies(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -892,161 +747,4 @@ pub(crate) fn router_authed() -> Router<AppState> {
             "/api/v1/tenants/:tenant_id/trust/decision-records/:record_id",
             get(get_decision),
         )
-}
-
-#[cfg(test)]
-mod unit {
-    use super::*;
-
-    fn sample_policy() -> TrustPolicyRecord {
-        TrustPolicyRecord {
-            id: "11111111-1111-4111-8111-111111111111".into(),
-            tenant_id: "22222222-2222-4222-8222-222222222222".into(),
-            workspace_id: "33333333-3333-4333-8333-333333333333".into(),
-            agent_instance_id: "44444444-4444-4444-8444-444444444444".into(),
-            action_type: "terminal.execute".into(),
-            granted_by: "55555555-5555-4555-8555-555555555555".into(),
-            grant_type: "always".into(),
-            created_at: sample_dt(),
-            deleted_at: None,
-        }
-    }
-
-    fn sample_decision() -> DecisionRecordRecord {
-        DecisionRecordRecord {
-            id: "66666666-6666-4666-8666-666666666666".into(),
-            tenant_id: "22222222-2222-4222-8222-222222222222".into(),
-            workspace_id: "33333333-3333-4333-8333-333333333333".into(),
-            agent_instance_id: "44444444-4444-4444-8444-444444444444".into(),
-            decision_type: "terminal.execute".into(),
-            context_summary: Some("Agent wants to run a shell command.".into()),
-            proposal: json!({"command": "cargo test", "cwd": "/workspace"}),
-            outcome: "pending".into(),
-            reviewer_id: None,
-            review_type: None,
-            review_comment: None,
-            resolved_at: None,
-            created_at: sample_dt(),
-            updated_at: None,
-            deleted_at: None,
-        }
-    }
-
-    #[test]
-    fn trust_policy_response_matches_golden() {
-        let golden: Value =
-            serde_json::from_str(include_str!("../tests/golden/trust_policy_response.json"))
-                .unwrap();
-        let actual = serde_json::to_value(TrustPolicyView::from(sample_policy())).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn trust_policy_list_matches_golden() {
-        let golden: Value =
-            serde_json::from_str(include_str!("../tests/golden/trust_policy_list.json")).unwrap();
-        let actual = serde_json::to_value(TrustPolicyListView {
-            items: vec![TrustPolicyView::from(sample_policy())],
-        })
-        .unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn trust_check_matches_golden() {
-        let golden: Value =
-            serde_json::from_str(include_str!("../tests/golden/trust_check_response.json"))
-                .unwrap();
-        let actual = serde_json::to_value(TrustCheckView { trusted: true }).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn decision_record_response_matches_golden() {
-        let golden: Value = serde_json::from_str(include_str!(
-            "../tests/golden/decision_record_response.json"
-        ))
-        .unwrap();
-        let actual = serde_json::to_value(DecisionRecordView::from(sample_decision())).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn decision_record_list_matches_golden() {
-        let golden: Value =
-            serde_json::from_str(include_str!("../tests/golden/decision_record_list.json"))
-                .unwrap();
-        let actual = serde_json::to_value(DecisionRecordListView {
-            items: vec![DecisionRecordView::from(sample_decision())],
-        })
-        .unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[tokio::test]
-    async fn dev_resolve_allow_always_creates_policy_and_python_comment() {
-        let svc = DevTrustService::new("dev-user");
-        let created = svc
-            .submit_approval(
-                "dev-tenant",
-                "dev-user",
-                ApprovalRequestCreatePayload {
-                    workspace_id: "dev-workspace".into(),
-                    agent_instance_id: "agent-1".into(),
-                    action_type: "terminal.execute".into(),
-                    proposal: json!({}),
-                    context_summary: None,
-                },
-            )
-            .await
-            .unwrap();
-        let resolved = svc
-            .resolve_approval(
-                "dev-tenant",
-                "dev-user",
-                &created.id,
-                ApprovalResolvePayload {
-                    decision: "allow_always".into(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(resolved.outcome, "success");
-        assert_eq!(
-            resolved.review_comment.as_deref(),
-            Some("Allowed always — trust policy created")
-        );
-
-        let check = svc
-            .check_trust(
-                "dev-tenant",
-                "dev-user",
-                TrustCheckQuery {
-                    workspace_id: "dev-workspace".into(),
-                    agent_instance_id: "agent-1".into(),
-                    action_type: "terminal.execute".into(),
-                },
-            )
-            .await
-            .unwrap();
-        assert!(check.trusted);
-    }
-
-    #[tokio::test]
-    async fn invalid_resolve_decision_matches_python_404() {
-        let svc = DevTrustService::new("dev-user");
-        let err = svc
-            .resolve_approval(
-                "dev-tenant",
-                "dev-user",
-                "missing",
-                ApprovalResolvePayload {
-                    decision: "bogus".into(),
-                },
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(err.status, StatusCode::NOT_FOUND);
-        assert_eq!(err.detail, "Approval request not found");
-    }
 }
