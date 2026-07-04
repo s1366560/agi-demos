@@ -16,8 +16,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, SecondsFormat, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use serde_json::json;
 
 use agistack_adapters_postgres::{PgTenantSkillConfigRepository, TenantSkillConfigRecord};
@@ -25,6 +24,12 @@ use agistack_adapters_secrets::generate_uuid_v4;
 
 use crate::auth::Identity;
 use crate::AppState;
+
+#[cfg(test)]
+mod tests;
+mod views;
+
+use views::*;
 
 pub(crate) type SharedTenantSkillConfigs = Arc<dyn TenantSkillConfigService>;
 
@@ -118,73 +123,6 @@ impl IntoResponse for TenantSkillConfigApiError {
     fn into_response(self) -> Response {
         (self.status, Json(json!({ "detail": self.detail }))).into_response()
     }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct TenantQuery {
-    #[serde(default)]
-    tenant_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct SystemSkillPayload {
-    system_skill_name: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct OverrideSkillPayload {
-    system_skill_name: String,
-    override_skill_id: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TenantSkillConfigView {
-    id: String,
-    tenant_id: String,
-    system_skill_name: String,
-    action: String,
-    override_skill_id: Option<String>,
-    created_at: String,
-    updated_at: String,
-}
-
-impl From<TenantSkillConfigRecord> for TenantSkillConfigView {
-    fn from(record: TenantSkillConfigRecord) -> Self {
-        let updated_at = record.updated_at.unwrap_or(record.created_at);
-        Self {
-            id: record.id,
-            tenant_id: record.tenant_id,
-            system_skill_name: record.system_skill_name,
-            action: record.action,
-            override_skill_id: record.override_skill_id,
-            created_at: iso8601(record.created_at),
-            updated_at: iso8601(updated_at),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TenantSkillConfigListView {
-    configs: Vec<TenantSkillConfigView>,
-    total: i64,
-}
-
-impl TenantSkillConfigListView {
-    pub(crate) fn disabled_system_skill_names(&self) -> HashSet<String> {
-        self.configs
-            .iter()
-            .filter(|config| config.action == "disable")
-            .map(|config| config.system_skill_name.clone())
-            .collect()
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TenantSkillStatusView {
-    system_skill_name: String,
-    status: String,
-    action: Option<String>,
-    override_skill_id: Option<String>,
 }
 
 pub(crate) struct PgTenantSkillConfigService {
@@ -817,149 +755,6 @@ fn validate_system_skill_name(raw: &str) -> Result<&str, TenantSkillConfigApiErr
     })
 }
 
-fn iso8601(value: DateTime<Utc>) -> String {
-    value.to_rfc3339_opts(SecondsFormat::Secs, true)
-}
-
 fn present(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sample_config_record() -> TenantSkillConfigRecord {
-        let at = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
-        TenantSkillConfigRecord {
-            id: "33333333-3333-4333-8333-333333333333".to_string(),
-            tenant_id: "tenant-1".to_string(),
-            system_skill_name: "code-review".to_string(),
-            action: "override".to_string(),
-            override_skill_id: Some("skill-override-1".to_string()),
-            created_at: at,
-            updated_at: Some(at),
-        }
-    }
-
-    #[test]
-    fn tenant_skill_config_response_matches_golden() {
-        let actual =
-            serde_json::to_value(TenantSkillConfigView::from(sample_config_record())).unwrap();
-        let golden: serde_json::Value = serde_json::from_str(include_str!(
-            "../tests/golden/tenant_skill_config_response.json"
-        ))
-        .unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn tenant_skill_config_list_matches_golden() {
-        let actual = serde_json::to_value(TenantSkillConfigListView {
-            configs: vec![TenantSkillConfigView::from(sample_config_record())],
-            total: 1,
-        })
-        .unwrap();
-        let golden: serde_json::Value = serde_json::from_str(include_str!(
-            "../tests/golden/tenant_skill_config_list.json"
-        ))
-        .unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn tenant_skill_status_matches_goldens() {
-        let actual = serde_json::to_value(skill_status_view(
-            "code-review",
-            Some(sample_config_record()),
-        ))
-        .unwrap();
-        let golden: serde_json::Value = serde_json::from_str(include_str!(
-            "../tests/golden/tenant_skill_config_status_overridden.json"
-        ))
-        .unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-
-        let actual = serde_json::to_value(skill_status_view("code-review", None)).unwrap();
-        let golden: serde_json::Value = serde_json::from_str(include_str!(
-            "../tests/golden/tenant_skill_config_status_enabled.json"
-        ))
-        .unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[tokio::test]
-    async fn dev_service_disable_override_enable_and_delete_roundtrip() {
-        let service = DevTenantSkillConfigService::new("tenant-1")
-            .with_override_skill("skill-override-1")
-            .unwrap();
-
-        let disabled = service
-            .disable_skill(
-                "u1",
-                Some("tenant-1"),
-                SystemSkillPayload {
-                    system_skill_name: "code-review".to_string(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(disabled.action, "disable");
-        assert_eq!(disabled.override_skill_id, None);
-
-        let overridden = service
-            .override_skill(
-                "u1",
-                Some("tenant-1"),
-                OverrideSkillPayload {
-                    system_skill_name: "code-review".to_string(),
-                    override_skill_id: "skill-override-1".to_string(),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(overridden.action, "override");
-        assert_eq!(
-            overridden.override_skill_id.as_deref(),
-            Some("skill-override-1")
-        );
-
-        let status = service
-            .skill_status("u1", Some("tenant-1"), "code-review")
-            .await
-            .unwrap();
-        assert_eq!(status.status, "overridden");
-
-        service
-            .enable_skill(
-                "u1",
-                Some("tenant-1"),
-                SystemSkillPayload {
-                    system_skill_name: "code-review".to_string(),
-                },
-            )
-            .await
-            .unwrap();
-        let status = service
-            .skill_status("u1", Some("tenant-1"), "code-review")
-            .await
-            .unwrap();
-        assert_eq!(status.status, "enabled");
-
-        let missing = service
-            .delete_config("u1", Some("tenant-1"), "code-review")
-            .await;
-        assert!(matches!(
-            missing,
-            Err(TenantSkillConfigApiError {
-                status: StatusCode::NOT_FOUND,
-                ..
-            })
-        ));
-    }
-
-    #[test]
-    fn tenant_skill_config_router_builds() {
-        let _router: Router<AppState> = router();
-    }
 }
