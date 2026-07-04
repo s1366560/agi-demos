@@ -7,8 +7,8 @@
 //! Python-owned until their full semantics are migrated; accept-review already
 //! projects linked attempts to accepted so pending adjudication does not linger
 //! after explicit human acceptance. The autonomy tick endpoint owns the durable
-//! plan supervisor/outbox slice only; Python still owns planner decomposition,
-//! Redis cooldown, and root auto-completion.
+//! plan supervisor/outbox slice plus Python-compatible Redis cooldown; Python
+//! still owns planner decomposition and root auto-completion.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -46,6 +46,7 @@ use agistack_core::ports::ObjectStore;
 use crate::auth::Identity;
 use crate::AppState;
 
+mod autonomy_cooldown;
 mod autonomy_service;
 mod blackboard_service;
 mod chat_mentions;
@@ -100,6 +101,8 @@ use views::{
     metadata_string_values, object_or_empty, phase_label, string_from_value, string_values,
 };
 
+pub(crate) use autonomy_cooldown::SharedAutonomyCooldownStore;
+use autonomy_cooldown::{AutonomyCooldownStore, InMemoryAutonomyCooldownStore};
 pub(crate) use routes::router;
 pub(crate) use service::{SharedWorkspaces, WorkspaceService};
 use shared::{
@@ -121,11 +124,20 @@ const STALE_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS: i64 = 300;
 pub(crate) struct PgWorkspaceService {
     repo: PgWorkspaceRepository,
     object_store: Arc<dyn ObjectStore>,
+    autonomy_cooldown: Option<SharedAutonomyCooldownStore>,
 }
 
 impl PgWorkspaceService {
-    pub(crate) fn new(repo: PgWorkspaceRepository, object_store: Arc<dyn ObjectStore>) -> Self {
-        Self { repo, object_store }
+    pub(crate) fn new(
+        repo: PgWorkspaceRepository,
+        object_store: Arc<dyn ObjectStore>,
+        autonomy_cooldown: Option<SharedAutonomyCooldownStore>,
+    ) -> Self {
+        Self {
+            repo,
+            object_store,
+            autonomy_cooldown,
+        }
     }
 
     async fn ensure_project_access(
@@ -272,6 +284,7 @@ pub(crate) struct DevWorkspaceService {
     dev_user_id: String,
     state: Mutex<DevWorkspaceState>,
     object_store: Arc<dyn ObjectStore>,
+    autonomy_cooldown: Option<SharedAutonomyCooldownStore>,
 }
 
 impl DevWorkspaceService {
@@ -284,10 +297,23 @@ impl DevWorkspaceService {
         dev_user_id: impl Into<String>,
         object_store: Arc<dyn ObjectStore>,
     ) -> Self {
+        Self::with_object_store_and_cooldown(
+            dev_user_id,
+            object_store,
+            Some(Arc::new(InMemoryAutonomyCooldownStore::new())),
+        )
+    }
+
+    pub(crate) fn with_object_store_and_cooldown(
+        dev_user_id: impl Into<String>,
+        object_store: Arc<dyn ObjectStore>,
+        autonomy_cooldown: Option<SharedAutonomyCooldownStore>,
+    ) -> Self {
         Self {
             dev_user_id: dev_user_id.into(),
             state: Mutex::new(DevWorkspaceState::default()),
             object_store,
+            autonomy_cooldown,
         }
     }
 

@@ -150,6 +150,14 @@ async fn dev_service_autonomy_tick_queues_existing_root_plan_once() {
         .unwrap();
     assert_eq!(
         second,
+        AutonomyTickView::new(false, Some("root-autonomy".to_string()), "cooling_down")
+    );
+    let forced = service
+        .trigger_autonomy_tick("user-1", &workspace.id, AutonomyTickRequest { force: true })
+        .await
+        .unwrap();
+    assert_eq!(
+        forced,
         AutonomyTickView::new(
             false,
             Some("root-autonomy".to_string()),

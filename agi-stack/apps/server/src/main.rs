@@ -84,7 +84,9 @@ use crate::tenant_skill_config_api::{
     DevTenantSkillConfigService, PgTenantSkillConfigService, SharedTenantSkillConfigs,
 };
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
-use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
+use crate::workspace_api::{
+    DevWorkspaceService, PgWorkspaceService, SharedAutonomyCooldownStore, SharedWorkspaces,
+};
 use crate::workspace_outbox_worker::{
     worker_launch_event_stream_source, workspace_agent_mention_runtime_from_env,
     workspace_plan_outbox_handlers_with_runtime_state_and_event_stream, PgWorkspacePlanOutboxStore,
@@ -316,6 +318,7 @@ async fn build_memory_and_auth(
     llm: Arc<dyn LlmPort>,
     embedding: Arc<dyn EmbeddingPort>,
     object_store: Arc<dyn ObjectStore>,
+    autonomy_cooldown: Option<SharedAutonomyCooldownStore>,
 ) -> ServerResult<MemoryAndAuth> {
     let email = select_email_sender();
     let device_grants = build_device_grant_store().await;
@@ -367,6 +370,7 @@ async fn build_memory_and_auth(
             let workspaces: SharedWorkspaces = Arc::new(PgWorkspaceService::new(
                 PgWorkspaceRepository::new(pool.clone()),
                 object_store,
+                autonomy_cooldown,
             ));
             let sandbox_repo = Some(PgProjectSandboxRepository::new(pool.clone()));
             let project_sandbox_config_repo = Some(PgProjectReadRepository::new(pool.clone()));
@@ -447,6 +451,30 @@ async fn build_event_stream() -> Arc<dyn EventStream> {
         _ => {
             eprintln!("[agistack] event stream: in-memory (dev)");
             Arc::new(InMemoryEventStream::new())
+        }
+    }
+}
+
+async fn build_workspace_autonomy_cooldown_store() -> Option<SharedAutonomyCooldownStore> {
+    match std::env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => {
+            match agistack_adapters_redis::RedisWorkspaceAutonomyCooldownStore::connect(&url).await
+            {
+                Ok(store) => {
+                    eprintln!("[agistack] workspace autonomy cooldown: Redis TTL via REDIS_URL");
+                    Some(Arc::new(store))
+                }
+                Err(err) => {
+                    eprintln!(
+                        "[agistack] workspace autonomy cooldown: Redis unavailable ({err}); skipping cooldown"
+                    );
+                    None
+                }
+            }
+        }
+        _ => {
+            eprintln!("[agistack] workspace autonomy cooldown: disabled (no REDIS_URL)");
+            None
         }
     }
 }
@@ -577,6 +605,7 @@ async fn build_state() -> ServerResult<AppState> {
 
     let registry = build_registry();
     let object_store = build_object_store().await;
+    let autonomy_cooldown = build_workspace_autonomy_cooldown_store().await;
 
     // Persistence + auth: Postgres (production) or in-memory (dev), selected by
     // `DATABASE_URL`. This is the strangler cutover switch.
@@ -593,7 +622,7 @@ async fn build_state() -> ServerResult<AppState> {
         workspace_plan_pool,
         sandbox_repo,
         project_config_repo,
-    ) = build_memory_and_auth(llm.clone(), embedding, object_store).await?;
+    ) = build_memory_and_auth(llm.clone(), embedding, object_store, autonomy_cooldown).await?;
     let events = build_event_stream().await;
     let hitl = build_hitl_response_service(workspace_plan_pool.clone(), Arc::clone(&events));
     let graph = build_graph_store().await;

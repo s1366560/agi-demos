@@ -6,6 +6,8 @@ const ROOT_TASK_ROLE: &str = "goal_root";
 const ROOT_TASK_METADATA_KEY: &str = "root_goal_task_id";
 const TASK_ROLE_METADATA_KEY: &str = "task_role";
 const WORKSPACE_PLAN_ID_METADATA_KEY: &str = "workspace_plan_id";
+const AUTO_TRIGGER_COOLDOWN_SECONDS: i64 = 60;
+const REPLAN_TRIGGER_COOLDOWN_SECONDS: i64 = 300;
 const NON_OPEN_ROOT_STATUSES: &[&str] = &["done", "blocked"];
 const REMEDIATION_STATUSES_NEEDING_PROGRESS: &[&str] = &["replan_required", "ready_for_completion"];
 const PRE_EXECUTION_STATUSES: &[&str] = &["todo", "dispatched"];
@@ -56,6 +58,21 @@ impl PgWorkspaceService {
             } => (*root_task, children),
         };
 
+        if !body.force
+            && autonomy_is_on_cooldown(
+                self.autonomy_cooldown.as_deref(),
+                workspace_id,
+                &root_task.id,
+            )
+            .await
+        {
+            return Ok(AutonomyTickView::new(
+                false,
+                Some(root_task.id),
+                "cooling_down",
+            ));
+        }
+
         let Some(plan) = self
             .pg_find_root_plan(workspace_id, &root_task, &children)
             .await?
@@ -65,12 +82,31 @@ impl PgWorkspaceService {
             } else {
                 "durable_plan_unavailable"
             };
+            let ttl_seconds = if reason == "durable_plan_unavailable" {
+                autonomy_unavailable_cooldown_seconds(&root_task, !children.is_empty())
+            } else {
+                AUTO_TRIGGER_COOLDOWN_SECONDS
+            };
+            mark_autonomy_cooldown(
+                self.autonomy_cooldown.as_deref(),
+                workspace_id,
+                &root_task.id,
+                ttl_seconds,
+            )
+            .await;
             return Ok(AutonomyTickView::new(false, Some(root_task.id), reason));
         };
 
         let reason = self
             .pg_enqueue_supervisor_tick_if_needed(user_id, workspace_id, &root_task.id, &plan)
             .await?;
+        mark_autonomy_cooldown(
+            self.autonomy_cooldown.as_deref(),
+            workspace_id,
+            &root_task.id,
+            AUTO_TRIGGER_COOLDOWN_SECONDS,
+        )
+        .await;
         Ok(AutonomyTickView::new(false, Some(root_task.id), reason))
     }
 
@@ -190,11 +226,11 @@ impl DevWorkspaceService {
         body: AutonomyTickRequest,
     ) -> Result<AutonomyTickView, WorkspaceApiError> {
         self.require_dev_user(user_id)?;
-        let mut state = self.lock_state()?;
-        if !state.workspaces.contains_key(workspace_id) {
-            return Err(WorkspaceApiError::workspace_not_found());
-        }
-        let (root_task, children) =
+        let (root_task, children) = {
+            let state = self.lock_state()?;
+            if !state.workspaces.contains_key(workspace_id) {
+                return Err(WorkspaceApiError::workspace_not_found());
+            }
             match dev_select_root_task_needing_progress(&state, workspace_id, body.force) {
                 RootTaskProgressSelection::NoOpenRoot => {
                     return Ok(AutonomyTickView::new(false, None, "no_open_root"));
@@ -206,48 +242,72 @@ impl DevWorkspaceService {
                     root_task,
                     children,
                 } => (*root_task, children),
-            };
-
-        let Some(plan) = dev_find_root_plan(&state, workspace_id, &root_task, &children) else {
-            let reason = if root_has_workspace_plan_linked_children(&children) {
-                "durable_plan_active"
-            } else {
-                "durable_plan_unavailable"
-            };
-            return Ok(AutonomyTickView::new(false, Some(root_task.id), reason));
+            }
         };
 
-        if !RESUMABLE_PLAN_STATUSES.contains(&plan.status.as_str()) {
+        if !body.force
+            && autonomy_is_on_cooldown(
+                self.autonomy_cooldown.as_deref(),
+                workspace_id,
+                &root_task.id,
+            )
+            .await
+        {
             return Ok(AutonomyTickView::new(
                 false,
                 Some(root_task.id),
-                "durable_plan_active",
+                "cooling_down",
             ));
         }
-        let pending = state
-            .plan_outbox
-            .iter()
-            .filter(|item| item.plan_id.as_deref() == Some(plan.id.as_str()))
-            .any(supervisor_tick_is_pending);
-        if pending {
-            return Ok(AutonomyTickView::new(
-                false,
-                Some(root_task.id),
-                "durable_plan_active",
-            ));
-        }
-        state.plan_outbox.push(autonomy_supervisor_tick_outbox(
-            &plan.id,
+
+        let (reason, ttl_seconds) = {
+            let mut state = self.lock_state()?;
+            match dev_find_root_plan(&state, workspace_id, &root_task, &children) {
+                None => {
+                    let reason = if root_has_workspace_plan_linked_children(&children) {
+                        "durable_plan_active"
+                    } else {
+                        "durable_plan_unavailable"
+                    };
+                    let ttl_seconds = if reason == "durable_plan_unavailable" {
+                        autonomy_unavailable_cooldown_seconds(&root_task, !children.is_empty())
+                    } else {
+                        AUTO_TRIGGER_COOLDOWN_SECONDS
+                    };
+                    (reason, ttl_seconds)
+                }
+                Some(plan) if !RESUMABLE_PLAN_STATUSES.contains(&plan.status.as_str()) => {
+                    ("durable_plan_active", AUTO_TRIGGER_COOLDOWN_SECONDS)
+                }
+                Some(plan) => {
+                    let pending = state
+                        .plan_outbox
+                        .iter()
+                        .filter(|item| item.plan_id.as_deref() == Some(plan.id.as_str()))
+                        .any(supervisor_tick_is_pending);
+                    if pending {
+                        ("durable_plan_active", AUTO_TRIGGER_COOLDOWN_SECONDS)
+                    } else {
+                        state.plan_outbox.push(autonomy_supervisor_tick_outbox(
+                            &plan.id,
+                            workspace_id,
+                            &root_task.id,
+                            user_id,
+                            Utc::now(),
+                        ));
+                        ("durable_plan_started", AUTO_TRIGGER_COOLDOWN_SECONDS)
+                    }
+                }
+            }
+        };
+        mark_autonomy_cooldown(
+            self.autonomy_cooldown.as_deref(),
             workspace_id,
             &root_task.id,
-            user_id,
-            Utc::now(),
-        ));
-        Ok(AutonomyTickView::new(
-            false,
-            Some(root_task.id),
-            "durable_plan_started",
-        ))
+            ttl_seconds,
+        )
+        .await;
+        Ok(AutonomyTickView::new(false, Some(root_task.id), reason))
     }
 }
 
@@ -361,6 +421,51 @@ fn root_task_priority(task: &WorkspaceTaskRecord) -> i32 {
         Some("ready_for_completion") => 0,
         Some("replan_required") => 1,
         _ => 2,
+    }
+}
+
+async fn autonomy_is_on_cooldown(
+    cooldown: Option<&dyn AutonomyCooldownStore>,
+    workspace_id: &str,
+    root_task_id: &str,
+) -> bool {
+    let Some(cooldown) = cooldown else {
+        return false;
+    };
+    (cooldown.is_on_cooldown(workspace_id, root_task_id).await).unwrap_or_default()
+}
+
+async fn mark_autonomy_cooldown(
+    cooldown: Option<&dyn AutonomyCooldownStore>,
+    workspace_id: &str,
+    root_task_id: &str,
+    ttl_seconds: i64,
+) {
+    let Some(cooldown) = cooldown else {
+        return;
+    };
+    if let Err(error) = cooldown
+        .mark_cooldown(workspace_id, root_task_id, ttl_seconds)
+        .await
+    {
+        eprintln!("[agistack] workspace autonomy cooldown mark failed: {error}");
+    }
+}
+
+fn autonomy_unavailable_cooldown_seconds(
+    root_task: &WorkspaceTaskRecord,
+    has_children: bool,
+) -> i64 {
+    let remediation_status = if has_children {
+        metadata_string(&root_task.metadata_json, "remediation_status")
+            .unwrap_or_else(|| "none".to_string())
+    } else {
+        "none".to_string()
+    };
+    if remediation_status == "replan_required" {
+        REPLAN_TRIGGER_COOLDOWN_SECONDS
+    } else {
+        AUTO_TRIGGER_COOLDOWN_SECONDS
     }
 }
 

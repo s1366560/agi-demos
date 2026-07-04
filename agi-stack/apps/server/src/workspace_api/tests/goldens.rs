@@ -446,4 +446,11 @@ fn workspace_plan_snapshot_matches_golden() {
         ))
         .unwrap(),
     );
+    assert_golden(
+        &AutonomyTickView::new(false, Some("root-autonomy".to_string()), "cooling_down"),
+        serde_json::from_str(include_str!(
+            "../../../tests/golden/workspace_autonomy_tick_cooling_down.json"
+        ))
+        .unwrap(),
+    );
 }

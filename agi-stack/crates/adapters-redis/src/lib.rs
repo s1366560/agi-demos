@@ -42,6 +42,7 @@ const SANDBOX_PREVIEW_SESSION_KEY_PREFIX: &str = "agistack:sandbox:preview_sessi
 const SANDBOX_TERMINAL_SESSION_KEY_PREFIX: &str = "agistack:sandbox:terminal_session:";
 const SANDBOX_MCP_UPSTREAM_TOKEN_KEY_PREFIX: &str = "agistack:sandbox:mcp_token:";
 const WORKER_LAUNCH_COOLDOWN_KEY_PREFIX: &str = "workspace:worker_launch:cooldown:";
+const WORKSPACE_AUTONOMY_COOLDOWN_KEY_PREFIX: &str = "workspace:autonomy:last_trigger:";
 const AGENT_RUNNING_KEY_PREFIX: &str = "agent:running:";
 const AGENT_FINISHED_KEY_PREFIX: &str = "agent:finished:";
 
@@ -580,6 +581,56 @@ impl RedisWorkerLaunchStateStore {
     }
 }
 
+/// Redis-backed P6 workspace autonomy tick cooldown state. This mirrors the
+/// Python key `workspace:autonomy:last_trigger:{workspace_id}:{root_task_id}`.
+#[derive(Clone)]
+pub struct RedisWorkspaceAutonomyCooldownStore {
+    conn: MultiplexedConnection,
+}
+
+impl RedisWorkspaceAutonomyCooldownStore {
+    pub fn from_connection(conn: MultiplexedConnection) -> Self {
+        Self { conn }
+    }
+
+    pub async fn connect(url: &str) -> CoreResult<Self> {
+        let client = redis::Client::open(url).map_err(gerr)?;
+        let conn = client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(gerr)?;
+        Ok(Self { conn })
+    }
+
+    pub async fn is_on_cooldown(&self, workspace_id: &str, root_task_id: &str) -> CoreResult<bool> {
+        let mut conn = self.conn.clone();
+        let exists: i64 = redis::cmd("EXISTS")
+            .arg(workspace_autonomy_cooldown_key(workspace_id, root_task_id))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(exists > 0)
+    }
+
+    pub async fn mark_cooldown(
+        &self,
+        workspace_id: &str,
+        root_task_id: &str,
+        ttl_seconds: u64,
+    ) -> CoreResult<()> {
+        let mut conn = self.conn.clone();
+        let _: () = redis::cmd("SET")
+            .arg(workspace_autonomy_cooldown_key(workspace_id, root_task_id))
+            .arg("1")
+            .arg("EX")
+            .arg(ttl_seconds.max(1))
+            .query_async(&mut conn)
+            .await
+            .map_err(gerr)?;
+        Ok(())
+    }
+}
+
 pub fn device_code_key(device_code: &str) -> String {
     format!("{DEVICE_CODE_KEY_PREFIX}{device_code}")
 }
@@ -606,6 +657,10 @@ pub fn sandbox_mcp_upstream_token_key(token: &str) -> String {
 
 pub fn worker_launch_cooldown_key(conversation_id: &str) -> String {
     format!("{WORKER_LAUNCH_COOLDOWN_KEY_PREFIX}{conversation_id}")
+}
+
+pub fn workspace_autonomy_cooldown_key(workspace_id: &str, root_task_id: &str) -> String {
+    format!("{WORKSPACE_AUTONOMY_COOLDOWN_KEY_PREFIX}{workspace_id}:{root_task_id}")
 }
 
 pub fn agent_running_key(conversation_id: &str) -> String {

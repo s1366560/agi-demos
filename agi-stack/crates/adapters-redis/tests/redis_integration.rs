@@ -16,10 +16,10 @@ use agistack_adapters_mem::InMemoryEventStream;
 use agistack_adapters_redis::{
     agent_finished_key, agent_running_key, connect, device_code_key, device_user_code_key,
     sandbox_http_services_key, sandbox_mcp_upstream_token_key, sandbox_preview_session_key,
-    sandbox_terminal_session_key, worker_launch_cooldown_key, DeviceGrant, RedisDeviceGrantStore,
-    RedisEventStream, RedisSandboxHttpRegistry, RedisWorkerLaunchStateStore,
-    SandboxHttpServiceRecord, SandboxMcpUpstreamTokenRecord, SandboxPreviewSessionRecord,
-    SandboxTerminalSessionRecord,
+    sandbox_terminal_session_key, worker_launch_cooldown_key, workspace_autonomy_cooldown_key,
+    DeviceGrant, RedisDeviceGrantStore, RedisEventStream, RedisSandboxHttpRegistry,
+    RedisWorkerLaunchStateStore, RedisWorkspaceAutonomyCooldownStore, SandboxHttpServiceRecord,
+    SandboxMcpUpstreamTokenRecord, SandboxPreviewSessionRecord, SandboxTerminalSessionRecord,
 };
 use agistack_core::ports::EventStream;
 
@@ -77,6 +77,20 @@ async fn redis_worker_launch_state_or_skip() -> Option<RedisWorkerLaunchStateSto
         Ok(store) => Some(store),
         Err(e) => {
             eprintln!("[skip] Redis unreachable at {uri}: {e} — skipping worker launch state test");
+            None
+        }
+    }
+}
+
+async fn redis_workspace_autonomy_cooldown_or_skip() -> Option<RedisWorkspaceAutonomyCooldownStore>
+{
+    let uri = redis_uri();
+    match RedisWorkspaceAutonomyCooldownStore::connect(&uri).await {
+        Ok(store) => Some(store),
+        Err(e) => {
+            eprintln!(
+                "[skip] Redis unreachable at {uri}: {e} — skipping workspace autonomy cooldown test"
+            );
             None
         }
     }
@@ -512,4 +526,36 @@ async fn redis_worker_launch_refreshes_runtime_markers_like_python_heartbeat() {
         .unwrap());
 
     del_keys(&[cooldown_key, running_key, finished_key]).await;
+}
+
+#[tokio::test]
+async fn redis_workspace_autonomy_cooldown_matches_python_key_and_ttl() {
+    let Some(store) = redis_workspace_autonomy_cooldown_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("workspace-autonomy").replace(':', "-");
+    let workspace_id = format!("workspace-{suffix}");
+    let root_task_id = format!("root-{suffix}");
+    let key = workspace_autonomy_cooldown_key(&workspace_id, &root_task_id);
+    del_keys(std::slice::from_ref(&key)).await;
+
+    assert!(!store
+        .is_on_cooldown(&workspace_id, &root_task_id)
+        .await
+        .unwrap());
+    store
+        .mark_cooldown(&workspace_id, &root_task_id, 60)
+        .await
+        .unwrap();
+    assert!(store
+        .is_on_cooldown(&workspace_id, &root_task_id)
+        .await
+        .unwrap());
+    let cooldown_ttl = ttl(&key).await.unwrap();
+    assert!(
+        (1..=60).contains(&cooldown_ttl),
+        "workspace autonomy cooldown should be Redis TTL-backed, got {cooldown_ttl}"
+    );
+
+    del_keys(&[key]).await;
 }
