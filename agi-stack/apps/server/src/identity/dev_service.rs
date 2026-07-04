@@ -28,6 +28,8 @@ use super::{
     TenantMemberMutationView, TenantPage, TenantView, DEVICE_CODE_TTL_SECS,
 };
 
+mod invitations;
+
 // ---- offline dev impl -----------------------------------------------------
 
 /// Offline identity service: mints a fake `ms_sk_` key for any non-empty
@@ -122,19 +124,6 @@ impl DevIdentityService {
                 system_status: None,
                 recent_activity: Vec::new(),
             }),
-        }
-    }
-
-    fn dev_invitation(&self) -> InvitationView {
-        InvitationView {
-            id: "dev-invitation".to_string(),
-            tenant_id: "dev-tenant".to_string(),
-            email: "invitee@example.test".to_string(),
-            role: "member".to_string(),
-            status: "pending".to_string(),
-            invited_by: self.dev_user_id.clone(),
-            expires_at: "1970-01-08T00:00:00Z".to_string(),
-            created_at: "1970-01-01T00:00:00Z".to_string(),
         }
     }
 }
@@ -678,95 +667,53 @@ impl IdentityService for DevIdentityService {
 
     async fn create_invitation(
         &self,
-        _user_id: &str,
+        user_id: &str,
         tenant_id: &str,
         email: &str,
         role: &str,
-        _message: Option<&str>,
-        _now_ms: i64,
+        message: Option<&str>,
+        now_ms: i64,
     ) -> Result<InvitationView, IdentityError> {
-        if tenant_id != "dev-tenant" {
-            return Err(IdentityError::not_found("Tenant not found"));
-        }
-        let mut invitation = self.dev_invitation();
-        invitation.email = normalize_email(email);
-        invitation.role = if role.trim().is_empty() {
-            "member".to_string()
-        } else {
-            role.to_string()
-        };
-        Ok(invitation)
+        self.dev_create_invitation(user_id, tenant_id, email, role, message, now_ms)
+            .await
     }
 
     async fn list_invitations(
         &self,
-        _user_id: &str,
+        user_id: &str,
         tenant_id: &str,
         limit: i64,
         offset: i64,
     ) -> Result<InvitationListView, IdentityError> {
-        if tenant_id != "dev-tenant" {
-            return Err(IdentityError::not_found("Tenant not found"));
-        }
-        let (limit, offset) = clamp_limit_offset(limit, offset);
-        Ok(InvitationListView {
-            items: if offset == 0 {
-                vec![self.dev_invitation()]
-            } else {
-                Vec::new()
-            },
-            total: 1,
-            limit,
-            offset,
-        })
+        self.dev_list_invitations(user_id, tenant_id, limit, offset)
+            .await
     }
 
     async fn cancel_invitation(
         &self,
-        _user_id: &str,
+        user_id: &str,
         tenant_id: &str,
         invitation_id: &str,
-        _now_ms: i64,
+        now_ms: i64,
     ) -> Result<(), IdentityError> {
-        if tenant_id != "dev-tenant" {
-            return Err(IdentityError::not_found("Tenant not found"));
-        }
-        if invitation_id == "dev-invitation" {
-            Ok(())
-        } else {
-            Err(IdentityError::not_found("Invitation not found"))
-        }
+        self.dev_cancel_invitation(user_id, tenant_id, invitation_id, now_ms)
+            .await
     }
 
     async fn verify_invitation(
         &self,
         token: &str,
-        _now_ms: i64,
+        now_ms: i64,
     ) -> Result<InvitationVerifyView, IdentityError> {
-        if token == "dev-token" {
-            Ok(InvitationVerifyView {
-                valid: true,
-                email: Some("invitee@example.test".to_string()),
-                tenant_id: Some("dev-tenant".to_string()),
-                role: Some("member".to_string()),
-                expires_at: Some("1970-01-08T00:00:00Z".to_string()),
-            })
-        } else {
-            Ok(InvitationVerifyView::invalid())
-        }
+        self.dev_verify_invitation(token, now_ms).await
     }
 
     async fn accept_invitation(
         &self,
         token: &str,
-        _user_id: &str,
-        _now_ms: i64,
+        user_id: &str,
+        now_ms: i64,
     ) -> Result<InvitationView, IdentityError> {
-        if token != "dev-token" {
-            return Err(IdentityError::bad_request("Invalid or expired invitation"));
-        }
-        let mut invitation = self.dev_invitation();
-        invitation.status = "accepted".to_string();
-        Ok(invitation)
+        self.dev_accept_invitation(token, user_id, now_ms).await
     }
 }
