@@ -50,6 +50,10 @@ fn strangled_prefixes_route_to_rust() {
         "/api/v1/tenants/acme/members/u1"
     ));
     assert!(is_strangled_request(&get, "/api/v1/agent/ws"));
+    assert!(is_strangled_request(
+        &get,
+        "/api/v1/agent/conversations/c1/events"
+    ));
     assert!(is_strangled_request(&get, "/api/v1/shared/share_token"));
     for p in [
         "/api/v1/memories",
@@ -101,6 +105,14 @@ fn everything_else_routes_to_python() {
     );
     assert_eq!(
         upstream_for_request(&post, "/api/v1/agent/ws", &ups()),
+        "http://python:8000"
+    );
+    assert_eq!(
+        upstream_for_request(&post, "/api/v1/agent/conversations/c1/events", &ups()),
+        "http://python:8000"
+    );
+    assert_eq!(
+        upstream_for_request(&get, "/api/v1/agent/conversations/c1/messages", &ups()),
         "http://python:8000"
     );
     assert_eq!(

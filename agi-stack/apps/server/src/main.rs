@@ -25,6 +25,7 @@
 
 use std::sync::{atomic::AtomicU64, Arc, Mutex};
 
+mod agent_events_api;
 mod agent_ws;
 mod auth;
 mod channel_api;
@@ -52,11 +53,12 @@ use agistack_adapters_mem::{
 };
 use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
-    connect, ensure_aux_schema, PgApiKeyStore, PgChannelRepository, PgCheckpointStore,
-    PgInvitationRepository, PgMemoryRepository, PgPool, PgProjectReadRepository,
-    PgProjectSandboxRepository, PgProjectStore, PgShareRepository, PgSkillEvolutionRepository,
-    PgSkillRepository, PgTenantRepository, PgTenantSkillConfigRepository, PgTrustRepository,
-    PgUserStore, PgVectorIndex, PgWorkspaceRepository,
+    connect, ensure_aux_schema, PgAgentExecutionEventRepository, PgApiKeyStore,
+    PgChannelRepository, PgCheckpointStore, PgInvitationRepository, PgMemoryRepository, PgPool,
+    PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore, PgShareRepository,
+    PgSkillEvolutionRepository, PgSkillRepository, PgTenantRepository,
+    PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
+    PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -69,6 +71,9 @@ use agistack_plugin_host::{
     ControlPlane, DataPlaneReconciler, HotPlugRegistry, LenTool, PluginHost, UpperTool,
 };
 
+use crate::agent_events_api::{
+    DevAgentEventReplayService, PgAgentEventReplayService, SharedAgentEvents,
+};
 use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
 use crate::channel_api::{DevChannelService, PgChannelService, SharedChannels};
 use crate::hitl_api::{build_hitl_response_service, SharedHitlResponses};
@@ -134,6 +139,9 @@ pub(crate) struct AppState {
     /// P3/F7 HITL response ingress over Python-owned `hitl_requests` plus the
     /// shared Redis/EventStream continuation channel.
     pub(crate) hitl: SharedHitlResponses,
+    /// P3/F7 event replay over Python-owned `agent_execution_events` in
+    /// production, with an in-process stream reader in offline/dev mode.
+    pub(crate) agent_events: SharedAgentEvents,
     /// P6 server-only outbox worker foundation. It is wired for explicit
     /// one-shot/loop use once handlers are migrated, but is not auto-started.
     pub(crate) workspace_plan_outbox_worker: Option<SharedWorkspacePlanOutboxWorker>,
@@ -630,6 +638,12 @@ async fn build_state() -> ServerResult<AppState> {
     ) = build_memory_and_auth(llm.clone(), embedding, object_store, autonomy_cooldown).await?;
     let events = build_event_stream().await;
     let hitl = build_hitl_response_service(workspace_plan_pool.clone(), Arc::clone(&events));
+    let agent_events: SharedAgentEvents = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgAgentEventReplayService::new(
+            PgAgentExecutionEventRepository::new(pool),
+        )),
+        None => Arc::new(DevAgentEventReplayService::new(Arc::clone(&events))),
+    };
     let channels: SharedChannels = match workspace_plan_pool.clone() {
         Some(pool) => Arc::new(PgChannelService::new(PgChannelRepository::new(pool))),
         None => Arc::new(DevChannelService::new()),
@@ -716,6 +730,7 @@ async fn build_state() -> ServerResult<AppState> {
         workspaces,
         channels,
         hitl,
+        agent_events,
         workspace_plan_outbox_worker,
         graph,
         sandboxes,

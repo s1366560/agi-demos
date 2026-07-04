@@ -30,6 +30,7 @@ pub use sqlx::postgres::PgPool;
 mod auth_store;
 mod channel_repo;
 mod checkpoint;
+mod conversation_events_repo;
 mod hitl_repo;
 mod invitation_repo;
 mod memory_repo;
@@ -51,6 +52,10 @@ pub use channel_repo::{
     ChannelPageQuery, ChannelSessionBindingRecord, ChannelStatusRecord, PgChannelRepository,
 };
 pub use checkpoint::PgCheckpointStore;
+pub use conversation_events_repo::{
+    AgentExecutionEventListQuery, AgentExecutionEventRecord, ConversationReplayAccess,
+    PgAgentExecutionEventRepository,
+};
 pub use hitl_repo::{HitlRequestRecord, PgHitlRequestRepository};
 pub use invitation_repo::{
     normalize_email, InvitationRecord, PgInvitationRepository, TenantAdminStatus,

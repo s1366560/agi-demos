@@ -12,6 +12,7 @@ use agistack_core::{MemoryService, ReActEngine};
 use agistack_plugin_host::{ControlPlane, DataPlaneReconciler, PluginHost};
 
 use super::*;
+use crate::agent_events_api::{DevAgentEventReplayService, SharedAgentEvents};
 use crate::auth::{DevAuthenticator, SharedAuthenticator};
 use crate::channel_api::{DevChannelService, SharedChannels};
 use crate::hitl_api::{DevHitlResponseService, SharedHitlResponses};
@@ -54,6 +55,8 @@ fn test_state() -> AppState {
     let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::new("dev-user"));
     let channels: SharedChannels = Arc::new(DevChannelService::new());
     let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
+    let agent_events: SharedAgentEvents =
+        Arc::new(DevAgentEventReplayService::new(Arc::clone(&events)));
     let hitl: SharedHitlResponses = Arc::new(DevHitlResponseService::new(Arc::clone(&events)));
 
     AppState {
@@ -79,6 +82,7 @@ fn test_state() -> AppState {
         workspaces,
         channels,
         hitl,
+        agent_events,
         workspace_plan_outbox_worker: None,
         graph: Arc::new(InMemoryGraphStore::new()),
         sandboxes: Arc::new(ProjectSandboxService::new(

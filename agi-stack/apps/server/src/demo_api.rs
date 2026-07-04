@@ -11,9 +11,9 @@ use agistack_core::{ports::ToolHost, Episode, Memory, SessionState, SessionStatu
 use agistack_plugin_host::{ConfigAck, NativeToolFactory, PluginManifest, ToolDecl};
 
 use crate::{
-    agent_ws, auth, channel_api, enhanced_search_api, graph_api, hitl_api, identity_api, prod_api,
-    sandbox_api, shares_api, skill_api, tenant_skill_config_api, trust_api, workspace_api,
-    AppState,
+    agent_events_api, agent_ws, auth, channel_api, enhanced_search_api, graph_api, hitl_api,
+    identity_api, prod_api, sandbox_api, shares_api, skill_api, tenant_skill_config_api, trust_api,
+    workspace_api, AppState,
 };
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -263,6 +263,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(enhanced_search_api::router())
         .merge(channel_api::router())
         .merge(graph_api::router())
+        .merge(agent_events_api::router())
         .merge(hitl_api::router())
         .merge(identity_api::router_authed())
         .merge(sandbox_api::router())

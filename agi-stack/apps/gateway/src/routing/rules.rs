@@ -729,6 +729,17 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/agent/ws",
         match_kind: MethodMatchKind::Exact,
     },
+    // F7 agent event replay flip. Only the completed replay resource moves;
+    // sibling `/agent/conversations/*` routes remain Python-owned. Rollback =
+    // delete this single rule.
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/agent/conversations",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "events",
+            excluded: &[],
+        },
+    },
     MethodRule {
         method: "GET",
         path: "/api/v1/shared",
