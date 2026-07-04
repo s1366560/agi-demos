@@ -121,6 +121,66 @@ impl PgSkillService {
         ))
     }
 
+    pub(super) async fn run_tenant_evolution_for_user(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<SkillEvolutionTenantRunView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        self.ensure_write_access(user_id, &tenant_id, "tenant", None)
+            .await?;
+        let scheduler = self
+            .evolution_scheduler
+            .as_ref()
+            .ok_or_else(skill_evolution_plugin_unavailable)?;
+        let result = scheduler
+            .schedule_evolution(&tenant_id, None, None, "manual")
+            .await?;
+        Ok(SkillEvolutionTenantRunView {
+            tenant_id,
+            result: result.into(),
+        })
+    }
+
+    pub(super) async fn run_skill_evolution_for_user(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        skill_id: &str,
+    ) -> Result<SkillEvolutionRunView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(user_id, tenant_id).await?;
+        let skill = self.readable_skill(user_id, &tenant_id, skill_id).await?;
+        if skill.is_system_skill || skill.scope == "system" {
+            return Err(SkillApiError::bad_request(
+                "Skill evolution is only available for managed skills",
+            ));
+        }
+        self.ensure_write_access(
+            user_id,
+            &tenant_id,
+            &skill.scope,
+            skill.project_id.as_deref(),
+        )
+        .await?;
+        let scheduler = self
+            .evolution_scheduler
+            .as_ref()
+            .ok_or_else(skill_evolution_plugin_unavailable)?;
+        let result = scheduler
+            .schedule_evolution(
+                &tenant_id,
+                skill.project_id.as_deref(),
+                Some(&skill.name),
+                "manual",
+            )
+            .await?;
+        Ok(SkillEvolutionRunView {
+            skill_id: skill.id,
+            skill_name: skill.name,
+            result: result.into(),
+        })
+    }
+
     pub(super) async fn apply_evolution_job_for_user(
         &self,
         user_id: &str,

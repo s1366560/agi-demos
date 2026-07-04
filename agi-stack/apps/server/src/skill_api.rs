@@ -4,8 +4,9 @@
 //! router: tenant/project skill CRUD, content updates, version snapshots,
 //! rollback/import/export, filesystem-backed system skill listing/package
 //! export, zip import, and the skill-evolution strategy config/overview/detail
-//! plus apply/reject review job actions. Evolution run actions remain
-//! Python-owned until the scheduler/evolution-engine semantics are migrated.
+//! plus apply/reject review job actions. Evolution run admission is available
+//! behind a server-only scheduler port; gateway ownership remains Python until
+//! the scheduler/evolution-engine semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
@@ -35,6 +36,7 @@ mod dev_service;
 mod dev_service_evolution;
 mod dev_service_lifecycle;
 mod evolution_config;
+mod evolution_scheduler;
 mod handlers;
 mod pg_service;
 mod pg_service_evolution;
@@ -52,6 +54,9 @@ use evolution_config::SkillEvolutionPublishMode;
 use evolution_config::{
     validate_evolution_detail_limit, validate_overview_limit, SkillEvolutionConfig,
 };
+use evolution_scheduler::{
+    InMemorySkillEvolutionScheduler, SharedSkillEvolutionScheduler, SkillEvolutionScheduleResult,
+};
 pub(crate) use routes::router;
 pub(crate) use service::{SharedSkills, SkillService};
 use types::*;
@@ -60,6 +65,7 @@ use views::*;
 pub(crate) struct PgSkillService {
     repo: PgSkillRepository,
     evolution_repo: Option<PgSkillEvolutionRepository>,
+    evolution_scheduler: Option<SharedSkillEvolutionScheduler>,
 }
 
 impl PgSkillService {
@@ -67,6 +73,7 @@ impl PgSkillService {
         Self {
             repo,
             evolution_repo: None,
+            evolution_scheduler: None,
         }
     }
 
@@ -74,6 +81,13 @@ impl PgSkillService {
         self.evolution_repo = Some(repo);
         self
     }
+}
+
+fn skill_evolution_plugin_unavailable() -> SkillApiError {
+    SkillApiError::new(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Skill evolution plugin is not available",
+    )
 }
 
 fn default_scope() -> String {

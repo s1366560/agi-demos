@@ -8,8 +8,9 @@ use super::handlers::{
     get_skill_content, get_skill_evolution_config, get_skill_evolution_detail,
     get_skill_evolution_overview, get_skill_version, import_skill_package,
     import_skill_zip_package, import_system_skill, list_skill_versions, list_skills,
-    list_system_skills, reject_skill_evolution_job, rollback_skill, update_skill,
-    update_skill_content, update_skill_evolution_config, update_skill_status,
+    list_system_skills, reject_skill_evolution_job, rollback_skill, run_skill_evolution,
+    run_tenant_skill_evolution, update_skill, update_skill_content, update_skill_evolution_config,
+    update_skill_status,
 };
 use crate::AppState;
 
@@ -36,6 +37,14 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/skills/evolution/jobs/:job_id/reject",
             post(reject_skill_evolution_job),
+        )
+        .route(
+            "/api/v1/skills/evolution/run",
+            post(run_tenant_skill_evolution),
+        )
+        .route(
+            "/api/v1/skills/:skill_id/evolution/run",
+            post(run_skill_evolution),
         )
         .route(
             "/api/v1/skills/:skill_id/evolution",

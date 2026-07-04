@@ -1,0 +1,8 @@
+{
+  "tenant_id": "tenant-1",
+  "result": {
+    "scheduled": true,
+    "reason": "manual",
+    "status": "queued"
+  }
+}

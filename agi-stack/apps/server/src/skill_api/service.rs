@@ -145,6 +145,19 @@ pub(crate) trait SkillService: Send + Sync {
         skill_id: &str,
     ) -> Result<SkillEvolutionDetailView, SkillApiError>;
 
+    async fn run_tenant_evolution(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<SkillEvolutionTenantRunView, SkillApiError>;
+
+    async fn run_skill_evolution(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        skill_id: &str,
+    ) -> Result<SkillEvolutionRunView, SkillApiError>;
+
     async fn apply_evolution_job(
         &self,
         user_id: &str,

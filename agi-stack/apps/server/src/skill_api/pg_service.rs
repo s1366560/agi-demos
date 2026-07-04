@@ -622,6 +622,24 @@ impl SkillService for PgSkillService {
             .await
     }
 
+    async fn run_tenant_evolution(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<SkillEvolutionTenantRunView, SkillApiError> {
+        self.run_tenant_evolution_for_user(user_id, tenant_id).await
+    }
+
+    async fn run_skill_evolution(
+        &self,
+        user_id: &str,
+        tenant_id: Option<&str>,
+        skill_id: &str,
+    ) -> Result<SkillEvolutionRunView, SkillApiError> {
+        self.run_skill_evolution_for_user(user_id, tenant_id, skill_id)
+            .await
+    }
+
     async fn apply_evolution_job(
         &self,
         user_id: &str,

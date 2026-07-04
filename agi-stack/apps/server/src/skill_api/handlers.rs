@@ -284,6 +284,31 @@ pub(super) async fn get_skill_evolution_detail(
     ))
 }
 
+pub(super) async fn run_tenant_skill_evolution(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+) -> Result<Json<SkillEvolutionTenantRunView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .run_tenant_evolution(&identity.user_id, q.tenant_id.as_deref())
+            .await?,
+    ))
+}
+
+pub(super) async fn run_skill_evolution(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(q): Query<TenantQuery>,
+    Path(skill_id): Path<String>,
+) -> Result<Json<SkillEvolutionRunView>, SkillApiError> {
+    Ok(Json(
+        app.skills
+            .run_skill_evolution(&identity.user_id, q.tenant_id.as_deref(), &skill_id)
+            .await?,
+    ))
+}
+
 pub(super) async fn apply_skill_evolution_job(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,

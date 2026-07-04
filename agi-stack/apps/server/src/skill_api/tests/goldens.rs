@@ -323,6 +323,41 @@ fn skill_evolution_detail_matches_golden() {
 }
 
 #[test]
+fn skill_evolution_run_shapes_match_goldens() {
+    // Arrange
+    let result = SkillEvolutionScheduleResult {
+        scheduled: true,
+        reason: "manual".to_string(),
+        status: "queued".to_string(),
+    };
+
+    // Act
+    let skill_actual = serde_json::to_value(SkillEvolutionRunView {
+        skill_id: "11111111-1111-4111-8111-111111111111".to_string(),
+        skill_name: "code-review".to_string(),
+        result: result.clone().into(),
+    })
+    .unwrap();
+    let tenant_actual = serde_json::to_value(SkillEvolutionTenantRunView {
+        tenant_id: "tenant-1".to_string(),
+        result: result.into(),
+    })
+    .unwrap();
+
+    // Assert
+    let skill_golden: Value = serde_json::from_str(include_str!(
+        "../../../tests/golden/skill_evolution_run.json"
+    ))
+    .unwrap();
+    let tenant_golden: Value = serde_json::from_str(include_str!(
+        "../../../tests/golden/skill_evolution_tenant_run.json"
+    ))
+    .unwrap();
+    agistack_parity::assert_parity(&skill_golden, &skill_actual);
+    agistack_parity::assert_parity(&tenant_golden, &tenant_actual);
+}
+
+#[test]
 fn skill_evolution_applied_job_matches_golden() {
     // Arrange
     let mut record = sample_evolution_job_record();

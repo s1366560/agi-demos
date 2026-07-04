@@ -438,3 +438,90 @@ async fn dev_service_evolution_config_rejects_invalid_publish_mode() {
     assert_eq!(err.status, StatusCode::BAD_REQUEST);
     assert_eq!(err.detail, "Invalid skill evolution publish mode");
 }
+
+#[tokio::test]
+async fn dev_service_evolution_run_admits_tenant_and_skill_once() {
+    // Arrange
+    let service = DevSkillService::new("tenant-1");
+    let created = service
+        .create_skill(
+            "u1",
+            Some("tenant-1"),
+            SkillCreatePayload {
+                name: "code-review".to_string(),
+                description: "Review code".to_string(),
+                tools: vec!["read_file".to_string()],
+                full_content: Some("# Code Review\n".to_string()),
+                project_id: None,
+                scope: "tenant".to_string(),
+                metadata: None,
+                license: None,
+                compatibility: None,
+                allowed_tools_raw: None,
+                spec_version: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    // Act
+    let tenant_first = service
+        .run_tenant_evolution("u1", Some("tenant-1"))
+        .await
+        .unwrap();
+    let tenant_second = service
+        .run_tenant_evolution("u1", Some("tenant-1"))
+        .await
+        .unwrap();
+    let skill_first = service
+        .run_skill_evolution("u1", Some("tenant-1"), &created.id)
+        .await
+        .unwrap();
+    let skill_second = service
+        .run_skill_evolution("u1", Some("tenant-1"), &created.id)
+        .await
+        .unwrap();
+
+    // Assert
+    assert_eq!(tenant_first.tenant_id, "tenant-1");
+    assert!(tenant_first.result.scheduled);
+    assert_eq!(tenant_first.result.reason, "manual");
+    assert_eq!(tenant_first.result.status, "queued");
+    assert!(!tenant_second.result.scheduled);
+    assert_eq!(
+        tenant_second.result.status,
+        "already_scheduled_or_not_running"
+    );
+    assert_eq!(skill_first.skill_id, created.id);
+    assert_eq!(skill_first.skill_name, "code-review");
+    assert!(skill_first.result.scheduled);
+    assert!(!skill_second.result.scheduled);
+}
+
+#[tokio::test]
+async fn dev_service_evolution_run_rejects_system_skill() {
+    // Arrange
+    let service = DevSkillService::new("tenant-1");
+    let mut system_skill = sample_skill_record();
+    system_skill.id = "system-skill-1".to_string();
+    system_skill.scope = "system".to_string();
+    system_skill.is_system_skill = true;
+    service
+        .skills
+        .lock()
+        .unwrap()
+        .insert(system_skill.id.clone(), system_skill);
+
+    // Act
+    let err = service
+        .run_skill_evolution("u1", Some("tenant-1"), "system-skill-1")
+        .await
+        .expect_err("system skill evolution run should be rejected");
+
+    // Assert
+    assert_eq!(err.status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        err.detail,
+        "Skill evolution is only available for managed skills"
+    );
+}

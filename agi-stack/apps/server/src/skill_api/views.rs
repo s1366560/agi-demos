@@ -8,7 +8,7 @@ use agistack_adapters_postgres::{
     SkillEvolutionSkillSummaryRecord, SkillRecord, SkillVersionRecord,
 };
 
-use super::{iso8601, present, SkillEvolutionConfig};
+use super::{iso8601, present, SkillEvolutionConfig, SkillEvolutionScheduleResult};
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct SkillView {
@@ -361,6 +361,36 @@ pub(crate) struct SkillEvolutionDetailView {
     pub(in crate::skill_api) jobs: Vec<SkillEvolutionJobView>,
     pub(in crate::skill_api) route: Vec<SkillEvolutionRouteEntryView>,
     pub(in crate::skill_api) trigger: SkillEvolutionTriggerView,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(crate) struct SkillEvolutionScheduleResultView {
+    pub(in crate::skill_api) scheduled: bool,
+    pub(in crate::skill_api) reason: String,
+    pub(in crate::skill_api) status: String,
+}
+
+impl From<SkillEvolutionScheduleResult> for SkillEvolutionScheduleResultView {
+    fn from(result: SkillEvolutionScheduleResult) -> Self {
+        Self {
+            scheduled: result.scheduled,
+            reason: result.reason,
+            status: result.status,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(crate) struct SkillEvolutionRunView {
+    pub(in crate::skill_api) skill_id: String,
+    pub(in crate::skill_api) skill_name: String,
+    pub(in crate::skill_api) result: SkillEvolutionScheduleResultView,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(crate) struct SkillEvolutionTenantRunView {
+    pub(in crate::skill_api) tenant_id: String,
+    pub(in crate::skill_api) result: SkillEvolutionScheduleResultView,
 }
 
 #[derive(Debug, Clone, Serialize)]

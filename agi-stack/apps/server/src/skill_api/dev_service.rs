@@ -1,12 +1,12 @@
 use super::*;
 
-#[derive(Default)]
 pub(crate) struct DevSkillService {
     pub(super) tenant_id: String,
     pub(super) skills: Mutex<HashMap<String, SkillRecord>>,
     pub(super) versions: Mutex<HashMap<String, Vec<SkillVersionRecord>>>,
     pub(super) evolution_jobs: Mutex<HashMap<String, SkillEvolutionJobRecord>>,
     pub(super) evolution_configs: Mutex<HashMap<String, SkillEvolutionConfig>>,
+    pub(super) evolution_scheduler: SharedSkillEvolutionScheduler,
 }
 
 impl DevSkillService {
@@ -17,6 +17,7 @@ impl DevSkillService {
             versions: Mutex::new(HashMap::new()),
             evolution_jobs: Mutex::new(HashMap::new()),
             evolution_configs: Mutex::new(HashMap::new()),
+            evolution_scheduler: std::sync::Arc::new(InMemorySkillEvolutionScheduler::new()),
         }
     }
 
@@ -459,6 +460,51 @@ impl SkillService for DevSkillService {
             Vec::new(),
             0,
         ))
+    }
+
+    async fn run_tenant_evolution(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<SkillEvolutionTenantRunView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        let result = self
+            .evolution_scheduler
+            .schedule_evolution(&tenant_id, None, None, "manual")
+            .await?;
+        Ok(SkillEvolutionTenantRunView {
+            tenant_id,
+            result: result.into(),
+        })
+    }
+
+    async fn run_skill_evolution(
+        &self,
+        _user_id: &str,
+        tenant_id: Option<&str>,
+        skill_id: &str,
+    ) -> Result<SkillEvolutionRunView, SkillApiError> {
+        let tenant_id = self.resolve_tenant(tenant_id);
+        let skill = self.get_owned(&tenant_id, skill_id)?;
+        if skill.is_system_skill || skill.scope == "system" {
+            return Err(SkillApiError::bad_request(
+                "Skill evolution is only available for managed skills",
+            ));
+        }
+        let result = self
+            .evolution_scheduler
+            .schedule_evolution(
+                &tenant_id,
+                skill.project_id.as_deref(),
+                Some(&skill.name),
+                "manual",
+            )
+            .await?;
+        Ok(SkillEvolutionRunView {
+            skill_id: skill.id,
+            skill_name: skill.name,
+            result: result.into(),
+        })
     }
 
     async fn apply_evolution_job(
