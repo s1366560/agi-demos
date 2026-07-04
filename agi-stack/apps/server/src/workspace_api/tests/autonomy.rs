@@ -168,6 +168,80 @@ async fn dev_service_autonomy_tick_queues_existing_root_plan_once() {
 }
 
 #[tokio::test]
+async fn dev_service_autonomy_tick_reports_open_root_without_pending_progress() {
+    let service = DevWorkspaceService::new("user-1");
+    let workspace = canonical_workspace();
+    let now = "2026-01-02T03:04:05Z".parse().unwrap();
+    {
+        let mut state = service.state.lock().expect("workspace dev state");
+        state
+            .workspaces
+            .insert(workspace.id.clone(), workspace.clone());
+        state.tasks.insert(
+            "root-autonomy".to_string(),
+            WorkspaceTaskRecord {
+                id: "root-autonomy".to_string(),
+                workspace_id: workspace.id.clone(),
+                title: "Deliver autonomy root".to_string(),
+                description: None,
+                created_by: "user-1".to_string(),
+                assignee_user_id: None,
+                assignee_agent_id: None,
+                status: "todo".to_string(),
+                priority: 1,
+                estimated_effort: None,
+                blocker_reason: None,
+                metadata_json: json!({"task_role": "goal_root"}),
+                created_at: now,
+                updated_at: None,
+                completed_at: None,
+                archived_at: None,
+            },
+        );
+        state.tasks.insert(
+            "child-in-progress".to_string(),
+            WorkspaceTaskRecord {
+                id: "child-in-progress".to_string(),
+                workspace_id: workspace.id.clone(),
+                title: "Already running child".to_string(),
+                description: None,
+                created_by: "user-1".to_string(),
+                assignee_user_id: None,
+                assignee_agent_id: Some("agent-1".to_string()),
+                status: "in_progress".to_string(),
+                priority: 1,
+                estimated_effort: None,
+                blocker_reason: None,
+                metadata_json: json!({
+                    "task_role": "execution_task",
+                    "root_goal_task_id": "root-autonomy"
+                }),
+                created_at: now,
+                updated_at: None,
+                completed_at: None,
+                archived_at: None,
+            },
+        );
+    }
+
+    let result = service
+        .trigger_autonomy_tick(
+            "user-1",
+            &workspace.id,
+            AutonomyTickRequest { force: false },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result,
+        AutonomyTickView::new(false, None, "no_root_needs_progress")
+    );
+    let state = service.state.lock().expect("workspace dev state");
+    assert!(state.plan_outbox.is_empty());
+}
+
+#[tokio::test]
 async fn dev_service_autonomy_tick_reports_missing_workspace_as_404() {
     let service = DevWorkspaceService::new("user-1");
     let err = service

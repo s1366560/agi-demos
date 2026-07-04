@@ -439,4 +439,11 @@ fn workspace_plan_snapshot_matches_golden() {
         ))
         .unwrap(),
     );
+    assert_golden(
+        &AutonomyTickView::new(false, None, "no_root_needs_progress"),
+        serde_json::from_str(include_str!(
+            "../../../tests/golden/workspace_autonomy_tick_no_progress.json"
+        ))
+        .unwrap(),
+    );
 }

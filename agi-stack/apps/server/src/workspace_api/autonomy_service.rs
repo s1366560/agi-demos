@@ -12,6 +12,15 @@ const PRE_EXECUTION_STATUSES: &[&str] = &["todo", "dispatched"];
 const RESUMABLE_PLAN_STATUSES: &[&str] = &["active", "draft"];
 const DEDUP_PLAN_STATUSES: &[&str] = &["active", "draft", "completed"];
 
+enum RootTaskProgressSelection {
+    NoOpenRoot,
+    NoRootNeedsProgress,
+    Selected {
+        root_task: Box<WorkspaceTaskRecord>,
+        children: Vec<WorkspaceTaskRecord>,
+    },
+}
+
 impl PgWorkspaceService {
     pub(super) async fn pg_trigger_autonomy_tick(
         &self,
@@ -31,11 +40,20 @@ impl PgWorkspaceService {
         self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
             .await?;
 
-        let Some((root_task, children)) = self
+        let (root_task, children) = match self
             .pg_select_root_task_needing_progress(workspace_id, body.force)
             .await?
-        else {
-            return Ok(AutonomyTickView::new(false, None, "no_open_root"));
+        {
+            RootTaskProgressSelection::NoOpenRoot => {
+                return Ok(AutonomyTickView::new(false, None, "no_open_root"));
+            }
+            RootTaskProgressSelection::NoRootNeedsProgress => {
+                return Ok(AutonomyTickView::new(false, None, "no_root_needs_progress"));
+            }
+            RootTaskProgressSelection::Selected {
+                root_task,
+                children,
+            } => (*root_task, children),
         };
 
         let Some(plan) = self
@@ -60,7 +78,7 @@ impl PgWorkspaceService {
         &self,
         workspace_id: &str,
         force: bool,
-    ) -> Result<Option<(WorkspaceTaskRecord, Vec<WorkspaceTaskRecord>)>, WorkspaceApiError> {
+    ) -> Result<RootTaskProgressSelection, WorkspaceApiError> {
         let mut root_tasks = self
             .repo
             .list_tasks(workspace_id, None, 100, 0)
@@ -70,7 +88,7 @@ impl PgWorkspaceService {
             .filter(open_root_task)
             .collect::<Vec<_>>();
         if root_tasks.is_empty() {
-            return Ok(None);
+            return Ok(RootTaskProgressSelection::NoOpenRoot);
         }
         root_tasks.sort_by(root_task_priority_cmp);
         for root_task in root_tasks {
@@ -80,10 +98,13 @@ impl PgWorkspaceService {
                 .await
                 .map_err(WorkspaceApiError::internal)?;
             if root_task_needs_progress(&root_task, &children, force) {
-                return Ok(Some((root_task, children)));
+                return Ok(RootTaskProgressSelection::Selected {
+                    root_task: Box::new(root_task),
+                    children,
+                });
             }
         }
-        Ok(None)
+        Ok(RootTaskProgressSelection::NoRootNeedsProgress)
     }
 
     async fn pg_find_root_plan(
@@ -173,11 +194,19 @@ impl DevWorkspaceService {
         if !state.workspaces.contains_key(workspace_id) {
             return Err(WorkspaceApiError::workspace_not_found());
         }
-        let Some((root_task, children)) =
-            dev_select_root_task_needing_progress(&state, workspace_id, body.force)
-        else {
-            return Ok(AutonomyTickView::new(false, None, "no_open_root"));
-        };
+        let (root_task, children) =
+            match dev_select_root_task_needing_progress(&state, workspace_id, body.force) {
+                RootTaskProgressSelection::NoOpenRoot => {
+                    return Ok(AutonomyTickView::new(false, None, "no_open_root"));
+                }
+                RootTaskProgressSelection::NoRootNeedsProgress => {
+                    return Ok(AutonomyTickView::new(false, None, "no_root_needs_progress"));
+                }
+                RootTaskProgressSelection::Selected {
+                    root_task,
+                    children,
+                } => (*root_task, children),
+            };
 
         let Some(plan) = dev_find_root_plan(&state, workspace_id, &root_task, &children) else {
             let reason = if root_has_workspace_plan_linked_children(&children) {
@@ -226,7 +255,7 @@ fn dev_select_root_task_needing_progress(
     state: &DevWorkspaceState,
     workspace_id: &str,
     force: bool,
-) -> Option<(WorkspaceTaskRecord, Vec<WorkspaceTaskRecord>)> {
+) -> RootTaskProgressSelection {
     let mut root_tasks = state
         .tasks
         .values()
@@ -234,25 +263,34 @@ fn dev_select_root_task_needing_progress(
         .filter(|task| open_root_task(task))
         .cloned()
         .collect::<Vec<_>>();
+    if root_tasks.is_empty() {
+        return RootTaskProgressSelection::NoOpenRoot;
+    }
     root_tasks.sort_by(root_task_priority_cmp);
-    root_tasks.into_iter().find_map(|root_task| {
-        let children = state
-            .tasks
-            .values()
-            .filter(|task| task.workspace_id == workspace_id)
-            .filter(|task| task.archived_at.is_none())
-            .filter(|task| {
-                metadata_string(&task.metadata_json, ROOT_TASK_METADATA_KEY).as_deref()
-                    == Some(root_task.id.as_str())
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        if root_task_needs_progress(&root_task, &children, force) {
-            Some((root_task, children))
-        } else {
-            None
-        }
-    })
+    root_tasks
+        .into_iter()
+        .find_map(|root_task| {
+            let children = state
+                .tasks
+                .values()
+                .filter(|task| task.workspace_id == workspace_id)
+                .filter(|task| task.archived_at.is_none())
+                .filter(|task| {
+                    metadata_string(&task.metadata_json, ROOT_TASK_METADATA_KEY).as_deref()
+                        == Some(root_task.id.as_str())
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            if root_task_needs_progress(&root_task, &children, force) {
+                Some(RootTaskProgressSelection::Selected {
+                    root_task: Box::new(root_task),
+                    children,
+                })
+            } else {
+                None
+            }
+        })
+        .unwrap_or(RootTaskProgressSelection::NoRootNeedsProgress)
 }
 
 fn dev_find_root_plan(
