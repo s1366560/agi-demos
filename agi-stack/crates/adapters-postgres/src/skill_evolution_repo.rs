@@ -22,6 +22,8 @@ use crate::PgPool;
 
 const JOB_COLS: &str = "id, tenant_id, project_id, skill_name, action, status, rationale, \
     candidate_content, session_ids, skill_version_id, created_at, applied_at";
+const RUN_COLS: &str = "id, tenant_id, project_id, skill_name, reason, status, attempts, \
+    worker_id, started_at, completed_at, last_error, result_json, created_at, updated_at";
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SkillEvolutionOverviewStatsRecord {
@@ -87,6 +89,24 @@ pub struct SkillEvolutionJobRecord {
     pub skill_version_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub applied_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkillEvolutionRunRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub project_id: Option<String>,
+    pub skill_name: Option<String>,
+    pub reason: String,
+    pub status: String,
+    pub attempts: i32,
+    pub worker_id: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub result_json: Option<Value>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
@@ -354,6 +374,89 @@ impl PgSkillEvolutionRepository {
         Ok(inserted.is_some())
     }
 
+    pub async fn claim_next_evolution_run(
+        &self,
+        worker_id: &str,
+    ) -> CoreResult<Option<SkillEvolutionRunRecord>> {
+        let sql = format!(
+            "WITH candidate AS (\
+                SELECT id FROM agistack_skill_evolution_runs \
+                WHERE status = 'queued' \
+                ORDER BY created_at ASC \
+                FOR UPDATE SKIP LOCKED \
+                LIMIT 1\
+             ) \
+             UPDATE agistack_skill_evolution_runs runs \
+             SET status = 'running', \
+                 attempts = attempts + 1, \
+                 worker_id = $1, \
+                 started_at = now(), \
+                 completed_at = NULL, \
+                 last_error = NULL, \
+                 updated_at = now() \
+             FROM candidate \
+             WHERE runs.id = candidate.id \
+             RETURNING {RUN_COLS}"
+        );
+        let row = sqlx::query(&sql)
+            .bind(worker_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        row.map(row_to_run).transpose()
+    }
+
+    pub async fn complete_evolution_run(
+        &self,
+        run_id: &str,
+        worker_id: Option<&str>,
+        result_json: &Value,
+    ) -> CoreResult<bool> {
+        let rows = sqlx::query(
+            "UPDATE agistack_skill_evolution_runs \
+             SET status = 'completed', \
+                 completed_at = now(), \
+                 updated_at = now(), \
+                 last_error = NULL, \
+                 result_json = $3 \
+             WHERE id = $1 \
+               AND status = 'running' \
+               AND ($2::text IS NULL OR worker_id = $2)",
+        )
+        .bind(run_id)
+        .bind(worker_id)
+        .bind(result_json)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(rows.rows_affected() > 0)
+    }
+
+    pub async fn fail_evolution_run(
+        &self,
+        run_id: &str,
+        worker_id: Option<&str>,
+        error: &str,
+    ) -> CoreResult<bool> {
+        let rows = sqlx::query(
+            "UPDATE agistack_skill_evolution_runs \
+             SET status = 'failed', \
+                 completed_at = now(), \
+                 updated_at = now(), \
+                 last_error = left($3, 2000) \
+             WHERE id = $1 \
+               AND status = 'running' \
+               AND ($2::text IS NULL OR worker_id = $2)",
+        )
+        .bind(run_id)
+        .bind(worker_id)
+        .bind(error)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(rows.rows_affected() > 0)
+    }
+
     pub async fn count_sessions_by_skill(
         &self,
         tenant_id: &str,
@@ -529,6 +632,25 @@ fn row_to_job(row: PgRow) -> CoreResult<SkillEvolutionJobRecord> {
         skill_version_id: row.try_get("skill_version_id").map_err(storage)?,
         created_at: row.try_get("created_at").map_err(storage)?,
         applied_at: row.try_get("applied_at").map_err(storage)?,
+    })
+}
+
+fn row_to_run(row: PgRow) -> CoreResult<SkillEvolutionRunRecord> {
+    Ok(SkillEvolutionRunRecord {
+        id: row.try_get("id").map_err(storage)?,
+        tenant_id: row.try_get("tenant_id").map_err(storage)?,
+        project_id: row.try_get("project_id").map_err(storage)?,
+        skill_name: row.try_get("skill_name").map_err(storage)?,
+        reason: row.try_get("reason").map_err(storage)?,
+        status: row.try_get("status").map_err(storage)?,
+        attempts: row.try_get("attempts").map_err(storage)?,
+        worker_id: row.try_get("worker_id").map_err(storage)?,
+        started_at: row.try_get("started_at").map_err(storage)?,
+        completed_at: row.try_get("completed_at").map_err(storage)?,
+        last_error: row.try_get("last_error").map_err(storage)?,
+        result_json: row.try_get("result_json").map_err(storage)?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+        updated_at: row.try_get("updated_at").map_err(storage)?,
     })
 }
 

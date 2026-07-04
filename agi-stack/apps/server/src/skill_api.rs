@@ -37,6 +37,7 @@ mod dev_service_evolution;
 mod dev_service_lifecycle;
 mod evolution_config;
 mod evolution_scheduler;
+mod evolution_worker;
 mod handlers;
 mod pg_service;
 mod pg_service_evolution;
@@ -58,6 +59,9 @@ pub(crate) use evolution_scheduler::PgSkillEvolutionScheduler;
 use evolution_scheduler::{
     InMemorySkillEvolutionScheduler, SharedSkillEvolutionScheduler, SkillEvolutionScheduleResult,
     SkillEvolutionScheduler,
+};
+pub(crate) use evolution_worker::{
+    EngineUnavailableSkillEvolutionExecutor, PgSkillEvolutionWorker, SharedSkillEvolutionWorker,
 };
 pub(crate) use routes::router;
 pub(crate) use service::{SharedSkills, SkillService};

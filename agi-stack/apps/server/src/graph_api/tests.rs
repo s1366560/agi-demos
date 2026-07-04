@@ -78,6 +78,7 @@ fn test_state() -> AppState {
         shares,
         trust,
         skills,
+        skill_evolution_worker: None,
         tenant_skill_configs,
         workspaces,
         channels,

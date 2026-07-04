@@ -1,5 +1,13 @@
 use super::support::*;
 
+type SkillEvolutionRunStateRow = (
+    String,
+    String,
+    i32,
+    Option<String>,
+    Option<serde_json::Value>,
+);
+
 #[tokio::test]
 async fn skill_repository_roundtrips_against_shared_schema() {
     let Some(pool) = pool_or_skip("skill_repository_roundtrips_against_shared_schema").await else {
@@ -613,6 +621,100 @@ async fn skill_evolution_run_queue_coalesces_active_runs() {
     assert!(after_completion);
 
     sqlx::query("DELETE FROM agistack_skill_evolution_runs WHERE tenant_id = 't_skill_evo_queue'")
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn skill_evolution_run_queue_claims_and_finishes_runs() {
+    let Some(pool) = pool_or_skip("skill_evolution_run_queue_claims_and_finishes_runs").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    sqlx::query("DELETE FROM agistack_skill_evolution_runs WHERE tenant_id = 't_skill_evo_worker'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let repo = PgSkillEvolutionRepository::new(pool.clone());
+    assert!(repo
+        .schedule_evolution_run(
+            "run_skill_evo_worker_1",
+            "t_skill_evo_worker",
+            Some("p_skill_evo_worker"),
+            Some("code-review"),
+            "manual",
+        )
+        .await
+        .unwrap());
+    assert!(repo
+        .schedule_evolution_run(
+            "run_skill_evo_worker_2",
+            "t_skill_evo_worker",
+            None,
+            None,
+            "manual",
+        )
+        .await
+        .unwrap());
+
+    let first = repo
+        .claim_next_evolution_run("worker-a")
+        .await
+        .unwrap()
+        .expect("first queued run should be claimed");
+    assert_eq!(first.id, "run_skill_evo_worker_1");
+    assert_eq!(first.status, "running");
+    assert_eq!(first.attempts, 1);
+    assert_eq!(first.worker_id.as_deref(), Some("worker-a"));
+    assert!(first.started_at.is_some());
+    assert!(repo
+        .complete_evolution_run(
+            &first.id,
+            Some("worker-a"),
+            &serde_json::json!({"jobs": 1, "skipped": false}),
+        )
+        .await
+        .unwrap());
+
+    let second = repo
+        .claim_next_evolution_run("worker-b")
+        .await
+        .unwrap()
+        .expect("second queued run should be claimed");
+    assert_eq!(second.id, "run_skill_evo_worker_2");
+    assert!(repo
+        .fail_evolution_run(&second.id, Some("worker-b"), "llm provider unavailable")
+        .await
+        .unwrap());
+    assert!(repo
+        .claim_next_evolution_run("worker-c")
+        .await
+        .unwrap()
+        .is_none());
+
+    let rows: Vec<SkillEvolutionRunStateRow> = sqlx::query_as(
+        "SELECT id, status, attempts, last_error, result_json \
+             FROM agistack_skill_evolution_runs \
+             WHERE tenant_id = 't_skill_evo_worker' \
+             ORDER BY id ASC",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].0, "run_skill_evo_worker_1");
+    assert_eq!(rows[0].1, "completed");
+    assert_eq!(rows[0].2, 1);
+    assert_eq!(rows[0].4.as_ref().unwrap()["jobs"], serde_json::json!(1));
+    assert_eq!(rows[1].0, "run_skill_evo_worker_2");
+    assert_eq!(rows[1].1, "failed");
+    assert_eq!(rows[1].3.as_deref(), Some("llm provider unavailable"));
+
+    sqlx::query("DELETE FROM agistack_skill_evolution_runs WHERE tenant_id = 't_skill_evo_worker'")
         .execute(&pool)
         .await
         .unwrap();

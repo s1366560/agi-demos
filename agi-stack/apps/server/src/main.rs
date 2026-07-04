@@ -86,7 +86,10 @@ use crate::sandbox_api::{
     SharedHttpServiceRegistry, SharedProjectSandboxes,
 };
 use crate::shares_api::{DevShareService, PgShareService, SharedShares};
-use crate::skill_api::{DevSkillService, PgSkillEvolutionScheduler, PgSkillService, SharedSkills};
+use crate::skill_api::{
+    DevSkillService, EngineUnavailableSkillEvolutionExecutor, PgSkillEvolutionScheduler,
+    PgSkillEvolutionWorker, PgSkillService, SharedSkillEvolutionWorker, SharedSkills,
+};
 use crate::tenant_skill_config_api::{
     DevTenantSkillConfigService, PgTenantSkillConfigService, SharedTenantSkillConfigs,
 };
@@ -127,6 +130,10 @@ pub(crate) struct AppState {
     pub(crate) trust: SharedTrust,
     /// P5 skill store/versioning service over Python-owned `skills` tables.
     pub(crate) skills: SharedSkills,
+    /// P5 skill evolution run worker foundation over Rust-owned
+    /// `agistack_skill_evolution_runs`. It is wired but autostart-gated until
+    /// full LLM evolution-engine parity is enabled.
+    pub(crate) skill_evolution_worker: Option<SharedSkillEvolutionWorker>,
     /// P5 tenant skill disable/override config over Python-owned
     /// `tenant_skill_configs`.
     pub(crate) tenant_skill_configs: SharedTenantSkillConfigs,
@@ -650,6 +657,12 @@ async fn build_state() -> ServerResult<AppState> {
         Some(pool) => Arc::new(PgChannelService::new(PgChannelRepository::new(pool))),
         None => Arc::new(DevChannelService::new()),
     };
+    let skill_evolution_worker = workspace_plan_pool.clone().map(|pool| {
+        Arc::new(PgSkillEvolutionWorker::new(
+            PgSkillEvolutionRepository::new(pool),
+            Arc::new(EngineUnavailableSkillEvolutionExecutor),
+        ))
+    });
     let graph = build_graph_store().await;
     let sandbox_runtime = build_container_runtime().await;
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
@@ -728,6 +741,7 @@ async fn build_state() -> ServerResult<AppState> {
         shares,
         trust,
         skills,
+        skill_evolution_worker,
         tenant_skill_configs,
         workspaces,
         channels,
@@ -745,6 +759,10 @@ async fn main() -> ServerResult<()> {
     let state = build_state().await?;
     let _workspace_plan_outbox_runtime = state
         .workspace_plan_outbox_worker
+        .as_ref()
+        .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
+    let _skill_evolution_runtime = state
+        .skill_evolution_worker
         .as_ref()
         .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
     let app = demo_api::router(state);

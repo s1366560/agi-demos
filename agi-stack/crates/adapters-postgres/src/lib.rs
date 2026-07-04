@@ -72,7 +72,7 @@ pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
 pub use share_repo::{NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord};
 pub use skill_evolution_repo::{
     PgSkillEvolutionRepository, SkillEvolutionJobRecord, SkillEvolutionOverviewStatsRecord,
-    SkillEvolutionSessionRecord, SkillEvolutionSkillSummaryRecord,
+    SkillEvolutionRunRecord, SkillEvolutionSessionRecord, SkillEvolutionSkillSummaryRecord,
 };
 pub use skill_repo::{
     PgSkillRepository, PluginConfigRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
@@ -157,12 +157,38 @@ pub async fn ensure_aux_schema(pool: &PgPool) -> CoreResult<()> {
             skill_name text, \
             reason text NOT NULL, \
             status text NOT NULL, \
+            attempts integer NOT NULL DEFAULT 0, \
+            worker_id text, \
+            started_at timestamptz, \
+            completed_at timestamptz, \
+            last_error text, \
+            result_json jsonb, \
             created_at timestamptz NOT NULL DEFAULT now(), \
             updated_at timestamptz)",
     )
     .execute(pool)
     .await
     .map_err(|e| CoreError::Storage(format!("ensure agistack_skill_evolution_runs: {e}")))?;
+
+    for (column, ty) in [
+        ("attempts", "integer NOT NULL DEFAULT 0"),
+        ("worker_id", "text"),
+        ("started_at", "timestamptz"),
+        ("completed_at", "timestamptz"),
+        ("last_error", "text"),
+        ("result_json", "jsonb"),
+    ] {
+        sqlx::query(&format!(
+            "ALTER TABLE agistack_skill_evolution_runs ADD COLUMN IF NOT EXISTS {column} {ty}"
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            CoreError::Storage(format!(
+                "ensure agistack_skill_evolution_runs.{column}: {e}"
+            ))
+        })?;
+    }
 
     sqlx::query(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_agistack_skill_evolution_runs_active \
@@ -174,6 +200,18 @@ pub async fn ensure_aux_schema(pool: &PgPool) -> CoreResult<()> {
     .map_err(|e| {
         CoreError::Storage(format!(
             "ensure uq_agistack_skill_evolution_runs_active: {e}"
+        ))
+    })?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_agistack_skill_evolution_runs_claim \
+         ON agistack_skill_evolution_runs (status, created_at)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure idx_agistack_skill_evolution_runs_claim: {e}"
         ))
     })?;
 
