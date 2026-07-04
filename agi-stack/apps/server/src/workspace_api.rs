@@ -3,10 +3,12 @@
 //! This deliberately covers only precise, database-backed resources:
 //! workspaces, workspace chat messages, workspace tasks, topology nodes/edges, and blackboard
 //! posts/replies/files plus transactional plan action/outbox rows. Runtime-heavy
-//! siblings (execution diagnostics, full leader adjudication, autonomy)
-//! remain Python-owned until their full semantics are migrated; accept-review
-//! already projects linked attempts to accepted so pending adjudication does not
-//! linger after explicit human acceptance.
+//! siblings (execution diagnostics and full leader adjudication) remain
+//! Python-owned until their full semantics are migrated; accept-review already
+//! projects linked attempts to accepted so pending adjudication does not linger
+//! after explicit human acceptance. The autonomy tick endpoint owns the durable
+//! plan supervisor/outbox slice only; Python still owns planner decomposition,
+//! Redis cooldown, and root auto-completion.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -44,6 +46,7 @@ use agistack_core::ports::ObjectStore;
 use crate::auth::Identity;
 use crate::AppState;
 
+mod autonomy_service;
 mod blackboard_service;
 mod chat_mentions;
 mod file_dev_service;
@@ -73,15 +76,16 @@ use chat_mentions::{
     WORKSPACE_AGENT_MENTION_STATUS,
 };
 use types::{
-    BlackboardFileDownload, BlackboardFileListQuery, BlackboardFileListView, BlackboardFileView,
-    BlackboardPostCreatePayload, BlackboardPostListView, BlackboardPostUpdatePayload,
-    BlackboardPostView, BlackboardReplyCreatePayload, BlackboardReplyListView,
-    BlackboardReplyUpdatePayload, BlackboardReplyView, BlackboardUpload, CopyFilePayload,
-    DeleteFileQuery, DeletedView, LimitOffset, MessageListQuery, MessageListView,
-    MessageMentionQuery, MessageView, MkdirPayload, RenameOrMoveFilePayload, SendMessagePayload,
-    TaskListQuery, TaskTransitionAction, TopologyEdgeCreatePayload, TopologyEdgeUpdatePayload,
-    TopologyEdgeView, TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView,
-    WorkspaceApiError, WorkspaceCreatePayload, WorkspaceDeliverySummaryView, WorkspaceListQuery,
+    AutonomyTickRequest, AutonomyTickView, BlackboardFileDownload, BlackboardFileListQuery,
+    BlackboardFileListView, BlackboardFileView, BlackboardPostCreatePayload,
+    BlackboardPostListView, BlackboardPostUpdatePayload, BlackboardPostView,
+    BlackboardReplyCreatePayload, BlackboardReplyListView, BlackboardReplyUpdatePayload,
+    BlackboardReplyView, BlackboardUpload, CopyFilePayload, DeleteFileQuery, DeletedView,
+    LimitOffset, MessageListQuery, MessageListView, MessageMentionQuery, MessageView, MkdirPayload,
+    RenameOrMoveFilePayload, SendMessagePayload, TaskListQuery, TaskTransitionAction,
+    TopologyEdgeCreatePayload, TopologyEdgeUpdatePayload, TopologyEdgeView,
+    TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView, WorkspaceApiError,
+    WorkspaceCreatePayload, WorkspaceDeliverySummaryView, WorkspaceListQuery,
     WorkspacePlanActionCapabilityView, WorkspacePlanActionRequest, WorkspacePlanActionResultView,
     WorkspacePlanBlackboardEntryView, WorkspacePlanEventView, WorkspacePlanEvidenceBundleView,
     WorkspacePlanGateStatusView, WorkspacePlanHistoryItemView, WorkspacePlanIterationPhaseView,
@@ -109,6 +113,7 @@ const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
 const SUPERVISOR_TICK_EVENT: &str = "supervisor_tick";
 const WORKER_LAUNCH_EVENT: &str = "worker_launch";
 const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
+const WORKSPACE_PLAN_SYSTEM_ACTOR_ID: &str = "workspace-plan:system";
 const STALE_RECOVERY_DISPATCH_STALE_SECONDS: i64 = 180;
 const STALE_RECOVERY_RUNNING_STALE_SECONDS: i64 = 300;
 const STALE_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS: i64 = 300;

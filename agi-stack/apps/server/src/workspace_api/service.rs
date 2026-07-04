@@ -121,6 +121,13 @@ pub(crate) trait WorkspaceService: Send + Sync {
         body: WorkspacePlanActionRequest,
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
 
+    async fn trigger_autonomy_tick(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: AutonomyTickRequest,
+    ) -> Result<AutonomyTickView, WorkspaceApiError>;
+
     async fn update_workspace(
         &self,
         user_id: &str,

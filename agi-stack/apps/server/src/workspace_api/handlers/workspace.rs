@@ -187,6 +187,22 @@ pub(in crate::workspace_api) async fn accept_plan_node_review(
         .map(Json)
 }
 
+pub(in crate::workspace_api) async fn trigger_autonomy_tick(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(workspace_id): Path<String>,
+    body: Option<Json<AutonomyTickRequest>>,
+) -> Result<Json<AutonomyTickView>, WorkspaceApiError> {
+    app.workspaces
+        .trigger_autonomy_tick(
+            &identity.user_id,
+            &workspace_id,
+            body.map(|Json(body)| body).unwrap_or_default(),
+        )
+        .await
+        .map(Json)
+}
+
 pub(in crate::workspace_api) async fn update_workspace(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,

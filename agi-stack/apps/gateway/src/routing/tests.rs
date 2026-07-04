@@ -421,6 +421,32 @@ fn p5_tenant_skill_config_rules_are_exact() {
 }
 
 #[test]
+fn p6_workspace_autonomy_tick_rule_is_exact() {
+    assert_eq!(
+        upstream_for_request(
+            &Method::POST,
+            "/api/v1/workspaces/ws-1/autonomy/tick",
+            &ups()
+        ),
+        "http://rust:8088"
+    );
+
+    for (method, path) in [
+        (Method::GET, "/api/v1/workspaces/ws-1/autonomy/tick"),
+        (Method::POST, "/api/v1/workspaces/ws-1/autonomy"),
+        (Method::POST, "/api/v1/workspaces/ws-1/autonomy/tick/extra"),
+        (Method::POST, "/api/v1/workspaces/ws-1/plan"),
+        (Method::POST, "/api/v1/workspaces/ws-1/runtime/tick"),
+    ] {
+        assert_eq!(
+            upstream_for_request(&method, path, &ups()),
+            "http://python:8000",
+            "{method} {path} should remain on python",
+        );
+    }
+}
+
+#[test]
 fn preview_hosts_are_host_scoped_and_route_to_rust() {
     assert!(is_preview_host_for_suffix(
         "web.p1.preview.localhost:8000",

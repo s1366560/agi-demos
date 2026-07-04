@@ -35,6 +35,7 @@ fn assert_golden<T: Serialize>(actual: &T, golden: Value) {
 }
 
 mod accept_review;
+mod autonomy;
 mod chat_mentions;
 mod goldens;
 mod workspace_lifecycle;

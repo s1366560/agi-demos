@@ -671,6 +671,17 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/tenant/skills/config",
         match_kind: MethodMatchKind::FixedChildWithGrandchild { child: "status" },
     },
+    // P6 workspace autonomy tick flip. This is only the durable supervisor
+    // outbox trigger; sibling autonomy/runtime endpoints remain Python-owned.
+    // Rollback = delete this single rule.
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/workspaces",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["autonomy", "tick"],
+            excluded: &[],
+        },
+    },
     MethodRule {
         method: "GET",
         path: "/api/v1/agent/ws",

@@ -428,4 +428,15 @@ fn workspace_plan_snapshot_matches_golden() {
         ))
         .unwrap(),
     );
+    assert_golden(
+        &AutonomyTickView::new(
+            false,
+            Some("root-autonomy".to_string()),
+            "durable_plan_started",
+        ),
+        serde_json::from_str(include_str!(
+            "../../../tests/golden/workspace_autonomy_tick.json"
+        ))
+        .unwrap(),
+    );
 }

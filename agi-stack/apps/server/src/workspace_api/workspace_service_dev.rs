@@ -171,6 +171,16 @@ impl WorkspaceService for DevWorkspaceService {
             .await
     }
 
+    async fn trigger_autonomy_tick(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: AutonomyTickRequest,
+    ) -> Result<AutonomyTickView, WorkspaceApiError> {
+        self.dev_trigger_autonomy_tick(user_id, workspace_id, body)
+            .await
+    }
+
     async fn update_workspace(
         &self,
         user_id: &str,

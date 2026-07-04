@@ -163,6 +163,15 @@ impl WorkspaceService for PgWorkspaceService {
         self.pg_accept_plan_node_review(user_id, workspace_id, node_id, body)
             .await
     }
+    async fn trigger_autonomy_tick(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        body: AutonomyTickRequest,
+    ) -> Result<AutonomyTickView, WorkspaceApiError> {
+        self.pg_trigger_autonomy_tick(user_id, workspace_id, body)
+            .await
+    }
     async fn update_workspace(
         &self,
         user_id: &str,

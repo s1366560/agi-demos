@@ -114,6 +114,33 @@ pub(crate) struct WorkspaceUpdatePayload {
     pub(in crate::workspace_api) metadata: Option<Value>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct AutonomyTickRequest {
+    #[serde(default)]
+    pub(in crate::workspace_api) force: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct AutonomyTickView {
+    pub(in crate::workspace_api) triggered: bool,
+    pub(in crate::workspace_api) root_task_id: Option<String>,
+    pub(in crate::workspace_api) reason: String,
+}
+
+impl AutonomyTickView {
+    pub(in crate::workspace_api) fn new(
+        triggered: bool,
+        root_task_id: Option<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            triggered,
+            root_task_id,
+            reason: reason.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct SendMessagePayload {
     pub(in crate::workspace_api) content: String,

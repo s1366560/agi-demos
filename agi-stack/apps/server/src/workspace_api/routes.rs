@@ -56,6 +56,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/workspaces/:workspace_id/plan/nodes/:node_id/accept-review",
             post(accept_plan_node_review),
         )
+        .route(
+            "/api/v1/workspaces/:workspace_id/autonomy/tick",
+            post(trigger_autonomy_tick),
+        )
         .route("/api/v1/workspaces/:workspace_id/tasks", post(create_task).get(list_tasks))
         .route(
             "/api/v1/workspaces/:workspace_id/tasks/:task_id",
