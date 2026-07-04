@@ -56,6 +56,7 @@ mod service_helpers;
 mod service_http;
 mod service_lifecycle;
 mod service_state;
+mod terminal_protocol;
 mod views;
 mod ws_handlers;
 mod ws_proxy;
@@ -85,6 +86,10 @@ use ws_urls::{
     desktop_websocket_origin, normalize_mcp_resource_mime_type, terminal_websocket_origin,
 };
 
+use terminal_protocol::{
+    new_terminal_session_id, terminal_error_message, TerminalSessionRecord,
+    TerminalSessionRecorder, TerminalSize,
+};
 pub(crate) use views::ExecuteToolResponse;
 use views::{
     DesktopServiceResponse, EnsureSandboxRequest, ExecuteToolRequest, HealthCheckResponse,
@@ -96,9 +101,8 @@ use views::{
 };
 use ws_handlers::*;
 use ws_proxy::{
-    new_terminal_session_id, proxy_desktop_ws_session, proxy_http_service_ws_session,
-    proxy_mcp_ws_session, proxy_terminal_ws_session, terminal_error_message, TerminalSessionRecord,
-    TerminalSessionRecorder, TerminalSize,
+    proxy_desktop_ws_session, proxy_http_service_ws_session, proxy_mcp_ws_session,
+    proxy_terminal_ws_session,
 };
 
 const SANDBOX_NOT_FOUND: &str = "Sandbox not found";
