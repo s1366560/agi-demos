@@ -119,6 +119,19 @@ pub struct SkillEvolutionJobRecord {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct SkillEvolutionJobInsertRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub project_id: Option<String>,
+    pub skill_name: String,
+    pub action: String,
+    pub status: String,
+    pub rationale: Option<String>,
+    pub candidate_content: Option<String>,
+    pub session_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SkillEvolutionRunRecord {
     pub id: String,
     pub tenant_id: String,
@@ -540,6 +553,48 @@ impl PgSkillEvolutionRepository {
             }
         }
         Ok(None)
+    }
+
+    pub async fn insert_job(
+        &self,
+        job: &SkillEvolutionJobInsertRecord,
+    ) -> CoreResult<SkillEvolutionJobRecord> {
+        let session_ids = serde_json::to_value(&job.session_ids).map_err(storage)?;
+        let sql = format!(
+            "INSERT INTO skill_evolution_jobs \
+                (id, tenant_id, project_id, skill_name, action, status, rationale, \
+                 candidate_content, session_ids) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+             RETURNING {JOB_COLS}"
+        );
+        let row = sqlx::query(&sql)
+            .bind(&job.id)
+            .bind(&job.tenant_id)
+            .bind(&job.project_id)
+            .bind(&job.skill_name)
+            .bind(&job.action)
+            .bind(&job.status)
+            .bind(&job.rationale)
+            .bind(&job.candidate_content)
+            .bind(session_ids)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(storage)?;
+        row_to_job(row)
+    }
+
+    pub async fn cleanup_old_sessions(&self, retention_days: i64) -> CoreResult<i64> {
+        let retention_days = retention_days.max(1);
+        let retention_days = i32::try_from(retention_days).unwrap_or(i32::MAX);
+        let rows = sqlx::query(
+            "DELETE FROM skill_evolution_sessions \
+             WHERE created_at < now() - ($1 * interval '1 day')",
+        )
+        .bind(retention_days)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        i64::try_from(rows.rows_affected()).map_err(storage)
     }
 
     pub async fn get_job_for_tenant(

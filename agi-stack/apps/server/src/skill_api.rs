@@ -36,6 +36,7 @@ mod dev_service;
 mod dev_service_evolution;
 mod dev_service_lifecycle;
 mod evolution_config;
+mod evolution_pipeline;
 mod evolution_scheduler;
 mod evolution_worker;
 mod handlers;

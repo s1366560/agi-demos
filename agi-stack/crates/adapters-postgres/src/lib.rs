@@ -71,8 +71,10 @@ pub use project_repo::{
 pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
 pub use share_repo::{NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord};
 pub use skill_evolution_repo::{
-    PgSkillEvolutionRepository, SkillEvolutionJobRecord, SkillEvolutionOverviewStatsRecord,
-    SkillEvolutionRunRecord, SkillEvolutionSessionRecord, SkillEvolutionSkillSummaryRecord,
+    PgSkillEvolutionRepository, SkillEvolutionJobInsertRecord, SkillEvolutionJobRecord,
+    SkillEvolutionOverviewStatsRecord, SkillEvolutionPipelineSessionRecord,
+    SkillEvolutionRunRecord, SkillEvolutionSessionGroupRecord, SkillEvolutionSessionRecord,
+    SkillEvolutionSkillSummaryRecord,
 };
 pub use skill_repo::{
     PgSkillRepository, PluginConfigRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,

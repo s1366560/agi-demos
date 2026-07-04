@@ -628,6 +628,28 @@ async fn skill_evolution_overview_queries_shared_schema() {
         .unwrap()
         .is_none());
 
+    let inserted_job = repo
+        .insert_job(&SkillEvolutionJobInsertRecord {
+            id: "job_skill_evo_inserted".to_string(),
+            tenant_id: "t_skill_evo".to_string(),
+            project_id: Some("p_skill_evo".to_string()),
+            skill_name: "code-review".to_string(),
+            action: "skip".to_string(),
+            status: "skipped".to_string(),
+            rationale: Some("No change needed after Rust pipeline review.".to_string()),
+            candidate_content: None,
+            session_ids: vec!["sess_skill_evo_project".to_string()],
+        })
+        .await
+        .unwrap();
+    assert_eq!(inserted_job.id, "job_skill_evo_inserted");
+    assert_eq!(inserted_job.status, "skipped");
+    assert_eq!(
+        inserted_job.session_ids,
+        vec!["sess_skill_evo_project".to_string()]
+    );
+    assert!(inserted_job.created_at.timestamp() > 0);
+
     let pending_job = repo
         .get_job_for_tenant("t_skill_evo", "job_skill_evo_project")
         .await
