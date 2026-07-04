@@ -48,8 +48,9 @@ mod workspace_repo;
 
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
 pub use channel_repo::{
-    ChannelConfigListQuery, ChannelConfigRecord, ChannelOutboxListQuery, ChannelOutboxRecord,
-    ChannelPageQuery, ChannelSessionBindingRecord, ChannelStatusRecord, PgChannelRepository,
+    ChannelConfigListQuery, ChannelConfigRecord, ChannelObservabilitySummaryRecord,
+    ChannelOutboxListQuery, ChannelOutboxRecord, ChannelPageQuery, ChannelSessionBindingRecord,
+    ChannelStatusRecord, PgChannelRepository,
 };
 pub use checkpoint::PgCheckpointStore;
 pub use conversation_events_repo::{

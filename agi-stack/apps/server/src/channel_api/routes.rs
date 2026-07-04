@@ -10,8 +10,8 @@ use super::{
     error::ChannelApiError,
     queries::{ChannelConfigQuery, ChannelOutboxQuery, ChannelPageQueryParams},
     views::{
-        ChannelConfigListView, ChannelConfigView, ChannelOutboxListView,
-        ChannelSessionBindingListView, ChannelStatusView,
+        ChannelConfigListView, ChannelConfigView, ChannelObservabilitySummaryView,
+        ChannelOutboxListView, ChannelSessionBindingListView, ChannelStatusView,
     },
 };
 
@@ -32,6 +32,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/channels/projects/:project_id/observability/outbox",
             get(list_project_channel_outbox),
+        )
+        .route(
+            "/api/v1/channels/projects/:project_id/observability/summary",
+            get(get_project_channel_observability_summary),
         )
         .route(
             "/api/v1/channels/projects/:project_id/observability/session-bindings",
@@ -87,6 +91,18 @@ async fn list_project_channel_outbox(
     state
         .channels
         .list_project_outbox(&identity.user_id, &project_id, query)
+        .await
+        .map(Json)
+}
+
+async fn get_project_channel_observability_summary(
+    State(state): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(project_id): Path<String>,
+) -> Result<Json<ChannelObservabilitySummaryView>, ChannelApiError> {
+    state
+        .channels
+        .get_project_observability_summary(&identity.user_id, &project_id)
         .await
         .map(Json)
 }

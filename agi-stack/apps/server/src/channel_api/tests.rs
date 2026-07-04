@@ -1,7 +1,8 @@
 use super::views::{ChannelOutboxItemView, ChannelSessionBindingItemView};
 use super::*;
 use agistack_adapters_postgres::{
-    ChannelConfigRecord, ChannelOutboxRecord, ChannelSessionBindingRecord, ChannelStatusRecord,
+    ChannelConfigRecord, ChannelObservabilitySummaryRecord, ChannelOutboxRecord,
+    ChannelSessionBindingRecord, ChannelStatusRecord,
 };
 use agistack_parity::assert_parity;
 use axum::http::StatusCode;
@@ -89,6 +90,21 @@ fn sample_session_binding_record() -> ChannelSessionBindingRecord {
     }
 }
 
+fn sample_observability_summary_record() -> ChannelObservabilitySummaryRecord {
+    ChannelObservabilitySummaryRecord {
+        project_id: "project-1".to_string(),
+        session_bindings_total: 1,
+        outbox_total: 2,
+        outbox_by_status: [
+            ("failed".to_string(), 1_i64),
+            ("pending".to_string(), 1_i64),
+        ]
+        .into_iter()
+        .collect(),
+        latest_delivery_error: Some("rate limited".to_string()),
+    }
+}
+
 #[test]
 fn channel_config_response_matches_golden_and_masks_extra_secrets() {
     let actual = serde_json::to_value(ChannelConfigView::from(sample_channel_config_record()))
@@ -148,6 +164,19 @@ fn channel_session_binding_list_matches_golden() {
     .expect("channel session binding list serializes");
     let golden: Value = serde_json::from_str(include_str!(
         "../../tests/golden/channel_session_binding_list.json"
+    ))
+    .expect("golden parses");
+    assert_parity(&golden, &actual);
+}
+
+#[test]
+fn channel_observability_summary_matches_golden() {
+    let actual = serde_json::to_value(ChannelObservabilitySummaryView::from(
+        sample_observability_summary_record(),
+    ))
+    .expect("channel observability summary serializes");
+    let golden: Value = serde_json::from_str(include_str!(
+        "../../tests/golden/channel_observability_summary.json"
     ))
     .expect("golden parses");
     assert_parity(&golden, &actual);
@@ -274,4 +303,15 @@ async fn dev_channel_service_lists_empty_configs_and_returns_not_found_for_detai
         .expect("dev session binding list succeeds");
     assert!(bindings.items.is_empty());
     assert_eq!(bindings.total, 0);
+
+    let summary = service
+        .get_project_observability_summary("dev-user", "project-1")
+        .await
+        .expect("dev observability summary succeeds");
+    let summary_json = serde_json::to_value(summary).expect("dev summary serializes");
+    assert_eq!(summary_json["project_id"], "project-1");
+    assert_eq!(summary_json["session_bindings_total"], 0);
+    assert_eq!(summary_json["outbox_total"], 0);
+    assert_eq!(summary_json["active_connections"], 0);
+    assert_eq!(summary_json["connected_config_ids"], json!([]));
 }

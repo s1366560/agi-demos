@@ -1,0 +1,12 @@
+{
+  "project_id": "project-1",
+  "session_bindings_total": 1,
+  "outbox_total": 2,
+  "outbox_by_status": {
+    "failed": 1,
+    "pending": 1
+  },
+  "active_connections": 0,
+  "connected_config_ids": [],
+  "latest_delivery_error": "rate limited"
+}

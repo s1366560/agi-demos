@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 
 use agistack_adapters_postgres::{
-    ChannelConfigRecord, ChannelOutboxRecord, ChannelSessionBindingRecord, ChannelStatusRecord,
+    ChannelConfigRecord, ChannelObservabilitySummaryRecord, ChannelOutboxRecord,
+    ChannelSessionBindingRecord, ChannelStatusRecord,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -172,6 +174,45 @@ impl From<ChannelSessionBindingRecord> for ChannelSessionBindingItemView {
 pub(crate) struct ChannelSessionBindingListView {
     pub(crate) items: Vec<ChannelSessionBindingItemView>,
     pub(crate) total: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChannelObservabilitySummaryView {
+    project_id: String,
+    session_bindings_total: i64,
+    outbox_total: i64,
+    outbox_by_status: BTreeMap<String, i64>,
+    active_connections: i64,
+    connected_config_ids: Vec<String>,
+    latest_delivery_error: Option<String>,
+}
+
+impl ChannelObservabilitySummaryView {
+    pub(crate) fn empty(project_id: &str) -> Self {
+        Self {
+            project_id: project_id.to_string(),
+            session_bindings_total: 0,
+            outbox_total: 0,
+            outbox_by_status: BTreeMap::new(),
+            active_connections: 0,
+            connected_config_ids: Vec::new(),
+            latest_delivery_error: None,
+        }
+    }
+}
+
+impl From<ChannelObservabilitySummaryRecord> for ChannelObservabilitySummaryView {
+    fn from(record: ChannelObservabilitySummaryRecord) -> Self {
+        Self {
+            project_id: record.project_id,
+            session_bindings_total: record.session_bindings_total,
+            outbox_total: record.outbox_total,
+            outbox_by_status: record.outbox_by_status,
+            active_connections: 0,
+            connected_config_ids: Vec::new(),
+            latest_delivery_error: record.latest_delivery_error,
+        }
+    }
 }
 
 fn iso8601(value: DateTime<Utc>) -> String {

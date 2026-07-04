@@ -490,8 +490,8 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
     },
     // P5 channel config read/status + DB-only observability foundation. Only
     // these read-side routes are Rust-owned; config writes, plugin runtime
-    // management, active connection summary, webhook ingress and
-    // delivery/runtime endpoints remain Python-owned.
+    // management, active runtime, webhook ingress and delivery/runtime
+    // endpoints remain Python-owned.
     // Rollback = delete this block.
     MethodRule {
         method: "GET",
@@ -506,6 +506,14 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/channels/projects",
         match_kind: MethodMatchKind::SingleChildWithTailExcept {
             tail: &["observability", "outbox"],
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/channels/projects",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["observability", "summary"],
             excluded: &[],
         },
     },

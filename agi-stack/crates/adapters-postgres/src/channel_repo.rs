@@ -1,6 +1,7 @@
 use serde_json::Value;
 use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::FromRow;
+use std::collections::BTreeMap;
 
 use agistack_core::ports::{CoreError, CoreResult};
 
@@ -71,6 +72,15 @@ pub struct ChannelSessionBindingRecord {
     pub session_key: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelObservabilitySummaryRecord {
+    pub project_id: String,
+    pub session_bindings_total: i64,
+    pub outbox_total: i64,
+    pub outbox_by_status: BTreeMap<String, i64>,
+    pub latest_delivery_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -276,6 +286,47 @@ impl PgChannelRepository {
         .map_err(|e| CoreError::Storage(e.to_string()))
         .map(|(count,)| count)
     }
+
+    pub async fn observability_summary(
+        &self,
+        project_id: &str,
+    ) -> CoreResult<ChannelObservabilitySummaryRecord> {
+        let session_bindings_total = self.count_session_bindings(project_id).await?;
+        let outbox_total = self.count_outbox(project_id, None).await?;
+        let status_counts = sqlx::query_as::<_, (String, i64)>(
+            "SELECT status, count(*) \
+             FROM channel_outbox \
+             WHERE project_id = $1 \
+             GROUP BY status \
+             ORDER BY status ASC",
+        )
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+        let latest_delivery_error = sqlx::query_as::<_, (String,)>(
+            "SELECT last_error \
+             FROM channel_outbox \
+             WHERE project_id = $1 \
+               AND last_error IS NOT NULL \
+               AND status IN ('failed', 'dead_letter') \
+             ORDER BY updated_at DESC NULLS LAST, created_at DESC \
+             LIMIT 1",
+        )
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?
+        .map(|(last_error,)| last_error);
+
+        Ok(ChannelObservabilitySummaryRecord {
+            project_id: project_id.to_string(),
+            session_bindings_total,
+            outbox_total,
+            outbox_by_status: status_counts.into_iter().collect(),
+            latest_delivery_error,
+        })
+    }
 }
 
 const CHANNEL_CONFIG_SELECT_BY_PROJECT_SQL: &str = "\
@@ -307,6 +358,7 @@ const CHANNEL_CONFIG_SELECT_BY_ID_SQL: &str = "\
 #[cfg(test)]
 mod tests {
     use super::CHANNEL_CONFIG_SELECT_BY_ID_SQL;
+    use super::*;
 
     #[test]
     fn channel_config_column_list_documents_secret_exclusion() {
@@ -314,5 +366,26 @@ mod tests {
         assert!(!CHANNEL_CONFIG_SELECT_BY_ID_SQL.contains("app_secret"));
         assert!(!CHANNEL_CONFIG_SELECT_BY_ID_SQL.contains("encrypt_key"));
         assert!(!CHANNEL_CONFIG_SELECT_BY_ID_SQL.contains("verification_token"));
+    }
+
+    #[test]
+    fn observability_summary_status_counts_are_sorted_for_stable_wire_output() {
+        let record = ChannelObservabilitySummaryRecord {
+            project_id: "project-1".to_string(),
+            session_bindings_total: 1,
+            outbox_total: 2,
+            outbox_by_status: [
+                ("failed".to_string(), 1_i64),
+                ("pending".to_string(), 1_i64),
+            ]
+            .into_iter()
+            .collect(),
+            latest_delivery_error: Some("delivery failed".to_string()),
+        };
+
+        assert_eq!(
+            record.outbox_by_status.keys().collect::<Vec<_>>(),
+            vec!["failed", "pending"]
+        );
     }
 }

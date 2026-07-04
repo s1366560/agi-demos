@@ -24,6 +24,6 @@ pub(crate) use queries::{ChannelConfigQuery, ChannelOutboxQuery, ChannelPageQuer
 pub(crate) use service::ChannelService;
 #[cfg(test)]
 pub(crate) use views::{
-    ChannelConfigListView, ChannelConfigView, ChannelOutboxListView, ChannelSessionBindingListView,
-    ChannelStatusView,
+    ChannelConfigListView, ChannelConfigView, ChannelObservabilitySummaryView,
+    ChannelOutboxListView, ChannelSessionBindingListView, ChannelStatusView,
 };

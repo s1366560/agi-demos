@@ -390,6 +390,10 @@ fn p5_channel_config_rules_are_exact() {
         ),
         (
             Method::GET,
+            "/api/v1/channels/projects/project-1/observability/summary",
+        ),
+        (
+            Method::GET,
             "/api/v1/channels/projects/project-1/observability/session-bindings",
         ),
         (Method::GET, "/api/v1/channels/configs/config-1"),
@@ -406,8 +410,12 @@ fn p5_channel_config_rules_are_exact() {
         (Method::POST, "/api/v1/channels/projects/project-1/configs"),
         (Method::GET, "/api/v1/channels/projects/project-1/plugins"),
         (
-            Method::GET,
+            Method::POST,
             "/api/v1/channels/projects/project-1/observability/summary",
+        ),
+        (
+            Method::GET,
+            "/api/v1/channels/projects/project-1/observability/summary/extra",
         ),
         (
             Method::POST,

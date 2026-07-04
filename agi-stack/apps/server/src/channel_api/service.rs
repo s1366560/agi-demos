@@ -12,8 +12,9 @@ use super::{
         ValidatedChannelConfigQuery, ValidatedChannelOutboxQuery, ValidatedChannelPageQuery,
     },
     views::{
-        ChannelConfigListView, ChannelConfigView, ChannelOutboxItemView, ChannelOutboxListView,
-        ChannelSessionBindingItemView, ChannelSessionBindingListView, ChannelStatusView,
+        ChannelConfigListView, ChannelConfigView, ChannelObservabilitySummaryView,
+        ChannelOutboxItemView, ChannelOutboxListView, ChannelSessionBindingItemView,
+        ChannelSessionBindingListView, ChannelStatusView,
     },
 };
 
@@ -53,6 +54,12 @@ pub(crate) trait ChannelService: Send + Sync {
         project_id: &str,
         query: ValidatedChannelPageQuery,
     ) -> Result<ChannelSessionBindingListView, ChannelApiError>;
+
+    async fn get_project_observability_summary(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<ChannelObservabilitySummaryView, ChannelApiError>;
 }
 
 pub(crate) struct PgChannelService {
@@ -219,6 +226,20 @@ impl ChannelService for PgChannelService {
             total,
         })
     }
+
+    async fn get_project_observability_summary(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<ChannelObservabilitySummaryView, ChannelApiError> {
+        self.ensure_project_admin(user_id, project_id).await?;
+        let record = self
+            .repo
+            .observability_summary(project_id)
+            .await
+            .map_err(ChannelApiError::internal)?;
+        Ok(ChannelObservabilitySummaryView::from(record))
+    }
 }
 
 #[derive(Default)]
@@ -282,5 +303,13 @@ impl ChannelService for DevChannelService {
             items: Vec::new(),
             total: 0,
         })
+    }
+
+    async fn get_project_observability_summary(
+        &self,
+        _user_id: &str,
+        project_id: &str,
+    ) -> Result<ChannelObservabilitySummaryView, ChannelApiError> {
+        Ok(ChannelObservabilitySummaryView::empty(project_id))
     }
 }
