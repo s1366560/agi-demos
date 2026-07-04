@@ -6,7 +6,7 @@
 //! conversation subscription with stream replay, and Rust-produced agent events
 //! written to the shared `EventStream` (`agent:events:{conversation_id}`).
 
-use std::collections::HashMap;
+mod subscriptions;
 
 use axum::{
     extract::{
@@ -23,12 +23,10 @@ use tokio::time::{self, Duration};
 use crate::auth::{AuthRejection, Identity};
 use crate::AppState;
 use agistack_core::agent::events::{derive_event_id, AgentEventType, EventEnvelope};
+use subscriptions::{flush_event_subscriptions, ConnectionSubscriptions};
 
 const WEBSOCKET_AUTH_SUBPROTOCOL: &str = "memstack.auth";
 const EVENT_STREAM_MAX_LEN: usize = 1000;
-const EVENT_REPLAY_BATCH: usize = 100;
-const MAX_EVENTS_PER_FLUSH: usize = 256;
-const MAX_SUBSCRIPTIONS_PER_CONNECTION: usize = 64;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct AgentWsQuery {
@@ -90,14 +88,6 @@ enum ClientMessage {
         #[serde(default)]
         tenant_id: Option<String>,
     },
-}
-
-#[derive(Debug, Clone, Default)]
-struct Subscription {
-    last_id: String,
-    message_id: Option<String>,
-    from_time_us: Option<i64>,
-    from_counter: Option<u64>,
 }
 
 /// `GET /api/v1/agent/ws` — WebSocket bridge compatible with the existing
@@ -177,7 +167,7 @@ async fn handle_socket(
     session_id: String,
     mut socket: WebSocket,
 ) {
-    let mut subscriptions: HashMap<String, Subscription> = HashMap::new();
+    let mut subscriptions = ConnectionSubscriptions::default();
     let mut interval = time::interval(Duration::from_millis(250));
     let _ = send_json(
         &mut socket,
@@ -201,7 +191,7 @@ async fn handle_socket(
                 }
             }
             _ = interval.tick() => {
-                if flush_subscriptions(&app, &mut socket, &mut subscriptions).await.is_err() {
+                if flush_event_subscriptions(&app, &mut socket, &mut subscriptions).await.is_err() {
                     break;
                 }
             }
@@ -213,7 +203,7 @@ async fn handle_client_message(
     app: &AppState,
     identity: &Identity,
     socket: &mut WebSocket,
-    subscriptions: &mut HashMap<String, Subscription>,
+    subscriptions: &mut ConnectionSubscriptions,
     message: Message,
 ) -> bool {
     let Message::Text(text) = message else {
@@ -236,19 +226,20 @@ async fn handle_client_message(
             from_time_us,
             from_counter,
         } => {
-            if !can_add_subscription(subscriptions, &conversation_id) {
-                let _ = send_subscription_limit_error(socket, &conversation_id).await;
+            if !subscriptions.subscribe_conversation(
+                conversation_id.clone(),
+                last_event_id,
+                message_id,
+                from_time_us,
+                from_counter,
+            ) {
+                let _ = send_subscription_limit_error(
+                    socket,
+                    json!({"conversation_id": conversation_id}),
+                )
+                .await;
                 return true;
             }
-            subscriptions.insert(
-                conversation_id.clone(),
-                Subscription {
-                    last_id: last_event_id.unwrap_or_default(),
-                    message_id,
-                    from_time_us,
-                    from_counter,
-                },
-            );
             let _ = send_ack(
                 socket,
                 "subscribe",
@@ -257,7 +248,7 @@ async fn handle_client_message(
             .await;
         }
         ClientMessage::Unsubscribe { conversation_id } => {
-            subscriptions.remove(&conversation_id);
+            subscriptions.unsubscribe_conversation(&conversation_id);
             let _ = send_ack(
                 socket,
                 "unsubscribe",
@@ -272,6 +263,7 @@ async fn handle_client_message(
                 json!({"project_id": project_id}),
             )
             .await;
+            let _ = send_status_update(socket, &project_id).await;
         }
         ClientMessage::UnsubscribeStatus { project_id } => {
             let _ = send_ack(
@@ -291,6 +283,7 @@ async fn handle_client_message(
                 json!({"project_id": project_id, "tenant_id": tenant_id}),
             )
             .await;
+            let _ = send_lifecycle_state(socket, &project_id).await;
         }
         ClientMessage::UnsubscribeLifecycleState {
             project_id,
@@ -307,6 +300,11 @@ async fn handle_client_message(
             project_id,
             tenant_id,
         } => {
+            if !subscriptions.subscribe_sandbox(project_id.clone()) {
+                let _ =
+                    send_subscription_limit_error(socket, json!({"project_id": project_id})).await;
+                return true;
+            }
             let _ = send_ack(
                 socket,
                 "subscribe_sandbox",
@@ -318,6 +316,7 @@ async fn handle_client_message(
             project_id,
             tenant_id,
         } => {
+            subscriptions.unsubscribe_sandbox(&project_id);
             let _ = send_ack(
                 socket,
                 "unsubscribe_sandbox",
@@ -331,16 +330,14 @@ async fn handle_client_message(
             project_id,
             message_id,
         } => {
-            if !can_add_subscription(subscriptions, &conversation_id) {
-                let _ = send_subscription_limit_error(socket, &conversation_id).await;
+            if !subscriptions.ensure_conversation(conversation_id.clone(), message_id.clone()) {
+                let _ = send_subscription_limit_error(
+                    socket,
+                    json!({"conversation_id": conversation_id}),
+                )
+                .await;
                 return true;
             }
-            subscriptions
-                .entry(conversation_id.clone())
-                .or_insert_with(|| Subscription {
-                    message_id: message_id.clone(),
-                    ..Subscription::default()
-                });
             let _ = send_ack(
                 socket,
                 "send_message",
@@ -430,99 +427,18 @@ async fn run_agent_message(
     Ok(())
 }
 
-async fn flush_subscriptions(
-    app: &AppState,
-    socket: &mut WebSocket,
-    subscriptions: &mut HashMap<String, Subscription>,
-) -> Result<(), ()> {
-    let mut sent_this_flush = 0usize;
-    for (conversation_id, subscription) in subscriptions.iter_mut() {
-        let Some(limit) = replay_limit(sent_this_flush) else {
-            break;
-        };
-        let topic = stream_topic(conversation_id);
-        let entries = app
-            .events
-            .read_after(&topic, &subscription.last_id, limit)
-            .await
-            .map_err(|_| ())?;
-        for entry in entries {
-            let message = stream_entry_to_ws_message(conversation_id, &entry.payload);
-            if subscription_allows(&message, subscription) {
-                send_json(socket, message).await.map_err(|_| ())?;
-                sent_this_flush += 1;
-            }
-            subscription.last_id = entry.id;
-            if replay_limit(sent_this_flush).is_none() {
-                break;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn can_add_subscription(
-    subscriptions: &HashMap<String, Subscription>,
-    conversation_id: &str,
-) -> bool {
-    subscriptions.contains_key(conversation_id)
-        || subscriptions.len() < MAX_SUBSCRIPTIONS_PER_CONNECTION
-}
-
-fn replay_limit(sent_this_flush: usize) -> Option<usize> {
-    MAX_EVENTS_PER_FLUSH
-        .checked_sub(sent_this_flush)
-        .filter(|remaining| *remaining > 0)
-        .map(|remaining| remaining.min(EVENT_REPLAY_BATCH))
-}
-
 async fn send_subscription_limit_error(
     socket: &mut WebSocket,
-    conversation_id: &str,
+    extra: Value,
 ) -> Result<(), axum::Error> {
-    send_json(
-        socket,
-        json!({
-            "type": "error",
-            "conversation_id": conversation_id,
-            "data": {"message": "Too many active subscriptions"}
-        }),
-    )
-    .await
-}
-
-fn subscription_allows(message: &Value, subscription: &Subscription) -> bool {
-    if let Some(expected) = subscription.message_id.as_deref() {
-        let actual = message
-            .pointer("/data/message_id")
-            .and_then(Value::as_str)
-            .or_else(|| message.get("message_id").and_then(Value::as_str));
-        if let Some(actual) = actual {
-            if actual != expected {
-                return false;
-            }
-        }
+    let mut message = json!({
+        "type": "error",
+        "data": {"message": "Too many active subscriptions"}
+    });
+    if let (Some(base), Some(extra)) = (message.as_object_mut(), extra.as_object()) {
+        base.extend(extra.clone());
     }
-
-    let Some(from_time_us) = subscription.from_time_us else {
-        return true;
-    };
-    let event_time_us = message
-        .get("event_time_us")
-        .and_then(Value::as_i64)
-        .unwrap_or_default();
-    if event_time_us > from_time_us {
-        return true;
-    }
-    if event_time_us < from_time_us {
-        return false;
-    }
-    let from_counter = subscription.from_counter.unwrap_or_default();
-    let event_counter = message
-        .get("event_counter")
-        .and_then(Value::as_u64)
-        .unwrap_or_default();
-    event_counter >= from_counter
+    send_json(socket, message).await
 }
 
 async fn append_event(
@@ -564,27 +480,41 @@ async fn append_event(
         .map_err(|e| e.to_string())
 }
 
-fn stream_entry_to_ws_message(conversation_id: &str, payload: &str) -> Value {
-    let parsed: Value = serde_json::from_str(payload).unwrap_or_else(|_| json!({}));
-    if parsed.get("type").is_some() {
-        let mut message = parsed;
-        if let Some(obj) = message.as_object_mut() {
-            obj.insert("conversation_id".to_string(), json!(conversation_id));
-        }
-        return message;
-    }
-    if parsed.get("event_type").is_some() {
-        return json!({
-            "type": parsed.get("event_type").and_then(Value::as_str).unwrap_or("message"),
-            "conversation_id": conversation_id,
-            "data": parsed.get("payload").cloned().unwrap_or_else(|| json!({})),
-            "envelope": parsed,
-        });
-    }
+async fn send_status_update(socket: &mut WebSocket, project_id: &str) -> Result<(), axum::Error> {
+    send_json(socket, status_update_message(project_id)).await
+}
+
+fn status_update_message(project_id: &str) -> Value {
     json!({
-        "type": "error",
-        "conversation_id": conversation_id,
-        "data": {"message": "Malformed event payload"}
+        "type": "status_update",
+        "project_id": project_id,
+        "data": {
+            "is_initialized": false,
+            "is_active": false,
+            "total_chats": 0,
+            "active_chats": 0,
+            "tool_count": 0,
+            "cached_since": Value::Null,
+            "workflow_id": "default",
+        },
+        "timestamp": now_iso(),
+    })
+}
+
+async fn send_lifecycle_state(socket: &mut WebSocket, project_id: &str) -> Result<(), axum::Error> {
+    send_json(socket, lifecycle_state_message(project_id)).await
+}
+
+fn lifecycle_state_message(project_id: &str) -> Value {
+    json!({
+        "type": "lifecycle_state_change",
+        "project_id": project_id,
+        "data": {
+            "lifecycle_state": "uninitialized",
+            "is_active": false,
+            "is_initialized": false,
+        },
+        "timestamp": now_iso(),
     })
 }
 
@@ -653,59 +583,30 @@ mod tests {
     }
 
     #[test]
-    fn stream_payload_is_frontend_message_shape() {
-        let payload = json!({
-            "type": "complete",
-            "data": {"answer": "ok"},
-            "event_time_us": 7,
-            "event_counter": 2,
-        });
-        let out = stream_entry_to_ws_message("c1", &payload.to_string());
-        assert_eq!(out["type"], "complete");
-        assert_eq!(out["conversation_id"], "c1");
-        assert_eq!(out["data"]["answer"], "ok");
-        assert_eq!(out["event_time_us"], 7);
+    fn status_update_matches_python_default_shape() {
+        let message = status_update_message("p1");
+
+        assert_eq!(message["type"], "status_update");
+        assert_eq!(message["project_id"], "p1");
+        assert_eq!(message["data"]["is_initialized"], false);
+        assert_eq!(message["data"]["is_active"], false);
+        assert_eq!(message["data"]["total_chats"], 0);
+        assert_eq!(message["data"]["active_chats"], 0);
+        assert_eq!(message["data"]["tool_count"], 0);
+        assert_eq!(message["data"]["cached_since"], Value::Null);
+        assert_eq!(message["data"]["workflow_id"], "default");
+        assert!(message["timestamp"].as_str().is_some());
     }
 
     #[test]
-    fn subscription_filters_replay_cursor() {
-        let sub = Subscription {
-            from_time_us: Some(10),
-            from_counter: Some(3),
-            ..Subscription::default()
-        };
-        assert!(!subscription_allows(
-            &json!({"type": "thought", "event_time_us": 9, "event_counter": 99}),
-            &sub
-        ));
-        assert!(!subscription_allows(
-            &json!({"type": "thought", "event_time_us": 10, "event_counter": 2}),
-            &sub
-        ));
-        assert!(subscription_allows(
-            &json!({"type": "thought", "event_time_us": 10, "event_counter": 3}),
-            &sub
-        ));
-    }
+    fn lifecycle_state_matches_python_uninitialized_shape() {
+        let message = lifecycle_state_message("p1");
 
-    #[test]
-    fn subscription_limit_rejects_new_conversation_after_cap() {
-        let mut subscriptions = HashMap::new();
-        for idx in 0..MAX_SUBSCRIPTIONS_PER_CONNECTION {
-            subscriptions.insert(format!("c{idx}"), Subscription::default());
-        }
-
-        assert!(!can_add_subscription(&subscriptions, "overflow"));
-        assert!(can_add_subscription(&subscriptions, "c1"));
-    }
-
-    #[test]
-    fn replay_limit_applies_flush_budget() {
-        assert_eq!(
-            replay_limit(0),
-            Some(EVENT_REPLAY_BATCH.min(MAX_EVENTS_PER_FLUSH))
-        );
-        assert_eq!(replay_limit(MAX_EVENTS_PER_FLUSH - 1), Some(1));
-        assert_eq!(replay_limit(MAX_EVENTS_PER_FLUSH), None);
+        assert_eq!(message["type"], "lifecycle_state_change");
+        assert_eq!(message["project_id"], "p1");
+        assert_eq!(message["data"]["lifecycle_state"], "uninitialized");
+        assert_eq!(message["data"]["is_active"], false);
+        assert_eq!(message["data"]["is_initialized"], false);
+        assert!(message["timestamp"].as_str().is_some());
     }
 }
