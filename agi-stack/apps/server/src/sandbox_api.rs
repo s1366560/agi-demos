@@ -49,6 +49,7 @@ use crate::AppState;
 
 mod http_proxy;
 mod http_registry;
+mod views;
 mod ws_proxy;
 mod ws_urls;
 
@@ -68,6 +69,15 @@ use ws_urls::{
     desktop_websocket_origin, normalize_mcp_resource_mime_type, terminal_websocket_origin,
 };
 
+pub(crate) use views::ExecuteToolResponse;
+use views::{
+    DesktopServiceResponse, EnsureSandboxRequest, ExecuteToolRequest, HealthCheckResponse,
+    HttpServiceActionResponse, HttpServicePreviewSessionResponse, HttpServiceResponse,
+    ListHttpServicesResponse, ListProjectSandboxesQuery, ListProjectSandboxesResponse,
+    ProjectSandboxResponse, SandboxActionResponse, SandboxProxyAuthCookieResponse,
+    SandboxServiceStopResponse, SandboxStatsResponse, StartDesktopQuery, TerminalServiceResponse,
+    TerminalWsQuery,
+};
 use ws_proxy::{
     new_terminal_session_id, proxy_desktop_ws_session, proxy_http_service_ws_session,
     proxy_mcp_ws_session, proxy_terminal_ws_session, terminal_error_message, TerminalSessionRecord,
@@ -1407,190 +1417,6 @@ impl ProjectSandboxInfo {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct EnsureSandboxRequest {
-    profile: Option<String>,
-    #[serde(default = "default_auto_create")]
-    _auto_create: bool,
-}
-
-fn default_auto_create() -> bool {
-    true
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct ProjectSandboxResponse {
-    sandbox_id: String,
-    project_id: String,
-    tenant_id: String,
-    status: String,
-    endpoint: Option<String>,
-    websocket_url: Option<String>,
-    mcp_port: Option<u16>,
-    desktop_port: Option<u16>,
-    terminal_port: Option<u16>,
-    desktop_url: Option<String>,
-    terminal_url: Option<String>,
-    created_at: Option<String>,
-    last_accessed_at: Option<String>,
-    is_healthy: bool,
-    error_message: Option<String>,
-}
-
-impl From<ProjectSandboxInfo> for ProjectSandboxResponse {
-    fn from(info: ProjectSandboxInfo) -> Self {
-        let status = info.status_str().to_string();
-        let is_healthy = info.healthy();
-        let error_message = info.error_message();
-        Self {
-            sandbox_id: info.sandbox_id,
-            project_id: info.project_id,
-            tenant_id: info.tenant_id,
-            status,
-            endpoint: info.endpoint,
-            websocket_url: info.websocket_url,
-            mcp_port: info.mcp_port,
-            desktop_port: info.desktop_port,
-            terminal_port: info.terminal_port,
-            desktop_url: info.desktop_url,
-            terminal_url: info.terminal_url,
-            created_at: Some(rfc3339(info.created_at_ms)),
-            last_accessed_at: Some(rfc3339(info.last_accessed_at_ms)),
-            is_healthy,
-            error_message,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct HealthCheckResponse {
-    project_id: String,
-    sandbox_id: String,
-    healthy: bool,
-    status: String,
-    checked_at: String,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct SandboxStatsResponse {
-    project_id: String,
-    sandbox_id: String,
-    status: String,
-    cpu_percent: f64,
-    memory_usage: u64,
-    memory_limit: u64,
-    memory_percent: f64,
-    disk_usage: Option<u64>,
-    disk_limit: Option<u64>,
-    disk_percent: Option<f64>,
-    network_rx_bytes: Option<u64>,
-    network_tx_bytes: Option<u64>,
-    pids: u64,
-    uptime_seconds: Option<i64>,
-    created_at: Option<String>,
-    collected_at: String,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct SandboxActionResponse {
-    success: bool,
-    message: String,
-    sandbox: Option<ProjectSandboxResponse>,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct ListProjectSandboxesResponse {
-    sandboxes: Vec<ProjectSandboxResponse>,
-    total: usize,
-}
-
-#[derive(Debug, Deserialize)]
-struct ExecuteToolRequest {
-    tool_name: String,
-    #[serde(default)]
-    arguments: Value,
-    #[serde(default = "default_tool_timeout")]
-    timeout: f64,
-}
-
-fn default_tool_timeout() -> f64 {
-    30.0
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-pub(crate) struct ExecuteToolResponse {
-    pub(crate) success: bool,
-    pub(crate) content: Vec<Value>,
-    pub(crate) is_error: bool,
-    pub(crate) execution_time_ms: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct StartDesktopQuery {
-    resolution: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TerminalWsQuery {
-    session_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct DesktopServiceResponse {
-    success: bool,
-    url: Option<String>,
-    display: String,
-    resolution: String,
-    port: u16,
-    audio_enabled: bool,
-    dynamic_resize: bool,
-    encoding: String,
-}
-
-impl DesktopServiceResponse {
-    fn from_info(info: &ProjectSandboxInfo, resolution: String) -> Self {
-        Self {
-            success: info.desktop_url.is_some(),
-            url: info.desktop_url.clone(),
-            display: DESKTOP_DEFAULT_DISPLAY.to_string(),
-            resolution,
-            port: info.desktop_port.unwrap_or(0),
-            audio_enabled: false,
-            dynamic_resize: true,
-            encoding: DESKTOP_DEFAULT_ENCODING.to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct TerminalServiceResponse {
-    success: bool,
-    url: Option<String>,
-    port: u16,
-    session_id: Option<String>,
-}
-
-impl TerminalServiceResponse {
-    #[cfg(test)]
-    fn from_info(info: &ProjectSandboxInfo) -> Self {
-        Self::from_info_with_session(info, None)
-    }
-
-    fn from_info_with_session(info: &ProjectSandboxInfo, session_id: Option<String>) -> Self {
-        Self {
-            success: info.terminal_url.is_some(),
-            url: info.terminal_url.clone(),
-            port: info.terminal_port.unwrap_or(0),
-            session_id,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct SandboxServiceStopResponse {
-    success: bool,
-}
-
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum HttpServiceSourceType {
@@ -1721,71 +1547,6 @@ fn info_from_redis_service_record(
         restart_token: record.restart_token,
         updated_at: record.updated_at,
     })
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct HttpServiceResponse {
-    service_id: String,
-    name: String,
-    source_type: HttpServiceSourceType,
-    status: String,
-    service_url: String,
-    preview_url: String,
-    ws_preview_url: Option<String>,
-    sandbox_id: Option<String>,
-    auto_open: bool,
-    restart_token: Option<String>,
-    updated_at: String,
-}
-
-impl From<HttpServiceProxyInfo> for HttpServiceResponse {
-    fn from(info: HttpServiceProxyInfo) -> Self {
-        Self {
-            service_id: info.service_id,
-            name: info.name,
-            source_type: info.source_type,
-            status: info.status,
-            service_url: info.service_url,
-            preview_url: info.preview_url,
-            ws_preview_url: info.ws_preview_url,
-            sandbox_id: info.sandbox_id,
-            auto_open: info.auto_open,
-            restart_token: info.restart_token,
-            updated_at: info.updated_at,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct ListHttpServicesResponse {
-    services: Vec<HttpServiceResponse>,
-    total: usize,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct HttpServiceActionResponse {
-    success: bool,
-    message: String,
-    service: Option<HttpServiceResponse>,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct HttpServicePreviewSessionResponse {
-    preview_url: String,
-    expires_in_seconds: i64,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-struct SandboxProxyAuthCookieResponse {
-    success: bool,
-    expires_in_seconds: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct ListProjectSandboxesQuery {
-    status: Option<String>,
-    limit: Option<i64>,
-    offset: Option<i64>,
 }
 
 fn rfc3339(ms: i64) -> String {
