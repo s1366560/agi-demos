@@ -115,6 +115,33 @@ async fn decide_tolerates_markdown_fenced_finish() {
 }
 
 #[tokio::test]
+async fn stream_complete_collects_openai_sse_deltas() {
+    let stream_body = concat!(
+        "event: message\n",
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\n",
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"}}]}\r\n\r\n",
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"lo\"}}]}\n\n",
+        "data: [DONE]\n\n"
+    );
+    let body: &'static str = Box::leak(stream_body.to_string().into_boxed_str());
+    let (base, captured) = mock(200, body).await;
+
+    let llm = HttpLlm::new(base, "m").with_api_key("stream-key");
+    let mut deltas = Vec::new();
+    let full = llm
+        .stream_complete("s", "u", |delta| deltas.push(delta.to_string()))
+        .await
+        .unwrap();
+
+    assert_eq!(deltas, vec!["Hel", "lo"]);
+    assert_eq!(full, "Hello");
+    let reqs = captured.lock().await;
+    assert!(reqs[0].contains("POST /chat/completions"));
+    assert!(reqs[0].contains("authorization: Bearer stream-key"));
+    assert!(reqs[0].contains("\"stream\":true"));
+}
+
+#[tokio::test]
 async fn embedding_parses_data_vector() {
     let body: &'static str = r#"{"data":[{"embedding":[0.1,0.2,0.3,0.4]}]}"#;
     let (base, captured) = mock(200, body).await;

@@ -19,6 +19,7 @@
 //! just carries the structured tool-call to/from the provider.
 
 use async_trait::async_trait;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use agistack_core::agent::types::{AgentAction, Role, TranscriptEntry};
@@ -78,6 +79,8 @@ struct ChatRequest {
     model: String,
     messages: Vec<ChatMessage>,
     temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -93,6 +96,24 @@ struct ChatChoice {
 #[derive(Deserialize)]
 struct ChatResponseMessage {
     content: String,
+}
+
+#[derive(Deserialize)]
+struct ChatStreamChunk {
+    #[serde(default)]
+    choices: Vec<ChatStreamChoice>,
+}
+
+#[derive(Deserialize)]
+struct ChatStreamChoice {
+    #[serde(default)]
+    delta: ChatStreamDelta,
+}
+
+#[derive(Default, Deserialize)]
+struct ChatStreamDelta {
+    #[serde(default)]
+    content: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -219,6 +240,7 @@ impl HttpLlm {
                 },
             ],
             temperature: 0.0,
+            stream: None,
         };
         let resp: ChatResponse = self
             .ep
@@ -231,6 +253,69 @@ impl HttpLlm {
             .ok_or_else(|| CoreError::Llm("no choices in chat response".into()))
     }
 
+    async fn chat_stream<F>(
+        &self,
+        system: &str,
+        user: String,
+        mut on_delta: F,
+    ) -> CoreResult<String>
+    where
+        F: FnMut(&str),
+    {
+        let body = ChatRequest {
+            model: self.ep.model.clone(),
+            messages: vec![
+                ChatMessage {
+                    role: "system",
+                    content: system.to_string(),
+                },
+                ChatMessage {
+                    role: "user",
+                    content: user,
+                },
+            ],
+            temperature: 0.0,
+            stream: Some(true),
+        };
+        let url = format!("{}/chat/completions", self.ep.base_url);
+        let mut req = self.ep.client.post(&url).json(&body);
+        if let Some(key) = &self.ep.api_key {
+            req = req.bearer_auth(key);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| CoreError::Llm(e.to_string()))?;
+        let resp = resp
+            .error_for_status()
+            .map_err(|e| CoreError::Llm(e.to_string()))?;
+        let mut chunks = resp.bytes_stream();
+        let mut line_buffer = Vec::new();
+        let mut content = String::new();
+        let mut done = false;
+
+        while let Some(chunk) = chunks.next().await {
+            let chunk = chunk.map_err(|e| CoreError::Llm(e.to_string()))?;
+            line_buffer.extend_from_slice(&chunk);
+            while let Some(newline_index) = line_buffer.iter().position(|b| *b == b'\n') {
+                let line: Vec<u8> = line_buffer.drain(..=newline_index).collect();
+                if handle_openai_stream_line(&line, &mut content, &mut on_delta)? {
+                    done = true;
+                    break;
+                }
+            }
+            if done {
+                break;
+            }
+        }
+
+        if !done && !line_buffer.is_empty() {
+            handle_openai_stream_line(&line_buffer, &mut content, &mut on_delta)?;
+        }
+
+        Ok(content)
+    }
+
     /// Raw single-turn completion: returns the model's message content
     /// **verbatim** (reasoning `<think>` blocks and code fences are *not*
     /// stripped — callers that need structured output use [`Self::extract_memory`]
@@ -239,6 +324,59 @@ impl HttpLlm {
     pub async fn complete(&self, system: &str, user: impl Into<String>) -> CoreResult<String> {
         self.chat(system, user.into()).await
     }
+
+    /// Stream a raw single-turn completion from an OpenAI-/LiteLLM-compatible
+    /// Server-Sent Events response. `on_delta` is invoked once for each
+    /// `choices[].delta.content` fragment and the fully assembled content is
+    /// returned when `[DONE]` is observed or the stream closes.
+    ///
+    /// This is intentionally an adapter-level method for now: it proves the F7
+    /// token wire without adding `tokio`, `reqwest`, or stream types to the
+    /// portable [`LlmPort`] signature.
+    pub async fn stream_complete<F>(
+        &self,
+        system: &str,
+        user: impl Into<String>,
+        on_delta: F,
+    ) -> CoreResult<String>
+    where
+        F: FnMut(&str),
+    {
+        self.chat_stream(system, user.into(), on_delta).await
+    }
+}
+
+fn handle_openai_stream_line<F>(
+    line: &[u8],
+    content: &mut String,
+    on_delta: &mut F,
+) -> CoreResult<bool>
+where
+    F: FnMut(&str),
+{
+    let line = std::str::from_utf8(line)
+        .map_err(|e| CoreError::Llm(format!("bad stream utf-8: {e}")))?
+        .trim_end_matches(['\r', '\n']);
+    let Some(payload) = line.strip_prefix("data:") else {
+        return Ok(false);
+    };
+    let payload = payload.trim_start();
+    if payload == "[DONE]" {
+        return Ok(true);
+    }
+    if payload.is_empty() {
+        return Ok(false);
+    }
+    let chunk: ChatStreamChunk = serde_json::from_str(payload)
+        .map_err(|e| CoreError::Llm(format!("bad stream json: {e}")))?;
+    for choice in chunk.choices {
+        let Some(delta) = choice.delta.content.filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        on_delta(&delta);
+        content.push_str(&delta);
+    }
+    Ok(false)
 }
 
 const EXTRACT_SYSTEM: &str = "You distill an episode into a memory. Respond with ONLY a JSON object: \
