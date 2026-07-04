@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 
 pub(super) fn empty_plan_snapshot(workspace_id: &str) -> WorkspacePlanSnapshotView {

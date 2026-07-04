@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 
 pub(super) fn outbox_actions(
