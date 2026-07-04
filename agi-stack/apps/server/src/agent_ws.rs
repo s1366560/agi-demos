@@ -26,6 +26,9 @@ use agistack_core::agent::events::{derive_event_id, AgentEventType, EventEnvelop
 
 const WEBSOCKET_AUTH_SUBPROTOCOL: &str = "memstack.auth";
 const EVENT_STREAM_MAX_LEN: usize = 1000;
+const EVENT_REPLAY_BATCH: usize = 100;
+const MAX_EVENTS_PER_FLUSH: usize = 256;
+const MAX_SUBSCRIPTIONS_PER_CONNECTION: usize = 64;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct AgentWsQuery {
@@ -233,6 +236,10 @@ async fn handle_client_message(
             from_time_us,
             from_counter,
         } => {
+            if !can_add_subscription(subscriptions, &conversation_id) {
+                let _ = send_subscription_limit_error(socket, &conversation_id).await;
+                return true;
+            }
             subscriptions.insert(
                 conversation_id.clone(),
                 Subscription {
@@ -324,6 +331,10 @@ async fn handle_client_message(
             project_id,
             message_id,
         } => {
+            if !can_add_subscription(subscriptions, &conversation_id) {
+                let _ = send_subscription_limit_error(socket, &conversation_id).await;
+                return true;
+            }
             subscriptions
                 .entry(conversation_id.clone())
                 .or_insert_with(|| Subscription {
@@ -424,22 +435,60 @@ async fn flush_subscriptions(
     socket: &mut WebSocket,
     subscriptions: &mut HashMap<String, Subscription>,
 ) -> Result<(), ()> {
+    let mut sent_this_flush = 0usize;
     for (conversation_id, subscription) in subscriptions.iter_mut() {
+        let Some(limit) = replay_limit(sent_this_flush) else {
+            break;
+        };
         let topic = stream_topic(conversation_id);
         let entries = app
             .events
-            .read_after(&topic, &subscription.last_id, 100)
+            .read_after(&topic, &subscription.last_id, limit)
             .await
             .map_err(|_| ())?;
         for entry in entries {
             let message = stream_entry_to_ws_message(conversation_id, &entry.payload);
             if subscription_allows(&message, subscription) {
                 send_json(socket, message).await.map_err(|_| ())?;
+                sent_this_flush += 1;
             }
             subscription.last_id = entry.id;
+            if replay_limit(sent_this_flush).is_none() {
+                break;
+            }
         }
     }
     Ok(())
+}
+
+fn can_add_subscription(
+    subscriptions: &HashMap<String, Subscription>,
+    conversation_id: &str,
+) -> bool {
+    subscriptions.contains_key(conversation_id)
+        || subscriptions.len() < MAX_SUBSCRIPTIONS_PER_CONNECTION
+}
+
+fn replay_limit(sent_this_flush: usize) -> Option<usize> {
+    MAX_EVENTS_PER_FLUSH
+        .checked_sub(sent_this_flush)
+        .filter(|remaining| *remaining > 0)
+        .map(|remaining| remaining.min(EVENT_REPLAY_BATCH))
+}
+
+async fn send_subscription_limit_error(
+    socket: &mut WebSocket,
+    conversation_id: &str,
+) -> Result<(), axum::Error> {
+    send_json(
+        socket,
+        json!({
+            "type": "error",
+            "conversation_id": conversation_id,
+            "data": {"message": "Too many active subscriptions"}
+        }),
+    )
+    .await
 }
 
 fn subscription_allows(message: &Value, subscription: &Subscription) -> bool {
@@ -637,5 +686,26 @@ mod tests {
             &json!({"type": "thought", "event_time_us": 10, "event_counter": 3}),
             &sub
         ));
+    }
+
+    #[test]
+    fn subscription_limit_rejects_new_conversation_after_cap() {
+        let mut subscriptions = HashMap::new();
+        for idx in 0..MAX_SUBSCRIPTIONS_PER_CONNECTION {
+            subscriptions.insert(format!("c{idx}"), Subscription::default());
+        }
+
+        assert!(!can_add_subscription(&subscriptions, "overflow"));
+        assert!(can_add_subscription(&subscriptions, "c1"));
+    }
+
+    #[test]
+    fn replay_limit_applies_flush_budget() {
+        assert_eq!(
+            replay_limit(0),
+            Some(EVENT_REPLAY_BATCH.min(MAX_EVENTS_PER_FLUSH))
+        );
+        assert_eq!(replay_limit(MAX_EVENTS_PER_FLUSH - 1), Some(1));
+        assert_eq!(replay_limit(MAX_EVENTS_PER_FLUSH), None);
     }
 }
