@@ -3,7 +3,14 @@ use axum::{
     Router,
 };
 
-use super::*;
+use super::handlers::{
+    apply_skill_evolution_job, create_skill, delete_skill, export_skill_package, get_skill,
+    get_skill_content, get_skill_evolution_config, get_skill_evolution_detail,
+    get_skill_evolution_overview, get_skill_version, import_skill_package,
+    import_skill_zip_package, import_system_skill, list_skill_versions, list_skills,
+    list_system_skills, reject_skill_evolution_job, rollback_skill, update_skill,
+    update_skill_content, update_skill_evolution_config, update_skill_status,
+};
 use crate::AppState;
 
 pub(crate) fn router() -> Router<AppState> {
