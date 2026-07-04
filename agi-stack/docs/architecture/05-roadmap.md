@@ -1,5 +1,7 @@
 # 05 · 落地路径与风险
 
+> 最新 P5 增量(#294):Rust 端 skill evolution scheduler data-plane foundation 已落地,`PgSkillEvolutionRepository` 已覆盖 Python scheduler 所需的未处理/未评分 session 查询、summary/score 写回、可聚合 scored group/evidence session 查询与 exact session batch job 查重。该切片只补齐共享 Postgres 数据面,不声称 LLM summarizer/judge/aggregator/evolution decision 执行已完成;完整 skill evolution LLM engine 仍按 Phase 5 future 门禁推进。验证见 [04 #294](04-spike-evidence.md)。
+
 ## 1. 绞杀者式增量迁移(语言无关)
 
 **严禁大爆炸重写。** 新旧后端迁移期并行,逐能力绞杀替换。

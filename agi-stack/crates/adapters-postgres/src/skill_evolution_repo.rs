@@ -76,6 +76,33 @@ pub struct SkillEvolutionSessionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct SkillEvolutionPipelineSessionRecord {
+    pub id: String,
+    pub skill_name: String,
+    pub conversation_id: String,
+    pub project_id: Option<String>,
+    pub user_query: String,
+    pub trajectory: Option<Value>,
+    pub summary: Option<String>,
+    pub judge_scores: Option<Value>,
+    pub overall_score: Option<f64>,
+    pub success: bool,
+    pub execution_time_ms: i64,
+    pub tool_call_count: i64,
+    pub processed: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkillEvolutionSessionGroupRecord {
+    pub skill_name: String,
+    pub project_id: Option<String>,
+    pub session_count: i64,
+    pub avg_score: f64,
+    pub success_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SkillEvolutionJobRecord {
     pub id: String,
     pub tenant_id: String,
@@ -300,6 +327,219 @@ impl PgSkillEvolutionRepository {
         query.push_bind(limit);
         let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
         rows.into_iter().map(row_to_job).collect()
+    }
+
+    pub async fn list_unprocessed_sessions(
+        &self,
+        tenant_id: &str,
+        skill_name: Option<&str>,
+        project_id: Option<&str>,
+        filter_project_id: bool,
+        min_skill_sessions: i64,
+        limit: i64,
+    ) -> CoreResult<Vec<SkillEvolutionPipelineSessionRecord>> {
+        let mut query = QueryBuilder::new(
+            "SELECT id, skill_name, conversation_id, project_id, user_query, trajectory, \
+                summary, judge_scores, overall_score, success, execution_time_ms, \
+                tool_call_count, processed, created_at \
+             FROM skill_evolution_sessions \
+             WHERE tenant_id = ",
+        );
+        query.push_bind(tenant_id);
+        query.push(" AND processed = false");
+        push_skill_name_filter(&mut query, skill_name);
+        if filter_project_id {
+            push_exact_project_filter(&mut query, "project_id", project_id);
+        }
+        push_min_skill_sessions_filter(
+            &mut query,
+            tenant_id,
+            project_id,
+            filter_project_id,
+            min_skill_sessions,
+        );
+        query.push(" ORDER BY created_at ASC LIMIT ");
+        query.push_bind(limit.max(1));
+        let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
+        rows.into_iter().map(row_to_pipeline_session).collect()
+    }
+
+    pub async fn list_unscored_sessions(
+        &self,
+        tenant_id: &str,
+        skill_name: Option<&str>,
+        project_id: Option<&str>,
+        filter_project_id: bool,
+        min_skill_sessions: i64,
+        limit: i64,
+    ) -> CoreResult<Vec<SkillEvolutionPipelineSessionRecord>> {
+        let mut query = QueryBuilder::new(
+            "SELECT id, skill_name, conversation_id, project_id, user_query, trajectory, \
+                summary, judge_scores, overall_score, success, execution_time_ms, \
+                tool_call_count, processed, created_at \
+             FROM skill_evolution_sessions \
+             WHERE tenant_id = ",
+        );
+        query.push_bind(tenant_id);
+        query.push(" AND processed = true AND overall_score IS NULL");
+        push_skill_name_filter(&mut query, skill_name);
+        if filter_project_id {
+            push_exact_project_filter(&mut query, "project_id", project_id);
+        }
+        push_min_skill_sessions_filter(
+            &mut query,
+            tenant_id,
+            project_id,
+            filter_project_id,
+            min_skill_sessions,
+        );
+        query.push(" ORDER BY created_at ASC LIMIT ");
+        query.push_bind(limit.max(1));
+        let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
+        rows.into_iter().map(row_to_pipeline_session).collect()
+    }
+
+    pub async fn update_session_summary(
+        &self,
+        session_id: &str,
+        trajectory: &Value,
+        summary: &str,
+    ) -> CoreResult<bool> {
+        let rows = sqlx::query(
+            "UPDATE skill_evolution_sessions \
+             SET trajectory = $2, summary = $3, processed = true \
+             WHERE id = $1",
+        )
+        .bind(session_id)
+        .bind(trajectory)
+        .bind(summary)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(rows.rows_affected() > 0)
+    }
+
+    pub async fn update_session_scores(
+        &self,
+        session_id: &str,
+        judge_scores: &Value,
+        overall_score: f64,
+    ) -> CoreResult<bool> {
+        let rows = sqlx::query(
+            "UPDATE skill_evolution_sessions \
+             SET judge_scores = $2, overall_score = $3 \
+             WHERE id = $1",
+        )
+        .bind(session_id)
+        .bind(judge_scores)
+        .bind(overall_score)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(rows.rows_affected() > 0)
+    }
+
+    pub async fn scored_session_groups(
+        &self,
+        tenant_id: &str,
+        project_id: Option<&str>,
+        filter_project_id: bool,
+        min_sessions: i64,
+        min_avg_score: f64,
+    ) -> CoreResult<Vec<SkillEvolutionSessionGroupRecord>> {
+        let mut query = QueryBuilder::new(
+            "SELECT skill_name, project_id, count(id) AS session_count, \
+                avg(overall_score) AS avg_score, \
+                count(*) FILTER (WHERE success = true) AS success_count \
+             FROM skill_evolution_sessions \
+             WHERE tenant_id = ",
+        );
+        query.push_bind(tenant_id);
+        query.push(" AND overall_score IS NOT NULL");
+        if filter_project_id {
+            push_exact_project_filter(&mut query, "project_id", project_id);
+        }
+        query.push(
+            " GROUP BY skill_name, project_id, coalesce(project_id, '') \
+              HAVING count(id) >= ",
+        );
+        query.push_bind(min_sessions.max(1));
+        query.push(" AND avg(overall_score) >= ");
+        query.push_bind(min_avg_score);
+        query.push(" ORDER BY count(id) DESC, skill_name ASC");
+        let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
+        rows.into_iter().map(row_to_session_group).collect()
+    }
+
+    pub async fn list_scored_sessions_by_skill(
+        &self,
+        tenant_id: &str,
+        skill_name: &str,
+        project_id: Option<&str>,
+        filter_project_id: bool,
+        min_score: Option<f64>,
+        limit: i64,
+    ) -> CoreResult<Vec<SkillEvolutionPipelineSessionRecord>> {
+        let mut query = QueryBuilder::new(
+            "SELECT id, skill_name, conversation_id, project_id, user_query, trajectory, \
+                summary, judge_scores, overall_score, success, execution_time_ms, \
+                tool_call_count, processed, created_at \
+             FROM skill_evolution_sessions \
+             WHERE tenant_id = ",
+        );
+        query.push_bind(tenant_id);
+        query.push(" AND skill_name = ");
+        query.push_bind(skill_name);
+        query.push(" AND overall_score IS NOT NULL");
+        if filter_project_id {
+            push_exact_project_filter(&mut query, "project_id", project_id);
+        }
+        if let Some(min_score) = min_score {
+            query.push(" AND overall_score >= ");
+            query.push_bind(min_score);
+        }
+        query.push(" ORDER BY created_at DESC LIMIT ");
+        query.push_bind(limit.max(1));
+        let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
+        rows.into_iter().map(row_to_pipeline_session).collect()
+    }
+
+    pub async fn get_job_for_sessions(
+        &self,
+        tenant_id: &str,
+        skill_name: &str,
+        project_id: Option<&str>,
+        filter_project_id: bool,
+        session_ids: &[String],
+        excluded_statuses: &[&str],
+    ) -> CoreResult<Option<SkillEvolutionJobRecord>> {
+        if session_ids.is_empty() {
+            return Ok(None);
+        }
+        let expected = session_ids.iter().collect::<std::collections::HashSet<_>>();
+        let mut query = QueryBuilder::new(format!(
+            "SELECT {JOB_COLS} FROM skill_evolution_jobs WHERE tenant_id = "
+        ));
+        query.push_bind(tenant_id);
+        query.push(" AND skill_name = ");
+        query.push_bind(skill_name);
+        if filter_project_id {
+            push_exact_project_filter(&mut query, "project_id", project_id);
+        }
+        query.push(" ORDER BY created_at DESC");
+        let rows = query.build().fetch_all(&self.pool).await.map_err(storage)?;
+        for row in rows {
+            let job = row_to_job(row)?;
+            if excluded_statuses.contains(&job.status.as_str()) {
+                continue;
+            }
+            if job.session_ids.len() == expected.len()
+                && job.session_ids.iter().all(|id| expected.contains(id))
+            {
+                return Ok(Some(job));
+            }
+        }
+        Ok(None)
     }
 
     pub async fn get_job_for_tenant(
@@ -572,6 +812,44 @@ fn push_exact_project_filter<'q>(
     }
 }
 
+fn push_skill_name_filter<'q>(query: &mut QueryBuilder<'q, Postgres>, skill_name: Option<&'q str>) {
+    match skill_name {
+        Some(skill_name) => {
+            query.push(" AND skill_name = ");
+            query.push_bind(skill_name);
+        }
+        None => {
+            query.push(" AND skill_name <> '__no_skill__'");
+        }
+    }
+}
+
+fn push_min_skill_sessions_filter<'q>(
+    query: &mut QueryBuilder<'q, Postgres>,
+    tenant_id: &'q str,
+    project_id: Option<&'q str>,
+    filter_project_id: bool,
+    min_skill_sessions: i64,
+) {
+    if min_skill_sessions <= 1 {
+        return;
+    }
+    query.push(
+        " AND (skill_name, coalesce(project_id, '')) IN (\
+             SELECT skill_name, coalesce(project_id, '') \
+             FROM skill_evolution_sessions \
+             WHERE tenant_id = ",
+    );
+    query.push_bind(tenant_id);
+    query.push(" AND skill_name <> '__no_skill__'");
+    if filter_project_id {
+        push_exact_project_filter(query, "project_id", project_id);
+    }
+    query.push(" GROUP BY skill_name, coalesce(project_id, '') HAVING count(id) >= ");
+    query.push_bind(min_skill_sessions);
+    query.push(")");
+}
+
 fn row_to_skill_summary(
     row: PgRow,
     job_counts: &HashMap<(String, Option<String>), JobCountRecord>,
@@ -595,6 +873,41 @@ fn row_to_skill_summary(
         job_count: counts.job_count,
         pending_job_count: counts.pending_job_count,
         latest_job_at: counts.latest_job_at,
+    })
+}
+
+fn row_to_pipeline_session(row: PgRow) -> CoreResult<SkillEvolutionPipelineSessionRecord> {
+    let execution_time_ms: i32 = row.try_get("execution_time_ms").map_err(storage)?;
+    let tool_call_count: i32 = row.try_get("tool_call_count").map_err(storage)?;
+    Ok(SkillEvolutionPipelineSessionRecord {
+        id: row.try_get("id").map_err(storage)?,
+        skill_name: row.try_get("skill_name").map_err(storage)?,
+        conversation_id: row.try_get("conversation_id").map_err(storage)?,
+        project_id: row.try_get("project_id").map_err(storage)?,
+        user_query: row.try_get("user_query").map_err(storage)?,
+        trajectory: row.try_get("trajectory").map_err(storage)?,
+        summary: row.try_get("summary").map_err(storage)?,
+        judge_scores: row.try_get("judge_scores").map_err(storage)?,
+        overall_score: row.try_get("overall_score").map_err(storage)?,
+        success: row.try_get("success").map_err(storage)?,
+        execution_time_ms: i64::from(execution_time_ms),
+        tool_call_count: i64::from(tool_call_count),
+        processed: row.try_get("processed").map_err(storage)?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+    })
+}
+
+fn row_to_session_group(row: PgRow) -> CoreResult<SkillEvolutionSessionGroupRecord> {
+    let avg_score = row
+        .try_get::<Option<f64>, _>("avg_score")
+        .map_err(storage)?
+        .unwrap_or_default();
+    Ok(SkillEvolutionSessionGroupRecord {
+        skill_name: row.try_get("skill_name").map_err(storage)?,
+        project_id: row.try_get("project_id").map_err(storage)?,
+        session_count: row.try_get("session_count").map_err(storage)?,
+        avg_score,
+        success_count: row.try_get("success_count").map_err(storage)?,
     })
 }
 

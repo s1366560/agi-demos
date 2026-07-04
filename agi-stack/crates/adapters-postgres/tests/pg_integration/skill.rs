@@ -493,6 +493,141 @@ async fn skill_evolution_overview_queries_shared_schema() {
         .unwrap();
     assert_eq!(tenant_session_count, 1);
 
+    let unprocessed_project = repo
+        .list_unprocessed_sessions(
+            "t_skill_evo",
+            Some("code-review"),
+            Some("p_skill_evo"),
+            true,
+            1,
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(unprocessed_project.len(), 1);
+    assert_eq!(unprocessed_project[0].id, "sess_skill_evo_project");
+    assert_eq!(unprocessed_project[0].skill_name, "code-review");
+    assert!(!unprocessed_project[0].processed);
+
+    let below_min_sessions = repo
+        .list_unprocessed_sessions(
+            "t_skill_evo",
+            Some("code-review"),
+            Some("p_skill_evo"),
+            true,
+            2,
+            10,
+        )
+        .await
+        .unwrap();
+    assert!(below_min_sessions.is_empty());
+
+    let summary_written = repo
+        .update_session_summary(
+            "sess_skill_evo_project",
+            &serde_json::json!({
+                "steps": [
+                    {"step": 1, "action": "read diff", "tool": "read_file", "outcome": "success"}
+                ],
+                "final_response": "Reviewed the patch."
+            }),
+            "The agent reviewed the requested patch and produced actionable feedback.",
+        )
+        .await
+        .unwrap();
+    assert!(summary_written);
+
+    let unscored_project = repo
+        .list_unscored_sessions(
+            "t_skill_evo",
+            Some("code-review"),
+            Some("p_skill_evo"),
+            true,
+            1,
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(unscored_project.len(), 1);
+    assert_eq!(unscored_project[0].id, "sess_skill_evo_project");
+    assert!(unscored_project[0].processed);
+    assert!(unscored_project[0].overall_score.is_none());
+    assert_eq!(
+        unscored_project[0]
+            .trajectory
+            .as_ref()
+            .and_then(|value| value.get("final_response"))
+            .and_then(serde_json::Value::as_str),
+        Some("Reviewed the patch.")
+    );
+
+    let scores_written = repo
+        .update_session_scores(
+            "sess_skill_evo_project",
+            &serde_json::json!({
+                "task_completion": 0.9,
+                "response_quality": 0.8,
+                "efficiency": 0.7,
+                "tool_usage": 0.8,
+                "rationale": "Useful review"
+            }),
+            0.82,
+        )
+        .await
+        .unwrap();
+    assert!(scores_written);
+
+    let groups = repo
+        .scored_session_groups("t_skill_evo", Some("p_skill_evo"), true, 1, 0.8)
+        .await
+        .unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].skill_name, "code-review");
+    assert_eq!(groups[0].project_id.as_deref(), Some("p_skill_evo"));
+    assert_eq!(groups[0].session_count, 1);
+    assert!((groups[0].avg_score - 0.82).abs() < 0.000_001);
+
+    let scored_sessions = repo
+        .list_scored_sessions_by_skill(
+            "t_skill_evo",
+            "code-review",
+            Some("p_skill_evo"),
+            true,
+            Some(0.8),
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(scored_sessions.len(), 1);
+    assert_eq!(scored_sessions[0].id, "sess_skill_evo_project");
+    assert!((scored_sessions[0].overall_score.unwrap() - 0.82).abs() < 0.000_001);
+
+    let duplicate_job = repo
+        .get_job_for_sessions(
+            "t_skill_evo",
+            "code-review",
+            Some("p_skill_evo"),
+            true,
+            &["sess_skill_evo_project".to_string()],
+            &["rejected"],
+        )
+        .await
+        .unwrap()
+        .expect("duplicate project job by exact session set");
+    assert_eq!(duplicate_job.id, "job_skill_evo_project");
+    assert!(repo
+        .get_job_for_sessions(
+            "t_skill_evo",
+            "code-review",
+            Some("p_skill_evo"),
+            true,
+            &["sess_skill_evo_project".to_string()],
+            &["pending_review"],
+        )
+        .await
+        .unwrap()
+        .is_none());
+
     let pending_job = repo
         .get_job_for_tenant("t_skill_evo", "job_skill_evo_project")
         .await
