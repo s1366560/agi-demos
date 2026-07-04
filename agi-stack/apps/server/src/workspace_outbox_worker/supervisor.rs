@@ -4,6 +4,7 @@ mod accepted;
 mod disposition;
 mod pipeline;
 mod replan;
+mod root_progress;
 mod terminal;
 
 pub(super) struct SupervisorTickAdmissionHandler {
