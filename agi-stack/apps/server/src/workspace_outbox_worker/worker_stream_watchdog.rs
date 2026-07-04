@@ -1,10 +1,20 @@
-#[cfg(test)]
-use super::WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS;
 use super::{
     DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS,
-    DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS, WORKER_STREAM_COMPLETION_SUMMARY_CHARS,
+    DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS,
 };
 use serde_json::Value;
+
+mod summary;
+mod terminal_report;
+use summary::bounded_terminal_summary;
+pub(super) use summary::stream_completion_summary;
+#[cfg(test)]
+pub(super) use summary::worker_launch_started_summary;
+pub(super) use terminal_report::{
+    should_reconcile_terminal_report_tool, should_synthesize_stream_completion_report,
+    terminal_report_metadata_matches_attempt, terminal_report_tool_observation_status,
+    terminal_report_tool_report_type, TerminalReportToolStatus, TerminalReportType,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum StopReason {
@@ -110,152 +120,6 @@ pub(super) fn idle_progress_summary(
         parts.push(format!("agent:finished={finished_message_id}"));
     }
     parts.join("; ")
-}
-
-#[cfg(test)]
-pub(super) fn worker_launch_started_summary(
-    attempt_number: Option<&str>,
-    repair_brief_prompt: Option<&str>,
-) -> String {
-    let attempt_label = attempt_number
-        .filter(|value| !value.is_empty())
-        .map(|value| format!("attempt #{value}"))
-        .unwrap_or_else(|| "attempt".to_string());
-    let repair_summary = compact_progress_text(repair_brief_prompt);
-    if repair_summary.is_empty() {
-        return format!("Worker {attempt_label} started; session is bound and streaming.");
-    }
-    format!("Worker {attempt_label} started from verifier feedback: {repair_summary}")
-}
-
-#[cfg(test)]
-pub(super) fn compact_progress_text(value: Option<&str>) -> String {
-    let Some(value) = value else {
-        return String::new();
-    };
-    let collapsed = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if collapsed.is_empty() {
-        return collapsed;
-    }
-    if collapsed.chars().count() <= WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS {
-        return collapsed;
-    }
-    let end = char_prefix_boundary(&collapsed, WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS - 1);
-    format!("{}...", collapsed[..end].trim_end())
-}
-
-pub(super) fn stream_completion_summary(final_content: &str, accumulated_text: &str) -> String {
-    let mut summary = if final_content.is_empty() {
-        accumulated_text.trim().to_string()
-    } else {
-        final_content.trim().to_string()
-    };
-    if summary.is_empty() {
-        summary =
-            "Worker stream completed without an explicit workspace terminal report.".to_string();
-    }
-    if summary.chars().count() > WORKER_STREAM_COMPLETION_SUMMARY_CHARS {
-        let end = char_prefix_boundary(&summary, WORKER_STREAM_COMPLETION_SUMMARY_CHARS - 3);
-        summary = format!("{}...", &summary[..end]);
-    }
-    summary
-}
-
-pub(super) fn should_synthesize_stream_completion_report(
-    terminal_report_tool_observed: bool,
-) -> bool {
-    !terminal_report_tool_observed
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum TerminalReportToolStatus {
-    Denied,
-    Applied,
-    Attempted,
-}
-
-impl TerminalReportToolStatus {
-    #[cfg(test)]
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Denied => "denied",
-            Self::Applied => "applied",
-            Self::Attempted => "attempted",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum TerminalReportType {
-    Completed,
-    Blocked,
-}
-
-impl TerminalReportType {
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Completed => "completed",
-            Self::Blocked => "blocked",
-        }
-    }
-}
-
-pub(super) fn terminal_report_tool_observation_status(
-    event: &Value,
-) -> Option<TerminalReportToolStatus> {
-    if event.get("type").and_then(Value::as_str) != Some("observe") {
-        return None;
-    }
-    let data = event.get("data")?.as_object()?;
-    let _report_type = terminal_report_type_for_tool(data.get("tool_name")?)?;
-    if data.get("error").is_some_and(json_truthy) {
-        return Some(TerminalReportToolStatus::Denied);
-    }
-    Some(terminal_report_tool_result_status(data.get("result")))
-}
-
-pub(super) fn terminal_report_tool_report_type(event: &Value) -> Option<TerminalReportType> {
-    if event.get("type").and_then(Value::as_str) != Some("observe") {
-        return None;
-    }
-    let data = event.get("data")?.as_object()?;
-    terminal_report_type_for_tool(data.get("tool_name")?)
-}
-
-pub(super) fn terminal_report_metadata_matches_attempt(
-    metadata: Option<&Value>,
-    attempt_id: Option<&str>,
-    report_type: Option<&str>,
-) -> bool {
-    let Some(attempt_id) = attempt_id.filter(|value| !value.is_empty()) else {
-        return false;
-    };
-    let Some(metadata) = metadata.and_then(Value::as_object) else {
-        return false;
-    };
-    if metadata
-        .get("last_worker_report_attempt_id")
-        .and_then(Value::as_str)
-        != Some(attempt_id)
-    {
-        return false;
-    }
-    match report_type.filter(|value| !value.is_empty()) {
-        Some(report_type) => {
-            metadata
-                .get("last_worker_report_type")
-                .and_then(Value::as_str)
-                == Some(report_type)
-        }
-        None => true,
-    }
-}
-
-pub(super) fn should_reconcile_terminal_report_tool(
-    terminal_report_tool_applied: bool,
-    report_recorded_for_attempt: bool,
-) -> bool {
-    terminal_report_tool_applied && !report_recorded_for_attempt
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -451,84 +315,4 @@ pub(super) struct TerminalOutcome {
     pub(super) summary: String,
     pub(super) should_report: bool,
     pub(super) should_reconcile: bool,
-}
-
-fn terminal_report_type_for_tool(value: &Value) -> Option<TerminalReportType> {
-    match value.as_str()?.trim() {
-        "workspace_report_complete" => Some(TerminalReportType::Completed),
-        "workspace_report_blocked" => Some(TerminalReportType::Blocked),
-        _ => None,
-    }
-}
-
-fn terminal_report_tool_result_status(result: Option<&Value>) -> TerminalReportToolStatus {
-    let result_text = result.and_then(Value::as_str).unwrap_or("");
-    if let Ok(Value::Object(parsed)) = serde_json::from_str::<Value>(result_text) {
-        if let Some(status) = parsed_terminal_report_tool_status(&parsed) {
-            return status;
-        }
-    }
-    let lowered = result_text.to_lowercase();
-    if lowered.contains("completion denied:")
-        || lowered.contains("terminal_report_apply_failed")
-        || lowered.contains("\"error\"")
-    {
-        TerminalReportToolStatus::Denied
-    } else {
-        TerminalReportToolStatus::Attempted
-    }
-}
-
-fn parsed_terminal_report_tool_status(
-    parsed: &serde_json::Map<String, Value>,
-) -> Option<TerminalReportToolStatus> {
-    if let Some(applied_report) = parsed.get("applied_report").and_then(Value::as_object) {
-        if applied_report
-            .get("skipped_supervisor_only")
-            .and_then(Value::as_bool)
-            == Some(true)
-        {
-            return Some(TerminalReportToolStatus::Attempted);
-        }
-        if applied_report.get("applied").and_then(Value::as_bool) == Some(true) {
-            return Some(TerminalReportToolStatus::Applied);
-        }
-    }
-    if parsed.get("ok").and_then(Value::as_bool) == Some(true) {
-        return Some(TerminalReportToolStatus::Applied);
-    }
-    if parsed.get("error").is_some_and(json_truthy) {
-        return Some(TerminalReportToolStatus::Denied);
-    }
-    None
-}
-
-fn bounded_terminal_summary(value: &str, default: &str) -> String {
-    let trimmed = value.trim();
-    let summary = if trimmed.is_empty() { default } else { trimmed };
-    if summary.chars().count() > WORKER_STREAM_COMPLETION_SUMMARY_CHARS {
-        let end = char_prefix_boundary(summary, WORKER_STREAM_COMPLETION_SUMMARY_CHARS);
-        summary[..end].to_string()
-    } else {
-        summary.to_string()
-    }
-}
-
-fn json_truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(value) => *value,
-        Value::Number(value) => value.as_f64().is_some_and(|number| number != 0.0),
-        Value::String(value) => !value.is_empty(),
-        Value::Array(value) => !value.is_empty(),
-        Value::Object(value) => !value.is_empty(),
-    }
-}
-
-fn char_prefix_boundary(value: &str, max_chars: usize) -> usize {
-    value
-        .char_indices()
-        .nth(max_chars)
-        .map(|(index, _)| index)
-        .unwrap_or(value.len())
 }
