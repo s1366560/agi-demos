@@ -75,7 +75,6 @@ impl Drop for WorkspacePlanOutboxWorkerRuntime {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) enum WorkspacePlanOutboxHandlerOutcome {
     Complete,
     Release {

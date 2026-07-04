@@ -1,9 +1,8 @@
-#![allow(dead_code)]
-
+#[cfg(test)]
+use super::WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS;
 use super::{
     DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS,
-    DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS, WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS,
-    WORKER_STREAM_COMPLETION_SUMMARY_CHARS,
+    DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS, WORKER_STREAM_COMPLETION_SUMMARY_CHARS,
 };
 use serde_json::Value;
 
@@ -113,6 +112,7 @@ pub(super) fn idle_progress_summary(
     parts.join("; ")
 }
 
+#[cfg(test)]
 pub(super) fn worker_launch_started_summary(
     attempt_number: Option<&str>,
     repair_brief_prompt: Option<&str>,
@@ -128,6 +128,7 @@ pub(super) fn worker_launch_started_summary(
     format!("Worker {attempt_label} started from verifier feedback: {repair_summary}")
 }
 
+#[cfg(test)]
 pub(super) fn compact_progress_text(value: Option<&str>) -> String {
     let Some(value) = value else {
         return String::new();
@@ -174,6 +175,7 @@ pub(super) enum TerminalReportToolStatus {
 }
 
 impl TerminalReportToolStatus {
+    #[cfg(test)]
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Denied => "denied",
@@ -344,6 +346,7 @@ impl StreamState {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn mark_stream_ended_without_terminal(&mut self) {
         self.final_content =
             "Worker stream ended without a terminal complete/error event.".to_string();

@@ -1,7 +1,6 @@
 use super::*;
 
 impl WorkerLaunchAdmissionHandler {
-    #[allow(dead_code)]
     pub(in crate::workspace_outbox_worker) async fn persist_worker_stream_terminal_outcome(
         &self,
         input: WorkerStreamTerminalPersistence<'_>,

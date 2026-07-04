@@ -1,6 +1,5 @@
 use super::worker_launch_runtime::{
-    NoopWorkerLaunchEventStream, NoopWorkerLaunchRuntimeStateStore, WorkerLaunchEventStream,
-    WorkerLaunchRuntimeStateStore,
+    NoopWorkerLaunchRuntimeStateStore, WorkerLaunchEventStream, WorkerLaunchRuntimeStateStore,
 };
 use super::worker_launch_worktree::{worker_launch_worktree_context, WorkerLaunchWorktreeContext};
 use super::*;
@@ -111,27 +110,6 @@ pub(crate) struct WorkerLaunchAdmissionHandler {
 }
 
 impl WorkerLaunchAdmissionHandler {
-    #[allow(dead_code)]
-    pub(crate) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
-        Self::with_runtime_state_and_event_stream(
-            store,
-            Arc::new(NoopWorkerLaunchRuntimeStateStore),
-            Arc::new(NoopWorkerLaunchEventStream),
-        )
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn with_runtime_state(
-        store: Arc<dyn WorkspacePlanDispatchStore>,
-        runtime_state: Arc<dyn WorkerLaunchRuntimeStateStore>,
-    ) -> Self {
-        Self::with_runtime_state_and_event_stream(
-            store,
-            runtime_state,
-            Arc::new(NoopWorkerLaunchEventStream),
-        )
-    }
-
     pub(crate) fn with_event_stream(
         store: Arc<dyn WorkspacePlanDispatchStore>,
         stream_events: Arc<dyn WorkerLaunchEventStream>,
@@ -520,7 +498,6 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
     }
 }
 
-#[allow(dead_code)]
 pub(super) struct WorkerStreamTerminalPersistence<'a> {
     pub(super) workspace_id: &'a str,
     pub(super) task_id: &'a str,
@@ -536,7 +513,6 @@ pub(super) struct WorkerStreamTerminalPersistence<'a> {
     pub(super) now: DateTime<Utc>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(super) struct WorkerReportPayload {
     pub(super) normalized_summary: String,

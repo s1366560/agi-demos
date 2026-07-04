@@ -152,13 +152,12 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         completed_at: DateTime<Utc>,
     ) -> CoreResult<Option<WorkspacePipelineRunRecord>>;
 
-    #[allow(dead_code)]
     async fn create_pipeline_stage_run(
         &self,
         stage_run: WorkspacePipelineStageRunRecord,
     ) -> CoreResult<WorkspacePipelineStageRunRecord>;
 
-    #[allow(clippy::too_many_arguments, dead_code)]
+    #[allow(clippy::too_many_arguments)]
     async fn finish_pipeline_stage_run(
         &self,
         stage_run_id: &str,
