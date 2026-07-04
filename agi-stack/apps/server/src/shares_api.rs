@@ -18,7 +18,6 @@ use axum::{
     Extension, Json, Router,
 };
 use chrono::{DateTime, NaiveDateTime, TimeDelta, Utc};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use agistack_adapters_postgres::{
@@ -27,6 +26,12 @@ use agistack_adapters_postgres::{
 use agistack_adapters_secrets::{generate_urlsafe_token, generate_uuid_v4};
 
 use crate::{auth::Identity, AppState};
+
+#[cfg(test)]
+mod tests;
+mod views;
+
+use views::*;
 
 pub(crate) type SharedShares = Arc<dyn ShareService>;
 
@@ -86,135 +91,6 @@ impl IntoResponse for ShareError {
     fn into_response(self) -> Response {
         (self.status, Json(json!({ "detail": self.detail }))).into_response()
     }
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-pub(crate) struct ShareCreatePayload {
-    #[serde(default)]
-    target_type: Option<Value>,
-    #[serde(default)]
-    permission_level: Option<Value>,
-    #[serde(default)]
-    target_id: Option<Value>,
-    #[serde(default)]
-    permissions: Option<Value>,
-    #[serde(default)]
-    expires_at: Option<Value>,
-    #[serde(default)]
-    expires_in_days: Option<Value>,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ShareView {
-    id: String,
-    share_token: Option<String>,
-    memory_id: String,
-    shared_with_user_id: Option<String>,
-    shared_with_project_id: Option<String>,
-    permissions: Value,
-    expires_at: Option<String>,
-    created_at: String,
-    access_count: i32,
-}
-
-impl From<ShareRecord> for ShareView {
-    fn from(record: ShareRecord) -> Self {
-        Self {
-            id: record.id,
-            share_token: record.share_token,
-            memory_id: record.memory_id,
-            shared_with_user_id: record.shared_with_user_id,
-            shared_with_project_id: record.shared_with_project_id,
-            permissions: record.permissions,
-            expires_at: record.expires_at.map(iso8601),
-            created_at: iso8601(record.created_at),
-            access_count: record.access_count,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ShareList {
-    shares: Vec<ShareListItem>,
-}
-
-#[derive(Debug, Serialize)]
-struct ShareListItem {
-    id: String,
-    share_token: Option<String>,
-    permissions: Value,
-    expires_at: Option<String>,
-    created_at: String,
-    access_count: i32,
-}
-
-impl From<ShareRecord> for ShareListItem {
-    fn from(record: ShareRecord) -> Self {
-        Self {
-            id: record.id,
-            share_token: record.share_token,
-            permissions: record.permissions,
-            expires_at: record.expires_at.map(iso8601),
-            created_at: iso8601(record.created_at),
-            access_count: record.access_count,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct SharedMemoryView {
-    memory: SharedMemoryBody,
-    share: SharedMemoryShareBody,
-}
-
-#[derive(Debug, Serialize)]
-struct SharedMemoryBody {
-    id: String,
-    title: String,
-    content: String,
-    tags: Value,
-    created_at: String,
-    updated_at: Option<String>,
-}
-
-impl From<ShareMemoryRecord> for SharedMemoryBody {
-    fn from(record: ShareMemoryRecord) -> Self {
-        Self {
-            id: record.id,
-            title: record.title,
-            content: record.content,
-            tags: record.tags,
-            created_at: iso8601(record.created_at),
-            updated_at: record.updated_at.map(iso8601),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct SharedMemoryShareBody {
-    permissions: Value,
-    expires_at: Option<String>,
-}
-
-#[derive(Debug)]
-enum TargetKind {
-    User,
-    Project,
-}
-
-impl TargetKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::User => "user",
-            Self::Project => "project",
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ValidatedTarget {
-    kind: TargetKind,
-    id: String,
 }
 
 pub(crate) struct PgShareService {
@@ -359,11 +235,8 @@ impl ShareService for PgShareService {
             .repo
             .list_for_memory(memory_id)
             .await
-            .map_err(ShareError::internal)?
-            .into_iter()
-            .map(ShareListItem::from)
-            .collect();
-        Ok(ShareList { shares })
+            .map_err(ShareError::internal)?;
+        Ok(ShareList::from_records(shares))
     }
 
     async fn delete_share(
@@ -547,9 +420,7 @@ impl ShareService for DevShareService {
             .cloned()
             .collect::<Vec<_>>();
         shares.sort_by_key(|share| std::cmp::Reverse(share.created_at));
-        Ok(ShareList {
-            shares: shares.into_iter().map(ShareListItem::from).collect(),
-        })
+        Ok(ShareList::from_records(shares))
     }
 
     async fn delete_share(
@@ -708,22 +579,9 @@ fn share_can_view(permissions: &Value) -> bool {
     permissions.as_object().and_then(|map| map.get("view")) == Some(&Value::Bool(true))
 }
 
-fn shared_memory_view(memory: ShareMemoryRecord, share: ShareRecord) -> SharedMemoryView {
-    SharedMemoryView {
-        memory: SharedMemoryBody::from(memory),
-        share: SharedMemoryShareBody {
-            permissions: share.permissions,
-            expires_at: share.expires_at.map(iso8601),
-        },
-    }
-}
-
-fn iso8601(dt: DateTime<Utc>) -> String {
-    dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
-
 fn sample_dt() -> DateTime<Utc> {
-    DateTime::<Utc>::from_timestamp_millis(1_700_000_000_000).unwrap()
+    DateTime::<Utc>::from_timestamp_millis(1_700_000_000_000)
+        .expect("sample timestamp must be valid")
 }
 
 async fn create_share(
@@ -782,93 +640,4 @@ pub(crate) fn router_authed() -> Router<AppState> {
 
 pub(crate) fn router_public() -> Router<AppState> {
     Router::new().route("/api/v1/shared/:share_token", get(get_shared_memory))
-}
-
-#[cfg(test)]
-mod unit {
-    use super::*;
-
-    fn sample_share() -> ShareRecord {
-        ShareRecord {
-            id: "11111111-1111-4111-8111-111111111111".into(),
-            memory_id: "22222222-2222-4222-8222-222222222222".into(),
-            share_token: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
-            shared_with_user_id: None,
-            shared_with_project_id: None,
-            permissions: json!({"view": true, "edit": false}),
-            shared_by: "33333333-3333-4333-8333-333333333333".into(),
-            created_at: sample_dt(),
-            expires_at: None,
-            access_count: 0,
-        }
-    }
-
-    fn sample_memory() -> ShareMemoryRecord {
-        ShareMemoryRecord {
-            id: "22222222-2222-4222-8222-222222222222".into(),
-            project_id: "44444444-4444-4444-8444-444444444444".into(),
-            title: "Shared memory".into(),
-            content: "Rust serves a Python-compatible share link.".into(),
-            author_id: "33333333-3333-4333-8333-333333333333".into(),
-            tags: json!(["rust", "share"]),
-            created_at: sample_dt(),
-            updated_at: None,
-        }
-    }
-
-    #[test]
-    fn share_response_matches_golden() {
-        let golden: Value =
-            serde_json::from_str(include_str!("../tests/golden/share_response.json")).unwrap();
-        let actual = serde_json::to_value(ShareView::from(sample_share())).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn share_list_matches_golden() {
-        let golden: Value =
-            serde_json::from_str(include_str!("../tests/golden/share_list.json")).unwrap();
-        let actual = serde_json::to_value(ShareList {
-            shares: vec![ShareListItem::from(sample_share())],
-        })
-        .unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn shared_memory_matches_golden() {
-        let golden: Value =
-            serde_json::from_str(include_str!("../tests/golden/shared_memory.json")).unwrap();
-        let actual =
-            serde_json::to_value(shared_memory_view(sample_memory(), sample_share())).unwrap();
-        agistack_parity::assert_parity(&golden, &actual);
-    }
-
-    #[test]
-    fn target_validation_matches_python_errors() {
-        let req: ShareCreatePayload =
-            serde_json::from_value(json!({"target_type": "team"})).unwrap();
-        let err = validate_target(&req).unwrap_err();
-        assert_eq!(err.status, StatusCode::BAD_REQUEST);
-        assert_eq!(err.detail, "target_type must be 'user' or 'project'");
-
-        let req: ShareCreatePayload =
-            serde_json::from_value(json!({"target_type": "user"})).unwrap();
-        let err = validate_target(&req).unwrap_err();
-        assert_eq!(err.detail, "permission_level must be 'view' or 'edit'");
-
-        let req: ShareCreatePayload =
-            serde_json::from_value(json!({"target_type": "user", "permission_level": "view"}))
-                .unwrap();
-        let err = validate_target(&req).unwrap_err();
-        assert_eq!(err.detail, "target_id is required");
-    }
-
-    #[test]
-    fn share_can_view_requires_explicit_true() {
-        assert!(share_can_view(&json!({"view": true})));
-        assert!(!share_can_view(&json!({"view": false})));
-        assert!(!share_can_view(&json!({"view": "true"})));
-        assert!(!share_can_view(&json!(["view"])));
-    }
 }
