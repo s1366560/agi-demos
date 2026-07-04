@@ -57,6 +57,7 @@ mod service_http;
 mod service_lifecycle;
 mod service_state;
 mod views;
+mod ws_handlers;
 mod ws_proxy;
 mod ws_urls;
 
@@ -93,6 +94,7 @@ use views::{
     SandboxServiceStopResponse, SandboxStatsResponse, StartDesktopQuery, TerminalServiceResponse,
     TerminalWsQuery,
 };
+use ws_handlers::*;
 use ws_proxy::{
     new_terminal_session_id, proxy_desktop_ws_session, proxy_http_service_ws_session,
     proxy_mcp_ws_session, proxy_terminal_ws_session, terminal_error_message, TerminalSessionRecord,
