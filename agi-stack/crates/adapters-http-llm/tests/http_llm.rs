@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
+use agistack_adapters_http_llm::{AnthropicLlm, HttpEmbedding, HttpLlm};
 use agistack_core::agent::types::{AgentAction, Role, TranscriptEntry};
 use agistack_core::model::{Episode, SourceType};
 use agistack_core::ports::{CoreError, EmbeddingPort, LlmPort};
@@ -139,6 +139,62 @@ async fn stream_complete_collects_openai_sse_deltas() {
     assert!(reqs[0].contains("POST /chat/completions"));
     assert!(reqs[0].contains("authorization: Bearer stream-key"));
     assert!(reqs[0].contains("\"stream\":true"));
+}
+
+#[tokio::test]
+async fn anthropic_stream_complete_collects_text_deltas() {
+    let stream_body = concat!(
+        "event: message_start\n",
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\"}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hel\"}}\n\n",
+        "event: ping\n",
+        "data: {\"type\":\"ping\"}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"lo\"}}\r\n\r\n",
+        "event: message_stop\n",
+        "data: {\"type\":\"message_stop\"}\n\n"
+    );
+    let body: &'static str = Box::leak(stream_body.to_string().into_boxed_str());
+    let (base, captured) = mock(200, body).await;
+
+    let llm = AnthropicLlm::new(base, "claude-test")
+        .with_api_key("anthropic-key")
+        .with_version("2023-06-01")
+        .with_max_tokens(256);
+    let mut deltas = Vec::new();
+    let full = llm
+        .stream_complete("s", "u", |delta| deltas.push(delta.to_string()))
+        .await
+        .unwrap();
+
+    assert_eq!(deltas, vec!["Hel", "lo"]);
+    assert_eq!(full, "Hello");
+    let reqs = captured.lock().await;
+    assert!(reqs[0].contains("POST /messages"));
+    assert!(reqs[0].contains("x-api-key: anthropic-key"));
+    assert!(reqs[0].contains("anthropic-version: 2023-06-01"));
+    assert!(reqs[0].contains("\"stream\":true"));
+    assert!(reqs[0].contains("\"max_tokens\":256"));
+}
+
+#[tokio::test]
+async fn anthropic_stream_error_maps_to_core_error() {
+    let stream_body = concat!(
+        "event: error\n",
+        "data: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"try later\"}}\n\n"
+    );
+    let body: &'static str = Box::leak(stream_body.to_string().into_boxed_str());
+    let (base, _captured) = mock(200, body).await;
+
+    let llm = AnthropicLlm::new(base, "claude-test");
+    let err = llm.stream_complete("s", "u", |_| {}).await.unwrap_err();
+
+    assert!(matches!(err, CoreError::Llm(_)), "got {err:?}");
+    assert!(
+        format!("{err:?}").contains("overloaded_error"),
+        "got {err:?}"
+    );
 }
 
 #[tokio::test]
