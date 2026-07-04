@@ -26,6 +26,10 @@ use tokio_tungstenite::{
 
 use agistack_gateway::{app, GatewayState, Upstreams};
 
+fn gateway_state(upstreams: Upstreams) -> GatewayState {
+    GatewayState::try_new(upstreams).expect("test reqwest client should build")
+}
+
 /// A mock upstream that echoes which backend served the request plus the method,
 /// path, forwarded `Authorization`, and body — so the test can assert routing
 /// and header/body passthrough.
@@ -136,7 +140,7 @@ async fn gateway_routes_strangled_to_rust_and_rest_to_python_with_auth_passthrou
     let python_url = spawn(python_mock).await;
 
     // The real gateway pointing at both mocks.
-    let gateway_state = GatewayState::new(Upstreams {
+    let gateway_state = gateway_state(Upstreams {
         rust: rust_url.clone(),
         python: python_url.clone(),
     });
@@ -844,7 +848,7 @@ async fn gateway_proxies_agent_ws_to_rust_with_protocol_auth_passthrough() {
 
     let rust_url = spawn(rust_mock).await;
     let python_url = spawn(python_mock).await;
-    let gateway_url = spawn(app(GatewayState::new(Upstreams {
+    let gateway_url = spawn(app(gateway_state(Upstreams {
         rust: rust_url,
         python: python_url,
     })))
@@ -921,7 +925,7 @@ async fn gateway_proxies_p5_sandbox_ws_to_rust_with_protocol_auth_passthrough() 
 
     let rust_url = spawn(rust_mock).await;
     let python_url = spawn(python_mock).await;
-    let gateway_url = spawn(app(GatewayState::new(Upstreams {
+    let gateway_url = spawn(app(gateway_state(Upstreams {
         rust: rust_url,
         python: python_url,
     })))
@@ -1008,7 +1012,7 @@ async fn gateway_routes_preview_host_http_to_rust_and_preserves_host() {
 
     let rust_url = spawn(rust_mock).await;
     let python_url = spawn(python_mock).await;
-    let gateway_url = spawn(app(GatewayState::new(Upstreams {
+    let gateway_url = spawn(app(gateway_state(Upstreams {
         rust: rust_url,
         python: python_url,
     })))
@@ -1058,7 +1062,7 @@ async fn gateway_routes_preview_host_ws_to_rust_and_preserves_host() {
 
     let rust_url = spawn(rust_mock).await;
     let python_url = spawn(python_mock).await;
-    let gateway_url = spawn(app(GatewayState::new(Upstreams {
+    let gateway_url = spawn(app(gateway_state(Upstreams {
         rust: rust_url,
         python: python_url,
     })))

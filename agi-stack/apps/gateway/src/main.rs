@@ -8,7 +8,7 @@
 use agistack_gateway::{app, strangled_rule_summary, GatewayState, Upstreams};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr =
         std::env::var("AGISTACK_GATEWAY_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
     let rust = std::env::var("AGISTACK_RUST_UPSTREAM")
@@ -16,17 +16,18 @@ async fn main() {
     let python = std::env::var("AGISTACK_PYTHON_UPSTREAM")
         .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string());
 
-    let state = GatewayState::new(Upstreams {
+    let state = GatewayState::try_new(Upstreams {
         rust: rust.clone(),
         python: python.clone(),
-    });
+    })?;
 
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
     println!("agistack-gateway listening on http://{addr}");
     println!(
         "  strangled -> Rust   {rust}   ({})",
         strangled_rule_summary()
     );
     println!("  fallback  -> Python {python}");
-    axum::serve(listener, app(state)).await.unwrap();
+    axum::serve(listener, app(state)).await?;
+    Ok(())
 }
