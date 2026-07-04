@@ -36,6 +36,7 @@ mod dev_service;
 mod dev_service_evolution;
 mod dev_service_lifecycle;
 mod evolution_config;
+mod evolution_llm;
 mod evolution_pipeline;
 mod evolution_scheduler;
 mod evolution_worker;
@@ -56,6 +57,8 @@ use evolution_config::SkillEvolutionPublishMode;
 use evolution_config::{
     validate_evolution_detail_limit, validate_overview_limit, SkillEvolutionConfig,
 };
+pub(crate) use evolution_llm::LlmSkillEvolutionStageEngine;
+pub(crate) use evolution_pipeline::{PgSkillEvolutionPipelineExecutor, SkillEvolutionStageEngine};
 pub(crate) use evolution_scheduler::PgSkillEvolutionScheduler;
 use evolution_scheduler::{
     InMemorySkillEvolutionScheduler, SharedSkillEvolutionScheduler, SkillEvolutionScheduleResult,
@@ -63,6 +66,7 @@ use evolution_scheduler::{
 };
 pub(crate) use evolution_worker::{
     EngineUnavailableSkillEvolutionExecutor, PgSkillEvolutionWorker, SharedSkillEvolutionWorker,
+    SkillEvolutionRunExecutor,
 };
 pub(crate) use routes::router;
 pub(crate) use service::{SharedSkills, SkillService};

@@ -103,6 +103,7 @@ fn sample_imported_skill_record() -> SkillRecord {
 }
 
 mod dev_service;
+mod evolution_llm;
 mod evolution_worker;
 mod goldens;
 mod zip_import;
