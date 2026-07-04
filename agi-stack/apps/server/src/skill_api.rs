@@ -36,6 +36,7 @@ mod dev_service_evolution;
 mod evolution_config;
 mod handlers;
 mod pg_service;
+mod pg_service_evolution;
 mod pg_service_helpers;
 mod routes;
 mod service;
