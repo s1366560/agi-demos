@@ -1,0 +1,34 @@
+{
+  "id": "chan-1",
+  "project_id": "project-1",
+  "channel_type": "feishu",
+  "name": "Feishu Support",
+  "enabled": true,
+  "connection_mode": "websocket",
+  "app_id": "cli_aabbcc",
+  "webhook_url": "https://example.test/hook",
+  "webhook_port": 443,
+  "webhook_path": "/webhook/feishu",
+  "domain": "feishu",
+  "extra_settings": {
+    "bot": {
+      "token": "__MEMSTACK_SECRET_UNCHANGED__",
+      "locale": "zh-CN"
+    },
+    "theme": "default"
+  },
+  "dm_policy": "open",
+  "group_policy": "allowlist",
+  "allow_from": [
+    "ou_user_1"
+  ],
+  "group_allow_from": [
+    "oc_chat_1"
+  ],
+  "rate_limit_per_minute": 30,
+  "status": "connected",
+  "last_error": null,
+  "description": "primary project channel",
+  "created_at": "2023-11-14T22:13:20.123000Z",
+  "updated_at": "2023-11-14T22:14:20.123000Z"
+}

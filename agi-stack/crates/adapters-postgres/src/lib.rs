@@ -28,6 +28,7 @@ use sha2::{Digest, Sha256};
 pub use sqlx::postgres::PgPool;
 
 mod auth_store;
+mod channel_repo;
 mod checkpoint;
 mod hitl_repo;
 mod invitation_repo;
@@ -45,6 +46,9 @@ mod vector_index;
 mod workspace_repo;
 
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
+pub use channel_repo::{
+    ChannelConfigListQuery, ChannelConfigRecord, ChannelStatusRecord, PgChannelRepository,
+};
 pub use checkpoint::PgCheckpointStore;
 pub use hitl_repo::{HitlRequestRecord, PgHitlRequestRepository};
 pub use invitation_repo::{

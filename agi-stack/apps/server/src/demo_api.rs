@@ -11,8 +11,9 @@ use agistack_core::{ports::ToolHost, Episode, Memory, SessionState, SessionStatu
 use agistack_plugin_host::{ConfigAck, NativeToolFactory, PluginManifest, ToolDecl};
 
 use crate::{
-    agent_ws, auth, enhanced_search_api, graph_api, hitl_api, identity_api, prod_api, sandbox_api,
-    shares_api, skill_api, tenant_skill_config_api, trust_api, workspace_api, AppState,
+    agent_ws, auth, channel_api, enhanced_search_api, graph_api, hitl_api, identity_api, prod_api,
+    sandbox_api, shares_api, skill_api, tenant_skill_config_api, trust_api, workspace_api,
+    AppState,
 };
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -260,6 +261,7 @@ pub(crate) fn router(state: AppState) -> Router {
     // The legacy `/v1/*` demo routes stay open for local exercising.
     let authed = prod_api::router()
         .merge(enhanced_search_api::router())
+        .merge(channel_api::router())
         .merge(graph_api::router())
         .merge(hitl_api::router())
         .merge(identity_api::router_authed())

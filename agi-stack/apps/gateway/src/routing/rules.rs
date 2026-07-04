@@ -488,6 +488,31 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/memory/search",
         match_kind: MethodMatchKind::Exact,
     },
+    // P5 channel config read/status foundation. Only these read-side routes are
+    // Rust-owned; config writes, plugin runtime management, observability,
+    // webhook ingress and delivery/runtime endpoints remain Python-owned.
+    // Rollback = delete this block.
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/channels/projects",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["configs"],
+            excluded: &[],
+        },
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/channels/configs",
+        match_kind: MethodMatchKind::SingleChild,
+    },
+    MethodRule {
+        method: "GET",
+        path: "/api/v1/channels/configs",
+        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
+            suffix: "status",
+            excluded: &[],
+        },
+    },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
     // status, versions, rollback, JSON/zip package import, package export,
     // filesystem system import, skill-evolution config/overview/detail, and

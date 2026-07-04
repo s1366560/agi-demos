@@ -369,6 +369,41 @@ fn p5_skill_store_rules_are_exact() {
 }
 
 #[test]
+fn p5_channel_config_rules_are_exact() {
+    for (method, path) in [
+        (Method::GET, "/api/v1/channels/projects/project-1/configs"),
+        (Method::GET, "/api/v1/channels/configs/config-1"),
+        (Method::GET, "/api/v1/channels/configs/config-1/status"),
+    ] {
+        assert_eq!(
+            upstream_for_request(&method, path, &ups()),
+            "http://rust:8088",
+            "{method} {path} should route to rust",
+        );
+    }
+
+    for (method, path) in [
+        (Method::POST, "/api/v1/channels/projects/project-1/configs"),
+        (Method::GET, "/api/v1/channels/projects/project-1/plugins"),
+        (
+            Method::GET,
+            "/api/v1/channels/projects/project-1/observability/summary",
+        ),
+        (Method::PUT, "/api/v1/channels/configs/config-1"),
+        (Method::DELETE, "/api/v1/channels/configs/config-1"),
+        (Method::POST, "/api/v1/channels/configs/config-1/test"),
+        (Method::POST, "/api/v1/channels/configs/config-1/status"),
+        (Method::GET, "/api/v1/channels/status"),
+    ] {
+        assert_eq!(
+            upstream_for_request(&method, path, &ups()),
+            "http://python:8000",
+            "{method} {path} should remain on python",
+        );
+    }
+}
+
+#[test]
 fn p5_tenant_skill_config_rules_are_exact() {
     for (method, path) in [
         (Method::GET, "/api/v1/tenant/skills/config"),

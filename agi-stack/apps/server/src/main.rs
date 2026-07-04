@@ -27,6 +27,7 @@ use std::sync::{atomic::AtomicU64, Arc, Mutex};
 
 mod agent_ws;
 mod auth;
+mod channel_api;
 mod demo_api;
 mod enhanced_search_api;
 mod graph_api;
@@ -51,11 +52,11 @@ use agistack_adapters_mem::{
 };
 use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
-    connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
-    PgMemoryRepository, PgPool, PgProjectReadRepository, PgProjectSandboxRepository,
-    PgProjectStore, PgShareRepository, PgSkillEvolutionRepository, PgSkillRepository,
-    PgTenantRepository, PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore,
-    PgVectorIndex, PgWorkspaceRepository,
+    connect, ensure_aux_schema, PgApiKeyStore, PgChannelRepository, PgCheckpointStore,
+    PgInvitationRepository, PgMemoryRepository, PgPool, PgProjectReadRepository,
+    PgProjectSandboxRepository, PgProjectStore, PgShareRepository, PgSkillEvolutionRepository,
+    PgSkillRepository, PgTenantRepository, PgTenantSkillConfigRepository, PgTrustRepository,
+    PgUserStore, PgVectorIndex, PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -69,6 +70,7 @@ use agistack_plugin_host::{
 };
 
 use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
+use crate::channel_api::{DevChannelService, PgChannelService, SharedChannels};
 use crate::hitl_api::{build_hitl_response_service, SharedHitlResponses};
 use crate::identity::{
     DevIdentityService, InMemoryDeviceGrantStore, PgIdentityService, SharedDeviceGrantStore,
@@ -126,6 +128,9 @@ pub(crate) struct AppState {
     /// P6 workspace/task/topology/blackboard foundation over Python-owned
     /// workspace tables.
     pub(crate) workspaces: SharedWorkspaces,
+    /// P5 channel configuration read/status foundation over Python-owned
+    /// channel tables. Runtime connections and delivery remain Python-owned.
+    pub(crate) channels: SharedChannels,
     /// P3/F7 HITL response ingress over Python-owned `hitl_requests` plus the
     /// shared Redis/EventStream continuation channel.
     pub(crate) hitl: SharedHitlResponses,
@@ -625,6 +630,10 @@ async fn build_state() -> ServerResult<AppState> {
     ) = build_memory_and_auth(llm.clone(), embedding, object_store, autonomy_cooldown).await?;
     let events = build_event_stream().await;
     let hitl = build_hitl_response_service(workspace_plan_pool.clone(), Arc::clone(&events));
+    let channels: SharedChannels = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgChannelService::new(PgChannelRepository::new(pool))),
+        None => Arc::new(DevChannelService::new()),
+    };
     let graph = build_graph_store().await;
     let sandbox_runtime = build_container_runtime().await;
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
@@ -705,6 +714,7 @@ async fn build_state() -> ServerResult<AppState> {
         skills,
         tenant_skill_configs,
         workspaces,
+        channels,
         hitl,
         workspace_plan_outbox_worker,
         graph,
