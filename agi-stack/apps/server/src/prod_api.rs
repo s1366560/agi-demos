@@ -17,19 +17,27 @@
 //! multi-tenancy invariant. The heavy lifting stays in the portable
 //! `MemoryService`; this module is transport + Python-shape (de)serialization.
 
+mod views;
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
-use agistack_core::model::{Entity, Memory};
+use agistack_core::model::Entity;
+#[cfg(test)]
+use agistack_core::model::Memory;
 
 use crate::auth::Identity;
 use crate::AppState;
+
+use views::{
+    rfc3339, EpisodeResponse, MemoryListResponse, MemoryResponse, ShortTermRecallResponse,
+};
 
 // ---- error envelope (FastAPI `{"detail": ...}` parity) --------------------
 
@@ -68,14 +76,6 @@ impl IntoResponse for ApiError {
 }
 
 type ApiResult<T> = Result<T, ApiError>;
-
-/// Format epoch-millis as an RFC 3339 / ISO-8601 UTC timestamp, matching how
-/// pydantic serializes the Python `created_at` (`DateTime(timezone=True)`).
-fn rfc3339(ms: i64) -> String {
-    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
-        .unwrap_or(chrono::DateTime::<chrono::Utc>::UNIX_EPOCH)
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
 
 /// Verify the caller may act within `project_id`, or map to `403`/`500`.
 async fn ensure_project_access(
@@ -129,74 +129,6 @@ async fn ensure_project_admin(
     } else {
         Err(ApiError::forbidden("Access denied"))
     }
-}
-
-// ---- MemoryResponse (mirrors routers/memories.py MemoryResponse) ----------
-
-/// Byte-compatible with the Python `MemoryResponse`. Fields the portable core
-/// does not model (`relationships`, `collaborators`, `is_public`,
-/// `processing_status`, `metadata`, `updated_at`, `task_id`) are emitted with the
-/// same defaults the Postgres adapter writes, so a Rust-served response is
-/// indistinguishable from a Python-served one for these strangled routes.
-#[derive(Serialize)]
-struct MemoryResponse {
-    id: String,
-    project_id: String,
-    title: String,
-    content: String,
-    content_type: String,
-    tags: Vec<String>,
-    entities: Vec<Value>,
-    relationships: Vec<Value>,
-    version: u32,
-    author_id: String,
-    collaborators: Vec<String>,
-    is_public: bool,
-    status: String,
-    processing_status: String,
-    #[serde(rename = "metadata")]
-    meta: Value,
-    created_at: String,
-    updated_at: Option<String>,
-    task_id: Option<String>,
-}
-
-impl From<Memory> for MemoryResponse {
-    fn from(m: Memory) -> Self {
-        let entities = m
-            .entities
-            .into_iter()
-            .map(|e| json!({ "name": e.name, "kind": e.kind }))
-            .collect();
-        MemoryResponse {
-            id: m.id,
-            project_id: m.project_id,
-            title: m.title,
-            content: m.content,
-            content_type: m.content_type,
-            tags: m.tags,
-            entities,
-            relationships: Vec::new(),
-            version: m.version,
-            author_id: m.author_id,
-            collaborators: Vec::new(),
-            is_public: false,
-            status: m.status,
-            processing_status: "COMPLETED".to_string(),
-            meta: json!({}),
-            created_at: rfc3339(m.created_at_ms),
-            updated_at: None,
-            task_id: None,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct MemoryListResponse {
-    memories: Vec<MemoryResponse>,
-    total: usize,
-    page: usize,
-    page_size: usize,
 }
 
 // ---- create memory --------------------------------------------------------
@@ -420,18 +352,6 @@ struct EpisodeCreate {
     project_id: Option<String>,
 }
 
-#[derive(Serialize)]
-struct EpisodeResponse {
-    id: String,
-    name: String,
-    content: String,
-    status: String,
-    created_at: Option<String>,
-    message: Option<String>,
-    task_id: Option<String>,
-    workflow_id: Option<String>,
-}
-
 async fn create_episode(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -491,13 +411,6 @@ fn default_window() -> i64 {
 }
 fn default_recall_limit() -> usize {
     100
-}
-
-#[derive(Serialize)]
-struct ShortTermRecallResponse {
-    results: Vec<Value>,
-    total: usize,
-    window_minutes: i64,
 }
 
 async fn short_term_recall(
