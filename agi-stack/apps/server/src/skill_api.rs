@@ -8,15 +8,14 @@
 //! Python-owned until the scheduler/evolution-engine semantics are migrated.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use axum::{
     extract::{Multipart, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, patch, post},
-    Extension, Json, Router,
+    Extension, Json,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
@@ -34,166 +33,15 @@ use agistack_adapters_secrets::generate_uuid_v4;
 use crate::auth::Identity;
 use crate::AppState;
 
-pub(crate) type SharedSkills = Arc<dyn SkillService>;
-
 const SKILL_EVOLUTION_PLUGIN: &str = "skill_evolution";
 
+mod routes;
+mod service;
 mod system_skills;
 mod zip_import;
 
-#[async_trait]
-pub(crate) trait SkillService: Send + Sync {
-    async fn create_skill(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        body: SkillCreatePayload,
-    ) -> Result<SkillView, SkillApiError>;
-
-    async fn import_package(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        body: SkillImportPayload,
-    ) -> Result<SkillLifecycleView, SkillApiError>;
-
-    async fn list_skills(
-        &self,
-        user_id: &str,
-        query: SkillListQuery,
-    ) -> Result<SkillListView, SkillApiError>;
-
-    async fn list_system_skills(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        status: Option<&str>,
-    ) -> Result<SkillListView, SkillApiError>;
-
-    async fn import_system_skill(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        body: SystemSkillImportPayload,
-    ) -> Result<SkillLifecycleView, SkillApiError>;
-
-    async fn get_skill(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-    ) -> Result<SkillView, SkillApiError>;
-
-    async fn update_skill(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-        body: SkillUpdatePayload,
-    ) -> Result<SkillView, SkillApiError>;
-
-    async fn delete_skill(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-    ) -> Result<(), SkillApiError>;
-
-    async fn update_status(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-        status: &str,
-    ) -> Result<SkillView, SkillApiError>;
-
-    async fn get_content(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-    ) -> Result<SkillContentView, SkillApiError>;
-
-    async fn update_content(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-        body: SkillContentUpdatePayload,
-    ) -> Result<SkillView, SkillApiError>;
-
-    async fn list_versions(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-        limit: i64,
-        offset: i64,
-    ) -> Result<SkillVersionListView, SkillApiError>;
-
-    async fn get_version(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-        version_number: i32,
-    ) -> Result<SkillVersionDetailView, SkillApiError>;
-
-    async fn rollback(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-        body: SkillRollbackPayload,
-    ) -> Result<SkillView, SkillApiError>;
-
-    async fn export_package(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        skill_id: &str,
-    ) -> Result<SkillPackageView, SkillApiError>;
-
-    async fn get_evolution_config(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-    ) -> Result<SkillEvolutionConfigView, SkillApiError>;
-
-    async fn update_evolution_config(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        body: SkillEvolutionConfigUpdatePayload,
-    ) -> Result<SkillEvolutionConfigView, SkillApiError>;
-
-    async fn get_evolution_overview(
-        &self,
-        user_id: &str,
-        query: SkillEvolutionOverviewQuery,
-    ) -> Result<SkillEvolutionOverviewView, SkillApiError>;
-
-    async fn get_evolution_detail(
-        &self,
-        user_id: &str,
-        query: SkillEvolutionDetailQuery,
-        skill_id: &str,
-    ) -> Result<SkillEvolutionDetailView, SkillApiError>;
-
-    async fn apply_evolution_job(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        job_id: &str,
-    ) -> Result<SkillEvolutionJobView, SkillApiError>;
-
-    async fn reject_evolution_job(
-        &self,
-        user_id: &str,
-        tenant_id: Option<&str>,
-        job_id: &str,
-    ) -> Result<SkillEvolutionJobView, SkillApiError>;
-}
+pub(crate) use routes::router;
+pub(crate) use service::{SharedSkills, SkillService};
 
 #[derive(Debug)]
 pub(crate) struct SkillApiError {
@@ -3272,58 +3120,6 @@ async fn reject_skill_evolution_job(
     ))
 }
 
-pub(crate) fn router() -> Router<AppState> {
-    Router::new()
-        .route("/api/v1/skills/", get(list_skills).post(create_skill))
-        .route("/api/v1/skills", get(list_skills).post(create_skill))
-        .route("/api/v1/skills/import", post(import_skill_package))
-        .route("/api/v1/skills/import/zip", post(import_skill_zip_package))
-        .route("/api/v1/skills/system/list", get(list_system_skills))
-        .route("/api/v1/skills/system/import", post(import_system_skill))
-        .route(
-            "/api/v1/skills/evolution/config",
-            get(get_skill_evolution_config).put(update_skill_evolution_config),
-        )
-        .route(
-            "/api/v1/skills/evolution/overview",
-            get(get_skill_evolution_overview),
-        )
-        .route(
-            "/api/v1/skills/evolution/jobs/:job_id/apply",
-            post(apply_skill_evolution_job),
-        )
-        .route(
-            "/api/v1/skills/evolution/jobs/:job_id/reject",
-            post(reject_skill_evolution_job),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/evolution",
-            get(get_skill_evolution_detail),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/content",
-            get(get_skill_content).put(update_skill_content),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/status",
-            patch(update_skill_status),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/versions",
-            get(list_skill_versions),
-        )
-        .route(
-            "/api/v1/skills/:skill_id/versions/:version_number",
-            get(get_skill_version),
-        )
-        .route("/api/v1/skills/:skill_id/rollback", post(rollback_skill))
-        .route("/api/v1/skills/:skill_id/export", get(export_skill_package))
-        .route(
-            "/api/v1/skills/:skill_id",
-            get(get_skill).put(update_skill).delete(delete_skill),
-        )
-}
-
 fn default_scope() -> String {
     "tenant".to_string()
 }
@@ -4306,6 +4102,7 @@ mod tests {
     use std::io::{Cursor, Write};
     use std::path::Path as FsPath;
 
+    use axum::Router;
     use zip::write::SimpleFileOptions;
 
     const SAMPLE_IMPORT_SKILL_MD: &str = r#"---
