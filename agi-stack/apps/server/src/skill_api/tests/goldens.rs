@@ -1,4 +1,8 @@
 use super::*;
+use agistack_adapters_postgres::{
+    SkillEvolutionOverviewStatsRecord, SkillEvolutionSessionRecord,
+    SkillEvolutionSkillSummaryRecord,
+};
 use std::collections::HashSet;
 use std::path::Path as FsPath;
 
