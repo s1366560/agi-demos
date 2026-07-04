@@ -33,6 +33,7 @@ const SKILL_EVOLUTION_PLUGIN: &str = "skill_evolution";
 
 mod dev_service;
 mod dev_service_evolution;
+mod dev_service_lifecycle;
 mod evolution_config;
 mod handlers;
 mod pg_service;
