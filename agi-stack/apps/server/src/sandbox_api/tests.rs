@@ -1,6 +1,6 @@
 use super::*;
 use agistack_adapters_mem::InMemoryContainerRuntime;
-use agistack_core::ports::CoreResult;
+use agistack_core::ports::{ContainerSpec, CoreResult};
 use tokio_tungstenite::tungstenite::handshake::server::{
     ErrorResponse as WsHandshakeErrorResponse, Request as WsHandshakeRequest,
     Response as WsHandshakeResponse,
