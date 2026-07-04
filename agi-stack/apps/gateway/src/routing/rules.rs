@@ -540,9 +540,8 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
     },
     // P5 skill store/versioning flip. Only database-backed CRUD, content,
     // status, versions, rollback, JSON/zip package import, package export,
-    // filesystem system import, skill-evolution config/overview/detail, and
-    // evolution job apply/reject are in Rust; evolution run siblings remain
-    // Python until scheduler semantics move.
+    // filesystem system import, skill-evolution config/overview/detail,
+    // evolution job apply/reject, and run admission are in Rust.
     MethodRule {
         method: "GET",
         path: "/api/v1/skills",
@@ -586,6 +585,11 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
     MethodRule {
         method: "GET",
         path: "/api/v1/skills/evolution/overview",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills/evolution/run",
         match_kind: MethodMatchKind::Exact,
     },
     MethodRule {
@@ -680,6 +684,14 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/skills",
         match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
             suffix: "evolution",
+            excluded: &["system"],
+        },
+    },
+    MethodRule {
+        method: "POST",
+        path: "/api/v1/skills",
+        match_kind: MethodMatchKind::SingleChildWithTailExcept {
+            tail: &["evolution", "run"],
             excluded: &["system"],
         },
     },

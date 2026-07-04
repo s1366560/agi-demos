@@ -54,8 +54,10 @@ use evolution_config::SkillEvolutionPublishMode;
 use evolution_config::{
     validate_evolution_detail_limit, validate_overview_limit, SkillEvolutionConfig,
 };
+pub(crate) use evolution_scheduler::PgSkillEvolutionScheduler;
 use evolution_scheduler::{
     InMemorySkillEvolutionScheduler, SharedSkillEvolutionScheduler, SkillEvolutionScheduleResult,
+    SkillEvolutionScheduler,
 };
 pub(crate) use routes::router;
 pub(crate) use service::{SharedSkills, SkillService};
@@ -79,6 +81,14 @@ impl PgSkillService {
 
     pub(crate) fn with_evolution_repo(mut self, repo: PgSkillEvolutionRepository) -> Self {
         self.evolution_repo = Some(repo);
+        self
+    }
+
+    pub(crate) fn with_evolution_scheduler(
+        mut self,
+        scheduler: impl SkillEvolutionScheduler + 'static,
+    ) -> Self {
+        self.evolution_scheduler = Some(std::sync::Arc::new(scheduler));
         self
     }
 }

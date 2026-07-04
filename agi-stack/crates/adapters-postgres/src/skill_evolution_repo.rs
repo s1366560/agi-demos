@@ -4,6 +4,10 @@
 //! `skill_evolution_sessions` and `skill_evolution_jobs`. Rust reads and
 //! updates those rows verbatim for the P5 strangler skill-evolution endpoints;
 //! it does not create or alter the Python-owned schema.
+//!
+//! Rust-side run admission uses the additive `agistack_skill_evolution_runs`
+//! queue created by `ensure_aux_schema`, so manual run scheduling can be
+//! persisted without polluting Python's review-job table.
 
 use std::collections::HashMap;
 
@@ -320,6 +324,36 @@ impl PgSkillEvolutionRepository {
         row.map(row_to_job).transpose()
     }
 
+    pub async fn schedule_evolution_run(
+        &self,
+        run_id: &str,
+        tenant_id: &str,
+        project_id: Option<&str>,
+        skill_name: Option<&str>,
+        reason: &str,
+    ) -> CoreResult<bool> {
+        let scope_key = skill_evolution_run_scope_key(project_id, skill_name);
+        let inserted = sqlx::query_scalar::<_, String>(
+            "INSERT INTO agistack_skill_evolution_runs \
+                (id, tenant_id, scope_key, project_id, skill_name, reason, status, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, 'queued', now()) \
+             ON CONFLICT (tenant_id, scope_key) \
+                WHERE status IN ('queued', 'running') \
+             DO NOTHING \
+             RETURNING id",
+        )
+        .bind(run_id)
+        .bind(tenant_id)
+        .bind(scope_key)
+        .bind(project_id)
+        .bind(skill_name)
+        .bind(reason)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(inserted.is_some())
+    }
+
     pub async fn count_sessions_by_skill(
         &self,
         tenant_id: &str,
@@ -369,6 +403,24 @@ impl PgSkillEvolutionRepository {
         }
         Ok(counts)
     }
+}
+
+fn skill_evolution_run_scope_key(project_id: Option<&str>, skill_name: Option<&str>) -> String {
+    let mut key = String::with_capacity(
+        "project=".len()
+            + project_id.map_or(0, str::len)
+            + "\nskill=".len()
+            + skill_name.map_or(0, str::len),
+    );
+    key.push_str("project=");
+    if let Some(project_id) = project_id {
+        key.push_str(project_id);
+    }
+    key.push_str("\nskill=");
+    if let Some(skill_name) = skill_name {
+        key.push_str(skill_name);
+    }
+    key
 }
 
 #[derive(Debug, Clone, Default)]
@@ -501,7 +553,7 @@ fn storage<E: std::fmt::Display>(error: E) -> CoreError {
 mod tests {
     use serde_json::json;
 
-    use super::session_ids_from_value;
+    use super::{session_ids_from_value, skill_evolution_run_scope_key};
 
     #[test]
     fn session_ids_from_value_preserves_string_items_and_stringifies_scalars() {
@@ -517,5 +569,17 @@ mod tests {
     fn session_ids_from_value_returns_empty_for_missing_or_non_array_values() {
         assert!(session_ids_from_value(None).is_empty());
         assert!(session_ids_from_value(Some(json!({"id": "s1"}))).is_empty());
+    }
+
+    #[test]
+    fn skill_evolution_run_scope_key_preserves_none_vs_some_scope() {
+        assert_eq!(
+            skill_evolution_run_scope_key(None, None),
+            "project=\nskill="
+        );
+        assert_eq!(
+            skill_evolution_run_scope_key(Some("p1"), Some("code-review")),
+            "project=p1\nskill=code-review"
+        );
     }
 }

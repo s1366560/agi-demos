@@ -534,3 +534,86 @@ async fn skill_evolution_overview_queries_shared_schema() {
         sqlx::query(sql).execute(&pool).await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn skill_evolution_run_queue_coalesces_active_runs() {
+    let Some(pool) = pool_or_skip("skill_evolution_run_queue_coalesces_active_runs").await else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    sqlx::query("DELETE FROM agistack_skill_evolution_runs WHERE tenant_id = 't_skill_evo_queue'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let repo = PgSkillEvolutionRepository::new(pool.clone());
+    let first = repo
+        .schedule_evolution_run(
+            "run_skill_evo_queue_1",
+            "t_skill_evo_queue",
+            Some("p_skill_evo_queue"),
+            Some("code-review"),
+            "manual",
+        )
+        .await
+        .unwrap();
+    let duplicate = repo
+        .schedule_evolution_run(
+            "run_skill_evo_queue_2",
+            "t_skill_evo_queue",
+            Some("p_skill_evo_queue"),
+            Some("code-review"),
+            "manual",
+        )
+        .await
+        .unwrap();
+    let tenant_run = repo
+        .schedule_evolution_run(
+            "run_skill_evo_queue_3",
+            "t_skill_evo_queue",
+            None,
+            None,
+            "manual",
+        )
+        .await
+        .unwrap();
+
+    assert!(first);
+    assert!(!duplicate);
+    assert!(tenant_run);
+
+    let count: (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM agistack_skill_evolution_runs \
+         WHERE tenant_id = 't_skill_evo_queue'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count.0, 2);
+
+    sqlx::query(
+        "UPDATE agistack_skill_evolution_runs \
+         SET status = 'completed', updated_at = now() \
+         WHERE id = 'run_skill_evo_queue_1'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let after_completion = repo
+        .schedule_evolution_run(
+            "run_skill_evo_queue_4",
+            "t_skill_evo_queue",
+            Some("p_skill_evo_queue"),
+            Some("code-review"),
+            "manual",
+        )
+        .await
+        .unwrap();
+    assert!(after_completion);
+
+    sqlx::query("DELETE FROM agistack_skill_evolution_runs WHERE tenant_id = 't_skill_evo_queue'")
+        .execute(&pool)
+        .await
+        .unwrap();
+}

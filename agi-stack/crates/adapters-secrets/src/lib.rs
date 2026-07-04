@@ -50,6 +50,13 @@ pub const DEVICE_USER_CODE_ALPHABET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 /// Python `_USER_CODE_LEN`.
 pub const DEVICE_USER_CODE_LEN: usize = 8;
 
+const LOWER_HEX: &[u8; 16] = b"0123456789abcdef";
+
+fn push_lower_hex_byte(out: &mut String, byte: u8) {
+    out.push(LOWER_HEX[(byte >> 4) as usize] as char);
+    out.push(LOWER_HEX[(byte & 0x0f) as usize] as char);
+}
+
 /// Mint a fresh API key: `ms_sk_` + 64 lowercase hex chars from 32 CSPRNG bytes.
 /// Shape-identical to Python `f"ms_sk_{secrets.token_bytes(32).hex()}"`. The
 /// returned value is the *plaintext* key shown to the caller exactly once.
@@ -61,8 +68,7 @@ pub fn generate_api_key() -> String {
     key.push_str(API_KEY_PREFIX);
     for byte in bytes {
         // Lowercase hex, two chars per byte — identical to Python `bytes.hex()`.
-        key.push(char::from_digit((byte >> 4) as u32, 16).unwrap());
-        key.push(char::from_digit((byte & 0x0f) as u32, 16).unwrap());
+        push_lower_hex_byte(&mut key, byte);
     }
     key
 }
@@ -125,8 +131,7 @@ pub fn generate_uuid_v4() -> String {
         if matches!(i, 4 | 6 | 8 | 10) {
             s.push('-');
         }
-        s.push(char::from_digit((byte >> 4) as u32, 16).unwrap());
-        s.push(char::from_digit((byte & 0x0f) as u32, 16).unwrap());
+        push_lower_hex_byte(&mut s, *byte);
     }
     s
 }
@@ -191,6 +196,15 @@ mod unit {
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
         // Two mints differ (CSPRNG, not constant).
         assert_ne!(generate_api_key(), generate_api_key());
+    }
+
+    #[test]
+    fn lower_hex_byte_matches_python_hex_shape() {
+        let mut out = String::new();
+        for byte in [0x00, 0x0f, 0x10, 0xab, 0xff] {
+            push_lower_hex_byte(&mut out, byte);
+        }
+        assert_eq!(out, "000f10abff");
     }
 
     #[test]

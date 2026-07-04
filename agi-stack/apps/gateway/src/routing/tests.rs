@@ -317,6 +317,7 @@ fn p5_skill_store_rules_are_exact() {
         (Method::GET, "/api/v1/skills/evolution/config"),
         (Method::PUT, "/api/v1/skills/evolution/config"),
         (Method::GET, "/api/v1/skills/evolution/overview"),
+        (Method::POST, "/api/v1/skills/evolution/run"),
         (Method::POST, "/api/v1/skills/evolution/jobs/job-1/apply"),
         (Method::POST, "/api/v1/skills/evolution/jobs/job-1/reject"),
         (Method::GET, "/api/v1/skills/skill-1"),
@@ -330,6 +331,7 @@ fn p5_skill_store_rules_are_exact() {
         (Method::POST, "/api/v1/skills/skill-1/rollback"),
         (Method::GET, "/api/v1/skills/skill-1/export"),
         (Method::GET, "/api/v1/skills/skill-1/evolution"),
+        (Method::POST, "/api/v1/skills/skill-1/evolution/run"),
     ] {
         assert_eq!(
             upstream_for_request(&method, path, &ups()),
@@ -358,7 +360,6 @@ fn p5_skill_store_rules_are_exact() {
             "/api/v1/skills/evolution/jobs/job-1/apply/extra",
         ),
         (Method::POST, "/api/v1/skills/evolution/jobs/job-1/cancel"),
-        (Method::POST, "/api/v1/skills/evolution/run"),
         (Method::POST, "/api/v1/skills/skill-1/content"),
         (Method::PUT, "/api/v1/skills/skill-1/status"),
         (Method::POST, "/api/v1/skills/skill-1/versions"),
@@ -367,7 +368,7 @@ fn p5_skill_store_rules_are_exact() {
         (Method::POST, "/api/v1/skills/skill-1/export"),
         (Method::POST, "/api/v1/skills/skill-1/evolution"),
         (Method::GET, "/api/v1/skills/skill-1/evolution/run"),
-        (Method::POST, "/api/v1/skills/skill-1/evolution/run"),
+        (Method::POST, "/api/v1/skills/skill-1/evolution/run/extra"),
         (Method::POST, "/api/v1/skills/skill-1/publish"),
         (Method::POST, "/api/v1/skills/skill-1/clone"),
         (Method::GET, "/api/v1/skills/skill-1/files"),

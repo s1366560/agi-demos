@@ -116,6 +116,7 @@ pub async fn connect(database_url: &str) -> CoreResult<PgPool> {
 ///
 /// - `vector` extension + `agistack_memory_vectors` back [`PgVectorIndex`].
 /// - `agistack_checkpoints` backs [`PgCheckpointStore`] (agent crash recovery).
+/// - `agistack_skill_evolution_runs` backs Rust-side P5 evolution run admission.
 pub async fn ensure_aux_schema(pool: &PgPool) -> CoreResult<()> {
     // pgvector. On the `pgvector/pgvector` image the bootstrap superuser can
     // create it; if a managed instance pre-installs it, the IF NOT EXISTS is a
@@ -146,6 +147,35 @@ pub async fn ensure_aux_schema(pool: &PgPool) -> CoreResult<()> {
     .execute(pool)
     .await
     .map_err(|e| CoreError::Storage(format!("ensure agistack_checkpoints: {e}")))?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agistack_skill_evolution_runs (\
+            id text PRIMARY KEY, \
+            tenant_id text NOT NULL, \
+            scope_key text NOT NULL, \
+            project_id text, \
+            skill_name text, \
+            reason text NOT NULL, \
+            status text NOT NULL, \
+            created_at timestamptz NOT NULL DEFAULT now(), \
+            updated_at timestamptz)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| CoreError::Storage(format!("ensure agistack_skill_evolution_runs: {e}")))?;
+
+    sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_agistack_skill_evolution_runs_active \
+         ON agistack_skill_evolution_runs (tenant_id, scope_key) \
+         WHERE status IN ('queued', 'running')",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure uq_agistack_skill_evolution_runs_active: {e}"
+        ))
+    })?;
 
     Ok(())
 }

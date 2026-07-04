@@ -86,7 +86,7 @@ use crate::sandbox_api::{
     SharedHttpServiceRegistry, SharedProjectSandboxes,
 };
 use crate::shares_api::{DevShareService, PgShareService, SharedShares};
-use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
+use crate::skill_api::{DevSkillService, PgSkillEvolutionScheduler, PgSkillService, SharedSkills};
 use crate::tenant_skill_config_api::{
     DevTenantSkillConfigService, PgTenantSkillConfigService, SharedTenantSkillConfigs,
 };
@@ -373,9 +373,11 @@ async fn build_memory_and_auth(
                 Arc::new(PgShareService::new(PgShareRepository::new(pool.clone())));
             let trust: SharedTrust =
                 Arc::new(PgTrustService::new(PgTrustRepository::new(pool.clone())));
+            let skill_evolution_repo = PgSkillEvolutionRepository::new(pool.clone());
             let skills: SharedSkills = Arc::new(
                 PgSkillService::new(PgSkillRepository::new(pool.clone()))
-                    .with_evolution_repo(PgSkillEvolutionRepository::new(pool.clone())),
+                    .with_evolution_repo(skill_evolution_repo.clone())
+                    .with_evolution_scheduler(PgSkillEvolutionScheduler::new(skill_evolution_repo)),
             );
             let tenant_skill_configs: SharedTenantSkillConfigs = Arc::new(
                 PgTenantSkillConfigService::new(PgTenantSkillConfigRepository::new(pool.clone())),
