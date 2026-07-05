@@ -5,17 +5,22 @@ use agistack_adapters_postgres::{
     BlackboardOutboxRecord, WorkspaceAgentRecord, WorkspaceMessageRecord, WorkspacePlanOutboxRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
-use agistack_core::agent::types::AgentAction;
-use agistack_core::ports::{CoreError, CoreResult, LlmPort};
+use agistack_core::ports::CoreResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
-use uuid::Uuid;
 
 use super::{
-    bool_env, compact_text, metadata_string_values, object_or_empty, required_string,
-    string_from_map, workspace_event_iso, workspace_message_event_payload,
-    WorkspacePlanDispatchStore, WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
+    compact_text, metadata_string_values, object_or_empty, required_string, string_from_map,
+    workspace_event_iso, workspace_message_event_payload, WorkspacePlanDispatchStore,
+    WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
+};
+
+mod runtime;
+
+pub(crate) use runtime::{
+    workspace_agent_conversation_id, workspace_agent_mention_runtime_from_env,
+    WorkspaceAgentMentionRuntime, WorkspaceAgentMentionRuntimeInput,
 };
 
 pub(super) const WORKSPACE_AGENT_MENTION_EVENT: &str = "workspace_agent_mention";
@@ -24,19 +29,9 @@ pub(super) const WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS: &str = "runtime_b
 pub(super) const WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS: &str = "runtime_response_ready";
 pub(super) const WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS: &str = "runtime_error_ready";
 pub(super) const WORKSPACE_MESSAGE_CREATED_EVENT: &str = "workspace_message_created";
-const WORKSPACE_MENTION_RUNTIME_ENABLED_ENV: &str = "AGISTACK_WORKSPACE_MENTION_RUNTIME_ENABLED";
 pub(super) const MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH: i64 = 3;
 pub(super) const WORKSPACE_AGENT_CHAIN_MENTION_SOURCE: &str = "workspace_agent_chain_mention";
 pub(super) const WORKSPACE_AGENT_CHAIN_MENTION_STAGE: &str = "agent_chain_mention";
-
-pub(crate) struct WorkspaceAgentMentionRuntimeInput {
-    pub(crate) workspace_id: String,
-    pub(crate) conversation_id: String,
-    pub(crate) target_agent_id: String,
-    pub(crate) agent_name: String,
-    pub(crate) sender_name: Option<String>,
-    pub(crate) user_prompt: String,
-}
 
 struct WorkspaceAgentMentionChainInput<'a> {
     payload: &'a Map<String, Value>,
@@ -48,86 +43,6 @@ struct WorkspaceAgentMentionChainInput<'a> {
     source_agent_id: &'a str,
     source_agent_name: &'a str,
     now: DateTime<Utc>,
-}
-
-#[async_trait]
-pub(crate) trait WorkspaceAgentMentionRuntime: Send + Sync {
-    async fn complete(&self, input: WorkspaceAgentMentionRuntimeInput) -> CoreResult<String>;
-}
-
-pub(crate) fn workspace_agent_mention_runtime_from_env(
-    llm: Arc<dyn LlmPort>,
-) -> Option<Arc<dyn WorkspaceAgentMentionRuntime>> {
-    if bool_env(WORKSPACE_MENTION_RUNTIME_ENABLED_ENV, false) {
-        Some(Arc::new(LlmWorkspaceAgentMentionRuntime { llm }))
-    } else {
-        None
-    }
-}
-
-struct LlmWorkspaceAgentMentionRuntime {
-    llm: Arc<dyn LlmPort>,
-}
-
-#[async_trait]
-impl WorkspaceAgentMentionRuntime for LlmWorkspaceAgentMentionRuntime {
-    async fn complete(&self, input: WorkspaceAgentMentionRuntimeInput) -> CoreResult<String> {
-        let goal = render_workspace_agent_mention_goal(&input);
-        match self.llm.decide(&goal, 0, &[], &[]).await? {
-            AgentAction::Finish { answer } => {
-                let answer = answer.trim();
-                if answer.is_empty() {
-                    Err(CoreError::Llm(
-                        "workspace mention runtime returned an empty answer".to_string(),
-                    ))
-                } else {
-                    Ok(answer.to_string())
-                }
-            }
-            AgentAction::CallTool { tool, .. } => Err(CoreError::Llm(format!(
-                "workspace mention runtime requested unsupported tool call: {tool}"
-            ))),
-            AgentAction::RequestHuman { request } => Err(CoreError::Llm(format!(
-                "workspace mention runtime requested HITL ({:?}): {}",
-                request.kind, request.prompt
-            ))),
-        }
-    }
-}
-
-fn render_workspace_agent_mention_goal(input: &WorkspaceAgentMentionRuntimeInput) -> String {
-    let sender = input
-        .sender_name
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("workspace user");
-    format!(
-        "You are {agent_name} ({agent_id}) replying inside workspace {workspace_id}. \
-Respond directly to {sender}'s message in the same language. \
-Return a concise final answer for the workspace chat only; do not request tools or human input.\n\n\
-Conversation: {conversation_id}\nUser message:\n{user_prompt}",
-        agent_name = input.agent_name,
-        agent_id = input.target_agent_id,
-        workspace_id = input.workspace_id,
-        sender = sender,
-        conversation_id = input.conversation_id,
-        user_prompt = input.user_prompt
-    )
-}
-
-pub(crate) fn workspace_agent_conversation_id(
-    workspace_id: &str,
-    agent_id: &str,
-    conversation_scope: Option<&str>,
-) -> String {
-    let scope_suffix = conversation_scope
-        .map(|scope| format!(":scope:{scope}"))
-        .unwrap_or_default();
-    Uuid::new_v5(
-        &Uuid::NAMESPACE_DNS,
-        format!("workspace:{workspace_id}:agent:{agent_id}{scope_suffix}").as_bytes(),
-    )
-    .to_string()
 }
 
 pub(crate) struct WorkspaceAgentMentionBindingHandler {
