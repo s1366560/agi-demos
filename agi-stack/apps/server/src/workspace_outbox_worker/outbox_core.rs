@@ -1,6 +1,7 @@
 use super::*;
 
 mod config;
+mod events;
 mod handler;
 mod metadata;
 mod readiness;
@@ -8,6 +9,10 @@ mod runtime;
 
 pub(crate) use config::WorkspacePlanOutboxWorkerConfig;
 pub(super) use config::{bool_env, i64_env, positive_i64_env};
+pub(super) use events::{
+    ATTEMPT_RETRY_EVENT, HANDOFF_RESUME_EVENT, PIPELINE_RUN_REQUESTED_EVENT, SUPERVISOR_TICK_EVENT,
+    WORKER_LAUNCH_EVENT,
+};
 pub(crate) use handler::{
     WorkspacePipelineStageRunner, WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
 };

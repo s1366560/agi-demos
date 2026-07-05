@@ -53,11 +53,6 @@ use agent_mention::{
 pub(crate) type SharedWorkspacePlanOutboxWorker = Arc<WorkspacePlanOutboxWorker>;
 pub(crate) type WorkspacePlanOutboxHandlers = HashMap<String, Arc<dyn WorkspacePlanOutboxHandler>>;
 
-const SUPERVISOR_TICK_EVENT: &str = "supervisor_tick";
-const WORKER_LAUNCH_EVENT: &str = "worker_launch";
-const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
-const ATTEMPT_RETRY_EVENT: &str = "attempt_retry";
-const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
 const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
 const DRONE_PROVIDER: &str = "drone";
 const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
@@ -95,7 +90,8 @@ const REJECTED_ATTEMPT_STATUS: &str = "rejected";
 mod outbox_core;
 use outbox_core::{
     bool_env, i64_env, merge_metadata_patch, object_or_empty, positive_i64_env, string_from_map,
-    string_from_value_object,
+    string_from_value_object, ATTEMPT_RETRY_EVENT, HANDOFF_RESUME_EVENT,
+    PIPELINE_RUN_REQUESTED_EVENT, SUPERVISOR_TICK_EVENT, WORKER_LAUNCH_EVENT,
 };
 #[cfg(test)]
 use outbox_core::{
