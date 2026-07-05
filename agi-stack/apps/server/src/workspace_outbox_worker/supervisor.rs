@@ -23,16 +23,6 @@ pub(super) struct AcceptedAttemptTaskProjection<'a> {
     pub(super) now: DateTime<Utc>,
 }
 
-struct WorktreeIntegrationEvent<'a> {
-    workspace_id: &'a str,
-    node: &'a WorkspacePlanNodeRecord,
-    attempt_id: &'a str,
-    task: &'a WorkspaceTaskRecord,
-    metadata: &'a Map<String, Value>,
-    event_type: &'a str,
-    now: DateTime<Utc>,
-}
-
 impl SupervisorTickAdmissionHandler {
     pub(super) fn new(store: Arc<dyn WorkspacePlanDispatchStore>) -> Self {
         Self { store }
