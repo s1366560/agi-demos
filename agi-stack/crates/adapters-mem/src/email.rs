@@ -12,7 +12,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 
-use agistack_core::ports::{CoreResult, EmailMessage, EmailSender};
+use agistack_core::ports::{CoreError, CoreResult, EmailMessage, EmailSender};
 
 /// Process-local email sink: appends each sent [`EmailMessage`] to a `Vec` the
 /// test can inspect. Never fails (mirrors a healthy MTA accepting the envelope).
@@ -28,14 +28,18 @@ impl InMemoryEmailSender {
     }
 
     /// Snapshot of every message sent so far, in send order.
-    pub fn sent(&self) -> Vec<EmailMessage> {
-        self.sent.lock().expect("email sink mutex").clone()
+    pub fn sent(&self) -> CoreResult<Vec<EmailMessage>> {
+        Ok(self.sent.lock().map_err(|_| poisoned())?.clone())
     }
 
     /// Number of messages sent so far.
-    pub fn count(&self) -> usize {
-        self.sent.lock().expect("email sink mutex").len()
+    pub fn count(&self) -> CoreResult<usize> {
+        Ok(self.sent.lock().map_err(|_| poisoned())?.len())
     }
+}
+
+fn poisoned() -> CoreError {
+    CoreError::Email("poisoned email sink lock".into())
 }
 
 #[async_trait]
@@ -43,7 +47,7 @@ impl EmailSender for InMemoryEmailSender {
     async fn send(&self, message: &EmailMessage) -> CoreResult<()> {
         self.sent
             .lock()
-            .expect("email sink mutex")
+            .map_err(|_| poisoned())?
             .push(message.clone());
         Ok(())
     }
@@ -53,6 +57,8 @@ impl EmailSender for InMemoryEmailSender {
 mod tests {
     use super::*;
     use futures::executor::block_on;
+
+    static PANIC_HOOK_LOCK: Mutex<()> = Mutex::new(());
 
     fn msg() -> EmailMessage {
         EmailMessage {
@@ -67,14 +73,14 @@ mod tests {
     #[test]
     fn records_sent_messages_in_order() {
         let sender = InMemoryEmailSender::new();
-        assert_eq!(sender.count(), 0);
+        assert_eq!(sender.count().unwrap(), 0);
 
         block_on(sender.send(&msg())).unwrap();
         let mut second = msg();
         second.subject = "Reminder".into();
         block_on(sender.send(&second)).unwrap();
 
-        let sent = sender.sent();
+        let sent = sender.sent().unwrap();
         assert_eq!(sent.len(), 2);
         assert_eq!(sent[0].subject, "You're invited");
         assert_eq!(sent[0].to, vec!["alice@example.com".to_string()]);
@@ -85,12 +91,32 @@ mod tests {
     fn captures_full_envelope_and_bodies() {
         let sender = InMemoryEmailSender::new();
         block_on(sender.send(&msg())).unwrap();
-        let sent = sender.sent();
+        let sent = sender.sent().unwrap();
         assert_eq!(sent[0].from, "MemStack <no-reply@memstack.ai>");
         assert_eq!(sent[0].body_text, "Join the project");
         assert_eq!(
             sent[0].body_html.as_deref(),
             Some("<p>Join the project</p>")
         );
+    }
+
+    #[test]
+    fn poisoned_lock_returns_email_error() {
+        let sender = InMemoryEmailSender::new();
+        let _panic_hook_guard = PANIC_HOOK_LOCK.lock().unwrap();
+        let old_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = sender.sent.lock().unwrap();
+            panic!("poison email sink mutex");
+        }));
+        std::panic::set_hook(old_hook);
+        assert!(result.is_err());
+
+        let err = block_on(sender.send(&msg())).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Email(message) if message == "poisoned email sink lock"
+        ));
     }
 }

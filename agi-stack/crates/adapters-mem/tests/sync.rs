@@ -60,8 +60,8 @@ fn two_devices_offline_then_resync_converge() {
         laptop.write("memory", "m1", "update", 1).await; // later time, lower version
 
         // Each ChangeLog captured exactly its own local mutations (capture seam).
-        assert_eq!(phone.changelog.events().len(), 3); // m1.create, m2, m1.update
-        assert_eq!(laptop.changelog.events().len(), 2); // m3, m1.update
+        assert_eq!(phone.changelog.events().unwrap().len(), 3); // m1.create, m2, m1.update
+        assert_eq!(laptop.changelog.events().unwrap().len(), 2); // m3, m1.update
 
         // Reconnect -> converge.
         reconcile(&mut phone.replica, &mut laptop.replica);

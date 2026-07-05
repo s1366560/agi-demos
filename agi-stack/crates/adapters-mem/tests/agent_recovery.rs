@@ -94,7 +94,7 @@ fn resume_reuses_completed_tool_call_without_reinvoking() {
         input_json: LEN_INPUT.into(),
         output_json: r#"{"reused":true,"len":5}"#.into(),
     });
-    checkpoints.seed(seeded);
+    checkpoints.seed(seeded).unwrap();
 
     // The script replays the SAME round-0 call (so the engine matches it against
     // the saved completed call), then finishes.

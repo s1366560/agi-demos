@@ -69,7 +69,7 @@ async fn sends_through_real_smtp_and_arrives_in_mailpit() {
     // SMTP send transmits.
     let oracle = InMemoryEmailSender::new();
     oracle.send(&msg).await.unwrap();
-    assert_eq!(oracle.sent()[0], msg);
+    assert_eq!(oracle.sent().unwrap()[0], msg);
 
     // Real delivery over SMTP.
     let sender = SmtpEmailSender::plaintext(SMTP_HOST, smtp_port());
@@ -131,8 +131,9 @@ async fn sends_through_real_smtp_and_arrives_in_mailpit() {
 
     // Cross-tier behavioural parity: what mailpit actually received matches what
     // the in-memory oracle recorded.
-    assert_eq!(oracle.sent()[0].to[0], to_addr);
-    assert_eq!(oracle.sent()[0].subject, subject);
+    let sent = oracle.sent().unwrap();
+    assert_eq!(sent[0].to[0], to_addr);
+    assert_eq!(sent[0].subject, subject);
 
     // Hermetic: leave the inbox as we found it.
     let _ = client.delete(&list_url).send().await;
