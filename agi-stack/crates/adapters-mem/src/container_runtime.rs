@@ -16,7 +16,8 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 
 use agistack_core::ports::{
-    ContainerRuntime, ContainerSpec, ContainerState, ContainerStatus, CoreResult, PortBinding,
+    ContainerRuntime, ContainerSpec, ContainerState, ContainerStatus, CoreError, CoreResult,
+    PortBinding,
 };
 
 /// Process-local container runtime: `id -> record`. Ids are `mem-{n}` so tests
@@ -41,12 +42,16 @@ impl InMemoryContainerRuntime {
     }
 }
 
+fn poisoned() -> CoreError {
+    CoreError::Container("poisoned container runtime lock".into())
+}
+
 #[async_trait]
 impl ContainerRuntime for InMemoryContainerRuntime {
     async fn create(&self, spec: &ContainerSpec) -> CoreResult<String> {
         let n = self.seq.fetch_add(1, Ordering::SeqCst);
         let id = format!("mem-{n:06}");
-        let mut inner = self.inner.lock().expect("container runtime mutex");
+        let mut inner = self.inner.lock().map_err(|_| poisoned())?;
         inner.insert(
             id.clone(),
             Record {
@@ -60,7 +65,7 @@ impl ContainerRuntime for InMemoryContainerRuntime {
     }
 
     async fn start(&self, id: &str) -> CoreResult<()> {
-        let mut inner = self.inner.lock().expect("container runtime mutex");
+        let mut inner = self.inner.lock().map_err(|_| poisoned())?;
         if let Some(r) = inner.get_mut(id) {
             r.state = ContainerState::Running;
             r.exit_code = None;
@@ -69,7 +74,7 @@ impl ContainerRuntime for InMemoryContainerRuntime {
     }
 
     async fn status(&self, id: &str) -> CoreResult<Option<ContainerStatus>> {
-        let inner = self.inner.lock().expect("container runtime mutex");
+        let inner = self.inner.lock().map_err(|_| poisoned())?;
         Ok(inner.get(id).map(|r| ContainerStatus {
             id: id.to_string(),
             state: r.state,
@@ -80,7 +85,7 @@ impl ContainerRuntime for InMemoryContainerRuntime {
     }
 
     async fn stop(&self, id: &str) -> CoreResult<()> {
-        let mut inner = self.inner.lock().expect("container runtime mutex");
+        let mut inner = self.inner.lock().map_err(|_| poisoned())?;
         if let Some(r) = inner.get_mut(id) {
             // Stopping is a no-op unless it was running.
             if matches!(r.state, ContainerState::Running | ContainerState::Created) {
@@ -92,13 +97,13 @@ impl ContainerRuntime for InMemoryContainerRuntime {
     }
 
     async fn remove(&self, id: &str) -> CoreResult<()> {
-        let mut inner = self.inner.lock().expect("container runtime mutex");
+        let mut inner = self.inner.lock().map_err(|_| poisoned())?;
         inner.remove(id); // absent id: no-op success
         Ok(())
     }
 
     async fn list(&self, label: Option<(&str, &str)>) -> CoreResult<Vec<String>> {
-        let inner = self.inner.lock().expect("container runtime mutex");
+        let inner = self.inner.lock().map_err(|_| poisoned())?;
         // BTreeMap iterates ascending already.
         Ok(inner
             .iter()
@@ -115,6 +120,8 @@ impl ContainerRuntime for InMemoryContainerRuntime {
 mod tests {
     use super::*;
     use futures::executor::block_on;
+
+    static PANIC_HOOK_LOCK: Mutex<()> = Mutex::new(());
 
     fn spec(labels: &[(&str, &str)]) -> ContainerSpec {
         ContainerSpec {
@@ -202,5 +209,25 @@ mod tests {
         block_on(rt.stop(&id)).unwrap();
         let st = block_on(rt.status(&id)).unwrap().unwrap();
         assert_eq!(st.state, ContainerState::Exited);
+    }
+
+    #[test]
+    fn poisoned_lock_returns_container_error() {
+        let rt = InMemoryContainerRuntime::new();
+        let _panic_hook_guard = PANIC_HOOK_LOCK.lock().unwrap();
+        let old_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = rt.inner.lock().unwrap();
+            panic!("poison container runtime mutex");
+        }));
+        std::panic::set_hook(old_hook);
+        assert!(result.is_err());
+
+        let err = block_on(rt.status("mem-000000")).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Container(message) if message == "poisoned container runtime lock"
+        ));
     }
 }

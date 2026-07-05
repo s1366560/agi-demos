@@ -12,7 +12,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 
-use agistack_core::ports::{CoreResult, ObjectMeta, ObjectStore};
+use agistack_core::ports::{CoreError, CoreResult, ObjectMeta, ObjectStore};
 
 /// Process-local blob store: `key -> (bytes, content_type)`.
 #[derive(Default)]
@@ -32,10 +32,14 @@ impl InMemoryObjectStore {
     }
 }
 
+fn poisoned() -> CoreError {
+    CoreError::Storage("poisoned object store lock".into())
+}
+
 #[async_trait]
 impl ObjectStore for InMemoryObjectStore {
     async fn put(&self, key: &str, bytes: Vec<u8>, content_type: Option<&str>) -> CoreResult<()> {
-        let mut inner = self.inner.lock().expect("object store mutex");
+        let mut inner = self.inner.lock().map_err(|_| poisoned())?;
         inner.insert(
             key.to_string(),
             StoredObject {
@@ -54,12 +58,12 @@ impl ObjectStore for InMemoryObjectStore {
     }
 
     async fn get(&self, key: &str) -> CoreResult<Option<Vec<u8>>> {
-        let inner = self.inner.lock().expect("object store mutex");
+        let inner = self.inner.lock().map_err(|_| poisoned())?;
         Ok(inner.get(key).map(|o| o.bytes.clone()))
     }
 
     async fn stat(&self, key: &str) -> CoreResult<Option<ObjectMeta>> {
-        let inner = self.inner.lock().expect("object store mutex");
+        let inner = self.inner.lock().map_err(|_| poisoned())?;
         Ok(inner.get(key).map(|o| ObjectMeta {
             size: o.bytes.len() as u64,
             content_type: o.content_type.clone(),
@@ -67,13 +71,13 @@ impl ObjectStore for InMemoryObjectStore {
     }
 
     async fn delete(&self, key: &str) -> CoreResult<()> {
-        let mut inner = self.inner.lock().expect("object store mutex");
+        let mut inner = self.inner.lock().map_err(|_| poisoned())?;
         inner.remove(key);
         Ok(())
     }
 
     async fn list(&self, prefix: &str) -> CoreResult<Vec<String>> {
-        let inner = self.inner.lock().expect("object store mutex");
+        let inner = self.inner.lock().map_err(|_| poisoned())?;
         // BTreeMap iterates in ascending key order already.
         Ok(inner
             .keys()
@@ -87,6 +91,8 @@ impl ObjectStore for InMemoryObjectStore {
 mod tests {
     use super::*;
     use futures::executor::block_on;
+
+    static PANIC_HOOK_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn put_get_roundtrip_and_missing_is_none() {
@@ -148,5 +154,25 @@ mod tests {
             vec!["a/1", "a/3", "b/2", "c/9"]
         );
         assert!(block_on(s.list("z/")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn poisoned_lock_returns_storage_error() {
+        let s = InMemoryObjectStore::new();
+        let _panic_hook_guard = PANIC_HOOK_LOCK.lock().unwrap();
+        let old_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = s.inner.lock().unwrap();
+            panic!("poison object store mutex");
+        }));
+        std::panic::set_hook(old_hook);
+        assert!(result.is_err());
+
+        let err = block_on(s.get("k")).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Storage(message) if message == "poisoned object store lock"
+        ));
     }
 }
