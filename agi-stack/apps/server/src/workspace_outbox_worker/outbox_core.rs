@@ -1,83 +1,21 @@
 use super::*;
 
 mod config;
+mod handler;
+mod metadata;
+mod readiness;
+mod runtime;
 
 pub(crate) use config::WorkspacePlanOutboxWorkerConfig;
 pub(super) use config::{bool_env, i64_env, positive_i64_env};
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub(crate) struct WorkspacePlanOutboxRunReport {
-    pub claimed: usize,
-    pub completed: usize,
-    pub failed: usize,
-    pub released: usize,
-    pub parked: usize,
-    pub missing_handler: usize,
-    pub skipped: usize,
-}
-
-pub(crate) struct WorkspacePlanOutboxWorkerRuntime {
-    join: Option<JoinHandle<()>>,
-}
-
-impl WorkspacePlanOutboxWorkerRuntime {
-    #[cfg(test)]
-    pub(super) async fn shutdown(mut self) {
-        if let Some(join) = self.join.take() {
-            join.abort();
-            let _ = join.await;
-        }
-    }
-}
-
-impl Drop for WorkspacePlanOutboxWorkerRuntime {
-    fn drop(&mut self) {
-        if let Some(join) = &self.join {
-            join.abort();
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum WorkspacePlanOutboxHandlerOutcome {
-    Complete,
-    Release {
-        reason: Option<String>,
-    },
-    Park {
-        status: String,
-        metadata_patch: Value,
-    },
-    ParkWithPayload {
-        status: String,
-        metadata_patch: Value,
-        payload_patch: Value,
-    },
-}
-
-#[async_trait]
-pub(crate) trait WorkspacePlanOutboxHandler: Send + Sync {
-    async fn handle(
-        &self,
-        item: WorkspacePlanOutboxRecord,
-    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome>;
-}
-
-#[async_trait]
-pub(crate) trait WorkspacePipelineStageRunner: Send + Sync {
-    async fn run_stage(
-        &self,
-        project_id: &str,
-        contract: &PipelineContractFoundation,
-        stage: &PipelineStageSpec,
-    ) -> PipelineStageResult;
-}
-
-pub(super) fn merge_metadata_patch(target: &mut Map<String, Value>, patch: &Map<String, Value>) {
-    for (key, value) in patch {
-        target.insert(key.clone(), value.clone());
-    }
-}
+pub(crate) use handler::{
+    WorkspacePipelineStageRunner, WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
+};
+pub(super) use metadata::merge_metadata_patch;
+pub(super) use readiness::missing_required_handler_event_types;
+#[cfg(test)]
+pub(super) use readiness::required_handler_event_types;
+pub(crate) use runtime::{WorkspacePlanOutboxRunReport, WorkspacePlanOutboxWorkerRuntime};
 
 pub(crate) struct WorkspacePlanOutboxWorker {
     store: Arc<dyn WorkspacePlanOutboxStore>,
@@ -273,26 +211,6 @@ impl WorkspacePlanOutboxWorker {
         }
         Ok(())
     }
-}
-
-pub(super) fn required_handler_event_types() -> [&'static str; 5] {
-    [
-        SUPERVISOR_TICK_EVENT,
-        WORKER_LAUNCH_EVENT,
-        HANDOFF_RESUME_EVENT,
-        ATTEMPT_RETRY_EVENT,
-        PIPELINE_RUN_REQUESTED_EVENT,
-    ]
-}
-
-pub(super) fn missing_required_handler_event_types(
-    handlers: &WorkspacePlanOutboxHandlers,
-) -> Vec<String> {
-    required_handler_event_types()
-        .into_iter()
-        .filter(|event_type| !handlers.contains_key(*event_type))
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 pub(super) fn object_or_empty(value: Value) -> Map<String, Value> {
