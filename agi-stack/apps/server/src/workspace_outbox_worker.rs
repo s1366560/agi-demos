@@ -53,20 +53,6 @@ use agent_mention::{
 pub(crate) type SharedWorkspacePlanOutboxWorker = Arc<WorkspacePlanOutboxWorker>;
 pub(crate) type WorkspacePlanOutboxHandlers = HashMap<String, Arc<dyn WorkspacePlanOutboxHandler>>;
 
-const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
-const DRONE_PROVIDER: &str = "drone";
-const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
-const DRONE_SERVER_URL_ENV: &str = "DRONE_SERVER_URL";
-const DRONE_TOKEN_ENV: &str = "DRONE_TOKEN";
-const DRONE_CLI_JSON_TEMPLATE: &str = "{{ json . }}";
-const DRONE_DOCKER_DEPLOY_VALIDATION: &str = "explicit_deploy_step_v1";
-const DRONE_YAML_PREFLIGHT_VALIDATION: &str = "drone_yml_preflight_v1";
-const DEFAULT_DRONE_DEPLOY_MODE: &str = "cli";
-const DEFAULT_DRONE_DEPLOY_STAGE: &str = "deploy";
-const PLANNING_CONTRACT_SOURCE: &str = "planner_agent_code_analysis";
-const DEFAULT_PIPELINE_TIMEOUT_SECONDS: i32 = 600;
-const DEFAULT_PREVIEW_PORT: i32 = 3000;
-const PIPELINE_EXIT_MARKER: &str = "__MEMSTACK_PIPELINE_EXIT_CODE__=";
 const WORKSPACE_PLAN_SYSTEM_ACTOR_ID: &str = "workspace-plan:system";
 const ROOT_GOAL_TASK_ID: &str = "root_goal_task_id";
 const WORKSPACE_PLAN_ID: &str = "workspace_plan_id";
@@ -141,6 +127,10 @@ use supervisor::{
 mod pipeline_shared;
 use pipeline_shared::{
     bool_from_map_default, merge_object_values, source_publish_dotenv_value, GitCommandOutput,
+    DEFAULT_DRONE_DEPLOY_MODE, DEFAULT_DRONE_DEPLOY_STAGE, DEFAULT_PIPELINE_TIMEOUT_SECONDS,
+    DEFAULT_PREVIEW_PORT, DRONE_CLI_JSON_TEMPLATE, DRONE_DOCKER_DEPLOY_VALIDATION, DRONE_PROVIDER,
+    DRONE_SERVER_ENV, DRONE_SERVER_URL_ENV, DRONE_TOKEN_ENV, DRONE_YAML_PREFLIGHT_VALIDATION,
+    PIPELINE_EXIT_MARKER, PLANNING_CONTRACT_SOURCE, SANDBOX_NATIVE_PROVIDER,
 };
 
 mod pipeline_contract;
