@@ -13,7 +13,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 
-use agistack_core::ports::{CoreResult, EventStream, StreamEntry};
+use agistack_core::ports::{CoreError, CoreResult, EventStream, StreamEntry};
 
 /// Process-local event bus: `topic -> ordered entries`, plus a global monotonic
 /// counter for id assignment. Cloneable handles share one backing store via
@@ -45,10 +45,14 @@ fn from_start(after_id: &str) -> &str {
     }
 }
 
+fn poisoned() -> CoreError {
+    CoreError::Event("poisoned event stream lock".into())
+}
+
 #[async_trait]
 impl EventStream for InMemoryEventStream {
     async fn append(&self, topic: &str, payload: &str, max_len: usize) -> CoreResult<String> {
-        let mut inner = self.inner.lock().expect("event stream mutex");
+        let mut inner = self.inner.lock().map_err(|_| poisoned())?;
         inner.seq += 1;
         let id = format!("{:020}", inner.seq);
         let entry = StreamEntry {
@@ -71,7 +75,7 @@ impl EventStream for InMemoryEventStream {
         limit: usize,
     ) -> CoreResult<Vec<StreamEntry>> {
         let after = from_start(after_id);
-        let inner = self.inner.lock().expect("event stream mutex");
+        let inner = self.inner.lock().map_err(|_| poisoned())?;
         let Some(entries) = inner.topics.get(topic) else {
             return Ok(Vec::new());
         };
@@ -158,5 +162,26 @@ mod tests {
         block_on(s.append("t", "a", 0)).unwrap();
         let got = block_on(s.read_after("t", "0", 100)).unwrap();
         assert_eq!(got.len(), 1);
+    }
+
+    #[test]
+    fn poisoned_lock_returns_event_error() {
+        static PANIC_HOOK_LOCK: Mutex<()> = Mutex::new(());
+
+        let s = InMemoryEventStream::new();
+        let _panic_hook_guard = PANIC_HOOK_LOCK.lock().unwrap();
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let poisoned = std::panic::catch_unwind(|| {
+            let _guard = s.inner.lock().unwrap();
+            panic!("poison event stream mutex");
+        });
+        std::panic::set_hook(previous_hook);
+        assert!(poisoned.is_err());
+
+        let err = block_on(s.append("t", "a", 0)).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Event(message) if message == "poisoned event stream lock")
+        );
     }
 }
