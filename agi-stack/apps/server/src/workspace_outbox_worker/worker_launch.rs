@@ -5,9 +5,17 @@ use super::worker_launch_worktree::{worker_launch_worktree_context, WorkerLaunch
 use super::*;
 
 mod admission;
+mod conversation;
+mod outbox;
 mod stream;
 mod terminal;
 
+pub(crate) use conversation::worker_conversation_id;
+use conversation::{worker_conversation_metadata, worker_conversation_title};
+use outbox::deferred_worker_launch_outbox;
+pub(super) use outbox::{
+    worker_launch_outbox, WorkerReportPayload, WorkerStreamTerminalPersistence,
+};
 use stream::WorkerStreamReplayInput;
 
 pub(crate) struct WorkerLaunchAdmissionConfig {
@@ -38,68 +46,6 @@ impl WorkerLaunchAdmissionConfig {
             ),
         }
     }
-}
-
-fn worker_conversation_scope_for_task(task_id: &str, attempt_id: Option<&str>) -> String {
-    attempt_id
-        .map(|attempt_id| format!("task:{task_id}:attempt:{attempt_id}"))
-        .unwrap_or_else(|| format!("task:{task_id}"))
-}
-
-pub(crate) fn worker_conversation_id(
-    workspace_id: &str,
-    worker_agent_id: &str,
-    task_id: &str,
-    attempt_id: Option<&str>,
-) -> String {
-    let scope = worker_conversation_scope_for_task(task_id, attempt_id);
-    let name = format!("workspace:{workspace_id}:agent:{worker_agent_id}:scope:{scope}");
-    Uuid::new_v5(&Uuid::NAMESPACE_DNS, name.as_bytes()).to_string()
-}
-
-fn worker_conversation_title(task: &WorkspaceTaskRecord) -> String {
-    let title_prefix = task.title.chars().take(80).collect::<String>();
-    format!("Workspace Worker - {title_prefix}")
-}
-
-fn worker_conversation_metadata(
-    workspace_id: &str,
-    task: &WorkspaceTaskRecord,
-    task_metadata: &Map<String, Value>,
-    worker_agent_id: &str,
-    attempt: &WorkspaceTaskSessionAttemptRecord,
-    now: DateTime<Utc>,
-) -> Value {
-    let mut metadata = json!({
-        "workspace_id": workspace_id,
-        "agent_id": worker_agent_id,
-        "workspace_agent_binding_id": Value::Null,
-        "workspace_task_id": task.id,
-        "linked_workspace_task_id": task.id,
-        ROOT_GOAL_TASK_ID: attempt.root_goal_task_id,
-        "attempt_id": attempt.id,
-        "conversation_scope": worker_conversation_scope_for_task(&task.id, Some(&attempt.id)),
-        "source": WORKER_LAUNCH_CONVERSATION_SOURCE,
-        "workspace_llm_stage": WORKER_LAUNCH_CONVERSATION_STAGE,
-        "created_at": now.to_rfc3339(),
-    });
-    if let Some(preferred_language) = string_from_map(task_metadata, "preferred_language") {
-        if let Some(map) = metadata.as_object_mut() {
-            map.insert("preferred_language".to_string(), json!(preferred_language));
-        }
-    }
-    if let Some(map) = metadata.as_object_mut() {
-        for key in [
-            "last_retry_reason",
-            "last_retry_previous_attempt_id",
-            "retry_origin",
-            "worker_stream_orphan_retry_reason",
-            "worker_stream_orphan_summary",
-        ] {
-            copy_metadata_string_field(task_metadata, map, key);
-        }
-    }
-    metadata
 }
 
 pub(crate) struct WorkerLaunchAdmissionHandler {
@@ -495,138 +441,5 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
         }
 
         Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
-    }
-}
-
-pub(super) struct WorkerStreamTerminalPersistence<'a> {
-    pub(super) workspace_id: &'a str,
-    pub(super) task_id: &'a str,
-    pub(super) root_goal_task_id: Option<&'a str>,
-    pub(super) attempt_id: Option<&'a str>,
-    pub(super) conversation_id: Option<&'a str>,
-    pub(super) actor_user_id: &'a str,
-    pub(super) worker_agent_id: &'a str,
-    pub(super) leader_agent_id: Option<&'a str>,
-    pub(super) plan_id: Option<&'a str>,
-    pub(super) node_id: Option<&'a str>,
-    pub(super) outcome: &'a worker_stream_watchdog::TerminalOutcome,
-    pub(super) now: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct WorkerReportPayload {
-    pub(super) normalized_summary: String,
-    pub(super) report_artifacts: Vec<String>,
-    pub(super) merged_artifacts: Vec<String>,
-    pub(super) report_verifications: Vec<String>,
-    pub(super) merged_verifications: Vec<String>,
-    pub(super) fingerprint: String,
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(super) fn worker_launch_outbox(
-    plan_id: Option<&str>,
-    workspace_id: &str,
-    source_event_type: &str,
-    payload: &Map<String, Value>,
-    task_id: &str,
-    worker_agent_id: &str,
-    actor_user_id: &str,
-    leader_agent_id: &str,
-    attempt_id: &str,
-    node_id: Option<&str>,
-    created_at: DateTime<Utc>,
-) -> WorkspacePlanOutboxRecord {
-    let mut launch_payload = Map::new();
-    launch_payload.insert("workspace_id".to_string(), json!(workspace_id));
-    launch_payload.insert("task_id".to_string(), json!(task_id));
-    launch_payload.insert("worker_agent_id".to_string(), json!(worker_agent_id));
-    launch_payload.insert("actor_user_id".to_string(), json!(actor_user_id));
-    launch_payload.insert("leader_agent_id".to_string(), json!(leader_agent_id));
-    launch_payload.insert("attempt_id".to_string(), json!(attempt_id));
-    if let Some(node_id) = node_id {
-        launch_payload.insert("node_id".to_string(), json!(node_id));
-    }
-    for optional_key in [
-        "extra_instructions",
-        "reuse_conversation_id",
-        "repair_brief_prompt",
-    ] {
-        if let Some(value) = payload.get(optional_key) {
-            launch_payload.insert(optional_key.to_string(), value.clone());
-        }
-    }
-    copy_retry_context_payload_fields(payload, &mut launch_payload);
-    WorkspacePlanOutboxRecord {
-        id: generate_uuid_v4(),
-        plan_id: plan_id.map(ToOwned::to_owned),
-        workspace_id: workspace_id.to_string(),
-        event_type: WORKER_LAUNCH_EVENT.to_string(),
-        payload_json: Value::Object(launch_payload),
-        status: "pending".to_string(),
-        attempt_count: 0,
-        max_attempts: 5,
-        lease_owner: None,
-        lease_expires_at: None,
-        last_error: None,
-        next_attempt_at: None,
-        processed_at: None,
-        metadata_json: json!({
-            "source": format!("workspace_plan.{source_event_type}"),
-            "previous_attempt_id": string_from_map(payload, "previous_attempt_id")
-        }),
-        created_at,
-        updated_at: None,
-    }
-}
-
-fn deferred_worker_launch_outbox(
-    item: &WorkspacePlanOutboxRecord,
-    payload: &Map<String, Value>,
-    active_count: i64,
-    max_active: i64,
-    delay_seconds: i64,
-    now: DateTime<Utc>,
-) -> WorkspacePlanOutboxRecord {
-    let mut metadata = object_or_empty(item.metadata_json.clone());
-    let defer_count = metadata
-        .get("defer_count")
-        .and_then(Value::as_i64)
-        .unwrap_or(0)
-        + 1;
-    metadata.insert(
-        "source".to_string(),
-        json!("workspace_plan.worker_launch.deferred_capacity"),
-    );
-    metadata.insert(
-        "deferred_from_outbox_id".to_string(),
-        json!(item.id.clone()),
-    );
-    metadata.insert("defer_count".to_string(), json!(defer_count));
-    metadata.insert(
-        "active_worker_conversations".to_string(),
-        json!(active_count),
-    );
-    metadata.insert(
-        "max_active_worker_conversations".to_string(),
-        json!(max_active),
-    );
-    WorkspacePlanOutboxRecord {
-        id: generate_uuid_v4(),
-        plan_id: item.plan_id.clone(),
-        workspace_id: item.workspace_id.clone(),
-        event_type: WORKER_LAUNCH_EVENT.to_string(),
-        payload_json: Value::Object(payload.clone()),
-        status: "pending".to_string(),
-        attempt_count: 0,
-        max_attempts: item.max_attempts,
-        lease_owner: None,
-        lease_expires_at: None,
-        last_error: None,
-        next_attempt_at: Some(now + ChronoDuration::seconds(delay_seconds.max(1))),
-        processed_at: None,
-        metadata_json: Value::Object(metadata),
-        created_at: now,
-        updated_at: None,
     }
 }
