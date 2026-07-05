@@ -1,6 +1,6 @@
 #[cfg(test)]
-use super::super::WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS;
-use super::super::WORKER_STREAM_COMPLETION_SUMMARY_CHARS;
+use super::WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS;
+use super::WORKER_STREAM_COMPLETION_SUMMARY_CHARS;
 
 #[cfg(test)]
 pub(in crate::workspace_outbox_worker) fn worker_launch_started_summary(

@@ -1,7 +1,3 @@
-use super::{
-    DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS,
-    DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS,
-};
 use serde_json::Value;
 
 mod summary;
@@ -15,6 +11,12 @@ pub(super) use terminal_report::{
     terminal_report_metadata_matches_attempt, terminal_report_tool_observation_status,
     terminal_report_tool_report_type, TerminalReportToolStatus, TerminalReportType,
 };
+
+#[cfg(test)]
+pub(super) const WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS: usize = 700;
+pub(super) const WORKER_STREAM_COMPLETION_SUMMARY_CHARS: usize = 2000;
+const DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS: i64 = 900;
+pub(super) const DEFAULT_WORKER_STREAM_IDLE_PROGRESS_INTERVAL_SECONDS: i64 = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum StopReason {
