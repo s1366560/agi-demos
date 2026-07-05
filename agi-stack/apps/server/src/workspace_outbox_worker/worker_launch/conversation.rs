@@ -1,5 +1,8 @@
 use super::*;
 
+const WORKER_LAUNCH_CONVERSATION_SOURCE: &str = "workspace_worker_launch";
+const WORKER_LAUNCH_CONVERSATION_STAGE: &str = "worker_launch";
+
 fn worker_conversation_scope_for_task(task_id: &str, attempt_id: Option<&str>) -> String {
     attempt_id
         .map(|attempt_id| format!("task:{task_id}:attempt:{attempt_id}"))

@@ -8,6 +8,8 @@ mod replay;
 use poll::worker_stream_poll_outbox;
 use replay::worker_stream_event_time_us;
 
+const DEFAULT_WORKER_STREAM_REPLAY_BATCH_LIMIT: usize = 100;
+
 pub(super) struct WorkerStreamReplayInput<'a> {
     pub(super) workspace_id: &'a str,
     pub(super) task_id: &'a str,
