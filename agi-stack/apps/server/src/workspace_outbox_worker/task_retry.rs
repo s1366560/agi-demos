@@ -2,6 +2,39 @@ use super::*;
 
 mod outbox;
 
+const ATTEMPT_RETRY_STALE_WORKER_STREAM_METADATA_KEYS: &[&str] = &[
+    "current_attempt_conversation_id",
+    "evidence_refs",
+    "execution_verifications",
+    "last_worker_report_artifacts",
+    "last_worker_report_attempt_id",
+    "last_worker_report_fingerprint",
+    "last_worker_report_summary",
+    "last_worker_report_type",
+    "last_worker_report_verifications",
+    "last_worker_reported_at",
+    "pending_leader_adjudication",
+    "worker_launch_admitted_at",
+    "worker_launch_bound_at",
+    "worker_stream_idle_finished_message_id",
+    "worker_stream_idle_progress_published_at",
+    "worker_stream_idle_progress_published_at_us",
+    "worker_stream_idle_progress_summary",
+    "worker_stream_idle_running_exists",
+    "worker_stream_idle_seconds",
+    "worker_stream_last_entry_id",
+    "worker_stream_last_event_time_us",
+    "worker_stream_last_event_type",
+    "worker_stream_last_replayed_at",
+    "worker_stream_message_id",
+    "worker_stream_replay_attempt_id",
+    "worker_stream_replay_status",
+    "worker_stream_terminal_launch_state",
+    "worker_stream_terminal_outcome",
+    "worker_stream_terminal_replayed_at",
+    "worker_stream_terminal_should_report",
+];
+
 pub(super) use outbox::{
     supervisor_replan_tick_outbox, supervisor_request_pipeline_outbox,
     supervisor_retry_attempt_outbox, worker_report_supervisor_tick,
