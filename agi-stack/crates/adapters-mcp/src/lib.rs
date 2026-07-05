@@ -33,7 +33,7 @@ use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::net::TcpStream;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
@@ -43,6 +43,7 @@ type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// The MCP protocol revision this client negotiates.
 const PROTOCOL_VERSION: &str = "2024-11-05";
+const REQUEST_BUFFER: usize = 32;
 
 /// Map any transport / protocol failure to the port-level [`CoreError::Tool`],
 /// keeping the concrete `tungstenite` types out of the core contract.
@@ -93,10 +94,17 @@ async fn read_response(ws: &mut Ws, want_id: i64) -> CoreResult<Value> {
 
 /// A [`ToolHost`] backed by a remote MCP server over WebSocket.
 pub struct WsMcpToolHost {
-    conn: Mutex<Ws>,
+    requests: mpsc::Sender<McpRequest>,
     tools: Vec<String>,
     next_id: AtomicI64,
     server_name: String,
+}
+
+struct McpRequest {
+    id: i64,
+    tool: String,
+    arguments: Value,
+    reply: oneshot::Sender<CoreResult<Value>>,
 }
 
 /// Connect to an MCP server at `url` (e.g. `ws://localhost:8765`), perform the
@@ -149,12 +157,39 @@ pub async fn connect(url: &str) -> CoreResult<WsMcpToolHost> {
         })
         .unwrap_or_default();
 
+    let (requests, worker_rx) = mpsc::channel(REQUEST_BUFFER);
+    tokio::spawn(run_mcp_connection(ws, worker_rx));
+
     Ok(WsMcpToolHost {
-        conn: Mutex::new(ws),
+        requests,
         tools,
         next_id: AtomicI64::new(3),
         server_name,
     })
+}
+
+async fn run_mcp_connection(mut ws: Ws, mut requests: mpsc::Receiver<McpRequest>) {
+    while let Some(request) = requests.recv().await {
+        let result = send_mcp_call(&mut ws, &request).await;
+        let should_stop = result.is_err();
+        let _ = request.reply.send(result);
+        if should_stop {
+            break;
+        }
+    }
+}
+
+async fn send_mcp_call(ws: &mut Ws, request: &McpRequest) -> CoreResult<Value> {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": request.id,
+        "method": "tools/call",
+        "params": { "name": request.tool, "arguments": request.arguments }
+    });
+    ws.send(Message::Text(req.to_string()))
+        .await
+        .map_err(gerr)?;
+    read_response(ws, request.id).await
 }
 
 impl WsMcpToolHost {
@@ -179,19 +214,19 @@ impl ToolHost for WsMcpToolHost {
         };
 
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "method": "tools/call",
-            "params": { "name": tool, "arguments": arguments }
-        });
-
-        let mut conn = self.conn.lock().await;
-        conn.send(Message::Text(req.to_string()))
+        let (reply, response) = oneshot::channel();
+        self.requests
+            .send(McpRequest {
+                id,
+                tool: tool.to_string(),
+                arguments,
+                reply,
+            })
             .await
-            .map_err(gerr)?;
-        let resp = read_response(&mut conn, id).await?;
-        drop(conn);
+            .map_err(|_| CoreError::Tool("mcp connection task is closed".into()))?;
+        let resp = response
+            .await
+            .map_err(|_| CoreError::Tool("mcp connection task dropped response".into()))??;
 
         // JSON-RPC-level error (malformed request, method not found, ...).
         if let Some(err) = resp.get("error").filter(|e| !e.is_null()) {
