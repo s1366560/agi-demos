@@ -1,9 +1,7 @@
 use super::*;
 
-mod create_repair;
-
 impl SupervisorTickAdmissionHandler {
-    pub(super) async fn reconcile_supervisor_replan_nodes(
+    pub(in crate::workspace_outbox_worker::supervisor) async fn reconcile_supervisor_create_repair_nodes(
         &self,
         workspace_id: &str,
         plan_id: &str,
@@ -20,30 +18,27 @@ impl SupervisorTickAdmissionHandler {
         }
 
         let now = Utc::now();
+        let nodes = self.store.list_plan_nodes(plan_id).await?;
+        let nodes_by_id = nodes
+            .iter()
+            .map(|node| (node.id.clone(), node.clone()))
+            .collect::<HashMap<_, _>>();
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
+        for mut node in nodes {
             if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
                 continue;
             }
             let mut metadata = object_or_empty(node.metadata_json.clone());
-            if !supervisor_replan_metadata_present(&metadata) {
+            if !supervisor_create_repair_metadata_present(&metadata) {
                 continue;
             }
-            if node.current_attempt_id.is_none()
-                && node.intent == "todo"
-                && node.execution == "idle"
-                && metadata_string(metadata.get("workspace_task_projection_status")).as_deref()
-                    == Some(SUPERVISOR_REPLAN_REQUESTED_VERDICT)
-                && metadata_string(metadata.get("supervisor_replan_outbox_id")).is_some()
-            {
+            if supervisor_create_repair_projection_complete(&node, &metadata, &nodes_by_id) {
                 continue;
             }
 
             let previous_attempt_id = node.current_attempt_id.clone();
-            let replan_task_id = node.workspace_task_id.clone();
-            let replan_worker_agent_id = node.assignee_agent_id.clone();
             let mut evidence_refs = Vec::new();
-            let summary = supervisor_replan_summary(&metadata);
+            let summary = supervisor_create_repair_summary(&metadata);
             let mut attempt_projected = false;
             if let Some(attempt_id) = previous_attempt_id.as_deref() {
                 if let Some(attempt) = self.store.get_task_session_attempt(attempt_id).await? {
@@ -58,7 +53,7 @@ impl SupervisorTickAdmissionHandler {
                                 attempt_id,
                                 REJECTED_ATTEMPT_STATUS,
                                 Some(&summary),
-                                Some(SUPERVISOR_DECISION_REPLAN_NODE_REASON),
+                                Some(SUPERVISOR_DECISION_CREATE_REPAIR_NODE_REASON),
                                 now,
                             )
                             .await?;
@@ -86,7 +81,7 @@ impl SupervisorTickAdmissionHandler {
             dedup_strings(&mut evidence_refs);
 
             let task_projected = self
-                .project_supervisor_replan_to_task(
+                .project_supervisor_create_repair_to_task(
                     workspace_id,
                     &node,
                     previous_attempt_id.as_deref(),
@@ -96,22 +91,56 @@ impl SupervisorTickAdmissionHandler {
                 )
                 .await?;
 
-            clear_supervisor_replan_node_metadata(&mut metadata);
-            let confidence = node
-                .progress_json
-                .get("confidence")
-                .and_then(Value::as_f64)
-                .unwrap_or(0.0);
+            let existing_repair_id = existing_repair_node_id_for_original(&nodes_by_id, &node.id);
+            let (repair_node_id, repair_node_created) =
+                if let Some(repair_node_id) = existing_repair_id {
+                    (repair_node_id, false)
+                } else {
+                    let repair_node_id = generated_repair_node_id();
+                    let repair_node = supervisor_repair_plan_node(
+                        &node,
+                        &metadata,
+                        &repair_node_id,
+                        &summary,
+                        &evidence_refs,
+                        previous_attempt_id.as_deref(),
+                        now,
+                    );
+                    self.store.create_plan_node(repair_node).await?;
+                    (repair_node_id, true)
+                };
+
+            clear_supervisor_create_repair_node_metadata(&mut metadata);
             metadata.insert(
                 "last_supervisor_decision_action".to_string(),
-                json!(SUPERVISOR_DECISION_REPLAN_NODE_ACTION),
+                json!(SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION),
             );
             metadata.insert(
                 "last_supervisor_decision_rationale".to_string(),
                 json!(summary.clone()),
             );
             metadata.insert(
-                "supervisor_replan_reconciled_at".to_string(),
+                "last_verification_judge_verdict".to_string(),
+                json!("needs_rework"),
+            );
+            metadata.insert(
+                "last_verification_judge_next_action_kind".to_string(),
+                json!(SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION),
+            );
+            metadata.insert(
+                "last_verification_judge_required_next_action".to_string(),
+                json!(summary.clone()),
+            );
+            metadata.insert(
+                "blocked_by_repair_node_id".to_string(),
+                json!(repair_node_id.clone()),
+            );
+            metadata.insert(
+                "supervisor_repair_node_id".to_string(),
+                json!(repair_node_id.clone()),
+            );
+            metadata.insert(
+                "supervisor_repair_requested_at".to_string(),
                 json!(now.to_rfc3339()),
             );
             metadata.insert(
@@ -122,9 +151,14 @@ impl SupervisorTickAdmissionHandler {
                 "workspace_task_projected_at".to_string(),
                 json!(now.to_rfc3339()),
             );
+            metadata.insert(
+                "replan_source".to_string(),
+                json!("verification_judge_create_repair_node"),
+            );
+            metadata.insert("replan_trigger".to_string(), json!("verification_failed"));
             if let Some(attempt_id) = previous_attempt_id.as_deref() {
                 metadata.insert(
-                    "supervisor_replan_previous_attempt_id".to_string(),
+                    "supervisor_repair_previous_attempt_id".to_string(),
                     json!(attempt_id),
                 );
             }
@@ -134,50 +168,14 @@ impl SupervisorTickAdmissionHandler {
                     json!(evidence_refs),
                 );
             }
-            metadata.insert(
-                "operator_action".to_string(),
-                json!({
-                    "action": "operator_replan_requested",
-                    "actor_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
-                    "reason": summary,
-                    "created_at": now.to_rfc3339(),
-                    "source": "supervisor_decision"
-                }),
-            );
-
+            push_unique_string(&mut node.depends_on_json, repair_node_id.clone());
             node.intent = "todo".to_string();
             node.execution = "idle".to_string();
-            node.progress_json = json!({
-                "percent": 0,
-                "confidence": confidence,
-                "note": "Supervisor requested replan."
-            });
-            node.assignee_agent_id = None;
             node.current_attempt_id = None;
-            node.feature_checkpoint_json = reset_feature_checkpoint(node.feature_checkpoint_json);
             node.metadata_json = Value::Object(metadata);
             node.completed_at = None;
             node.updated_at = Some(now);
-
-            let replan_outbox = supervisor_replan_tick_outbox(SupervisorReplanTickOutboxInput {
-                workspace_id,
-                plan_id,
-                node_id: &node.id,
-                task_id: replan_task_id.as_deref(),
-                worker_agent_id: replan_worker_agent_id.as_deref(),
-                reason: &summary,
-                previous_attempt_id: previous_attempt_id.as_deref(),
-                now,
-            });
-            let replan_outbox_id = replan_outbox.id.clone();
-            let mut node_metadata = object_or_empty(node.metadata_json.clone());
-            node_metadata.insert(
-                "supervisor_replan_outbox_id".to_string(),
-                json!(replan_outbox_id.clone()),
-            );
-            node.metadata_json = Value::Object(node_metadata);
             self.store.save_plan_node(node.clone()).await?;
-            self.store.enqueue_plan_outbox(replan_outbox).await?;
             self.store
                 .create_plan_event(WorkspacePlanEventRecord {
                     id: generate_uuid_v4(),
@@ -185,18 +183,19 @@ impl SupervisorTickAdmissionHandler {
                     workspace_id: workspace_id.to_string(),
                     node_id: Some(node.id.clone()),
                     attempt_id: previous_attempt_id.clone(),
-                    event_type: "supervisor_replan_reconciled".to_string(),
+                    event_type: "supervisor_create_repair_node_reconciled".to_string(),
                     source: "workspace_plan_supervisor_tick".to_string(),
                     actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
                     payload_json: json!({
-                        "action": SUPERVISOR_DECISION_REPLAN_NODE_ACTION,
-                        "reason": SUPERVISOR_DECISION_REPLAN_NODE_REASON,
+                        "action": SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION,
+                        "reason": SUPERVISOR_DECISION_CREATE_REPAIR_NODE_REASON,
                         "rationale": summary,
                         "workspace_task_id": node.workspace_task_id.clone(),
                         "previous_attempt_id": previous_attempt_id,
+                        "repair_node_id": repair_node_id,
+                        "repair_node_created": repair_node_created,
                         "task_projected": task_projected,
                         "attempt_projected": attempt_projected,
-                        "outbox_id": replan_outbox_id,
                     }),
                     created_at: now,
                 })
@@ -206,7 +205,7 @@ impl SupervisorTickAdmissionHandler {
         Ok(changed)
     }
 
-    async fn project_supervisor_replan_to_task(
+    async fn project_supervisor_create_repair_to_task(
         &self,
         workspace_id: &str,
         node: &WorkspacePlanNodeRecord,
@@ -230,7 +229,7 @@ impl SupervisorTickAdmissionHandler {
                 == Some(SUPERVISOR_REPLAN_REQUESTED_VERDICT)
             && metadata_string(metadata.get("durable_plan_verification_summary")).as_deref()
                 == Some(summary)
-            && metadata_string(metadata.get("supervisor_replan_requested_at")).is_some()
+            && metadata_string(metadata.get("supervisor_repair_requested_at")).is_some()
         {
             return Ok(false);
         }
@@ -250,7 +249,7 @@ impl SupervisorTickAdmissionHandler {
             json!(now.to_rfc3339()),
         );
         metadata.insert(
-            "supervisor_replan_requested_at".to_string(),
+            "supervisor_repair_requested_at".to_string(),
             json!(now.to_rfc3339()),
         );
         metadata.insert(
@@ -268,7 +267,7 @@ impl SupervisorTickAdmissionHandler {
         );
         metadata.insert(
             "last_supervisor_decision_action".to_string(),
-            json!(SUPERVISOR_DECISION_REPLAN_NODE_ACTION),
+            json!(SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION),
         );
         if let Some(attempt_id) = attempt_id {
             metadata.insert("last_attempt_id".to_string(), json!(attempt_id));
