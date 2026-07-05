@@ -88,33 +88,9 @@ const REMEDIATION_STATUS: &str = "remediation_status";
 const REMEDIATION_SUMMARY: &str = "remediation_summary";
 const WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV: &str =
     "AGISTACK_WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY";
-const PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV: &str = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES";
-const AWAITING_LEADER_ADJUDICATION_STATUS: &str = "awaiting_leader_adjudication";
-const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
 const DISPOSED_ATTEMPT_STATUS: &str = "disposed";
 const REJECTED_ATTEMPT_STATUS: &str = "rejected";
-const SUPERVISOR_DECISION_DISPOSE_NODE_ACTION: &str = "dispose_node";
-const SUPERVISOR_DISPOSED_NODE_DISPOSITION: &str = "supervisor_agent_disposed_node";
-const SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION: &str = "mark_blocked_human";
-const SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON: &str =
-    "supervisor_decision_mark_blocked_human";
-const SUPERVISOR_BLOCKED_HUMAN_VERDICT: &str = "blocked_human_required";
-const SUPERVISOR_DECISION_REQUEST_PIPELINE_ACTION: &str = "request_pipeline";
-const SUPERVISOR_DECISION_REQUEST_PIPELINE_REASON: &str = "supervisor_decision_request_pipeline";
-const SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION: &str = "wait_pipeline";
-const SUPERVISOR_DECISION_WAIT_PIPELINE_REASON: &str = "supervisor_decision_wait_pipeline";
-const SUPERVISOR_DECISION_NOOP_ACTION: &str = "noop";
-const SUPERVISOR_DECISION_NOOP_REASON: &str = "supervisor_decision_noop";
-const SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION: &str = "create_repair_node";
-const SUPERVISOR_DECISION_CREATE_REPAIR_NODE_REASON: &str =
-    "supervisor_decision_create_repair_node";
-const SUPERVISOR_DECISION_REPLAN_NODE_ACTION: &str = "replan_node";
-const SUPERVISOR_DECISION_REPLAN_NODE_REASON: &str = "supervisor_decision_replan_node";
-const SUPERVISOR_REPLAN_REQUESTED_VERDICT: &str = "replan_requested";
-const SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION: &str = "retry_same_node";
-const SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON: &str = "supervisor_decision_retry_same_node";
-const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
 
 mod outbox_core;
 use outbox_core::{
@@ -149,7 +125,22 @@ use handoff::DurableHandoffResumeHandler;
 mod worker_stream_watchdog;
 
 mod supervisor;
-use supervisor::SupervisorTickAdmissionHandler;
+use supervisor::{
+    SupervisorTickAdmissionHandler, AWAITING_LEADER_ADJUDICATION_STATUS,
+    DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES, PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV,
+    SUPERVISOR_BLOCKED_HUMAN_VERDICT, SUPERVISOR_DECISION_CREATE_REPAIR_NODE_ACTION,
+    SUPERVISOR_DECISION_DISPOSE_NODE_ACTION, SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_ACTION,
+    SUPERVISOR_DECISION_NOOP_ACTION, SUPERVISOR_DECISION_REPLAN_NODE_ACTION,
+    SUPERVISOR_DECISION_REPLAN_NODE_REASON, SUPERVISOR_DECISION_REQUEST_PIPELINE_ACTION,
+    SUPERVISOR_DECISION_REQUEST_PIPELINE_REASON, SUPERVISOR_DECISION_WAIT_PIPELINE_ACTION,
+    SUPERVISOR_DISPOSED_NODE_DISPOSITION, SUPERVISOR_REPLAN_REQUESTED_VERDICT,
+};
+#[cfg(test)]
+use supervisor::{
+    SUPERVISOR_DECISION_CREATE_REPAIR_NODE_REASON, SUPERVISOR_DECISION_MARK_BLOCKED_HUMAN_REASON,
+    SUPERVISOR_DECISION_NOOP_REASON, SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON,
+    SUPERVISOR_DECISION_WAIT_PIPELINE_REASON,
+};
 
 mod pipeline_shared;
 use pipeline_shared::{
