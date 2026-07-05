@@ -135,42 +135,6 @@ const SUPERVISOR_REPLAN_REQUESTED_VERDICT: &str = "replan_requested";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_ACTION: &str = "retry_same_node";
 const SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON: &str = "supervisor_decision_retry_same_node";
 const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
-const WORKTREE_INTEGRATION_DONE_STATUSES: [&str; 5] = [
-    "merged",
-    "already_merged",
-    "skipped",
-    "blocked_dirty_main",
-    "failed",
-];
-const NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS: [&str; 27] = [
-    "candidate_artifacts",
-    "candidate_verifications",
-    "execution_verifications",
-    "last_worker_report_artifacts",
-    "last_worker_report_verifications",
-    "pipeline_evidence_refs",
-    "pipeline_gate_status",
-    "pipeline_last_summary",
-    "pipeline_run_id",
-    "pipeline_status",
-    "source_publish_branch",
-    "source_publish_commit_ref",
-    "source_publish_provider",
-    "source_publish_reason",
-    "source_publish_source_commit_ref",
-    "source_publish_status",
-    "verification_evidence_refs",
-    "verified_commit_ref",
-    "verified_git_diff_summary",
-    "verified_test_commands",
-    "worktree_integration_attempt_id",
-    "worktree_integration_commit_ref",
-    "worktree_integration_dirty_signature",
-    "worktree_integration_ran_at",
-    "worktree_integration_status",
-    "worktree_integration_summary",
-    "worktree_integration_worktree_path",
-];
 
 mod outbox_core;
 use outbox_core::{
