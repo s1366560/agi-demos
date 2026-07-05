@@ -1,56 +1,20 @@
 use super::*;
 
+mod accepted_projection;
+mod verification_checkpoint;
 mod worktree;
 
+pub(super) use accepted_projection::{
+    accepted_attempt_projection_base_metadata, accepted_attempt_projection_feature_checkpoint,
+    accepted_worktree_projection_complete_for_node,
+};
+pub(super) use verification_checkpoint::apply_verification_checkpoint_metadata;
 pub(super) use worktree::{
     accepted_attempt_integration_commit_ref, accepted_attempt_worktree_path,
     apply_attempt_worktree_checkpoint, default_attempt_worktree_path,
     feature_checkpoint_commit_ref, normalize_posix_path, sandbox_code_root_for_integration,
     worktree_branch_name, worktree_integration_event_type, worktree_integration_metadata,
 };
-
-pub(super) fn accepted_attempt_projection_base_metadata(
-    node: &WorkspacePlanNodeRecord,
-    attempt: &WorkspaceTaskSessionAttemptRecord,
-) -> Map<String, Value> {
-    let mut metadata = object_or_empty(node.metadata_json.clone());
-    metadata.remove("terminal_attempt_retry_count");
-    metadata.remove("terminal_attempt_retry_reason");
-    metadata.remove("retry_not_before");
-    if !attempt_commit_refs(attempt).is_empty() {
-        return metadata;
-    }
-    for key in NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS {
-        metadata.remove(key);
-    }
-    metadata
-}
-
-pub(super) fn accepted_attempt_projection_feature_checkpoint(
-    node: &WorkspacePlanNodeRecord,
-    attempt: &WorkspaceTaskSessionAttemptRecord,
-) -> Option<Value> {
-    if !attempt_commit_refs(attempt).is_empty() || node.feature_checkpoint_json.is_none() {
-        return node.feature_checkpoint_json.clone();
-    }
-    reset_feature_checkpoint(node.feature_checkpoint_json.clone())
-}
-
-pub(super) fn accepted_worktree_projection_complete_for_node(
-    node: &WorkspacePlanNodeRecord,
-    attempt: &WorkspaceTaskSessionAttemptRecord,
-    metadata: &Map<String, Value>,
-) -> bool {
-    let has_commit_for_integration = !attempt_commit_refs(attempt).is_empty()
-        || accepted_attempt_integration_commit_ref(node).is_some();
-    if !has_commit_for_integration {
-        return true;
-    }
-    let status = metadata_string(metadata.get("worktree_integration_status"))
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    WORKTREE_INTEGRATION_DONE_STATUSES.contains(&status.as_str())
-}
 
 pub(super) fn done_node_needs_worktree_integration_retry(node: &WorkspacePlanNodeRecord) -> bool {
     if node.intent != "done" || node.execution != "idle" {
@@ -328,64 +292,4 @@ pub(super) fn clear_failed_worktree_retry_stale_attempt_metadata(
         metadata.remove(*key);
     }
     metadata
-}
-
-pub(super) fn apply_verification_checkpoint_metadata(
-    metadata: &mut Map<String, Value>,
-    summary: &str,
-    commit_ref: Option<&str>,
-    git_diff_summary: Option<&str>,
-    test_commands: &[String],
-    created_at: DateTime<Utc>,
-) {
-    if commit_ref.is_none() && git_diff_summary.is_none() && test_commands.is_empty() {
-        return;
-    }
-    if let Some(commit_ref) = commit_ref {
-        if let Some(Value::Object(feature_checkpoint)) = metadata.get_mut("feature_checkpoint") {
-            feature_checkpoint.insert("commit_ref".to_string(), json!(commit_ref));
-        }
-    }
-    let handoff = metadata
-        .entry("handoff_package".to_string())
-        .or_insert_with(|| {
-            json!({
-                "reason": "planned",
-                "summary": "Accepted by durable plan verifier.",
-                "next_steps": [],
-                "completed_steps": [],
-                "changed_files": [],
-                "git_head": Value::Null,
-                "git_diff_summary": "",
-                "test_commands": [],
-                "verification_notes": "",
-                "created_at": created_at.to_rfc3339()
-            })
-        });
-    if !handoff.is_object() {
-        *handoff = json!({
-            "reason": "planned",
-            "summary": "Accepted by durable plan verifier.",
-            "next_steps": [],
-            "completed_steps": [],
-            "changed_files": [],
-            "git_head": Value::Null,
-            "git_diff_summary": "",
-            "test_commands": [],
-            "verification_notes": "",
-            "created_at": created_at.to_rfc3339()
-        });
-    }
-    if let Value::Object(handoff) = handoff {
-        if let Some(commit_ref) = commit_ref {
-            handoff.insert("git_head".to_string(), json!(commit_ref));
-        }
-        if let Some(git_diff_summary) = git_diff_summary {
-            handoff.insert("git_diff_summary".to_string(), json!(git_diff_summary));
-        }
-        if !test_commands.is_empty() {
-            handoff.insert("test_commands".to_string(), json!(test_commands));
-        }
-        handoff.insert("verification_notes".to_string(), json!(summary));
-    }
 }
