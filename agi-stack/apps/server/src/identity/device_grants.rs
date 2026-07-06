@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use agistack_adapters_redis::{DeviceGrant, RedisDeviceGrantStore};
-use agistack_adapters_secrets::{generate_device_user_code, generate_urlsafe_token};
+use agistack_adapters_secrets::{try_generate_device_user_code, try_generate_urlsafe_token};
 
 use super::{
     DeviceCodeView, DeviceTokenView, IdentityError, DEVICE_CODE_INTERVAL_SECS,
@@ -215,7 +215,7 @@ pub(super) async fn create_device_code_with_store(
     store: &dyn DeviceGrantStore,
 ) -> Result<DeviceCodeView, IdentityError> {
     for _ in 0..DEVICE_USER_CODE_ALLOC_ATTEMPTS {
-        let user_code = generate_device_user_code();
+        let user_code = try_generate_device_user_code().map_err(IdentityError::internal)?;
         if store
             .user_code_exists(&user_code)
             .await
@@ -224,7 +224,7 @@ pub(super) async fn create_device_code_with_store(
             continue;
         }
 
-        let device_code = generate_urlsafe_token(32);
+        let device_code = try_generate_urlsafe_token(32).map_err(IdentityError::internal)?;
         let grant = DeviceGrant::pending(user_code.clone());
         store
             .create_pending(&device_code, &grant, DEVICE_CODE_TTL_SECS)

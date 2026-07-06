@@ -43,7 +43,7 @@ use agistack_adapters_postgres::{
 };
 use agistack_adapters_redis::DeviceGrant;
 use agistack_adapters_secrets::{
-    generate_api_key, generate_urlsafe_token, generate_uuid_v4, verify_password,
+    try_generate_api_key, try_generate_urlsafe_token, try_generate_uuid_v4, verify_password,
 };
 use agistack_core::ports::{EmailMessage, EmailSender};
 

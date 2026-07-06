@@ -44,8 +44,8 @@ impl PgIdentityService {
         }
 
         // 4. Mint + persist the session key (name/TTL identical to Python).
-        let plain_key = generate_api_key();
-        let key_id = generate_uuid_v4();
+        let plain_key = try_generate_api_key().map_err(IdentityError::internal)?;
+        let key_id = try_generate_uuid_v4().map_err(IdentityError::internal)?;
         let name = format!("Login Session {username}");
         let expires_at = chrono::DateTime::from_timestamp_millis(now_ms + LOGIN_KEY_TTL_MS);
         self.users
@@ -123,8 +123,8 @@ impl PgIdentityService {
             permissions.push("admin".to_string());
         }
 
-        let plain_key = generate_api_key();
-        let key_id = generate_uuid_v4();
+        let plain_key = try_generate_api_key().map_err(IdentityError::internal)?;
+        let key_id = try_generate_uuid_v4().map_err(IdentityError::internal)?;
         let name = format!("CLI device login ({user_code})");
         let expires_at = chrono::DateTime::from_timestamp_millis(now_ms + DEVICE_KEY_TTL_MS);
         self.users

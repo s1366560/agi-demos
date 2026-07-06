@@ -23,7 +23,7 @@ impl PgIdentityService {
 
         let now = ms_to_datetime(now_ms);
         let invitation = InvitationRecord {
-            id: generate_uuid_v4(),
+            id: try_generate_uuid_v4().map_err(IdentityError::internal)?,
             tenant_id: tenant_id.to_string(),
             email: normalize_email(email),
             role: if role.trim().is_empty() {
@@ -31,7 +31,7 @@ impl PgIdentityService {
             } else {
                 role.to_string()
             },
-            token: generate_urlsafe_token(32),
+            token: try_generate_urlsafe_token(32).map_err(IdentityError::internal)?,
             status: "pending".to_string(),
             invited_by: user_id.to_string(),
             accepted_by: None,
@@ -135,7 +135,7 @@ impl PgIdentityService {
             .map_err(IdentityError::internal)?;
         self.invitations
             .ensure_user_tenant_membership(
-                &generate_uuid_v4(),
+                &try_generate_uuid_v4().map_err(IdentityError::internal)?,
                 user_id,
                 &invitation.tenant_id,
                 &invitation.role,

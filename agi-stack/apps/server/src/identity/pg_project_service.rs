@@ -92,8 +92,8 @@ impl PgIdentityService {
             )
             .await?;
         let record = ProjectCreateRecord {
-            id: generate_uuid_v4(),
-            membership_id: generate_uuid_v4(),
+            id: try_generate_uuid_v4().map_err(IdentityError::internal)?,
+            membership_id: try_generate_uuid_v4().map_err(IdentityError::internal)?,
             tenant_id: input.tenant_id,
             name: input.name,
             description: input.description,
@@ -296,7 +296,7 @@ impl PgIdentityService {
             ));
         }
 
-        let membership_id = generate_uuid_v4();
+        let membership_id = try_generate_uuid_v4().map_err(IdentityError::internal)?;
         self.projects
             .add_project_member(
                 &membership_id,

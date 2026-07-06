@@ -57,6 +57,25 @@ fn push_lower_hex_byte(out: &mut String, byte: u8) {
     out.push(LOWER_HEX[(byte & 0x0f) as usize] as char);
 }
 
+fn fill_random(bytes: &mut [u8], purpose: &str) -> Result<(), SecretError> {
+    getrandom::getrandom(bytes)
+        .map_err(|err| SecretError(format!("failed to read OS CSPRNG for {purpose}: {err}")))
+}
+
+/// Mint a fresh API key: `ms_sk_` + 64 lowercase hex chars from 32 CSPRNG bytes.
+/// Shape-identical to Python `f"ms_sk_{secrets.token_bytes(32).hex()}"`. The
+/// returned value is the *plaintext* key shown to the caller exactly once.
+pub fn try_generate_api_key() -> Result<String, SecretError> {
+    let mut bytes = [0u8; 32];
+    fill_random(&mut bytes, "API key")?;
+    let mut key = String::with_capacity(API_KEY_PREFIX.len() + 64);
+    key.push_str(API_KEY_PREFIX);
+    for byte in bytes {
+        push_lower_hex_byte(&mut key, byte);
+    }
+    Ok(key)
+}
+
 /// Mint a fresh API key: `ms_sk_` + 64 lowercase hex chars from 32 CSPRNG bytes.
 /// Shape-identical to Python `f"ms_sk_{secrets.token_bytes(32).hex()}"`. The
 /// returned value is the *plaintext* key shown to the caller exactly once.
@@ -76,10 +95,34 @@ pub fn generate_api_key() -> String {
 /// Generate a URL-safe, no-padding token from `num_bytes` random bytes. This is
 /// shape-compatible with Python `secrets.token_urlsafe(num_bytes)` and is used
 /// by the P2 invitation flow for bearer links that must fit safely in URLs.
+pub fn try_generate_urlsafe_token(num_bytes: usize) -> Result<String, SecretError> {
+    let mut bytes = vec![0u8; num_bytes];
+    fill_random(&mut bytes, "url-safe token")?;
+    Ok(base64_urlsafe_no_pad(&bytes))
+}
+
+/// Generate a URL-safe, no-padding token from `num_bytes` random bytes. This is
+/// shape-compatible with Python `secrets.token_urlsafe(num_bytes)` and is used
+/// by the P2 invitation flow for bearer links that must fit safely in URLs.
 pub fn generate_urlsafe_token(num_bytes: usize) -> String {
     let mut bytes = vec![0u8; num_bytes];
     getrandom::getrandom(&mut bytes).expect("OS CSPRNG must be available to mint tokens");
     base64_urlsafe_no_pad(&bytes)
+}
+
+/// Mint an 8-character device-login user code using Python's ambiguity-free
+/// alphabet. The alphabet has exactly 32 symbols, so `byte & 31` maps CSPRNG
+/// bytes without modulo bias.
+pub fn try_generate_device_user_code() -> Result<String, SecretError> {
+    let alphabet = DEVICE_USER_CODE_ALPHABET.as_bytes();
+    debug_assert_eq!(alphabet.len(), 32);
+    let mut bytes = [0u8; DEVICE_USER_CODE_LEN];
+    fill_random(&mut bytes, "device user code")?;
+    let mut out = String::with_capacity(DEVICE_USER_CODE_LEN);
+    for byte in bytes {
+        out.push(alphabet[(byte & 31) as usize] as char);
+    }
+    Ok(out)
 }
 
 /// Mint an 8-character device-login user code using Python's ambiguity-free
@@ -121,6 +164,25 @@ fn base64_urlsafe_no_pad(bytes: &[u8]) -> String {
 /// mirroring Python's `str(uuid4())` used for ids like `api_keys.id`. Kept
 /// dependency-free (16 CSPRNG bytes with the version/variant bits set) so the
 /// crate stays a thin credential-primitives layer.
+pub fn try_generate_uuid_v4() -> Result<String, SecretError> {
+    let mut b = [0u8; 16];
+    fill_random(&mut b, "UUID v4")?;
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let mut s = String::with_capacity(36);
+    for (i, byte) in b.iter().enumerate() {
+        if matches!(i, 4 | 6 | 8 | 10) {
+            s.push('-');
+        }
+        push_lower_hex_byte(&mut s, *byte);
+    }
+    Ok(s)
+}
+
+/// Generate a random RFC 4122 **v4** UUID as a lowercase, hyphenated string —
+/// mirroring Python's `str(uuid4())` used for ids like `api_keys.id`. Kept
+/// dependency-free (16 CSPRNG bytes with the version/variant bits set) so the
+/// crate stays a thin credential-primitives layer.
 pub fn generate_uuid_v4() -> String {
     let mut b = [0u8; 16];
     getrandom::getrandom(&mut b).expect("OS CSPRNG must be available to mint ids");
@@ -136,7 +198,7 @@ pub fn generate_uuid_v4() -> String {
     s
 }
 
-/// A minimal opaque error for the (rare) hashing failure path.
+/// A minimal opaque error for the rare secret primitive failure paths.
 #[derive(Debug)]
 pub struct SecretError(pub String);
 
@@ -186,7 +248,7 @@ mod unit {
 
     #[test]
     fn generated_key_has_ms_sk_shape() {
-        let k = generate_api_key();
+        let k = try_generate_api_key().unwrap();
         assert!(k.starts_with("ms_sk_"));
         // ms_sk_ (6) + 64 hex chars.
         assert_eq!(k.len(), 6 + 64);
@@ -195,7 +257,10 @@ mod unit {
             .chars()
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
         // Two mints differ (CSPRNG, not constant).
-        assert_ne!(generate_api_key(), generate_api_key());
+        assert_ne!(
+            try_generate_api_key().unwrap(),
+            try_generate_api_key().unwrap()
+        );
     }
 
     #[test]
@@ -214,28 +279,28 @@ mod unit {
         assert_eq!(base64_urlsafe_no_pad(&[0, 0, 0]), "AAAA");
         assert_eq!(base64_urlsafe_no_pad(b"hello"), "aGVsbG8");
 
-        let token = generate_urlsafe_token(32);
+        let token = try_generate_urlsafe_token(32).unwrap();
         // Python `secrets.token_urlsafe(32)` produces ceil(32*4/3)=43 chars
         // without `=` padding.
         assert_eq!(token.len(), 43);
         assert!(token
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
-        assert_ne!(token, generate_urlsafe_token(32));
+        assert_ne!(token, try_generate_urlsafe_token(32).unwrap());
     }
 
     #[test]
     fn device_user_code_matches_python_shape() {
-        let code = generate_device_user_code();
+        let code = try_generate_device_user_code().unwrap();
         assert_eq!(code.len(), DEVICE_USER_CODE_LEN);
         assert!(code.chars().all(|c| DEVICE_USER_CODE_ALPHABET.contains(c)));
         assert!(!code.chars().any(|c| matches!(c, 'I' | 'O' | '0' | '1')));
-        assert_ne!(code, generate_device_user_code());
+        assert_ne!(code, try_generate_device_user_code().unwrap());
     }
 
     #[test]
     fn generated_uuid_is_v4_shaped() {
-        let id = generate_uuid_v4();
+        let id = try_generate_uuid_v4().unwrap();
         // 8-4-4-4-12 hyphenated, 36 chars total.
         assert_eq!(id.len(), 36);
         let parts: Vec<&str> = id.split('-').collect();
@@ -249,6 +314,9 @@ mod unit {
         assert!(id
             .chars()
             .all(|c| c == '-' || (c.is_ascii_hexdigit() && !c.is_ascii_uppercase())));
-        assert_ne!(generate_uuid_v4(), generate_uuid_v4());
+        assert_ne!(
+            try_generate_uuid_v4().unwrap(),
+            try_generate_uuid_v4().unwrap()
+        );
     }
 }

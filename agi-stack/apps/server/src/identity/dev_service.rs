@@ -9,7 +9,7 @@ use agistack_adapters_postgres::{
     normalize_email, ProjectDashboardStatsRecord, ProjectUpdatePatch, TenantUpdatePatch,
 };
 use agistack_adapters_redis::DeviceGrant;
-use agistack_adapters_secrets::generate_api_key;
+use agistack_adapters_secrets::try_generate_api_key;
 
 use super::device_grants::{
     create_device_code_with_store, normalize_device_user_code, poll_device_token_from_store,
@@ -129,7 +129,7 @@ impl IdentityService for DevIdentityService {
             ));
         }
         Ok(LoginOutcome {
-            access_token: generate_api_key(),
+            access_token: try_generate_api_key().map_err(IdentityError::internal)?,
             token_type: "bearer".to_string(),
             must_change_password: false,
         })
@@ -167,7 +167,11 @@ impl IdentityService for DevIdentityService {
             ));
         }
 
-        let approved = DeviceGrant::approved(grant.user_code, user_id, generate_api_key());
+        let approved = DeviceGrant::approved(
+            grant.user_code,
+            user_id,
+            try_generate_api_key().map_err(IdentityError::internal)?,
+        );
         self.device_grants
             .save_preserving_ttl(&device_code, &approved, DEVICE_CODE_TTL_SECS)
             .await

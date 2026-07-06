@@ -51,8 +51,8 @@ impl PgIdentityService {
         name: &str,
         description: Option<&str>,
     ) -> Result<TenantView, IdentityError> {
-        let tenant_id = generate_uuid_v4();
-        let membership_id = generate_uuid_v4();
+        let tenant_id = try_generate_uuid_v4().map_err(IdentityError::internal)?;
+        let membership_id = try_generate_uuid_v4().map_err(IdentityError::internal)?;
         let record = self
             .tenants
             .create_tenant(
@@ -148,7 +148,7 @@ impl PgIdentityService {
                 "User is already a member of this tenant",
             ));
         }
-        let membership_id = generate_uuid_v4();
+        let membership_id = try_generate_uuid_v4().map_err(IdentityError::internal)?;
         self.tenants
             .add_tenant_member(
                 &membership_id,
