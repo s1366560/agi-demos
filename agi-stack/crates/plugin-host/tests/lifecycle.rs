@@ -52,7 +52,7 @@ fn enable_registers_and_disable_unregisters_exactly_its_tools() {
 
     // Nothing registered yet.
     assert!(registry.names().is_empty());
-    assert!(!host.is_enabled("notes-pack"));
+    assert!(!host.is_enabled("notes-pack").unwrap());
 
     // Enable: both declared tools appear atomically.
     let added = host.enable(&manifest, &factory).unwrap();
@@ -60,7 +60,7 @@ fn enable_registers_and_disable_unregisters_exactly_its_tools() {
         added,
         vec!["note_create".to_string(), "note_search".to_string()]
     );
-    assert!(host.is_enabled("notes-pack"));
+    assert!(host.is_enabled("notes-pack").unwrap());
     assert_eq!(
         registry.names(),
         vec!["note_create".to_string(), "note_search".to_string()]
@@ -74,12 +74,12 @@ fn enable_registers_and_disable_unregisters_exactly_its_tools() {
     assert!(host.enable(&manifest, &factory).is_err());
 
     // Disable: exactly its tools are removed, registry returns to empty.
-    let removed = host.disable("notes-pack");
+    let removed = host.disable("notes-pack").unwrap();
     assert_eq!(
         removed,
         vec!["note_create".to_string(), "note_search".to_string()]
     );
-    assert!(!host.is_enabled("notes-pack"));
+    assert!(!host.is_enabled("notes-pack").unwrap());
     assert!(registry.names().is_empty());
 }
 
@@ -101,7 +101,7 @@ fn disabling_one_plugin_leaves_others_intact() {
         vec!["a_tool".to_string(), "b_tool".to_string()]
     );
 
-    host.disable("a");
+    host.disable("a").unwrap();
     assert_eq!(registry.names(), vec!["b_tool".to_string()]);
-    assert_eq!(host.enabled_plugins(), vec!["b".to_string()]);
+    assert_eq!(host.enabled_plugins().unwrap(), vec!["b".to_string()]);
 }

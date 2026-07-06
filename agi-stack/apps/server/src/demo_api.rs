@@ -136,11 +136,11 @@ async fn agent_resume(
 
 // ---- plugins (enable/disable lifecycle) -----------------------------------
 
-async fn plugins_list(State(app): State<AppState>) -> Json<Value> {
-    Json(json!({
+async fn plugins_list(State(app): State<AppState>) -> Result<Json<Value>, (StatusCode, String)> {
+    Ok(Json(json!({
         "tools": app.registry.names(),
-        "enabled_plugins": app.plugins.enabled_plugins(),
-    }))
+        "enabled_plugins": app.plugins.enabled_plugins().map_err(internal)?,
+    })))
 }
 
 async fn plugins_enable(
@@ -166,13 +166,13 @@ struct DisableRequest {
 async fn plugins_disable(
     State(app): State<AppState>,
     Json(req): Json<DisableRequest>,
-) -> Json<Value> {
-    let removed = app.plugins.disable(&req.name);
-    Json(json!({
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let removed = app.plugins.disable(&req.name).map_err(internal)?;
+    Ok(Json(json!({
         "plugin": req.name,
         "removed": removed,
         "tools": app.registry.names(),
-    }))
+    })))
 }
 
 // ---- control plane / data plane -------------------------------------------

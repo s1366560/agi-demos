@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(registry.get("score").unwrap().trust(), Trust::SandboxedWasm);
 
         // Disable removes exactly what it added.
-        let removed = host.disable("scorer-pkg");
+        let removed = host.disable("scorer-pkg").unwrap();
         assert_eq!(removed, vec!["score".to_string()]);
         assert!(registry.get("score").is_none());
     }
