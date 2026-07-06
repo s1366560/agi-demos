@@ -3,8 +3,8 @@ use std::sync::Arc;
 use agistack_adapters_postgres::{
     BlackboardOutboxRecord, WorkspaceMessageRecord, WorkspacePlanOutboxRecord,
 };
-use agistack_adapters_secrets::generate_uuid_v4;
-use agistack_core::ports::CoreResult;
+use agistack_adapters_secrets::try_generate_uuid_v4;
+use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
@@ -85,7 +85,7 @@ impl WorkspaceAgentMentionBindingHandler {
         let message = self
             .store
             .create_workspace_message(WorkspaceMessageRecord {
-                id: generate_uuid_v4(),
+                id: try_generate_uuid_v4().map_err(|err| CoreError::Storage(err.to_string()))?,
                 workspace_id: workspace_id.to_string(),
                 sender_id: target_agent_id.to_string(),
                 sender_type: "agent".to_string(),
@@ -98,7 +98,7 @@ impl WorkspaceAgentMentionBindingHandler {
             .await?;
         self.store
             .enqueue_blackboard_outbox(BlackboardOutboxRecord {
-                id: generate_uuid_v4(),
+                id: try_generate_uuid_v4().map_err(|err| CoreError::Storage(err.to_string()))?,
                 workspace_id: workspace_id.to_string(),
                 tenant_id: tenant_id.to_string(),
                 project_id: project_id.to_string(),

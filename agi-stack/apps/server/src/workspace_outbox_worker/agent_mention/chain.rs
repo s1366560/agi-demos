@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use agistack_adapters_postgres::{
     WorkspaceAgentRecord, WorkspaceMessageRecord, WorkspacePlanOutboxRecord,
 };
-use agistack_adapters_secrets::generate_uuid_v4;
-use agistack_core::ports::CoreResult;
+use agistack_adapters_secrets::try_generate_uuid_v4;
+use agistack_core::ports::{CoreError, CoreResult};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 
@@ -65,7 +65,8 @@ impl WorkspaceAgentMentionBindingHandler {
             let next_chain_depth = chain_depth + 1;
             self.store
                 .enqueue_plan_outbox(WorkspacePlanOutboxRecord {
-                    id: generate_uuid_v4(),
+                    id: try_generate_uuid_v4()
+                        .map_err(|err| CoreError::Storage(err.to_string()))?,
                     plan_id: None,
                     workspace_id: input.workspace_id.to_string(),
                     event_type: WORKSPACE_AGENT_MENTION_EVENT.to_string(),
