@@ -23,7 +23,7 @@ use serde_json::{json, Value};
 use agistack_adapters_postgres::{
     NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord,
 };
-use agistack_adapters_secrets::{generate_urlsafe_token, generate_uuid_v4};
+use agistack_adapters_secrets::{try_generate_urlsafe_token, try_generate_uuid_v4};
 
 use crate::{auth::Identity, AppState};
 
@@ -208,9 +208,9 @@ impl ShareService for PgShareService {
         let record = self
             .repo
             .create_share(NewShareRecord {
-                id: generate_uuid_v4(),
+                id: try_generate_uuid_v4().map_err(ShareError::internal)?,
                 memory_id: memory_id.to_string(),
-                share_token: generate_urlsafe_token(32),
+                share_token: try_generate_urlsafe_token(32).map_err(ShareError::internal)?,
                 shared_with_user_id: target.as_ref().and_then(|t| match t.kind {
                     TargetKind::User => Some(t.id.clone()),
                     TargetKind::Project => None,
@@ -385,9 +385,9 @@ impl ShareService for DevShareService {
         }
 
         let record = ShareRecord {
-            id: generate_uuid_v4(),
+            id: try_generate_uuid_v4().map_err(ShareError::internal)?,
             memory_id: memory_id.to_string(),
-            share_token: Some(generate_urlsafe_token(32)),
+            share_token: Some(try_generate_urlsafe_token(32).map_err(ShareError::internal)?),
             shared_with_user_id: target.as_ref().and_then(|t| match t.kind {
                 TargetKind::User => Some(t.id.clone()),
                 TargetKind::Project => None,

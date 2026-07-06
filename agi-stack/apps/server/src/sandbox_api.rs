@@ -87,7 +87,7 @@ use ws_urls::{
 };
 
 use terminal_protocol::{
-    new_terminal_session_id, terminal_error_message, TerminalSessionRecord,
+    terminal_error_message, try_new_terminal_session_id, TerminalSessionRecord,
     TerminalSessionRecorder, TerminalSize,
 };
 pub(crate) use views::ExecuteToolResponse;
@@ -413,14 +413,20 @@ pub(crate) struct McpUpstreamTokenRecord {
 }
 
 impl McpUpstreamTokenRecord {
-    fn new(project_id: String, sandbox_id: String, now_ms: i64, ttl_seconds: i64) -> Self {
-        Self {
-            token: agistack_adapters_secrets::generate_urlsafe_token(32),
+    fn new(
+        project_id: String,
+        sandbox_id: String,
+        now_ms: i64,
+        ttl_seconds: i64,
+    ) -> SandboxApiResult<Self> {
+        Ok(Self {
+            token: agistack_adapters_secrets::try_generate_urlsafe_token(32)
+                .map_err(SandboxApiError::internal)?,
             project_id,
             sandbox_id,
             issued_at_ms: now_ms,
             expires_at_ms: now_ms + ttl_seconds.max(1) * 1000,
-        }
+        })
     }
 }
 

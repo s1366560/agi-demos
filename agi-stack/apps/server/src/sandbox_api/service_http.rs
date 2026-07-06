@@ -104,7 +104,8 @@ impl ProjectSandboxService {
                 expires_in_seconds: 0,
             });
         }
-        let token = agistack_adapters_secrets::generate_urlsafe_token(32);
+        let token = agistack_adapters_secrets::try_generate_urlsafe_token(32)
+            .map_err(SandboxApiError::internal)?;
         let expires_in_seconds = preview_session_ttl_seconds();
         self.http_registry
             .create_preview_session(
@@ -135,7 +136,7 @@ impl ProjectSandboxService {
         let now = now_ms();
         let record = TerminalSessionRecord::new(
             project_id.to_string(),
-            new_terminal_session_id(),
+            try_new_terminal_session_id()?,
             TerminalSize::default(),
             false,
             now,
@@ -187,7 +188,7 @@ impl ProjectSandboxService {
             sandbox_id.to_string(),
             now,
             ttl_seconds,
-        );
+        )?;
         self.http_registry
             .create_mcp_upstream_token(record.clone(), ttl_seconds)
             .await?;

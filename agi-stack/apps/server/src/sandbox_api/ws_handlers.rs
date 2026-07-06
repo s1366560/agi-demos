@@ -199,7 +199,10 @@ pub(super) async fn proxy_project_terminal_ws_impl(
         }
     };
     let origin = terminal_websocket_origin(terminal_url, &ws_target);
-    let session_id = query.session_id.unwrap_or_else(new_terminal_session_id);
+    let session_id = match query.session_id {
+        Some(session_id) => session_id,
+        None => try_new_terminal_session_id()?,
+    };
     let initial_size = app
         .sandboxes
         .get_terminal_session(&project_id, &session_id)

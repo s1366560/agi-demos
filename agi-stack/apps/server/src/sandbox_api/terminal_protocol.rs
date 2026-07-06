@@ -3,7 +3,7 @@ use serde_json::json;
 use tokio_tungstenite::tungstenite::protocol::Message as TungsteniteMessage;
 
 use super::{
-    now_ms, SandboxApiResult, SharedHttpServiceRegistry, TERMINAL_DEFAULT_COLS,
+    now_ms, SandboxApiError, SandboxApiResult, SharedHttpServiceRegistry, TERMINAL_DEFAULT_COLS,
     TERMINAL_DEFAULT_ROWS, TTYD_INPUT_COMMAND, TTYD_PREFERENCES_COMMAND, TTYD_RESIZE_COMMAND,
 };
 
@@ -16,12 +16,13 @@ pub(super) struct TerminalClientWsMessage {
     pub(super) rows: Option<u16>,
 }
 
-pub(super) fn new_terminal_session_id() -> String {
-    agistack_adapters_secrets::generate_uuid_v4()
+pub(super) fn try_new_terminal_session_id() -> SandboxApiResult<String> {
+    Ok(agistack_adapters_secrets::try_generate_uuid_v4()
+        .map_err(SandboxApiError::internal)?
         .replace('-', "")
         .chars()
         .take(12)
-        .collect()
+        .collect())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

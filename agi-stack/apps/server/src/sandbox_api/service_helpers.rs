@@ -192,7 +192,8 @@ pub(super) fn validate_http_service_name(name: &str) -> SandboxApiResult<()> {
 
 pub(super) fn normalize_http_service_id(service_id: Option<&str>) -> SandboxApiResult<String> {
     let Some(service_id) = service_id else {
-        let uuid = agistack_adapters_secrets::generate_uuid_v4();
+        let uuid =
+            agistack_adapters_secrets::try_generate_uuid_v4().map_err(SandboxApiError::internal)?;
         return Ok(format!(
             "http-{}",
             uuid.replace('-', "").chars().take(12).collect::<String>()

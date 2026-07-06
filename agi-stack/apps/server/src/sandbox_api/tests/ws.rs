@@ -206,7 +206,9 @@ async fn spawn_terminal_ws_proxy(
                 let registry = registry.clone();
                 let project_id = project_id.clone();
                 async move {
-                    let session_id = query.session_id.unwrap_or_else(new_terminal_session_id);
+                    let session_id = query
+                        .session_id
+                        .unwrap_or_else(|| try_new_terminal_session_id().unwrap());
                     let initial_size = registry
                         .get_terminal_session(&project_id, &session_id)
                         .await
