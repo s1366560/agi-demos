@@ -149,6 +149,7 @@ local-sandbox-app/
 .omx/
 .memstack/git-remotes/
 .memstack/worktrees/
+agi-stack/apps/run-os-prototype/.npm-cache/
 
 # Runtime project workspace manifests created by sandbox lifecycle hooks.
 # Keep tracked plugin/persona assets under .memstack/, but do not track
