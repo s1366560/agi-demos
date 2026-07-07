@@ -589,8 +589,15 @@ fn row_error(err: sqlx::Error) -> CoreError {
 mod tests {
     use super::*;
 
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn lock_env() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().expect("env test lock is not poisoned")
+    }
+
     #[test]
     fn decrypt_config_matches_python_shape() {
+        let _guard = lock_env();
         std::env::set_var(
             "LLM_ENCRYPTION_KEY",
             "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
@@ -606,6 +613,7 @@ mod tests {
 
     #[test]
     fn decrypt_config_falls_back_to_empty_object_like_python_repo() {
+        let _guard = lock_env();
         std::env::remove_var("LLM_ENCRYPTION_KEY");
         assert_eq!(decrypt_connection_config(None), serde_json::json!({}));
         assert_eq!(decrypt_connection_config(Some("")), serde_json::json!({}));
@@ -617,6 +625,7 @@ mod tests {
 
     #[test]
     fn encrypt_config_matches_python_decrypt_shape() {
+        let _guard = lock_env();
         std::env::set_var(
             "LLM_ENCRYPTION_KEY",
             "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
