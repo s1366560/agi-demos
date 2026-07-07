@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Agistack Desktop",
+  "productName": "agi-stack Desktop",
   "version": "0.1.0",
   "identifier": "ai.agistack.desktop",
   "build": {
@@ -10,9 +10,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Agistack Desktop",
-        "width": 920,
-        "height": 680
+        "title": "agi-stack Desktop",
+        "width": 1440,
+        "height": 1024,
+        "minWidth": 1080,
+        "minHeight": 720
       }
     ],
     "security": {

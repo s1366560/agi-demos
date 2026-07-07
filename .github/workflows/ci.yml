@@ -158,6 +158,199 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  agi-stack-strangler-gate:
+    name: agi-stack Strangler Gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agi-stack
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+          rustup target add wasm32-unknown-unknown
+
+      - name: Run strangler gate
+        run: make strangler-gate
+
+  agi-stack-bench:
+    name: agi-stack Bench Scorecard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agi-stack
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Restore previous approved bench scorecard
+        id: bench-baseline-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: agi-stack/target/bench/baseline
+          key: agi-stack-bench-scorecard-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            agi-stack-bench-scorecard-${{ github.ref_name }}-
+
+      - name: Select restored bench baseline
+        run: |
+          mkdir -p target/bench/baseline
+          if [ -s target/bench/baseline/scorecard.json ]; then
+            echo "BENCH_BASELINE=target/bench/baseline/scorecard.json" >> "$GITHUB_ENV"
+            echo "Using restored bench baseline: target/bench/baseline/scorecard.json"
+          else
+            echo "BENCH_BASELINE=" >> "$GITHUB_ENV"
+            echo "No previous approved bench baseline restored"
+          fi
+
+      - name: Run go/no-go bench scorecard
+        run: make bench
+
+      - name: Publish bench trend summary
+        if: always()
+        run: |
+          if [ -f target/bench/scorecard.json ]; then
+            if [ -n "${BENCH_BASELINE:-}" ]; then
+              python3 scripts/bench-trend-summary.py target/bench/scorecard.json --baseline "$BENCH_BASELINE"
+            else
+              python3 scripts/bench-trend-summary.py target/bench/scorecard.json
+            fi
+          else
+            {
+              echo "## agi-stack Bench Scorecard"
+              echo ""
+              echo "Bench did not produce target/bench/scorecard.json."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Stage approved bench scorecard baseline
+        if: success()
+        run: |
+          mkdir -p target/bench/baseline
+          cp target/bench/scorecard.json target/bench/baseline/scorecard.json
+
+      - name: Save approved bench scorecard baseline
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: agi-stack/target/bench/baseline
+          key: agi-stack-bench-scorecard-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload bench scorecard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agi-stack-bench-scorecard
+          path: agi-stack/target/bench/scorecard.json
+          if-no-files-found: error
+
+  agi-stack-desktop-bundle:
+    name: agi-stack Desktop Bundle
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: agi-stack
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Build desktop bundle
+        run: make desktop-bundle
+
+      - name: Smoke check desktop bundle
+        run: make desktop-bundle-smoke
+
+      - name: Upload desktop bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: agi-stack-desktop-bundle
+          path: agi-stack/apps/desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error
+
+  agi-stack-android-artifact:
+    name: agi-stack Android Artifact
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agi-stack
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;30.0.14904198"
+
+      - name: Build Android mobile library
+        run: make android NDK="$ANDROID_HOME/ndk/30.0.14904198" NDK_HOST_TAG=linux-x86_64
+
+      - name: Upload Android mobile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agi-stack-android-mobile
+          path: |
+            agi-stack/target/aarch64-linux-android/release/libagistack_mobile.so
+            agi-stack/target/kotlin/**
+          if-no-files-found: error
+
+  agi-stack-ios-artifact:
+    name: agi-stack iOS Artifact
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: agi-stack
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build iOS mobile library
+        run: make ios
+
+      - name: Upload iOS mobile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agi-stack-ios-mobile
+          path: |
+            agi-stack/target/AgistackMobile.xcframework/**
+            agi-stack/target/uniffi-swift/**
+            agi-stack/target/ios-headers/**
+          if-no-files-found: error
+
   # Docker build and deployment jobs require secrets to be configured
   # Uncomment when DOCKER_USERNAME and DOCKER_PASSWORD secrets are set
   # build-docker:

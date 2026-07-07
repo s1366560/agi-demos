@@ -88,6 +88,7 @@ cd agi-stack
 
 # —— 推荐:一键构建矩阵(`make help` 列出全部 target;详见 09-shipping-matrix)——
 make ci          # 最小门禁:整工作区测试(582 绿)+ 核心 wasm32
+make strangler-gate  # Strangler PR 门禁:fmt/clippy/test/wasm/parity/golden/gateway routing
 make all         # 全部免额外 SDK 的产物:server + wasm-web + desktop + 评分卡
 make android     # 移动:NDK 交叉编 .so + Kotlin(需 NDK,路径可 NDK= 覆盖)
 make ios         # 移动:XCFramework + Swift + 模拟器实跑(需 full Xcode)

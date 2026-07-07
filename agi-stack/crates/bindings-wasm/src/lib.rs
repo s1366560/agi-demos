@@ -15,14 +15,18 @@
 use std::sync::Arc;
 
 use js_sys::Promise;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use agistack_adapters_mem::{
     HashEmbedding, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm,
 };
-use agistack_core::ports::Clock;
+use agistack_core::model::Memory;
+use agistack_core::ports::{Clock, VectorIndexPort};
 use agistack_core::{Episode, MemoryService, SourceType};
+
+const SNAPSHOT_VERSION: u32 = 1;
 
 /// Wall-clock time for the browser, backed by JS `Date.now()` (millis since the
 /// Unix epoch). The web counterpart to `SystemClock`, which is unavailable on
@@ -40,6 +44,8 @@ impl Clock for WasmClock {
 #[wasm_bindgen]
 pub struct AgistackCore {
     service: MemoryService,
+    repo: Arc<InMemoryMemoryRepository>,
+    vectors: Arc<InMemoryVectorIndex>,
 }
 
 impl Default for AgistackCore {
@@ -53,14 +59,20 @@ impl AgistackCore {
     #[wasm_bindgen(constructor)]
     pub fn new() -> AgistackCore {
         let dim = 32;
+        let repo = Arc::new(InMemoryMemoryRepository::new());
+        let vectors = Arc::new(InMemoryVectorIndex::new());
         let service = MemoryService::new(
-            Arc::new(InMemoryMemoryRepository::new()),
+            repo.clone(),
             Arc::new(StubLlm),
             Arc::new(HashEmbedding::new(dim)),
             Arc::new(WasmClock),
         )
-        .with_vectors(Arc::new(InMemoryVectorIndex::new()));
-        AgistackCore { service }
+        .with_vectors(vectors.clone());
+        AgistackCore {
+            service,
+            repo,
+            vectors,
+        }
     }
 
     /// Ingest an episode. Promise -> the created `Memory` as a JSON string.
@@ -115,6 +127,54 @@ impl AgistackCore {
             ))
         })
     }
+
+    /// Export an app-owned persistence snapshot as JSON.
+    ///
+    /// The JS shell stores this string in IndexedDB (or another durable browser
+    /// store) and passes it to `importSnapshot` after reload. Keeping the actual
+    /// IndexedDB calls in JS preserves the Rust core's runtime-agnostic boundary.
+    #[wasm_bindgen(js_name = exportSnapshot)]
+    pub fn export_snapshot(&self) -> Result<String, JsValue> {
+        serde_json::to_string(&WasmPersistenceSnapshot {
+            version: SNAPSHOT_VERSION,
+            memories: self.repo.snapshot().map_err(to_js)?,
+        })
+        .map_err(to_js)
+    }
+
+    /// Restore a JSON snapshot produced by `exportSnapshot`.
+    #[wasm_bindgen(js_name = importSnapshot)]
+    pub fn import_snapshot(&self, snapshot_json: String) -> Promise {
+        let repo = self.repo.clone();
+        let vectors = self.vectors.clone();
+        future_to_promise(async move {
+            let snapshot: WasmPersistenceSnapshot =
+                serde_json::from_str(&snapshot_json).map_err(to_js)?;
+            if snapshot.version != SNAPSHOT_VERSION {
+                return Err(JsValue::from_str(
+                    "unsupported wasm persistence snapshot version",
+                ));
+            }
+
+            repo.replace_all(snapshot.memories.clone()).map_err(to_js)?;
+            vectors.clear().map_err(to_js)?;
+            for memory in snapshot.memories {
+                if let Some(embedding) = memory.embedding.as_deref() {
+                    vectors
+                        .upsert(&memory.project_id, &memory.id, embedding)
+                        .await
+                        .map_err(to_js)?;
+                }
+            }
+            Ok(JsValue::UNDEFINED)
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WasmPersistenceSnapshot {
+    version: u32,
+    memories: Vec<Memory>,
 }
 
 fn to_js<E: std::fmt::Display>(e: E) -> JsValue {

@@ -15,6 +15,7 @@ agistack-adapters-mem = { path = "../adapters-mem" }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
+serde.workspace = true
 serde_json.workspace = true
 
 # Newer rustc/LLVM emit bulk-memory ops by default; tell the bundled wasm-opt to

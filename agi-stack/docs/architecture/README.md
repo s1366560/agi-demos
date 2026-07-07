@@ -15,6 +15,7 @@
 9. **[08-control-data-plane-separation.md](08-control-data-plane-separation.md)** —— 控制流/数据流分离:控制面 = SSOT、声明式 level-triggered reconcile、xDS 风格版本化 typed 分发(version/nonce + ACK/NACK + last-good)、local-first = 数据面断连自治(学习 Kubernetes/Istio 控制面-数据面分离后的综合)。
 10. **[09-shipping-matrix.md](09-shipping-matrix.md)** —— 逐平台出厂矩阵:一份可移植核心 → server/web/桌面/Android/iOS 五类产物,各对应 [`Makefile`](../../Makefile) 一键 target,标注产物/体积/证据(Phase 5 可码部分)。
 11. **[10-production-migration.md](10-production-migration.md)** —— 生产迁移:Python 后端绞杀替换为 Rust 新架构。共享 Postgres 之上的 strangler-fig:反向代理网关按能力分流、逐能力灰度切换、契约字节兼容;P1..P8 全量波次计划 + 本波(P1 记忆/情节/召回)端到端落地证据。
+12. **[11-i1-i7-execution-plan.md](11-i1-i7-execution-plan.md)** —— I1-I7 未完成能力的执行计划:skill evolution 闭环、channel/runtime、workspace/agent runtime、graph/search、长尾域与平台发布门禁。
 
 ## 调研沉淀(证据基)
 

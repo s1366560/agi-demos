@@ -11,4 +11,6 @@ path = "src/main.rs"
 [dependencies]
 agistack-core = { path = "../../crates/core" }
 agistack-adapters-mem = { path = "../../crates/adapters-mem" }
+agistack-mobile = { package = "agistack-bindings-uniffi", path = "../../crates/bindings-uniffi" }
 futures.workspace = true
+serde_json.workspace = true
