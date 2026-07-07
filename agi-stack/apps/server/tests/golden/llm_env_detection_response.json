@@ -1,0 +1,24 @@
+{
+  "detected_providers": {
+    "ollama": {
+      "provider_type": "ollama",
+      "operation_type": "llm",
+      "api_key": null,
+      "base_url": "http://ollama.test",
+      "llm_model": "llama3.1:8b",
+      "llm_small_model": "llama3.1:8b",
+      "embedding_model": "nomic-embed-text",
+      "reranker_model": null
+    },
+    "openai": {
+      "provider_type": "openai",
+      "operation_type": "llm",
+      "api_key": "sk-openai",
+      "base_url": "https://api.openai.test/v1",
+      "llm_model": "gpt-4o",
+      "llm_small_model": "gpt-4o-mini",
+      "embedding_model": "text-embedding-3-small",
+      "reranker_model": null
+    }
+  }
+}

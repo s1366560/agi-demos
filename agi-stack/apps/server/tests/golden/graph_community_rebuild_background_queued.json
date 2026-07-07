@@ -1,0 +1,10 @@
+{
+  "status": "accepted",
+  "message": "Background community rebuild queued",
+  "communities_count": 0,
+  "entities_processed": 0,
+  "job_id": "<string>",
+  "job_status": "queued",
+  "event_topic": "graph:community_rebuilds:p1",
+  "requested_event_id": "<string>"
+}

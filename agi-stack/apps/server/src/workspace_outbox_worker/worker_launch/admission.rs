@@ -1,6 +1,47 @@
 use super::*;
 
 impl WorkerLaunchAdmissionHandler {
+    pub(super) async fn runtime_launch_admission(
+        &self,
+        conversation_id: &str,
+        reuse_existing: bool,
+        stream_poll: bool,
+    ) -> WorkerLaunchAdmissionSnapshot {
+        if reuse_existing && self.runtime_agent_running_exists(conversation_id).await {
+            return WorkerLaunchAdmissionSnapshot {
+                conversation_id: conversation_id.to_string(),
+                reuse_existing,
+                stream_poll,
+                cooldown_claimed: None,
+                action: WorkerLaunchAdmissionAction::SkipAlreadyRunning,
+            };
+        }
+
+        if reuse_existing {
+            self.runtime_clear_reused_session_markers(conversation_id)
+                .await;
+        }
+
+        let cooldown_claimed = if stream_poll {
+            None
+        } else {
+            Some(self.runtime_claim_launch_cooldown(conversation_id).await)
+        };
+        let action = if cooldown_claimed == Some(false) {
+            WorkerLaunchAdmissionAction::SkipCooldownActive
+        } else {
+            WorkerLaunchAdmissionAction::Admit
+        };
+
+        WorkerLaunchAdmissionSnapshot {
+            conversation_id: conversation_id.to_string(),
+            reuse_existing,
+            stream_poll,
+            cooldown_claimed,
+            action,
+        }
+    }
+
     pub(super) async fn runtime_agent_running_exists(&self, conversation_id: &str) -> bool {
         match self
             .runtime_state

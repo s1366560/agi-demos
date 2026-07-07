@@ -1,0 +1,10 @@
+{
+  "config_id": "chan-1",
+  "project_id": "project-1",
+  "channel_type": "feishu",
+  "status": "disconnected",
+  "connected": false,
+  "last_heartbeat": null,
+  "last_error": null,
+  "reconnect_attempts": 0
+}

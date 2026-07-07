@@ -129,6 +129,23 @@ async fn dev_service_applies_and_rejects_evolution_jobs() {
             applied_at: None,
         },
     );
+    service.evolution_jobs.lock().unwrap().insert(
+        "job-unsupported".to_string(),
+        SkillEvolutionJobRecord {
+            id: "job-unsupported".to_string(),
+            tenant_id: "tenant-1".to_string(),
+            project_id: None,
+            skill_name: "code-review".to_string(),
+            action: "unsupported_action".to_string(),
+            status: "pending_review".to_string(),
+            rationale: None,
+            candidate_content: Some("# Unsupported\n".to_string()),
+            session_ids: vec!["sess-3".to_string()],
+            skill_version_id: None,
+            created_at: now,
+            applied_at: None,
+        },
+    );
 
     // Act
     let applied = service
@@ -141,6 +158,14 @@ async fn dev_service_applies_and_rejects_evolution_jobs() {
         .unwrap();
     let repeated_apply = service
         .apply_evolution_job("u1", Some("tenant-1"), "job-apply")
+        .await
+        .unwrap_err();
+    let repeated_reject = service
+        .reject_evolution_job("u1", Some("tenant-1"), "job-reject")
+        .await
+        .unwrap_err();
+    let unsupported_apply = service
+        .apply_evolution_job("u1", Some("tenant-1"), "job-unsupported")
         .await
         .unwrap_err();
 
@@ -156,6 +181,16 @@ async fn dev_service_applies_and_rejects_evolution_jobs() {
     assert_eq!(
         repeated_apply.detail,
         "Skill evolution job is not pending review"
+    );
+    assert_eq!(repeated_reject.status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        repeated_reject.detail,
+        "Skill evolution job is not pending review"
+    );
+    assert_eq!(unsupported_apply.status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        unsupported_apply.detail,
+        "Skill evolution job cannot be applied"
     );
     let content = service
         .get_content("u1", Some("tenant-1"), &created.id)

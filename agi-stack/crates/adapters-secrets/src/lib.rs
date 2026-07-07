@@ -18,11 +18,20 @@
 //!    matching Python's `secrets.token_urlsafe(n)` shape for invitation tokens.
 //! 4. [`generate_device_user_code`] — the 8-character RFC-8628-style user code
 //!    alphabet Python uses for CLI device login (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`).
+//! 5. [`try_encrypt_python_aes256_gcm`] / [`try_decrypt_python_aes256_gcm`] —
+//!    Python `EncryptionService` compatibility for shared DB rows whose payload is
+//!    `base64(nonce[12] || ciphertext || gcm_tag)`.
 //!
 //! ## Agent First
 //! Nothing here is a *judgment*: bcrypt verification is a deterministic
 //! cryptographic check and key generation is CSPRNG bytes + hex encoding. These
 //! are protocol/arithmetic facts, explicitly outside the agent-decision boundary.
+
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
+use base64::{engine::general_purpose, Engine as _};
 
 /// Verify a plaintext password against a stored bcrypt hash, byte-compatible with
 /// the Python `AuthService.verify_password` (`bcrypt.checkpw`).
@@ -138,6 +147,91 @@ pub fn generate_device_user_code() -> String {
         out.push(alphabet[(byte & 31) as usize] as char);
     }
     out
+}
+
+/// Decrypt a Python `EncryptionService` AES-256-GCM payload.
+///
+/// Python stores `base64(nonce || ciphertext_and_tag)` where `nonce` is the
+/// first 12 bytes. The key is a 64-character lowercase/uppercase hex string
+/// containing exactly 32 bytes.
+pub fn try_decrypt_python_aes256_gcm(
+    encrypted_text: &str,
+    key_hex: &str,
+) -> Result<String, SecretError> {
+    if encrypted_text.is_empty() {
+        return Err(SecretError("cannot decrypt empty string".to_string()));
+    }
+    let key = parse_hex_32(key_hex)?;
+    let encrypted = general_purpose::STANDARD
+        .decode(encrypted_text.as_bytes())
+        .map_err(|err| SecretError(format!("invalid encrypted base64: {err}")))?;
+    if encrypted.len() <= 12 {
+        return Err(SecretError(
+            "encrypted payload must include 12-byte nonce and ciphertext".to_string(),
+        ));
+    }
+    let (nonce, ciphertext) = encrypted.split_at(12);
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|err| SecretError(format!("invalid aes-gcm key: {err}")))?;
+    let plaintext = cipher
+        .decrypt(Nonce::from_slice(nonce), ciphertext)
+        .map_err(|err| SecretError(format!("aes-gcm decrypt failed: {err}")))?;
+    String::from_utf8(plaintext)
+        .map_err(|err| SecretError(format!("decrypted plaintext is not utf-8: {err}")))
+}
+
+/// Encrypt plaintext into Python `EncryptionService.encrypt` AES-256-GCM shape.
+///
+/// Python stores `base64(nonce || ciphertext_and_tag)` where `nonce` is a fresh
+/// 12-byte random nonce. The key is a 64-character hex string containing exactly
+/// 32 bytes.
+pub fn try_encrypt_python_aes256_gcm(
+    plaintext: &str,
+    key_hex: &str,
+) -> Result<String, SecretError> {
+    if plaintext.is_empty() {
+        return Err(SecretError("cannot encrypt empty string".to_string()));
+    }
+    let key = parse_hex_32(key_hex)?;
+    let mut nonce = [0u8; 12];
+    fill_random(&mut nonce, "aes-gcm nonce")?;
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|err| SecretError(format!("invalid aes-gcm key: {err}")))?;
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), plaintext.as_bytes())
+        .map_err(|err| SecretError(format!("aes-gcm encrypt failed: {err}")))?;
+    let mut encrypted = Vec::with_capacity(nonce.len() + ciphertext.len());
+    encrypted.extend_from_slice(&nonce);
+    encrypted.extend_from_slice(&ciphertext);
+    Ok(general_purpose::STANDARD.encode(encrypted))
+}
+
+fn parse_hex_32(input: &str) -> Result<[u8; 32], SecretError> {
+    let trimmed = input.trim();
+    if trimmed.len() != 64 {
+        return Err(SecretError(format!(
+            "encryption key must be 64 hex characters, got {}",
+            trimmed.len()
+        )));
+    }
+    let mut out = [0u8; 32];
+    for (index, byte) in out.iter_mut().enumerate() {
+        let hi = from_hex_nibble(trimmed.as_bytes()[index * 2])?;
+        let lo = from_hex_nibble(trimmed.as_bytes()[index * 2 + 1])?;
+        *byte = (hi << 4) | lo;
+    }
+    Ok(out)
+}
+
+fn from_hex_nibble(value: u8) -> Result<u8, SecretError> {
+    match value {
+        b'0'..=b'9' => Ok(value - b'0'),
+        b'a'..=b'f' => Ok(value - b'a' + 10),
+        b'A'..=b'F' => Ok(value - b'A' + 10),
+        _ => Err(SecretError(format!(
+            "encryption key contains non-hex byte 0x{value:02x}"
+        ))),
+    }
 }
 
 fn base64_urlsafe_no_pad(bytes: &[u8]) -> String {
@@ -318,5 +412,52 @@ mod unit {
             try_generate_uuid_v4().unwrap(),
             try_generate_uuid_v4().unwrap()
         );
+    }
+
+    #[test]
+    fn decrypts_python_aes256_gcm_payload_shape() {
+        // Generated with Python-compatible AES-256-GCM:
+        // key = bytes(range(32)); nonce = bytes(range(12)); output =
+        // base64(nonce + ciphertext + tag).
+        let key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        let encrypted = concat!(
+            "AAECAwQFBgcICQoLPCCjaazH+DnvLvv/i8ZXCeH44kyRFi8QXV3SsyVeIp4jYM+P",
+            "3LZ96hCGRc/74ktKiy1CoXi4xqlL8k47IpjXj4BVmRG2qARbPj+IE5IaTk/sVMQFT2DgtWaO9PXs"
+        );
+        let plaintext = try_decrypt_python_aes256_gcm(encrypted, key).unwrap();
+        assert_eq!(
+            plaintext,
+            r#"{"uri":"bolt://db.example:7687","password":"secret","nested":{"api_key":"k"}}"#
+        );
+    }
+
+    #[test]
+    fn encrypts_python_aes256_gcm_payload_shape() {
+        let key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        let plaintext = r#"{"uri":"bolt://db.example:7687","password":"secret"}"#;
+        let encrypted = try_encrypt_python_aes256_gcm(plaintext, key).unwrap();
+        assert_ne!(encrypted, plaintext);
+        assert_ne!(
+            encrypted,
+            try_encrypt_python_aes256_gcm(plaintext, key).unwrap()
+        );
+        assert_eq!(
+            try_decrypt_python_aes256_gcm(&encrypted, key).unwrap(),
+            plaintext
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_python_aes_key_or_payload() {
+        assert!(try_decrypt_python_aes256_gcm("", "00").is_err());
+        assert!(try_decrypt_python_aes256_gcm("not-base64", "00").is_err());
+        assert!(try_decrypt_python_aes256_gcm("AAE=", "00").is_err());
+        assert!(try_decrypt_python_aes256_gcm(
+            "AAECAwQFBgcICQoLPCCjaazH+DnvLvv/i8ZXCeH44kyRFi8QXV3SsyVeIp4jYM+P",
+            "zz"
+        )
+        .is_err());
+        assert!(try_encrypt_python_aes256_gcm("", "00").is_err());
+        assert!(try_encrypt_python_aes256_gcm("secret", "zz").is_err());
     }
 }

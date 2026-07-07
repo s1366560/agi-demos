@@ -21,7 +21,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use agistack_adapters_mem::InMemoryGraphStore;
 use agistack_adapters_neo4j::{connect, Neo4jGraphStore};
-use agistack_core::model::{GraphEntity, Relationship};
+use agistack_core::model::{GraphEntity, GraphStatsScope, Relationship};
 use agistack_core::ports::GraphStore;
 use neo4rs::{query, Graph};
 
@@ -201,6 +201,88 @@ async fn neo4j_matches_in_memory_across_all_reads() {
             .expect("mem search");
         assert_eq!(s_neo, s_mem, "search parity for {q:?} limit {limit}");
     }
+
+    let mut old_episode = ent("ep-old", "Old episode", "cleanup candidate", &project);
+    old_episode.entity_type = "Episodic".to_string();
+    old_episode.created_at_ms = 1_000;
+    let mut fresh_episode = ent("ep-fresh", "Fresh episode", "keep", &project);
+    fresh_episode.entity_type = "Episodic".to_string();
+    fresh_episode.created_at_ms = 10_000;
+    let cleanup_ents = vec![old_episode, fresh_episode];
+    let cleanup_rels = vec![
+        rel("r-old-episode", "a", "ep-old", "MENTIONS", &project),
+        rel("r-fresh-episode", "a", "ep-fresh", "MENTIONS", &project),
+    ];
+    seed(&neo, &mem, &cleanup_ents, &cleanup_rels).await;
+    let cleanup_scope = GraphStatsScope::Projects(vec![project.clone()]);
+    assert_eq!(
+        neo.stats(cleanup_scope.clone()).await.expect("neo stats"),
+        mem.stats(cleanup_scope.clone()).await.expect("mem stats"),
+        "stats parity before cleanup"
+    );
+    assert_eq!(
+        neo.export(cleanup_scope.clone()).await.expect("neo export"),
+        mem.export(cleanup_scope.clone()).await.expect("mem export"),
+        "export parity before cleanup"
+    );
+    assert_eq!(
+        neo.count_episodes_older_than(cleanup_scope.clone(), 5_000)
+            .await
+            .expect("neo cleanup count"),
+        mem.count_episodes_older_than(cleanup_scope.clone(), 5_000)
+            .await
+            .expect("mem cleanup count"),
+        "cleanup count parity"
+    );
+    assert_eq!(
+        neo.delete_episodes_older_than(cleanup_scope.clone(), 5_000)
+            .await
+            .expect("neo cleanup delete"),
+        mem.delete_episodes_older_than(cleanup_scope.clone(), 5_000)
+            .await
+            .expect("mem cleanup delete"),
+        "cleanup delete parity"
+    );
+    assert_eq!(
+        neo.subgraph(&project, "a", 1).await.expect("neo subgraph"),
+        mem.subgraph(&project, "a", 1).await.expect("mem subgraph"),
+        "cleanup removes old episode relationships"
+    );
+
+    // delete_relationship and delete_entity: same project scope, no dangling
+    // relationship after an entity delete.
+    neo.delete_relationship(&project, "r5")
+        .await
+        .expect("neo delete rel");
+    mem.delete_relationship(&project, "r5")
+        .await
+        .expect("mem delete rel");
+    assert_eq!(
+        neo.subgraph(&project, "d", 1).await.expect("neo subgraph"),
+        mem.subgraph(&project, "d", 1).await.expect("mem subgraph"),
+        "delete_relationship parity"
+    );
+
+    neo.delete_entity(&project, "d")
+        .await
+        .expect("neo delete entity");
+    mem.delete_entity(&project, "d")
+        .await
+        .expect("mem delete entity");
+    assert_eq!(
+        neo.get_entity(&project, "d")
+            .await
+            .expect("neo get deleted"),
+        mem.get_entity(&project, "d")
+            .await
+            .expect("mem get deleted"),
+        "delete_entity get parity"
+    );
+    assert_eq!(
+        neo.subgraph(&project, "b", 1).await.expect("neo subgraph"),
+        mem.subgraph(&project, "b", 1).await.expect("mem subgraph"),
+        "delete_entity removes touching relationships"
+    );
 
     // Decoy project sees only its own node (isolation), independent of `project`.
     let leak = neo

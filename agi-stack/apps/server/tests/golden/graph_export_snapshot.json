@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "project_id": "p1",
+  "exported_at": "<iso8601>",
+  "entities": [
+    {
+      "uuid": "e1",
+      "name": "Alpha",
+      "entity_type": "Concept",
+      "summary": "Alpha summary",
+      "project_id": "p1",
+      "tenant_id": "t1",
+      "created_at_ms": 1700000000000,
+      "name_embedding": null
+    },
+    {
+      "uuid": "e2",
+      "name": "Beta",
+      "entity_type": "Concept",
+      "summary": "Beta summary",
+      "project_id": "p1",
+      "tenant_id": "t1",
+      "created_at_ms": 1700000000000,
+      "name_embedding": null
+    }
+  ],
+  "relationships": [
+    {
+      "uuid": "r1",
+      "source_uuid": "e1",
+      "target_uuid": "e2",
+      "relation_type": "MENTIONS",
+      "fact": "e1 mentions e2",
+      "score": 1.0,
+      "project_id": "p1",
+      "created_at_ms": 1700000000000
+    }
+  ],
+  "stats": {
+    "entities_count": 2,
+    "relationships_count": 1
+  }
+}

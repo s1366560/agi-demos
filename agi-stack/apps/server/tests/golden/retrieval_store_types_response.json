@@ -1,0 +1,89 @@
+{
+  "success": true,
+  "data": [
+    {
+      "type": "memstack_pgvector",
+      "display_name": "MemStack PostgreSQL (pgvector + FTS)",
+      "connection_fields": [
+        {
+          "name": "use_default_connection",
+          "type": "boolean",
+          "required": false,
+          "default": true
+        }
+      ],
+      "index_fields": [],
+      "source": "env"
+    },
+    {
+      "type": "weknora_remote",
+      "display_name": "WeKnora Remote",
+      "connection_fields": [
+        {
+          "name": "base_url",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "api_key",
+          "type": "string",
+          "required": true,
+          "sensitive": true
+        },
+        {
+          "name": "knowledge_base_id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "knowledge_base_ids",
+          "type": "array",
+          "required": false
+        }
+      ],
+      "index_fields": [
+        {
+          "name": "search_path",
+          "type": "string",
+          "required": false,
+          "default": "/knowledge-search"
+        },
+        {
+          "name": "index_path",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "type": "qdrant",
+      "display_name": "Qdrant",
+      "connection_fields": [],
+      "index_fields": []
+    },
+    {
+      "type": "milvus",
+      "display_name": "Milvus",
+      "connection_fields": [],
+      "index_fields": []
+    },
+    {
+      "type": "weaviate",
+      "display_name": "Weaviate",
+      "connection_fields": [],
+      "index_fields": []
+    },
+    {
+      "type": "elasticsearch",
+      "display_name": "Elasticsearch",
+      "connection_fields": [],
+      "index_fields": []
+    },
+    {
+      "type": "opensearch",
+      "display_name": "OpenSearch",
+      "connection_fields": [],
+      "index_fields": []
+    }
+  ]
+}

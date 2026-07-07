@@ -23,24 +23,51 @@
 //!   POST /v1/tools/call               invoke one tool via the ToolHost (sandboxes wasm)
 //!   POST /v1/control-plane/publish     CP publishes desired tools -> DP reconcile -> ACK/NACK
 
-use std::sync::{atomic::AtomicU64, Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{atomic::AtomicU64, Arc, Mutex},
+};
 
+mod admin_access;
+mod admin_dlq_api;
+mod agent_commands_api;
 mod agent_events_api;
 mod agent_ws;
+mod artifacts_api;
+mod attachments_api;
+mod audit_api;
 mod auth;
+mod billing_api;
 mod channel_api;
+mod cron_api;
+mod data_api;
 mod demo_api;
+mod deploy_api;
+mod engines_api;
 mod enhanced_search_api;
+mod events_api;
+mod gene_api;
 mod graph_api;
+mod graph_stores_api;
 mod hitl_api;
 mod identity;
 mod identity_api;
+mod instance_api;
+mod llm_providers_api;
+mod maintenance_api;
+mod notifications_api;
 mod prod_api;
+mod retrieval_stores_api;
 mod sandbox_api;
+mod schema_api;
 mod shares_api;
 mod skill_api;
 mod skill_evolution_wiring;
+mod subagents_api;
+mod support_api;
+mod system_api;
 mod tenant_skill_config_api;
+mod tenant_webhooks_api;
 mod trust_api;
 mod workspace_api;
 mod workspace_outbox_worker;
@@ -55,10 +82,15 @@ use agistack_adapters_mem::{
 use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgAgentExecutionEventRepository, PgApiKeyStore,
-    PgChannelRepository, PgCheckpointStore, PgInvitationRepository, PgMemoryRepository, PgPool,
-    PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore, PgShareRepository,
-    PgSkillEvolutionRepository, PgSkillRepository, PgTenantRepository,
-    PgTenantSkillConfigRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
+    PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository, PgBillingRepository,
+    PgChannelRepository, PgCheckpointStore, PgCronRepository, PgDataStatsRepository,
+    PgDeployRepository, PgEventLogRepository, PgGeneRepository, PgGraphStoreRepository,
+    PgInstanceRepository, PgInvitationRepository, PgLlmProviderRepository, PgMemoryRepository,
+    PgNotificationRepository, PgPool, PgProjectReadRepository, PgProjectSandboxRepository,
+    PgProjectStore, PgRetrievalStoreRepository, PgSchemaRepository, PgShareRepository,
+    PgSkillEvolutionRepository, PgSkillRepository, PgSubagentTemplateRepository,
+    PgSupportRepository, PgTenantRepository, PgTenantSkillConfigRepository,
+    PgTenantWebhookRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
     PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
@@ -72,28 +104,66 @@ use agistack_plugin_host::{
     ControlPlane, DataPlaneReconciler, HotPlugRegistry, LenTool, PluginHost, UpperTool,
 };
 
+use crate::admin_access::{build_admin_access, SharedAdminAccess};
+use crate::admin_dlq_api::{build_admin_dlq_service, SharedAdminDlq};
 use crate::agent_events_api::{
     DevAgentEventReplayService, PgAgentEventReplayService, SharedAgentEvents,
 };
+use crate::artifacts_api::{DevArtifactService, PgArtifactService, SharedArtifacts};
+use crate::attachments_api::{DevAttachmentService, PgAttachmentService, SharedAttachments};
+use crate::audit_api::{DevAuditLogService, PgAuditLogService, SharedAuditLogs};
 use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
-use crate::channel_api::{DevChannelService, PgChannelService, SharedChannels};
+use crate::billing_api::{DevBillingService, PgBillingService, SharedBilling};
+use crate::channel_api::{
+    ChannelOutboxDeliveryWorker, ChannelOutboxDeliveryWorkerConfig, DevChannelService,
+    FeishuWebhookDeliverer, PgChannelService, SharedChannelOutboxDeliveryWorker, SharedChannels,
+};
+use crate::cron_api::{DevCronJobService, PgCronJobService, SharedCronJobs};
+use crate::data_api::{DevDataStatsScopeService, PgDataStatsScopeService, SharedDataStats};
+use crate::deploy_api::{DevDeployService, PgDeployService, SharedDeploys};
+use crate::events_api::{DevEventLogService, PgEventLogService, SharedEventLogs};
+use crate::gene_api::{DevGeneService, PgGeneService, SharedGenes};
+use crate::graph_stores_api::{
+    DevGraphStoreCatalogService, PgGraphStoreCatalogService, SharedGraphStores,
+};
 use crate::hitl_api::{build_hitl_response_service, SharedHitlResponses};
 use crate::identity::{
     DevIdentityService, InMemoryDeviceGrantStore, PgIdentityService, SharedDeviceGrantStore,
     SharedIdentity,
 };
+use crate::instance_api::{DevInstanceService, PgInstanceService, SharedInstances};
+use crate::llm_providers_api::{
+    DevLlmProviderAssignmentService, DevLlmProviderCatalogService, DevLlmProviderHealthService,
+    DevLlmProviderUsageService, PgLlmProviderAssignmentService, PgLlmProviderCatalogService,
+    PgLlmProviderHealthService, PgLlmProviderUsageService, SharedLlmProviderAssignments,
+    SharedLlmProviderHealth, SharedLlmProviderUsage, SharedLlmProviders,
+};
+use crate::notifications_api::{
+    DevNotificationService, PgNotificationService, SharedNotifications,
+};
+use crate::retrieval_stores_api::{
+    DevRetrievalStoreCatalogService, PgRetrievalStoreCatalogService, SharedRetrievalStores,
+};
 use crate::sandbox_api::{
     in_memory_http_service_registry, PgProjectSandboxConfigSource, ProjectSandboxService,
     SharedHttpServiceRegistry, SharedProjectSandboxes,
 };
+use crate::schema_api::{DevProjectSchemaService, PgProjectSchemaService, SharedProjectSchema};
 use crate::shares_api::{DevShareService, PgShareService, SharedShares};
 use crate::skill_api::{
     DevSkillService, PgSkillEvolutionScheduler, PgSkillEvolutionWorker, PgSkillService,
     SharedSkillEvolutionWorker, SharedSkills,
 };
 use crate::skill_evolution_wiring::skill_evolution_executor_from_env;
+use crate::subagents_api::{
+    DevSubagentTemplateService, PgSubagentTemplateService, SharedSubagentTemplates,
+};
+use crate::support_api::{DevSupportService, PgSupportService, SharedSupport};
 use crate::tenant_skill_config_api::{
     DevTenantSkillConfigService, PgTenantSkillConfigService, SharedTenantSkillConfigs,
+};
+use crate::tenant_webhooks_api::{
+    DevTenantWebhookService, PgTenantWebhookService, SharedTenantWebhooks,
 };
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{
@@ -101,7 +171,7 @@ use crate::workspace_api::{
 };
 use crate::workspace_outbox_worker::{
     worker_launch_event_stream_source, workspace_agent_mention_runtime_from_env,
-    workspace_plan_outbox_handlers_with_runtime_state_and_event_stream, PgWorkspacePlanOutboxStore,
+    workspace_plan_outbox_handlers_with_runtime_state_and_streams, PgWorkspacePlanOutboxStore,
     ProjectSandboxPipelineStageRunner, SharedWorkspacePlanOutboxWorker,
     WorkerLaunchRuntimeStateStore, WorkspacePipelineStageRunner, WorkspacePlanOutboxWorker,
     WorkspacePlanOutboxWorkerConfig,
@@ -130,6 +200,8 @@ pub(crate) struct AppState {
     pub(crate) shares: SharedShares,
     /// P2 trust governance service: policies, approval requests, and decisions.
     pub(crate) trust: SharedTrust,
+    /// Shared global admin gate for exact admin-only Rust surfaces.
+    pub(crate) admin_access: SharedAdminAccess,
     /// P5 skill store/versioning service over Python-owned `skills` tables.
     pub(crate) skills: SharedSkills,
     /// P5 skill evolution run worker foundation over Rust-owned
@@ -142,15 +214,92 @@ pub(crate) struct AppState {
     /// P6 workspace/task/topology/blackboard foundation over Python-owned
     /// workspace tables.
     pub(crate) workspaces: SharedWorkspaces,
-    /// P5 channel configuration read/status foundation over Python-owned
-    /// channel tables. Runtime connections and delivery remain Python-owned.
+    /// P5 channel configuration read/status, Feishu webhook EventStream fanout,
+    /// and local lifecycle status markers over Python-owned channel tables. Live
+    /// provider sessions and full workspace/session routing remain Python-owned.
     pub(crate) channels: SharedChannels,
+    /// P5 channel outbox delivery worker foundation. It is wired for explicit
+    /// one-shot/loop use but only autostarts when both channel delivery gates
+    /// are enabled.
+    pub(crate) channel_outbox_delivery_worker: Option<SharedChannelOutboxDeliveryWorker>,
     /// P3/F7 HITL response ingress over Python-owned `hitl_requests` plus the
     /// shared Redis/EventStream continuation channel.
     pub(crate) hitl: SharedHitlResponses,
     /// P3/F7 event replay over Python-owned `agent_execution_events` in
     /// production, with an in-process stream reader in offline/dev mode.
     pub(crate) agent_events: SharedAgentEvents,
+    /// P7 tenant event-log read surface over Python-owned `tenant_event_logs`.
+    /// Only exact list/type-discovery reads are routed to Rust.
+    pub(crate) event_logs: SharedEventLogs,
+    /// P7 tenant audit-log read/export surface over Python-owned `audit_logs`.
+    /// Write-side logging remains Python-owned.
+    pub(crate) audit_logs: SharedAuditLogs,
+    /// P7 current-user notification API-v1 surface over Python-owned
+    /// `notifications`.
+    pub(crate) notifications: SharedNotifications,
+    /// P7 billing invoice read surface over Python-owned `invoices`. Billing
+    /// summaries and plan mutations remain Python-owned.
+    pub(crate) billing: SharedBilling,
+    /// P7 support ticket API-v1 and legacy surfaces over Python-owned
+    /// `support_tickets`.
+    pub(crate) support: SharedSupport,
+    /// P7 artifact surface over Python-owned `artifacts`. Rust owns read
+    /// metadata plus exact content save-back and soft-delete; download, URL
+    /// refresh, upload, and multipart storage writes remain Python-owned.
+    pub(crate) artifacts: SharedArtifacts,
+    /// P7 attachment surface over Python-owned `attachments`. Rust owns
+    /// metadata reads, exact simple upload, and hard-delete; multipart and
+    /// download paths remain Python-owned.
+    pub(crate) attachments: SharedAttachments,
+    /// P7 admin DLQ surface over Python-owned Redis DLQ keys, including retry
+    /// republish to the Python-compatible UnifiedEventBus stream.
+    pub(crate) admin_dlq: SharedAdminDlq,
+    /// P7 provider metadata list/detail/create/update/soft-delete over
+    /// Python-owned `llm_providers`. Active connection tests and runtime
+    /// provider resolution remain Python-owned.
+    pub(crate) llm_providers: SharedLlmProviders,
+    /// P7 latest provider health read surface over Python-owned
+    /// `provider_health`. Active provider checks and writes remain Python-owned.
+    pub(crate) llm_provider_health: SharedLlmProviderHealth,
+    /// P7 tenant-provider assignment list surface over Python-owned
+    /// `tenant_provider_mappings`. Assignment mutations remain Python-owned.
+    pub(crate) llm_provider_assignments: SharedLlmProviderAssignments,
+    /// P7 provider usage statistics read surface over Python-owned
+    /// `llm_usage_logs`. Usage writes remain Python-owned.
+    pub(crate) llm_provider_usage: SharedLlmProviderUsage,
+    /// P7 tenant webhook CRUD surface over Python-owned `webhooks`. Provider
+    /// delivery paths remain Python-owned.
+    pub(crate) tenant_webhooks: SharedTenantWebhooks,
+    /// P7 project schema CRUD surface over Python-owned schema tables.
+    pub(crate) project_schema: SharedProjectSchema,
+    /// P7 cron job read surface over Python-owned `cron_jobs` and
+    /// `cron_job_runs`. Scheduler runtime and write paths remain Python-owned.
+    pub(crate) cron_jobs: SharedCronJobs,
+    /// P7 exact graph data stats/export read surface over the portable
+    /// GraphStore. Cleanup stays Python-owned.
+    pub(crate) data_stats: SharedDataStats,
+    /// P7 deploy read surface over Python-owned `instances` and
+    /// `deploy_records`. Deploy writes, lifecycle transitions, and SSE progress
+    /// remain Python-owned.
+    pub(crate) deploys: SharedDeploys,
+    /// P3/F11 SubAgent template marketplace category discovery over
+    /// Python-owned `subagent_templates`. Template CRUD/install/runtime remain
+    /// Python-owned.
+    pub(crate) subagent_templates: SharedSubagentTemplates,
+    /// P7 instance read surface over Python-owned `instances`. Instance writes,
+    /// runtime operations, config, members, files, and channels remain
+    /// Python-owned.
+    pub(crate) instances: SharedInstances,
+    /// P7 gene marketplace read surface over Python-owned `gene_market`.
+    /// Gene writes, genomes, installation, reviews, ratings, and evolution
+    /// events remain Python-owned.
+    pub(crate) genes: SharedGenes,
+    /// P7 graph-store read surface over Python-owned `graph_stores`.
+    /// Store writes and connection tests remain Python-owned.
+    pub(crate) graph_stores: SharedGraphStores,
+    /// P7 retrieval-store read surface over Python-owned `retrieval_stores`.
+    /// Store writes and connection tests remain Python-owned.
+    pub(crate) retrieval_stores: SharedRetrievalStores,
     /// P6 server-only outbox worker foundation. It is wired for explicit
     /// one-shot/loop use once handlers are migrated, but is not auto-started.
     pub(crate) workspace_plan_outbox_worker: Option<SharedWorkspacePlanOutboxWorker>,
@@ -646,7 +795,13 @@ async fn build_state() -> ServerResult<AppState> {
         workspace_plan_pool,
         sandbox_repo,
         project_config_repo,
-    ) = build_memory_and_auth(llm.clone(), embedding, object_store, autonomy_cooldown).await?;
+    ) = build_memory_and_auth(
+        llm.clone(),
+        embedding,
+        Arc::clone(&object_store),
+        autonomy_cooldown,
+    )
+    .await?;
     let events = build_event_stream().await;
     let hitl = build_hitl_response_service(workspace_plan_pool.clone(), Arc::clone(&events));
     let agent_events: SharedAgentEvents = match workspace_plan_pool.clone() {
@@ -655,13 +810,141 @@ async fn build_state() -> ServerResult<AppState> {
         )),
         None => Arc::new(DevAgentEventReplayService::new(Arc::clone(&events))),
     };
+    let event_logs: SharedEventLogs = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgEventLogService::new(PgEventLogRepository::new(pool))),
+        None => Arc::new(DevEventLogService::default()),
+    };
+    let audit_logs: SharedAuditLogs = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgAuditLogService::new(PgAuditLogRepository::new(pool))),
+        None => Arc::new(DevAuditLogService::default()),
+    };
+    let notifications: SharedNotifications = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgNotificationService::new(PgNotificationRepository::new(
+            pool,
+        ))),
+        None => Arc::new(DevNotificationService::default()),
+    };
+    let billing: SharedBilling = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgBillingService::new(PgBillingRepository::new(pool))),
+        None => Arc::new(DevBillingService::default()),
+    };
+    let support: SharedSupport = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgSupportService::new(PgSupportRepository::new(pool))),
+        None => Arc::new(DevSupportService::default()),
+    };
+    let artifacts: SharedArtifacts = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgArtifactService::new(
+            PgArtifactRepository::new(pool),
+            Arc::clone(&object_store),
+        )),
+        None => Arc::new(DevArtifactService::with_object_store(
+            Vec::new(),
+            Arc::clone(&object_store),
+        )),
+    };
+    let attachments: SharedAttachments = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgAttachmentService::new(
+            PgAttachmentRepository::new(pool),
+            Arc::clone(&object_store),
+        )),
+        None => Arc::new(DevAttachmentService::with_object_store(
+            Vec::new(),
+            HashMap::new(),
+            Arc::clone(&object_store),
+        )),
+    };
+    let admin_access = build_admin_access(workspace_plan_pool.clone());
+    let admin_dlq = build_admin_dlq_service(workspace_plan_pool.clone()).await;
+    let llm_providers: SharedLlmProviders = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgLlmProviderCatalogService::new(
+            PgLlmProviderRepository::new(pool),
+        )),
+        None => Arc::new(DevLlmProviderCatalogService::default()),
+    };
+    let llm_provider_health: SharedLlmProviderHealth = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgLlmProviderHealthService::new(
+            PgLlmProviderRepository::new(pool),
+        )),
+        None => Arc::new(DevLlmProviderHealthService::default()),
+    };
+    let llm_provider_assignments: SharedLlmProviderAssignments = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgLlmProviderAssignmentService::new(
+            PgLlmProviderRepository::new(pool),
+        )),
+        None => Arc::new(DevLlmProviderAssignmentService::default()),
+    };
+    let llm_provider_usage: SharedLlmProviderUsage = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgLlmProviderUsageService::new(
+            PgLlmProviderRepository::new(pool),
+        )),
+        None => Arc::new(DevLlmProviderUsageService),
+    };
+    let tenant_webhooks: SharedTenantWebhooks = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgTenantWebhookService::new(PgTenantWebhookRepository::new(
+            pool,
+        ))),
+        None => Arc::new(DevTenantWebhookService::default()),
+    };
+    let project_schema: SharedProjectSchema = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgProjectSchemaService::new(PgSchemaRepository::new(pool))),
+        None => Arc::new(DevProjectSchemaService::default()),
+    };
+    let cron_jobs: SharedCronJobs = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgCronJobService::new(PgCronRepository::new(pool))),
+        None => Arc::new(DevCronJobService::default()),
+    };
+    let data_stats: SharedDataStats = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgDataStatsScopeService::new(PgDataStatsRepository::new(
+            pool,
+        ))),
+        None => Arc::new(DevDataStatsScopeService::default()),
+    };
+    let deploys: SharedDeploys = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgDeployService::new(PgDeployRepository::new(pool))),
+        None => Arc::new(DevDeployService::default()),
+    };
+    let subagent_templates: SharedSubagentTemplates = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgSubagentTemplateService::new(
+            PgSubagentTemplateRepository::new(pool),
+        )),
+        None => Arc::new(DevSubagentTemplateService::default()),
+    };
+    let instances: SharedInstances = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgInstanceService::new(PgInstanceRepository::new(pool))),
+        None => Arc::new(DevInstanceService::default()),
+    };
+    let genes: SharedGenes = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgGeneService::new(PgGeneRepository::new(pool))),
+        None => Arc::new(DevGeneService::default()),
+    };
+    let graph_stores: SharedGraphStores = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgGraphStoreCatalogService::new(
+            PgGraphStoreRepository::new(pool),
+        )),
+        None => Arc::new(DevGraphStoreCatalogService::new("dev-tenant")),
+    };
+    let retrieval_stores: SharedRetrievalStores = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgRetrievalStoreCatalogService::new(
+            PgRetrievalStoreRepository::new(pool),
+        )),
+        None => Arc::new(DevRetrievalStoreCatalogService::new("dev-tenant")),
+    };
     let channels: SharedChannels = match workspace_plan_pool.clone() {
         Some(pool) => Arc::new(PgChannelService::new(PgChannelRepository::new(pool))),
         None => Arc::new(DevChannelService::new()),
     };
+    let channel_outbox_delivery_worker = workspace_plan_pool.clone().map(|pool| {
+        Arc::new(ChannelOutboxDeliveryWorker::new(
+            PgChannelRepository::new(pool),
+            FeishuWebhookDeliverer::default(),
+            ChannelOutboxDeliveryWorkerConfig::from_env(),
+        ))
+    });
     let skill_evolution_worker = workspace_plan_pool.clone().map(|pool| {
-        let executor =
-            skill_evolution_executor_from_env(PgSkillEvolutionRepository::new(pool.clone()));
+        let executor = skill_evolution_executor_from_env(
+            PgSkillEvolutionRepository::new(pool.clone()),
+            PgSkillRepository::new(pool.clone()),
+        );
         Arc::new(PgSkillEvolutionWorker::new(
             PgSkillEvolutionRepository::new(pool),
             executor,
@@ -695,21 +978,21 @@ async fn build_state() -> ServerResult<AppState> {
         );
         let worker_stream_events = worker_launch_event_stream_source(Arc::clone(&events));
         let handlers = match worker_launch_runtime_state.clone() {
-            Some(runtime_state) => {
-                workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
-                    Arc::new(PgWorkspaceRepository::new(pool.clone())),
-                    Some(Arc::clone(&stage_runner)),
-                    Some(runtime_state),
-                    Some(Arc::clone(&worker_stream_events)),
-                    workspace_mention_runtime.clone(),
-                )
-            }
-            None => workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
+            Some(runtime_state) => workspace_plan_outbox_handlers_with_runtime_state_and_streams(
+                Arc::new(PgWorkspaceRepository::new(pool.clone())),
+                Some(Arc::clone(&stage_runner)),
+                Some(runtime_state),
+                Some(Arc::clone(&worker_stream_events)),
+                workspace_mention_runtime.clone(),
+                Some(Arc::clone(&events)),
+            ),
+            None => workspace_plan_outbox_handlers_with_runtime_state_and_streams(
                 Arc::new(PgWorkspaceRepository::new(pool.clone())),
                 Some(Arc::clone(&stage_runner)),
                 None,
                 Some(worker_stream_events),
                 workspace_mention_runtime.clone(),
+                Some(Arc::clone(&events)),
             ),
         };
         Arc::new(WorkspacePlanOutboxWorker::new(
@@ -744,13 +1027,37 @@ async fn build_state() -> ServerResult<AppState> {
         identity,
         shares,
         trust,
+        admin_access,
         skills,
         skill_evolution_worker,
         tenant_skill_configs,
         workspaces,
         channels,
+        channel_outbox_delivery_worker,
         hitl,
         agent_events,
+        event_logs,
+        audit_logs,
+        notifications,
+        billing,
+        support,
+        artifacts,
+        attachments,
+        admin_dlq,
+        llm_providers,
+        llm_provider_health,
+        llm_provider_assignments,
+        llm_provider_usage,
+        tenant_webhooks,
+        project_schema,
+        cron_jobs,
+        data_stats,
+        deploys,
+        subagent_templates,
+        instances,
+        genes,
+        graph_stores,
+        retrieval_stores,
         workspace_plan_outbox_worker,
         graph,
         sandboxes,
@@ -767,6 +1074,10 @@ async fn main() -> ServerResult<()> {
         .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
     let _skill_evolution_runtime = state
         .skill_evolution_worker
+        .as_ref()
+        .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
+    let _channel_outbox_delivery_runtime = state
+        .channel_outbox_delivery_worker
         .as_ref()
         .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
     let app = demo_api::router(state);

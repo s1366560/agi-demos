@@ -1,10 +1,11 @@
 //! P4 enhanced-search REST foundation over the portable [`GraphStore`] port.
 //!
-//! This is intentionally project-scoped. Python's enhanced-search router can
-//! fan out across tenant/user project sets and persisted Community/Episodic
-//! nodes; the Rust side does not expose that scope-listing contract yet. These
-//! endpoints therefore require `project_id`, keep FastAPI-style error envelopes,
-//! and provide a safe foundation for later parity/gateway work.
+//! Query-style endpoints support the Python-compatible `project_id` optional
+//! contract by fanning out across the current user's accessible project list
+//! when `project_id` is omitted. Community and graph-traversal lookups can also
+//! resolve an omitted `project_id` by searching only identity-visible projects
+//! for the stable community or start-entity handle. FastAPI-style error
+//! envelopes are preserved for safe gateway rollback.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -21,6 +22,7 @@ use agistack_core::model::{GraphEntity, Relationship, Subgraph};
 use agistack_core::{detect_communities, CommunityEdge, DEFAULT_MIN_COMMUNITY_SIZE};
 
 use crate::auth::Identity;
+use crate::identity::{IdentityError, ProjectListInput};
 use crate::AppState;
 
 #[cfg(test)]
@@ -68,6 +70,65 @@ impl IntoResponse for SearchApiError {
 
 type SearchApiResult<T> = Result<T, SearchApiError>;
 
+const FANOUT_PROJECT_PAGE_SIZE: i64 = 100;
+const FANOUT_PROJECT_PAGE_LIMIT: i64 = 10;
+
+#[derive(Debug, Clone)]
+struct SearchScope {
+    project_ids: Vec<String>,
+    tenant_id: Option<String>,
+    fanout: bool,
+}
+
+impl SearchScope {
+    fn explicit(project_id: &str) -> Self {
+        Self {
+            project_ids: vec![project_id.to_string()],
+            tenant_id: None,
+            fanout: false,
+        }
+    }
+
+    fn fanout(project_ids: Vec<String>, tenant_id: Option<&str>) -> Self {
+        Self {
+            project_ids,
+            tenant_id: tenant_id.map(str::to_string),
+            fanout: true,
+        }
+    }
+
+    fn is_fanout(&self) -> bool {
+        self.fanout
+    }
+
+    fn explicit_project_id(&self) -> Option<&str> {
+        if self.fanout {
+            None
+        } else {
+            self.project_ids.first().map(String::as_str)
+        }
+    }
+
+    fn response_scope(&self) -> Value {
+        json!({
+            "fanout": true,
+            "project_ids": self.project_ids.clone(),
+            "tenant_id": self.tenant_id.clone(),
+        })
+    }
+
+    fn filters_applied(&self) -> Value {
+        if let Some(project_id) = self.explicit_project_id() {
+            json!({ "project_id": project_id })
+        } else {
+            json!({
+                "project_ids": self.project_ids.clone(),
+                "tenant_id": self.tenant_id.clone(),
+            })
+        }
+    }
+}
+
 fn rfc3339(ms: i64) -> String {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
         .unwrap_or(chrono::DateTime::<chrono::Utc>::UNIX_EPOCH)
@@ -87,13 +148,6 @@ fn parse_iso_ms(value: Option<&str>, field: &str) -> SearchApiResult<Option<i64>
                 SearchApiError::bad_request("Invalid 'until' datetime format")
             }
         })
-}
-
-fn require_project_id(project_id: Option<&str>) -> SearchApiResult<&str> {
-    match project_id {
-        Some(project_id) if !project_id.trim().is_empty() => Ok(project_id),
-        _ => Err(SearchApiError::bad_request("project_id is required")),
-    }
 }
 
 fn require_query(query: &str) -> SearchApiResult<()> {
@@ -125,34 +179,156 @@ async fn ensure_project_access(
     }
 }
 
+fn identity_error(err: IdentityError) -> SearchApiError {
+    SearchApiError::new(err.status, err.detail)
+}
+
+fn nonblank(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+async fn resolve_search_scope(
+    app: &AppState,
+    identity: &Identity,
+    project_id: Option<&str>,
+    tenant_id: Option<&str>,
+) -> SearchApiResult<SearchScope> {
+    if let Some(project_id) = nonblank(project_id) {
+        ensure_project_access(app, identity, project_id).await?;
+        return Ok(SearchScope::explicit(project_id));
+    }
+
+    let tenant_id = nonblank(tenant_id);
+    let mut project_ids = Vec::new();
+    let mut page = 1;
+    while page <= FANOUT_PROJECT_PAGE_LIMIT {
+        let page_result = app
+            .identity
+            .list_projects(
+                &identity.user_id,
+                ProjectListInput {
+                    tenant_id,
+                    search: None,
+                    visibility: "all",
+                    owner_id: None,
+                    page,
+                    page_size: FANOUT_PROJECT_PAGE_SIZE,
+                },
+            )
+            .await
+            .map_err(identity_error)?;
+        let returned = page_result.projects.len() as i64;
+        project_ids.extend(page_result.projects.into_iter().map(|project| project.id));
+        if returned == 0 || project_ids.len() as i64 >= page_result.total {
+            break;
+        }
+        page += 1;
+    }
+    project_ids.sort();
+    project_ids.dedup();
+    Ok(SearchScope::fanout(project_ids, tenant_id))
+}
+
+async fn search_scope_entities(
+    app: &AppState,
+    scope: &SearchScope,
+    query: &str,
+    per_project_limit: usize,
+) -> SearchApiResult<Vec<GraphEntity>> {
+    let mut entities = Vec::new();
+    for project_id in &scope.project_ids {
+        let mut hits = app
+            .graph
+            .search_entities(project_id, query, per_project_limit)
+            .await
+            .map_err(SearchApiError::internal)?;
+        entities.append(&mut hits);
+    }
+    Ok(entities)
+}
+
+async fn find_start_entity_project_in_scope(
+    app: &AppState,
+    scope: &SearchScope,
+    start_entity_uuid: &str,
+) -> SearchApiResult<Option<String>> {
+    for project_id in &scope.project_ids {
+        if app
+            .graph
+            .get_entity(project_id, start_entity_uuid)
+            .await
+            .map_err(SearchApiError::internal)?
+            .is_some()
+        {
+            return Ok(Some(project_id.clone()));
+        }
+    }
+    Ok(None)
+}
+
+fn add_fanout_scope(body: &mut Value, scope: &SearchScope) {
+    if scope.is_fanout() {
+        body["scope"] = scope.response_scope();
+    }
+}
+
+fn result_from_entity(
+    entity: GraphEntity,
+    score: f32,
+    kind: &str,
+    include_project_id: bool,
+) -> Value {
+    let project_id = entity.project_id.clone();
+    let mut result =
+        serde_json::to_value(SearchResult::from_entity(entity, score, kind)).unwrap_or(Value::Null);
+    if include_project_id {
+        result["metadata"]["project_id"] = Value::String(project_id);
+    }
+    result
+}
+
+fn advanced_result(entity: GraphEntity, score: f32, include_project_id: bool) -> Value {
+    let project_id = entity.project_id.clone();
+    let mut result = SearchResult::advanced(entity, score);
+    if include_project_id {
+        result["metadata"]["project_id"] = Value::String(project_id);
+    }
+    result
+}
+
 async fn search_advanced(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
     Json(req): Json<AdvancedSearchRequest>,
 ) -> SearchApiResult<Json<Value>> {
     require_query(&req.query)?;
-    let project_id = require_project_id(req.project_id.as_deref())?;
-    ensure_project_access(&app, &identity, project_id).await?;
     let since_ms = parse_iso_ms(req.since.as_deref(), "since")?;
-    let _ = (&req.tenant_id, &req.focal_node_uuid, &req.reranker);
+    let _ = (&req.focal_node_uuid, &req.reranker);
+    let limit = cap_limit(req.limit);
+    let scope = resolve_search_scope(
+        &app,
+        &identity,
+        req.project_id.as_deref(),
+        req.tenant_id.as_deref(),
+    )
+    .await?;
 
-    let entities = app
-        .graph
-        .search_entities(project_id, req.query.trim(), cap_limit(req.limit))
-        .await
-        .map_err(SearchApiError::internal)?;
+    let entities = search_scope_entities(&app, &scope, req.query.trim(), limit).await?;
     let results: Vec<Value> = entities
         .into_iter()
         .filter(|entity| since_ms.is_none_or(|since| entity.created_at_ms >= since))
+        .take(limit)
         .enumerate()
-        .map(|(idx, entity)| SearchResult::advanced(entity, positional_score(idx)))
+        .map(|(idx, entity)| advanced_result(entity, positional_score(idx), scope.is_fanout()))
         .collect();
-    Ok(Json(json!({
+    let mut body = json!({
         "results": results,
         "total": results.len(),
         "search_type": "advanced",
         "strategy": req.strategy,
-    })))
+    });
+    add_fanout_scope(&mut body, &scope);
+    Ok(Json(body))
 }
 
 async fn search_graph_traversal(
@@ -160,23 +336,25 @@ async fn search_graph_traversal(
     Extension(identity): Extension<Identity>,
     Json(req): Json<TraversalSearchRequest>,
 ) -> SearchApiResult<Json<Value>> {
-    let project_id = require_project_id(req.project_id.as_deref())?;
-    ensure_project_access(&app, &identity, project_id).await?;
-    let _ = &req.tenant_id;
-    let Some(_start) = app
-        .graph
-        .get_entity(project_id, &req.start_entity_uuid)
-        .await
-        .map_err(SearchApiError::internal)?
+    let scope = resolve_search_scope(
+        &app,
+        &identity,
+        req.project_id.as_deref(),
+        req.tenant_id.as_deref(),
+    )
+    .await?;
+    let Some(project_id) =
+        find_start_entity_project_in_scope(&app, &scope, &req.start_entity_uuid).await?
     else {
         return Err(SearchApiError::not_found("Entity not found"));
     };
+    let include_project_id = scope.is_fanout();
 
     let depth = req.max_depth.clamp(1, 5);
     let limit = cap_limit(req.limit);
     let graph = app
         .graph
-        .subgraph(project_id, &req.start_entity_uuid, depth)
+        .subgraph(&project_id, &req.start_entity_uuid, depth)
         .await
         .map_err(SearchApiError::internal)?;
     let allowed_relationships: Option<BTreeSet<String>> = req
@@ -188,10 +366,11 @@ async fn search_graph_traversal(
         .take(limit)
         .map(|entity| {
             let created_at = rfc3339(entity.created_at_ms);
+            let project_id = entity.project_id;
             let uuid = entity.uuid;
             let name = entity.name;
             let entity_type = entity.entity_type;
-            json!({
+            let mut item = json!({
                 "uuid": uuid.clone(),
                 "name": name.clone(),
                 "type": entity_type.clone(),
@@ -204,15 +383,21 @@ async fn search_graph_traversal(
                     "type": entity_type,
                     "created_at": created_at,
                 },
-            })
+            });
+            if include_project_id {
+                item["metadata"]["project_id"] = Value::String(project_id);
+            }
+            item
         })
         .collect();
 
-    Ok(Json(json!({
+    let mut body = json!({
         "results": items,
         "total": items.len(),
         "search_type": "graph_traversal",
-    })))
+    });
+    add_fanout_scope(&mut body, &scope);
+    Ok(Json(body))
 }
 
 async fn search_community(
@@ -220,11 +405,11 @@ async fn search_community(
     Extension(identity): Extension<Identity>,
     Json(req): Json<CommunitySearchRequest>,
 ) -> SearchApiResult<Json<Value>> {
-    let project_id = require_project_id(req.project_id.as_deref())?;
-    ensure_project_access(&app, &identity, project_id).await?;
+    let scope = resolve_search_scope(&app, &identity, req.project_id.as_deref(), None).await?;
     let _ = req.include_episodes;
     let limit = cap_limit(req.limit);
-    let Some((_community, members)) = find_community(&app, project_id, &req.community_uuid).await?
+    let Some((_project_id, _community, members)) =
+        find_community_in_scope(&app, &scope, &req.community_uuid).await?
     else {
         return Err(SearchApiError::not_found("Community not found"));
     };
@@ -233,15 +418,16 @@ async fn search_community(
         .take(limit)
         .enumerate()
         .map(|(idx, entity)| {
-            let result = SearchResult::from_entity(entity, positional_score(idx), "entity");
-            serde_json::to_value(result).unwrap_or(Value::Null)
+            result_from_entity(entity, positional_score(idx), "entity", scope.is_fanout())
         })
         .collect();
-    Ok(Json(json!({
+    let mut body = json!({
         "results": items,
         "total": items.len(),
         "search_type": "community",
-    })))
+    });
+    add_fanout_scope(&mut body, &scope);
+    Ok(Json(body))
 }
 
 async fn search_temporal(
@@ -250,32 +436,29 @@ async fn search_temporal(
     Json(req): Json<TemporalSearchRequest>,
 ) -> SearchApiResult<Json<Value>> {
     require_query(&req.query)?;
-    let project_id = require_project_id(req.project_id.as_deref())?;
-    ensure_project_access(&app, &identity, project_id).await?;
-    let _ = &req.tenant_id;
     let since_ms = parse_iso_ms(req.since.as_deref(), "since")?;
     let until_ms = parse_iso_ms(req.until.as_deref(), "until")?;
+    let limit = cap_limit(req.limit);
+    let scope = resolve_search_scope(
+        &app,
+        &identity,
+        req.project_id.as_deref(),
+        req.tenant_id.as_deref(),
+    )
+    .await?;
 
-    let entities = app
-        .graph
-        .search_entities(project_id, req.query.trim(), cap_limit(req.limit))
-        .await
-        .map_err(SearchApiError::internal)?;
+    let entities = search_scope_entities(&app, &scope, req.query.trim(), limit).await?;
     let results: Vec<Value> = entities
         .into_iter()
         .filter(|entity| since_ms.is_none_or(|since| entity.created_at_ms >= since))
         .filter(|entity| until_ms.is_none_or(|until| entity.created_at_ms <= until))
+        .take(limit)
         .enumerate()
         .map(|(idx, entity)| {
-            serde_json::to_value(SearchResult::from_entity(
-                entity,
-                positional_score(idx),
-                "entity",
-            ))
-            .unwrap_or(Value::Null)
+            result_from_entity(entity, positional_score(idx), "entity", scope.is_fanout())
         })
         .collect();
-    Ok(Json(json!({
+    let mut body = json!({
         "results": results,
         "total": results.len(),
         "search_type": "temporal",
@@ -283,7 +466,9 @@ async fn search_temporal(
             "since": req.since,
             "until": req.until,
         },
-    })))
+    });
+    add_fanout_scope(&mut body, &scope);
+    Ok(Json(body))
 }
 
 async fn search_faceted(
@@ -292,12 +477,17 @@ async fn search_faceted(
     Json(req): Json<FacetedSearchRequest>,
 ) -> SearchApiResult<Json<Value>> {
     require_query(&req.query)?;
-    let project_id = require_project_id(req.project_id.as_deref())?;
-    ensure_project_access(&app, &identity, project_id).await?;
-    let _ = (&req.tags, &req.tenant_id);
+    let _ = &req.tags;
     let since_ms = parse_iso_ms(req.since.as_deref(), "since")?;
     let limit = cap_limit(req.limit);
     let offset = req.offset.unwrap_or(0);
+    let scope = resolve_search_scope(
+        &app,
+        &identity,
+        req.project_id.as_deref(),
+        req.tenant_id.as_deref(),
+    )
+    .await?;
     let entity_filter: Option<BTreeSet<String>> = req
         .entity_types
         .as_ref()
@@ -312,11 +502,7 @@ async fn search_faceted(
         limit.saturating_add(offset).clamp(1, 1_000)
     };
 
-    let mut entities = app
-        .graph
-        .search_entities(project_id, req.query.trim(), fetch)
-        .await
-        .map_err(SearchApiError::internal)?;
+    let mut entities = search_scope_entities(&app, &scope, req.query.trim(), fetch).await?;
     entities.retain(|entity| {
         since_ms.is_none_or(|since| entity.created_at_ms >= since)
             && entity_filter
@@ -335,16 +521,11 @@ async fn search_faceted(
         .into_iter()
         .enumerate()
         .map(|(idx, entity)| {
-            serde_json::to_value(SearchResult::from_entity(
-                entity,
-                positional_score(idx),
-                "entity",
-            ))
-            .unwrap_or(Value::Null)
+            result_from_entity(entity, positional_score(idx), "entity", scope.is_fanout())
         })
         .collect();
 
-    Ok(Json(json!({
+    let mut body = json!({
         "results": results,
         "facets": {
             "entity_types": entity_type_counts,
@@ -354,7 +535,9 @@ async fn search_faceted(
         "limit": limit,
         "offset": offset,
         "search_type": "faceted",
-    })))
+    });
+    add_fanout_scope(&mut body, &scope);
+    Ok(Json(body))
 }
 
 async fn search_capabilities() -> Json<Value> {
@@ -378,6 +561,7 @@ async fn search_capabilities() -> Json<Value> {
                     "max_depth": "integer (1-5)",
                     "relationship_types": "array of strings (optional)",
                     "limit": "integer (1-200)",
+                    "project_id": "string (optional; omitted fans out across accessible projects to resolve start entity)",
                 },
             },
             "community": {
@@ -387,6 +571,7 @@ async fn search_capabilities() -> Json<Value> {
                     "community_uuid": "string (required)",
                     "limit": "integer (1-200)",
                     "include_episodes": "boolean",
+                    "project_id": "string (optional; omitted fans out across accessible projects)",
                 },
             },
             "temporal": {
@@ -441,36 +626,35 @@ async fn memory_search(
     Json(req): Json<MemorySearchRequest>,
 ) -> SearchApiResult<Json<Value>> {
     require_query(&req.query)?;
-    let project_id = require_project_id(req.project_id.as_deref())?;
-    ensure_project_access(&app, &identity, project_id).await?;
     let limit = req.limit.unwrap_or(10).clamp(1, 200);
-    let entities = app
-        .graph
-        .search_entities(project_id, req.query.trim(), limit)
-        .await
-        .map_err(SearchApiError::internal)?;
+    let scope = resolve_search_scope(
+        &app,
+        &identity,
+        req.project_id.as_deref(),
+        req.tenant_id.as_deref(),
+    )
+    .await?;
+    let entities = search_scope_entities(&app, &scope, req.query.trim(), limit).await?;
     let results: Vec<Value> = entities
         .into_iter()
+        .take(limit)
         .enumerate()
         .map(|(idx, entity)| {
-            serde_json::to_value(SearchResult::from_entity(
-                entity,
-                positional_score(idx),
-                "entity",
-            ))
-            .unwrap_or(Value::Null)
+            result_from_entity(entity, positional_score(idx), "entity", scope.is_fanout())
         })
         .collect();
-    Ok(Json(json!({
+    let mut body = json!({
         "results": results,
         "total": results.len(),
         "query": req.query,
-        "filters_applied": { "project_id": project_id },
+        "filters_applied": scope.filters_applied(),
         "search_metadata": {
             "strategy": "hybrid_search",
             "limit": limit,
         },
-    })))
+    });
+    add_fanout_scope(&mut body, &scope);
+    Ok(Json(body))
 }
 
 fn positional_score(idx: usize) -> f32 {
@@ -621,6 +805,19 @@ async fn find_community(
             }),
             members,
         )));
+    }
+    Ok(None)
+}
+
+async fn find_community_in_scope(
+    app: &AppState,
+    scope: &SearchScope,
+    community_uuid: &str,
+) -> SearchApiResult<Option<(String, Value, Vec<GraphEntity>)>> {
+    for project_id in &scope.project_ids {
+        if let Some((community, members)) = find_community(app, project_id, community_uuid).await? {
+            return Ok(Some((project_id.clone(), community, members)));
+        }
     }
     Ok(None)
 }

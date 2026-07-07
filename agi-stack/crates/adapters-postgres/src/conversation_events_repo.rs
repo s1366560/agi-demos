@@ -19,6 +19,7 @@ pub struct AgentExecutionEventListQuery<'a> {
     pub from_time_us: i64,
     pub from_counter: i64,
     pub limit: i64,
+    pub event_types: &'a [String],
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -90,12 +91,14 @@ impl PgAgentExecutionEventRepository {
              FROM agent_execution_events \
              WHERE conversation_id = $1 \
                AND (event_time_us, event_counter::bigint) > ($2, $3) \
+               AND (cardinality($4::text[]) = 0 OR event_type = ANY($4)) \
              ORDER BY event_time_us ASC, event_counter ASC \
-             LIMIT $4",
+             LIMIT $5",
         )
         .bind(query.conversation_id)
         .bind(query.from_time_us)
         .bind(query.from_counter)
+        .bind(query.event_types)
         .bind(query.limit)
         .fetch_all(&self.pool)
         .await

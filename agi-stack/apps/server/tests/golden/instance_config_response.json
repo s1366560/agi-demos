@@ -1,0 +1,12 @@
+{
+  "env_vars": {
+    "RUST_LOG": "info"
+  },
+  "advanced_config": {
+    "autoscale": true
+  },
+  "llm_providers": {
+    "provider_id": "provider-1",
+    "model_name": "gpt-4o-mini"
+  }
+}

@@ -5,11 +5,13 @@
 //! entity upsert, relationship upsert, project-scoped entity search/get,
 //! outgoing neighbours, and depth-bounded subgraph. Community read and
 //! synchronous rebuild endpoints are projected from a project snapshot with the
-//! portable core Louvain math; the broader Python graph router still owns
-//! persisted community rebuild workflows and tenant-wide pagination until those
-//! semantics are migrated with parity goldens.
+//! portable core Louvain math. Background community rebuild requests are logged
+//! to the shared EventStream and completed by a Rust worker task; broader
+//! tenant-wide pagination still stays Python-owned until those semantics are
+//! migrated with parity goldens.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::Ordering;
 
 use axum::{
     extract::{Path, Query, State},
@@ -29,6 +31,13 @@ use crate::AppState;
 mod views;
 
 use views::*;
+
+const GRAPH_SNAPSHOT_VERSION: u32 = 1;
+const GRAPH_IMPORT_MAX_ENTITIES: usize = 1_000;
+const GRAPH_IMPORT_MAX_RELATIONSHIPS: usize = 2_000;
+const GRAPH_REBUILD_EVENT_STREAM_MAX_LEN: usize = 1_000;
+const PERSISTED_COMMUNITY_ENTITY_TYPE: &str = "Community";
+const PERSISTED_COMMUNITY_MEMBER_RELATION_TYPE: &str = "HAS_MEMBER";
 
 #[derive(Debug)]
 struct GraphApiError {
@@ -54,10 +63,6 @@ impl GraphApiError {
 
     fn not_found(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, detail)
-    }
-
-    fn not_implemented(detail: impl Into<String>) -> Self {
-        Self::new(StatusCode::NOT_IMPLEMENTED, detail)
     }
 
     fn internal(detail: impl std::fmt::Display) -> Self {
@@ -305,20 +310,357 @@ async fn rebuild_communities(
     ensure_project_write(&app, &identity, project_id).await?;
 
     if query.background {
-        return Err(GraphApiError::not_implemented(
-            "Background community rebuild is not implemented in Rust",
-        ));
+        return enqueue_background_community_rebuild(app, identity, project_id).await;
     }
 
     let snapshot = graph_project_snapshot(&app, project_id, cap_scan_limit(None)).await?;
-    let entities_processed = snapshot.entities.len();
-    let communities_count = community_views(project_id, snapshot, DEFAULT_MIN_COMMUNITY_SIZE).len();
+    let entities_processed = count_source_entities(&snapshot);
+    let communities = project_communities(project_id, snapshot.clone(), DEFAULT_MIN_COMMUNITY_SIZE);
+    let communities_count = communities.len();
+    persist_community_projection(&app, project_id, &snapshot, &communities, now_ms()).await?;
 
     Ok(Json(RebuildCommunitiesResponse {
         status: "success".to_string(),
         message: "Communities rebuilt successfully".to_string(),
         communities_count,
         entities_processed,
+        job_id: None,
+        job_status: None,
+        event_topic: None,
+        requested_event_id: None,
+    }))
+}
+
+async fn enqueue_background_community_rebuild(
+    app: AppState,
+    identity: Identity,
+    project_id: &str,
+) -> GraphApiResult<Json<RebuildCommunitiesResponse>> {
+    let job_id = next_graph_rebuild_job_id(&app, project_id);
+    let topic = graph_rebuild_topic(project_id);
+    let requested_event_id = append_graph_rebuild_event(
+        &app,
+        project_id,
+        json!({
+            "type": "graph_community_rebuild_requested",
+            "job_id": job_id.as_str(),
+            "project_id": project_id,
+            "requested_by": identity.user_id.as_str(),
+            "job_status": "queued",
+            "min_community_size": DEFAULT_MIN_COMMUNITY_SIZE,
+            "scan_limit": cap_scan_limit(None),
+            "created_at": rfc3339(now_ms()),
+        }),
+    )
+    .await?;
+
+    let worker_app = app.clone();
+    let worker_project_id = project_id.to_string();
+    let worker_job_id = job_id.clone();
+    tokio::spawn(async move {
+        run_background_community_rebuild(worker_app, worker_project_id, worker_job_id).await;
+    });
+
+    Ok(Json(RebuildCommunitiesResponse {
+        status: "accepted".to_string(),
+        message: "Background community rebuild queued".to_string(),
+        communities_count: 0,
+        entities_processed: 0,
+        job_id: Some(job_id),
+        job_status: Some("queued".to_string()),
+        event_topic: Some(topic),
+        requested_event_id: Some(requested_event_id),
+    }))
+}
+
+async fn get_rebuild_job(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(job_id): Path<String>,
+    Query(query): Query<RebuildCommunityJobQuery>,
+) -> GraphApiResult<Json<RebuildCommunityJobStatusResponse>> {
+    let project_id = require_project_id(query.project_id.as_deref())?;
+    ensure_project_access(&app, &identity, project_id).await?;
+
+    let topic = graph_rebuild_topic(project_id);
+    let entries = app
+        .events
+        .read_after(&topic, "", GRAPH_REBUILD_EVENT_STREAM_MAX_LEN)
+        .await
+        .map_err(GraphApiError::internal)?;
+    let mut events = Vec::new();
+    for entry in entries {
+        let Ok(payload) = serde_json::from_str::<Value>(&entry.payload) else {
+            continue;
+        };
+        if payload.get("job_id").and_then(Value::as_str) != Some(job_id.as_str()) {
+            continue;
+        }
+        if let Some(event) = graph_rebuild_job_event_view(entry.id, &payload) {
+            events.push(event);
+        }
+    }
+
+    let Some(latest) = events.last() else {
+        return Err(GraphApiError::not_found("Community rebuild job not found"));
+    };
+
+    Ok(Json(RebuildCommunityJobStatusResponse {
+        job_id,
+        project_id: project_id.to_string(),
+        job_status: latest.job_status.clone(),
+        event_topic: topic,
+        latest_event_id: latest.event_id.clone(),
+        communities_count: latest.communities_count,
+        entities_processed: latest.entities_processed,
+        persisted_communities_count: latest.persisted_communities_count,
+        error: latest.error.clone(),
+        events,
+    }))
+}
+
+fn graph_rebuild_job_event_view(
+    event_id: String,
+    payload: &Value,
+) -> Option<RebuildCommunityJobEventView> {
+    Some(RebuildCommunityJobEventView {
+        event_id,
+        event_type: payload.get("type")?.as_str()?.to_string(),
+        job_status: payload.get("job_status")?.as_str()?.to_string(),
+        created_at: value_string(payload, "created_at"),
+        started_at: value_string(payload, "started_at"),
+        completed_at: value_string(payload, "completed_at"),
+        failed_at: value_string(payload, "failed_at"),
+        communities_count: value_usize(payload, "communities_count"),
+        entities_processed: value_usize(payload, "entities_processed"),
+        persisted_communities_count: value_usize(payload, "persisted_communities_count"),
+        error: value_string(payload, "error"),
+    })
+}
+
+fn value_string(payload: &Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+}
+
+fn value_usize(payload: &Value, key: &str) -> Option<usize> {
+    payload
+        .get(key)
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+}
+
+async fn run_background_community_rebuild(app: AppState, project_id: String, job_id: String) {
+    let _ = append_graph_rebuild_event(
+        &app,
+        &project_id,
+        json!({
+            "type": "graph_community_rebuild_started",
+            "job_id": job_id.as_str(),
+            "project_id": project_id.as_str(),
+            "job_status": "running",
+            "started_at": rfc3339(now_ms()),
+        }),
+    )
+    .await;
+
+    match graph_project_snapshot(&app, &project_id, cap_scan_limit(None)).await {
+        Ok(snapshot) => {
+            let entities_processed = count_source_entities(&snapshot);
+            let communities =
+                project_communities(&project_id, snapshot.clone(), DEFAULT_MIN_COMMUNITY_SIZE);
+            let communities_count = communities.len();
+            let persisted_communities_count = match persist_community_projection(
+                &app,
+                &project_id,
+                &snapshot,
+                &communities,
+                now_ms(),
+            )
+            .await
+            {
+                Ok(()) => communities_count,
+                Err(err) => {
+                    let _ = append_graph_rebuild_event(
+                        &app,
+                        &project_id,
+                        json!({
+                            "type": "graph_community_rebuild_failed",
+                            "job_id": job_id.as_str(),
+                            "project_id": project_id.as_str(),
+                            "job_status": "failed",
+                            "error": err.detail,
+                            "failed_at": rfc3339(now_ms()),
+                        }),
+                    )
+                    .await;
+                    return;
+                }
+            };
+            let _ = append_graph_rebuild_event(
+                &app,
+                &project_id,
+                json!({
+                    "type": "graph_community_rebuild_completed",
+                    "job_id": job_id.as_str(),
+                    "project_id": project_id.as_str(),
+                    "job_status": "completed",
+                    "communities_count": communities_count,
+                    "entities_processed": entities_processed,
+                    "persisted_communities_count": persisted_communities_count,
+                    "completed_at": rfc3339(now_ms()),
+                }),
+            )
+            .await;
+        }
+        Err(err) => {
+            let _ = append_graph_rebuild_event(
+                &app,
+                &project_id,
+                json!({
+                    "type": "graph_community_rebuild_failed",
+                    "job_id": job_id.as_str(),
+                    "project_id": project_id.as_str(),
+                    "job_status": "failed",
+                    "error": err.detail,
+                    "failed_at": rfc3339(now_ms()),
+                }),
+            )
+            .await;
+        }
+    }
+}
+
+async fn append_graph_rebuild_event(
+    app: &AppState,
+    project_id: &str,
+    payload: Value,
+) -> GraphApiResult<String> {
+    app.events
+        .append(
+            &graph_rebuild_topic(project_id),
+            &payload.to_string(),
+            GRAPH_REBUILD_EVENT_STREAM_MAX_LEN,
+        )
+        .await
+        .map_err(GraphApiError::internal)
+}
+
+fn graph_rebuild_topic(project_id: &str) -> String {
+    format!("graph:community_rebuilds:{project_id}")
+}
+
+fn next_graph_rebuild_job_id(app: &AppState, project_id: &str) -> String {
+    let seq = app.event_counter.fetch_add(1, Ordering::SeqCst) + 1;
+    format!(
+        "graph_rebuild_{:016x}_{seq:020}",
+        stable_token_hash(project_id)
+    )
+}
+
+fn stable_token_hash(value: &str) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in value.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+async fn export_graph(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Query(query): Query<GraphExportQuery>,
+) -> GraphApiResult<Json<GraphExportResponse>> {
+    let project_id = require_project_id(query.project_id.as_deref())?;
+    ensure_project_access(&app, &identity, project_id).await?;
+
+    let snapshot = graph_project_snapshot(&app, project_id, cap_scan_limit(query.limit)).await?;
+    let entities: Vec<EntityUpsertPayload> = snapshot
+        .entities
+        .into_iter()
+        .map(EntityUpsertPayload::from_entity)
+        .collect();
+    let relationships: Vec<RelationshipUpsertPayload> = snapshot
+        .relationships
+        .into_iter()
+        .map(RelationshipUpsertPayload::from_relationship)
+        .collect();
+    Ok(Json(GraphExportResponse {
+        version: GRAPH_SNAPSHOT_VERSION,
+        project_id: project_id.to_string(),
+        exported_at: rfc3339(now_ms()),
+        stats: GraphExportStats {
+            entities_count: entities.len(),
+            relationships_count: relationships.len(),
+        },
+        entities,
+        relationships,
+    }))
+}
+
+async fn import_graph(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Json(payload): Json<GraphImportPayload>,
+) -> GraphApiResult<Json<GraphImportResponse>> {
+    if payload.version != GRAPH_SNAPSHOT_VERSION {
+        return Err(GraphApiError::bad_request(
+            "unsupported graph snapshot version",
+        ));
+    }
+    let project_id = require_project_id(Some(payload.project_id.as_str()))?.to_string();
+    ensure_project_write(&app, &identity, &project_id).await?;
+
+    if payload.entities.len() > GRAPH_IMPORT_MAX_ENTITIES {
+        return Err(GraphApiError::bad_request(
+            "too many graph entities to import",
+        ));
+    }
+    if payload.relationships.len() > GRAPH_IMPORT_MAX_RELATIONSHIPS {
+        return Err(GraphApiError::bad_request(
+            "too many graph relationships to import",
+        ));
+    }
+    for entity in &payload.entities {
+        if entity.project_id != project_id {
+            return Err(GraphApiError::bad_request(
+                "graph import entity project_id must match package project_id",
+            ));
+        }
+    }
+    for rel in &payload.relationships {
+        if rel.project_id != project_id {
+            return Err(GraphApiError::bad_request(
+                "graph import relationship project_id must match package project_id",
+            ));
+        }
+    }
+
+    let entities_imported = payload.entities.len();
+    let relationships_imported = payload.relationships.len();
+    for entity in payload.entities {
+        app.graph
+            .upsert_entity(entity.into_entity())
+            .await
+            .map_err(GraphApiError::internal)?;
+    }
+    for rel in payload.relationships {
+        app.graph
+            .upsert_relationship(rel.into_relationship())
+            .await
+            .map_err(GraphApiError::internal)?;
+    }
+
+    Ok(Json(GraphImportResponse {
+        status: "success".to_string(),
+        message: "Graph snapshot imported successfully".to_string(),
+        version: GRAPH_SNAPSHOT_VERSION,
+        project_id,
+        entities_imported,
+        relationships_imported,
     }))
 }
 
@@ -513,23 +855,70 @@ fn community_summary(members: &[EntityView]) -> String {
         .join(", ")
 }
 
-fn community_views(project_id: &str, graph: Subgraph, min_members: usize) -> Vec<CommunityView> {
-    let nodes: Vec<String> = graph
+#[derive(Debug, Clone)]
+struct ProjectCommunity {
+    view: CommunityView,
+    member_uuids: Vec<String>,
+    members: Vec<EntityView>,
+}
+
+fn is_persisted_community_entity(entity: &GraphEntity) -> bool {
+    entity.entity_type == PERSISTED_COMMUNITY_ENTITY_TYPE && entity.uuid.starts_with("community_")
+}
+
+fn is_persisted_community_relationship(rel: &Relationship) -> bool {
+    rel.relation_type == PERSISTED_COMMUNITY_MEMBER_RELATION_TYPE
+        && rel.source_uuid.starts_with("community_")
+}
+
+fn count_source_entities(graph: &Subgraph) -> usize {
+    graph
         .entities
+        .iter()
+        .filter(|entity| !is_persisted_community_entity(entity))
+        .count()
+}
+
+fn community_views(project_id: &str, graph: Subgraph, min_members: usize) -> Vec<CommunityView> {
+    project_communities(project_id, graph, min_members)
+        .into_iter()
+        .map(|community| community.view)
+        .collect()
+}
+
+fn project_communities(
+    project_id: &str,
+    graph: Subgraph,
+    min_members: usize,
+) -> Vec<ProjectCommunity> {
+    let source_entities: Vec<GraphEntity> = graph
+        .entities
+        .into_iter()
+        .filter(|entity| !is_persisted_community_entity(entity))
+        .collect();
+    let source_ids: BTreeSet<String> = source_entities
+        .iter()
+        .map(|entity| entity.uuid.clone())
+        .collect();
+    let nodes: Vec<String> = source_entities
         .iter()
         .map(|entity| entity.uuid.clone())
         .collect();
     let edges: Vec<CommunityEdge> = graph
         .relationships
-        .iter()
+        .into_iter()
+        .filter(|rel| {
+            !is_persisted_community_relationship(rel)
+                && source_ids.contains(&rel.source_uuid)
+                && source_ids.contains(&rel.target_uuid)
+        })
         .map(|rel| CommunityEdge {
             source: rel.source_uuid.clone(),
             target: rel.target_uuid.clone(),
-            weight: relationship_weight(rel),
+            weight: relationship_weight(&rel),
         })
         .collect();
-    let by_uuid: BTreeMap<String, EntityView> = graph
-        .entities
+    let by_uuid: BTreeMap<String, EntityView> = source_entities
         .into_iter()
         .map(|entity| {
             let view = EntityView::from(entity);
@@ -540,13 +929,14 @@ fn community_views(project_id: &str, graph: Subgraph, min_members: usize) -> Vec
     detect_communities(&nodes, &edges, min_members)
         .into_iter()
         .map(|community| {
+            let member_uuids = community.members.clone();
             let members: Vec<EntityView> = community
                 .members
                 .iter()
                 .filter_map(|uuid| by_uuid.get(uuid).cloned())
                 .collect();
             let tenant_id = members.iter().find_map(|entity| entity.tenant_id.clone());
-            CommunityView {
+            let view = CommunityView {
                 uuid: community_id(project_id, &community.name, &community.members),
                 name: community.name,
                 summary: community_summary(&members),
@@ -555,9 +945,111 @@ fn community_views(project_id: &str, graph: Subgraph, min_members: usize) -> Vec
                 project_id: project_id.to_string(),
                 formed_at: None,
                 created_at: None,
+            };
+            ProjectCommunity {
+                view,
+                member_uuids,
+                members,
             }
         })
         .collect()
+}
+
+async fn persist_community_projection(
+    app: &AppState,
+    project_id: &str,
+    existing: &Subgraph,
+    communities: &[ProjectCommunity],
+    created_at_ms: i64,
+) -> GraphApiResult<()> {
+    let current_community_ids: BTreeSet<String> = communities
+        .iter()
+        .map(|community| community.view.uuid.clone())
+        .collect();
+    let current_member_rel_ids: BTreeSet<String> = communities
+        .iter()
+        .flat_map(|community| {
+            community.member_uuids.iter().map(|member_uuid| {
+                community_member_relationship_id(&community.view.uuid, member_uuid)
+            })
+        })
+        .collect();
+
+    for rel in existing
+        .relationships
+        .iter()
+        .filter(|rel| is_persisted_community_relationship(rel))
+        .filter(|rel| !current_member_rel_ids.contains(&rel.uuid))
+    {
+        app.graph
+            .delete_relationship(project_id, &rel.uuid)
+            .await
+            .map_err(GraphApiError::internal)?;
+    }
+
+    for entity in existing
+        .entities
+        .iter()
+        .filter(|entity| is_persisted_community_entity(entity))
+        .filter(|entity| !current_community_ids.contains(&entity.uuid))
+    {
+        app.graph
+            .delete_entity(project_id, &entity.uuid)
+            .await
+            .map_err(GraphApiError::internal)?;
+    }
+
+    for community in communities {
+        app.graph
+            .upsert_entity(GraphEntity {
+                uuid: community.view.uuid.clone(),
+                name: community.view.name.clone(),
+                entity_type: PERSISTED_COMMUNITY_ENTITY_TYPE.to_string(),
+                summary: community.view.summary.clone(),
+                project_id: project_id.to_string(),
+                tenant_id: community.view.tenant_id.clone(),
+                created_at_ms,
+                name_embedding: None,
+            })
+            .await
+            .map_err(GraphApiError::internal)?;
+        for member_uuid in &community.member_uuids {
+            app.graph
+                .upsert_relationship(Relationship {
+                    uuid: community_member_relationship_id(&community.view.uuid, member_uuid),
+                    source_uuid: community.view.uuid.clone(),
+                    target_uuid: member_uuid.clone(),
+                    relation_type: PERSISTED_COMMUNITY_MEMBER_RELATION_TYPE.to_string(),
+                    fact: format!("{} contains {member_uuid}", community.view.name),
+                    score: 1.0,
+                    project_id: project_id.to_string(),
+                    created_at_ms,
+                })
+                .await
+                .map_err(GraphApiError::internal)?;
+        }
+    }
+    Ok(())
+}
+
+fn community_member_relationship_id(community_uuid: &str, member_uuid: &str) -> String {
+    format!(
+        "community_member_{:016x}",
+        stable_pair_hash(community_uuid, member_uuid)
+    )
+}
+
+fn stable_pair_hash(left: &str, right: &str) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for part in [left, right] {
+        for byte in part.as_bytes() {
+            hash ^= *byte as u64;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        hash ^= 0xff;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 async fn find_community(
@@ -567,49 +1059,14 @@ async fn find_community(
     min_members: usize,
 ) -> GraphApiResult<Option<(CommunityView, Vec<EntityView>)>> {
     let snapshot = graph_project_snapshot(app, project_id, cap_scan_limit(None)).await?;
-    let views = community_views(project_id, snapshot.clone(), min_members);
-    let Some(view) = views
+    let communities = project_communities(project_id, snapshot, min_members);
+    let Some(community) = communities
         .into_iter()
-        .find(|community| community.uuid == community_uuid)
+        .find(|community| community.view.uuid == community_uuid)
     else {
         return Ok(None);
     };
-    let nodes: Vec<String> = snapshot
-        .entities
-        .iter()
-        .map(|entity| entity.uuid.clone())
-        .collect();
-    let edges: Vec<CommunityEdge> = snapshot
-        .relationships
-        .iter()
-        .map(|rel| CommunityEdge {
-            source: rel.source_uuid.clone(),
-            target: rel.target_uuid.clone(),
-            weight: relationship_weight(rel),
-        })
-        .collect();
-    let Some(community) = detect_communities(&nodes, &edges, min_members)
-        .into_iter()
-        .find(|community| {
-            community_id(project_id, &community.name, &community.members) == community_uuid
-        })
-    else {
-        return Ok(None);
-    };
-    let by_uuid: BTreeMap<String, EntityView> = snapshot
-        .entities
-        .into_iter()
-        .map(|entity| {
-            let view = EntityView::from(entity);
-            (view.uuid.clone(), view)
-        })
-        .collect();
-    let members = community
-        .members
-        .into_iter()
-        .filter_map(|uuid| by_uuid.get(&uuid).cloned())
-        .collect();
-    Ok(Some((view, members)))
+    Ok(Some((community.view, community.members)))
 }
 
 fn subgraph_elements(graph: Subgraph) -> Value {
@@ -655,11 +1112,17 @@ fn subgraph_elements(graph: Subgraph) -> Value {
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/graph/export", get(export_graph))
+        .route("/api/v1/graph/import", post(import_graph))
         .route("/api/v1/graph/communities/", get(list_communities))
         .route("/api/v1/graph/communities", get(list_communities))
         .route(
             "/api/v1/graph/communities/rebuild",
             post(rebuild_communities),
+        )
+        .route(
+            "/api/v1/graph/communities/rebuild/jobs/:job_id",
+            get(get_rebuild_job),
         )
         .route("/api/v1/graph/communities/:uuid", get(get_community))
         .route(

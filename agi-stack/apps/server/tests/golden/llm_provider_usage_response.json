@@ -1,0 +1,19 @@
+{
+  "provider_id": "11111111-2222-4333-8444-555555555555",
+  "tenant_id": "tenant-llm",
+  "statistics": [
+    {
+      "provider_id": "11111111-2222-4333-8444-555555555555",
+      "tenant_id": "tenant-llm",
+      "operation_type": "llm",
+      "total_requests": 2,
+      "total_prompt_tokens": 13,
+      "total_completion_tokens": 27,
+      "total_tokens": 40,
+      "total_cost_usd": 0.03,
+      "avg_response_time_ms": null,
+      "first_request_at": "2026-01-01T00:00:00Z",
+      "last_request_at": "2026-01-02T00:00:00Z"
+    }
+  ]
+}

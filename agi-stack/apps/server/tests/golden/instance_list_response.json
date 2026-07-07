@@ -1,0 +1,58 @@
+{
+  "instances": [
+    {
+      "id": "inst_550e8400",
+      "name": "Production Instance",
+      "slug": "production-instance",
+      "description": "Primary production runtime",
+      "tenant_id": "tenant_123",
+      "cluster_id": "cluster_456",
+      "namespace": "production",
+      "image_version": "1.2.0",
+      "replicas": 2,
+      "cpu_request": "200m",
+      "cpu_limit": "1000m",
+      "mem_request": "512Mi",
+      "mem_limit": "1Gi",
+      "service_type": "ClusterIP",
+      "ingress_domain": "agents.example.test",
+      "env_vars": {
+        "RUST_LOG": "info"
+      },
+      "quota_cpu": "2",
+      "quota_memory": "4Gi",
+      "quota_max_pods": 4,
+      "storage_class": "standard",
+      "storage_size": "20Gi",
+      "advanced_config": {
+        "autoscale": true
+      },
+      "llm_providers": {
+        "provider_id": "provider-1",
+        "model_name": "gpt-4o-mini"
+      },
+      "compute_provider": "kubernetes",
+      "runtime": "default",
+      "workspace_id": "workspace-1",
+      "hex_position_q": 1,
+      "hex_position_r": -1,
+      "agent_display_name": "Prod Agent",
+      "agent_label": "prod",
+      "theme_color": "#3366ff",
+      "status": "running",
+      "health_status": "healthy",
+      "current_revision": 3,
+      "available_replicas": 2,
+      "proxy_token": "proxy-token-redacted-shape",
+      "pending_config": {
+        "image_version": "1.3.0"
+      },
+      "created_by": "user_123",
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-15T12:45:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}

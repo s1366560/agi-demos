@@ -1,0 +1,18 @@
+{
+  "id": "entity-type-1",
+  "project_id": "project-1",
+  "name": "Person",
+  "description": "Person description",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      }
+    }
+  },
+  "status": "ENABLED",
+  "source": "user",
+  "created_at": "2026-01-05T00:00:00Z",
+  "updated_at": "2026-01-06T00:00:00Z"
+}

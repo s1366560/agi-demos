@@ -1,0 +1,69 @@
+{
+  "edition": "ce",
+  "features": [
+    {
+      "id": "gene_market",
+      "name": "Gene Market",
+      "description": "Gene marketplace",
+      "edition": "ce",
+      "enabled": true
+    },
+    {
+      "id": "knowledge_graph",
+      "name": "Knowledge Graph",
+      "description": "Neo4j knowledge graph",
+      "edition": "ce",
+      "enabled": true
+    },
+    {
+      "id": "agent_pool",
+      "name": "Agent Pool",
+      "description": "Agent pool management",
+      "edition": "ce",
+      "enabled": true
+    },
+    {
+      "id": "mcp_tools",
+      "name": "MCP Tools",
+      "description": "Model Context Protocol tools",
+      "edition": "ce",
+      "enabled": true
+    },
+    {
+      "id": "webhooks",
+      "name": "Webhooks",
+      "description": "Outbound webhook management",
+      "edition": "ce",
+      "enabled": true
+    },
+    {
+      "id": "events",
+      "name": "Events",
+      "description": "System event logging",
+      "edition": "ce",
+      "enabled": true
+    },
+    {
+      "id": "advanced_analytics",
+      "name": "Advanced Analytics",
+      "description": "Advanced analytics dashboard",
+      "edition": "ee",
+      "enabled": false
+    },
+    {
+      "id": "sso",
+      "name": "SSO",
+      "description": "Single Sign-On",
+      "edition": "ee",
+      "enabled": false
+    }
+  ],
+  "agent_runtime": {
+    "mode": "auto"
+  },
+  "memory_runtime": {
+    "mode": "plugin",
+    "tool_provider_mode": "plugin",
+    "failure_persistence_enabled": true
+  }
+}

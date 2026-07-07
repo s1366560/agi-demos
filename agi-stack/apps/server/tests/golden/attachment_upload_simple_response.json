@@ -1,0 +1,13 @@
+{
+  "conversation_id": "conversation-attachments",
+  "created_at": "2026-01-02T03:04:05+00:00",
+  "error_message": null,
+  "filename": "attachment-1.txt",
+  "id": "attachment-1",
+  "mime_type": "text/plain",
+  "project_id": "project-attachments",
+  "purpose": "both",
+  "sandbox_path": null,
+  "size_bytes": 42,
+  "status": "uploaded"
+}

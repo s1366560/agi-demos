@@ -1,0 +1,28 @@
+{
+  "messages": [
+    {
+      "id": "dlq-1",
+      "event_id": "event-1",
+      "event_type": "agent.failed",
+      "event_data": "{\"type\":\"agent.failed\"}",
+      "routing_key": "agent.events.failed",
+      "error": "boom",
+      "error_type": "RuntimeError",
+      "error_traceback": "traceback",
+      "retry_count": 1,
+      "max_retries": 3,
+      "first_failed_at": "2026-01-02T03:04:05Z",
+      "last_failed_at": "2026-01-02T03:05:05Z",
+      "next_retry_at": "2026-01-02T03:06:05Z",
+      "status": "pending",
+      "metadata": {
+        "consumer": "events"
+      },
+      "can_retry": true,
+      "age_seconds": "<number>"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}

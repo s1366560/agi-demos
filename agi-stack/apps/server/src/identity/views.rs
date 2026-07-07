@@ -2,8 +2,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use agistack_adapters_postgres::{
-    InvitationRecord, ProjectDashboardStatsRecord, ProjectMemberRecord, ProjectMembersRecord,
-    ProjectReadRecord, TenantRecord,
+    CurrentUserRecord, InvitationRecord, ProjectDashboardStatsRecord, ProjectMemberRecord,
+    ProjectMembersRecord, ProjectReadRecord, TenantRecord,
 };
 
 use super::{
@@ -18,6 +18,40 @@ pub struct LoginOutcome {
     pub access_token: String,
     pub token_type: String,
     pub must_change_password: bool,
+}
+
+/// Current-user response, byte-shaped like Python's `User` schema.
+#[derive(Debug, Serialize)]
+pub struct CurrentUserView {
+    pub user_id: String,
+    pub email: String,
+    pub name: String,
+    pub roles: Vec<String>,
+    pub is_active: bool,
+    pub created_at: String,
+    pub profile: Value,
+    pub preferred_language: Option<String>,
+}
+
+impl From<CurrentUserRecord> for CurrentUserView {
+    fn from(record: CurrentUserRecord) -> Self {
+        let profile = if record.profile.is_object() {
+            record.profile
+        } else {
+            Value::Object(Default::default())
+        };
+
+        Self {
+            user_id: record.id,
+            email: record.email,
+            name: record.full_name.unwrap_or_default(),
+            roles: record.roles,
+            is_active: record.is_active,
+            created_at: iso8601(record.created_at),
+            profile,
+            preferred_language: record.preferred_language,
+        }
+    }
 }
 
 /// `POST /auth/device/code` response, byte-shaped like Python.

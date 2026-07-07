@@ -11,7 +11,10 @@
 use async_trait::async_trait;
 
 use crate::agent::types::{AgentAction, SessionState, TranscriptEntry};
-use crate::model::{Entity, Episode, GraphEntity, Memory, Relationship, Subgraph};
+use crate::model::{
+    Entity, Episode, GraphEntity, GraphExport, GraphStats, GraphStatsScope, Memory, Relationship,
+    Subgraph,
+};
 
 /// Errors surfaced across core ports.
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +66,21 @@ pub struct MemoryDraft {
     pub entities: Vec<Entity>,
 }
 
+/// Structured relationship candidate produced by an LLM extraction pass.
+///
+/// `source` and `target` intentionally name already-extracted entities instead
+/// of graph UUIDs. The server graph projection layer resolves those names to
+/// project-scoped graph nodes after access and tenancy have already been
+/// established.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RelationshipDraft {
+    pub source: String,
+    pub target: String,
+    pub relation_type: String,
+    pub fact: String,
+    pub score: f32,
+}
+
 /// The model port: both the memory-extraction skill and the agent "Think" step.
 ///
 /// Folding both into one port mirrors the Python `infrastructure/llm` client,
@@ -71,6 +89,15 @@ pub struct MemoryDraft {
 pub trait LlmPort: Send + Sync {
     /// Turn an episode into a structured memory draft.
     async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft>;
+
+    /// Extract semantic relationships between already-extracted memory entities.
+    ///
+    /// The default is intentionally empty so existing local/device/browser LLM
+    /// stand-ins remain compatible and production hosts can gate this optional
+    /// graph-enrichment pass independently of memory ingestion.
+    async fn extract_relationships(&self, _memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
+        Ok(Vec::new())
+    }
 
     /// Decide the next ReAct action given the goal, the current round, the
     /// transcript so far, and the names of the available tools.
@@ -477,6 +504,14 @@ pub trait GraphStore: Send + Sync {
     /// MERGE semantics where edges may precede nodes during extraction).
     async fn upsert_relationship(&self, rel: Relationship) -> CoreResult<()>;
 
+    /// Delete an entity by `uuid`, scoped to `project_id`, and remove any
+    /// project-scoped relationships that touch it so graph snapshots never return
+    /// dangling edges.
+    async fn delete_entity(&self, project_id: &str, uuid: &str) -> CoreResult<()>;
+
+    /// Delete one relationship by `uuid`, scoped to `project_id`.
+    async fn delete_relationship(&self, project_id: &str, uuid: &str) -> CoreResult<()>;
+
     /// Fetch one entity by `uuid`, scoped to `project_id`.
     async fn get_entity(&self, project_id: &str, uuid: &str) -> CoreResult<Option<GraphEntity>>;
 
@@ -504,4 +539,28 @@ pub trait GraphStore: Send + Sync {
         query: &str,
         limit: usize,
     ) -> CoreResult<Vec<GraphEntity>>;
+
+    /// Aggregate node/relationship counts for data-export stats. `All` mirrors
+    /// Python's admin-wide scope; `Projects([])` is intentionally empty.
+    async fn stats(&self, scope: GraphStatsScope) -> CoreResult<GraphStats>;
+
+    /// Export raw graph entities and relationships for the data-export surface.
+    /// The HTTP layer decides which entity types become episodes, entities, or
+    /// communities to preserve Python's route-specific envelope.
+    async fn export(&self, scope: GraphStatsScope) -> CoreResult<GraphExport>;
+
+    /// Count `Episodic` graph nodes older than `cutoff_ms` for cleanup dry-runs.
+    async fn count_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize>;
+
+    /// Delete `Episodic` graph nodes older than `cutoff_ms`, removing dangling
+    /// relationships as part of the adapter's graph-delete semantics.
+    async fn delete_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize>;
 }

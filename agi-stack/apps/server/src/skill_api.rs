@@ -22,8 +22,9 @@ use serde_json::{json, Map, Value};
 use serde_yaml_ng::{Mapping as YamlMapping, Value as YamlValue};
 
 use agistack_adapters_postgres::{
-    PgSkillEvolutionRepository, PgSkillRepository, SkillEvolutionJobRecord, SkillProjectAccess,
-    SkillRecord, SkillUpdateRecord, SkillVersionRecord,
+    PgSkillEvolutionRepository, PgSkillRepository, SkillEvolutionJobAuditEventInsertRecord,
+    SkillEvolutionJobRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
+    SkillVersionRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 
@@ -58,7 +59,9 @@ use evolution_config::{
     validate_evolution_detail_limit, validate_overview_limit, SkillEvolutionConfig,
 };
 pub(crate) use evolution_llm::LlmSkillEvolutionStageEngine;
-pub(crate) use evolution_pipeline::{PgSkillEvolutionPipelineExecutor, SkillEvolutionStageEngine};
+pub(crate) use evolution_pipeline::{
+    PgSkillEvolutionPipelineExecutor, PgSkillEvolutionPipelineStore, SkillEvolutionStageEngine,
+};
 pub(crate) use evolution_scheduler::PgSkillEvolutionScheduler;
 use evolution_scheduler::{
     InMemorySkillEvolutionScheduler, SharedSkillEvolutionScheduler, SkillEvolutionScheduleResult,
@@ -232,6 +235,15 @@ fn evolution_change_summary(job: &SkillEvolutionJobRecord, action: &str) -> Opti
             .filter(|rationale| !rationale.is_empty())
             .map_or_else(|| format!("Evolution {action}"), ToString::to_string),
     )
+}
+
+fn skill_evolution_job_audit_event_id() -> String {
+    let hex: String = generate_uuid_v4()
+        .chars()
+        .filter(|ch| *ch != '-')
+        .take(16)
+        .collect();
+    format!("evja-{hex}")
 }
 
 fn replace_frontmatter_description(content: &str, description: &str) -> String {

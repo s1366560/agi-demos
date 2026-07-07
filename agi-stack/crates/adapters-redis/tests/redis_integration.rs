@@ -10,18 +10,26 @@
 //! Each run uses a unique topic (nanosecond suffix) and `DEL`s it at start and
 //! end, so the test is hermetic and leaves no residue on the shared Redis.
 
+use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use agistack_adapters_mem::InMemoryEventStream;
 use agistack_adapters_redis::{
     agent_finished_key, agent_running_key, connect, device_code_key, device_user_code_key,
-    sandbox_http_services_key, sandbox_mcp_upstream_token_key, sandbox_preview_session_key,
-    sandbox_terminal_session_key, worker_launch_cooldown_key, workspace_autonomy_cooldown_key,
-    DeviceGrant, RedisDeviceGrantStore, RedisEventStream, RedisSandboxHttpRegistry,
-    RedisWorkerLaunchStateStore, RedisWorkspaceAutonomyCooldownStore, SandboxHttpServiceRecord,
-    SandboxMcpUpstreamTokenRecord, SandboxPreviewSessionRecord, SandboxTerminalSessionRecord,
+    dlq_error_type_index_key, dlq_event_type_index_key, dlq_message_key, dlq_pending_index_key,
+    dlq_stats_key, sandbox_http_services_key, sandbox_mcp_upstream_token_key,
+    sandbox_preview_session_key, sandbox_terminal_session_key, worker_launch_cooldown_key,
+    workspace_autonomy_cooldown_key, DeviceGrant, DlqListQuery, RedisDeviceGrantStore,
+    RedisDlqRepository, RedisEventStream, RedisSandboxHttpRegistry, RedisWorkerLaunchStateStore,
+    RedisWorkspaceAutonomyCooldownStore, SandboxHttpServiceRecord, SandboxMcpUpstreamTokenRecord,
+    SandboxPreviewSessionRecord, SandboxTerminalSessionRecord,
 };
 use agistack_core::ports::EventStream;
+use redis::streams::StreamRangeReply;
+use serde_json::json;
+use tokio::sync::Mutex;
+
+static REDIS_DLQ_TEST_LOCK: Mutex<()> = Mutex::const_new(());
 
 fn redis_uri() -> String {
     std::env::var("REDIS_TEST_URI").unwrap_or_else(|_| "redis://localhost:6379".to_string())
@@ -96,6 +104,17 @@ async fn redis_workspace_autonomy_cooldown_or_skip() -> Option<RedisWorkspaceAut
     }
 }
 
+async fn redis_dlq_or_skip() -> Option<RedisDlqRepository> {
+    let uri = redis_uri();
+    match RedisDlqRepository::connect(&uri).await {
+        Ok(store) => Some(store),
+        Err(e) => {
+            eprintln!("[skip] Redis unreachable at {uri}: {e} — skipping admin DLQ test");
+            None
+        }
+    }
+}
+
 async fn del(stream: &RedisEventStream, topic: &str) {
     // Best-effort cleanup via a throwaway append+trim is awkward; instead issue a
     // raw DEL through a fresh connection helper. RedisEventStream doesn't expose
@@ -137,6 +156,37 @@ async fn set_key(key: &str, value: &str, ttl_seconds: u64) {
         .query_async(&mut conn)
         .await
         .unwrap();
+}
+
+async fn redis_hash_snapshot(key: &str) -> BTreeMap<String, String> {
+    let uri = redis_uri();
+    let client = redis::Client::open(uri).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    redis::cmd("HGETALL")
+        .arg(key)
+        .query_async(&mut conn)
+        .await
+        .unwrap()
+}
+
+async fn restore_redis_hash(key: &str, snapshot: BTreeMap<String, String>) {
+    let uri = redis_uri();
+    let client = redis::Client::open(uri).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    let _: i64 = redis::cmd("DEL")
+        .arg(key)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    if snapshot.is_empty() {
+        return;
+    }
+    let mut cmd = redis::cmd("HSET");
+    cmd.arg(key);
+    for (field, value) in snapshot {
+        cmd.arg(field).arg(value);
+    }
+    let _: i64 = cmd.query_async(&mut conn).await.unwrap();
 }
 
 async fn payloads_after(
@@ -558,4 +608,474 @@ async fn redis_workspace_autonomy_cooldown_matches_python_key_and_ttl() {
     );
 
     del_keys(&[key]).await;
+}
+
+#[tokio::test]
+async fn redis_dlq_reads_python_keys_filters_and_stats() {
+    let Some(store) = redis_dlq_or_skip().await else {
+        return;
+    };
+    let _dlq_guard = REDIS_DLQ_TEST_LOCK.lock().await;
+    let suffix = unique_topic("dlq").replace(':', "-");
+    let id1 = format!("dlq-{suffix}-1");
+    let id2 = format!("dlq-{suffix}-2");
+    let mut message_keys = vec![dlq_message_key(&id1), dlq_message_key(&id2)];
+    let pending_key = dlq_pending_index_key().to_string();
+    let error_key = dlq_error_type_index_key("RuntimeError");
+    let agent_event_key = dlq_event_type_index_key("agent.failed");
+    let channel_event_key = dlq_event_type_index_key("channel.failed");
+    let stats_key = dlq_stats_key().to_string();
+    let original_stats = redis_hash_snapshot(&stats_key).await;
+
+    let uri = redis_uri();
+    let client = redis::Client::open(uri).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    let score1 = now - 20.0;
+    let score2 = now - 10.0;
+    for (id, event_type, score) in [
+        (&id1, "agent.failed", score1),
+        (&id2, "channel.failed", score2),
+    ] {
+        let payload = json!({
+            "id": id,
+            "event_id": format!("event-{id}"),
+            "event_type": event_type,
+            "event_data": "{\"ok\":false}",
+            "routing_key": "agent.events.failed",
+            "error": "boom",
+            "error_type": "RuntimeError",
+            "error_traceback": null,
+            "retry_count": 1,
+            "max_retries": 3,
+            "first_failed_at": "2026-01-02T03:04:05+00:00",
+            "last_failed_at": "2026-01-02T03:05:05+00:00",
+            "next_retry_at": null,
+            "status": "pending",
+            "metadata": {"source": "integration"}
+        })
+        .to_string();
+        let _: i64 = redis::cmd("HSET")
+            .arg(dlq_message_key(id))
+            .arg("data")
+            .arg(payload)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        for key in [&pending_key, &error_key] {
+            let _: i64 = redis::cmd("ZADD")
+                .arg(key)
+                .arg(score)
+                .arg(id)
+                .query_async(&mut conn)
+                .await
+                .unwrap();
+        }
+        let event_key = if event_type == "agent.failed" {
+            &agent_event_key
+        } else {
+            &channel_event_key
+        };
+        let _: i64 = redis::cmd("ZADD")
+            .arg(event_key)
+            .arg(score)
+            .arg(id)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+    }
+    let _: i64 = redis::cmd("HSET")
+        .arg(&stats_key)
+        .arg("total_messages")
+        .arg("2")
+        .arg("pending_count")
+        .arg("2")
+        .arg("retrying_count")
+        .arg("0")
+        .arg("discarded_count")
+        .arg("0")
+        .arg("expired_count")
+        .arg("0")
+        .arg("resolved_count")
+        .arg("0")
+        .arg("error:RuntimeError")
+        .arg("2")
+        .arg("event:agent.failed")
+        .arg("1")
+        .arg("event:channel.failed")
+        .arg("1")
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+
+    let by_error = store
+        .list_messages(DlqListQuery {
+            status: Some("pending"),
+            event_type: Some("agent.failed"),
+            error_type: Some("RuntimeError"),
+            routing_key_pattern: Some("agent.events.*"),
+            limit: 10,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        by_error
+            .iter()
+            .map(|message| &message.id)
+            .collect::<Vec<_>>(),
+        vec![&id2, &id1],
+        "error_type takes precedence over event_type, matching Python RedisDLQAdapter"
+    );
+    assert_eq!(
+        store
+            .count_messages(DlqListQuery {
+                status: Some("pending"),
+                event_type: Some("agent.failed"),
+                error_type: Some("RuntimeError"),
+                routing_key_pattern: Some("agent.events.*"),
+                limit: 10,
+                offset: 0,
+            })
+            .await
+            .unwrap(),
+        2
+    );
+
+    let by_event = store
+        .list_messages(DlqListQuery {
+            status: Some("pending"),
+            event_type: Some("agent.failed"),
+            error_type: None,
+            routing_key_pattern: Some("agent.events.*"),
+            limit: 10,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        by_event
+            .iter()
+            .map(|message| &message.id)
+            .collect::<Vec<_>>(),
+        vec![&id1]
+    );
+    assert_eq!(
+        store.get_message(&id1).await.unwrap().unwrap().metadata,
+        json!({"source": "integration"})
+    );
+
+    let stats = store.stats().await.unwrap();
+    assert_eq!(stats.total_messages, 2);
+    assert_eq!(stats.pending_count, 2);
+    assert_eq!(stats.error_type_counts.get("RuntimeError"), Some(&2));
+    assert_eq!(stats.event_type_counts.get("agent.failed"), Some(&1));
+    assert!(stats.oldest_message_age_seconds >= 0.0);
+
+    assert_eq!(
+        store
+            .discard_message(&id1, "operator decision", "2026-01-02T04:00:00Z")
+            .await
+            .unwrap(),
+        Some(true)
+    );
+    let discarded = store.get_message(&id1).await.unwrap().unwrap();
+    assert_eq!(discarded.status, "discarded");
+    assert_eq!(
+        discarded.metadata["discard_reason"],
+        json!("operator decision")
+    );
+
+    let expired_id = format!("dlq-{suffix}-expired");
+    let resolved_id = format!("dlq-{suffix}-resolved");
+    message_keys.push(dlq_message_key(&expired_id));
+    message_keys.push(dlq_message_key(&resolved_id));
+    let expired_payload = json!({
+        "id": expired_id,
+        "event_id": format!("event-{expired_id}"),
+        "event_type": "agent.failed",
+        "event_data": "{\"ok\":false}",
+        "routing_key": "agent.events.failed",
+        "error": "boom",
+        "error_type": "RuntimeError",
+        "retry_count": 1,
+        "max_retries": 3,
+        "first_failed_at": "2026-01-02T03:04:05+00:00",
+        "last_failed_at": "2026-01-02T03:05:05+00:00",
+        "next_retry_at": null,
+        "status": "pending",
+        "metadata": {}
+    })
+    .to_string();
+    let _: i64 = redis::cmd("HSET")
+        .arg(dlq_message_key(&expired_id))
+        .arg("data")
+        .arg(expired_payload)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    for key in [&pending_key, &error_key, &agent_event_key] {
+        let _: i64 = redis::cmd("ZADD")
+            .arg(key)
+            .arg(now - 7_200.0)
+            .arg(&expired_id)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+    }
+    assert_eq!(store.cleanup_expired(1).await.unwrap(), 1);
+    assert_eq!(
+        store
+            .get_message(&expired_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        "expired"
+    );
+
+    let resolved_payload = json!({
+        "id": resolved_id,
+        "event_id": format!("event-{resolved_id}"),
+        "event_type": "agent.failed",
+        "event_data": "{\"ok\":false}",
+        "routing_key": "agent.events.failed",
+        "error": "boom",
+        "error_type": "RuntimeError",
+        "retry_count": 1,
+        "max_retries": 3,
+        "first_failed_at": "2026-01-02T03:04:05+00:00",
+        "last_failed_at": "2026-01-02T03:05:05+00:00",
+        "next_retry_at": null,
+        "status": "resolved",
+        "metadata": {}
+    })
+    .to_string();
+    let _: i64 = redis::cmd("HSET")
+        .arg(dlq_message_key(&resolved_id))
+        .arg("data")
+        .arg(resolved_payload)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    for key in [&pending_key, &error_key, &agent_event_key] {
+        let _: i64 = redis::cmd("ZADD")
+            .arg(key)
+            .arg(now - 7_200.0)
+            .arg(&resolved_id)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+    }
+    assert_eq!(store.cleanup_resolved(1).await.unwrap(), 1);
+    assert!(store.get_message(&resolved_id).await.unwrap().is_none());
+
+    let _: i64 = redis::cmd("ZREM")
+        .arg(&pending_key)
+        .arg(&id1)
+        .arg(&id2)
+        .arg(&expired_id)
+        .arg(&resolved_id)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    let _: i64 = redis::cmd("ZREM")
+        .arg(&error_key)
+        .arg(&id1)
+        .arg(&id2)
+        .arg(&expired_id)
+        .arg(&resolved_id)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    let _: i64 = redis::cmd("ZREM")
+        .arg(&agent_event_key)
+        .arg(&id1)
+        .arg(&expired_id)
+        .arg(&resolved_id)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    let _: i64 = redis::cmd("ZREM")
+        .arg(&channel_event_key)
+        .arg(&id2)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    del_keys(&message_keys).await;
+    restore_redis_hash(&stats_key, original_stats).await;
+}
+
+#[tokio::test]
+async fn redis_dlq_retry_republishes_to_unified_event_stream() {
+    let Some(store) = redis_dlq_or_skip().await else {
+        return;
+    };
+    let _dlq_guard = REDIS_DLQ_TEST_LOCK.lock().await;
+    let suffix = unique_topic("dlq-retry").replace(':', "-");
+    let message_id = format!("dlq-{suffix}");
+    let event_id = format!("event-{suffix}");
+    let routing_key = format!("agent.{suffix}.retry");
+    let stream_key = format!("events:{routing_key}");
+    let message_key = dlq_message_key(&message_id);
+    let pending_key = dlq_pending_index_key().to_string();
+    let error_key = dlq_error_type_index_key("RuntimeError");
+    let event_key = dlq_event_type_index_key("agent.failed");
+    let stats_key = dlq_stats_key().to_string();
+    let original_stats = redis_hash_snapshot(&stats_key).await;
+
+    let uri = redis_uri();
+    let client = redis::Client::open(uri).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    del_keys(&[message_key.clone(), stream_key.clone()]).await;
+    let _: i64 = redis::cmd("DEL")
+        .arg(&stats_key)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+
+    let envelope = json!({
+        "schema_version": "1.0",
+        "event_id": event_id,
+        "event_type": "agent.failed",
+        "timestamp": "2026-01-02T03:04:05+00:00",
+        "source": "memstack",
+        "correlation_id": "corr-dlq-retry",
+        "causation_id": null,
+        "payload": {"ok": false},
+        "metadata": {"source": "integration"}
+    });
+    let payload = json!({
+        "id": message_id,
+        "event_id": envelope["event_id"].as_str().unwrap(),
+        "event_type": "agent.failed",
+        "event_data": envelope.to_string(),
+        "routing_key": routing_key,
+        "error": "boom",
+        "error_type": "RuntimeError",
+        "error_traceback": null,
+        "retry_count": 0,
+        "max_retries": 3,
+        "first_failed_at": "2026-01-02T03:04:05+00:00",
+        "last_failed_at": "2026-01-02T03:05:05+00:00",
+        "next_retry_at": null,
+        "status": "pending",
+        "metadata": {"source": "integration"}
+    })
+    .to_string();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    let _: i64 = redis::cmd("HSET")
+        .arg(&message_key)
+        .arg("data")
+        .arg(payload)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    for key in [&pending_key, &error_key, &event_key] {
+        let _: i64 = redis::cmd("ZADD")
+            .arg(key)
+            .arg(now)
+            .arg(&message_id)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+    }
+    let _: i64 = redis::cmd("HSET")
+        .arg(&stats_key)
+        .arg("total_messages")
+        .arg("1")
+        .arg("pending_count")
+        .arg("1")
+        .arg("retrying_count")
+        .arg("0")
+        .arg("discarded_count")
+        .arg("0")
+        .arg("expired_count")
+        .arg("0")
+        .arg("resolved_count")
+        .arg("0")
+        .arg("error:RuntimeError")
+        .arg("1")
+        .arg("event:agent.failed")
+        .arg("1")
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+
+    assert_eq!(store.retry_message(&message_id).await.unwrap(), Some(true));
+    let resolved = store.get_message(&message_id).await.unwrap().unwrap();
+    assert_eq!(resolved.status, "resolved");
+    assert_eq!(resolved.retry_count, 1);
+    let stats = store.stats().await.unwrap();
+    assert_eq!(stats.pending_count, 0);
+    assert_eq!(stats.resolved_count, 1);
+    let pending_members: Vec<String> = redis::cmd("ZRANGE")
+        .arg(&pending_key)
+        .arg(0)
+        .arg(-1)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    assert!(!pending_members.contains(&message_id));
+
+    let reply: StreamRangeReply = redis::cmd("XRANGE")
+        .arg(&stream_key)
+        .arg("-")
+        .arg("+")
+        .arg("COUNT")
+        .arg(1)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    assert_eq!(reply.ids.len(), 1);
+    let entry = &reply.ids[0];
+    let stream_event_id: String = entry.get("event_id").unwrap();
+    let stream_event_type: String = entry.get("event_type").unwrap();
+    let stream_schema_version: String = entry.get("schema_version").unwrap();
+    let stream_routing_key: String = entry.get("routing_key").unwrap();
+    let stream_data: String = entry.get("data").unwrap();
+    assert_eq!(stream_event_id, envelope["event_id"].as_str().unwrap());
+    assert_eq!(stream_event_type, "agent.failed");
+    assert_eq!(stream_schema_version, "1.0");
+    assert_eq!(stream_routing_key, routing_key);
+    let stream_envelope: serde_json::Value = serde_json::from_str(&stream_data).unwrap();
+    assert_eq!(stream_envelope["payload"], json!({"ok": false}));
+    assert_eq!(
+        stream_envelope["metadata"],
+        json!({"source": "integration"})
+    );
+    let missing_id = format!("dlq-missing-{suffix}");
+    let batch = store
+        .retry_batch(&[message_id.clone(), missing_id.clone()])
+        .await
+        .unwrap();
+    assert_eq!(batch.get(&message_id), Some(&false));
+    assert_eq!(batch.get(&missing_id), Some(&false));
+
+    let _: i64 = redis::cmd("ZREM")
+        .arg(&pending_key)
+        .arg(&message_id)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    let _: i64 = redis::cmd("ZREM")
+        .arg(&error_key)
+        .arg(&message_id)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    let _: i64 = redis::cmd("ZREM")
+        .arg(&event_key)
+        .arg(&message_id)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+    del_keys(&[message_key, stream_key]).await;
+    restore_redis_hash(&stats_key, original_stats).await;
 }

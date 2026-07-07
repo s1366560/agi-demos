@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use agistack_core::model::Entity;
-use agistack_core::ports::{CoreError, CoreResult, MemoryDraft};
+use agistack_core::ports::{CoreError, CoreResult, MemoryDraft, RelationshipDraft};
 
 /// The draft shape we ask the model to return. Mirrors [`MemoryDraft`] but is a
 /// `Deserialize` wire type; entities reuse the core [`Entity`], which is serde.
@@ -24,6 +24,50 @@ pub(super) fn parse_memory_draft(content: &str) -> CoreResult<MemoryDraft> {
         tags: wire.tags,
         entities: wire.entities,
     })
+}
+
+#[derive(Deserialize)]
+struct RelationshipDraftWire {
+    source: String,
+    target: String,
+    #[serde(default)]
+    relation_type: Option<String>,
+    #[serde(default)]
+    fact: Option<String>,
+    #[serde(default)]
+    score: Option<f32>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RelationshipDraftPayload {
+    Wrapped {
+        #[serde(default)]
+        relationships: Vec<RelationshipDraftWire>,
+    },
+    Bare(Vec<RelationshipDraftWire>),
+}
+
+pub(super) fn parse_relationship_drafts(content: &str) -> CoreResult<Vec<RelationshipDraft>> {
+    let payload: RelationshipDraftPayload = serde_json::from_str(clean_structured(content))
+        .map_err(|e| CoreError::Llm(format!("bad relationship json: {e}")))?;
+    let relationships = match payload {
+        RelationshipDraftPayload::Wrapped { relationships } => relationships,
+        RelationshipDraftPayload::Bare(relationships) => relationships,
+    };
+    Ok(relationships
+        .into_iter()
+        .map(|wire| RelationshipDraft {
+            source: wire.source,
+            target: wire.target,
+            relation_type: wire
+                .relation_type
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "RELATED_TO".to_string()),
+            fact: wire.fact.unwrap_or_default(),
+            score: wire.score.unwrap_or(0.8),
+        })
+        .collect())
 }
 
 /// Strip a leading reasoning block that "thinking" models (MiniMax-M2,
@@ -64,7 +108,7 @@ pub(super) fn clean_structured(content: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{clean_structured, strip_fences, strip_reasoning};
+    use super::{clean_structured, parse_relationship_drafts, strip_fences, strip_reasoning};
 
     #[test]
     fn strip_fences_handles_plain_and_fenced() {
@@ -90,5 +134,17 @@ mod tests {
             clean_structured("<think>reasoning...</think>\n```json\n{\"a\":1}\n```"),
             r#"{"a":1}"#
         );
+    }
+
+    #[test]
+    fn parse_relationship_drafts_accepts_wrapped_and_defaults_optional_fields() {
+        let got = parse_relationship_drafts(
+            r#"{"relationships":[{"source":"Rust","target":"GraphStore"}]}"#,
+        )
+        .expect("parse relationships");
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].relation_type, "RELATED_TO");
+        assert_eq!(got[0].fact, "");
+        assert_eq!(got[0].score, 0.8);
     }
 }

@@ -1,0 +1,46 @@
+{
+  "items": [
+    {
+      "id": "job-1",
+      "project_id": "project-1",
+      "tenant_id": "tenant-1",
+      "name": "Job job-1",
+      "description": "Nightly maintenance",
+      "enabled": true,
+      "delete_after_run": false,
+      "schedule": {
+        "kind": "cron",
+        "config": {
+          "expr": "0 * * * *",
+          "timezone": "UTC"
+        }
+      },
+      "payload": {
+        "kind": "agent_turn",
+        "config": {
+          "message": "Summarize status",
+          "timeout_seconds": 300
+        }
+      },
+      "delivery": {
+        "kind": "announce",
+        "config": {
+          "conversation_id": "conversation-1"
+        }
+      },
+      "conversation_mode": "reuse",
+      "conversation_id": "conversation-1",
+      "timezone": "UTC",
+      "stagger_seconds": 5,
+      "timeout_seconds": 300,
+      "max_retries": 3,
+      "state": {
+        "last_run_status": "success"
+      },
+      "created_by": "user-1",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-02T00:00:00Z"
+    }
+  ],
+  "total": 1
+}

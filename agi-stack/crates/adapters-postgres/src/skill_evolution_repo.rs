@@ -24,6 +24,8 @@ const JOB_COLS: &str = "id, tenant_id, project_id, skill_name, action, status, r
     candidate_content, session_ids, skill_version_id, created_at, applied_at";
 const RUN_COLS: &str = "id, tenant_id, project_id, skill_name, reason, status, attempts, \
     worker_id, started_at, completed_at, last_error, result_json, created_at, updated_at";
+const JOB_AUDIT_COLS: &str = "id, tenant_id, project_id, skill_name, job_id, event_type, \
+    actor_user_id, skill_version_id, details_json, created_at";
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SkillEvolutionOverviewStatsRecord {
@@ -129,6 +131,33 @@ pub struct SkillEvolutionJobInsertRecord {
     pub rationale: Option<String>,
     pub candidate_content: Option<String>,
     pub session_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkillEvolutionJobAuditEventRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub project_id: Option<String>,
+    pub skill_name: String,
+    pub job_id: String,
+    pub event_type: String,
+    pub actor_user_id: Option<String>,
+    pub skill_version_id: Option<String>,
+    pub details_json: Value,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkillEvolutionJobAuditEventInsertRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub project_id: Option<String>,
+    pub skill_name: String,
+    pub job_id: String,
+    pub event_type: String,
+    pub actor_user_id: Option<String>,
+    pub skill_version_id: Option<String>,
+    pub details_json: Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -517,6 +546,84 @@ impl PgSkillEvolutionRepository {
         rows.into_iter().map(row_to_pipeline_session).collect()
     }
 
+    pub async fn current_skill_content(
+        &self,
+        tenant_id: &str,
+        skill_name: &str,
+        project_id: Option<&str>,
+    ) -> CoreResult<Option<String>> {
+        let row = if let Some(project_id) = project_id {
+            sqlx::query_as::<_, (Option<String>,)>(
+                "WITH selected_skill AS ( \
+                     SELECT id, full_content, current_version \
+                     FROM skills \
+                     WHERE tenant_id = $1 \
+                       AND name = $2 \
+                       AND is_system_skill = false \
+                       AND status = 'active' \
+                       AND (project_id = $3 OR project_id IS NULL) \
+                     ORDER BY CASE WHEN project_id = $3 THEN 0 ELSE 1 END, \
+                              current_version DESC, created_at DESC \
+                     LIMIT 1 \
+                 ) \
+                 SELECT COALESCE( \
+                     NULLIF(BTRIM(version.skill_md_content), ''), \
+                     NULLIF(BTRIM(selected_skill.full_content), '') \
+                 ) AS content \
+                 FROM selected_skill \
+                 LEFT JOIN LATERAL ( \
+                     SELECT skill_md_content \
+                     FROM skill_versions \
+                     WHERE skill_id = selected_skill.id \
+                       AND version_number = selected_skill.current_version \
+                     LIMIT 1 \
+                 ) AS version ON true",
+            )
+            .bind(tenant_id)
+            .bind(skill_name)
+            .bind(project_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+        } else {
+            sqlx::query_as::<_, (Option<String>,)>(
+                "WITH selected_skill AS ( \
+                     SELECT id, full_content, current_version \
+                     FROM skills \
+                     WHERE tenant_id = $1 \
+                       AND name = $2 \
+                       AND is_system_skill = false \
+                       AND status = 'active' \
+                       AND project_id IS NULL \
+                     ORDER BY current_version DESC, created_at DESC \
+                     LIMIT 1 \
+                 ) \
+                 SELECT COALESCE( \
+                     NULLIF(BTRIM(version.skill_md_content), ''), \
+                     NULLIF(BTRIM(selected_skill.full_content), '') \
+                 ) AS content \
+                 FROM selected_skill \
+                 LEFT JOIN LATERAL ( \
+                     SELECT skill_md_content \
+                     FROM skill_versions \
+                     WHERE skill_id = selected_skill.id \
+                       AND version_number = selected_skill.current_version \
+                     LIMIT 1 \
+                 ) AS version ON true",
+            )
+            .bind(tenant_id)
+            .bind(skill_name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+        };
+        Ok(row.and_then(|(content,)| {
+            content
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        }))
+    }
+
     pub async fn get_job_for_sessions(
         &self,
         tenant_id: &str,
@@ -637,6 +744,53 @@ impl PgSkillEvolutionRepository {
             .await
             .map_err(storage)?;
         row.map(row_to_job).transpose()
+    }
+
+    pub async fn insert_job_audit_event(
+        &self,
+        event: &SkillEvolutionJobAuditEventInsertRecord,
+    ) -> CoreResult<SkillEvolutionJobAuditEventRecord> {
+        let sql = format!(
+            "INSERT INTO agistack_skill_evolution_job_audit_events \
+                (id, tenant_id, project_id, skill_name, job_id, event_type, actor_user_id, \
+                 skill_version_id, details_json) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+             RETURNING {JOB_AUDIT_COLS}"
+        );
+        let row = sqlx::query(&sql)
+            .bind(&event.id)
+            .bind(&event.tenant_id)
+            .bind(&event.project_id)
+            .bind(&event.skill_name)
+            .bind(&event.job_id)
+            .bind(&event.event_type)
+            .bind(&event.actor_user_id)
+            .bind(&event.skill_version_id)
+            .bind(&event.details_json)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(storage)?;
+        row_to_job_audit_event(row)
+    }
+
+    pub async fn list_job_audit_events(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+    ) -> CoreResult<Vec<SkillEvolutionJobAuditEventRecord>> {
+        let sql = format!(
+            "SELECT {JOB_AUDIT_COLS} \
+             FROM agistack_skill_evolution_job_audit_events \
+             WHERE tenant_id = $1 AND job_id = $2 \
+             ORDER BY created_at ASC, id ASC"
+        );
+        let rows = sqlx::query(&sql)
+            .bind(tenant_id)
+            .bind(job_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?;
+        rows.into_iter().map(row_to_job_audit_event).collect()
     }
 
     pub async fn schedule_evolution_run(
@@ -1000,6 +1154,21 @@ fn row_to_job(row: PgRow) -> CoreResult<SkillEvolutionJobRecord> {
         skill_version_id: row.try_get("skill_version_id").map_err(storage)?,
         created_at: row.try_get("created_at").map_err(storage)?,
         applied_at: row.try_get("applied_at").map_err(storage)?,
+    })
+}
+
+fn row_to_job_audit_event(row: PgRow) -> CoreResult<SkillEvolutionJobAuditEventRecord> {
+    Ok(SkillEvolutionJobAuditEventRecord {
+        id: row.try_get("id").map_err(storage)?,
+        tenant_id: row.try_get("tenant_id").map_err(storage)?,
+        project_id: row.try_get("project_id").map_err(storage)?,
+        skill_name: row.try_get("skill_name").map_err(storage)?,
+        job_id: row.try_get("job_id").map_err(storage)?,
+        event_type: row.try_get("event_type").map_err(storage)?,
+        actor_user_id: row.try_get("actor_user_id").map_err(storage)?,
+        skill_version_id: row.try_get("skill_version_id").map_err(storage)?,
+        details_json: row.try_get("details_json").map_err(storage)?,
+        created_at: row.try_get("created_at").map_err(storage)?,
     })
 }
 

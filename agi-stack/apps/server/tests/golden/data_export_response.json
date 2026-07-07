@@ -1,0 +1,42 @@
+{
+  "exported_at": "2026-01-01T00:00:00Z",
+  "tenant_id": "tenant-1",
+  "project_id": "project-1",
+  "episodes": [
+    {
+      "uuid": "episode-1",
+      "name": "Episode",
+      "entity_type": "Episodic",
+      "summary": "Imported episode",
+      "project_id": "project-1",
+      "tenant_id": "tenant-1",
+      "created_at_ms": 1700000001000
+    }
+  ],
+  "entities": [
+    {
+      "uuid": "entity-1",
+      "name": "Rust",
+      "entity_type": "Concept",
+      "summary": "Portable runtime",
+      "project_id": "project-1",
+      "tenant_id": "tenant-1",
+      "created_at_ms": 1700000000000,
+      "labels": ["Entity"]
+    }
+  ],
+  "relationships": [
+    {
+      "edge_id": "rel-1",
+      "type": "MENTIONS",
+      "properties": {
+        "uuid": "rel-1",
+        "fact": "Rust is mentioned",
+        "score": 0.75,
+        "project_id": "project-1",
+        "created_at_ms": 1700000003000
+      }
+    }
+  ],
+  "communities": []
+}

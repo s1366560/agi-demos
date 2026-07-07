@@ -1,0 +1,27 @@
+{
+  "tenant": {
+    "id": "tenant-1",
+    "name": "Tenant tenant-1",
+    "plan": "pro",
+    "storage_limit": 107374182400
+  },
+  "usage": {
+    "projects": 2,
+    "memories": 3,
+    "users": 2,
+    "storage": 0
+  },
+  "invoices": [
+    {
+      "id": "invoice-1",
+      "amount": 1999,
+      "currency": "USD",
+      "status": "paid",
+      "period_start": "2026-01-01T00:00:00Z",
+      "period_end": "2026-02-01T00:00:00Z",
+      "created_at": "2026-01-05T00:00:00Z",
+      "paid_at": "2026-01-06T00:00:00Z",
+      "invoice_url": "https://billing.example.test/invoices/invoice-1"
+    }
+  ]
+}

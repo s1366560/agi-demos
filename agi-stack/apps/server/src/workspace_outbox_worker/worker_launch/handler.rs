@@ -117,6 +117,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
 
         let mut bound_attempt = None;
         let mut current_attempt_conversation_id = None;
+        let mut worker_runtime_admission = None;
         if let Some(attempt_id) = attempt_id.as_deref() {
             let attempt = self
                 .store
@@ -139,18 +140,24 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                         Some(attempt_id),
                     )
                 });
-            if reuse_conversation_id.is_some()
-                && self.runtime_agent_running_exists(&conversation_id).await
-            {
+            let admission = self
+                .runtime_launch_admission(
+                    &conversation_id,
+                    reuse_conversation_id.is_some(),
+                    is_stream_poll,
+                )
+                .await;
+            if admission.action != WorkerLaunchAdmissionAction::Admit {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
             }
-            if reuse_conversation_id.is_some() {
-                self.runtime_clear_reused_session_markers(&conversation_id)
-                    .await;
-            }
-            if !is_stream_poll && !self.runtime_claim_launch_cooldown(&conversation_id).await {
-                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
-            }
+            worker_runtime_admission = Some(json!({
+                "status": admission.action.as_str(),
+                "conversation_id": admission.conversation_id,
+                "reuse_existing": admission.reuse_existing,
+                "stream_poll": admission.stream_poll,
+                "cooldown_claimed": admission.cooldown_claimed,
+                "control_plane": "worker_launch",
+            }));
             apply_attempt_retry_context(&mut task_metadata, &payload, now);
             let agent_config = json!({
                 "selected_agent_id": worker_agent_id,
@@ -222,6 +229,9 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             "current_attempt_worker_agent_id".to_string(),
             json!(worker_agent_id),
         );
+        if let Some(runtime_admission) = worker_runtime_admission {
+            task_metadata.insert("worker_runtime_admission".to_string(), runtime_admission);
+        }
         task_metadata.insert(CURRENT_ATTEMPT_WORKER_BINDING_ID.to_string(), Value::Null);
         if let Some(attempt) = bound_attempt.as_ref() {
             task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt.id.clone()));

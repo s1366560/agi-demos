@@ -1,0 +1,44 @@
+{
+  "categories": [
+    {
+      "value": "image",
+      "label": "Image",
+      "description": "Images (PNG, JPEG, GIF, SVG, etc.)"
+    },
+    {
+      "value": "video",
+      "label": "Video",
+      "description": "Videos (MP4, WebM, MOV, etc.)"
+    },
+    {
+      "value": "audio",
+      "label": "Audio",
+      "description": "Audio files (MP3, WAV, OGG, etc.)"
+    },
+    {
+      "value": "document",
+      "label": "Document",
+      "description": "Documents (PDF, TXT, HTML, Markdown)"
+    },
+    {
+      "value": "code",
+      "label": "Code",
+      "description": "Source code files (Python, JavaScript, etc.)"
+    },
+    {
+      "value": "data",
+      "label": "Data",
+      "description": "Data files (JSON, CSV, XML, YAML)"
+    },
+    {
+      "value": "archive",
+      "label": "Archive",
+      "description": "Archives (ZIP, TAR, GZ)"
+    },
+    {
+      "value": "other",
+      "label": "Other",
+      "description": "Other file types"
+    }
+  ]
+}

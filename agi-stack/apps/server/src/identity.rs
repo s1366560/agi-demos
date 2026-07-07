@@ -63,10 +63,10 @@ use device_grants::{
 pub use device_grants::{DeviceGrantStore, InMemoryDeviceGrantStore, SharedDeviceGrantStore};
 pub use pg_service::PgIdentityService;
 pub use views::{
-    BackendStoreSummary, DeviceApproveView, DeviceCodeView, DeviceTokenView, InvitationListView,
-    InvitationVerifyView, InvitationView, LoginOutcome, ProjectCreateInput, ProjectListInput,
-    ProjectMemberMutationView, ProjectMemberView, ProjectMembersView, ProjectPage,
-    ProjectStatsView, ProjectView, TenantMemberMutationView, TenantPage, TenantView,
+    BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView,
+    InvitationListView, InvitationVerifyView, InvitationView, LoginOutcome, ProjectCreateInput,
+    ProjectListInput, ProjectMemberMutationView, ProjectMemberView, ProjectMembersView,
+    ProjectPage, ProjectStatsView, ProjectView, TenantMemberMutationView, TenantPage, TenantView,
 };
 
 /// One day in milliseconds — the login key TTL (`expires_in_days=1` in Python).
@@ -181,6 +181,9 @@ pub trait IdentityService: Send + Sync {
         password: &str,
         now_ms: i64,
     ) -> Result<LoginOutcome, IdentityError>;
+
+    /// Fetch the authenticated user's Python `User` schema projection.
+    async fn current_user(&self, user_id: &str) -> Result<CurrentUserView, IdentityError>;
 
     async fn create_device_code(&self) -> Result<DeviceCodeView, IdentityError>;
 

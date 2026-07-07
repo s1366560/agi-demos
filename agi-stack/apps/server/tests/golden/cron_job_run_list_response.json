@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "id": "run-1",
+      "job_id": "job-1",
+      "project_id": "project-1",
+      "status": "success",
+      "trigger_type": "scheduled",
+      "started_at": "2026-01-01T01:00:00Z",
+      "finished_at": "2026-01-01T01:00:00Z",
+      "duration_ms": 1250,
+      "error_message": null,
+      "result_summary": {
+        "tokens": 42
+      },
+      "conversation_id": "conversation-1"
+    }
+  ],
+  "total": 1
+}

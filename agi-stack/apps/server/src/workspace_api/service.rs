@@ -32,6 +32,14 @@ pub(crate) trait WorkspaceService: Send + Sync {
         workspace_id: &str,
     ) -> Result<WorkspaceView, WorkspaceApiError>;
 
+    async fn authorize_workspace_event_subscription(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        project_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<String, WorkspaceApiError>;
+
     async fn send_message(
         &self,
         user_id: &str,

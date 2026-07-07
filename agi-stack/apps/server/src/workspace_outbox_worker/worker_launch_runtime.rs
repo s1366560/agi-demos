@@ -1,5 +1,31 @@
 use super::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorkerLaunchAdmissionAction {
+    Admit,
+    SkipAlreadyRunning,
+    SkipCooldownActive,
+}
+
+impl WorkerLaunchAdmissionAction {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Admit => "admit",
+            Self::SkipAlreadyRunning => "skip_already_running",
+            Self::SkipCooldownActive => "skip_cooldown_active",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkerLaunchAdmissionSnapshot {
+    pub(crate) conversation_id: String,
+    pub(crate) reuse_existing: bool,
+    pub(crate) stream_poll: bool,
+    pub(crate) cooldown_claimed: Option<bool>,
+    pub(crate) action: WorkerLaunchAdmissionAction,
+}
+
 #[async_trait]
 pub(crate) trait WorkerLaunchRuntimeStateStore: Send + Sync {
     async fn claim_launch_cooldown(

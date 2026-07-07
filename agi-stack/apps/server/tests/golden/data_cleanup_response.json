@@ -1,0 +1,8 @@
+{
+  "cutoff_date": "2026-01-01T00:00:00+00:00",
+  "dry_run": true,
+  "message": "Would delete 2 episodes older than 90 days",
+  "project_id": "project-1",
+  "tenant_id": "tenant-1",
+  "would_delete": 2
+}

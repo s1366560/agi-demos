@@ -1,20 +1,28 @@
 use std::sync::Arc;
 
 use agistack_adapters_http_llm::HttpLlm;
-use agistack_adapters_postgres::PgSkillEvolutionRepository;
+use agistack_adapters_postgres::{PgSkillEvolutionRepository, PgSkillRepository};
 
 use crate::skill_api::{
     EngineUnavailableSkillEvolutionExecutor, LlmSkillEvolutionStageEngine,
-    PgSkillEvolutionPipelineExecutor, SkillEvolutionRunExecutor, SkillEvolutionStageEngine,
+    PgSkillEvolutionPipelineExecutor, PgSkillEvolutionPipelineStore, SkillEvolutionRunExecutor,
+    SkillEvolutionStageEngine,
 };
 
 pub(crate) fn skill_evolution_executor_from_env(
-    repo: PgSkillEvolutionRepository,
+    evolution_repo: PgSkillEvolutionRepository,
+    skill_repo: PgSkillRepository,
 ) -> Arc<dyn SkillEvolutionRunExecutor> {
     let Some(engine) = select_skill_evolution_stage_engine() else {
         return Arc::new(EngineUnavailableSkillEvolutionExecutor);
     };
-    Arc::new(PgSkillEvolutionPipelineExecutor::new(repo, engine))
+    Arc::new(PgSkillEvolutionPipelineExecutor::with_store(
+        Arc::new(PgSkillEvolutionPipelineStore::new(
+            evolution_repo,
+            skill_repo,
+        )),
+        engine,
+    ))
 }
 
 fn select_skill_evolution_stage_engine() -> Option<Arc<dyn SkillEvolutionStageEngine>> {

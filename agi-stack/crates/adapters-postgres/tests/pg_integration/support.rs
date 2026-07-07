@@ -1,17 +1,28 @@
 pub(super) use agistack_adapters_postgres::PgPool;
 pub(super) use agistack_adapters_postgres::{
-    connect, ensure_aux_schema, BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord,
-    BlackboardReplyRecord, InvitationRecord, NewDecisionRecordRecord, NewShareRecord,
-    NewTrustPolicyRecord, PgApiKeyStore, PgCheckpointStore, PgHitlRequestRepository,
-    PgInvitationRepository, PgMemoryRepository, PgProjectReadRepository,
-    PgProjectSandboxRepository, PgProjectStore, PgShareRepository, PgSkillEvolutionRepository,
-    PgSkillRepository, PgTenantRepository, PgTenantSkillConfigRepository, PgTrustRepository,
-    PgUserStore, PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord,
-    ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord,
-    ProjectStatsLookup, ProjectUpdatePatch, SkillEvolutionJobInsertRecord, SkillProjectAccess,
-    SkillRecord, SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus, TenantAdminStatus,
-    TenantLookup, TenantSkillConfigRecord, TenantUpdatePatch, TopologyEdgeRecord,
-    TopologyNodeRecord, TrustDecisionResolution, WorkspaceAccess, WorkspacePipelineRunRecord,
+    connect, ensure_aux_schema, AgentExecutionEventListQuery, ArtifactListQuery, AuditLogListQuery,
+    BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
+    ChannelWebhookEventInsertRecord, ChannelWebhookSecretRecord, ChannelWebhookSessionCreateRecord,
+    CreateTenantWebhook, CronJobListQuery, DataStatsAccess, DataStatsScopeError, DeployAccess,
+    DeployListQuery, GeneListQuery, GenomeListQuery, InstanceListQuery, InstanceMemberListQuery,
+    InvitationRecord, LlmProviderCreateRecord, LlmProviderUpdateRecord, NewDecisionRecordRecord,
+    NewShareRecord, NewTrustPolicyRecord, PgAdminAccessRepository, PgAgentExecutionEventRepository,
+    PgApiKeyStore, PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository,
+    PgBillingRepository, PgChannelRepository, PgCheckpointStore, PgCronRepository,
+    PgDataStatsRepository, PgDeployRepository, PgEventLogRepository, PgGeneRepository,
+    PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository, PgLlmProviderRepository,
+    PgMemoryRepository, PgNotificationRepository, PgProjectReadRepository,
+    PgProjectSandboxRepository, PgProjectStore, PgSchemaRepository, PgShareRepository,
+    PgSkillEvolutionRepository, PgSkillRepository, PgSubagentTemplateRepository,
+    PgSupportRepository, PgTenantRepository, PgTenantSkillConfigRepository,
+    PgTenantWebhookRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
+    PgWorkspaceRepository, ProjectCreateRecord, ProjectListForUserQuery, ProjectLookup,
+    ProjectMembersLookup, ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch,
+    RuntimeHookAuditQuery, SkillEvolutionJobAuditEventInsertRecord, SkillEvolutionJobInsertRecord,
+    SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus,
+    TenantAdminStatus, TenantEventLogListQuery, TenantLookup, TenantSkillConfigRecord,
+    TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord, TrustDecisionResolution,
+    UsageStatisticsQuery, WorkspaceAccess, WorkspacePipelineRunRecord,
     WorkspacePipelineStageRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
     WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
     WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
@@ -48,6 +59,7 @@ pub(super) fn ts(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32)
 pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
     for ddl in [
         "CREATE TABLE IF NOT EXISTS users (id text PRIMARY KEY, email text)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser boolean DEFAULT false",
         "CREATE TABLE IF NOT EXISTS tenants (id text PRIMARY KEY, name text)",
         "CREATE TABLE IF NOT EXISTS user_tenants (\
             id text PRIMARY KEY, user_id text NOT NULL, tenant_id text NOT NULL, \
@@ -56,6 +68,284 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "CREATE TABLE IF NOT EXISTS projects (\
             id text PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, \
             owner_id text NOT NULL, is_public boolean DEFAULT false)",
+        "CREATE TABLE IF NOT EXISTS conversations (\
+            id text PRIMARY KEY, user_id text NOT NULL, tenant_id text NOT NULL, \
+            project_id text NOT NULL, workspace_id text, meta json DEFAULT '{}'::json)",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title varchar(500) NOT NULL DEFAULT 'Untitled'",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS status varchar(20) DEFAULT 'active' NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS agent_config json DEFAULT '{}'::json",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS message_count integer DEFAULT 0 NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS current_mode varchar(20) DEFAULT 'build' NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS updated_at timestamptz",
+        "CREATE TABLE IF NOT EXISTS agent_execution_events (\
+            id text PRIMARY KEY, conversation_id text NOT NULL, message_id text, \
+            event_type varchar(80) NOT NULL, event_data json DEFAULT '{}'::json NOT NULL, \
+            event_time_us bigint NOT NULL, event_counter integer NOT NULL, \
+            correlation_id text, created_at timestamptz DEFAULT now())",
+        "CREATE INDEX IF NOT EXISTS ix_agent_execution_events_conversation_cursor \
+            ON agent_execution_events (conversation_id, event_time_us, event_counter)",
+        "CREATE TABLE IF NOT EXISTS tenant_event_logs (\
+            id text PRIMARY KEY, tenant_id text NOT NULL, event_type varchar(64) NOT NULL, \
+            message text NOT NULL, source varchar(64) NOT NULL, metadata json DEFAULT '{}'::json, \
+            created_at timestamptz DEFAULT now())",
+        "CREATE INDEX IF NOT EXISTS ix_tenant_event_logs_tenant_created \
+            ON tenant_event_logs (tenant_id, created_at)",
+        "CREATE TABLE IF NOT EXISTS llm_providers (\
+            id uuid PRIMARY KEY, name varchar(255) UNIQUE NOT NULL, provider_type varchar(50) NOT NULL, \
+            operation_type varchar(20) DEFAULT 'llm' NOT NULL, api_key_encrypted text NOT NULL, \
+            base_url text, config json DEFAULT '{}'::json NOT NULL, is_active boolean DEFAULT true NOT NULL, \
+            is_default boolean DEFAULT false NOT NULL, is_enabled boolean DEFAULT true NOT NULL, \
+            pool_weight double precision DEFAULT 1.0 NOT NULL, pool_enabled boolean DEFAULT true NOT NULL, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS llm_model varchar(100)",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS llm_small_model varchar(100)",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS embedding_model varchar(100)",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS reranker_model varchar(100)",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS allowed_models text",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS blocked_models text",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS model_tier varchar(16)",
+        "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS secondary_models json",
+        "CREATE TABLE IF NOT EXISTS provider_health (\
+            provider_id uuid NOT NULL, last_check timestamptz DEFAULT now() NOT NULL, \
+            status varchar(20) NOT NULL, error_message text, response_time_ms integer, \
+            PRIMARY KEY (provider_id, last_check))",
+        "CREATE INDEX IF NOT EXISTS idx_provider_health_status \
+            ON provider_health (provider_id, last_check)",
+        "CREATE TABLE IF NOT EXISTS tenant_provider_mappings (\
+            id uuid PRIMARY KEY, tenant_id varchar(255) NOT NULL, \
+            operation_type varchar(20) DEFAULT 'llm' NOT NULL, provider_id uuid NOT NULL, \
+            priority integer DEFAULT 0 NOT NULL, created_at timestamptz DEFAULT now())",
+        "CREATE INDEX IF NOT EXISTS idx_tenant_mappings_tenant \
+            ON tenant_provider_mappings (tenant_id)",
+        "CREATE INDEX IF NOT EXISTS idx_tenant_mappings_priority \
+            ON tenant_provider_mappings (priority)",
+        "CREATE TABLE IF NOT EXISTS llm_usage_logs (\
+            id uuid PRIMARY KEY, provider_id uuid, tenant_id varchar(255), \
+            operation_type varchar(50) NOT NULL, model_name varchar(100) NOT NULL, \
+            prompt_tokens integer DEFAULT 0 NOT NULL, \
+            completion_tokens integer DEFAULT 0 NOT NULL, cost_usd double precision, \
+            created_at timestamptz DEFAULT now() NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS idx_llm_usage_logs_provider \
+            ON llm_usage_logs (provider_id)",
+        "CREATE INDEX IF NOT EXISTS idx_llm_usage_logs_tenant \
+            ON llm_usage_logs (tenant_id)",
+        "CREATE TABLE IF NOT EXISTS audit_logs (\
+            id text PRIMARY KEY, \"timestamp\" timestamptz DEFAULT now(), actor text, \
+            action text NOT NULL, resource_type text NOT NULL, resource_id text, tenant_id text, \
+            details json DEFAULT '{}'::json, ip_address text, user_agent text)",
+        "CREATE INDEX IF NOT EXISTS ix_audit_logs_tenant_action \
+            ON audit_logs (tenant_id, action)",
+        "CREATE TABLE IF NOT EXISTS roles (\
+            id text PRIMARY KEY, name text UNIQUE NOT NULL, description text, \
+            created_at timestamptz DEFAULT now())",
+        "CREATE TABLE IF NOT EXISTS user_roles (\
+            id text PRIMARY KEY, user_id text NOT NULL, role_id text NOT NULL, \
+            tenant_id text, project_id text, created_at timestamptz DEFAULT now())",
+        "CREATE TABLE IF NOT EXISTS notifications (\
+            id text PRIMARY KEY, user_id text NOT NULL, type text NOT NULL, \
+            title text NOT NULL, message text NOT NULL, data json, is_read boolean DEFAULT false, \
+            action_url text, created_at timestamptz DEFAULT now(), expires_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS invoices (\
+            id text PRIMARY KEY, tenant_id text NOT NULL, amount integer NOT NULL, \
+            currency text NOT NULL, status text NOT NULL, period_start timestamptz NOT NULL, \
+            period_end timestamptz NOT NULL, created_at timestamptz DEFAULT now(), \
+            paid_at timestamptz, invoice_url text)",
+        "CREATE TABLE IF NOT EXISTS support_tickets (\
+            id text PRIMARY KEY, tenant_id text, user_id text NOT NULL, subject text NOT NULL, \
+            message text NOT NULL, priority text NOT NULL, status text DEFAULT 'open', \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), \
+            resolved_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS artifacts (\
+            id text PRIMARY KEY, project_id text NOT NULL, tenant_id text NOT NULL, \
+            sandbox_id text, tool_execution_id text, conversation_id text, workspace_id text, \
+            filename text NOT NULL, mime_type text NOT NULL, category text NOT NULL, \
+            size_bytes bigint DEFAULT 0 NOT NULL, object_key text NOT NULL, url text, \
+            preview_url text, status text DEFAULT 'pending' NOT NULL, error_message text, \
+            source_tool text, source_path text, artifact_metadata json DEFAULT '{}'::json, \
+            created_at timestamptz DEFAULT now())",
+        "CREATE INDEX IF NOT EXISTS ix_artifacts_project_status \
+            ON artifacts (project_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_artifacts_tool_execution \
+            ON artifacts (tool_execution_id)",
+        "CREATE TABLE IF NOT EXISTS attachments (\
+            id text PRIMARY KEY, conversation_id text NOT NULL, project_id text NOT NULL, \
+            tenant_id text NOT NULL, filename text NOT NULL, mime_type text NOT NULL, \
+            size_bytes bigint NOT NULL, object_key text NOT NULL, purpose text NOT NULL, \
+            status text DEFAULT 'pending' NOT NULL, upload_id text, total_parts integer, \
+            uploaded_parts integer DEFAULT 0 NOT NULL, sandbox_path text, file_metadata json, \
+            error_message text, created_at timestamptz DEFAULT now() NOT NULL, expires_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_attachments_conv_status \
+            ON attachments (conversation_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_attachments_status \
+            ON attachments (status)",
+        "CREATE TABLE IF NOT EXISTS entity_types (\
+            id text PRIMARY KEY, project_id text NOT NULL, name text NOT NULL, \
+            description text, schema json DEFAULT '{}'::json, status text DEFAULT 'ENABLED', \
+            source text DEFAULT 'user', created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS edge_types (\
+            id text PRIMARY KEY, project_id text NOT NULL, name text NOT NULL, \
+            description text, schema json DEFAULT '{}'::json, status text DEFAULT 'ENABLED', \
+            source text DEFAULT 'user', created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS edge_type_maps (\
+            id text PRIMARY KEY, project_id text NOT NULL, source_type text NOT NULL, \
+            target_type text NOT NULL, edge_type text NOT NULL, status text DEFAULT 'ENABLED', \
+            source text DEFAULT 'user', created_at timestamptz DEFAULT now())",
+        "CREATE TABLE IF NOT EXISTS instances (\
+            id text PRIMARY KEY, name varchar(100) DEFAULT '' NOT NULL, \
+            slug varchar(100) DEFAULT '' NOT NULL, tenant_id text NOT NULL, \
+            description text, cluster_id text, namespace varchar(100), \
+            image_version varchar(100) DEFAULT 'latest', replicas integer DEFAULT 1, \
+            cpu_request varchar(20) DEFAULT '100m', cpu_limit varchar(20) DEFAULT '500m', \
+            mem_request varchar(20) DEFAULT '256Mi', mem_limit varchar(20) DEFAULT '512Mi', \
+            service_type varchar(20) DEFAULT 'ClusterIP', ingress_domain text, proxy_token text, \
+            env_vars json DEFAULT '{}'::json, quota_cpu varchar(20), quota_memory varchar(20), \
+            quota_max_pods integer, storage_class varchar(50), storage_size varchar(20), \
+            advanced_config json DEFAULT '{}'::json, llm_providers json DEFAULT '{}'::json, \
+            pending_config json DEFAULT '{}'::json, available_replicas integer DEFAULT 0, \
+            status varchar(20) DEFAULT 'creating', health_status varchar(20), \
+            current_revision integer DEFAULT 0, compute_provider varchar(50), \
+            runtime varchar(50) DEFAULT 'default', created_by text DEFAULT '', workspace_id text, \
+            hex_position_q integer, hex_position_r integer, agent_display_name varchar(100), \
+            agent_label varchar(100), theme_color varchar(20), \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz, deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_instances_tenant_status \
+            ON instances (tenant_id, status)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS description text",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS cluster_id text",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS namespace varchar(100)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS image_version varchar(100) DEFAULT 'latest'",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS replicas integer DEFAULT 1",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS cpu_request varchar(20) DEFAULT '100m'",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS cpu_limit varchar(20) DEFAULT '500m'",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS mem_request varchar(20) DEFAULT '256Mi'",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS mem_limit varchar(20) DEFAULT '512Mi'",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS service_type varchar(20) DEFAULT 'ClusterIP'",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS ingress_domain text",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS proxy_token text",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS env_vars json DEFAULT '{}'::json",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS quota_cpu varchar(20)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS quota_memory varchar(20)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS quota_max_pods integer",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS storage_class varchar(50)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS storage_size varchar(20)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS advanced_config json DEFAULT '{}'::json",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS llm_providers json DEFAULT '{}'::json",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS pending_config json DEFAULT '{}'::json",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS available_replicas integer DEFAULT 0",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS health_status varchar(20)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS current_revision integer DEFAULT 0",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS compute_provider varchar(50)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS runtime varchar(50) DEFAULT 'default'",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS created_by text DEFAULT ''",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS workspace_id text",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS hex_position_q integer",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS hex_position_r integer",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS agent_display_name varchar(100)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS agent_label varchar(100)",
+        "ALTER TABLE instances ADD COLUMN IF NOT EXISTS theme_color varchar(20)",
+        "CREATE TABLE IF NOT EXISTS instance_channel_configs (\
+            id text PRIMARY KEY, instance_id text NOT NULL, channel_type varchar(50) NOT NULL, \
+            name varchar(200) NOT NULL, config json DEFAULT '{}'::json NOT NULL, \
+            status varchar(20) DEFAULT 'pending' NOT NULL, last_connected_at timestamptz, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz, \
+            deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_instance_channel_configs_instance \
+            ON instance_channel_configs (instance_id)",
+        "CREATE TABLE IF NOT EXISTS instance_members (\
+            id text PRIMARY KEY, instance_id text NOT NULL, user_id text NOT NULL, \
+            role varchar(20) DEFAULT 'viewer', created_at timestamptz DEFAULT now(), \
+            deleted_at timestamptz)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_instance_members_instance_user \
+            ON instance_members (instance_id, user_id)",
+        "CREATE TABLE IF NOT EXISTS gene_market (\
+            id text PRIMARY KEY, name varchar(100) NOT NULL, slug varchar(100) NOT NULL, \
+            tenant_id text, description text, short_description varchar(300), category varchar(50), \
+            tags json, source varchar(20) DEFAULT 'official', source_ref varchar(200), \
+            icon varchar(200), version varchar(20) DEFAULT '1.0.0', manifest json DEFAULT '{}'::json, \
+            dependencies json DEFAULT '[]'::json, synergies json DEFAULT '[]'::json, \
+            parent_gene_id text, created_by_instance_id text, install_count integer DEFAULT 0, \
+            avg_rating double precision DEFAULT 0, effectiveness_score double precision DEFAULT 0, \
+            is_featured boolean DEFAULT false, review_status varchar(20) DEFAULT 'pending', \
+            is_published boolean DEFAULT false, visibility varchar(20) DEFAULT 'public', \
+            created_by text DEFAULT '', created_at timestamptz DEFAULT now(), \
+            updated_at timestamptz, deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_gene_market_tenant_created \
+            ON gene_market (tenant_id, created_at)",
+        "CREATE TABLE IF NOT EXISTS genomes (\
+            id text PRIMARY KEY, name varchar(100) NOT NULL, slug varchar(100) NOT NULL, \
+            tenant_id text, description text, short_description varchar(300), icon varchar(200), \
+            gene_slugs json DEFAULT '[]'::json, config_override json DEFAULT '{}'::json, \
+            install_count integer DEFAULT 0, avg_rating double precision DEFAULT 0, \
+            is_featured boolean DEFAULT false, is_published boolean DEFAULT false, \
+            visibility varchar(20) DEFAULT 'public', created_by text DEFAULT '', \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz, deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_genomes_tenant_created \
+            ON genomes (tenant_id, created_at)",
+        "CREATE TABLE IF NOT EXISTS instance_genes (\
+            id text PRIMARY KEY, instance_id text NOT NULL, gene_id text NOT NULL, \
+            genome_id text, status varchar(20) DEFAULT 'installed', installed_version varchar(20), \
+            config_snapshot json DEFAULT '{}'::json, usage_count integer DEFAULT 0, \
+            installed_at timestamptz, created_at timestamptz DEFAULT now(), deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_instance_genes_instance \
+            ON instance_genes (instance_id, gene_id)",
+        "CREATE TABLE IF NOT EXISTS deploy_records (\
+            id text PRIMARY KEY, instance_id text NOT NULL, revision integer NOT NULL, \
+            action varchar(20) NOT NULL, image_version varchar(100), replicas integer, \
+            config_snapshot json DEFAULT '{}'::json, status varchar(20) DEFAULT 'pending' NOT NULL, \
+            message text, triggered_by text, started_at timestamptz, finished_at timestamptz, \
+            created_at timestamptz DEFAULT now(), deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_deploy_records_instance_created \
+            ON deploy_records (instance_id, created_at)",
+        "CREATE TABLE IF NOT EXISTS cron_jobs (\
+            id text PRIMARY KEY, project_id text NOT NULL, tenant_id text NOT NULL, \
+            name varchar(255) NOT NULL, description text, enabled boolean DEFAULT true, \
+            delete_after_run boolean DEFAULT false, schedule_type varchar(50) NOT NULL, \
+            schedule_config json DEFAULT '{}'::json, payload_type varchar(50) NOT NULL, \
+            payload_config json DEFAULT '{}'::json, delivery_type varchar(50) DEFAULT 'none', \
+            delivery_config json DEFAULT '{}'::json, conversation_mode varchar(50) DEFAULT 'reuse', \
+            conversation_id text, timezone varchar(100) DEFAULT 'UTC', \
+            stagger_seconds integer DEFAULT 0, timeout_seconds integer DEFAULT 300, \
+            max_retries integer DEFAULT 3, state json DEFAULT '{}'::json, created_by text, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_cron_jobs_project_enabled \
+            ON cron_jobs (project_id, enabled)",
+        "CREATE TABLE IF NOT EXISTS cron_job_runs (\
+            id text PRIMARY KEY, job_id text NOT NULL, project_id text NOT NULL, \
+            status varchar(50) NOT NULL, trigger_type varchar(50) DEFAULT 'scheduled', \
+            started_at timestamptz DEFAULT now(), finished_at timestamptz, \
+            duration_ms integer, error_message text, result_summary json DEFAULT '{}'::json, \
+            conversation_id text)",
+        "CREATE INDEX IF NOT EXISTS ix_cron_job_runs_job_status \
+            ON cron_job_runs (job_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_cron_job_runs_project_started \
+            ON cron_job_runs (project_id, started_at)",
+        "CREATE TABLE IF NOT EXISTS webhooks (\
+            id text PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, url text NOT NULL, \
+            secret text, events json DEFAULT '[]'::json NOT NULL, is_active boolean DEFAULT true, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz, deleted_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS graph_stores (\
+            id text PRIMARY KEY, name varchar(255) NOT NULL, tenant_id text NOT NULL, \
+            engine_type varchar(50) DEFAULT 'neo4j' NOT NULL, connection_config_encrypted text, \
+            index_config json DEFAULT '{}'::json NOT NULL, status varchar(50) DEFAULT 'disconnected' NOT NULL, \
+            health_status varchar(50), last_health_check timestamptz, detected_version varchar(100), \
+            created_by text DEFAULT '' NOT NULL, created_at timestamptz DEFAULT now(), \
+            updated_at timestamptz, deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_graph_stores_tenant_status \
+            ON graph_stores (tenant_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_graph_stores_tenant_engine \
+            ON graph_stores (tenant_id, engine_type)",
+        "CREATE TABLE IF NOT EXISTS retrieval_stores (\
+            id text PRIMARY KEY, name varchar(255) NOT NULL, tenant_id text NOT NULL, \
+            engine_type varchar(50) DEFAULT 'memstack_pgvector' NOT NULL, connection_config_encrypted text, \
+            index_config json DEFAULT '{}'::json NOT NULL, status varchar(50) DEFAULT 'disconnected' NOT NULL, \
+            health_status varchar(50), last_health_check timestamptz, detected_version varchar(100), \
+            created_by text DEFAULT '' NOT NULL, created_at timestamptz DEFAULT now(), \
+            updated_at timestamptz, deleted_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_retrieval_stores_tenant_status \
+            ON retrieval_stores (tenant_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_retrieval_stores_tenant_engine \
+            ON retrieval_stores (tenant_id, engine_type)",
         "CREATE TABLE IF NOT EXISTS project_sandboxes (\
             id text PRIMARY KEY, project_id text NOT NULL UNIQUE, tenant_id text NOT NULL, \
             sandbox_id text NOT NULL UNIQUE, sandbox_type varchar(20) DEFAULT 'cloud' NOT NULL, \
@@ -127,6 +417,62 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             project_id text, action varchar(30) NOT NULL, candidate_content text, rationale text, \
             session_ids json, status varchar(30) DEFAULT 'pending_review' NOT NULL, \
             skill_version_id text, created_at timestamptz DEFAULT now(), applied_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS subagent_templates (\
+            id text PRIMARY KEY, tenant_id text NOT NULL, name varchar(200) NOT NULL, \
+            version varchar(20) DEFAULT '1.0.0' NOT NULL, display_name varchar(200), \
+            description text, category varchar(100) DEFAULT 'general' NOT NULL, \
+            tags json, system_prompt text DEFAULT '' NOT NULL, trigger_description text, \
+            trigger_keywords json, trigger_examples json, model varchar(50) DEFAULT 'inherit' NOT NULL, \
+            max_tokens integer DEFAULT 4096 NOT NULL, temperature double precision DEFAULT 0.7 NOT NULL, \
+            max_iterations integer DEFAULT 10 NOT NULL, allowed_tools json DEFAULT '[\"*\"]'::json NOT NULL, \
+            author varchar(200), is_builtin boolean DEFAULT false NOT NULL, \
+            is_published boolean DEFAULT true NOT NULL, install_count integer DEFAULT 0 NOT NULL, \
+            rating double precision DEFAULT 0.0 NOT NULL, metadata_json json, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_subagent_templates_tenant_id \
+            ON subagent_templates (tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_subagent_templates_category \
+            ON subagent_templates (category)",
+        "CREATE INDEX IF NOT EXISTS ix_subagent_templates_is_published \
+            ON subagent_templates (is_published)",
+        "CREATE TABLE IF NOT EXISTS channel_configs (\
+            id text PRIMARY KEY, project_id text NOT NULL, channel_type text NOT NULL, \
+            name text NOT NULL, enabled boolean DEFAULT true, connection_mode text DEFAULT 'websocket', \
+            app_id text, app_secret text, encrypt_key text, verification_token text, \
+            webhook_url text, webhook_port integer, webhook_path text, \
+            dm_policy text DEFAULT 'open' NOT NULL, group_policy text DEFAULT 'open' NOT NULL, \
+            allow_from json, group_allow_from json, rate_limit_per_minute integer DEFAULT 60 NOT NULL, \
+            model_override varchar(255), domain text DEFAULT 'feishu', extra_settings json, \
+            status text DEFAULT 'disconnected', last_error text, description text, created_by text, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_channel_configs_project_type \
+            ON channel_configs (project_id, channel_type)",
+        "CREATE INDEX IF NOT EXISTS ix_channel_configs_project_enabled \
+            ON channel_configs (project_id, enabled)",
+        "CREATE TABLE IF NOT EXISTS channel_session_bindings (\
+            id text PRIMARY KEY, project_id text NOT NULL, channel_config_id text NOT NULL, \
+            conversation_id text NOT NULL, channel_type text NOT NULL, chat_id text NOT NULL, \
+            chat_type text NOT NULL, thread_id text, topic_id text, session_key varchar(512) NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_channel_session_bindings_project_session_key \
+            ON channel_session_bindings (project_id, session_key)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_channel_session_bindings_conversation_id \
+            ON channel_session_bindings (conversation_id)",
+        "CREATE INDEX IF NOT EXISTS ix_channel_session_bindings_project_chat \
+            ON channel_session_bindings (project_id, chat_id)",
+        "CREATE INDEX IF NOT EXISTS ix_channel_session_bindings_config_chat \
+            ON channel_session_bindings (channel_config_id, chat_id)",
+        "CREATE TABLE IF NOT EXISTS channel_outbox (\
+            id text PRIMARY KEY, project_id text NOT NULL, channel_config_id text NOT NULL, \
+            conversation_id text NOT NULL, chat_id text NOT NULL, reply_to_channel_message_id text, \
+            content_text text NOT NULL, status varchar(20) DEFAULT 'pending' NOT NULL, \
+            attempt_count integer DEFAULT 0 NOT NULL, max_attempts integer DEFAULT 3 NOT NULL, \
+            sent_channel_message_id text, last_error text, next_retry_at timestamptz, \
+            metadata_json json, created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_channel_outbox_status_retry \
+            ON channel_outbox (status, next_retry_at)",
+        "CREATE INDEX IF NOT EXISTS ix_channel_outbox_project_created \
+            ON channel_outbox (project_id, created_at)",
         "CREATE TABLE IF NOT EXISTS workspaces (\
             id text PRIMARY KEY, tenant_id text NOT NULL, project_id text NOT NULL, \
             name varchar(255) NOT NULL, description text, created_by text NOT NULL, \

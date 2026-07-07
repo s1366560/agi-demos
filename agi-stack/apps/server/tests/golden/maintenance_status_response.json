@@ -1,0 +1,26 @@
+{
+  "stats": {
+    "entities": 10001,
+    "episodes": 101,
+    "communities": 0,
+    "old_episodes": 1001
+  },
+  "recommendations": [
+    {
+      "type": "cleanup",
+      "priority": "medium",
+      "message": "Consider cleaning up 1001 episodes older than 90 days"
+    },
+    {
+      "type": "deduplicate",
+      "priority": "low",
+      "message": "Large number of entities detected. Consider running deduplication"
+    },
+    {
+      "type": "rebuild_communities",
+      "priority": "high",
+      "message": "No communities detected. Consider rebuilding communities"
+    }
+  ],
+  "last_checked": "2026-01-01T00:00:00.000000+00:00"
+}

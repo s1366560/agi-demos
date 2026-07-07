@@ -33,7 +33,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rustls = "0.23"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 url = "2"
-uuid = { version = "1", features = ["v5"] }
+uuid = { version = "1", features = ["v4", "v5"] }
 zip = { version = "4.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 base64 = "0.22"
 

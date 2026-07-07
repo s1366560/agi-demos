@@ -1,0 +1,18 @@
+{
+  "members": [
+    {
+      "id": "member_550e8400",
+      "instance_id": "inst_550e8400",
+      "user_id": "user_123",
+      "role": "viewer",
+      "user_name": "User user_123",
+      "user_email": "user_123@example.test",
+      "user_avatar_url": null,
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 25,
+  "offset": 0,
+  "has_more": false
+}

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use agistack_adapters_postgres::{
     ChannelConfigRecord, ChannelObservabilitySummaryRecord, ChannelOutboxRecord,
-    ChannelSessionBindingRecord, ChannelStatusRecord,
+    ChannelSessionBindingRecord, ChannelStatusRecord, ChannelWebhookIngressRecord,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -135,6 +135,48 @@ impl From<ChannelOutboxRecord> for ChannelOutboxItemView {
 pub(crate) struct ChannelOutboxListView {
     pub(crate) items: Vec<ChannelOutboxItemView>,
     pub(crate) total: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChannelWebhookChallengeView {
+    pub(crate) challenge: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChannelWebhookIngressView {
+    pub(crate) event_id: String,
+    pub(crate) project_id: String,
+    pub(crate) channel_config_id: String,
+    pub(crate) idempotency_key: String,
+    pub(crate) inserted: bool,
+    pub(crate) status: String,
+    pub(crate) normalized_event: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) route_session_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) session_binding_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) conversation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) routed_event_id: Option<String>,
+}
+
+impl From<ChannelWebhookIngressRecord> for ChannelWebhookIngressView {
+    fn from(record: ChannelWebhookIngressRecord) -> Self {
+        Self {
+            event_id: record.event.id,
+            project_id: record.event.project_id,
+            channel_config_id: record.event.channel_config_id,
+            idempotency_key: record.event.idempotency_key,
+            inserted: record.inserted,
+            status: record.event.status,
+            normalized_event: record.event.normalized_event_json,
+            route_session_key: record.event.route_session_key,
+            session_binding_id: record.event.route_binding_id,
+            conversation_id: record.event.route_conversation_id,
+            routed_event_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

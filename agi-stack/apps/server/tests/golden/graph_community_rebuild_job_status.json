@@ -1,0 +1,33 @@
+{
+  "job_id": "<string>",
+  "project_id": "p1",
+  "job_status": "completed",
+  "event_topic": "graph:community_rebuilds:p1",
+  "latest_event_id": "<string>",
+  "events": [
+    {
+      "event_id": "<string>",
+      "event_type": "graph_community_rebuild_requested",
+      "job_status": "queued",
+      "created_at": "<iso8601>"
+    },
+    {
+      "event_id": "<string>",
+      "event_type": "graph_community_rebuild_started",
+      "job_status": "running",
+      "started_at": "<iso8601>"
+    },
+    {
+      "event_id": "<string>",
+      "event_type": "graph_community_rebuild_completed",
+      "job_status": "completed",
+      "completed_at": "<iso8601>",
+      "communities_count": 2,
+      "entities_processed": 6,
+      "persisted_communities_count": 2
+    }
+  ],
+  "communities_count": 2,
+  "entities_processed": 6,
+  "persisted_communities_count": 2
+}

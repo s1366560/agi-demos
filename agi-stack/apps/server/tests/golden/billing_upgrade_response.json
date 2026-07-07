@@ -1,0 +1,9 @@
+{
+  "message": "Plan upgraded successfully",
+  "tenant": {
+    "id": "tenant-1",
+    "name": "Tenant tenant-1",
+    "plan": "enterprise",
+    "storage_limit": 1099511627776
+  }
+}

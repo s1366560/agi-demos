@@ -20,7 +20,9 @@ use async_trait::async_trait;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::Direction;
 
-use agistack_core::model::{GraphEntity, Relationship, Subgraph};
+use agistack_core::model::{
+    GraphEntity, GraphExport, GraphStats, GraphStatsScope, Relationship, Subgraph,
+};
 use agistack_core::ports::{CoreError, CoreResult, GraphStore};
 
 /// Entities keyed by `(project_id, uuid)` and relationships keyed by `uuid`.
@@ -64,6 +66,49 @@ impl InMemoryGraphStore {
             .collect();
         Ok((ents, rs))
     }
+
+    fn scoped_slice(
+        &self,
+        scope: GraphStatsScope,
+    ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
+        let project_filter = match scope {
+            GraphStatsScope::All => None,
+            GraphStatsScope::Projects(project_ids) => {
+                Some(project_ids.into_iter().collect::<HashSet<_>>())
+            }
+        };
+        if project_filter.as_ref().is_some_and(HashSet::is_empty) {
+            return Ok((Vec::new(), Vec::new()));
+        }
+
+        let entities = self.entities.lock().map_err(|_| poisoned())?;
+        let rels = self.relationships.lock().map_err(|_| poisoned())?;
+        let ents: Vec<GraphEntity> = entities
+            .iter()
+            .filter(|((project_id, _), _)| {
+                project_filter
+                    .as_ref()
+                    .is_none_or(|ids| ids.contains(project_id))
+            })
+            .map(|(_, entity)| entity.clone())
+            .collect();
+        let present: HashSet<(String, String)> = ents
+            .iter()
+            .map(|entity| (entity.project_id.clone(), entity.uuid.clone()))
+            .collect();
+        let rs: Vec<Relationship> = rels
+            .values()
+            .filter(|rel| {
+                project_filter
+                    .as_ref()
+                    .is_none_or(|ids| ids.contains(&rel.project_id))
+                    && present.contains(&(rel.project_id.clone(), rel.source_uuid.clone()))
+                    && present.contains(&(rel.project_id.clone(), rel.target_uuid.clone()))
+            })
+            .cloned()
+            .collect();
+        Ok((ents, rs))
+    }
 }
 
 fn poisoned() -> CoreError {
@@ -81,6 +126,29 @@ impl GraphStore for InMemoryGraphStore {
     async fn upsert_relationship(&self, rel: Relationship) -> CoreResult<()> {
         let mut rels = self.relationships.lock().map_err(|_| poisoned())?;
         rels.insert(rel.uuid.clone(), rel);
+        Ok(())
+    }
+
+    async fn delete_entity(&self, project_id: &str, uuid: &str) -> CoreResult<()> {
+        let mut entities = self.entities.lock().map_err(|_| poisoned())?;
+        entities.remove(&(project_id.to_string(), uuid.to_string()));
+        drop(entities);
+
+        let mut rels = self.relationships.lock().map_err(|_| poisoned())?;
+        rels.retain(|_, rel| {
+            rel.project_id != project_id || (rel.source_uuid != uuid && rel.target_uuid != uuid)
+        });
+        Ok(())
+    }
+
+    async fn delete_relationship(&self, project_id: &str, uuid: &str) -> CoreResult<()> {
+        let mut rels = self.relationships.lock().map_err(|_| poisoned())?;
+        if rels
+            .get(uuid)
+            .is_some_and(|rel| rel.project_id == project_id)
+        {
+            rels.remove(uuid);
+        }
         Ok(())
     }
 
@@ -136,6 +204,64 @@ impl GraphStore for InMemoryGraphStore {
         hits.sort_by(|a, b| a.uuid.cmp(&b.uuid));
         hits.truncate(limit);
         Ok(hits)
+    }
+
+    async fn stats(&self, scope: GraphStatsScope) -> CoreResult<GraphStats> {
+        let (entities, relationships) = self.scoped_slice(scope)?;
+        let mut stats = GraphStats::default();
+        for entity in entities {
+            stats.add_entity_type(&entity.entity_type, 1);
+        }
+        stats.add_relationships(relationships.len());
+        Ok(stats)
+    }
+
+    async fn export(&self, scope: GraphStatsScope) -> CoreResult<GraphExport> {
+        let (mut entities, mut relationships) = self.scoped_slice(scope)?;
+        entities.sort_by(|a, b| {
+            a.project_id
+                .cmp(&b.project_id)
+                .then_with(|| a.uuid.cmp(&b.uuid))
+        });
+        relationships.sort_by(|a, b| {
+            a.project_id
+                .cmp(&b.project_id)
+                .then_with(|| a.uuid.cmp(&b.uuid))
+        });
+        Ok(GraphExport {
+            entities,
+            relationships,
+        })
+    }
+
+    async fn count_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize> {
+        let (entities, _) = self.scoped_slice(scope)?;
+        Ok(entities
+            .iter()
+            .filter(|entity| entity.entity_type == "Episodic" && entity.created_at_ms < cutoff_ms)
+            .count())
+    }
+
+    async fn delete_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize> {
+        let (entities, _) = self.scoped_slice(scope)?;
+        let expired: Vec<(String, String)> = entities
+            .into_iter()
+            .filter(|entity| entity.entity_type == "Episodic" && entity.created_at_ms < cutoff_ms)
+            .map(|entity| (entity.project_id, entity.uuid))
+            .collect();
+        let deleted = expired.len();
+        for (project_id, uuid) in expired {
+            self.delete_entity(&project_id, &uuid).await?;
+        }
+        Ok(deleted)
     }
 }
 
@@ -344,5 +470,156 @@ mod tests {
         let hits = block_on(s.search_entities("p1", "alpha", 1)).unwrap();
         assert_eq!(hits.len(), 1); // limit honored
         assert_eq!(hits[0].project_id, "p1"); // p2 excluded
+    }
+
+    #[test]
+    fn delete_entity_is_scoped_and_removes_touching_relationships() {
+        let s = InMemoryGraphStore::new();
+        for project in ["p1", "p2"] {
+            for e in ["e1", "e2"] {
+                block_on(s.upsert_entity(ent(e, e, "", project))).unwrap();
+            }
+        }
+        block_on(s.upsert_relationship(rel("r1", "e1", "e2", "p1"))).unwrap();
+        block_on(s.upsert_relationship(rel("r2", "e1", "e2", "p2"))).unwrap();
+
+        block_on(s.delete_entity("p1", "e1")).unwrap();
+
+        assert!(block_on(s.get_entity("p1", "e1")).unwrap().is_none());
+        assert!(block_on(s.get_entity("p2", "e1")).unwrap().is_some());
+        assert!(block_on(s.subgraph("p1", "e2", 1))
+            .unwrap()
+            .relationships
+            .is_empty());
+        assert_eq!(
+            block_on(s.subgraph("p2", "e1", 1))
+                .unwrap()
+                .relationships
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn delete_relationship_is_project_scoped() {
+        let s = InMemoryGraphStore::new();
+        for project in ["p1", "p2"] {
+            for e in ["e1", "e2"] {
+                block_on(s.upsert_entity(ent(e, e, "", project))).unwrap();
+            }
+        }
+        block_on(s.upsert_relationship(rel("r1", "e1", "e2", "p1"))).unwrap();
+
+        block_on(s.delete_relationship("p2", "r1")).unwrap();
+        assert_eq!(
+            block_on(s.subgraph("p1", "e1", 1))
+                .unwrap()
+                .relationships
+                .len(),
+            1
+        );
+
+        block_on(s.delete_relationship("p1", "r1")).unwrap();
+        assert!(block_on(s.subgraph("p1", "e1", 1))
+            .unwrap()
+            .relationships
+            .is_empty());
+    }
+
+    #[test]
+    fn stats_counts_special_entity_types_and_scopes() {
+        let s = InMemoryGraphStore::new();
+        block_on(s.upsert_entity(ent("e1", "Alpha", "", "p1"))).unwrap();
+        let mut episodic = ent("ep1", "Episode", "", "p1");
+        episodic.entity_type = "Episodic".to_string();
+        block_on(s.upsert_entity(episodic)).unwrap();
+        let mut community = ent("c1", "Community", "", "p1");
+        community.entity_type = "Community".to_string();
+        block_on(s.upsert_entity(community)).unwrap();
+        block_on(s.upsert_entity(ent("e2", "Other", "", "p2"))).unwrap();
+        block_on(s.upsert_relationship(rel("r1", "e1", "ep1", "p1"))).unwrap();
+        block_on(s.upsert_relationship(rel("r2", "e2", "e2", "p2"))).unwrap();
+
+        let scoped = block_on(s.stats(GraphStatsScope::Projects(vec!["p1".to_string()])))
+            .expect("stats succeeds");
+        assert_eq!(scoped.entities, 1);
+        assert_eq!(scoped.episodes, 1);
+        assert_eq!(scoped.communities, 1);
+        assert_eq!(scoped.relationships, 1);
+        assert_eq!(scoped.total_nodes, 3);
+
+        let empty =
+            block_on(s.stats(GraphStatsScope::Projects(Vec::new()))).expect("stats succeeds");
+        assert_eq!(empty, GraphStats::default());
+
+        let all = block_on(s.stats(GraphStatsScope::All)).expect("stats succeeds");
+        assert_eq!(all.entities, 2);
+        assert_eq!(all.relationships, 2);
+
+        let exported = block_on(s.export(GraphStatsScope::Projects(vec!["p1".to_string()])))
+            .expect("export succeeds");
+        assert_eq!(
+            exported
+                .entities
+                .iter()
+                .map(|entity| entity.uuid.as_str())
+                .collect::<Vec<_>>(),
+            vec!["c1", "e1", "ep1"]
+        );
+        assert_eq!(
+            exported
+                .relationships
+                .iter()
+                .map(|relationship| relationship.uuid.as_str())
+                .collect::<Vec<_>>(),
+            vec!["r1"]
+        );
+    }
+
+    #[test]
+    fn cleanup_counts_and_deletes_only_old_scoped_episodes() {
+        let s = InMemoryGraphStore::new();
+        block_on(s.upsert_entity(ent("e1", "Alpha", "", "p1"))).unwrap();
+        let mut old_episode = ent("ep-old", "Old", "", "p1");
+        old_episode.entity_type = "Episodic".to_string();
+        old_episode.created_at_ms = 1_000;
+        block_on(s.upsert_entity(old_episode)).unwrap();
+        let mut fresh_episode = ent("ep-fresh", "Fresh", "", "p1");
+        fresh_episode.entity_type = "Episodic".to_string();
+        fresh_episode.created_at_ms = 10_000;
+        block_on(s.upsert_entity(fresh_episode)).unwrap();
+        let mut other_project_episode = ent("ep-other", "Other", "", "p2");
+        other_project_episode.entity_type = "Episodic".to_string();
+        other_project_episode.created_at_ms = 1_000;
+        block_on(s.upsert_entity(other_project_episode)).unwrap();
+        block_on(s.upsert_relationship(rel("r-old", "e1", "ep-old", "p1"))).unwrap();
+        block_on(s.upsert_relationship(rel("r-fresh", "e1", "ep-fresh", "p1"))).unwrap();
+
+        let scope = GraphStatsScope::Projects(vec!["p1".to_string()]);
+        let count =
+            block_on(s.count_episodes_older_than(scope.clone(), 5_000)).expect("count succeeds");
+        assert_eq!(count, 1);
+
+        let deleted =
+            block_on(s.delete_episodes_older_than(scope, 5_000)).expect("delete succeeds");
+        assert_eq!(deleted, 1);
+        assert!(block_on(s.get_entity("p1", "ep-old"))
+            .expect("read succeeds")
+            .is_none());
+        assert!(block_on(s.get_entity("p1", "ep-fresh"))
+            .expect("read succeeds")
+            .is_some());
+        assert!(block_on(s.get_entity("p2", "ep-other"))
+            .expect("read succeeds")
+            .is_some());
+        let remaining = block_on(s.subgraph("p1", "e1", 1)).expect("subgraph succeeds");
+        assert_eq!(
+            remaining
+                .relationships
+                .iter()
+                .map(|relationship| relationship.uuid.as_str())
+                .collect::<Vec<_>>(),
+            vec!["r-fresh"]
+        );
     }
 }

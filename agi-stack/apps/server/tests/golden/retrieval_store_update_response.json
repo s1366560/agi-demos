@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": {
+    "id": "retrieval-store-1",
+    "tenant_id": "tenant-1",
+    "name": "Primary retrieval",
+    "engine_type": "weknora_remote",
+    "status": "connected",
+    "health_status": "healthy",
+    "detected_version": "remote",
+    "connection_config": {
+      "base_url": "https://retrieval.example",
+      "api_key": "***",
+      "knowledge_base_id": "kb-1"
+    },
+    "index_config": {
+      "search_path": "/knowledge-search"
+    },
+    "created_at": "2026-01-02T03:04:05+00:00",
+    "updated_at": "2026-01-03T04:05:06+00:00",
+    "source": "user",
+    "readonly": false
+  }
+}

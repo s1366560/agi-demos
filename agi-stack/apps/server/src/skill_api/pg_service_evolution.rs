@@ -201,6 +201,23 @@ impl PgSkillService {
             .await
             .map_err(SkillApiError::internal)?
             .ok_or_else(|| SkillApiError::not_found("Skill evolution job not found"))?;
+        repo.insert_job_audit_event(&SkillEvolutionJobAuditEventInsertRecord {
+            id: skill_evolution_job_audit_event_id(),
+            tenant_id: tenant_id.clone(),
+            project_id: updated.project_id.clone(),
+            skill_name: updated.skill_name.clone(),
+            job_id: updated.id.clone(),
+            event_type: "job_applied".to_string(),
+            actor_user_id: Some(user_id.to_string()),
+            skill_version_id: updated.skill_version_id.clone(),
+            details_json: json!({
+                "job_action": updated.action.clone(),
+                "skill_version_id": updated.skill_version_id.clone(),
+                "source": "skill_evolution_review",
+            }),
+        })
+        .await
+        .map_err(SkillApiError::internal)?;
         Ok(updated.into())
     }
 
@@ -220,6 +237,24 @@ impl PgSkillService {
             .await
             .map_err(SkillApiError::internal)?
             .ok_or_else(|| SkillApiError::not_found("Skill evolution job not found"))?;
+        self.evolution_repo()?
+            .insert_job_audit_event(&SkillEvolutionJobAuditEventInsertRecord {
+                id: skill_evolution_job_audit_event_id(),
+                tenant_id: tenant_id.clone(),
+                project_id: updated.project_id.clone(),
+                skill_name: updated.skill_name.clone(),
+                job_id: updated.id.clone(),
+                event_type: "job_rejected".to_string(),
+                actor_user_id: Some(user_id.to_string()),
+                skill_version_id: None,
+                details_json: json!({
+                    "job_action": updated.action.clone(),
+                    "candidate_job_id": updated.id.clone(),
+                    "source": "skill_evolution_review",
+                }),
+            })
+            .await
+            .map_err(SkillApiError::internal)?;
         Ok(updated.into())
     }
 }

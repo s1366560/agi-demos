@@ -54,8 +54,32 @@ pub(super) async fn roundtrip_workspace_access(
         .await
         .unwrap();
     assert_eq!(workspace.id, "ws_p6_repo");
+    assert_eq!(
+        repo.workspace_scope("ws_p6_repo").await.unwrap(),
+        Some(("t_p6_repo".to_string(), "p_p6_repo".to_string()))
+    );
+    assert!(repo
+        .workspace_in_scope("ws_p6_repo", "t_p6_repo", "p_p6_repo")
+        .await
+        .unwrap());
+    assert!(!repo
+        .workspace_in_scope("ws_p6_repo", "wrong_tenant", "p_p6_repo")
+        .await
+        .unwrap());
+    assert!(!repo
+        .workspace_in_scope("ws_p6_repo", "t_p6_repo", "wrong_project")
+        .await
+        .unwrap());
     assert!(repo
         .user_can_access_workspace("u_p6_owner", "ws_p6_repo", WorkspaceAccess::Write)
+        .await
+        .unwrap());
+    assert!(repo
+        .user_can_access_workspace("u_p6_owner", "ws_p6_repo", WorkspaceAccess::Read)
+        .await
+        .unwrap());
+    assert!(!repo
+        .user_can_access_workspace("u_p6_viewer", "ws_p6_repo", WorkspaceAccess::Read)
         .await
         .unwrap());
     let listed = repo

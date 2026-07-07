@@ -75,6 +75,8 @@ pub(crate) struct SkillEvolutionExecutionSummary {
     pub(crate) judged: i64,
     pub(crate) groups: i64,
     pub(crate) jobs: i64,
+    pub(crate) auto_applied: i64,
+    pub(crate) auto_apply_blocked: i64,
     pub(crate) blocked_by_review: i64,
     pub(crate) cleaned: i64,
 }
@@ -88,6 +90,8 @@ impl SkillEvolutionExecutionSummary {
             judged: 0,
             groups: 0,
             jobs: 0,
+            auto_applied: 0,
+            auto_apply_blocked: 0,
             blocked_by_review: 0,
             cleaned: 0,
         }
@@ -101,6 +105,8 @@ impl SkillEvolutionExecutionSummary {
             "judged": self.judged,
             "groups": self.groups,
             "jobs": self.jobs,
+            "auto_applied": self.auto_applied,
+            "auto_apply_blocked": self.auto_apply_blocked,
             "blocked_by_review": self.blocked_by_review,
             "cleaned": self.cleaned,
         })

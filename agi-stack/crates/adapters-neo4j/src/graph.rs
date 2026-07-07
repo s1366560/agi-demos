@@ -26,7 +26,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use async_trait::async_trait;
 use neo4rs::{query, Graph, Node};
 
-use agistack_core::model::{GraphEntity, Relationship, Subgraph};
+use agistack_core::model::{
+    GraphEntity, GraphExport, GraphStats, GraphStatsScope, Relationship, Subgraph,
+};
 use agistack_core::ports::{CoreError, CoreResult, GraphStore};
 
 /// Production knowledge-graph adapter over a Bolt-connected [`neo4rs::Graph`].
@@ -90,6 +92,79 @@ impl Neo4jGraphStore {
             });
         }
         Ok(out)
+    }
+
+    async fn load_scoped_export(&self, scope: GraphStatsScope) -> CoreResult<GraphExport> {
+        let project_ids = match scope {
+            GraphStatsScope::All => None,
+            GraphStatsScope::Projects(project_ids) if project_ids.is_empty() => {
+                return Ok(GraphExport::default());
+            }
+            GraphStatsScope::Projects(project_ids) => Some(project_ids),
+        };
+
+        let entity_cypher = match project_ids.as_ref() {
+            Some(_) => {
+                "MATCH (e:Entity) \
+                 WHERE e.project_id IN $project_ids \
+                 RETURN e ORDER BY e.project_id, e.uuid"
+            }
+            None => "MATCH (e:Entity) RETURN e ORDER BY e.project_id, e.uuid",
+        };
+        let mut entity_query = query(entity_cypher);
+        if let Some(project_ids) = project_ids.clone() {
+            entity_query = entity_query.param("project_ids", project_ids);
+        }
+        let mut entity_stream = self.graph.execute(entity_query).await.map_err(gerr)?;
+        let mut entities = Vec::new();
+        while let Some(row) = entity_stream.next().await.map_err(gerr)? {
+            let node: Node = row.get("e").map_err(gerr)?;
+            entities.push(node_to_entity(&node)?);
+        }
+
+        let rel_cypher = match project_ids.as_ref() {
+            Some(_) => {
+                "MATCH (a:Entity)-[r]->(b:Entity) \
+                 WHERE r.project_id IN $project_ids \
+                   AND a.project_id = r.project_id \
+                   AND b.project_id = r.project_id \
+                 RETURN a.uuid AS src, b.uuid AS tgt, type(r) AS rt, r.uuid AS uuid, \
+                        r.fact AS fact, r.score AS score, r.project_id AS pid, \
+                        r.created_at_ms AS cams \
+                 ORDER BY r.project_id, r.uuid"
+            }
+            None => {
+                "MATCH (a:Entity)-[r]->(b:Entity) \
+                 WHERE a.project_id = r.project_id \
+                   AND b.project_id = r.project_id \
+                 RETURN a.uuid AS src, b.uuid AS tgt, type(r) AS rt, r.uuid AS uuid, \
+                        r.fact AS fact, r.score AS score, r.project_id AS pid, \
+                        r.created_at_ms AS cams \
+                 ORDER BY r.project_id, r.uuid"
+            }
+        };
+        let mut rel_query = query(rel_cypher);
+        if let Some(project_ids) = project_ids {
+            rel_query = rel_query.param("project_ids", project_ids);
+        }
+        let mut rel_stream = self.graph.execute(rel_query).await.map_err(gerr)?;
+        let mut relationships = Vec::new();
+        while let Some(row) = rel_stream.next().await.map_err(gerr)? {
+            relationships.push(Relationship {
+                uuid: row.get("uuid").map_err(gerr)?,
+                source_uuid: row.get("src").map_err(gerr)?,
+                target_uuid: row.get("tgt").map_err(gerr)?,
+                relation_type: row.get("rt").map_err(gerr)?,
+                fact: row.get("fact").ok().unwrap_or_default(),
+                score: row.get::<f64>("score").map(|s| s as f32).unwrap_or(0.0),
+                project_id: row.get("pid").map_err(gerr)?,
+                created_at_ms: row.get("cams").ok().unwrap_or(0),
+            });
+        }
+        Ok(GraphExport {
+            entities,
+            relationships,
+        })
     }
 }
 
@@ -186,6 +261,35 @@ impl GraphStore for Neo4jGraphStore {
             .map_err(gerr)
     }
 
+    async fn delete_entity(&self, project_id: &str, uuid: &str) -> CoreResult<()> {
+        self.graph
+            .run(
+                query(
+                    "MATCH (e:Entity {uuid: $uuid, project_id: $pid}) \
+                     DETACH DELETE e",
+                )
+                .param("uuid", uuid)
+                .param("pid", project_id),
+            )
+            .await
+            .map_err(gerr)
+    }
+
+    async fn delete_relationship(&self, project_id: &str, uuid: &str) -> CoreResult<()> {
+        self.graph
+            .run(
+                query(
+                    "MATCH (:Entity {project_id: $pid})-[r]->(:Entity {project_id: $pid}) \
+                     WHERE r.uuid = $uuid AND r.project_id = $pid \
+                     DELETE r",
+                )
+                .param("uuid", uuid)
+                .param("pid", project_id),
+            )
+            .await
+            .map_err(gerr)
+    }
+
     async fn get_entity(&self, project_id: &str, uuid: &str) -> CoreResult<Option<GraphEntity>> {
         let mut stream = self
             .graph
@@ -267,6 +371,151 @@ impl GraphStore for Neo4jGraphStore {
             out.push(node_to_entity(&node)?);
         }
         Ok(out)
+    }
+
+    async fn stats(&self, scope: GraphStatsScope) -> CoreResult<GraphStats> {
+        let project_ids = match scope {
+            GraphStatsScope::All => None,
+            GraphStatsScope::Projects(project_ids) if project_ids.is_empty() => {
+                return Ok(GraphStats::default());
+            }
+            GraphStatsScope::Projects(project_ids) => Some(project_ids),
+        };
+
+        let entity_query = match project_ids.as_ref() {
+            Some(_) => {
+                "MATCH (e:Entity) \
+                 WHERE e.project_id IN $project_ids \
+                 RETURN e.entity_type AS entity_type, count(e) AS count"
+            }
+            None => {
+                "MATCH (e:Entity) \
+                 RETURN e.entity_type AS entity_type, count(e) AS count"
+            }
+        };
+        let mut entity_query = query(entity_query);
+        if let Some(project_ids) = project_ids.clone() {
+            entity_query = entity_query.param("project_ids", project_ids);
+        }
+        let mut stream = self.graph.execute(entity_query).await.map_err(gerr)?;
+        let mut stats = GraphStats::default();
+        while let Some(row) = stream.next().await.map_err(gerr)? {
+            let entity_type = row
+                .get::<String>("entity_type")
+                .ok()
+                .unwrap_or_else(|| "Entity".to_string());
+            let count = row.get::<i64>("count").ok().unwrap_or(0).max(0) as usize;
+            stats.add_entity_type(&entity_type, count);
+        }
+
+        let rel_query = match project_ids.as_ref() {
+            Some(_) => {
+                "MATCH (a:Entity)-[r]->(b:Entity) \
+                 WHERE r.project_id IN $project_ids \
+                   AND a.project_id = r.project_id \
+                   AND b.project_id = r.project_id \
+                 RETURN count(r) AS count"
+            }
+            None => {
+                "MATCH (a:Entity)-[r]->(b:Entity) \
+                 WHERE a.project_id = r.project_id \
+                   AND b.project_id = r.project_id \
+                 RETURN count(r) AS count"
+            }
+        };
+        let mut rel_query = query(rel_query);
+        if let Some(project_ids) = project_ids {
+            rel_query = rel_query.param("project_ids", project_ids);
+        }
+        let mut rel_stream = self.graph.execute(rel_query).await.map_err(gerr)?;
+        if let Some(row) = rel_stream.next().await.map_err(gerr)? {
+            let count = row.get::<i64>("count").ok().unwrap_or(0).max(0) as usize;
+            stats.add_relationships(count);
+        }
+        Ok(stats)
+    }
+
+    async fn export(&self, scope: GraphStatsScope) -> CoreResult<GraphExport> {
+        self.load_scoped_export(scope).await
+    }
+
+    async fn count_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize> {
+        let project_ids = match scope {
+            GraphStatsScope::All => None,
+            GraphStatsScope::Projects(project_ids) if project_ids.is_empty() => return Ok(0),
+            GraphStatsScope::Projects(project_ids) => Some(project_ids),
+        };
+
+        let count_cypher = match project_ids.as_ref() {
+            Some(_) => {
+                "MATCH (e:Entity) \
+                 WHERE e.entity_type = 'Episodic' \
+                   AND e.created_at_ms < $cutoff_ms \
+                   AND e.project_id IN $project_ids \
+                 RETURN count(e) AS count"
+            }
+            None => {
+                "MATCH (e:Entity) \
+                 WHERE e.entity_type = 'Episodic' \
+                   AND e.created_at_ms < $cutoff_ms \
+                 RETURN count(e) AS count"
+            }
+        };
+        let mut count_query = query(count_cypher).param("cutoff_ms", cutoff_ms);
+        if let Some(project_ids) = project_ids {
+            count_query = count_query.param("project_ids", project_ids);
+        }
+        let mut stream = self.graph.execute(count_query).await.map_err(gerr)?;
+        let count = match stream.next().await.map_err(gerr)? {
+            Some(row) => row.get::<i64>("count").ok().unwrap_or(0).max(0),
+            None => 0,
+        };
+        usize::try_from(count)
+            .map_err(|_| CoreError::Graph(format!("episode count overflow: {count}")))
+    }
+
+    async fn delete_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize> {
+        let count = self
+            .count_episodes_older_than(scope.clone(), cutoff_ms)
+            .await?;
+        if count == 0 {
+            return Ok(0);
+        }
+
+        let project_ids = match scope {
+            GraphStatsScope::All => None,
+            GraphStatsScope::Projects(project_ids) if project_ids.is_empty() => return Ok(0),
+            GraphStatsScope::Projects(project_ids) => Some(project_ids),
+        };
+        let delete_cypher = match project_ids.as_ref() {
+            Some(_) => {
+                "MATCH (e:Entity) \
+                 WHERE e.entity_type = 'Episodic' \
+                   AND e.created_at_ms < $cutoff_ms \
+                   AND e.project_id IN $project_ids \
+                 DETACH DELETE e"
+            }
+            None => {
+                "MATCH (e:Entity) \
+                 WHERE e.entity_type = 'Episodic' \
+                   AND e.created_at_ms < $cutoff_ms \
+                 DETACH DELETE e"
+            }
+        };
+        let mut delete_query = query(delete_cypher).param("cutoff_ms", cutoff_ms);
+        if let Some(project_ids) = project_ids {
+            delete_query = delete_query.param("project_ids", project_ids);
+        }
+        self.graph.run(delete_query).await.map_err(gerr)?;
+        Ok(count)
     }
 }
 

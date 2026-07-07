@@ -22,6 +22,13 @@ impl InMemoryVectorIndex {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Drop all vectors from this concrete in-memory adapter.
+    pub fn clear(&self) -> CoreResult<()> {
+        let mut store = self.store.lock().map_err(|_| poisoned())?;
+        store.clear();
+        Ok(())
+    }
 }
 
 /// Cosine similarity (higher = closer). Returns 0 for a zero-norm vector.

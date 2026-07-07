@@ -23,8 +23,8 @@ use agistack_adapters_postgres::{ProjectUpdatePatch, TenantUpdatePatch};
 
 use crate::auth::Identity;
 use crate::identity::{
-    DeviceApproveView, DeviceCodeView, DeviceTokenView, IdentityError, InvitationListView,
-    InvitationVerifyView, InvitationView, ProjectCreateInput, ProjectListInput,
+    CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView, IdentityError,
+    InvitationListView, InvitationVerifyView, InvitationView, ProjectCreateInput, ProjectListInput,
     ProjectMemberMutationView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
     TenantMemberMutationView, TenantPage, TenantView,
 };
@@ -81,6 +81,15 @@ async fn oauth_callback(Path(_provider): Path<String>) -> Response {
         Json(json!({ "detail": "OAuth login is not configured" })),
     )
         .into_response()
+}
+
+// ---- GET /auth/me + /users/me --------------------------------------------
+
+async fn current_user(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+) -> Result<Json<CurrentUserView>, IdentityError> {
+    Ok(Json(app.identity.current_user(&identity.user_id).await?))
 }
 
 // ---- device-code login ----------------------------------------------------
@@ -596,6 +605,10 @@ pub fn router_public() -> Router<AppState> {
 /// FastAPI-style 307 redirects that strip the `Authorization` header.
 pub fn router_authed() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/auth/me", get(current_user))
+        .route("/api/v1/auth/me/", get(current_user))
+        .route("/api/v1/users/me", get(current_user))
+        .route("/api/v1/users/me/", get(current_user))
         .route("/api/v1/tenants/", get(list_tenants).post(create_tenant))
         .route("/api/v1/tenants", get(list_tenants).post(create_tenant))
         .route(

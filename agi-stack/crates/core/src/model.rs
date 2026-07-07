@@ -87,6 +87,47 @@ pub struct Subgraph {
     pub relationships: Vec<Relationship>,
 }
 
+/// Scope for graph aggregate statistics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GraphStatsScope {
+    /// Count every project visible to the backing graph store.
+    All,
+    /// Count exactly these project ids. An empty list means an empty scope.
+    Projects(Vec<String>),
+}
+
+/// Aggregate graph counts used by data/export stats surfaces.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphStats {
+    pub entities: usize,
+    pub episodes: usize,
+    pub communities: usize,
+    pub relationships: usize,
+    pub total_nodes: usize,
+}
+
+impl GraphStats {
+    pub fn add_entity_type(&mut self, entity_type: &str, count: usize) {
+        match entity_type {
+            "Episodic" => self.episodes += count,
+            "Community" => self.communities += count,
+            _ => self.entities += count,
+        }
+        self.total_nodes = self.entities + self.episodes + self.communities;
+    }
+
+    pub fn add_relationships(&mut self, count: usize) {
+        self.relationships += count;
+    }
+}
+
+/// Raw graph export payload used by data-export surfaces before HTTP projection.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct GraphExport {
+    pub entities: Vec<GraphEntity>,
+    pub relationships: Vec<Relationship>,
+}
+
 /// A discrete interaction to be distilled into memory. Mirrors `Episode` in
 /// `src/domain/model/memory/episode.py`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

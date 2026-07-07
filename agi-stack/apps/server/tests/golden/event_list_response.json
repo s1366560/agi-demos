@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "id": "event-1",
+      "tenant_id": "tenant-1",
+      "event_type": "gene.installed",
+      "message": "Gene installed",
+      "source": "gene-market",
+      "metadata": {
+        "gene_id": "gene-1"
+      },
+      "created_at": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 2,
+  "page_size": 10
+}

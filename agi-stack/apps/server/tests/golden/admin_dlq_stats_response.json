@@ -1,0 +1,15 @@
+{
+  "total_messages": 2,
+  "pending_count": 1,
+  "retrying_count": 0,
+  "discarded_count": 0,
+  "expired_count": 0,
+  "resolved_count": 1,
+  "oldest_message_age_seconds": "<number>",
+  "error_type_counts": {
+    "RuntimeError": 2
+  },
+  "event_type_counts": {
+    "agent.failed": 2
+  }
+}

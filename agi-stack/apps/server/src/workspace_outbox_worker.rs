@@ -38,16 +38,18 @@ use agent_mention::WORKSPACE_AGENT_MENTION_EVENT;
 pub(crate) use agent_mention::{
     workspace_agent_conversation_id, WorkspaceAgentMentionRuntimeInput,
 };
+#[cfg(test)]
+use agent_mention::{
+    workspace_agent_mention_event_stream_topic, MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH,
+    MAX_WORKSPACE_AGENT_MENTION_STREAM_CHARS, MAX_WORKSPACE_AGENT_MENTION_STREAM_CHUNKS,
+    WORKSPACE_AGENT_CHAIN_MENTION_SOURCE, WORKSPACE_AGENT_CHAIN_MENTION_STAGE,
+    WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS, WORKSPACE_AGENT_MENTION_PENDING_RUNTIME_STATUS,
+    WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS, WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS,
+    WORKSPACE_AGENT_MENTION_TOKEN_CHUNK_EVENT, WORKSPACE_MESSAGE_CREATED_EVENT,
+};
 pub(crate) use agent_mention::{
     workspace_agent_mention_runtime_from_env, WorkspaceAgentMentionBindingHandler,
     WorkspaceAgentMentionRuntime,
-};
-#[cfg(test)]
-use agent_mention::{
-    MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH, WORKSPACE_AGENT_CHAIN_MENTION_SOURCE,
-    WORKSPACE_AGENT_CHAIN_MENTION_STAGE, WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS,
-    WORKSPACE_AGENT_MENTION_PENDING_RUNTIME_STATUS, WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS,
-    WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS, WORKSPACE_MESSAGE_CREATED_EVENT,
 };
 
 pub(crate) type SharedWorkspacePlanOutboxWorker = Arc<WorkspacePlanOutboxWorker>;
@@ -211,12 +213,31 @@ pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_event_stream(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
     stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
     worker_launch_state: Option<Arc<dyn WorkerLaunchRuntimeStateStore>>,
     worker_stream_events: Option<Arc<dyn WorkerLaunchEventStream>>,
     workspace_mention_runtime: Option<Arc<dyn WorkspaceAgentMentionRuntime>>,
+) -> WorkspacePlanOutboxHandlers {
+    workspace_plan_outbox_handlers_with_runtime_state_and_streams(
+        dispatch_store,
+        stage_runner,
+        worker_launch_state,
+        worker_stream_events,
+        workspace_mention_runtime,
+        None,
+    )
+}
+
+pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_streams(
+    dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
+    stage_runner: Option<Arc<dyn WorkspacePipelineStageRunner>>,
+    worker_launch_state: Option<Arc<dyn WorkerLaunchRuntimeStateStore>>,
+    worker_stream_events: Option<Arc<dyn WorkerLaunchEventStream>>,
+    workspace_mention_runtime: Option<Arc<dyn WorkspaceAgentMentionRuntime>>,
+    workspace_event_stream: Option<Arc<dyn EventStream>>,
 ) -> WorkspacePlanOutboxHandlers {
     let handoff = Arc::new(DurableHandoffResumeHandler::new(Arc::clone(
         &dispatch_store,
@@ -237,12 +258,21 @@ pub(crate) fn workspace_plan_outbox_handlers_with_runtime_state_and_event_stream
     let supervisor_tick = Arc::new(SupervisorTickAdmissionHandler::new(Arc::clone(
         &dispatch_store,
     )));
-    let workspace_agent_mention = Arc::new(match workspace_mention_runtime {
-        Some(runtime) => {
-            WorkspaceAgentMentionBindingHandler::with_runtime(Arc::clone(&dispatch_store), runtime)
-        }
-        None => WorkspaceAgentMentionBindingHandler::new(Arc::clone(&dispatch_store)),
-    });
+    let workspace_agent_mention =
+        Arc::new(match (workspace_mention_runtime, workspace_event_stream) {
+            (runtime, Some(event_stream)) => {
+                WorkspaceAgentMentionBindingHandler::with_runtime_and_event_stream(
+                    Arc::clone(&dispatch_store),
+                    runtime,
+                    event_stream,
+                )
+            }
+            (Some(runtime), None) => WorkspaceAgentMentionBindingHandler::with_runtime(
+                Arc::clone(&dispatch_store),
+                runtime,
+            ),
+            (None, None) => WorkspaceAgentMentionBindingHandler::new(Arc::clone(&dispatch_store)),
+        });
     let pipeline_run = Arc::new(PipelineRunAdmissionHandler::new(
         dispatch_store,
         stage_runner,

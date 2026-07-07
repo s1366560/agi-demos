@@ -1,0 +1,77 @@
+{
+  "search_types": {
+    "semantic": {
+      "description": "Semantic search using embeddings and hybrid retrieval",
+      "endpoint": "/api/v1/memory/search",
+      "parameters": {
+        "query": "string (required)",
+        "limit": "integer (1-100)",
+        "tenant_id": "string (optional)",
+        "project_id": "string (optional)"
+      }
+    },
+    "graph_traversal": {
+      "description": "Search by traversing the knowledge graph",
+      "endpoint": "/api/v1/search-enhanced/graph-traversal",
+      "parameters": {
+        "start_entity_uuid": "string (required)",
+        "max_depth": "integer (1-5)",
+        "relationship_types": "array of strings (optional)",
+        "limit": "integer (1-200)",
+        "project_id": "string (optional; omitted fans out across accessible projects to resolve start entity)"
+      }
+    },
+    "community": {
+      "description": "Search within a specific community",
+      "endpoint": "/api/v1/search-enhanced/community",
+      "parameters": {
+        "community_uuid": "string (required)",
+        "limit": "integer (1-200)",
+        "include_episodes": "boolean",
+        "project_id": "string (optional; omitted fans out across accessible projects)"
+      }
+    },
+    "temporal": {
+      "description": "Search within a time range",
+      "endpoint": "/api/v1/search-enhanced/temporal",
+      "parameters": {
+        "query": "string (required)",
+        "since": "ISO datetime string (optional)",
+        "until": "ISO datetime string (optional)",
+        "limit": "integer (1-200)"
+      }
+    },
+    "faceted": {
+      "description": "Search with faceted filtering",
+      "endpoint": "/api/v1/search-enhanced/faceted",
+      "parameters": {
+        "query": "string (required)",
+        "entity_types": "array of strings (optional)",
+        "tags": "array of strings (optional)",
+        "since": "ISO datetime string (optional)",
+        "limit": "integer (1-200)",
+        "offset": "integer (0+)"
+      }
+    }
+  },
+  "filters": {
+    "entity_types": [
+      "Person",
+      "Organization",
+      "Product",
+      "Location",
+      "Event",
+      "Concept",
+      "Custom"
+    ],
+    "relationship_types": [
+      "RELATES_TO",
+      "MENTIONS",
+      "PART_OF",
+      "CONTAINS",
+      "BELONGS_TO",
+      "OWNS",
+      "LOCATED_AT"
+    ]
+  }
+}

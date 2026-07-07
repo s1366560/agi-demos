@@ -7,7 +7,9 @@
 use std::sync::Arc;
 
 use crate::model::{Episode, Memory};
-use crate::ports::{Clock, CoreResult, EmbeddingPort, LlmPort, MemoryRepository, VectorIndexPort};
+use crate::ports::{
+    Clock, CoreResult, EmbeddingPort, LlmPort, MemoryRepository, RelationshipDraft, VectorIndexPort,
+};
 use crate::util::new_memory_id;
 
 /// Episode → Memory ingestion + retrieval.
@@ -46,6 +48,15 @@ impl MemoryService {
     pub fn with_vectors(mut self, vectors: Arc<dyn VectorIndexPort>) -> Self {
         self.vectors = Some(vectors);
         self
+    }
+
+    /// Optional graph-enrichment pass: ask the configured LLM for relationships
+    /// between entities already extracted into `memory`.
+    pub async fn extract_relationships(
+        &self,
+        memory: &Memory,
+    ) -> CoreResult<Vec<RelationshipDraft>> {
+        self.llm.extract_relationships(memory).await
     }
 
     /// Single-step "skill": extract a memory from an episode, embed it, persist

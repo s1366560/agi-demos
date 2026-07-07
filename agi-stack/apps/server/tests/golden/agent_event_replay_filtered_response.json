@@ -1,0 +1,23 @@
+{
+  "events": [
+    {
+      "type": "error",
+      "data": {
+        "message": "worker failed"
+      },
+      "event_time_us": 42,
+      "event_counter": 4,
+      "timestamp": null
+    },
+    {
+      "type": "dead_letter",
+      "data": {
+        "outbox_id": "job-1"
+      },
+      "event_time_us": 43,
+      "event_counter": 1,
+      "timestamp": null
+    }
+  ],
+  "has_more": false
+}

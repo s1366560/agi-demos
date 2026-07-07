@@ -1,0 +1,49 @@
+{
+  "results": [
+    {
+      "uuid": "dev-a",
+      "name": "Dev Alpha",
+      "summary": "Dev Alpha summary",
+      "content": "Dev Alpha summary",
+      "type": "entity",
+      "entity_type": "Concept",
+      "score": 1.0,
+      "created_at": "2023-11-14T22:13:20Z",
+      "metadata": {
+        "uuid": "dev-a",
+        "name": "Dev Alpha",
+        "type": "Concept",
+        "entity_type": "Concept",
+        "created_at": "2023-11-14T22:13:20Z",
+        "project_id": "dev-project"
+      }
+    },
+    {
+      "uuid": "dev-b",
+      "name": "Dev Beta",
+      "summary": "Dev Beta summary",
+      "content": "Dev Beta summary",
+      "type": "entity",
+      "entity_type": "Concept",
+      "score": 0.9900000095367432,
+      "created_at": "2023-11-15T01:00:00Z",
+      "metadata": {
+        "uuid": "dev-b",
+        "name": "Dev Beta",
+        "type": "Concept",
+        "entity_type": "Concept",
+        "created_at": "2023-11-15T01:00:00Z",
+        "project_id": "dev-project"
+      }
+    }
+  ],
+  "total": 2,
+  "search_type": "community",
+  "scope": {
+    "fanout": true,
+    "project_ids": [
+      "dev-project"
+    ],
+    "tenant_id": null
+  }
+}

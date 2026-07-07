@@ -173,6 +173,15 @@ impl IdentityService for PgIdentityService {
         self.pg_login(username, password, now_ms).await
     }
 
+    async fn current_user(&self, user_id: &str) -> Result<CurrentUserView, IdentityError> {
+        self.users
+            .find_current_user_by_id(user_id)
+            .await
+            .map_err(IdentityError::internal)?
+            .map(CurrentUserView::from)
+            .ok_or_else(|| IdentityError::not_found("User not found"))
+    }
+
     async fn create_device_code(&self) -> Result<DeviceCodeView, IdentityError> {
         self.pg_create_device_code().await
     }

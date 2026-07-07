@@ -1,0 +1,25 @@
+{
+  "deploys": [
+    {
+      "id": "deploy_abc123",
+      "instance_id": "inst_550e8400",
+      "action": "update",
+      "revision": 5,
+      "status": "success",
+      "message": "Deploy completed successfully",
+      "image_version": "1.5.0",
+      "replicas": 3,
+      "config_snapshot": {
+        "cpu_limit": "1000m",
+        "mem_limit": "1Gi"
+      },
+      "triggered_by": "user-1",
+      "started_at": "2024-01-15T10:30:00Z",
+      "finished_at": "2024-01-15T10:32:00Z",
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}

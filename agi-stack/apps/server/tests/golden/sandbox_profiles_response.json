@@ -1,0 +1,50 @@
+{
+  "profiles": [
+    {
+      "name": "Lite",
+      "profile_type": "lite",
+      "description": "轻量级 sandbox，无桌面，仅 MCP + Terminal",
+      "desktop_enabled": false,
+      "memory_limit": "512m",
+      "cpu_limit": "0.5",
+      "timeout_seconds": 1800,
+      "preinstalled_tools": [
+        "python",
+        "node"
+      ],
+      "max_instances": 20
+    },
+    {
+      "name": "Standard",
+      "profile_type": "standard",
+      "description": "标准 sandbox，包含 XFCE 桌面",
+      "desktop_enabled": true,
+      "memory_limit": "8g",
+      "cpu_limit": "2",
+      "timeout_seconds": 3600,
+      "preinstalled_tools": [
+        "python",
+        "node",
+        "java"
+      ],
+      "max_instances": 5
+    },
+    {
+      "name": "Full",
+      "profile_type": "full",
+      "description": "完整开发环境，预装所有工具",
+      "desktop_enabled": true,
+      "memory_limit": "4g",
+      "cpu_limit": "4",
+      "timeout_seconds": 7200,
+      "preinstalled_tools": [
+        "python",
+        "node",
+        "java",
+        "go",
+        "rust"
+      ],
+      "max_instances": 2
+    }
+  ]
+}

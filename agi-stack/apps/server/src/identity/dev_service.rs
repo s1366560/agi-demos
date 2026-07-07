@@ -21,11 +21,11 @@ use super::{
     default_project_member_role, default_tenant_member_role, is_valid_agent_conversation_mode,
     is_valid_project_member_role, is_valid_tenant_member_role, normalize_backend_store_id,
     project_graph_config_for_write, project_memory_rules_for_write, sandbox_config, unprocessable,
-    BackendStoreSummary, DeviceApproveView, DeviceCodeView, DeviceTokenView, IdentityError,
-    IdentityService, InvitationListView, InvitationVerifyView, InvitationView, LoginOutcome,
-    ProjectCreateInput, ProjectListInput, ProjectMemberMutationView, ProjectMemberView,
-    ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView, SharedDeviceGrantStore,
-    TenantMemberMutationView, TenantPage, TenantView, DEVICE_CODE_TTL_SECS,
+    BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView,
+    IdentityError, IdentityService, InvitationListView, InvitationVerifyView, InvitationView,
+    LoginOutcome, ProjectCreateInput, ProjectListInput, ProjectMemberMutationView,
+    ProjectMemberView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
+    SharedDeviceGrantStore, TenantMemberMutationView, TenantPage, TenantView, DEVICE_CODE_TTL_SECS,
 };
 
 mod invitations;
@@ -132,6 +132,22 @@ impl IdentityService for DevIdentityService {
             access_token: try_generate_api_key().map_err(IdentityError::internal)?,
             token_type: "bearer".to_string(),
             must_change_password: false,
+        })
+    }
+
+    async fn current_user(&self, user_id: &str) -> Result<CurrentUserView, IdentityError> {
+        if user_id != self.dev_user_id {
+            return Err(IdentityError::not_found("User not found"));
+        }
+        Ok(CurrentUserView {
+            user_id: self.dev_user_id.clone(),
+            email: "dev@example.test".to_string(),
+            name: "Dev User".to_string(),
+            roles: vec!["admin".to_string()],
+            is_active: true,
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            profile: json!({}),
+            preferred_language: None,
         })
     }
 

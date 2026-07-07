@@ -21,6 +21,7 @@ struct Subscription {
 pub(super) struct ConnectionSubscriptions {
     conversations: HashMap<String, Subscription>,
     sandboxes: HashMap<String, Subscription>,
+    workspaces: HashMap<String, Subscription>,
 }
 
 impl ConnectionSubscriptions {
@@ -68,6 +69,28 @@ impl ConnectionSubscriptions {
         self.conversations.remove(conversation_id);
     }
 
+    pub(super) fn subscribe_workspace(
+        &mut self,
+        workspace_id: String,
+        last_id: Option<String>,
+    ) -> bool {
+        if !self.can_add(self.workspaces.contains_key(&workspace_id)) {
+            return false;
+        }
+        self.workspaces.insert(
+            workspace_id,
+            Subscription {
+                last_id: last_id.unwrap_or_default(),
+                ..Subscription::default()
+            },
+        );
+        true
+    }
+
+    pub(super) fn unsubscribe_workspace(&mut self, workspace_id: &str) {
+        self.workspaces.remove(workspace_id);
+    }
+
     pub(super) fn subscribe_sandbox(&mut self, project_id: String) -> bool {
         if !self.can_add(self.sandboxes.contains_key(&project_id)) {
             return false;
@@ -85,7 +108,7 @@ impl ConnectionSubscriptions {
     }
 
     fn active_count(&self) -> usize {
-        self.conversations.len() + self.sandboxes.len()
+        self.conversations.len() + self.sandboxes.len() + self.workspaces.len()
     }
 }
 
@@ -106,6 +129,13 @@ pub(super) async fn flush_event_subscriptions(
         app,
         socket,
         &mut subscriptions.sandboxes,
+        &mut sent_this_flush,
+    )
+    .await?;
+    flush_workspace_subscriptions(
+        app,
+        socket,
+        &mut subscriptions.workspaces,
         &mut sent_this_flush,
     )
     .await?;
@@ -169,6 +199,39 @@ async fn flush_sandbox_subscriptions(
         for entry in entries {
             let entry_id = entry.id;
             let message = sandbox_entry_to_ws_message(project_id, &entry.payload, &entry_id);
+            send_json(socket, message).await?;
+            *sent_this_flush += 1;
+            subscription.last_id = entry_id;
+            if replay_limit(*sent_this_flush).is_none() {
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn flush_workspace_subscriptions(
+    app: &AppState,
+    socket: &mut WebSocket,
+    subscriptions: &mut HashMap<String, Subscription>,
+    sent_this_flush: &mut usize,
+) -> Result<(), ()> {
+    for (workspace_id, subscription) in subscriptions.iter_mut() {
+        let Some(limit) = replay_limit(*sent_this_flush) else {
+            break;
+        };
+        let entries = app
+            .events
+            .read_after(
+                &workspace_stream_topic(workspace_id),
+                &subscription.last_id,
+                limit,
+            )
+            .await
+            .map_err(|_| ())?;
+        for entry in entries {
+            let entry_id = entry.id;
+            let message = workspace_entry_to_ws_message(workspace_id, &entry.payload, &entry_id);
             send_json(socket, message).await?;
             *sent_this_flush += 1;
             subscription.last_id = entry_id;
@@ -269,6 +332,29 @@ fn sandbox_entry_to_ws_message(project_id: &str, payload: &str, entry_id: &str) 
     })
 }
 
+fn workspace_entry_to_ws_message(workspace_id: &str, payload: &str, entry_id: &str) -> Value {
+    let parsed: Value = serde_json::from_str(payload).unwrap_or_else(|_| json!({}));
+    if parsed.get("type").is_some() {
+        let mut message = parsed;
+        if let Some(obj) = message.as_object_mut() {
+            obj.insert("workspace_id".to_string(), json!(workspace_id));
+            obj.insert(
+                "routing_key".to_string(),
+                json!(format!("workspace:{workspace_id}")),
+            );
+            obj.insert("event_id".to_string(), json!(entry_id));
+        }
+        return message;
+    }
+    json!({
+        "type": "error",
+        "workspace_id": workspace_id,
+        "routing_key": format!("workspace:{workspace_id}"),
+        "event_id": entry_id,
+        "data": {"message": "Malformed workspace event payload"}
+    })
+}
+
 async fn send_json(socket: &mut WebSocket, value: Value) -> Result<(), ()> {
     socket
         .send(Message::Text(value.to_string()))
@@ -282,6 +368,10 @@ fn agent_stream_topic(conversation_id: &str) -> String {
 
 fn sandbox_stream_topic(project_id: &str) -> String {
     format!("sandbox:events:{project_id}")
+}
+
+fn workspace_stream_topic(workspace_id: &str) -> String {
+    format!("workspace:events:{workspace_id}")
 }
 
 #[cfg(test)]
@@ -362,9 +452,13 @@ mod tests {
         }
 
         assert!(!subscriptions.subscribe_sandbox("p1".to_string()));
+        assert!(!subscriptions.subscribe_workspace("w1".to_string(), None));
         assert!(subscriptions.ensure_conversation("c0".to_string(), Some("m1".to_string())));
         subscriptions.unsubscribe_conversation("c0");
         assert!(subscriptions.subscribe_sandbox("p1".to_string()));
+        assert!(!subscriptions.subscribe_workspace("w1".to_string(), None));
+        subscriptions.unsubscribe_sandbox("p1");
+        assert!(subscriptions.subscribe_workspace("w1".to_string(), Some("7-0".to_string())));
         assert!(!subscriptions.ensure_conversation("new".to_string(), None));
     }
 
@@ -391,5 +485,31 @@ mod tests {
         assert_eq!(value["event_id"], "7-0");
         assert_eq!(value["data"]["type"], "sandbox.started");
         assert_eq!(value["data"]["data"]["status"], "running");
+    }
+
+    #[test]
+    fn workspace_payload_matches_frontend_contract() {
+        let payload = json!({
+            "type": "workspace_agent_mention_token_chunk",
+            "workspace_id": "original-workspace",
+            "project_id": "p1",
+            "data": {
+                "message_id": "m1",
+                "chunk_index": 0,
+                "content_delta": "hello"
+            },
+            "event_time_us": 1234
+        });
+
+        let value = workspace_entry_to_ws_message("w1", &payload.to_string(), "8-0");
+
+        assert_eq!(value["type"], "workspace_agent_mention_token_chunk");
+        assert_eq!(value["workspace_id"], "w1");
+        assert_eq!(value["routing_key"], "workspace:w1");
+        assert_eq!(value["event_id"], "8-0");
+        assert_eq!(value["project_id"], "p1");
+        assert_eq!(value["data"]["message_id"], "m1");
+        assert_eq!(value["data"]["content_delta"], "hello");
+        assert_eq!(value["event_time_us"], 1234);
     }
 }

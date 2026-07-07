@@ -1,0 +1,17 @@
+{
+  "total": 2,
+  "action_counts": {
+    "runtime_hook.completed": 1,
+    "runtime_hook.failed": 1
+  },
+  "executor_counts": {
+    "sandbox": 2
+  },
+  "family_counts": {
+    "tool": 2
+  },
+  "isolation_mode_counts": {
+    "container": 2
+  },
+  "latest_timestamp": "2026-01-02T00:00:00Z"
+}

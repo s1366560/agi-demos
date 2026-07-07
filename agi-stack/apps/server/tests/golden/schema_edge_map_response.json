@@ -1,0 +1,10 @@
+{
+  "id": "map-1",
+  "project_id": "project-1",
+  "source_type": "Person",
+  "target_type": "Company",
+  "edge_type": "WORKS_AT",
+  "status": "ENABLED",
+  "source": "user",
+  "created_at": "2026-01-05T00:00:00Z"
+}

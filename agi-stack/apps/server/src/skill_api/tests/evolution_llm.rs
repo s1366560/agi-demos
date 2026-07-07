@@ -146,6 +146,10 @@ async fn llm_skill_evolution_maps_description_action_to_candidate_content() {
         .as_deref()
         .unwrap_or_default()
         .contains("patch reviews"));
+    let requests = client.requests.lock().unwrap();
+    assert!(requests[0]
+        .1
+        .contains("# Code Review\nExisting managed guidance."));
 }
 
 #[tokio::test]
@@ -200,6 +204,7 @@ fn sample_evidence_group() -> SkillEvolutionEvidenceGroup {
     SkillEvolutionEvidenceGroup {
         skill_name: "code-review".to_string(),
         project_id: Some("project-1".to_string()),
+        current_skill_content: Some("# Code Review\nExisting managed guidance.".to_string()),
         session_count: 1,
         avg_score: 0.83,
         success_count: 1,

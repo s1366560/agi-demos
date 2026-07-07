@@ -19,5 +19,7 @@ license.workspace = true
 # issuance is a *server* concern — the browser/device tier never mints keys.
 # Nothing here appears in a core port signature.
 [dependencies]
+aes-gcm = "0.10"
+base64 = "0.22"
 bcrypt = "0.15"
 getrandom = "0.2"

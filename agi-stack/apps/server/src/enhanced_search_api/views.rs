@@ -168,5 +168,7 @@ pub(super) struct MemorySearchRequest {
     #[serde(default)]
     pub(super) limit: Option<usize>,
     #[serde(default)]
+    pub(super) tenant_id: Option<String>,
+    #[serde(default)]
     pub(super) project_id: Option<String>,
 }

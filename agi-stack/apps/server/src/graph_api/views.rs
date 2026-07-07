@@ -115,6 +115,55 @@ pub(super) struct RebuildCommunitiesResponse {
     pub(super) message: String,
     pub(super) communities_count: usize,
     pub(super) entities_processed: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) job_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) job_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) event_topic: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) requested_event_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub(super) struct RebuildCommunityJobStatusResponse {
+    pub(super) job_id: String,
+    pub(super) project_id: String,
+    pub(super) job_status: String,
+    pub(super) event_topic: String,
+    pub(super) latest_event_id: String,
+    pub(super) events: Vec<RebuildCommunityJobEventView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) communities_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) entities_processed: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) persisted_communities_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) error: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub(super) struct RebuildCommunityJobEventView {
+    pub(super) event_id: String,
+    pub(super) event_type: String,
+    pub(super) job_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) failed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) communities_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) entities_processed: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) persisted_communities_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -141,6 +190,11 @@ pub(super) struct RebuildCommunitiesQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub(super) struct RebuildCommunityJobQuery {
+    pub(super) project_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(super) struct EntityPathQuery {
     pub(super) project_id: Option<String>,
 }
@@ -158,6 +212,48 @@ pub(super) struct CommunityMembersQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub(super) struct GraphExportQuery {
+    pub(super) project_id: Option<String>,
+    pub(super) limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(super) struct GraphExportStats {
+    pub(super) entities_count: usize,
+    pub(super) relationships_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(super) struct GraphExportResponse {
+    pub(super) version: u32,
+    pub(super) project_id: String,
+    pub(super) exported_at: String,
+    pub(super) entities: Vec<EntityUpsertPayload>,
+    pub(super) relationships: Vec<RelationshipUpsertPayload>,
+    pub(super) stats: GraphExportStats,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(super) struct GraphImportPayload {
+    pub(super) version: u32,
+    pub(super) project_id: String,
+    #[serde(default)]
+    pub(super) entities: Vec<EntityUpsertPayload>,
+    #[serde(default)]
+    pub(super) relationships: Vec<RelationshipUpsertPayload>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub(super) struct GraphImportResponse {
+    pub(super) status: String,
+    pub(super) message: String,
+    pub(super) version: u32,
+    pub(super) project_id: String,
+    pub(super) entities_imported: usize,
+    pub(super) relationships_imported: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub(super) struct EntityUpsertPayload {
     pub(super) uuid: String,
     pub(super) name: String,
@@ -174,6 +270,19 @@ pub(super) struct EntityUpsertPayload {
 }
 
 impl EntityUpsertPayload {
+    pub(super) fn from_entity(entity: GraphEntity) -> Self {
+        Self {
+            uuid: entity.uuid,
+            name: entity.name,
+            entity_type: entity.entity_type,
+            summary: entity.summary,
+            project_id: entity.project_id,
+            tenant_id: entity.tenant_id,
+            created_at_ms: Some(entity.created_at_ms),
+            name_embedding: entity.name_embedding,
+        }
+    }
+
     pub(super) fn into_entity(self) -> GraphEntity {
         GraphEntity {
             uuid: self.uuid,
@@ -188,7 +297,7 @@ impl EntityUpsertPayload {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub(super) struct RelationshipUpsertPayload {
     pub(super) uuid: String,
     pub(super) source_uuid: String,
@@ -213,6 +322,19 @@ fn default_score() -> f32 {
 }
 
 impl RelationshipUpsertPayload {
+    pub(super) fn from_relationship(rel: Relationship) -> Self {
+        Self {
+            uuid: rel.uuid,
+            source_uuid: rel.source_uuid,
+            target_uuid: rel.target_uuid,
+            relation_type: rel.relation_type,
+            fact: rel.fact,
+            score: rel.score,
+            project_id: rel.project_id,
+            created_at_ms: Some(rel.created_at_ms),
+        }
+    }
+
     pub(super) fn into_relationship(self) -> Relationship {
         Relationship {
             uuid: self.uuid,

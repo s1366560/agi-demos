@@ -28,6 +28,8 @@ use crate::AppState;
 
 const DEFAULT_REPLAY_LIMIT: i64 = 1000;
 const MAX_REPLAY_LIMIT: i64 = 10_000;
+const MAX_EVENT_TYPE_FILTERS: usize = 20;
+const MAX_EVENT_TYPE_LENGTH: usize = 80;
 
 pub(crate) type SharedAgentEvents = Arc<dyn AgentEventReplayService>;
 
@@ -83,6 +85,7 @@ impl AgentEventReplayService for PgAgentEventReplayService {
                 from_time_us: cursor.from_time_us,
                 from_counter: cursor.from_counter,
                 limit: cursor.limit,
+                event_types: &cursor.event_types,
             })
             .await
             .map_err(AgentEventsApiError::internal)?;
@@ -121,6 +124,7 @@ impl AgentEventReplayService for DevAgentEventReplayService {
             .into_iter()
             .filter_map(|entry| stream_payload_to_replay_item(&entry.payload))
             .filter(|event| event.is_after(cursor.from_time_us, cursor.from_counter))
+            .filter(|event| event.matches_event_types(&cursor.event_types))
             .take(cursor.limit as usize)
             .collect();
         Ok(EventReplayResponse {
@@ -151,11 +155,12 @@ async fn get_conversation_events(
     Ok(Json(response))
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct EventReplayQuery {
     pub(crate) from_time_us: Option<i64>,
     pub(crate) from_counter: Option<i64>,
     pub(crate) limit: Option<i64>,
+    pub(crate) event_types: Option<String>,
 }
 
 impl EventReplayQuery {
@@ -178,19 +183,22 @@ impl EventReplayQuery {
                 "limit must be greater than or equal to 1 and less than or equal to 10000",
             ));
         }
+        let event_types = parse_event_type_filter(self.event_types.as_deref())?;
         Ok(ValidatedEventReplayQuery {
             from_time_us,
             from_counter,
             limit,
+            event_types,
         })
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct ValidatedEventReplayQuery {
     from_time_us: i64,
     from_counter: i64,
     limit: i64,
+    event_types: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -222,6 +230,13 @@ impl EventReplayItem {
     fn is_after(&self, from_time_us: i64, from_counter: i64) -> bool {
         self.event_time_us > from_time_us
             || (self.event_time_us == from_time_us && self.event_counter > from_counter)
+    }
+
+    fn matches_event_types(&self, event_types: &[String]) -> bool {
+        event_types.is_empty()
+            || event_types
+                .iter()
+                .any(|event_type| event_type == &self.event_type)
     }
 }
 
@@ -314,6 +329,46 @@ fn stream_payload_to_replay_item(payload: &str) -> Option<EventReplayItem> {
     })
 }
 
+fn parse_event_type_filter(event_types: Option<&str>) -> Result<Vec<String>, AgentEventsApiError> {
+    let Some(event_types) = event_types.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(Vec::new());
+    };
+
+    let mut parsed = Vec::new();
+    for raw in event_types.split(',') {
+        let event_type = raw.trim();
+        if event_type.is_empty() {
+            return Err(AgentEventsApiError::unprocessable(
+                "event_types must not contain empty values",
+            ));
+        }
+        if event_type.len() > MAX_EVENT_TYPE_LENGTH {
+            return Err(AgentEventsApiError::unprocessable(
+                "event_types values must be 80 characters or fewer",
+            ));
+        }
+        if !event_type
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | ':'))
+        {
+            return Err(AgentEventsApiError::unprocessable(
+                "event_types values may only contain ASCII letters, digits, _, -, . or :",
+            ));
+        }
+        if !parsed.iter().any(|existing| existing == event_type) {
+            parsed.push(event_type.to_string());
+        }
+    }
+
+    if parsed.len() > MAX_EVENT_TYPE_FILTERS {
+        return Err(AgentEventsApiError::unprocessable(
+            "event_types may contain at most 20 values",
+        ));
+    }
+
+    Ok(parsed)
+}
+
 fn agent_stream_topic(conversation_id: &str) -> String {
     format!("agent:events:{conversation_id}")
 }
@@ -328,6 +383,7 @@ mod tests {
             from_time_us: None,
             from_counter: None,
             limit: None,
+            event_types: None,
         };
 
         let validated = query.validated().expect("default query is valid");
@@ -335,6 +391,7 @@ mod tests {
         assert_eq!(validated.from_time_us, 0);
         assert_eq!(validated.from_counter, 0);
         assert_eq!(validated.limit, DEFAULT_REPLAY_LIMIT);
+        assert!(validated.event_types.is_empty());
     }
 
     #[test]
@@ -344,6 +401,7 @@ mod tests {
                 from_time_us: Some(-1),
                 from_counter: Some(0),
                 limit: Some(1),
+                event_types: None,
             }
             .validated()
             .expect_err("negative from_time_us rejected")
@@ -355,6 +413,7 @@ mod tests {
                 from_time_us: Some(0),
                 from_counter: Some(-1),
                 limit: Some(1),
+                event_types: None,
             }
             .validated()
             .expect_err("negative from_counter rejected")
@@ -366,9 +425,59 @@ mod tests {
                 from_time_us: Some(0),
                 from_counter: Some(0),
                 limit: Some(MAX_REPLAY_LIMIT + 1),
+                event_types: None,
             }
             .validated()
             .expect_err("limit above max rejected")
+            .status,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    #[test]
+    fn replay_query_parses_event_type_filter() {
+        let validated = EventReplayQuery {
+            from_time_us: Some(0),
+            from_counter: Some(0),
+            limit: Some(100),
+            event_types: Some(" error,dead_letter,error,tool:failed ".to_string()),
+        }
+        .validated()
+        .expect("event type filter is valid");
+
+        assert_eq!(
+            validated.event_types,
+            vec![
+                "error".to_string(),
+                "dead_letter".to_string(),
+                "tool:failed".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn replay_query_rejects_invalid_event_type_filter() {
+        assert_eq!(
+            EventReplayQuery {
+                from_time_us: Some(0),
+                from_counter: Some(0),
+                limit: Some(1),
+                event_types: Some("error,,dead_letter".to_string()),
+            }
+            .validated()
+            .expect_err("empty filter member rejected")
+            .status,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            EventReplayQuery {
+                from_time_us: Some(0),
+                from_counter: Some(0),
+                limit: Some(1),
+                event_types: Some("error;drop".to_string()),
+            }
+            .validated()
+            .expect_err("invalid character rejected")
             .status,
             StatusCode::UNPROCESSABLE_ENTITY
         );
@@ -395,6 +504,37 @@ mod tests {
     }
 
     #[test]
+    fn filtered_replay_response_matches_golden() {
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/agent_event_replay_filtered_response.json"
+        ))
+        .expect("agent event filtered replay golden must be valid JSON");
+        let response = EventReplayResponse {
+            has_more: false,
+            events: vec![
+                EventReplayItem {
+                    event_type: "error".to_string(),
+                    data: json!({"message": "worker failed"}),
+                    event_time_us: 42,
+                    event_counter: 4,
+                    timestamp: None,
+                },
+                EventReplayItem {
+                    event_type: "dead_letter".to_string(),
+                    data: json!({"outbox_id": "job-1"}),
+                    event_time_us: 43,
+                    event_counter: 1,
+                    timestamp: None,
+                },
+            ],
+        };
+
+        let value = serde_json::to_value(response).expect("response serializes");
+
+        agistack_parity::assert_parity(&golden, &value);
+    }
+
+    #[test]
     fn stream_payload_renders_python_sse_format() {
         let payload = json!({
             "type": "complete",
@@ -412,5 +552,7 @@ mod tests {
         assert_eq!(event.event_time_us, 100);
         assert_eq!(event.event_counter, 2);
         assert_eq!(event.timestamp.as_deref(), Some("2026-01-01T00:00:00Z"));
+        assert!(event.matches_event_types(&["complete".to_string()]));
+        assert!(!event.matches_event_types(&["error".to_string()]));
     }
 }

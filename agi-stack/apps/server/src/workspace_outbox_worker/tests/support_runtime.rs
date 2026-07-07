@@ -1,4 +1,5 @@
 use super::*;
+use crate::workspace_outbox_worker::agent_mention::WorkspaceAgentMentionRuntimeOutput;
 
 pub(super) struct FakeWorkspaceAgentMentionRuntime {
     result: Result<String, String>,
@@ -27,10 +28,17 @@ impl FakeWorkspaceAgentMentionRuntime {
 
 #[async_trait]
 impl WorkspaceAgentMentionRuntime for FakeWorkspaceAgentMentionRuntime {
-    async fn complete(&self, input: WorkspaceAgentMentionRuntimeInput) -> CoreResult<String> {
+    async fn complete(
+        &self,
+        input: WorkspaceAgentMentionRuntimeInput,
+    ) -> CoreResult<WorkspaceAgentMentionRuntimeOutput> {
         self.prompts.lock().unwrap().push(input.user_prompt);
         self.result
             .clone()
+            .and_then(|answer| {
+                WorkspaceAgentMentionRuntimeOutput::from_final_content(answer)
+                    .map_err(|err| err.to_string())
+            })
             .map_err(|message| CoreError::Llm(message.to_string()))
     }
 }

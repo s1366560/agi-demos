@@ -2,7 +2,8 @@ use super::views::{ChannelOutboxItemView, ChannelSessionBindingItemView};
 use super::*;
 use agistack_adapters_postgres::{
     ChannelConfigRecord, ChannelObservabilitySummaryRecord, ChannelOutboxRecord,
-    ChannelSessionBindingRecord, ChannelStatusRecord,
+    ChannelSessionBindingRecord, ChannelStatusRecord, ChannelWebhookEventRecord,
+    ChannelWebhookIngressRecord,
 };
 use agistack_parity::assert_parity;
 use axum::http::StatusCode;
@@ -57,12 +58,28 @@ fn sample_status_record() -> ChannelStatusRecord {
     }
 }
 
+fn sample_disconnected_status_record() -> ChannelStatusRecord {
+    ChannelStatusRecord {
+        config_id: "chan-1".to_string(),
+        project_id: "project-1".to_string(),
+        channel_type: "feishu".to_string(),
+        status: "disconnected".to_string(),
+        connected: false,
+        last_error: None,
+    }
+}
+
 fn sample_outbox_record() -> ChannelOutboxRecord {
     ChannelOutboxRecord {
         id: "outbox-1".to_string(),
+        project_id: "project-1".to_string(),
         channel_config_id: "chan-1".to_string(),
+        channel_type: Some("feishu".to_string()),
+        webhook_url: Some("https://example.test/hook".to_string()),
+        domain: Some("feishu".to_string()),
         conversation_id: "conv-1".to_string(),
         chat_id: "oc_chat_1".to_string(),
+        content_text: "hello from workspace".to_string(),
         status: "failed".to_string(),
         attempt_count: 2,
         max_attempts: 3,
@@ -105,6 +122,34 @@ fn sample_observability_summary_record() -> ChannelObservabilitySummaryRecord {
     }
 }
 
+fn sample_webhook_ingress_record() -> ChannelWebhookIngressRecord {
+    ChannelWebhookIngressRecord {
+        inserted: true,
+        event: ChannelWebhookEventRecord {
+            id: "channel_webhook_11111111-1111-5111-8111-111111111111".to_string(),
+            project_id: "project-1".to_string(),
+            channel_config_id: "chan-1".to_string(),
+            channel_type: "feishu".to_string(),
+            idempotency_key: "evt-1".to_string(),
+            headers_json: json!({"x-lark-request-id": "req-1"}),
+            raw_event_json: json!({"event": {"header": {"event_id": "evt-1"}}}),
+            normalized_event_json: json!({
+                "provider": "feishu",
+                "schema_version": 1,
+                "idempotency_key": "evt-1",
+                "event_id": "evt-1"
+            }),
+            status: "received".to_string(),
+            route_error: None,
+            route_session_key: None,
+            route_binding_id: None,
+            route_conversation_id: None,
+            received_at: at(1_700_000_000),
+            routed_at: None,
+        },
+    }
+}
+
 #[test]
 fn channel_config_response_matches_golden_and_masks_extra_secrets() {
     let actual = serde_json::to_value(ChannelConfigView::from(sample_channel_config_record()))
@@ -135,6 +180,17 @@ fn channel_status_matches_golden() {
         .expect("channel status serializes");
     let golden: Value = serde_json::from_str(include_str!(
         "../../tests/golden/channel_status_response.json"
+    ))
+    .expect("golden parses");
+    assert_parity(&golden, &actual);
+}
+
+#[test]
+fn channel_disconnected_status_matches_golden() {
+    let actual = serde_json::to_value(ChannelStatusView::from(sample_disconnected_status_record()))
+        .expect("channel disconnected status serializes");
+    let golden: Value = serde_json::from_str(include_str!(
+        "../../tests/golden/channel_disconnected_status_response.json"
     ))
     .expect("golden parses");
     assert_parity(&golden, &actual);
@@ -180,6 +236,106 @@ fn channel_observability_summary_matches_golden() {
     ))
     .expect("golden parses");
     assert_parity(&golden, &actual);
+}
+
+#[test]
+fn channel_webhook_challenge_matches_golden() {
+    let actual = serde_json::to_value(ChannelWebhookChallengeView {
+        challenge: "challenge-value".to_string(),
+    })
+    .expect("channel webhook challenge serializes");
+    let golden = serde_json::from_str(include_str!(
+        "../../tests/golden/channel_webhook_challenge.json"
+    ))
+    .expect("golden parses");
+    assert_parity(&golden, &actual);
+}
+
+#[test]
+fn channel_webhook_ingress_matches_golden() {
+    let actual = serde_json::to_value(ChannelWebhookIngressView::from(
+        sample_webhook_ingress_record(),
+    ))
+    .expect("channel webhook ingress serializes");
+    let golden = serde_json::from_str(include_str!(
+        "../../tests/golden/channel_webhook_ingress.json"
+    ))
+    .expect("golden parses");
+    assert_parity(&golden, &actual);
+}
+
+#[test]
+fn channel_webhook_event_payload_routes_normalized_message_to_project_stream() {
+    let view = ChannelWebhookIngressView::from(sample_webhook_ingress_record());
+    let payload = super::routes::channel_webhook_event_payload(&view);
+
+    assert_eq!(payload["type"], "channel_webhook_message_received");
+    assert_eq!(payload["project_id"], "project-1");
+    assert_eq!(payload["channel_config_id"], "chan-1");
+    assert_eq!(
+        payload["channel_event_id"],
+        "channel_webhook_11111111-1111-5111-8111-111111111111"
+    );
+    assert_eq!(payload["idempotency_key"], "evt-1");
+    assert_eq!(payload["routing_key"], "channel:chan-1:evt-1");
+    assert_eq!(payload["normalized_event"]["provider"], "feishu");
+}
+
+#[test]
+fn channel_webhook_session_route_matches_python_session_key_shape() {
+    let mut record = sample_webhook_ingress_record().event;
+    record.normalized_event_json = json!({
+        "provider": "feishu",
+        "schema_version": 1,
+        "chat_id": "oc_chat_1",
+        "chat_type": "group",
+        "topic_id": "topic-1",
+        "thread_id": "thread-1"
+    });
+
+    let route = super::service::channel_webhook_session_route(&record);
+
+    assert_eq!(
+        route.session_key.as_deref(),
+        Some("project:project-1:channel:feishu:config:chan-1:group:oc_chat_1:topic:topic-1:thread:thread-1")
+    );
+    assert_eq!(route.error, None);
+}
+
+#[test]
+fn channel_webhook_session_create_record_matches_python_conversation_shape() {
+    let mut record = sample_webhook_ingress_record().event;
+    record.normalized_event_json = json!({
+        "provider": "feishu",
+        "schema_version": 1,
+        "chat_id": "ou_dm_chat",
+        "chat_type": "p2p",
+        "thread_id": "thread-1",
+        "sender_open_id": "ou_sender_1"
+    });
+
+    let route = super::service::channel_webhook_session_route(&record);
+    let create_record = super::service::channel_webhook_session_create_record(&record, &route)
+        .expect("valid route produces create record");
+
+    assert_eq!(
+        create_record.session_key,
+        "project:project-1:channel:feishu:config:chan-1:dm:ou_dm_chat:thread:thread-1"
+    );
+    assert_eq!(create_record.chat_id, "ou_dm_chat");
+    assert_eq!(create_record.chat_type, "p2p");
+    assert_eq!(create_record.thread_id.as_deref(), Some("thread-1"));
+    assert_eq!(
+        create_record.conversation_title,
+        "Feishu: Chat with ou_sender_1"
+    );
+    assert_eq!(
+        create_record.metadata_json["channel_session_key"],
+        create_record.session_key
+    );
+    assert_eq!(create_record.metadata_json["channel_type"], "feishu");
+    assert_eq!(create_record.metadata_json["chat_type"], "p2p");
+    assert_eq!(create_record.metadata_json["sender_id"], "ou_sender_1");
 }
 
 #[test]

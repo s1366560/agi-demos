@@ -1,6 +1,68 @@
 use super::*;
 
 #[tokio::test]
+async fn dev_service_authorizes_workspace_event_subscription_by_workspace_scope() {
+    let service = DevWorkspaceService::new("user-1");
+    let workspace = service
+        .create_workspace(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            WorkspaceCreatePayload {
+                name: "Core Workspace".to_string(),
+                description: None,
+                metadata: json!({}),
+                use_case: Some("programming".to_string()),
+                collaboration_mode: Some("multi_agent_shared".to_string()),
+                autonomy_profile: None,
+                sandbox_code_root: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let resolved_tenant = service
+        .authorize_workspace_event_subscription("user-1", &workspace.id, "project-1", None)
+        .await
+        .unwrap();
+    assert_eq!(resolved_tenant, "tenant-1");
+
+    let resolved_tenant = service
+        .authorize_workspace_event_subscription(
+            "user-1",
+            &workspace.id,
+            "project-1",
+            Some("tenant-1"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resolved_tenant, "tenant-1");
+
+    let wrong_project = service
+        .authorize_workspace_event_subscription("user-1", &workspace.id, "other-project", None)
+        .await
+        .unwrap_err();
+    assert_eq!(wrong_project.status, StatusCode::NOT_FOUND);
+
+    let wrong_tenant = service
+        .authorize_workspace_event_subscription(
+            "user-1",
+            &workspace.id,
+            "project-1",
+            Some("other-tenant"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(wrong_tenant.status, StatusCode::NOT_FOUND);
+
+    let wrong_user = service
+        .authorize_workspace_event_subscription("other-user", &workspace.id, "project-1", None)
+        .await
+        .unwrap_err();
+    assert_eq!(wrong_user.status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn dev_service_roundtrips_workspace_task_topology_blackboard() {
     let service = DevWorkspaceService::new("user-1");
     let workspace = service

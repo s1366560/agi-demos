@@ -26,6 +26,25 @@ fn profile_validation_matches_python_enum_values() {
 fn sandbox_router_builds_with_http_service_proxy_routes() {
     let _ = router();
 }
+
+#[test]
+fn sandbox_profiles_match_python_wire_shape() {
+    let response = SandboxProfilesResponse {
+        profiles: SANDBOX_PROFILE_INFOS,
+    };
+    assert_eq!(response.profiles.len(), 3);
+    assert_eq!(response.profiles[0].profile_type, "lite");
+    assert_eq!(response.profiles[1].profile_type, "standard");
+    assert_eq!(response.profiles[2].profile_type, "full");
+
+    let golden: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/golden/sandbox_profiles_response.json"
+    ))
+    .unwrap();
+    let actual = serde_json::to_value(&response).unwrap();
+    agistack_parity::assert_parity(&golden, &actual);
+}
+
 #[test]
 fn response_keeps_python_wire_fields_and_null_proxy_urls() {
     let response = ProjectSandboxResponse::from(sample_info());

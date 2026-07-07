@@ -265,10 +265,17 @@ fn evolve_prompt(group: &SkillEvolutionEvidenceGroup) -> String {
     } else {
         0.0
     };
+    let current_skill_content = group
+        .current_skill_content
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| truncate_chars(value, 12_000))
+        .unwrap_or_else(|| NO_MANAGED_SKILL_CONTENT.to_string());
     format!(
         "Current SKILL.md for '{}':\n```markdown\n{}\n```\n\nSession evidence ({} sessions, avg score {:.2}, success rate {:.1}%):\n{}\n\nExisting skill names (avoid conflicts):\n",
         group.skill_name,
-        NO_MANAGED_SKILL_CONTENT,
+        current_skill_content,
         group.session_count,
         group.avg_score,
         success_rate,

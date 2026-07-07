@@ -4,7 +4,7 @@ use agistack_adapters_postgres::{
     BlackboardOutboxRecord, WorkspaceMessageRecord, WorkspacePlanOutboxRecord,
 };
 use agistack_adapters_secrets::try_generate_uuid_v4;
-use agistack_core::ports::{CoreError, CoreResult};
+use agistack_core::ports::{CoreError, CoreResult, EventStream};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
@@ -20,6 +20,8 @@ mod runtime;
 
 use chain::WorkspaceAgentMentionChainInput;
 
+#[cfg(test)]
+pub(crate) use runtime::WorkspaceAgentMentionRuntimeOutput;
 pub(crate) use runtime::{
     workspace_agent_conversation_id, workspace_agent_mention_runtime_from_env,
     WorkspaceAgentMentionRuntime, WorkspaceAgentMentionRuntimeInput,
@@ -31,13 +33,33 @@ pub(super) const WORKSPACE_AGENT_MENTION_RUNTIME_BOUND_STATUS: &str = "runtime_b
 pub(super) const WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS: &str = "runtime_response_ready";
 pub(super) const WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS: &str = "runtime_error_ready";
 pub(super) const WORKSPACE_MESSAGE_CREATED_EVENT: &str = "workspace_message_created";
+pub(super) const WORKSPACE_AGENT_MENTION_TOKEN_CHUNK_EVENT: &str =
+    "workspace_agent_mention_token_chunk";
 pub(super) const MAX_WORKSPACE_AGENT_MENTION_CHAIN_DEPTH: i64 = 3;
+pub(super) const MAX_WORKSPACE_AGENT_MENTION_STREAM_CHUNKS: usize = 128;
+pub(super) const MAX_WORKSPACE_AGENT_MENTION_STREAM_CHARS: usize = 64 * 1024;
+const WORKSPACE_AGENT_MENTION_EVENT_STREAM_MAX_LEN: usize = 1_000;
 pub(super) const WORKSPACE_AGENT_CHAIN_MENTION_SOURCE: &str = "workspace_agent_chain_mention";
 pub(super) const WORKSPACE_AGENT_CHAIN_MENTION_STAGE: &str = "agent_chain_mention";
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct WorkspaceAgentMentionRuntimeTokenChunks {
+    chunks: Vec<String>,
+    original_count: usize,
+    original_chars: usize,
+    backpressure_reason: Option<&'static str>,
+}
+
+impl WorkspaceAgentMentionRuntimeTokenChunks {
+    fn is_truncated(&self) -> bool {
+        self.backpressure_reason.is_some()
+    }
+}
 
 pub(crate) struct WorkspaceAgentMentionBindingHandler {
     store: Arc<dyn WorkspacePlanDispatchStore>,
     runtime: Option<Arc<dyn WorkspaceAgentMentionRuntime>>,
+    event_stream: Option<Arc<dyn EventStream>>,
 }
 
 impl WorkspaceAgentMentionBindingHandler {
@@ -45,6 +67,7 @@ impl WorkspaceAgentMentionBindingHandler {
         Self {
             store,
             runtime: None,
+            event_stream: None,
         }
     }
 
@@ -55,6 +78,62 @@ impl WorkspaceAgentMentionBindingHandler {
         Self {
             store,
             runtime: Some(runtime),
+            event_stream: None,
+        }
+    }
+
+    pub(crate) fn with_runtime_and_event_stream(
+        store: Arc<dyn WorkspacePlanDispatchStore>,
+        runtime: Option<Arc<dyn WorkspaceAgentMentionRuntime>>,
+        event_stream: Arc<dyn EventStream>,
+    ) -> Self {
+        Self {
+            store,
+            runtime,
+            event_stream: Some(event_stream),
+        }
+    }
+
+    async fn enqueue_blackboard_outbox_with_live_stream(
+        &self,
+        record: BlackboardOutboxRecord,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        self.store.enqueue_blackboard_outbox(record.clone()).await?;
+        self.append_live_workspace_event(&record, now).await;
+        Ok(())
+    }
+
+    async fn append_live_workspace_event(
+        &self,
+        record: &BlackboardOutboxRecord,
+        now: DateTime<Utc>,
+    ) {
+        let Some(event_stream) = self.event_stream.as_ref() else {
+            return;
+        };
+        let payload = json!({
+            "type": record.event_type,
+            "workspace_id": record.workspace_id,
+            "tenant_id": record.tenant_id,
+            "project_id": record.project_id,
+            "data": record.payload_json,
+            "metadata": record.metadata_json,
+            "correlation_id": record.correlation_id,
+            "event_time_us": now.timestamp_micros(),
+        });
+        if let Err(err) = event_stream
+            .append(
+                &workspace_agent_mention_event_stream_topic(&record.workspace_id),
+                &payload.to_string(),
+                WORKSPACE_AGENT_MENTION_EVENT_STREAM_MAX_LEN,
+            )
+            .await
+        {
+            eprintln!(
+                "[agistack] workspace mention stream append failed for workspace {}: {err}",
+                record.workspace_id
+            );
         }
     }
 
@@ -82,6 +161,21 @@ impl WorkspaceAgentMentionBindingHandler {
         let parent_message_id = string_from_map(payload, "message_id")
             .or_else(|| string_from_map(payload, "parent_message_id"));
         let mentions = metadata_string_values(payload.get("response_mentions"));
+        let token_stream = workspace_agent_mention_runtime_token_chunks(payload);
+        let token_chunk_count = token_stream.chunks.len();
+        let mut message_metadata = Map::new();
+        message_metadata.insert("sender_name".to_string(), json!(agent_name));
+        if token_chunk_count > 0 {
+            message_metadata.insert(
+                "runtime_stream_delivery".to_string(),
+                json!("blackboard_token_chunks"),
+            );
+            message_metadata.insert(
+                "runtime_token_chunk_count".to_string(),
+                json!(token_chunk_count),
+            );
+            add_token_stream_backpressure_fields(&mut message_metadata, &token_stream);
+        }
         let message = self
             .store
             .create_workspace_message(WorkspaceMessageRecord {
@@ -92,12 +186,62 @@ impl WorkspaceAgentMentionBindingHandler {
                 content,
                 mentions_json: mentions,
                 parent_message_id,
-                metadata_json: json!({ "sender_name": agent_name }),
+                metadata_json: Value::Object(message_metadata),
                 created_at: now,
             })
             .await?;
-        self.store
-            .enqueue_blackboard_outbox(BlackboardOutboxRecord {
+        if token_chunk_count > 0 {
+            let conversation_id = string_from_map(payload, "conversation_id");
+            for (index, chunk) in token_stream.chunks.iter().enumerate() {
+                let is_final = index + 1 == token_chunk_count && !token_stream.is_truncated();
+                let mut chunk_payload = object_or_empty(json!({
+                    "workspace_id": workspace_id,
+                    "conversation_id": conversation_id.as_deref(),
+                    "message_id": &message.id,
+                    "parent_message_id": message.parent_message_id.as_deref(),
+                    "sender_id": target_agent_id,
+                    "sender_type": "agent",
+                    "chunk_index": index,
+                    "chunk_count": token_chunk_count,
+                    "content_delta": chunk,
+                    "is_final": is_final
+                }));
+                add_token_stream_backpressure_fields(&mut chunk_payload, &token_stream);
+                if token_stream.is_truncated() && index + 1 == token_chunk_count {
+                    chunk_payload.insert("is_backpressure_truncated".to_string(), json!(true));
+                }
+                let mut chunk_metadata = object_or_empty(json!({
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                    "surface_owner": "workspace-chat",
+                    "surface_boundary": "hosted",
+                    "authority_class": "non-authoritative",
+                    "signal_role": "sensing-capable",
+                    "runtime_bridge": "p3_workspace_mention",
+                    "runtime_stream_delivery": "blackboard_token_chunks",
+                    "runtime_stream_sequence": index,
+                    "runtime_token_chunk_count": token_chunk_count
+                }));
+                add_token_stream_backpressure_fields(&mut chunk_metadata, &token_stream);
+                self.enqueue_blackboard_outbox_with_live_stream(
+                    BlackboardOutboxRecord {
+                        id: try_generate_uuid_v4()
+                            .map_err(|err| CoreError::Storage(err.to_string()))?,
+                        workspace_id: workspace_id.to_string(),
+                        tenant_id: tenant_id.to_string(),
+                        project_id: project_id.to_string(),
+                        event_type: WORKSPACE_AGENT_MENTION_TOKEN_CHUNK_EVENT.to_string(),
+                        payload_json: Value::Object(chunk_payload),
+                        metadata_json: Value::Object(chunk_metadata),
+                        correlation_id: Some(message.id.clone()),
+                    },
+                    now,
+                )
+                .await?;
+            }
+        }
+        self.enqueue_blackboard_outbox_with_live_stream(
+            BlackboardOutboxRecord {
                 id: try_generate_uuid_v4().map_err(|err| CoreError::Storage(err.to_string()))?,
                 workspace_id: workspace_id.to_string(),
                 tenant_id: tenant_id.to_string(),
@@ -116,8 +260,10 @@ impl WorkspaceAgentMentionBindingHandler {
                     "runtime_bridge": "p3_workspace_mention"
                 }),
                 correlation_id: None,
-            })
-            .await?;
+            },
+            now,
+        )
+        .await?;
         self.enqueue_agent_chain_mentions(WorkspaceAgentMentionChainInput {
             payload,
             message: &message,
@@ -133,6 +279,10 @@ impl WorkspaceAgentMentionBindingHandler {
 
         Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
     }
+}
+
+pub(super) fn workspace_agent_mention_event_stream_topic(workspace_id: &str) -> String {
+    format!("workspace:events:{workspace_id}")
 }
 
 #[async_trait]
@@ -244,13 +394,25 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
                 })
                 .await
             {
-                Ok(final_content) => {
+                Ok(output) => {
+                    let final_content = output.final_content;
+                    let token_chunks = output.token_chunks;
+                    let token_chunk_count = token_chunks.len();
                     status = WORKSPACE_AGENT_MENTION_RESPONSE_READY_STATUS.to_string();
                     payload_patch = json!({
-                        "final_content": final_content,
+                        "final_content": final_content.clone(),
                         "runtime_final_content": final_content,
+                        "runtime_token_chunks": token_chunks,
                     });
                     metadata_patch.insert("runtime_writer_status".to_string(), json!("ok"));
+                    metadata_patch.insert(
+                        "runtime_stream_delivery".to_string(),
+                        json!("final_content_chunks"),
+                    );
+                    metadata_patch.insert(
+                        "runtime_token_chunk_count".to_string(),
+                        json!(token_chunk_count),
+                    );
                 }
                 Err(err) => {
                     status = WORKSPACE_AGENT_MENTION_ERROR_READY_STATUS.to_string();
@@ -297,4 +459,71 @@ fn workspace_agent_mention_user_prompt(payload: &Map<String, Value>) -> String {
         })
         .or_else(|| string_from_map(payload, "message"))
         .unwrap_or_default()
+}
+
+fn workspace_agent_mention_runtime_token_chunks(
+    payload: &Map<String, Value>,
+) -> WorkspaceAgentMentionRuntimeTokenChunks {
+    let Some(chunks) = payload
+        .get("runtime_token_chunks")
+        .and_then(Value::as_array)
+    else {
+        return WorkspaceAgentMentionRuntimeTokenChunks::default();
+    };
+
+    let mut bounded = WorkspaceAgentMentionRuntimeTokenChunks::default();
+    let mut persisted_chars = 0_usize;
+    for chunk in chunks.iter().filter_map(Value::as_str) {
+        let chunk_chars = chunk.chars().count();
+        bounded.original_count += 1;
+        bounded.original_chars += chunk_chars;
+
+        if bounded.chunks.len() >= MAX_WORKSPACE_AGENT_MENTION_STREAM_CHUNKS
+            || persisted_chars >= MAX_WORKSPACE_AGENT_MENTION_STREAM_CHARS
+        {
+            bounded.backpressure_reason = Some("truncated");
+            continue;
+        }
+
+        let remaining_chars = MAX_WORKSPACE_AGENT_MENTION_STREAM_CHARS - persisted_chars;
+        if chunk_chars <= remaining_chars {
+            bounded.chunks.push(chunk.to_string());
+            persisted_chars += chunk_chars;
+        } else {
+            let truncated_chunk = chunk.chars().take(remaining_chars).collect::<String>();
+            if !truncated_chunk.is_empty() {
+                persisted_chars += truncated_chunk.chars().count();
+                bounded.chunks.push(truncated_chunk);
+            }
+            bounded.backpressure_reason = Some("truncated");
+        }
+    }
+
+    bounded
+}
+
+fn add_token_stream_backpressure_fields(
+    target: &mut Map<String, Value>,
+    token_stream: &WorkspaceAgentMentionRuntimeTokenChunks,
+) {
+    let Some(reason) = token_stream.backpressure_reason else {
+        return;
+    };
+    target.insert("runtime_stream_backpressure".to_string(), json!(reason));
+    target.insert(
+        "runtime_token_chunk_original_count".to_string(),
+        json!(token_stream.original_count),
+    );
+    target.insert(
+        "runtime_token_char_original_count".to_string(),
+        json!(token_stream.original_chars),
+    );
+    target.insert(
+        "runtime_token_chunk_max".to_string(),
+        json!(MAX_WORKSPACE_AGENT_MENTION_STREAM_CHUNKS),
+    );
+    target.insert(
+        "runtime_token_char_max".to_string(),
+        json!(MAX_WORKSPACE_AGENT_MENTION_STREAM_CHARS),
+    );
 }

@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "id": "audit-1",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "actor": "user-1",
+      "action": "runtime_hook.completed",
+      "resource_type": "runtime_hook",
+      "resource_id": "resource-1",
+      "tenant_id": "tenant-1",
+      "details": {
+        "executor_kind": "sandbox",
+        "hook_family": "tool",
+        "hook_name": "pre_tool",
+        "isolation_mode": "container"
+      },
+      "ip_address": "127.0.0.1",
+      "user_agent": "pytest"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}

@@ -5,6 +5,9 @@
 //! browser-compatible auth subprotocols, heartbeat/ack/error messages,
 //! conversation subscription with stream replay, and Rust-produced agent events
 //! written to the shared `EventStream` (`agent:events:{conversation_id}`).
+//! Workspace runtime slices can also subscribe to `workspace:events:{workspace_id}`
+//! after project access is checked, which lets P6 mention token chunks replay over
+//! the same WebSocket transport without broad workspace endpoint takeover.
 
 mod subscriptions;
 
@@ -52,6 +55,17 @@ enum ClientMessage {
     },
     Unsubscribe {
         conversation_id: String,
+    },
+    SubscribeWorkspace {
+        workspace_id: String,
+        project_id: String,
+        #[serde(default)]
+        tenant_id: Option<String>,
+        #[serde(default)]
+        last_event_id: Option<String>,
+    },
+    UnsubscribeWorkspace {
+        workspace_id: String,
     },
     SendMessage {
         conversation_id: String,
@@ -283,6 +297,64 @@ async fn handle_client_message(
                 socket,
                 "unsubscribe",
                 json!({"conversation_id": conversation_id}),
+            )
+            .await;
+        }
+        ClientMessage::SubscribeWorkspace {
+            workspace_id,
+            project_id,
+            tenant_id,
+            last_event_id,
+        } => {
+            let resolved_tenant_id = match app
+                .workspaces
+                .authorize_workspace_event_subscription(
+                    &identity.user_id,
+                    &workspace_id,
+                    &project_id,
+                    tenant_id.as_deref(),
+                )
+                .await
+            {
+                Ok(resolved_tenant_id) => resolved_tenant_id,
+                Err(_) => {
+                    let _ = send_error(socket, "Access denied").await;
+                    return true;
+                }
+            };
+            let requested_tenant_id = tenant_id.as_deref();
+            if requested_tenant_id
+                .map(|value| value != resolved_tenant_id)
+                .unwrap_or(false)
+            {
+                let _ = send_error(socket, "Access denied").await;
+                return true;
+            }
+            if !subscriptions.subscribe_workspace(workspace_id.clone(), last_event_id) {
+                let _ = send_subscription_limit_error(
+                    socket,
+                    json!({"workspace_id": workspace_id, "project_id": project_id}),
+                )
+                .await;
+                return true;
+            }
+            let _ = send_ack(
+                socket,
+                "subscribe_workspace",
+                json!({
+                    "workspace_id": workspace_id,
+                    "project_id": project_id,
+                    "tenant_id": resolved_tenant_id
+                }),
+            )
+            .await;
+        }
+        ClientMessage::UnsubscribeWorkspace { workspace_id } => {
+            subscriptions.unsubscribe_workspace(&workspace_id);
+            let _ = send_ack(
+                socket,
+                "unsubscribe_workspace",
+                json!({"workspace_id": workspace_id}),
             )
             .await;
         }

@@ -1,0 +1,9 @@
+{
+  "entities": 3,
+  "episodes": 2,
+  "communities": 1,
+  "relationships": 4,
+  "total_nodes": 6,
+  "tenant_id": "tenant-1",
+  "project_id": "project-1"
+}

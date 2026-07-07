@@ -1,8 +1,8 @@
 use super::*;
 
 use agistack_adapters_postgres::{
-    ProjectDashboardStatsRecord, ProjectMemberRecord, ProjectMembersRecord, ProjectReadRecord,
-    TenantRecord,
+    CurrentUserRecord, ProjectDashboardStatsRecord, ProjectMemberRecord, ProjectMembersRecord,
+    ProjectReadRecord, TenantRecord,
 };
 
 #[test]
@@ -26,6 +26,22 @@ async fn dev_login_accepts_non_empty_and_rejects_empty() {
     );
     // The login 401 carries WWW-Authenticate (Python parity).
     assert!(svc.login("u", "", 0).await.unwrap_err().www_authenticate);
+}
+
+#[tokio::test]
+async fn dev_current_user_matches_authenticated_identity() {
+    let svc = DevIdentityService::new("dev-user");
+    let view = svc.current_user("dev-user").await.unwrap();
+    assert_eq!(view.user_id, "dev-user");
+    assert_eq!(view.email, "dev@example.test");
+    assert_eq!(view.name, "Dev User");
+    assert_eq!(view.roles, vec!["admin"]);
+    assert!(view.is_active);
+    assert_eq!(view.profile, json!({}));
+    assert_eq!(
+        svc.current_user("other").await.unwrap_err().status,
+        StatusCode::NOT_FOUND
+    );
 }
 
 #[tokio::test]
@@ -345,6 +361,40 @@ fn sample_invitation_record() -> InvitationRecord {
         created_at: chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
         deleted_at: None,
     }
+}
+
+fn sample_current_user_record() -> CurrentUserRecord {
+    CurrentUserRecord {
+        id: "33333333-3333-4333-8333-333333333333".into(),
+        email: "admin@memstack.ai".into(),
+        full_name: Some("Admin User".into()),
+        roles: vec!["admin".into(), "user".into()],
+        is_active: true,
+        created_at: chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
+        profile: json!({
+            "department": "Platform",
+            "language": "zh-CN"
+        }),
+        preferred_language: Some("zh-CN".into()),
+    }
+}
+
+#[test]
+fn current_user_view_matches_golden() {
+    let golden: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/golden/current_user_response.json"
+    ))
+    .unwrap();
+    let actual = serde_json::to_value(CurrentUserView::from(sample_current_user_record())).unwrap();
+    agistack_parity::assert_parity(&golden, &actual);
+}
+
+#[test]
+fn current_user_profile_null_normalizes_to_object() {
+    let mut record = sample_current_user_record();
+    record.profile = Value::Null;
+    let view = CurrentUserView::from(record);
+    assert_eq!(view.profile, json!({}));
 }
 
 #[test]

@@ -328,6 +328,7 @@ async fn skill_evolution_overview_queries_shared_schema() {
     for sql in [
         "DELETE FROM skill_evolution_jobs WHERE tenant_id = 't_skill_evo'",
         "DELETE FROM skill_evolution_sessions WHERE tenant_id = 't_skill_evo'",
+        "DELETE FROM skill_versions WHERE skill_id IN ('skill_evo_project', 'skill_evo_tenant')",
         "DELETE FROM skills WHERE tenant_id = 't_skill_evo'",
         "DELETE FROM user_projects WHERE project_id IN ('p_skill_evo', 'p_skill_evo_other')",
         "DELETE FROM projects WHERE id IN ('p_skill_evo', 'p_skill_evo_other')",
@@ -370,10 +371,20 @@ async fn skill_evolution_overview_queries_shared_schema() {
     .unwrap();
     sqlx::query(
         "INSERT INTO skills \
-         (id, tenant_id, project_id, name, description, tools, status, created_at, scope, is_system_skill) \
+         (id, tenant_id, project_id, name, description, tools, status, full_content, \
+          current_version, created_at, scope, is_system_skill) \
          VALUES \
-         ('skill_evo_project', 't_skill_evo', 'p_skill_evo', 'code-review', 'Review code', '[\"read_file\"]'::json, 'active', '2026-01-02T03:00:00Z'::timestamptz, 'project', false), \
-         ('skill_evo_tenant', 't_skill_evo', NULL, 'review', 'Review tenant work', '[\"read_file\"]'::json, 'active', '2026-01-02T03:00:00Z'::timestamptz, 'tenant', false)",
+         ('skill_evo_project', 't_skill_evo', 'p_skill_evo', 'code-review', 'Review code', '[\"read_file\"]'::json, 'active', '# Code Review old project snapshot', 2, '2026-01-02T03:00:00Z'::timestamptz, 'project', false), \
+         ('skill_evo_tenant', 't_skill_evo', NULL, 'review', 'Review tenant work', '[\"read_file\"]'::json, 'active', '# Review tenant fallback', 0, '2026-01-02T03:00:00Z'::timestamptz, 'tenant', false)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_versions \
+         (id, skill_id, version_number, version_label, skill_md_content, resource_files, change_summary, created_by, created_at) \
+         VALUES \
+         ('skillver_evo_project_v2', 'skill_evo_project', 2, 'v2', '# Code Review current project version', '{}'::json, 'Current managed SKILL.md', 'agent', '2026-01-02T03:01:00Z'::timestamptz)",
     )
     .execute(&pool)
     .await
@@ -403,6 +414,20 @@ async fn skill_evolution_overview_queries_shared_schema() {
     .unwrap();
 
     let repo = PgSkillEvolutionRepository::new(pool.clone());
+    assert_eq!(
+        repo.current_skill_content("t_skill_evo", "code-review", Some("p_skill_evo"))
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("# Code Review current project version")
+    );
+    assert_eq!(
+        repo.current_skill_content("t_skill_evo", "review", None)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("# Review tenant fallback")
+    );
     let project_ids = repo
         .accessible_project_ids("u_skill_evo", "t_skill_evo")
         .await
@@ -875,4 +900,66 @@ async fn skill_evolution_run_queue_claims_and_finishes_runs() {
         .execute(&pool)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn skill_evolution_job_audit_events_roundtrip() {
+    let Some(pool) = pool_or_skip("skill_evolution_job_audit_events_roundtrip").await else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    sqlx::query(
+        "DELETE FROM agistack_skill_evolution_job_audit_events \
+         WHERE tenant_id = 't_skill_evo_audit'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let repo = PgSkillEvolutionRepository::new(pool.clone());
+    let inserted = repo
+        .insert_job_audit_event(&SkillEvolutionJobAuditEventInsertRecord {
+            id: "audit_skill_evo_job_1".to_string(),
+            tenant_id: "t_skill_evo_audit".to_string(),
+            project_id: Some("p_skill_evo_audit".to_string()),
+            skill_name: "code-review".to_string(),
+            job_id: "job_skill_evo_audit_1".to_string(),
+            event_type: "job_rejected".to_string(),
+            actor_user_id: Some("u_skill_evo_reviewer".to_string()),
+            skill_version_id: None,
+            details_json: json!({
+                "candidate_job_id": "job_skill_evo_audit_1",
+                "source": "test",
+            }),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(inserted.event_type, "job_rejected");
+    assert_eq!(inserted.project_id.as_deref(), Some("p_skill_evo_audit"));
+    assert_eq!(
+        inserted.actor_user_id.as_deref(),
+        Some("u_skill_evo_reviewer")
+    );
+    assert_eq!(
+        inserted.details_json["candidate_job_id"],
+        "job_skill_evo_audit_1"
+    );
+
+    let events = repo
+        .list_job_audit_events("t_skill_evo_audit", "job_skill_evo_audit_1")
+        .await
+        .unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id, "audit_skill_evo_job_1");
+    assert_eq!(events[0].event_type, "job_rejected");
+
+    sqlx::query(
+        "DELETE FROM agistack_skill_evolution_job_audit_events \
+         WHERE tenant_id = 't_skill_evo_audit'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 }

@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "data": [
+    {
+      "type": "neo4j",
+      "display_name": "Neo4j",
+      "connection_fields": [
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "sensitive": true
+        }
+      ],
+      "index_fields": []
+    },
+    {
+      "type": "arcadedb",
+      "display_name": "ArcadeDB",
+      "connection_fields": [
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "database",
+          "type": "string",
+          "required": false,
+          "default": "memstack"
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "sensitive": true
+        },
+        {
+          "name": "http_base_url",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "index_fields": []
+    },
+    {
+      "type": "age",
+      "display_name": "Apache AGE (PostgreSQL)",
+      "connection_fields": [
+        {
+          "name": "dsn",
+          "type": "string",
+          "required": true,
+          "sensitive": true
+        }
+      ],
+      "index_fields": [],
+      "status": "planned"
+    }
+  ]
+}

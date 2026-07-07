@@ -1,0 +1,14 @@
+{
+  "channel_config_id": "chan-1",
+  "event_id": "channel_webhook_11111111-1111-5111-8111-111111111111",
+  "idempotency_key": "evt-1",
+  "inserted": true,
+  "project_id": "project-1",
+  "normalized_event": {
+    "event_id": "evt-1",
+    "idempotency_key": "evt-1",
+    "provider": "feishu",
+    "schema_version": 1
+  },
+  "status": "received"
+}

@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use agistack_core::agent::types::{AgentAction, Role, TranscriptEntry};
-use agistack_core::model::Episode;
-use agistack_core::ports::{CoreError, CoreResult, LlmPort, MemoryDraft};
+use agistack_core::model::{Episode, Memory};
+use agistack_core::ports::{CoreError, CoreResult, LlmPort, MemoryDraft, RelationshipDraft};
 
 use crate::endpoint::Endpoint;
-use crate::structured::{clean_structured, parse_memory_draft};
+use crate::structured::{clean_structured, parse_memory_draft, parse_relationship_drafts};
 
 #[derive(Serialize)]
 struct ChatMessage {
@@ -66,6 +67,12 @@ const DECIDE_SYSTEM: &str = "You are a ReAct agent. Choose the next action and r
 {\"kind\":\"finish\",\"answer\":string} | \
 {\"kind\":\"request_human\",\"request\":{\"id\":string,\"kind\":\"clarification\"|\"decision\"|\"env_var\"|\"permission\",\"prompt\":string}}. \
 input_json must be a JSON string. No prose, no code fences.";
+
+const RELATIONSHIP_SYSTEM: &str = "You extract semantic relationships between the provided entities. \
+Respond with ONLY a JSON object: {\"relationships\":[{\"source\":string,\"target\":string,\"relation_type\":string,\"fact\":string,\"score\":number}]}. \
+source and target must exactly match entity names from the input entity list. \
+Use concise UPPER_SNAKE_CASE relation_type values. Return an empty array when no grounded relationship is present. \
+No prose, no code fences.";
 
 /// LLM adapter: extraction + ReAct `decide` over an HTTP chat-completions API.
 pub struct HttpLlm {
@@ -242,6 +249,17 @@ impl LlmPort for HttpLlm {
     async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
         let content = self.chat(EXTRACT_SYSTEM, episode.content.clone()).await?;
         parse_memory_draft(&content)
+    }
+
+    async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
+        let user = json!({
+            "title": memory.title,
+            "content": memory.content,
+            "entities": memory.entities,
+        })
+        .to_string();
+        let content = self.chat(RELATIONSHIP_SYSTEM, user).await?;
+        parse_relationship_drafts(&content)
     }
 
     async fn decide(

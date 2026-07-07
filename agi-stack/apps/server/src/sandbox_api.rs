@@ -564,6 +564,7 @@ fn select_websocket_auth_subprotocol(headers: &HeaderMap) -> Option<&'static str
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/sandbox/profiles", get(list_sandbox_profiles))
         .route("/api/v1/projects/sandboxes", get(list_project_sandboxes))
         .route(
             "/api/v1/projects/:project_id/sandbox",
@@ -657,6 +658,66 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/projects/:project_id/sandbox/sync",
             get(sync_project_sandbox_status),
         )
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SandboxProfileInfo {
+    name: &'static str,
+    profile_type: &'static str,
+    description: &'static str,
+    desktop_enabled: bool,
+    memory_limit: &'static str,
+    cpu_limit: &'static str,
+    timeout_seconds: i64,
+    preinstalled_tools: &'static [&'static str],
+    max_instances: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SandboxProfilesResponse {
+    profiles: &'static [SandboxProfileInfo],
+}
+
+const SANDBOX_PROFILE_INFOS: &[SandboxProfileInfo] = &[
+    SandboxProfileInfo {
+        name: "Lite",
+        profile_type: "lite",
+        description: "轻量级 sandbox，无桌面，仅 MCP + Terminal",
+        desktop_enabled: false,
+        memory_limit: "512m",
+        cpu_limit: "0.5",
+        timeout_seconds: 1800,
+        preinstalled_tools: &["python", "node"],
+        max_instances: 20,
+    },
+    SandboxProfileInfo {
+        name: "Standard",
+        profile_type: "standard",
+        description: "标准 sandbox，包含 XFCE 桌面",
+        desktop_enabled: true,
+        memory_limit: "8g",
+        cpu_limit: "2",
+        timeout_seconds: 3600,
+        preinstalled_tools: &["python", "node", "java"],
+        max_instances: 5,
+    },
+    SandboxProfileInfo {
+        name: "Full",
+        profile_type: "full",
+        description: "完整开发环境，预装所有工具",
+        desktop_enabled: true,
+        memory_limit: "4g",
+        cpu_limit: "4",
+        timeout_seconds: 7200,
+        preinstalled_tools: &["python", "node", "java", "go", "rust"],
+        max_instances: 2,
+    },
+];
+
+async fn list_sandbox_profiles() -> Json<SandboxProfilesResponse> {
+    Json(SandboxProfilesResponse {
+        profiles: SANDBOX_PROFILE_INFOS,
+    })
 }
 
 #[cfg(test)]

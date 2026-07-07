@@ -23,12 +23,24 @@ impl ChannelApiError {
         Self::new(StatusCode::FORBIDDEN, detail.into())
     }
 
+    pub(crate) fn unauthorized(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNAUTHORIZED, detail.into())
+    }
+
     pub(crate) fn not_found(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, detail.into())
     }
 
+    pub(crate) fn bad_request(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, detail.into())
+    }
+
     pub(crate) fn unprocessable(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::UNPROCESSABLE_ENTITY, detail.into())
+    }
+
+    pub(crate) fn service_unavailable(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::SERVICE_UNAVAILABLE, detail.into())
     }
 
     pub(crate) fn internal(detail: impl std::fmt::Display) -> Self {

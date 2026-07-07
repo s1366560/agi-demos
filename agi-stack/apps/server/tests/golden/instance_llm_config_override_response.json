@@ -1,0 +1,5 @@
+{
+  "provider_id": "provider-2",
+  "model_name": "gpt-4o",
+  "has_api_key_override": true
+}

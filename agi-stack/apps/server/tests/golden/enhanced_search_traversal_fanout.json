@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "uuid": "dev-a",
+      "name": "Dev Alpha",
+      "type": "Concept",
+      "summary": "Dev Alpha summary",
+      "content": "",
+      "created_at": "<iso8601>",
+      "metadata": {
+        "uuid": "dev-a",
+        "name": "Dev Alpha",
+        "type": "Concept",
+        "created_at": "<iso8601>",
+        "project_id": "dev-project"
+      }
+    },
+    {
+      "uuid": "dev-b",
+      "name": "Dev Beta",
+      "type": "Concept",
+      "summary": "Dev Beta summary",
+      "content": "",
+      "created_at": "<iso8601>",
+      "metadata": {
+        "uuid": "dev-b",
+        "name": "Dev Beta",
+        "type": "Concept",
+        "created_at": "<iso8601>",
+        "project_id": "dev-project"
+      }
+    },
+    {
+      "uuid": "dev-c",
+      "name": "Dev Gamma",
+      "type": "Concept",
+      "summary": "Dev Gamma summary",
+      "content": "",
+      "created_at": "<iso8601>",
+      "metadata": {
+        "uuid": "dev-c",
+        "name": "Dev Gamma",
+        "type": "Concept",
+        "created_at": "<iso8601>",
+        "project_id": "dev-project"
+      }
+    }
+  ],
+  "total": 3,
+  "search_type": "graph_traversal",
+  "scope": {
+    "fanout": true,
+    "project_ids": [
+      "dev-project"
+    ],
+    "tenant_id": null
+  }
+}

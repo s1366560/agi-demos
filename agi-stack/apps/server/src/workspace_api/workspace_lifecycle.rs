@@ -92,6 +92,33 @@ impl PgWorkspaceService {
             .ok_or_else(WorkspaceApiError::workspace_not_found)
     }
 
+    pub(super) async fn pg_authorize_workspace_event_subscription(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        project_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<String, WorkspaceApiError> {
+        let Some((actual_tenant_id, actual_project_id)) = self
+            .repo
+            .workspace_scope(workspace_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+        else {
+            return Err(WorkspaceApiError::workspace_not_found());
+        };
+        if actual_project_id != project_id
+            || tenant_id
+                .map(|requested_tenant_id| requested_tenant_id != actual_tenant_id)
+                .unwrap_or(false)
+        {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Read)
+            .await?;
+        Ok(actual_tenant_id)
+    }
+
     pub(super) async fn pg_update_workspace(
         &self,
         user_id: &str,
@@ -238,6 +265,28 @@ impl DevWorkspaceService {
             .cloned()
             .ok_or_else(WorkspaceApiError::workspace_not_found)?;
         Ok(workspace.into())
+    }
+
+    pub(super) async fn dev_authorize_workspace_event_subscription(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        project_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<String, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let state = self.lock_state()?;
+        let workspace = state
+            .workspaces
+            .get(workspace_id)
+            .filter(|workspace| workspace.project_id == project_id)
+            .filter(|workspace| {
+                tenant_id
+                    .map(|requested_tenant_id| requested_tenant_id == workspace.tenant_id)
+                    .unwrap_or(true)
+            })
+            .ok_or_else(WorkspaceApiError::workspace_not_found)?;
+        Ok(workspace.tenant_id.clone())
     }
 
     pub(super) async fn dev_update_workspace(

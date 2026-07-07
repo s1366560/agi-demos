@@ -1,0 +1,240 @@
+{
+  "commands": [
+    {
+      "name": "agents",
+      "description": "List available agents in this project",
+      "category": "agent",
+      "scope": "both",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "clear",
+      "description": "Clear conversation display",
+      "category": "session",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "commands",
+      "description": "List all available commands",
+      "category": "help",
+      "scope": "both",
+      "aliases": [
+        "cmds"
+      ],
+      "args": []
+    },
+    {
+      "name": "compact",
+      "description": "Trigger context compaction",
+      "category": "session",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "context",
+      "description": "Show current agent context and session info",
+      "category": "agent",
+      "scope": "both",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "debug",
+      "description": "Toggle debug mode",
+      "category": "debug",
+      "scope": "both",
+      "aliases": [],
+      "args": [
+        {
+          "name": "toggle",
+          "description": "Debug toggle",
+          "arg_type": "choice",
+          "required": false,
+          "choices": [
+            "on",
+            "off"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "focus",
+      "description": "Focus conversation on a specific agent",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "goal",
+      "description": "Create a workspace-backed standing goal",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [],
+      "args": [
+        {
+          "name": "objective",
+          "description": "Goal objective text",
+          "arg_type": "string",
+          "required": false,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "name": "help",
+      "description": "Show help for all commands or a specific command",
+      "category": "help",
+      "scope": "both",
+      "aliases": [],
+      "args": [
+        {
+          "name": "command",
+          "description": "Command name to get help for",
+          "arg_type": "string",
+          "required": false,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "name": "kill",
+      "description": "Kill a running sub-agent",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "model",
+      "description": "Show or switch current model",
+      "category": "model",
+      "scope": "both",
+      "aliases": [],
+      "args": [
+        {
+          "name": "name",
+          "description": "Model name to switch to",
+          "arg_type": "string",
+          "required": false,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "name": "new",
+      "description": "Start a new conversation",
+      "category": "session",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "reset",
+      "description": "Reset current conversation session",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "send",
+      "description": "Send message to a specific agent",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "skills",
+      "description": "List available skills",
+      "category": "skill",
+      "scope": "both",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "spawn",
+      "description": "Delegate a task to a sub-agent",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [
+        "delegate"
+      ],
+      "args": []
+    },
+    {
+      "name": "status",
+      "description": "Show current session status",
+      "category": "status",
+      "scope": "both",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "steer",
+      "description": "Send steering instruction to a running sub-agent",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "stop",
+      "description": "Stop current agent execution",
+      "category": "session",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "subagents",
+      "description": "List sub-agents of current agent",
+      "category": "agent",
+      "scope": "both",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "think",
+      "description": "Toggle thinking/reasoning mode",
+      "category": "config",
+      "scope": "both",
+      "aliases": [],
+      "args": [
+        {
+          "name": "mode",
+          "description": "Thinking mode",
+          "arg_type": "choice",
+          "required": false,
+          "choices": [
+            "on",
+            "off",
+            "auto"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tools",
+      "description": "List available tools",
+      "category": "tools",
+      "scope": "both",
+      "aliases": [],
+      "args": []
+    },
+    {
+      "name": "unfocus",
+      "description": "Remove agent focus, return to default routing",
+      "category": "agent",
+      "scope": "chat",
+      "aliases": [],
+      "args": []
+    }
+  ],
+  "total": 23
+}

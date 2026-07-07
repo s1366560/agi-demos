@@ -19,6 +19,7 @@
 //! SQLAlchemy client-side default. Writes are exercised only under the live
 //! integration test; offline the login path uses the dev identity stub.
 
+use serde_json::Value;
 use sqlx::types::chrono::{DateTime, Utc};
 
 use agistack_core::ports::{CoreError, CoreResult};
@@ -36,6 +37,20 @@ pub struct UserAuthRecord {
     pub is_active: bool,
     pub is_superuser: bool,
     pub must_change_password: bool,
+}
+
+/// The Python `User` response projection used by `GET /auth/me` and
+/// `GET /users/me`.
+#[derive(Debug, Clone)]
+pub struct CurrentUserRecord {
+    pub id: String,
+    pub email: String,
+    pub full_name: Option<String>,
+    pub roles: Vec<String>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub profile: Value,
+    pub preferred_language: Option<String>,
 }
 
 /// Read/mint store over the Python `users` + `api_keys` tables.
@@ -116,6 +131,55 @@ impl PgUserStore {
                     is_active,
                     is_superuser,
                     must_change_password,
+                }
+            },
+        ))
+    }
+
+    /// Fetch the current-user response projection. Roles are sorted in SQL to
+    /// keep response bytes deterministic across Postgres plans.
+    pub async fn find_current_user_by_id(
+        &self,
+        user_id: &str,
+    ) -> CoreResult<Option<CurrentUserRecord>> {
+        type Row = (
+            String,
+            String,
+            Option<String>,
+            bool,
+            DateTime<Utc>,
+            Value,
+            Option<String>,
+            Vec<String>,
+        );
+
+        let row = sqlx::query_as::<_, Row>(
+            "SELECT u.id, u.email, u.full_name, u.is_active, u.created_at, u.profile, \
+             u.preferred_language, \
+             COALESCE(array_agg(r.name ORDER BY r.name) \
+                FILTER (WHERE r.name IS NOT NULL), ARRAY[]::text[]) AS roles \
+             FROM users u \
+             LEFT JOIN user_roles ur ON ur.user_id = u.id \
+             LEFT JOIN roles r ON r.id = ur.role_id \
+             WHERE u.id = $1 \
+             GROUP BY u.id",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+
+        Ok(row.map(
+            |(id, email, full_name, is_active, created_at, profile, preferred_language, roles)| {
+                CurrentUserRecord {
+                    id,
+                    email,
+                    full_name,
+                    roles,
+                    is_active,
+                    created_at,
+                    profile,
+                    preferred_language,
                 }
             },
         ))

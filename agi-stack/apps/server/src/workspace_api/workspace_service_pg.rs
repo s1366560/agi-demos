@@ -35,6 +35,17 @@ impl WorkspaceService for PgWorkspaceService {
             .await
     }
 
+    async fn authorize_workspace_event_subscription(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        project_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<String, WorkspaceApiError> {
+        self.pg_authorize_workspace_event_subscription(user_id, workspace_id, project_id, tenant_id)
+            .await
+    }
+
     async fn send_message(
         &self,
         user_id: &str,

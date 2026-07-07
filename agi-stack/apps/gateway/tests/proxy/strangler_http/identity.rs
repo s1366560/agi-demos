@@ -1,11 +1,39 @@
 use super::*;
 
 pub(super) async fn assert_identity_and_shares_routing(ctx: &StranglerHttpContext) {
+    assert_current_user_routes(ctx).await;
     assert_tenant_read_and_device_routes(ctx).await;
     assert_tenant_writes(ctx).await;
     assert_invitation_routes(ctx).await;
     assert_trust_routes(ctx).await;
     assert_public_share_routes(ctx).await;
+}
+
+async fn assert_current_user_routes(ctx: &StranglerHttpContext) {
+    for path in [
+        "/api/v1/auth/me",
+        "/api/v1/auth/me/",
+        "/api/v1/users/me",
+        "/api/v1/users/me/",
+    ] {
+        let body = ctx.authed_body("GET", path, "").await;
+        assert_backend(&body, "rust", &format!("current-user {path} GET -> rust"));
+    }
+
+    for (method, path, body_in) in [
+        ("POST", "/api/v1/auth/me", "{}"),
+        ("GET", "/api/v1/auth/keys", ""),
+        ("PUT", "/api/v1/users/me", "{}"),
+        ("GET", "/api/v1/auth/me/extra", ""),
+        ("GET", "/api/v1/users/me/extra", ""),
+    ] {
+        let body = ctx.authed_body(method, path, body_in).await;
+        assert_backend(
+            &body,
+            "python",
+            &format!("current-user rollback boundary {method} {path} remains python"),
+        );
+    }
 }
 
 async fn assert_tenant_read_and_device_routes(ctx: &StranglerHttpContext) {

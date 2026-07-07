@@ -1,0 +1,47 @@
+{
+  "id": "11111111-2222-4333-8444-555555555555",
+  "tenant_id": "default",
+  "name": "test-openai",
+  "provider_type": "openai",
+  "operation_type": "llm",
+  "base_url": null,
+  "llm_model": "gpt-4o",
+  "llm_small_model": "gpt-4o-mini",
+  "embedding_model": null,
+  "embedding_config": null,
+  "reranker_model": null,
+  "config": {},
+  "is_active": true,
+  "is_default": false,
+  "is_enabled": true,
+  "allowed_models": [
+    "gpt-4o"
+  ],
+  "blocked_models": [],
+  "pool_weight": 1.0,
+  "pool_enabled": true,
+  "model_tier": "large",
+  "secondary_models": [
+    "gpt-4o-mini"
+  ],
+  "api_key_masked": "sk-sk-t...2345",
+  "created_at": "2026-01-02T03:04:05Z",
+  "updated_at": "2026-01-02T03:05:05Z",
+  "health_status": "healthy",
+  "health_last_check": "2026-01-02T03:06:05Z",
+  "response_time_ms": 88,
+  "error_message": null,
+  "resilience": {
+    "circuit_breaker_state": "closed",
+    "failure_count": 0,
+    "success_count": 0,
+    "rate_limit": {
+      "current_concurrent": 0,
+      "max_concurrent": 50,
+      "total_requests": 0,
+      "requests_per_minute": 0,
+      "max_rpm": null
+    },
+    "can_execute": true
+  }
+}

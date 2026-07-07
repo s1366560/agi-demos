@@ -2,8 +2,9 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use agistack_adapters_postgres::{
-    SkillEvolutionJobInsertRecord, SkillEvolutionJobRecord, SkillEvolutionPipelineSessionRecord,
-    SkillEvolutionRunRecord, SkillEvolutionSessionGroupRecord,
+    SkillEvolutionJobAuditEventInsertRecord, SkillEvolutionJobInsertRecord,
+    SkillEvolutionJobRecord, SkillEvolutionPipelineSessionRecord, SkillEvolutionRunRecord,
+    SkillEvolutionSessionGroupRecord,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -97,6 +98,8 @@ impl SkillEvolutionRunExecutor for SummaryExecutor {
             judged: 2,
             groups: 1,
             jobs: 1,
+            auto_applied: 0,
+            auto_apply_blocked: 0,
             blocked_by_review: 0,
             cleaned: 0,
         })
@@ -121,10 +124,15 @@ struct FakePipelineStore {
     unscored: Mutex<Vec<SkillEvolutionPipelineSessionRecord>>,
     groups: Mutex<Vec<SkillEvolutionSessionGroupRecord>>,
     scored: Mutex<Vec<SkillEvolutionPipelineSessionRecord>>,
+    current_skill_content: Mutex<Option<String>>,
     existing_job: Mutex<Option<SkillEvolutionJobRecord>>,
     summaries: Mutex<Vec<(String, Value, String)>>,
     scores: Mutex<Vec<(String, Value, f64)>>,
     inserted_jobs: Mutex<Vec<SkillEvolutionJobInsertRecord>>,
+    applied_jobs: Mutex<Vec<String>>,
+    status_updates: Mutex<Vec<(String, String, Option<String>)>>,
+    audit_events: Mutex<Vec<SkillEvolutionJobAuditEventInsertRecord>>,
+    apply_result: Mutex<Option<String>>,
     cleanup_count: i64,
 }
 
@@ -220,6 +228,18 @@ impl SkillEvolutionPipelineStore for FakePipelineStore {
             .map(|sessions| sessions.clone())
     }
 
+    async fn current_skill_content(
+        &self,
+        _tenant_id: &str,
+        _skill_name: &str,
+        _project_id: Option<&str>,
+    ) -> Result<Option<String>, SkillApiError> {
+        self.current_skill_content
+            .lock()
+            .map_err(SkillApiError::internal)
+            .map(|content| content.clone())
+    }
+
     async fn get_job_for_sessions(
         &self,
         _tenant_id: &str,
@@ -244,6 +264,63 @@ impl SkillEvolutionPipelineStore for FakePipelineStore {
             .map_err(SkillApiError::internal)?
             .push(job.clone());
         Ok(job_record_from_insert(job))
+    }
+
+    async fn apply_job(
+        &self,
+        _tenant_id: &str,
+        job: &SkillEvolutionJobRecord,
+    ) -> Result<Option<String>, SkillApiError> {
+        self.applied_jobs
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .push(job.id.clone());
+        self.apply_result
+            .lock()
+            .map_err(SkillApiError::internal)
+            .map(|result| result.clone())
+    }
+
+    async fn update_job_status(
+        &self,
+        _tenant_id: &str,
+        job_id: &str,
+        status: &str,
+        skill_version_id: Option<&str>,
+    ) -> Result<Option<SkillEvolutionJobRecord>, SkillApiError> {
+        self.status_updates
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .push((
+                job_id.to_string(),
+                status.to_string(),
+                skill_version_id.map(ToString::to_string),
+            ));
+        Ok(Some(SkillEvolutionJobRecord {
+            id: job_id.to_string(),
+            tenant_id: "tenant-1".to_string(),
+            project_id: Some("project-1".to_string()),
+            skill_name: "code-review".to_string(),
+            action: "improve_skill".to_string(),
+            status: status.to_string(),
+            rationale: None,
+            candidate_content: None,
+            session_ids: vec!["sess-pipeline-1".to_string()],
+            skill_version_id: skill_version_id.map(ToString::to_string),
+            created_at: test_time(),
+            applied_at: None,
+        }))
+    }
+
+    async fn record_job_audit_event(
+        &self,
+        event: &SkillEvolutionJobAuditEventInsertRecord,
+    ) -> Result<(), SkillApiError> {
+        self.audit_events
+            .lock()
+            .map_err(SkillApiError::internal)?
+            .push(event.clone());
+        Ok(())
     }
 
     async fn cleanup_old_sessions(&self, _retention_days: i64) -> Result<i64, SkillApiError> {
@@ -288,6 +365,10 @@ impl SkillEvolutionStageEngine for ScriptedStageEngine {
         &self,
         group: &SkillEvolutionEvidenceGroup,
     ) -> Result<Option<SkillEvolutionDecision>, SkillApiError> {
+        assert_eq!(
+            group.current_skill_content.as_deref(),
+            Some("# Code Review\nExisting managed guidance.")
+        );
         Ok(Some(SkillEvolutionDecision {
             action: SkillEvolutionDecisionAction::ImproveSkill,
             rationale: Some(format!(
@@ -392,6 +473,9 @@ async fn skill_evolution_pipeline_executor_runs_all_data_plane_stages() {
         unscored: Mutex::new(vec![session.clone()]),
         groups: Mutex::new(vec![sample_session_group()]),
         scored: Mutex::new(vec![session]),
+        current_skill_content: Mutex::new(Some(
+            "# Code Review\nExisting managed guidance.".to_string(),
+        )),
         cleanup_count: 3,
         ..Default::default()
     });
@@ -431,6 +515,8 @@ async fn skill_evolution_pipeline_executor_runs_all_data_plane_stages() {
     assert_eq!(jobs[0].action, "improve_skill");
     assert_eq!(jobs[0].status, "pending_review");
     assert_eq!(jobs[0].session_ids, vec!["sess-pipeline-1".to_string()]);
+    assert!(store.applied_jobs.lock().unwrap().is_empty());
+    assert!(store.status_updates.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -439,6 +525,9 @@ async fn skill_evolution_pipeline_executor_blocks_duplicate_pending_review_job()
     let store = Arc::new(FakePipelineStore {
         groups: Mutex::new(vec![sample_session_group()]),
         scored: Mutex::new(vec![session]),
+        current_skill_content: Mutex::new(Some(
+            "# Code Review\nExisting managed guidance.".to_string(),
+        )),
         existing_job: Mutex::new(Some(SkillEvolutionJobRecord {
             id: "job-existing".to_string(),
             tenant_id: "tenant-1".to_string(),
@@ -475,6 +564,95 @@ async fn skill_evolution_pipeline_executor_blocks_duplicate_pending_review_job()
     assert_eq!(summary.jobs, 0);
     assert_eq!(summary.blocked_by_review, 1);
     assert!(store.inserted_jobs.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn skill_evolution_pipeline_executor_auto_applies_only_when_gate_is_ready() {
+    let session = sample_pipeline_session("sess-pipeline-1");
+    let store = Arc::new(FakePipelineStore {
+        groups: Mutex::new(vec![sample_session_group()]),
+        scored: Mutex::new(vec![session]),
+        current_skill_content: Mutex::new(Some(
+            "# Code Review\nExisting managed guidance.".to_string(),
+        )),
+        apply_result: Mutex::new(Some("version-auto-1".to_string())),
+        ..Default::default()
+    });
+    let executor = PgSkillEvolutionPipelineExecutor::with_parts(
+        Arc::clone(&store) as Arc<dyn SkillEvolutionPipelineStore>,
+        Arc::new(ScriptedStageEngine),
+        SkillEvolutionPipelineConfig {
+            auto_apply: true,
+            auto_apply_production_ready: true,
+            min_sessions_per_skill: 1,
+            scoring_min_sessions_per_skill: 1,
+            max_sessions_per_batch: 10,
+            ..Default::default()
+        },
+    );
+
+    let summary = executor
+        .execute(&sample_run_record("run-pipeline-auto-apply"))
+        .await
+        .unwrap();
+
+    assert_eq!(summary.jobs, 1);
+    assert_eq!(summary.auto_applied, 1);
+    assert_eq!(summary.auto_apply_blocked, 0);
+    let applied = store.applied_jobs.lock().unwrap();
+    assert_eq!(applied.len(), 1);
+    let updates = store.status_updates.lock().unwrap();
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0].1, "applied");
+    assert_eq!(updates[0].2.as_deref(), Some("version-auto-1"));
+    let audit_events = store.audit_events.lock().unwrap();
+    assert_eq!(audit_events.len(), 1);
+    assert_eq!(audit_events[0].event_type, "auto_applied");
+    assert_eq!(
+        audit_events[0].skill_version_id.as_deref(),
+        Some("version-auto-1")
+    );
+    assert_eq!(
+        audit_events[0].details_json["run_id"],
+        "run-pipeline-auto-apply"
+    );
+}
+
+#[tokio::test]
+async fn skill_evolution_pipeline_executor_keeps_review_when_auto_apply_gate_is_not_ready() {
+    let session = sample_pipeline_session("sess-pipeline-1");
+    let store = Arc::new(FakePipelineStore {
+        groups: Mutex::new(vec![sample_session_group()]),
+        scored: Mutex::new(vec![session]),
+        current_skill_content: Mutex::new(Some(
+            "# Code Review\nExisting managed guidance.".to_string(),
+        )),
+        apply_result: Mutex::new(Some("version-auto-1".to_string())),
+        ..Default::default()
+    });
+    let executor = PgSkillEvolutionPipelineExecutor::with_parts(
+        Arc::clone(&store) as Arc<dyn SkillEvolutionPipelineStore>,
+        Arc::new(ScriptedStageEngine),
+        SkillEvolutionPipelineConfig {
+            auto_apply: true,
+            auto_apply_production_ready: false,
+            min_sessions_per_skill: 1,
+            scoring_min_sessions_per_skill: 1,
+            max_sessions_per_batch: 10,
+            ..Default::default()
+        },
+    );
+
+    let summary = executor
+        .execute(&sample_run_record("run-pipeline-auto-apply-gated"))
+        .await
+        .unwrap();
+
+    assert_eq!(summary.jobs, 1);
+    assert_eq!(summary.auto_applied, 0);
+    assert_eq!(summary.auto_apply_blocked, 0);
+    assert!(store.applied_jobs.lock().unwrap().is_empty());
+    assert!(store.status_updates.lock().unwrap().is_empty());
 }
 
 fn sample_run_record(id: &str) -> SkillEvolutionRunRecord {

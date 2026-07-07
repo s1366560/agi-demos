@@ -11,8 +11,12 @@ use agistack_core::{ports::ToolHost, Episode, Memory, SessionState, SessionStatu
 use agistack_plugin_host::{ConfigAck, NativeToolFactory, PluginManifest, ToolDecl};
 
 use crate::{
-    agent_events_api, agent_ws, auth, channel_api, enhanced_search_api, graph_api, hitl_api,
-    identity_api, prod_api, sandbox_api, shares_api, skill_api, tenant_skill_config_api, trust_api,
+    admin_dlq_api, agent_commands_api, agent_events_api, agent_ws, artifacts_api, attachments_api,
+    audit_api, auth, billing_api, channel_api, cron_api, data_api, deploy_api, engines_api,
+    enhanced_search_api, events_api, gene_api, graph_api, graph_stores_api, hitl_api, identity_api,
+    instance_api, llm_providers_api, maintenance_api, notifications_api, prod_api,
+    retrieval_stores_api, sandbox_api, schema_api, shares_api, skill_api, subagents_api,
+    support_api, system_api, tenant_skill_config_api, tenant_webhooks_api, trust_api,
     workspace_api, AppState,
 };
 
@@ -263,7 +267,29 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(enhanced_search_api::router())
         .merge(channel_api::router())
         .merge(graph_api::router())
+        .merge(agent_commands_api::router())
         .merge(agent_events_api::router())
+        .merge(events_api::router())
+        .merge(audit_api::router())
+        .merge(notifications_api::router())
+        .merge(billing_api::router())
+        .merge(support_api::router())
+        .merge(system_api::router())
+        .merge(maintenance_api::router())
+        .merge(artifacts_api::router())
+        .merge(attachments_api::router())
+        .merge(admin_dlq_api::router())
+        .merge(tenant_webhooks_api::router())
+        .merge(schema_api::router())
+        .merge(cron_api::router())
+        .merge(data_api::router())
+        .merge(deploy_api::router())
+        .merge(instance_api::router())
+        .merge(gene_api::router())
+        .merge(subagents_api::router())
+        .merge(graph_stores_api::router())
+        .merge(retrieval_stores_api::router())
+        .merge(llm_providers_api::router())
         .merge(hitl_api::router())
         .merge(identity_api::router_authed())
         .merge(sandbox_api::router())
@@ -276,7 +302,10 @@ pub(crate) fn router(state: AppState) -> Router {
             state.clone(),
             auth::require_api_key,
         ));
-    let public = identity_api::router_public().merge(shares_api::router_public());
+    let public = engines_api::router_public()
+        .merge(identity_api::router_public())
+        .merge(channel_api::router_public())
+        .merge(shares_api::router_public());
 
     Router::new()
         .route("/health", get(health))

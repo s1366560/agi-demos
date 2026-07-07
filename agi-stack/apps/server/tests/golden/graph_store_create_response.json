@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": {
+    "id": "graph-store-1",
+    "tenant_id": "tenant-1",
+    "name": "Primary graph",
+    "engine_type": "neo4j",
+    "status": "connected",
+    "health_status": "healthy",
+    "detected_version": "5.26",
+    "connection_config": {
+      "uri": "bolt://neo4j.example:7687",
+      "user": "neo4j",
+      "password": "***"
+    },
+    "index_config": {
+      "database": "neo4j"
+    },
+    "created_at": "2026-01-02T03:04:05+00:00",
+    "updated_at": "2026-01-03T04:05:06+00:00",
+    "source": "user",
+    "readonly": false
+  }
+}

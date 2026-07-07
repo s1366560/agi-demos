@@ -27,41 +27,98 @@ use sha2::{Digest, Sha256};
 
 pub use sqlx::postgres::PgPool;
 
+mod admin_access_repo;
+mod artifact_repo;
+mod attachment_repo;
+mod audit_repo;
 mod auth_store;
+mod backend_store_repo;
+mod billing_repo;
 mod channel_repo;
 mod checkpoint;
 mod conversation_events_repo;
+mod cron_repo;
+mod data_stats_repo;
+mod deploy_repo;
+mod event_log_repo;
+mod gene_repo;
 mod hitl_repo;
+mod instance_repo;
 mod invitation_repo;
+mod llm_provider_repo;
 mod memory_repo;
+mod notification_repo;
 mod project_repo;
 mod sandbox_repo;
+mod schema_repo;
 mod share_repo;
 mod skill_evolution_repo;
 mod skill_repo;
+mod subagent_template_repo;
+mod support_repo;
 mod tenant_repo;
 mod tenant_skill_config_repo;
+mod tenant_webhook_repo;
 mod trust_repo;
 mod user_store;
 mod vector_index;
 mod workspace_repo;
 
+pub use admin_access_repo::PgAdminAccessRepository;
+pub use artifact_repo::{ArtifactListQuery, ArtifactRecord, PgArtifactRepository};
+pub use attachment_repo::{
+    AttachmentListQuery, AttachmentRecord, AttachmentUploadRecord, PgAttachmentRepository,
+};
+pub use audit_repo::{
+    AuditLogListQuery, AuditLogRecord, PgAuditLogRepository, RuntimeHookAuditQuery,
+    RuntimeHookAuditSummaryRecord,
+};
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
+pub use backend_store_repo::{
+    BackendStoreAccessError, BackendStoreCreate, BackendStoreRecord, BackendStoreUpdate,
+    PgGraphStoreRepository, PgRetrievalStoreRepository,
+};
+pub use billing_repo::{
+    BillingTenantRecord, BillingUsageRecord, InvoiceRecord, PgBillingRepository,
+};
 pub use channel_repo::{
     ChannelConfigListQuery, ChannelConfigRecord, ChannelObservabilitySummaryRecord,
     ChannelOutboxListQuery, ChannelOutboxRecord, ChannelPageQuery, ChannelSessionBindingRecord,
-    ChannelStatusRecord, PgChannelRepository,
+    ChannelStatusRecord, ChannelWebhookEventInsertRecord, ChannelWebhookEventRecord,
+    ChannelWebhookIngressRecord, ChannelWebhookRouteRecord, ChannelWebhookSecretRecord,
+    ChannelWebhookSessionCreateRecord, PgChannelRepository,
 };
 pub use checkpoint::PgCheckpointStore;
 pub use conversation_events_repo::{
     AgentExecutionEventListQuery, AgentExecutionEventRecord, ConversationReplayAccess,
     PgAgentExecutionEventRepository,
 };
+pub use cron_repo::{CronJobListQuery, CronJobRecord, CronJobRunRecord, PgCronRepository};
+pub use data_stats_repo::{
+    DataStatsAccess, DataStatsScopeError, DataStatsScopeRecord, PgDataStatsRepository,
+};
+pub use deploy_repo::{DeployAccess, DeployListQuery, DeployRecord, PgDeployRepository};
+pub use event_log_repo::{PgEventLogRepository, TenantEventLogListQuery, TenantEventLogRecord};
+pub use gene_repo::{
+    GeneListQuery, GeneRecord, GeneTenantAccess, GenomeListQuery, GenomeRecord, PgGeneRepository,
+};
 pub use hitl_repo::{HitlRequestRecord, PgHitlRequestRepository};
+pub use instance_repo::{
+    InstanceChannelRecord, InstanceListQuery, InstanceMemberListQuery, InstanceMemberRecord,
+    InstanceRecord, InstanceUserSearchRecord, PgInstanceRepository,
+};
 pub use invitation_repo::{
     normalize_email, InvitationRecord, PgInvitationRepository, TenantAdminStatus,
 };
+pub use llm_provider_repo::{
+    decrypt_provider_api_key_for_mask, LlmProviderCreateRecord, LlmProviderRecord,
+    LlmProviderUpdateRecord, PgLlmProviderRepository, ProviderHealthRecord,
+    TenantProviderMappingRecord, UsageStatisticRecord, UsageStatisticsQuery,
+};
 pub use memory_repo::PgMemoryRepository;
+pub use notification_repo::{
+    CreateNotification, NotificationListQuery, NotificationRecord, PgNotificationRepository,
+};
 pub use project_repo::{
     PgProjectReadRepository, ProjectActivityRecord, ProjectCreateRecord,
     ProjectDashboardStatsRecord, ProjectListForUserQuery, ProjectListRecords, ProjectLookup,
@@ -69,9 +126,14 @@ pub use project_repo::{
     ProjectReadRecord, ProjectStatsLookup, ProjectStatsRecord, ProjectUpdatePatch,
 };
 pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
+pub use schema_repo::{
+    CreateSchemaEdgeMap, CreateSchemaType, PgSchemaRepository, SchemaEdgeMapRecord,
+    SchemaTypeRecord, UpdateSchemaType,
+};
 pub use share_repo::{NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord};
 pub use skill_evolution_repo::{
-    PgSkillEvolutionRepository, SkillEvolutionJobInsertRecord, SkillEvolutionJobRecord,
+    PgSkillEvolutionRepository, SkillEvolutionJobAuditEventInsertRecord,
+    SkillEvolutionJobAuditEventRecord, SkillEvolutionJobInsertRecord, SkillEvolutionJobRecord,
     SkillEvolutionOverviewStatsRecord, SkillEvolutionPipelineSessionRecord,
     SkillEvolutionRunRecord, SkillEvolutionSessionGroupRecord, SkillEvolutionSessionRecord,
     SkillEvolutionSkillSummaryRecord,
@@ -80,13 +142,21 @@ pub use skill_repo::{
     PgSkillRepository, PluginConfigRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
     SkillVersionRecord,
 };
+pub use subagent_template_repo::PgSubagentTemplateRepository;
+pub use support_repo::{
+    ClosedSupportTicketRecord, CreateSupportTicket, PgSupportRepository, SupportTicketListQuery,
+    SupportTicketRecord, UpdateSupportTicket,
+};
 pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord, TenantUpdatePatch};
 pub use tenant_skill_config_repo::{PgTenantSkillConfigRepository, TenantSkillConfigRecord};
+pub use tenant_webhook_repo::{
+    CreateTenantWebhook, PgTenantWebhookRepository, TenantWebhookRecord,
+};
 pub use trust_repo::{
     DecisionRecordRecord, NewDecisionRecordRecord, NewTrustPolicyRecord, PgTrustRepository,
     TenantAccessStatus, TrustDecisionResolution, TrustPolicyRecord,
 };
-pub use user_store::{PgUserStore, UserAuthRecord};
+pub use user_store::{CurrentUserRecord, PgUserStore, UserAuthRecord};
 pub use vector_index::PgVectorIndex;
 pub use workspace_repo::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
@@ -119,6 +189,10 @@ pub async fn connect(database_url: &str) -> CoreResult<PgPool> {
 /// - `vector` extension + `agistack_memory_vectors` back [`PgVectorIndex`].
 /// - `agistack_checkpoints` backs [`PgCheckpointStore`] (agent crash recovery).
 /// - `agistack_skill_evolution_runs` backs Rust-side P5 evolution run admission.
+/// - `agistack_skill_evolution_job_audit_events` records Rust-side P5 job review outcomes.
+/// - `agistack_channel_outbox_leases` backs Rust-side P5 channel delivery ownership.
+/// - `agistack_channel_webhook_events` backs Rust-side P5 channel webhook ingress idempotency
+///   and binding route projections.
 pub async fn ensure_aux_schema(pool: &PgPool) -> CoreResult<()> {
     // pgvector. On the `pgvector/pgvector` image the bootstrap superuser can
     // create it; if a managed instance pre-installs it, the IF NOT EXISTS is a
@@ -214,6 +288,138 @@ pub async fn ensure_aux_schema(pool: &PgPool) -> CoreResult<()> {
     .map_err(|e| {
         CoreError::Storage(format!(
             "ensure idx_agistack_skill_evolution_runs_claim: {e}"
+        ))
+    })?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agistack_skill_evolution_job_audit_events (\
+            id text PRIMARY KEY, \
+            tenant_id text NOT NULL, \
+            project_id text, \
+            skill_name text NOT NULL, \
+            job_id text NOT NULL, \
+            event_type text NOT NULL, \
+            actor_user_id text, \
+            skill_version_id text, \
+            details_json jsonb NOT NULL DEFAULT '{}'::jsonb, \
+            created_at timestamptz NOT NULL DEFAULT now())",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure agistack_skill_evolution_job_audit_events: {e}"
+        ))
+    })?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_agistack_skill_evolution_job_audit_job \
+         ON agistack_skill_evolution_job_audit_events (tenant_id, job_id, created_at)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure idx_agistack_skill_evolution_job_audit_job: {e}"
+        ))
+    })?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agistack_channel_outbox_leases (\
+            outbox_id text PRIMARY KEY, \
+            lease_owner text NOT NULL, \
+            lease_expires_at timestamptz NOT NULL, \
+            created_at timestamptz NOT NULL DEFAULT now(), \
+            updated_at timestamptz)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| CoreError::Storage(format!("ensure agistack_channel_outbox_leases: {e}")))?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_agistack_channel_outbox_leases_expiry \
+         ON agistack_channel_outbox_leases (lease_expires_at)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure idx_agistack_channel_outbox_leases_expiry: {e}"
+        ))
+    })?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agistack_channel_webhook_events (\
+            id text PRIMARY KEY, \
+            project_id text NOT NULL, \
+            channel_config_id text NOT NULL, \
+            channel_type text NOT NULL, \
+            idempotency_key text NOT NULL, \
+            headers_json jsonb NOT NULL DEFAULT '{}'::jsonb, \
+            raw_event_json jsonb NOT NULL, \
+            normalized_event_json jsonb NOT NULL DEFAULT '{}'::jsonb, \
+            status text NOT NULL DEFAULT 'received', \
+            route_error text, \
+            route_session_key text, \
+            route_binding_id text, \
+            route_conversation_id text, \
+            received_at timestamptz NOT NULL DEFAULT now(), \
+            routed_at timestamptz)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| CoreError::Storage(format!("ensure agistack_channel_webhook_events: {e}")))?;
+
+    sqlx::query(
+        "ALTER TABLE agistack_channel_webhook_events \
+         ADD COLUMN IF NOT EXISTS normalized_event_json jsonb NOT NULL DEFAULT '{}'::jsonb",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure agistack_channel_webhook_events.normalized_event_json: {e}"
+        ))
+    })?;
+
+    for (column, ty) in [
+        ("route_session_key", "text"),
+        ("route_binding_id", "text"),
+        ("route_conversation_id", "text"),
+    ] {
+        sqlx::query(&format!(
+            "ALTER TABLE agistack_channel_webhook_events ADD COLUMN IF NOT EXISTS {column} {ty}"
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            CoreError::Storage(format!(
+                "ensure agistack_channel_webhook_events.{column}: {e}"
+            ))
+        })?;
+    }
+
+    sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_agistack_channel_webhook_events_idempotency \
+         ON agistack_channel_webhook_events (channel_config_id, idempotency_key)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure uq_agistack_channel_webhook_events_idempotency: {e}"
+        ))
+    })?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_agistack_channel_webhook_events_project_received \
+         ON agistack_channel_webhook_events (project_id, received_at)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        CoreError::Storage(format!(
+            "ensure idx_agistack_channel_webhook_events_project_received: {e}"
         ))
     })?;
 

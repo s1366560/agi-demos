@@ -1,0 +1,41 @@
+{
+  "filters_applied": {
+    "project_ids": [
+      "dev-project"
+    ],
+    "tenant_id": null
+  },
+  "query": "Alpha",
+  "results": [
+    {
+      "content": "Dev Alpha summary",
+      "created_at": "2023-11-14T22:13:20Z",
+      "entity_type": "Concept",
+      "metadata": {
+        "created_at": "2023-11-14T22:13:20Z",
+        "entity_type": "Concept",
+        "name": "Dev Alpha",
+        "project_id": "dev-project",
+        "type": "Concept",
+        "uuid": "dev-alpha"
+      },
+      "name": "Dev Alpha",
+      "score": 1.0,
+      "summary": "Dev Alpha summary",
+      "type": "entity",
+      "uuid": "dev-alpha"
+    }
+  ],
+  "scope": {
+    "fanout": true,
+    "project_ids": [
+      "dev-project"
+    ],
+    "tenant_id": null
+  },
+  "search_metadata": {
+    "limit": 10,
+    "strategy": "hybrid_search"
+  },
+  "total": 1
+}

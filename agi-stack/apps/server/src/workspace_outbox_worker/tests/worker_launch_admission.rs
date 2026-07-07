@@ -55,6 +55,22 @@ async fn worker_launch_handler_binds_conversation_and_marks_node_running() {
         task.metadata_json["current_attempt_worker_agent_id"],
         "agent-worker"
     );
+    assert_eq!(
+        task.metadata_json["worker_runtime_admission"]["status"],
+        "admit"
+    );
+    assert_eq!(
+        task.metadata_json["worker_runtime_admission"]["conversation_id"],
+        "d267a78e-eefc-5d33-bfb3-ac4fa7ece855"
+    );
+    assert_eq!(
+        task.metadata_json["worker_runtime_admission"]["control_plane"],
+        "worker_launch"
+    );
+    assert_eq!(
+        task.metadata_json["worker_runtime_admission"]["cooldown_claimed"],
+        true
+    );
     assert!(task.metadata_json["worker_launch_admitted_at"].is_string());
     assert!(task.metadata_json["worker_launch_bound_at"].is_string());
     assert_eq!(

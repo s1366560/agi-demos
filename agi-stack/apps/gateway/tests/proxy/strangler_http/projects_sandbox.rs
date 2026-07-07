@@ -79,6 +79,7 @@ async fn assert_sandbox_routes(ctx: &StranglerHttpContext) {
     // P5 sandbox HTTP control plane flips to Rust without taking unrelated
     // rollback or data-plane siblings.
     for (method, path, body_in) in [
+        ("GET", "/api/v1/sandbox/profiles", ""),
         ("GET", "/api/v1/projects/sandboxes", ""),
         ("GET", "/api/v1/projects/p1/sandbox", ""),
         ("POST", "/api/v1/projects/p1/sandbox", "{}"),
@@ -148,6 +149,10 @@ async fn assert_sandbox_routes(ctx: &StranglerHttpContext) {
     }
 
     for (method, path, body_in) in [
+        ("POST", "/api/v1/sandbox/profiles", "{}"),
+        ("GET", "/api/v1/sandbox/profiles/extra", ""),
+        ("GET", "/api/v1/sandbox", ""),
+        ("POST", "/api/v1/sandbox/create", "{}"),
         ("POST", "/api/v1/projects/sandboxes", "{}"),
         ("GET", "/api/v1/projects/sandboxes/stats", ""),
         ("GET", "/api/v1/projects/sandboxes/members", ""),
