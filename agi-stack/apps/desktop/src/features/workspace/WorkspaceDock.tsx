@@ -92,6 +92,21 @@ export function WorkspaceDock({
               {messageCount}
             </Badge>
           </button>
+          <button
+            className="dock-row session-child-row new-chat-row"
+            type="button"
+            aria-label="New chat"
+            onClick={onCreateWorkspace}
+            disabled={createSessionDisabled}
+            title={actionDisabledReason ?? undefined}
+          >
+            <span className="dock-leading">
+              <PlusIcon aria-hidden />
+              <span>
+                <strong>{creatingWorkspace ? 'Creating chat...' : 'New chat'}</strong>
+              </span>
+            </span>
+          </button>
           <div className="dock-row project-root-row selected" aria-expanded={true}>
             <span className="dock-leading">
               <ChevronDownIcon aria-hidden />

@@ -1240,11 +1240,13 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   margin-left: 18px;
 }
 
+.new-chat-row,
 .new-session-row {
   min-height: 34px;
   color: var(--desktop-muted);
 }
 
+.new-chat-row:disabled,
 .new-session-row:disabled {
   cursor: not-allowed;
   opacity: 0.55;

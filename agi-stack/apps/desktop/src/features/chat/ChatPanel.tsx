@@ -55,6 +55,7 @@ export function ChatPanel({
   onWorkflowSelect,
 }: ChatPanelProps) {
   const disabled = Boolean(disabledReason);
+  const canSend = !disabled && !sending && Boolean(input.trim());
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const signalStateKey = useMemo(
     () => agentTaskSignals.map((signal) => `${signal.id}:${signal.status}`).join('|'),
@@ -75,6 +76,11 @@ export function ChatPanel({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [scrollToLatest]);
+
+  const handleSend = useCallback(() => {
+    if (!canSend) return;
+    onSend();
+  }, [canSend, onSend]);
 
   return (
     <section className="pane-shell chat-shell">
@@ -167,7 +173,13 @@ export function ChatPanel({
           <div ref={scrollAnchorRef} aria-hidden="true" />
         </div>
       </ScrollArea>
-      <div className="composer chat-composer">
+      <form
+        className="composer chat-composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleSend();
+        }}
+      >
         <ChatWorkflowStrip activeTarget={activeWorkflowTarget} onSelect={onWorkflowSelect} />
         <TextArea
           className="chat-composer-input"
@@ -176,9 +188,9 @@ export function ChatPanel({
           onChange={(event) => onInputChange(event.target.value)}
           placeholder={disabledReason ?? 'Message this workspace...'}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
-              onSend();
+              handleSend();
             }
           }}
         />
@@ -191,16 +203,16 @@ export function ChatPanel({
             <Button
               size="2"
               className="send-pill"
+              type="submit"
               aria-label="Send workspace message"
-              onClick={onSend}
               loading={sending}
-              disabled={disabled || !input.trim()}
+              disabled={!canSend}
             >
               <RocketIcon />
             </Button>
           </Flex>
         </Flex>
-      </div>
+      </form>
     </section>
   );
 }

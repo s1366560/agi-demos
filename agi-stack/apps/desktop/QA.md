@@ -130,6 +130,12 @@
   matches the GitHub Copilot structure: Quick links, Sessions, then the bottom
   account/settings area. Tool surfaces remain reachable through command
   routing, the right Workspace panel, and bottom settings.
+- Added the missing signed-in `New chat` row under `Chats`, matching the
+  GitHub Copilot Sessions hierarchy while reusing the existing workspace-backed
+  new-session creation path.
+- Changed the signed-in Chat composer to submit through a real form. `Enter`
+  now sends the task, `Shift+Enter` preserves multiline input, and the send
+  button uses the same guarded submit path.
 
 ### Validation
 
@@ -246,6 +252,11 @@
   separate tools group. Computer Use capture of the rebuilt release `.app`
   confirms the signed-in desktop sidebar now matches that structure, and a
   workspace message still creates an `Agent task Accepted` card.
+- Computer Use capture of the rebuilt release `.app` after the `New chat` and
+  composer-submit fixes confirms login reaches Chat, signed-in Sessions includes
+  `Chats` -> `New chat` -> project root -> `New session in 默认项目`, `New chat`
+  creates a fresh workspace and lands in Chat, and keyboard entry followed by
+  `Enter` creates a user message plus an `Agent task Accepted` card.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
