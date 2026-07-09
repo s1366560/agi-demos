@@ -1,9 +1,11 @@
 import type {
   AgentConversation,
+  ConversationMessagesResponse,
   CurrentUser,
   DesktopRuntimeConfig,
   DesktopServiceResponse,
   LoginOutcome,
+  PaginatedConversationsResponse,
   PlanSnapshot,
   ProjectSummary,
   ProjectSandbox,
@@ -76,9 +78,19 @@ export class DesktopApiClient {
   async listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const projectId = requireValue(this.config.projectId, 'project id');
+    return this.listWorkspacesForProject(projectId, tenantId, signal);
+  }
+
+  async listWorkspacesForProject(
+    projectId: string,
+    tenantId = this.config.tenantId,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceSummary[]> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
     const payload = await this.request<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
-        projectId,
+      `/api/v1/tenants/${encodeURIComponent(requiredTenantId)}/projects/${encodeURIComponent(
+        requiredProjectId,
       )}/workspaces`,
       { signal },
     );
@@ -88,9 +100,20 @@ export class DesktopApiClient {
   async createWorkspace(name: string, description?: string): Promise<WorkspaceSummary> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const projectId = requireValue(this.config.projectId, 'project id');
+    return this.createWorkspaceForProject(projectId, name, description, tenantId);
+  }
+
+  async createWorkspaceForProject(
+    projectId: string,
+    name: string,
+    description?: string,
+    tenantId = this.config.tenantId,
+  ): Promise<WorkspaceSummary> {
+    const requiredTenantId = requireValue(tenantId, 'tenant id');
+    const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<WorkspaceSummary>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
-        projectId,
+      `/api/v1/tenants/${encodeURIComponent(requiredTenantId)}/projects/${encodeURIComponent(
+        requiredProjectId,
       )}/workspaces`,
       {
         method: 'POST',
@@ -126,12 +149,15 @@ export class DesktopApiClient {
     });
   }
 
-  async createAgentConversation(title: string): Promise<AgentConversation> {
-    const projectId = requireValue(this.config.projectId, 'project id');
+  async createAgentConversation(
+    title: string,
+    projectId = this.config.projectId,
+  ): Promise<AgentConversation> {
+    const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<AgentConversation>('/api/v1/agent/conversations', {
       method: 'POST',
       body: {
-        project_id: projectId,
+        project_id: requiredProjectId,
         title,
         agent_config: {
           selected_agent_id: 'builtin:all-access',
@@ -147,16 +173,87 @@ export class DesktopApiClient {
       workspace_id?: string | null;
       linked_workspace_task_id?: string | null;
     },
+    projectId = this.config.projectId,
   ): Promise<AgentConversation> {
-    const projectId = requireValue(this.config.projectId, 'project id');
+    const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<AgentConversation>(
       `/api/v1/agent/conversations/${encodeURIComponent(
         conversationId,
-      )}/mode?project_id=${encodeURIComponent(projectId)}`,
+      )}/mode?project_id=${encodeURIComponent(requiredProjectId)}`,
       {
         method: 'PATCH',
         body: payload,
       },
+    );
+  }
+
+  async listConversations(
+    projectId = this.config.projectId,
+    workspaceId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<PaginatedConversationsResponse> {
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const items: AgentConversation[] = [];
+    let offset = 0;
+    let total = 0;
+    let hasMore = true;
+    let nextOffset: number | null | undefined = null;
+
+    while (hasMore) {
+      const params = new URLSearchParams({
+        project_id: requiredProjectId,
+        status: 'active',
+        limit: '100',
+        offset: String(offset),
+      });
+      if (workspaceId) params.set('workspace_id', workspaceId);
+      const page = await this.request<PaginatedConversationsResponse>(
+        `/api/v1/agent/conversations?${params.toString()}`,
+        { signal },
+      );
+      const pageItems = Array.isArray(page.items) ? page.items : [];
+      items.push(...pageItems);
+      total = typeof page.total === 'number' ? page.total : items.length;
+      nextOffset =
+        typeof page.next_offset === 'number' ? page.next_offset : offset + pageItems.length;
+      hasMore = Boolean(page.has_more) && nextOffset > offset;
+      offset = nextOffset ?? offset;
+    }
+
+    return {
+      items,
+      total,
+      has_more: false,
+      offset: 0,
+      limit: Math.max(items.length, 100),
+      next_offset: null,
+    };
+  }
+
+  async getConversationMessages(
+    conversationId: string,
+    projectId = this.config.projectId,
+    options: {
+      limit?: number;
+      fromTimeUs?: number;
+      fromCounter?: number;
+      beforeTimeUs?: number;
+      beforeCounter?: number;
+      signal?: AbortSignal;
+    } = {},
+  ): Promise<ConversationMessagesResponse> {
+    const requiredProjectId = requireValue(projectId, 'project id');
+    const params = new URLSearchParams({
+      project_id: requiredProjectId,
+      limit: String(options.limit ?? 50),
+    });
+    if (typeof options.fromTimeUs === 'number') params.set('from_time_us', String(options.fromTimeUs));
+    if (typeof options.fromCounter === 'number') params.set('from_counter', String(options.fromCounter));
+    if (typeof options.beforeTimeUs === 'number') params.set('before_time_us', String(options.beforeTimeUs));
+    if (typeof options.beforeCounter === 'number') params.set('before_counter', String(options.beforeCounter));
+    return this.request<ConversationMessagesResponse>(
+      `/api/v1/agent/conversations/${encodeURIComponent(conversationId)}/messages?${params.toString()}`,
+      { signal: options.signal },
     );
   }
 
@@ -222,7 +319,24 @@ export class DesktopApiClient {
         ? this.getPlanSnapshot(signal).catch(() => null)
         : Promise.resolve(null),
     ]);
-    return { workspaces, messages, tasks, plan, sandbox: null };
+    const projectId = this.config.projectId.trim();
+    const conversations = await Promise.all(
+      workspaces.map((workspace) =>
+        this.listConversations(projectId, workspace.id, signal)
+          .then((response) => [workspace.id, response.items] as const)
+          .catch(() => [workspace.id, []] as const),
+      ),
+    );
+    return {
+      workspaces,
+      workspacesByProject: projectId ? { [projectId]: workspaces } : {},
+      conversationsByWorkspace: Object.fromEntries(conversations),
+      nodeState: { projects: {}, workspaces: {} },
+      messages,
+      tasks,
+      plan,
+      sandbox: null,
+    };
   }
 
   desktopProxyUrl(): string {

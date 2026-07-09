@@ -74,24 +74,32 @@ import { useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
 import type {
   AgentConversation,
+  AgentTimelineItem,
   AuthState,
   BoardMode,
   ConnectionState,
+  ConversationTimelineState,
   DesktopRuntimeConfig,
   DesktopServiceResponse,
   LocalMemoryResult,
   PlanSnapshot,
+  ProjectSummary,
   ProjectSandbox,
+  RuntimeNodeLoadState,
   RuntimeDataset,
   StatusTab,
   TerminalServiceResponse,
   WorkbenchSection,
+  WorkspaceSummary,
   WorkspaceTask,
 } from './types';
 import { DEFAULT_CONFIG } from './types';
 
 const emptyDataset: RuntimeDataset = {
   workspaces: [],
+  workspacesByProject: {},
+  conversationsByWorkspace: {},
+  nodeState: { projects: {}, workspaces: {} },
   messages: [],
   tasks: [],
   plan: null,
@@ -105,6 +113,17 @@ const emptyAuthState: AuthState = {
   projects: [],
   mustChangePassword: false,
   error: null,
+};
+
+const emptyConversationTimeline: ConversationTimelineState = {
+  conversationId: null,
+  items: [],
+  loading: false,
+  loadingEarlier: false,
+  error: null,
+  hasMore: false,
+  firstCursor: null,
+  lastCursor: null,
 };
 
 const DEFAULT_WORKSPACE_NAME = 'Desktop workspace';
@@ -246,7 +265,11 @@ function isEditableEventTarget(target: EventTarget | null): boolean {
 }
 
 function agentConversationScopeKey(config: DesktopRuntimeConfig): string {
-  return `${config.projectId.trim()}::${config.workspaceId.trim()}`;
+  return agentConversationScopeKeyFor(config.projectId, config.workspaceId);
+}
+
+function agentConversationScopeKeyFor(projectId: string, workspaceId: string): string {
+  return `${projectId.trim()}::${workspaceId.trim()}`;
 }
 
 function agentTaskUpdateFromSocketEvent(
@@ -284,6 +307,36 @@ function agentTaskUpdateFromSocketEvent(
       messageId,
       status: 'acknowledged',
       detail: 'Agent conversation received the task message.',
+      eventType,
+    };
+  }
+
+  if (type === 'act' || type === 'observe' || type.startsWith('text_')) {
+    return {
+      conversationId,
+      messageId,
+      status: 'acknowledged',
+      detail: 'Agent is streaming updates for this task.',
+      eventType,
+    };
+  }
+
+  if (type === 'assistant_message') {
+    return {
+      conversationId,
+      messageId,
+      status: 'acknowledged',
+      detail: 'Agent response was added to the conversation.',
+      eventType,
+    };
+  }
+
+  if (type === 'complete') {
+    return {
+      conversationId,
+      messageId,
+      status: 'acknowledged',
+      detail: 'Agent run completed.',
       eventType,
     };
   }
@@ -343,6 +396,234 @@ function readStringField(payload: Record<string, unknown>, key: string): string 
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+function mergeTimelineItems(
+  existing: AgentTimelineItem[],
+  incoming: AgentTimelineItem[],
+): AgentTimelineItem[] {
+  const merged = [...existing];
+  for (const item of incoming) {
+    const duplicateIndex = merged.findIndex((current) => timelineItemsMatch(current, item));
+    if (duplicateIndex >= 0) {
+      merged[duplicateIndex] = { ...merged[duplicateIndex], ...item };
+    } else {
+      merged.push(item);
+    }
+  }
+  return merged.sort((a, b) => {
+    if (a.eventTimeUs !== b.eventTimeUs) return a.eventTimeUs - b.eventTimeUs;
+    return a.eventCounter - b.eventCounter;
+  });
+}
+
+function timelineItemsMatch(current: AgentTimelineItem, incoming: AgentTimelineItem): boolean {
+  if (current.id === incoming.id) return true;
+  if (!current.message_id || current.message_id !== incoming.message_id) return false;
+  if (current.type === incoming.type) {
+    return (
+      current.type === 'user_message' ||
+      current.type === 'assistant_message' ||
+      Boolean(current.metadata?.optimistic) ||
+      Boolean(current.metadata?.streaming)
+    );
+  }
+  return (
+    current.role === 'assistant' &&
+    incoming.role === 'assistant' &&
+    (current.type === 'assistant_message' || incoming.type === 'assistant_message')
+  );
+}
+
+function timelineCursorFromFirst(items: AgentTimelineItem[]): ConversationTimelineState['firstCursor'] {
+  const first = items[0];
+  if (!first) return null;
+  return { timeUs: first.eventTimeUs, counter: first.eventCounter };
+}
+
+function timelineCursorFromLast(items: AgentTimelineItem[]): ConversationTimelineState['lastCursor'] {
+  const last = items[items.length - 1];
+  if (!last) return null;
+  return { timeUs: last.eventTimeUs, counter: last.eventCounter };
+}
+
+function optimisticUserTimelineItem(messageId: string, content: string): AgentTimelineItem {
+  const nowMs = Date.now();
+  return {
+    id: `optimistic-user-${messageId}`,
+    type: 'user_message',
+    eventTimeUs: nowMs * 1000,
+    eventCounter: 0,
+    timestamp: nowMs,
+    message_id: messageId,
+    role: 'user',
+    content,
+    metadata: { optimistic: true },
+  };
+}
+
+function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
+  if (!event || typeof event !== 'object') return null;
+  const payload = event as Record<string, unknown>;
+  const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
+  if (!type || shouldSkipLiveTimelineEvent(type, payload)) return null;
+  const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+  const nowMs = Date.now();
+  const eventTimeUs =
+    numberField(payload, 'time_us') ?? numberField(payload, 'event_time_us') ?? nowMs * 1000;
+  const eventCounter =
+    numberField(payload, 'counter') ?? numberField(payload, 'event_counter') ?? 0;
+  const messageId =
+    socketMessageId(payload) ??
+    readStringField(data, 'message_id') ??
+    readStringField(data, 'messageId');
+  const item: AgentTimelineItem = {
+    id: `${type}-${eventTimeUs}-${eventCounter}`,
+    type,
+    eventTimeUs,
+    eventCounter,
+    timestamp: Math.floor(eventTimeUs / 1000),
+    message_id: messageId ?? null,
+    payload: data,
+  };
+
+  if (type === 'user_message' || type === 'assistant_message') {
+    item.role = type === 'user_message' ? 'user' : 'assistant';
+    item.content =
+      readStringField(data, 'content') ??
+      readStringField(data, 'answer') ??
+      readStringField(payload, 'message') ??
+      '';
+  } else if (type === 'thought') {
+    item.content = readStringField(data, 'thought') ?? readStringField(data, 'content') ?? '';
+  } else if (type === 'act' || type === 'act_delta') {
+    item.type = 'act';
+    item.toolName = readStringField(data, 'tool_name') ?? readStringField(data, 'toolName') ?? '';
+    item.toolInput = data.tool_input ?? data.toolInput ?? data.accumulated_arguments ?? {};
+  } else if (type === 'observe') {
+    item.toolName = readStringField(data, 'tool_name') ?? readStringField(data, 'toolName') ?? '';
+    item.toolInput = data.tool_input ?? data.toolInput;
+    item.toolOutput = data.observation ?? data.tool_output ?? data.toolOutput ?? '';
+    item.isError = Boolean(data.is_error ?? data.isError);
+  } else if (type === 'error') {
+    item.content = socketErrorDetail(payload) ?? 'Agent run failed.';
+    item.error = item.content;
+    item.isError = true;
+  }
+
+  const display = objectField(data, 'display');
+  if (display) item.display = display as AgentTimelineItem['display'];
+  const fileMetadata = objectField(data, 'fileMetadata') ?? objectField(data, 'file_metadata');
+  if (fileMetadata) item.fileMetadata = fileMetadata as AgentTimelineItem['fileMetadata'];
+  const metadata = objectField(data, 'metadata');
+  if (metadata) item.metadata = metadata;
+
+  return item;
+}
+
+function shouldSkipLiveTimelineEvent(type: string, payload: Record<string, unknown>): boolean {
+  if (
+    [
+      'ack',
+      'status',
+      'progress',
+      'start',
+      'complete',
+      'cancelled',
+      'heartbeat',
+      'status_update',
+      'lifecycle_state_change',
+      'sandbox_event',
+    ].includes(type)
+  ) {
+    return true;
+  }
+  const action = readStringField(payload, 'action');
+  return action === 'subscribe' || action === 'subscribe_workspace';
+}
+
+function mergeLiveTimelineEvent(
+  existing: AgentTimelineItem[],
+  event: unknown,
+): AgentTimelineItem[] {
+  if (!event || typeof event !== 'object') return existing;
+  const payload = event as Record<string, unknown>;
+  const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
+  if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
+    return mergeStreamingTextEvent(existing, payload, type);
+  }
+  const item = timelineItemFromSocketEvent(event);
+  return item ? mergeTimelineItems(existing, [item]) : existing;
+}
+
+function mergeStreamingTextEvent(
+  existing: AgentTimelineItem[],
+  payload: Record<string, unknown>,
+  type: 'text_start' | 'text_delta' | 'text_end',
+): AgentTimelineItem[] {
+  const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+  const messageId = socketMessageId(payload) ?? `stream-${readStringField(payload, 'conversation_id') ?? 'agent'}`;
+  const nowMs = Date.now();
+  const eventTimeUs =
+    numberField(payload, 'time_us') ?? numberField(payload, 'event_time_us') ?? nowMs * 1000;
+  const eventCounter =
+    numberField(payload, 'counter') ?? numberField(payload, 'event_counter') ?? 0;
+  const delta =
+    readStringField(data, 'delta') ??
+    readStringField(data, 'text') ??
+    readStringField(data, 'content') ??
+    '';
+  const existingIndex = existing.findIndex(
+    (item) =>
+      item.message_id === messageId &&
+      item.role === 'assistant' &&
+      Boolean(item.metadata?.streaming),
+  );
+
+  if (existingIndex < 0) {
+    if (type === 'text_end' && !delta) return existing;
+    return mergeTimelineItems(existing, [
+      {
+        id: `streaming-assistant-${messageId}`,
+        type: 'assistant_message',
+        eventTimeUs,
+        eventCounter,
+        timestamp: Math.floor(eventTimeUs / 1000),
+        message_id: messageId,
+        role: 'assistant',
+        content: delta,
+        metadata: { streaming: type !== 'text_end' },
+      },
+    ]);
+  }
+
+  const updated = existing.map((item, index) => {
+    if (index !== existingIndex) return item;
+    return {
+      ...item,
+      eventTimeUs,
+      eventCounter,
+      timestamp: Math.floor(eventTimeUs / 1000),
+      content: type === 'text_delta' ? `${item.content ?? ''}${delta}` : delta || item.content,
+      metadata: { ...(item.metadata ?? {}), streaming: type !== 'text_end' },
+    };
+  });
+  return updated.sort((a, b) => {
+    if (a.eventTimeUs !== b.eventTimeUs) return a.eventTimeUs - b.eventTimeUs;
+    return a.eventCounter - b.eventCounter;
+  });
+}
+
+function objectField(payload: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  const value = payload[key];
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function numberField(payload: Record<string, unknown>, key: string): number | null {
+  const value = payload[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 export function App() {
   const runsInTauri = detectTauriShell();
   const [config, setConfig] = useState<DesktopRuntimeConfig>(DEFAULT_CONFIG);
@@ -366,6 +647,8 @@ export function App() {
     ? mobileMenuOptionId(activeMobileMenuItemId)
     : undefined;
   const [sessionGroupMode, setSessionGroupMode] = useState<SessionGroupMode>('project');
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
+  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(() => new Set());
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [dataset, setDataset] = useState<RuntimeDataset>(emptyDataset);
@@ -393,9 +676,13 @@ export function App() {
   const [memoryResult, setMemoryResult] = useState<LocalMemoryResult | null>(null);
   const [newWorkspaceName, setNewWorkspaceName] = useState(DEFAULT_WORKSPACE_NAME);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [creatingSessionWorkspaceId, setCreatingSessionWorkspaceId] = useState<string | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
+  const [conversationTimeline, setConversationTimeline] =
+    useState<ConversationTimelineState>(emptyConversationTimeline);
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
+  const timelineRequestRef = useRef(0);
 
   const api = useMemo(() => new DesktopApiClient(config), [config]);
   const socket = useAgentSocket(config, connection === 'ready');
@@ -438,6 +725,98 @@ export function App() {
       return [...current.filter((signal) => signal.id !== patch.id), next].slice(-8);
     });
   }, []);
+
+  const loadConversationTimeline = useCallback(
+    async (conversation: AgentConversation, projectId: string) => {
+      const requestId = timelineRequestRef.current + 1;
+      timelineRequestRef.current = requestId;
+      setConversationTimeline({
+        ...emptyConversationTimeline,
+        conversationId: conversation.id,
+        loading: true,
+      });
+      try {
+        const response = await api.getConversationMessages(conversation.id, projectId, {
+          limit: 50,
+        });
+        if (timelineRequestRef.current !== requestId) return;
+        const responseItems = response.timeline ?? [];
+        setConversationTimeline((current) => {
+          const items =
+            current.conversationId === conversation.id
+              ? mergeTimelineItems(responseItems, current.items)
+              : responseItems;
+          return {
+            conversationId: conversation.id,
+            items,
+            loading: false,
+            loadingEarlier: false,
+            error: null,
+            hasMore: Boolean(response.has_more),
+            firstCursor:
+              typeof response.first_time_us === 'number' &&
+              typeof response.first_counter === 'number'
+                ? { timeUs: response.first_time_us, counter: response.first_counter }
+                : timelineCursorFromFirst(items),
+            lastCursor:
+              typeof response.last_time_us === 'number' && typeof response.last_counter === 'number'
+                ? { timeUs: response.last_time_us, counter: response.last_counter }
+                : timelineCursorFromLast(items),
+          };
+        });
+      } catch (caught) {
+        if (timelineRequestRef.current !== requestId) return;
+        setConversationTimeline({
+          ...emptyConversationTimeline,
+          conversationId: conversation.id,
+          error: formatConnectionError(caught, config.apiBaseUrl),
+        });
+      }
+    },
+    [api, config.apiBaseUrl],
+  );
+
+  const loadEarlierTimeline = useCallback(async () => {
+    const conversation = agentConversationSession?.conversation;
+    const cursor = conversationTimeline.firstCursor;
+    if (!conversation || !cursor || conversationTimeline.loadingEarlier) return;
+    setConversationTimeline((current) => ({ ...current, loadingEarlier: true, error: null }));
+    try {
+      const response = await api.getConversationMessages(conversation.id, config.projectId, {
+        limit: 50,
+        beforeTimeUs: cursor.timeUs,
+        beforeCounter: cursor.counter,
+      });
+      setConversationTimeline((current) => {
+        if (current.conversationId !== conversation.id) return current;
+        const items = mergeTimelineItems(response.timeline ?? [], current.items);
+        return {
+          ...current,
+          items,
+          loadingEarlier: false,
+          hasMore: Boolean(response.has_more),
+          firstCursor:
+            typeof response.first_time_us === 'number' && typeof response.first_counter === 'number'
+              ? { timeUs: response.first_time_us, counter: response.first_counter }
+              : timelineCursorFromFirst(items),
+          lastCursor: timelineCursorFromLast(items),
+        };
+      });
+    } catch (caught) {
+      setConversationTimeline((current) => ({
+        ...current,
+        loadingEarlier: false,
+        error: formatConnectionError(caught, config.apiBaseUrl),
+      }));
+    }
+  }, [
+    agentConversationSession?.conversation,
+    api,
+    config.apiBaseUrl,
+    config.projectId,
+    conversationTimeline.firstCursor,
+    conversationTimeline.loadingEarlier,
+  ]);
 
   const openCommandPalette = useCallback((trigger?: HTMLElement | null) => {
     commandPaletteTriggerRef.current =
@@ -648,6 +1027,29 @@ export function App() {
     });
   }, [socket.events]);
 
+  useEffect(() => {
+    const latest = socket.events[0];
+    if (!latest || typeof latest !== 'object') return;
+    const payload = latest as Record<string, unknown>;
+    const conversationId = readStringField(payload, 'conversation_id');
+    const activeConversation =
+      agentConversationSession?.scopeKey === agentConversationScopeKey(config)
+        ? agentConversationSession.conversation
+        : null;
+    if (!activeConversation || conversationId !== activeConversation.id) return;
+    setConversationTimeline((current) => {
+      if (current.conversationId !== activeConversation.id) return current;
+      const items = mergeLiveTimelineEvent(current.items, latest);
+      if (items === current.items) return current;
+      return {
+        ...current,
+        items,
+        firstCursor: timelineCursorFromFirst(items),
+        lastCursor: timelineCursorFromLast(items),
+      };
+    });
+  }, [agentConversationSession, config, socket.events]);
+
   const showRuntimeConfig = auth.status === 'signed_in' || auth.status === 'manual';
   const showReviewPanel = showRuntimeConfig && reviewPanelOpen;
   const runtimeDisabledReason = !showRuntimeConfig
@@ -681,6 +1083,10 @@ export function App() {
       ? 'Create or select a workspace before sending messages.'
       : connection !== 'ready'
         ? 'Connect the workspace before sending messages.'
+        : !socket.connected
+          ? socket.error
+            ? `Agent live connection is unavailable: ${socket.error}`
+            : 'Agent live connection is still connecting.'
         : null;
 
   useEffect(() => {
@@ -694,23 +1100,130 @@ export function App() {
   }, [dataset.tasks, selectedTaskId]);
 
   const refreshRuntime = useCallback(
-    async (nextConfig: DesktopRuntimeConfig = config) => {
+    async (nextConfig: DesktopRuntimeConfig = config, projectOverride?: ProjectSummary[]) => {
       setConnection('loading');
       setError(null);
       try {
-        const baseClient = new DesktopApiClient(nextConfig);
-        const workspaces = await baseClient.listWorkspaces();
-        const workspaceId = nextConfig.workspaceId.trim() || workspaces[0]?.id || '';
-        const resolvedConfig = { ...nextConfig, workspaceId };
+        const projects =
+          projectOverride ?? resolveSidebarProjects(nextConfig, auth.status, auth.projects);
+        const loadingNodeState: RuntimeNodeLoadState = {
+          projects: Object.fromEntries(
+            projects.map((project) => [
+              project.id,
+              { loading: true, error: null },
+            ]),
+          ),
+          workspaces: {},
+        };
+        setDataset((current) => ({ ...current, nodeState: loadingNodeState }));
+
+        const workspaceResults = await Promise.all(
+          projects.map(async (project) => {
+            const projectTenantId = project.tenant_id || nextConfig.tenantId;
+            const client = new DesktopApiClient({
+              ...nextConfig,
+              tenantId: projectTenantId,
+              projectId: project.id,
+              workspaceId: '',
+            });
+            try {
+              const workspaces = await client.listWorkspacesForProject(project.id, projectTenantId);
+              return { project, workspaces, error: null };
+            } catch (caught) {
+              return { project, workspaces: [] as WorkspaceSummary[], error: formatError(caught) };
+            }
+          }),
+        );
+
+        const workspacesByProject = Object.fromEntries(
+          workspaceResults.map((result) => [result.project.id, result.workspaces]),
+        );
+        const projectNodeState = Object.fromEntries(
+          workspaceResults.map((result) => [
+            result.project.id,
+            { loading: false, error: result.error },
+          ]),
+        );
+        const workspaceProjectIds = new Map<string, string>();
+        const workspaces = workspaceResults.flatMap((result) =>
+          result.workspaces.map((workspace) => {
+            workspaceProjectIds.set(workspace.id, result.project.id);
+            return workspace;
+          }),
+        );
+        const resolvedProjectId =
+          projects.some((project) => project.id === nextConfig.projectId.trim())
+            ? nextConfig.projectId.trim()
+            : projects[0]?.id ?? nextConfig.projectId.trim();
+        const resolvedProject =
+          projects.find((project) => project.id === resolvedProjectId) ?? projects[0] ?? null;
+        const projectWorkspaces = workspacesByProject[resolvedProjectId] ?? [];
+        const workspaceId =
+          nextConfig.workspaceId.trim() &&
+          projectWorkspaces.some((workspace) => workspace.id === nextConfig.workspaceId.trim())
+            ? nextConfig.workspaceId.trim()
+            : projectWorkspaces[0]?.id ?? '';
+        const resolvedConfig = {
+          ...nextConfig,
+          tenantId: resolvedProject?.tenant_id || nextConfig.tenantId,
+          projectId: resolvedProjectId,
+          workspaceId,
+        };
         const scopedClient = new DesktopApiClient(resolvedConfig);
         const [messages, tasks, plan] = await Promise.all([
           workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
           workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
           workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
         ]);
+        const conversationResults = await Promise.all(
+          workspaces.map(async (workspace) => {
+            const projectId = workspaceProjectIds.get(workspace.id) ?? resolvedProjectId;
+            const project = projects.find((item) => item.id === projectId);
+            const client = new DesktopApiClient({
+              ...nextConfig,
+              tenantId: project?.tenant_id || nextConfig.tenantId,
+              projectId,
+              workspaceId: workspace.id,
+            });
+            try {
+              const response = await client.listConversations(projectId, workspace.id);
+              return { workspaceId: workspace.id, conversations: response.items, error: null };
+            } catch (caught) {
+              return {
+                workspaceId: workspace.id,
+                conversations: [] as AgentConversation[],
+                error: formatError(caught),
+              };
+            }
+          }),
+        );
+        const conversationsByWorkspace = Object.fromEntries(
+          conversationResults.map((result) => [result.workspaceId, result.conversations]),
+        );
+        const workspaceNodeState = Object.fromEntries(
+          conversationResults.map((result) => [
+            result.workspaceId,
+            { loading: false, error: result.error },
+          ]),
+        );
 
         setConfig(resolvedConfig);
-        setDataset({ workspaces, messages, tasks, plan, sandbox: null });
+        setDataset({
+          workspaces,
+          workspacesByProject,
+          conversationsByWorkspace,
+          nodeState: { projects: projectNodeState, workspaces: workspaceNodeState },
+          messages,
+          tasks,
+          plan,
+          sandbox: null,
+        });
+        if (resolvedProjectId) {
+          setExpandedProjectIds((current) => new Set([...current, resolvedProjectId]));
+        }
+        if (workspaceId) {
+          setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+        }
         setConnection('ready');
         setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       } catch (caught) {
@@ -718,7 +1231,7 @@ export function App() {
         setError(formatConnectionError(caught, nextConfig.apiBaseUrl));
       }
     },
-    [config],
+    [auth.projects, auth.status, config],
   );
 
   const login = async () => {
@@ -756,7 +1269,7 @@ export function App() {
       setLoginPassword('');
 
       if (projectId) {
-        await refreshRuntime(nextConfig);
+        await refreshRuntime(nextConfig, projects);
         applySectionSideEffects('chat');
       } else {
         setDataset(emptyDataset);
@@ -776,6 +1289,7 @@ export function App() {
     setConfig(nextConfig);
     setConnection('idle');
     setAgentConversationSession(null);
+    setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
   };
 
@@ -786,6 +1300,7 @@ export function App() {
     setError(null);
     setSectionBackStack([]);
     setSectionForwardStack([]);
+    setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
     applySectionSideEffects('settings');
     setRuntimeApiKeyFocusSignal((signal) => signal + 1);
@@ -807,38 +1322,186 @@ export function App() {
     setTerminal(null);
     setTerminalInput('');
     setAgentConversationSession(null);
+    setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
     setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
+    setCreatingSessionWorkspaceId(null);
+    setExpandedProjectIds(new Set());
+    setExpandedWorkspaceIds(new Set());
     setActiveSection('workspace');
     setStatusTab('overview');
     terminalProxy.clear();
   };
 
-  const selectWorkspace = (workspaceId: string) => {
-    const nextConfig = { ...config, workspaceId };
+  const selectProject = (projectId: string) => {
+    const project =
+      sidebarProjects.find((item) => item.id === projectId) ??
+      auth.projects.find((item) => item.id === projectId);
+    const workspaces = dataset.workspacesByProject[projectId] ?? [];
+    const workspaceId = workspaces[0]?.id ?? '';
+    const nextConfig = {
+      ...config,
+      tenantId: project?.tenant_id || config.tenantId,
+      projectId,
+      workspaceId,
+    };
     setConfig(nextConfig);
     setAgentConversationSession(null);
+    setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
+    setExpandedProjectIds((current) => new Set([...current, projectId]));
+    if (workspaceId) {
+      setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    }
     void refreshRuntime(nextConfig);
   };
 
-  const createWorkspace = async () => {
+  const selectWorkspace = (workspaceId: string, projectId = config.projectId) => {
+    const project =
+      sidebarProjects.find((item) => item.id === projectId) ??
+      auth.projects.find((item) => item.id === projectId);
+    const nextConfig = {
+      ...config,
+      tenantId: project?.tenant_id || config.tenantId,
+      projectId,
+      workspaceId,
+    };
+    setConfig(nextConfig);
+    setAgentConversationSession(null);
+    setConversationTimeline(emptyConversationTimeline);
+    setAgentTaskSignals([]);
+    setExpandedProjectIds((current) => new Set([...current, projectId]));
+    setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    void refreshRuntime(nextConfig);
+  };
+
+  const selectConversation = (
+    projectId: string,
+    workspaceId: string,
+    conversation: AgentConversation,
+  ) => {
+    const project =
+      sidebarProjects.find((item) => item.id === projectId) ??
+      auth.projects.find((item) => item.id === projectId);
+    const nextConfig = {
+      ...config,
+      tenantId: project?.tenant_id || config.tenantId,
+      projectId,
+      workspaceId,
+    };
+    setConfig(nextConfig);
+    setAgentConversationSession({
+      scopeKey: agentConversationScopeKeyFor(projectId, workspaceId),
+      conversation,
+    });
+    setAgentTaskSignals([]);
+    setExpandedProjectIds((current) => new Set([...current, projectId]));
+    setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    socket.subscribeConversation(conversation.id);
+    applySectionSideEffects('chat');
+    void loadConversationTimeline(conversation, projectId);
+    void refreshRuntime(nextConfig);
+  };
+
+  const createWorkspace = async (projectId = config.projectId) => {
     const name = resolveNewWorkspaceName(newWorkspaceName);
+    const project =
+      sidebarProjects.find((item) => item.id === projectId) ??
+      auth.projects.find((item) => item.id === projectId);
+    const projectTenantId = project?.tenant_id || config.tenantId;
     setCreatingWorkspace(true);
     setError(null);
     try {
-      const created = await api.createWorkspace(name, 'Created from agi-stack Desktop');
-      const nextConfig = { ...config, workspaceId: created.id };
+      const client = new DesktopApiClient({
+        ...config,
+        tenantId: projectTenantId,
+        projectId,
+        workspaceId: '',
+      });
+      const created = await client.createWorkspaceForProject(
+        projectId,
+        name,
+        'Created from agi-stack Desktop',
+        projectTenantId,
+      );
+      const nextConfig = {
+        ...config,
+        tenantId: projectTenantId,
+        projectId,
+        workspaceId: created.id,
+      };
       setConfig(nextConfig);
       setAgentConversationSession(null);
+      setConversationTimeline(emptyConversationTimeline);
       setAgentTaskSignals([]);
       setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
+      setExpandedProjectIds((current) => new Set([...current, projectId]));
+      setExpandedWorkspaceIds((current) => new Set([...current, created.id]));
       applySectionSideEffects('chat');
       await refreshRuntime(nextConfig);
     } catch (caught) {
       setError(formatConnectionError(caught, config.apiBaseUrl));
     } finally {
       setCreatingWorkspace(false);
+    }
+  };
+
+  const createSessionForWorkspace = async (projectId: string, workspaceId: string) => {
+    const project =
+      sidebarProjects.find((item) => item.id === projectId) ??
+      auth.projects.find((item) => item.id === projectId);
+    const workspace = dataset.workspaces.find((item) => item.id === workspaceId);
+    const projectTenantId = project?.tenant_id || config.tenantId;
+    const nextConfig = {
+      ...config,
+      tenantId: projectTenantId,
+      projectId,
+      workspaceId,
+    };
+    const workspaceName = workspaceLabel(workspace);
+    setCreatingSessionWorkspaceId(workspaceId);
+    setError(null);
+    try {
+      const client = new DesktopApiClient(nextConfig);
+      const created = await client.createAgentConversation(
+        `${workspaceName}: New session ${new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        })}`,
+        projectId,
+      );
+      const conversation = await client.updateAgentConversationMode(
+        created.id,
+        { workspace_id: workspaceId },
+        projectId,
+      );
+      setConfig(nextConfig);
+      setAgentConversationSession({
+        scopeKey: agentConversationScopeKeyFor(projectId, workspaceId),
+        conversation,
+      });
+      setDataset((current) => ({
+        ...current,
+        conversationsByWorkspace: {
+          ...current.conversationsByWorkspace,
+          [workspaceId]: [
+            conversation,
+            ...(current.conversationsByWorkspace[workspaceId] ?? []).filter(
+              (item) => item.id !== conversation.id,
+            ),
+          ],
+        },
+      }));
+      setExpandedProjectIds((current) => new Set([...current, projectId]));
+      setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+      socket.subscribeConversation(conversation.id);
+      applySectionSideEffects('chat');
+      void loadConversationTimeline(conversation, projectId);
+      await refreshRuntime(nextConfig);
+    } catch (caught) {
+      setError(formatConnectionError(caught, config.apiBaseUrl));
+    } finally {
+      setCreatingSessionWorkspaceId(null);
     }
   };
 
@@ -849,6 +1512,7 @@ export function App() {
     setCommandQuery('');
     setChatInput('');
     setSelectedTaskId('');
+    setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
     setStatusTab('overview');
     setReviewTab('plan');
@@ -856,7 +1520,7 @@ export function App() {
     setSectionForwardStack([]);
 
     if (showRuntimeConfig && !workspaceDisabledReason) {
-      void createWorkspace();
+      void createWorkspace(config.projectId);
       return;
     }
 
@@ -875,20 +1539,46 @@ export function App() {
     const workspace = dataset.workspaces.find((item) => item.id === config.workspaceId.trim());
     const workspaceLabel = workspace?.name || workspace?.title || 'Desktop workspace';
     const titleSource = firstMessage.length > 42 ? `${firstMessage.slice(0, 39)}...` : firstMessage;
-    const created = await api.createAgentConversation(`${workspaceLabel}: ${titleSource}`);
+    const created = await api.createAgentConversation(
+      `${workspaceLabel}: ${titleSource}`,
+      config.projectId,
+    );
     const conversation = config.workspaceId.trim()
-      ? await api.updateAgentConversationMode(created.id, {
-          workspace_id: config.workspaceId.trim(),
-        })
+      ? await api.updateAgentConversationMode(
+          created.id,
+          {
+            workspace_id: config.workspaceId.trim(),
+          },
+          config.projectId,
+        )
       : created;
     setAgentConversationSession({ scopeKey, conversation });
+    if (config.workspaceId.trim()) {
+      setDataset((current) => ({
+        ...current,
+        conversationsByWorkspace: {
+          ...current.conversationsByWorkspace,
+          [config.workspaceId.trim()]: [
+            conversation,
+            ...(current.conversationsByWorkspace[config.workspaceId.trim()] ?? []).filter(
+              (item) => item.id !== conversation.id,
+            ),
+          ],
+        },
+      }));
+    }
     socket.subscribeConversation(conversation.id);
+    void loadConversationTimeline(conversation, config.projectId);
     return conversation;
   };
 
   const sendMessage = async () => {
     const content = chatInput.trim();
     if (!content) return;
+    if (chatDisabledReason) {
+      setError(chatDisabledReason);
+      return;
+    }
     setSending(true);
     setError(null);
     const signalId = `agent-task-${Date.now()}`;
@@ -926,6 +1616,18 @@ export function App() {
             projectId: config.projectId,
             message: content,
             messageId,
+          });
+          setConversationTimeline((current) => {
+            if (current.conversationId !== conversation.id) return current;
+            const items = mergeTimelineItems(current.items, [
+              optimisticUserTimelineItem(messageId, content),
+            ]);
+            return {
+              ...current,
+              items,
+              firstCursor: timelineCursorFromFirst(items),
+              lastCursor: timelineCursorFromLast(items),
+            };
           });
           if (!queued) {
             const websocketMessage = 'Message saved, but the Agent WebSocket is not connected yet.';
@@ -1035,35 +1737,33 @@ export function App() {
   const memoryProjectId = config.projectId.trim() || 'desktop-local';
   const memoryAuthorId = auth.user?.user_id ?? 'desktop-user';
   const paneStageClassName = 'pane-stage single-stage';
+  const configuredProject = useMemo(
+    () => projectSummaryFromConfig(config),
+    [config.projectId, config.tenantId],
+  );
+  const sidebarProjects = useMemo(() => {
+    if (auth.status === 'signed_in' && auth.projects.length) return auth.projects;
+    return configuredProject ? [configuredProject] : [];
+  }, [auth.projects, auth.status, configuredProject]);
   const selectedWorkspace = useMemo(
     () => dataset.workspaces.find((workspace) => workspace.id === config.workspaceId) ?? null,
     [config.workspaceId, dataset.workspaces],
   );
   const selectedProject = useMemo(
-    () => auth.projects.find((project) => project.id === config.projectId) ?? null,
-    [auth.projects, config.projectId],
+    () =>
+      sidebarProjects.find((project) => project.id === config.projectId) ??
+      auth.projects.find((project) => project.id === config.projectId) ??
+      null,
+    [auth.projects, config.projectId, sidebarProjects],
   );
-  const sidebarProjectLabel = selectedProject?.name || config.projectId.trim() || 'Project';
+  const selectedConversation =
+    agentConversationSession?.scopeKey === agentConversationScopeKey(config)
+      ? agentConversationSession.conversation
+      : null;
   const hasWorkspaceScope = Boolean(config.workspaceId.trim());
   const hasProjectScope = Boolean(config.projectId.trim());
-  const visibleWorkspaces = useMemo(() => {
-    const timestamp = (value: string | undefined) => (value ? Date.parse(value) || 0 : 0);
-    return [...dataset.workspaces].sort((left, right) => {
-      if (left.id === config.workspaceId) return -1;
-      if (right.id === config.workspaceId) return 1;
-      if (sessionGroupMode === 'recent') {
-        return (
-          Math.max(timestamp(right.updated_at), timestamp(right.created_at)) -
-          Math.max(timestamp(left.updated_at), timestamp(left.created_at))
-        );
-      }
-      const leftProject = left.project_id ?? '';
-      const rightProject = right.project_id ?? '';
-      if (leftProject !== rightProject) return leftProject.localeCompare(rightProject);
-      return workspaceLabel(left).localeCompare(workspaceLabel(right));
-    });
-  }, [config.workspaceId, dataset.workspaces, sessionGroupMode]);
   const sessionTitle =
+    selectedConversation?.title ??
     selectedWorkspace?.name ??
     selectedWorkspace?.title ??
     selectedWorkspace?.id ??
@@ -1143,6 +1843,24 @@ export function App() {
   const changeSessionGroupMode = (mode: SessionGroupMode) => {
     setSessionGroupMode(mode);
     setSessionMenuOpen(false);
+  };
+
+  const toggleProject = (projectId: string) => {
+    setExpandedProjectIds((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
+
+  const toggleWorkspace = (workspaceId: string) => {
+    setExpandedWorkspaceIds((current) => {
+      const next = new Set(current);
+      if (next.has(workspaceId)) next.delete(workspaceId);
+      else next.add(workspaceId);
+      return next;
+    });
   };
 
   const applySectionSideEffects = (section: WorkbenchSection) => {
@@ -1419,14 +2137,26 @@ export function App() {
   const renderChatPanel = () => (
     <ChatPanel
       messages={dataset.messages}
+      timelineState={selectedConversation ? conversationTimeline : null}
       agentTaskSignals={agentTaskSignals}
+      sessionTitle={selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined)}
+      scopeLabel={
+        selectedConversation
+          ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
+          : 'Workspace conversation'
+      }
       input={chatInput}
       sending={sending}
       disabledReason={chatDisabledReason}
       activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
       onInputChange={setChatInput}
       onSend={() => void sendMessage()}
-      onRefresh={() => void refreshRuntime()}
+      onRefresh={() =>
+        selectedConversation
+          ? void loadConversationTimeline(selectedConversation, config.projectId)
+          : void refreshRuntime()
+      }
+      onLoadEarlier={() => void loadEarlierTimeline()}
       onWorkflowSelect={selectChatWorkflowTarget}
       onOpenUsagePlan={openUsagePlan}
     />
@@ -2020,18 +2750,31 @@ export function App() {
                 </div>
                 {showRuntimeConfig ? (
                   <WorkspaceDock
-                    workspaces={visibleWorkspaces}
+                    projects={sidebarProjects}
+                    workspacesByProject={dataset.workspacesByProject}
+                    conversationsByWorkspace={dataset.conversationsByWorkspace}
+                    nodeState={dataset.nodeState}
+                    currentProjectId={config.projectId}
                     currentWorkspaceId={config.workspaceId}
-                    projectLabel={sidebarProjectLabel}
+                    currentConversationId={selectedConversation?.id ?? null}
                     groupMode={sessionGroupMode}
-                    messageCount={dataset.messages.length}
-                    taskCount={dataset.tasks.length}
-                    onSelectWorkspace={selectWorkspace}
-                    onOpenChat={() => switchSection('chat')}
+                    expandedProjectIds={expandedProjectIds}
+                    expandedWorkspaceIds={expandedWorkspaceIds}
+                    onToggleProject={toggleProject}
+                    onToggleWorkspace={toggleWorkspace}
+                    onSelectProject={selectProject}
+                    onSelectWorkspace={(projectId, workspaceId) =>
+                      selectWorkspace(workspaceId, projectId)
+                    }
+                    onSelectConversation={selectConversation}
                     onRefresh={() => void refreshRuntime()}
                     actionDisabledReason={workspaceDisabledReason}
                     creatingWorkspace={creatingWorkspace}
-                    onCreateWorkspace={startNewSession}
+                    creatingSessionWorkspaceId={creatingSessionWorkspaceId}
+                    onCreateWorkspace={(projectId) => void createWorkspace(projectId)}
+                    onCreateSession={(projectId, workspaceId) =>
+                      void createSessionForWorkspace(projectId, workspaceId)
+                    }
                   />
                 ) : (
                   <SignedOutSessionTree mode={sessionGroupMode} onNewSession={startNewSession} />
@@ -2177,6 +2920,26 @@ function SignedOutSessionTree({
 
 function workspaceLabel(workspace: { id: string; name?: string; title?: string } | undefined): string {
   return workspace?.name ?? workspace?.title ?? workspace?.id ?? 'No workspace';
+}
+
+function projectSummaryFromConfig(config: DesktopRuntimeConfig): ProjectSummary | null {
+  const projectId = config.projectId.trim();
+  if (!projectId) return null;
+  return {
+    id: projectId,
+    tenant_id: config.tenantId.trim(),
+    name: projectId,
+  };
+}
+
+function resolveSidebarProjects(
+  config: DesktopRuntimeConfig,
+  authStatus: AuthState['status'],
+  projects: ProjectSummary[],
+): ProjectSummary[] {
+  if (authStatus === 'signed_in' && projects.length) return projects;
+  const configured = projectSummaryFromConfig(config);
+  return configured ? [configured] : [];
 }
 
 function SignedOutPanel({

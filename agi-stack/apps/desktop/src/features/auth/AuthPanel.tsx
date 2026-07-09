@@ -54,12 +54,14 @@ export function AuthPanel({
   const signingIn = auth.status === 'signing_in';
   const localDevBase = isLocalDevBase(config.apiBaseUrl);
   const [internalLoginOpen, setInternalLoginOpen] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
   const loginOpen = controlledLoginOpen ?? internalLoginOpen;
   const setLoginOpen = onLoginOpenChange ?? setInternalLoginOpen;
   const emailInputRef = useRef<HTMLInputElement>(null);
   const loginModalRef = useRef<HTMLElement>(null);
   const loginTriggerRef = useRef<HTMLElement | null>(null);
   const wasLoginOpenRef = useRef(false);
+  const feedbackStatusTimeoutRef = useRef<number | null>(null);
   const openLogin = (trigger?: HTMLElement | null) => {
     loginTriggerRef.current =
       trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -79,6 +81,40 @@ export function AuthPanel({
   const applyLocalDevPreset = (apiBaseUrl: string) => {
     onApiBaseUrlChange(apiBaseUrl);
     fillLocalDevAdmin();
+  };
+  const accountLabel = auth.user?.name || auth.user?.email || 'Signed in';
+  const accountScope = `${selectedTenant?.name ?? config.tenantId ?? '-'} / ${
+    config.workspaceId || 'workspace -'
+  }`;
+  const copyFeedbackContext = async () => {
+    const feedbackContext = [
+      'agi-stack Desktop feedback',
+      `Account: ${accountLabel}`,
+      `Tenant: ${selectedTenant?.name ?? config.tenantId ?? '-'}`,
+      `Project: ${selectedProject?.name ?? config.projectId ?? '-'}`,
+      `Workspace: ${config.workspaceId || '-'}`,
+      `Server: ${config.apiBaseUrl}`,
+    ].join('\n');
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(feedbackContext);
+      } else {
+        copyTextFallback(feedbackContext);
+      }
+      setFeedbackStatus('Feedback details copied');
+    } catch {
+      copyTextFallback(feedbackContext);
+      setFeedbackStatus('Feedback details copied');
+    }
+
+    if (feedbackStatusTimeoutRef.current) {
+      window.clearTimeout(feedbackStatusTimeoutRef.current);
+    }
+    feedbackStatusTimeoutRef.current = window.setTimeout(() => {
+      setFeedbackStatus(null);
+      feedbackStatusTimeoutRef.current = null;
+    }, 2200);
   };
 
   useEffect(() => {
@@ -115,6 +151,15 @@ export function AuthPanel({
       setLoginOpen(false);
     }
   }, [auth.status]);
+
+  useEffect(
+    () => () => {
+      if (feedbackStatusTimeoutRef.current) {
+        window.clearTimeout(feedbackStatusTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!loginOpen) return;
@@ -330,7 +375,7 @@ export function AuthPanel({
           </div>
           <div className="account-copy">
             <Text size="2" weight="bold">
-              {auth.user?.name || auth.user?.email || 'Signed in'}
+              {accountLabel}
             </Text>
             <Text size="1" color="gray">
               {selectedProject?.name ?? (config.projectId || auth.user?.email)}
@@ -345,6 +390,16 @@ export function AuthPanel({
             <IconButton
               size="1"
               variant="ghost"
+              color={feedbackStatus ? 'cyan' : 'gray'}
+              aria-label="Share feedback"
+              title="Share feedback"
+              onClick={() => void copyFeedbackContext()}
+            >
+              <ChatBubbleIcon />
+            </IconButton>
+            <IconButton
+              size="1"
+              variant="ghost"
               color="gray"
               aria-label="Settings"
               onClick={onOpenSettings}
@@ -356,8 +411,13 @@ export function AuthPanel({
             </IconButton>
           </div>
         </div>
-        <Text size="1" color="gray" className="account-scope">
-          {selectedTenant?.name ?? config.tenantId ?? '-'} / {config.workspaceId || 'workspace -'}
+        <Text
+          size="1"
+          color={feedbackStatus ? 'cyan' : 'gray'}
+          className="account-scope"
+          aria-live="polite"
+        >
+          {feedbackStatus ?? accountScope}
         </Text>
       </section>
     );
@@ -442,4 +502,16 @@ function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(selectors)).filter(
     (element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'),
   );
+}
+
+function copyTextFallback(value: string) {
+  const textArea = document.createElement('textarea');
+  textArea.value = value;
+  textArea.setAttribute('readonly', '');
+  textArea.style.position = 'fixed';
+  textArea.style.top = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.select();
+  document.execCommand('copy');
+  textArea.remove();
 }
