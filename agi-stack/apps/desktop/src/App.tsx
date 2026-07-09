@@ -1991,6 +1991,7 @@ export function App() {
                     workspaces={visibleWorkspaces}
                     currentWorkspaceId={config.workspaceId}
                     projectLabel={sidebarProjectLabel}
+                    groupMode={sessionGroupMode}
                     messageCount={dataset.messages.length}
                     taskCount={dataset.tasks.length}
                     onSelectWorkspace={selectWorkspace}

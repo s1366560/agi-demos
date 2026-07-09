@@ -362,6 +362,7 @@ pub fn run() {
         .setup(|app| {
             let core = open_app_data_core(app.handle())?;
             app.manage(core);
+            ensure_main_window(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -407,10 +408,9 @@ mod tests {
 
     #[test]
     fn default_capability_allows_drag_regions() {
-        let capability: serde_json::Value = serde_json::from_str(include_str!(
-            "../capabilities/default.json"
-        ))
-        .expect("valid default capability");
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json"))
+                .expect("valid default capability");
         let windows = capability["windows"].as_array().expect("windows array");
         let permissions = capability["permissions"]
             .as_array()

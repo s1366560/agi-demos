@@ -120,6 +120,12 @@
 - Changed successful workspace/session creation to land directly in Chat so a
   newly created session is immediately ready for Agent messages instead of
   detouring through the Workspace overview.
+- Updated the signed-in Sessions root label to follow the grouping mode:
+  project grouping shows the project root, while `Recent first` shows `Recent
+  sessions` with the selected project context.
+- Ensured the Tauri main window is also created during setup, leaving
+  `RunEvent::Ready` and macOS reopen handling as fallback window restoration
+  paths.
 
 ### Validation
 
@@ -227,7 +233,12 @@
   project root + `New session in 默认项目` + child sessions, a workspace message
   creates an `Agent task Accepted` card, and a newly created session also lands
   in Chat before accepting its first task message.
+- Computer Use capture of the rebuilt release `.app` after the grouping-label
+  fix confirms a clean release launch produces one native window, login reaches
+  Chat, switching Session grouping to `Recent first` changes the root to
+  `Recent sessions 50 sessions in 默认项目`, and the recent list remains usable.
 - `pnpm build`
+- `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
 - `make desktop-bundle-smoke`
 - Local login/workspace/conversation/WS smoke against `127.0.0.1:8000`

@@ -13,6 +13,7 @@ type WorkspaceDockProps = {
   workspaces: WorkspaceSummary[];
   currentWorkspaceId: string;
   projectLabel: string;
+  groupMode: 'project' | 'recent';
   messageCount: number;
   taskCount: number;
   actionDisabledReason: string | null;
@@ -27,6 +28,7 @@ export function WorkspaceDock({
   workspaces,
   currentWorkspaceId,
   projectLabel,
+  groupMode,
   messageCount,
   taskCount,
   actionDisabledReason,
@@ -39,6 +41,9 @@ export function WorkspaceDock({
   const selected = workspaces.find((workspace) => workspace.id === currentWorkspaceId);
   const createSessionDisabled = Boolean(actionDisabledReason) || creatingWorkspace;
   const sessionCountLabel = `${workspaces.length} ${workspaces.length === 1 ? 'session' : 'sessions'}`;
+  const rootLabel = groupMode === 'recent' ? 'Recent sessions' : projectLabel;
+  const rootDetail =
+    groupMode === 'recent' ? `${sessionCountLabel} in ${projectLabel}` : sessionCountLabel;
 
   return (
     <aside className="workspace-dock workspace-session-tree">
@@ -91,16 +96,20 @@ export function WorkspaceDock({
             <span className="dock-leading">
               <ChevronDownIcon aria-hidden />
               <span>
-                <strong>{projectLabel}</strong>
+                <strong>{rootLabel}</strong>
                 <Text size="1" color="gray">
-                  {sessionCountLabel}
+                  {rootDetail}
                 </Text>
               </span>
             </span>
             <Button
               size="1"
               variant="ghost"
-              aria-label={`Refresh sessions in ${projectLabel}`}
+              aria-label={
+                groupMode === 'recent'
+                  ? `Refresh recent sessions in ${projectLabel}`
+                  : `Refresh sessions in ${projectLabel}`
+              }
               onClick={onRefresh}
               disabled={Boolean(actionDisabledReason)}
             >
