@@ -136,6 +136,13 @@
 - Changed the signed-in Chat composer to submit through a real form. `Enter`
   now sends the task, `Shift+Enter` preserves multiline input, and the send
   button uses the same guarded submit path.
+- Fixed Agent task status attribution for multiple tasks in the same
+  conversation. Socket updates now match `message_id` when present and otherwise
+  update only the latest matching task card, preventing a later conversation
+  error from flipping older accepted cards to `Needs attention`.
+- Broadened Agent socket error parsing so nested `payload`, `data`, or `error`
+  objects can surface their concrete message in the task card instead of only a
+  generic error label.
 
 ### Validation
 
@@ -257,6 +264,13 @@
   `Chats` -> `New chat` -> project root -> `New session in 默认项目`, `New chat`
   creates a fresh workspace and lands in Chat, and keyboard entry followed by
   `Enter` creates a user message plus an `Agent task Accepted` card.
+- Computer Use follow-up reproduced that the send button path submits a second
+  workspace message, but a later Agent socket `error` event flipped both cards
+  in the same conversation to `Needs attention`. The follow-up fix scopes
+  socket status updates to the exact `message_id` or the latest same-conversation
+  card. Rebuilt release verification was limited by Computer Use returning
+  `cgWindowNotFound` after the app restart, while the release process remained
+  alive.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`

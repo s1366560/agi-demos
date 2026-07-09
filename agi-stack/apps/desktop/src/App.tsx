@@ -251,6 +251,7 @@ function agentTaskUpdateFromSocketEvent(
   event: unknown,
 ): null | {
   conversationId: string;
+  messageId?: string;
   status: AgentTaskSignalStatus;
   detail: string;
   eventType: string;
@@ -263,10 +264,12 @@ function agentTaskUpdateFromSocketEvent(
   const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type') ?? 'event';
   const action = readStringField(payload, 'action');
   const eventType = action ? `${type}:${action}` : type;
+  const messageId = socketMessageId(payload);
 
   if (type === 'ack' && action === 'send_message') {
     return {
       conversationId,
+      messageId,
       status: 'acknowledged',
       detail: 'Agent acknowledged the task over WebSocket.',
       eventType,
@@ -276,6 +279,7 @@ function agentTaskUpdateFromSocketEvent(
   if (type === 'user_message' || type === 'message') {
     return {
       conversationId,
+      messageId,
       status: 'acknowledged',
       detail: 'Agent conversation received the task message.',
       eventType,
@@ -286,6 +290,7 @@ function agentTaskUpdateFromSocketEvent(
     const errorDetail = socketErrorDetail(payload);
     return {
       conversationId,
+      messageId,
       status: 'failed',
       detail: errorDetail
         ? `Agent reported an error for this task: ${errorDetail}`
@@ -305,9 +310,27 @@ function socketErrorDetail(payload: Record<string, unknown>): string | undefined
     readStringField(payload, 'reason');
   if (direct) return direct;
 
-  const nested = payload.payload;
-  if (nested && typeof nested === 'object') {
-    return socketErrorDetail(nested as Record<string, unknown>);
+  for (const key of ['payload', 'data', 'error', 'detail', 'message', 'reason']) {
+    const nested = payload[key];
+    if (nested && typeof nested === 'object') {
+      const nestedDetail = socketErrorDetail(nested as Record<string, unknown>);
+      if (nestedDetail) return nestedDetail;
+    }
+  }
+
+  return undefined;
+}
+
+function socketMessageId(payload: Record<string, unknown>): string | undefined {
+  const direct = readStringField(payload, 'message_id') ?? readStringField(payload, 'messageId');
+  if (direct) return direct;
+
+  for (const key of ['message', 'payload', 'data']) {
+    const nested = payload[key];
+    if (nested && typeof nested === 'object') {
+      const nestedId = socketMessageId(nested as Record<string, unknown>);
+      if (nestedId) return nestedId;
+    }
   }
 
   return undefined;
@@ -589,20 +612,37 @@ export function App() {
     const update = agentTaskUpdateFromSocketEvent(socket.events[0]);
     if (!update) return;
     setAgentTaskSignals((current) => {
-      let changed = false;
-      const next = current.map((signal) => {
-        if (signal.conversationId !== update.conversationId || signal.status === 'failed') {
-          return signal;
+      const matchesConversation = (signal: AgentTaskSignal) =>
+        signal.conversationId === update.conversationId && signal.status !== 'failed';
+      const exactIndex = update.messageId
+        ? current.findIndex(
+            (signal) => matchesConversation(signal) && signal.messageId === update.messageId,
+          )
+        : -1;
+      let targetIndex = exactIndex;
+      if (targetIndex < 0) {
+        for (let index = current.length - 1; index >= 0; index -= 1) {
+          const signal = current[index];
+          if (signal && matchesConversation(signal)) {
+            targetIndex = index;
+            break;
+          }
         }
-        changed = true;
-        return {
-          ...signal,
-          status: update.status,
-          detail: update.detail,
-          eventType: update.eventType,
-        };
-      });
-      return changed ? next : current;
+      }
+
+      if (targetIndex < 0) return current;
+
+      return current.map((signal, index) =>
+        index === targetIndex
+          ? {
+              ...signal,
+              messageId: update.messageId ?? signal.messageId,
+              status: update.status,
+              detail: update.detail,
+              eventType: update.eventType,
+            }
+          : signal,
+      );
     });
   }, [socket.events]);
 
