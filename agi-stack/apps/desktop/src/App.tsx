@@ -1302,6 +1302,10 @@ export function App() {
     selectWorkflowTarget('pull');
   };
 
+  const openUsagePlan = () => {
+    switchSection('settings');
+  };
+
   const openOtherApps = () => {
     openCommandPalette();
   };
@@ -1423,6 +1427,7 @@ export function App() {
       onSend={() => void sendMessage()}
       onRefresh={() => void refreshRuntime()}
       onWorkflowSelect={selectChatWorkflowTarget}
+      onOpenUsagePlan={openUsagePlan}
     />
   );
 
@@ -1647,6 +1652,13 @@ export function App() {
             </Badge>
           </header>
           <div className="settings-content">
+            <UsagePlanPanel
+              accountLabel={auth.user?.email ?? authStatusLabel}
+              planLabel={auth.status === 'signed_in' ? 'Copilot Max' : 'Local development'}
+              creditsUsedLabel={
+                auth.status === 'signed_in' ? '8 AI credits used' : 'Sign in to view usage'
+              }
+            />
             <RuntimeConfigPanel
               config={config}
               connection={connection}
@@ -3375,5 +3387,70 @@ function SettingMetric({ label, value }: { label: string; value: string }) {
         {value}
       </Text>
     </div>
+  );
+}
+
+function UsagePlanPanel({
+  accountLabel,
+  planLabel,
+  creditsUsedLabel,
+}: {
+  accountLabel: string;
+  planLabel: string;
+  creditsUsedLabel: string;
+}) {
+  return (
+    <section className="usage-plan-panel" aria-labelledby="usage-plan-heading">
+      <div className="usage-plan-header">
+        <div>
+          <Text size="1" color="gray">
+            Accounts /
+          </Text>
+          <Heading id="usage-plan-heading" as="h3" size="3">
+            Usage & Plan
+          </Heading>
+        </div>
+        <Badge color="gray" variant="soft">
+          100%
+        </Badge>
+      </div>
+      <div className="usage-account-card">
+        <div className="account-avatar" aria-hidden>
+          {accountLabel.slice(0, 1).toUpperCase()}
+        </div>
+        <div className="usage-account-copy">
+          <Text size="2" weight="bold">
+            {accountLabel}
+          </Text>
+          <Text size="1" color="gray">
+            Default
+          </Text>
+        </div>
+      </div>
+      <div className="usage-plan-row">
+        <Text size="1" color="gray">
+          Plan
+        </Text>
+        <Text size="2">{planLabel}</Text>
+      </div>
+      <div className="usage-plan-row">
+        <Text size="1" color="gray">
+          AI credits
+        </Text>
+        <Text size="2">100% quota used</Text>
+      </div>
+      <div className="usage-plan-meter" aria-label="100% quota used">
+        <span />
+      </div>
+      <Text size="1" color="gray">
+        AI credits are consumed based on model and token usage.
+      </Text>
+      <div className="usage-plan-row">
+        <Text size="1" color="gray">
+          Additional usage
+        </Text>
+        <Text size="2">{creditsUsedLabel}</Text>
+      </div>
+    </section>
   );
 }

@@ -26,6 +26,7 @@ type ChatPanelProps = {
   onSend: () => void;
   onRefresh: () => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
+  onOpenUsagePlan: () => void;
 };
 
 export type ChatWorkflowTarget = 'changes' | 'pull' | 'plan' | 'background' | 'artifacts';
@@ -53,6 +54,7 @@ export function ChatPanel({
   onSend,
   onRefresh,
   onWorkflowSelect,
+  onOpenUsagePlan,
 }: ChatPanelProps) {
   const disabled = Boolean(disabledReason);
   const canSend = !disabled && !sending && Boolean(input.trim());
@@ -195,11 +197,15 @@ export function ChatPanel({
         <Flex align="center" justify="between" className="chat-composer-footer">
           <ComposerControls disabledHint={disabledReason} modelLabel="Claude Fable 5 · 1M" />
           <Flex align="center" gap="2" className="composer-right-actions">
-            <span
-              className={`composer-status-dot ${disabledReason ? 'is-blocked' : 'is-connected'}`}
-              role="status"
+            <button
+              className={`composer-status-button composer-status-dot ${
+                disabledReason ? 'is-blocked' : 'is-connected'
+              }`}
+              type="button"
               aria-label={disabledReason ?? 'AI credits quota: 100% used'}
+              aria-haspopup="dialog"
               title={disabledReason ?? 'AI credits quota: 100% used'}
+              onClick={onOpenUsagePlan}
             />
             <Button
               size="2"

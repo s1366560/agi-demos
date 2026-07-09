@@ -331,6 +331,10 @@
   `Add folder...` under `Add files or folders`; this follow-up applies the same
   two-item context menu to the desktop composer and removes the extra
   `Reference workspace` item.
+- Computer Use comparison of the Copilot `AI credits quota: 100% used` control
+  shows it opens Accounts / Usage & Plan; this follow-up changes the Chat
+  composer quota status from a static dot into a pop-up button that opens a
+  matching Usage & Plan settings section.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
