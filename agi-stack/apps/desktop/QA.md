@@ -153,6 +153,9 @@
 - Aligned the signed-in Chat composer's model selector with the signed-out
   composer and GitHub Copilot reference by showing `Claude Fable 5 · 1M`
   instead of the generic `Local model` label.
+- Aligned the signed-in Chat composer's empty prompt with the GitHub Copilot
+  task-entry copy so logged-in users see `Describe a task to run autonomously`
+  instead of the generic `Message this workspace` placeholder.
 
 ### Validation
 
@@ -303,6 +306,14 @@
 - Rebuilt release `.app` verification confirms login reaches Chat, the signed-in
   model selector now announces `Model selector, Claude Fable 5 · 1M`, and
   sending `model label regression 1783580` creates a user message plus an
+  `Agent task Accepted` card.
+- Computer Use comparison of GitHub Copilot.app confirms the authenticated
+  message input placeholder says `Describe a task to run autonomously. Type /
+  for commands, @ for files, or # for issues...`; this follow-up applies the
+  same task-oriented empty-state copy to the signed-in Chat composer.
+- Rebuilt release `.app` verification confirms login reaches Chat, the signed-in
+  empty input announces the task-oriented Copilot placeholder, and sending
+  `placeholder regression 1783581` creates a user message plus an
   `Agent task Accepted` card.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`

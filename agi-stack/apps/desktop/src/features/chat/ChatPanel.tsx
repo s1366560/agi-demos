@@ -187,7 +187,10 @@ export function ChatPanel({
           value={input}
           disabled={disabled}
           onChange={(event) => onInputChange(event.target.value)}
-          placeholder={disabledReason ?? 'Message this workspace...'}
+          placeholder={
+            disabledReason ??
+            'Describe a task to run autonomously. Type / for commands, @ for files, or # for issues...'
+          }
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
