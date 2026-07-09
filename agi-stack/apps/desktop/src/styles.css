@@ -1839,11 +1839,25 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   gap: 8px;
 }
 
-.composer-status {
-  max-width: min(260px, 28vw);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.composer-status-dot {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.24),
+    0 0 0 4px rgba(148, 163, 184, 0.05);
+}
+
+.composer-status-dot.is-connected {
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.composer-status-dot.is-blocked {
+  background: rgba(245, 158, 11, 0.58);
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 191, 36, 0.46),
+    0 0 0 4px rgba(245, 158, 11, 0.08);
 }
 
 .lane-grid {
@@ -3309,10 +3323,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
 
   .chat-composer-footer .composer-right-actions {
     justify-content: space-between;
-  }
-
-  .composer-status {
-    max-width: none;
   }
 
   .composer-control-tray {

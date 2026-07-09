@@ -147,6 +147,9 @@
   up-arrow in both signed-out and signed-in composers, matching the GitHub
   Copilot message input affordance more closely while leaving the send action
   semantics unchanged.
+- Replaced the signed-in Chat composer's visible `Connected` footer text with a
+  fixed-size status dot that keeps the accessibility label and tooltip while
+  matching GitHub Copilot's compact message-input control cluster more closely.
 
 ### Validation
 
@@ -282,6 +285,14 @@
   Chat, `New chat` creates a fresh workspace, clicking the green up-arrow send
   button creates a user message plus an `Agent task Accepted` card, and the
   signed-in screenshot shows the Copilot-like up-arrow composer affordance.
+- Computer Use comparison of GitHub Copilot.app and the release desktop client
+  found the signed-in Chat composer still exposed `Connected` as visible footer
+  text where Copilot uses a compact status/control cluster; this follow-up
+  removes the text from the visual layout without changing send behavior.
+- Rebuilt release `.app` verification confirms login reaches Chat, the composer
+  visually shows only the compact status dot next to the green up-arrow send
+  button, and sending `compact status dot regression 1783579` creates a user
+  message plus an `Agent task Accepted` card.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`

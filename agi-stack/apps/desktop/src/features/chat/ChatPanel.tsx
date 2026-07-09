@@ -198,9 +198,12 @@ export function ChatPanel({
         <Flex align="center" justify="between" className="chat-composer-footer">
           <ComposerControls disabledHint={disabledReason} />
           <Flex align="center" gap="2" className="composer-right-actions">
-            <Text size="1" color="gray" className="composer-status">
-              {disabledReason ?? 'Connected'}
-            </Text>
+            <span
+              className={`composer-status-dot ${disabledReason ? 'is-blocked' : 'is-connected'}`}
+              role="status"
+              aria-label={disabledReason ?? 'Connected'}
+              title={disabledReason ?? 'Connected'}
+            />
             <Button
               size="2"
               color="green"
