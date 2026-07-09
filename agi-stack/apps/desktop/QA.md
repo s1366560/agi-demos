@@ -114,6 +114,12 @@
 - Changed successful password login with a project to land directly in Chat,
   matching the GitHub Copilot session flow where the user can immediately
   message the Agent and start a task instead of first seeing a dashboard.
+- Replaced the signed-in Sessions sidebar's flat workspace list with a
+  Copilot-like hierarchy: `Chats`, the selected project root, `New session in
+  <project>`, and project-scoped session children.
+- Changed successful workspace/session creation to land directly in Chat so a
+  newly created session is immediately ready for Agent messages instead of
+  detouring through the Workspace overview.
 
 ### Validation
 
@@ -216,11 +222,18 @@
   confirms the native sign-in dialog opens with `Login` enabled, successful
   login lands directly in Chat, and sending a native release message creates an
   `Agent task Accepted` card in the conversation timeline.
+- Computer Use capture of the rebuilt release `.app` after the signed-in
+  session-tree fix confirms login lands in Chat, Sessions renders as `Chats` +
+  project root + `New session in 默认项目` + child sessions, a workspace message
+  creates an `Agent task Accepted` card, and a newly created session also lands
+  in Chat before accepting its first task message.
+- `pnpm build`
+- `make desktop-bundle`
+- `make desktop-bundle-smoke`
 - Local login/workspace/conversation/WS smoke against `127.0.0.1:8000`
 - `git diff --check -- agi-stack/apps/desktop`
-- `mcp__gitnexus.detect_changes({scope: "all"})` reports low risk with no
-  affected execution processes; the changed-symbol list also includes unrelated
-  pre-existing Rust/server worktree changes.
+- `mcp__gitnexus.detect_changes({scope: "staged"})` reports low risk with no
+  changed symbols or affected execution processes for the staged desktop files.
 
 ### Open
 

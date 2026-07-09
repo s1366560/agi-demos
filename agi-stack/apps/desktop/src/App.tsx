@@ -791,7 +791,7 @@ export function App() {
       setAgentConversationSession(null);
       setAgentTaskSignals([]);
       setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
-      applySectionSideEffects('workspace');
+      applySectionSideEffects('chat');
       await refreshRuntime(nextConfig);
     } catch (caught) {
       setError(formatConnectionError(caught, config.apiBaseUrl));
@@ -997,6 +997,11 @@ export function App() {
     () => dataset.workspaces.find((workspace) => workspace.id === config.workspaceId) ?? null,
     [config.workspaceId, dataset.workspaces],
   );
+  const selectedProject = useMemo(
+    () => auth.projects.find((project) => project.id === config.projectId) ?? null,
+    [auth.projects, config.projectId],
+  );
+  const sidebarProjectLabel = selectedProject?.name || config.projectId.trim() || 'Project';
   const hasWorkspaceScope = Boolean(config.workspaceId.trim());
   const hasProjectScope = Boolean(config.projectId.trim());
   const visibleWorkspaces = useMemo(() => {
@@ -1985,15 +1990,15 @@ export function App() {
                   <WorkspaceDock
                     workspaces={visibleWorkspaces}
                     currentWorkspaceId={config.workspaceId}
+                    projectLabel={sidebarProjectLabel}
                     messageCount={dataset.messages.length}
                     taskCount={dataset.tasks.length}
                     onSelectWorkspace={selectWorkspace}
+                    onOpenChat={() => switchSection('chat')}
                     onRefresh={() => void refreshRuntime()}
                     actionDisabledReason={workspaceDisabledReason}
-                    newWorkspaceName={newWorkspaceName}
                     creatingWorkspace={creatingWorkspace}
-                    onNewWorkspaceNameChange={setNewWorkspaceName}
-                    onCreateWorkspace={() => void createWorkspace()}
+                    onCreateWorkspace={startNewSession}
                   />
                 ) : (
                   <SignedOutSessionTree mode={sessionGroupMode} onNewSession={startNewSession} />
