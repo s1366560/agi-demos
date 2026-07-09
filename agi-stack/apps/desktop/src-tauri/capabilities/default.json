@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capability: lets the main window invoke the app's own commands.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

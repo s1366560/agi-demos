@@ -8,4 +8,5 @@ interface Window {
       invoke?: TauriInvoke;
     };
   };
+  __TAURI_INTERNALS__?: unknown;
 }

@@ -330,6 +330,7 @@ dependencies = [
  "sha2 0.10.9",
  "tokio",
  "tokio-tungstenite",
+ "tower-http",
  "url",
  "uuid",
  "zip",

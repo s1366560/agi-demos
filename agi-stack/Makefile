@@ -15,8 +15,11 @@ export PATH := $(HOME)/.cargo/bin:$(PATH)
 # ---- 可覆盖变量 ----
 CARGO        ?= cargo
 RUSTUP       ?= rustup
+PNPM         ?= pnpm
 PROFILE      ?= release
 ADDR         ?= 127.0.0.1:8088
+DEV_ENV      ?= ../.env
+RUN_SERVER_DEV_STUB ?= 0
 # Android NDK(本机默认;生产建议 cargo-ndk)。覆盖:make android NDK=/path/to/ndk
 NDK          ?= $(HOME)/Library/Android/sdk/ndk/30.0.14904198
 ANDROID_TARGET ?= aarch64-linux-android
@@ -27,7 +30,7 @@ WASM_BROWSER_OUT ?= pkg-web
 BENCH_REPORT ?= target/bench/scorecard.json
 BENCH_BASELINE ?=
 BENCH_REGRESSION_TOLERANCE_PCT ?= 20
-TAURI_CLI ?= cargo tauri
+TAURI_CLI ?= $(PNPM) dlx @tauri-apps/cli
 TAURI_BUILD_ARGS ?=
 
 UNAME_S := $(shell uname -s)
@@ -42,7 +45,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop run-desktop desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -71,8 +74,27 @@ server: ## 云端:原生 axum 服务器 release 二进制(~5.5 MB)
 	$(CARGO) build -p agistack-server --profile $(PROFILE)
 	@echo "==> 产物:target/$(PROFILE)/agistack-server"
 
-run-server: ## 启动服务器(ADDR= 覆盖监听地址,默认 127.0.0.1:8088)
-	AGISTACK_ADDR=$(ADDR) $(CARGO) run -p agistack-server
+run-server: ## 启动服务器(默认读取 ../.env 拼接 DATABASE_URL; RUN_SERVER_DEV_STUB=1 用内存 stub)
+	@set -a; \
+	if [ -f "$(DEV_ENV)" ]; then . "$(DEV_ENV)"; fi; \
+	if [ "$(RUN_SERVER_DEV_STUB)" = "1" ]; then \
+		DATABASE_URL=""; \
+	else \
+		if [ -z "$$DATABASE_URL" ]; then \
+			POSTGRES_HOST="$${POSTGRES_HOST:-localhost}"; \
+			POSTGRES_PORT="$${POSTGRES_PORT:-5432}"; \
+			POSTGRES_DB="$${POSTGRES_DB:-memstack}"; \
+			POSTGRES_USER="$${POSTGRES_USER:-postgres}"; \
+			POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-password}"; \
+			DATABASE_URL="postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@$${POSTGRES_HOST}:$${POSTGRES_PORT}/$${POSTGRES_DB}"; \
+		fi; \
+	fi; \
+	if [ -n "$$DATABASE_URL" ]; then \
+		echo "==> DATABASE_URL configured for $${POSTGRES_HOST:-localhost}:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB:-memstack}"; \
+	else \
+		echo "==> DATABASE_URL unset; using in-memory dev stub"; \
+	fi; \
+	AGISTACK_ADDR=$(ADDR) DATABASE_URL="$$DATABASE_URL" $(CARGO) run -p agistack-server
 
 # ---- Web(浏览器 WASM) ----
 wasm-web: ## Web:wasm-bindgen 浏览器包 + node 冒烟(core-as-guest,~124 KB)
@@ -89,8 +111,11 @@ desktop: ## 桌面:Tauri 外壳全树编译 + 无头命令单测(故意排除出
 	cd apps/desktop/src-tauri && $(CARGO) build && $(CARGO) test
 	@echo "==> 桌面外壳编译链接通过(完整 bundle 用 tauri-cli)"
 
+run-desktop: ## 启动桌面 App(Tauri dev 会拉起 Vite 并创建原生窗口)
+	cd apps/desktop && $(TAURI_CLI) dev
+
 desktop-bundle: ## 桌面:完整 Tauri bundle(需 tauri-cli;CI macOS job 上传产物)
-	cd apps/desktop/src-tauri && $(TAURI_CLI) build $(TAURI_BUILD_ARGS)
+	cd apps/desktop && $(TAURI_CLI) build $(TAURI_BUILD_ARGS)
 	@echo "==> 桌面 bundle:apps/desktop/src-tauri/target/release/bundle/"
 
 desktop-bundle-smoke: ## 桌面:检查 Tauri bundle 产物目录、macOS .app 主二进制与标识
