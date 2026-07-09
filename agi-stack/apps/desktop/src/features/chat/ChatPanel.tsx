@@ -196,7 +196,7 @@ export function ChatPanel({
           }}
         />
         <Flex align="center" justify="between" className="chat-composer-footer">
-          <ComposerControls disabledHint={disabledReason} />
+          <ComposerControls disabledHint={disabledReason} modelLabel="Claude Fable 5 · 1M" />
           <Flex align="center" gap="2" className="composer-right-actions">
             <span
               className={`composer-status-dot ${disabledReason ? 'is-blocked' : 'is-connected'}`}

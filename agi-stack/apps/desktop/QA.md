@@ -150,6 +150,9 @@
 - Replaced the signed-in Chat composer's visible `Connected` footer text with a
   fixed-size status dot that keeps the accessibility label and tooltip while
   matching GitHub Copilot's compact message-input control cluster more closely.
+- Aligned the signed-in Chat composer's model selector with the signed-out
+  composer and GitHub Copilot reference by showing `Claude Fable 5 · 1M`
+  instead of the generic `Local model` label.
 
 ### Validation
 
@@ -293,6 +296,14 @@
   visually shows only the compact status dot next to the green up-arrow send
   button, and sending `compact status dot regression 1783579` creates a user
   message plus an `Agent task Accepted` card.
+- Computer Use comparison found the signed-in Chat model selector still showed
+  `Local model` while both the signed-out composer and GitHub Copilot reference
+  show a concrete model name; this follow-up keeps the authenticated composer on
+  `Claude Fable 5 · 1M`.
+- Rebuilt release `.app` verification confirms login reaches Chat, the signed-in
+  model selector now announces `Model selector, Claude Fable 5 · 1M`, and
+  sending `model label regression 1783580` creates a user message plus an
+  `Agent task Accepted` card.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
