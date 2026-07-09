@@ -15,6 +15,7 @@ use agistack_plugin_host::{ControlPlane, DataPlaneReconciler, PluginHost};
 use super::*;
 use crate::admin_access::{DevAdminAccessService, SharedAdminAccess};
 use crate::admin_dlq_api::{DevAdminDlqService, SharedAdminDlq};
+use crate::agent_conversations_api::{DevAgentConversationService, SharedAgentConversations};
 use crate::agent_events_api::{DevAgentEventReplayService, SharedAgentEvents};
 use crate::artifacts_api::{DevArtifactService, SharedArtifacts};
 use crate::attachments_api::{DevAttachmentService, SharedAttachments};
@@ -83,6 +84,8 @@ fn test_state() -> AppState {
     let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
     let agent_events: SharedAgentEvents =
         Arc::new(DevAgentEventReplayService::new(Arc::clone(&events)));
+    let agent_conversations: SharedAgentConversations =
+        Arc::new(DevAgentConversationService::new(Arc::clone(&events)));
     let event_logs: SharedEventLogs = Arc::new(DevEventLogService::default());
     let audit_logs: SharedAuditLogs = Arc::new(DevAuditLogService::default());
     let notifications: SharedNotifications = Arc::new(DevNotificationService::default());
@@ -120,6 +123,7 @@ fn test_state() -> AppState {
             Arc::new(SystemClock),
         )),
         events,
+        agent_event_writer: None,
         event_counter: Arc::new(AtomicU64::new(0)),
         registry: registry.clone(),
         plugins: Arc::new(PluginHost::new(registry.clone())),
@@ -138,6 +142,7 @@ fn test_state() -> AppState {
         channel_outbox_delivery_worker: None,
         hitl,
         agent_events,
+        agent_conversations,
         event_logs,
         audit_logs,
         notifications,

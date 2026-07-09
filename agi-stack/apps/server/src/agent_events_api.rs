@@ -369,7 +369,7 @@ fn parse_event_type_filter(event_types: Option<&str>) -> Result<Vec<String>, Age
     Ok(parsed)
 }
 
-fn agent_stream_topic(conversation_id: &str) -> String {
+pub(crate) fn agent_stream_topic(conversation_id: &str) -> String {
     format!("agent:events:{conversation_id}")
 }
 
@@ -490,6 +490,7 @@ mod tests {
         ))
         .expect("agent event replay golden must be valid JSON");
         let record = AgentExecutionEventRecord {
+            message_id: None,
             event_type: "thought".to_string(),
             event_data: json!({"text": "hello"}),
             event_time_us: 42,

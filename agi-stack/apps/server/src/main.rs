@@ -31,6 +31,7 @@ use std::{
 mod admin_access;
 mod admin_dlq_api;
 mod agent_commands_api;
+mod agent_conversations_api;
 mod agent_events_api;
 mod agent_ws;
 mod artifacts_api;
@@ -81,17 +82,17 @@ use agistack_adapters_mem::{
 };
 use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
-    connect, ensure_aux_schema, PgAgentExecutionEventRepository, PgApiKeyStore,
-    PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository, PgBillingRepository,
-    PgChannelRepository, PgCheckpointStore, PgCronRepository, PgDataStatsRepository,
-    PgDeployRepository, PgEventLogRepository, PgGeneRepository, PgGraphStoreRepository,
-    PgInstanceRepository, PgInvitationRepository, PgLlmProviderRepository, PgMemoryRepository,
-    PgNotificationRepository, PgPool, PgProjectReadRepository, PgProjectSandboxRepository,
-    PgProjectStore, PgRetrievalStoreRepository, PgSchemaRepository, PgShareRepository,
-    PgSkillEvolutionRepository, PgSkillRepository, PgSubagentTemplateRepository,
-    PgSupportRepository, PgTenantRepository, PgTenantSkillConfigRepository,
-    PgTenantWebhookRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
-    PgWorkspaceRepository,
+    connect, ensure_aux_schema, PgAgentConversationRepository, PgAgentExecutionEventRepository,
+    PgApiKeyStore, PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository,
+    PgBillingRepository, PgChannelRepository, PgCheckpointStore, PgCronRepository,
+    PgDataStatsRepository, PgDeployRepository, PgEventLogRepository, PgGeneRepository,
+    PgGraphStoreRepository, PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository,
+    PgLlmProviderRepository, PgMemoryRepository, PgNotificationRepository, PgPool,
+    PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
+    PgRetrievalStoreRepository, PgSchemaRepository, PgShareRepository, PgSkillEvolutionRepository,
+    PgSkillRepository, PgSubagentTemplateRepository, PgSupportRepository, PgTenantRepository,
+    PgTenantSkillConfigRepository, PgTenantWebhookRepository, PgTrustRepository, PgUserStore,
+    PgVectorIndex, PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -106,6 +107,9 @@ use agistack_plugin_host::{
 
 use crate::admin_access::{build_admin_access, SharedAdminAccess};
 use crate::admin_dlq_api::{build_admin_dlq_service, SharedAdminDlq};
+use crate::agent_conversations_api::{
+    DevAgentConversationService, PgAgentConversationService, SharedAgentConversations,
+};
 use crate::agent_events_api::{
     DevAgentEventReplayService, PgAgentEventReplayService, SharedAgentEvents,
 };
@@ -185,6 +189,7 @@ pub(crate) struct AppState {
     pub(crate) memory: Arc<MemoryService>,
     pub(crate) engine: Arc<ReActEngine>,
     pub(crate) events: Arc<dyn EventStream>,
+    pub(crate) agent_event_writer: Option<PgAgentExecutionEventRepository>,
     pub(crate) event_counter: Arc<AtomicU64>,
     registry: HotPlugRegistry,
     plugins: Arc<PluginHost>,
@@ -228,6 +233,9 @@ pub(crate) struct AppState {
     /// P3/F7 event replay over Python-owned `agent_execution_events` in
     /// production, with an in-process stream reader in offline/dev mode.
     pub(crate) agent_events: SharedAgentEvents,
+    /// Desktop Agent conversation list/create/link plus normalized timeline
+    /// replay over Python-owned conversation/event tables.
+    pub(crate) agent_conversations: SharedAgentConversations,
     /// P7 tenant event-log read surface over Python-owned `tenant_event_logs`.
     /// Only exact list/type-discovery reads are routed to Rust.
     pub(crate) event_logs: SharedEventLogs,
@@ -803,12 +811,23 @@ async fn build_state() -> ServerResult<AppState> {
     )
     .await?;
     let events = build_event_stream().await;
+    let agent_event_writer = workspace_plan_pool
+        .clone()
+        .map(PgAgentExecutionEventRepository::new);
     let hitl = build_hitl_response_service(workspace_plan_pool.clone(), Arc::clone(&events));
     let agent_events: SharedAgentEvents = match workspace_plan_pool.clone() {
         Some(pool) => Arc::new(PgAgentEventReplayService::new(
             PgAgentExecutionEventRepository::new(pool),
         )),
         None => Arc::new(DevAgentEventReplayService::new(Arc::clone(&events))),
+    };
+    let agent_conversations: SharedAgentConversations = match workspace_plan_pool.clone() {
+        Some(pool) => Arc::new(PgAgentConversationService::new(
+            PgAgentConversationRepository::new(pool.clone()),
+            PgAgentExecutionEventRepository::new(pool.clone()),
+            PgHitlRequestRepository::new(pool),
+        )),
+        None => Arc::new(DevAgentConversationService::new(Arc::clone(&events))),
     };
     let event_logs: SharedEventLogs = match workspace_plan_pool.clone() {
         Some(pool) => Arc::new(PgEventLogService::new(PgEventLogRepository::new(pool))),
@@ -1018,6 +1037,7 @@ async fn build_state() -> ServerResult<AppState> {
         memory,
         engine,
         events,
+        agent_event_writer,
         event_counter: Arc::new(AtomicU64::new(0)),
         registry,
         plugins,
@@ -1036,6 +1056,7 @@ async fn build_state() -> ServerResult<AppState> {
         channel_outbox_delivery_worker,
         hitl,
         agent_events,
+        agent_conversations,
         event_logs,
         audit_logs,
         notifications,

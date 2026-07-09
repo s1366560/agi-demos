@@ -26,6 +26,8 @@ pub struct HitlRequestRecord {
     pub context: Option<Value>,
     pub request_metadata: Option<Value>,
     pub status: String,
+    pub response: Option<String>,
+    pub response_metadata: Option<Value>,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
@@ -47,13 +49,33 @@ impl PgHitlRequestRepository {
     pub async fn get_by_id(&self, request_id: &str) -> CoreResult<Option<HitlRequestRecord>> {
         sqlx::query_as::<_, HitlRequestRow>(
             "SELECT id, request_type, conversation_id, message_id, tenant_id, project_id, \
-                    user_id, question, options, context, request_metadata, status, expires_at \
+                    user_id, question, options, context, request_metadata, status, response, \
+                    response_metadata, expires_at \
              FROM hitl_requests WHERE id = $1",
         )
         .bind(request_id)
         .fetch_optional(&self.pool)
         .await
         .map(|row| row.map(Into::into))
+        .map_err(storage)
+    }
+
+    pub async fn get_by_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> CoreResult<Vec<HitlRequestRecord>> {
+        sqlx::query_as::<_, HitlRequestRow>(
+            "SELECT id, request_type, conversation_id, message_id, tenant_id, project_id, \
+                    user_id, question, options, context, request_metadata, status, response, \
+                    response_metadata, expires_at \
+             FROM hitl_requests \
+             WHERE conversation_id = $1 \
+             ORDER BY created_at ASC, id ASC",
+        )
+        .bind(conversation_id)
+        .fetch_all(&self.pool)
+        .await
+        .map(|rows| rows.into_iter().map(Into::into).collect())
         .map_err(storage)
     }
 
@@ -155,6 +177,8 @@ struct HitlRequestRow {
     context: Option<Value>,
     request_metadata: Option<Value>,
     status: String,
+    response: Option<String>,
+    response_metadata: Option<Value>,
     expires_at: Option<DateTime<Utc>>,
 }
 
@@ -173,6 +197,8 @@ impl From<HitlRequestRow> for HitlRequestRecord {
             context: row.context,
             request_metadata: row.request_metadata,
             status: row.status,
+            response: row.response,
+            response_metadata: row.response_metadata,
             expires_at: row.expires_at,
         }
     }

@@ -28,6 +28,9 @@ use rows::*;
 const WORKSPACE_COLS: &str = "id, tenant_id, project_id, name, description, created_by, \
     is_archived, metadata_json, office_status, hex_layout_config_json, \
     default_blocking_categories_json, created_at, updated_at";
+const WORKSPACE_COLS_W: &str = "w.id, w.tenant_id, w.project_id, w.name, w.description, \
+    w.created_by, w.is_archived, w.metadata_json, w.office_status, w.hex_layout_config_json, \
+    w.default_blocking_categories_json, w.created_at, w.updated_at";
 const TASK_COLS: &str = "id, workspace_id, title, description, created_by, assignee_user_id, \
     assignee_agent_id, status, priority, estimated_effort, blocker_reason, metadata_json, \
     created_at, updated_at, completed_at, archived_at";
@@ -223,13 +226,13 @@ impl PgWorkspaceRepository {
         offset: i64,
     ) -> CoreResult<Vec<WorkspaceRecord>> {
         let rows = sqlx::query(&format!(
-            "SELECT w.{cols} \
+            "SELECT {cols} \
              FROM workspaces w \
              JOIN workspace_members wm ON wm.workspace_id = w.id \
              WHERE w.tenant_id = $1 AND w.project_id = $2 AND wm.user_id = $3 \
              ORDER BY w.created_at DESC, w.id ASC \
              OFFSET $4 LIMIT $5",
-            cols = WORKSPACE_COLS
+            cols = WORKSPACE_COLS_W
         ))
         .bind(tenant_id)
         .bind(project_id)

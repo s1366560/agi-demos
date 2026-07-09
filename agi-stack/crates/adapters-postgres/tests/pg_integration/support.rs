@@ -1,17 +1,19 @@
 pub(super) use agistack_adapters_postgres::PgPool;
 pub(super) use agistack_adapters_postgres::{
-    connect, ensure_aux_schema, AgentExecutionEventListQuery, ArtifactListQuery, AuditLogListQuery,
-    BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
-    ChannelWebhookEventInsertRecord, ChannelWebhookSecretRecord, ChannelWebhookSessionCreateRecord,
-    CreateTenantWebhook, CronJobListQuery, DataStatsAccess, DataStatsScopeError, DeployAccess,
-    DeployListQuery, GeneListQuery, GenomeListQuery, InstanceListQuery, InstanceMemberListQuery,
-    InvitationRecord, LlmProviderCreateRecord, LlmProviderUpdateRecord, NewDecisionRecordRecord,
-    NewShareRecord, NewTrustPolicyRecord, PgAdminAccessRepository, PgAgentExecutionEventRepository,
-    PgApiKeyStore, PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository,
-    PgBillingRepository, PgChannelRepository, PgCheckpointStore, PgCronRepository,
-    PgDataStatsRepository, PgDeployRepository, PgEventLogRepository, PgGeneRepository,
-    PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository, PgLlmProviderRepository,
-    PgMemoryRepository, PgNotificationRepository, PgProjectReadRepository,
+    connect, ensure_aux_schema, AgentExecutionEventListQuery, AgentExecutionTimelineQuery,
+    ArtifactListQuery, AuditLogListQuery, BlackboardFileRecord, BlackboardOutboxRecord,
+    BlackboardPostRecord, BlackboardReplyRecord, ChannelWebhookEventInsertRecord,
+    ChannelWebhookSecretRecord, ChannelWebhookSessionCreateRecord, ConversationCreateRecord,
+    ConversationListQuery, ConversationModePatch, ConversationMutationAccess, CreateTenantWebhook,
+    CronJobListQuery, DataStatsAccess, DataStatsScopeError, DeployAccess, DeployListQuery,
+    GeneListQuery, GenomeListQuery, InstanceListQuery, InstanceMemberListQuery, InvitationRecord,
+    LlmProviderCreateRecord, LlmProviderUpdateRecord, NewDecisionRecordRecord, NewShareRecord,
+    NewTrustPolicyRecord, PgAdminAccessRepository, PgAgentConversationRepository,
+    PgAgentExecutionEventRepository, PgApiKeyStore, PgArtifactRepository, PgAttachmentRepository,
+    PgAuditLogRepository, PgBillingRepository, PgChannelRepository, PgCheckpointStore,
+    PgCronRepository, PgDataStatsRepository, PgDeployRepository, PgEventLogRepository,
+    PgGeneRepository, PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository,
+    PgLlmProviderRepository, PgMemoryRepository, PgNotificationRepository, PgProjectReadRepository,
     PgProjectSandboxRepository, PgProjectStore, PgSchemaRepository, PgShareRepository,
     PgSkillEvolutionRepository, PgSkillRepository, PgSubagentTemplateRepository,
     PgSupportRepository, PgTenantRepository, PgTenantSkillConfigRepository,
@@ -76,6 +78,15 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS agent_config json DEFAULT '{}'::json",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS message_count integer DEFAULT 0 NOT NULL",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS current_mode varchar(20) DEFAULT 'build' NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS merge_strategy varchar(20) DEFAULT 'result_only' NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS summary text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS parent_conversation_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS branch_point_message_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS conversation_mode varchar(32)",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS linked_workspace_task_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS participant_agents json DEFAULT '[]'::json",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS coordinator_agent_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS focused_agent_id text",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS updated_at timestamptz",
         "CREATE TABLE IF NOT EXISTS agent_execution_events (\
@@ -85,6 +96,14 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             correlation_id text, created_at timestamptz DEFAULT now())",
         "CREATE INDEX IF NOT EXISTS ix_agent_execution_events_conversation_cursor \
             ON agent_execution_events (conversation_id, event_time_us, event_counter)",
+        "CREATE TABLE IF NOT EXISTS tool_execution_records (\
+            id text PRIMARY KEY, conversation_id text NOT NULL, message_id text NOT NULL, \
+            call_id text NOT NULL, tool_name varchar(100) NOT NULL, tool_input json DEFAULT '{}'::json, \
+            tool_output text, status varchar(20) NOT NULL, error text, step_number integer, \
+            sequence_number integer NOT NULL, started_at timestamptz DEFAULT now(), \
+            completed_at timestamptz, duration_ms integer)",
+        "CREATE INDEX IF NOT EXISTS ix_tool_execution_records_conversation \
+            ON tool_execution_records (conversation_id)",
         "CREATE TABLE IF NOT EXISTS tenant_event_logs (\
             id text PRIMARY KEY, tenant_id text NOT NULL, event_type varchar(64) NOT NULL, \
             message text NOT NULL, source varchar(64) NOT NULL, metadata json DEFAULT '{}'::json, \
@@ -745,8 +764,21 @@ pub(super) async fn ensure_project_read_tables(pool: &PgPool) {
             id text PRIMARY KEY, project_id text NOT NULL, tenant_id text NOT NULL, \
             user_id text NOT NULL, title varchar(500) NOT NULL, status varchar(20) DEFAULT 'active', \
             created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS workspace_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS meta json DEFAULT '{}'::json",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS agent_config json DEFAULT '{}'::json",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS message_count integer DEFAULT 0 NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS current_mode varchar(20) DEFAULT 'build' NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS merge_strategy varchar(20) DEFAULT 'result_only' NOT NULL",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS summary text",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS parent_conversation_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS branch_point_message_id text",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS fork_source_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS conversation_mode varchar(32)",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS linked_workspace_task_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS participant_agents json DEFAULT '[]'::json",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS coordinator_agent_id text",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS focused_agent_id text",
         "CREATE TABLE IF NOT EXISTS messages (\
             id text PRIMARY KEY, conversation_id text NOT NULL, reply_to_id text, \
             content text, created_at timestamptz DEFAULT now())",

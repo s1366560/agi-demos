@@ -37,6 +37,7 @@ mod billing_repo;
 mod channel_repo;
 mod checkpoint;
 mod conversation_events_repo;
+mod conversation_repo;
 mod cron_repo;
 mod data_stats_repo;
 mod deploy_repo;
@@ -90,8 +91,13 @@ pub use channel_repo::{
 };
 pub use checkpoint::PgCheckpointStore;
 pub use conversation_events_repo::{
-    AgentExecutionEventListQuery, AgentExecutionEventRecord, ConversationReplayAccess,
-    PgAgentExecutionEventRepository,
+    AgentExecutionEventInsertRecord, AgentExecutionEventListQuery, AgentExecutionEventRecord,
+    AgentExecutionTimelineQuery, ConversationReplayAccess, PgAgentExecutionEventRepository,
+    ToolExecutionRecord,
+};
+pub use conversation_repo::{
+    AgentConversationRecord, ConversationCreateRecord, ConversationListQuery,
+    ConversationModePatch, ConversationMutationAccess, PgAgentConversationRepository,
 };
 pub use cron_repo::{CronJobListQuery, CronJobRecord, CronJobRunRecord, PgCronRepository};
 pub use data_stats_repo::{

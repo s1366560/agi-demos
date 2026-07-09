@@ -17,6 +17,8 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::agent::doom_loop::{
     CostBudget, CostTracker, DoomLoopDetector, NextAction, SupervisorPort, TriggerReason,
 };
@@ -24,6 +26,48 @@ use crate::agent::types::{
     AgentAction, CompletedCall, HitlRequest, Role, SessionState, SessionStatus, TranscriptEntry,
 };
 use crate::ports::{CheckpointStore, Clock, CoreError, CoreResult, LlmPort, ToolHost};
+
+/// Receives non-mutating observations at ReAct run boundaries.
+///
+/// The observer is deliberately side-effect shaped and optional: it lets hosts
+/// persist/display live events without changing planner decisions, tool inputs,
+/// checkpoints, or the existing [`ReActEngine::run`] contract.
+#[async_trait]
+pub trait ReActObserver: Send + Sync {
+    async fn on_tool_call(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        _tool: &str,
+        _input_json: &str,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+
+    async fn on_tool_result(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        _tool: &str,
+        _input_json: &str,
+        _output_json: &str,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+
+    async fn on_finish(&self, _session_id: &str, _round: u64, _answer: &str) -> CoreResult<()> {
+        Ok(())
+    }
+
+    async fn on_human_request(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        _request: &HitlRequest,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+}
 
 /// Drives a single agent session to completion (or until the round budget is
 /// exhausted), persisting a checkpoint at every step.
@@ -103,6 +147,30 @@ impl ReActEngine {
         goal: &str,
         project_id: Option<&str>,
     ) -> CoreResult<SessionState> {
+        self.run_inner(session_id, goal, project_id, None).await
+    }
+
+    /// Run the session while reporting action/observation/final-answer
+    /// boundaries to a host observer. The observer must not mutate agent
+    /// decisions; failures propagate as ordinary run failures.
+    pub async fn run_observed(
+        &self,
+        session_id: &str,
+        goal: &str,
+        project_id: Option<&str>,
+        observer: Arc<dyn ReActObserver>,
+    ) -> CoreResult<SessionState> {
+        self.run_inner(session_id, goal, project_id, Some(observer))
+            .await
+    }
+
+    async fn run_inner(
+        &self,
+        session_id: &str,
+        goal: &str,
+        project_id: Option<&str>,
+        observer: Option<Arc<dyn ReActObserver>>,
+    ) -> CoreResult<SessionState> {
         let mut state = match self.checkpoints.load(session_id).await? {
             Some(existing) => existing,
             None => SessionState::new(session_id, goal, project_id),
@@ -175,6 +243,9 @@ impl ReActEngine {
                         Role::Answer,
                         answer.clone(),
                     ));
+                    if let Some(observer) = observer.as_deref() {
+                        observer.on_finish(session_id, state.round, &answer).await?;
+                    }
                     state.answer = Some(answer);
                     state.status = SessionStatus::Finished;
                 }
@@ -192,6 +263,12 @@ impl ReActEngine {
                     }
                     if let Some(c) = cost.as_mut() {
                         c.record_tool_call();
+                    }
+
+                    if let Some(observer) = observer.as_deref() {
+                        observer
+                            .on_tool_call(session_id, state.round, &tool, &input_json)
+                            .await?;
                     }
 
                     // Crash recovery: if this exact call already completed in
@@ -215,6 +292,12 @@ impl ReActEngine {
                             out
                         }
                     };
+
+                    if let Some(observer) = observer.as_deref() {
+                        observer
+                            .on_tool_result(session_id, state.round, &tool, &input_json, &output)
+                            .await?;
+                    }
 
                     state.push_unique(TranscriptEntry::new(state.round, Role::Observation, output));
                 }
@@ -241,6 +324,11 @@ impl ReActEngine {
                         // Persist the pending request and exit the loop without
                         // advancing the round, so resume replays this exact round.
                         None => {
+                            if let Some(observer) = observer.as_deref() {
+                                observer
+                                    .on_human_request(session_id, state.round, &request)
+                                    .await?;
+                            }
                             state.pending_hitl = Some(request);
                             state.status = SessionStatus::AwaitingInput;
                             self.checkpoints.save(&state).await?;

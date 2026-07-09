@@ -26,7 +26,7 @@ pub use harness::{
 };
 pub use orchestrator::{MiniOrchestrator, PlanStore, StepOutcome, StepRunner};
 pub use plan::{Plan, PlanStep, StepStatus};
-pub use react::{pending_request, ReActEngine};
+pub use react::{pending_request, ReActEngine, ReActObserver};
 pub use types::{
     AgentAction, CompletedCall, HitlKind, HitlRequest, HitlResponse, Role, SessionState,
     SessionStatus, TranscriptEntry,

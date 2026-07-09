@@ -1,27 +1,62 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{
+        header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+        request::Parts as RequestParts,
+        HeaderValue, Method, StatusCode,
+    },
     routing::{any, get, post},
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use agistack_core::{ports::ToolHost, Episode, Memory, SessionState, SessionStatus, SourceType};
 use agistack_plugin_host::{ConfigAck, NativeToolFactory, PluginManifest, ToolDecl};
 
 use crate::{
-    admin_dlq_api, agent_commands_api, agent_events_api, agent_ws, artifacts_api, attachments_api,
-    audit_api, auth, billing_api, channel_api, cron_api, data_api, deploy_api, engines_api,
-    enhanced_search_api, events_api, gene_api, graph_api, graph_stores_api, hitl_api, identity_api,
-    instance_api, llm_providers_api, maintenance_api, notifications_api, prod_api,
-    retrieval_stores_api, sandbox_api, schema_api, shares_api, skill_api, subagents_api,
-    support_api, system_api, tenant_skill_config_api, tenant_webhooks_api, trust_api,
-    workspace_api, AppState,
+    admin_dlq_api, agent_commands_api, agent_conversations_api, agent_events_api, agent_ws,
+    artifacts_api, attachments_api, audit_api, auth, billing_api, channel_api, cron_api, data_api,
+    deploy_api, engines_api, enhanced_search_api, events_api, gene_api, graph_api,
+    graph_stores_api, hitl_api, identity_api, instance_api, llm_providers_api, maintenance_api,
+    notifications_api, prod_api, retrieval_stores_api, sandbox_api, schema_api, shares_api,
+    skill_api, subagents_api, support_api, system_api, tenant_skill_config_api,
+    tenant_webhooks_api, trust_api, workspace_api, AppState,
 };
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+}
+
+fn desktop_origin_allowed(origin: &HeaderValue) -> bool {
+    let Ok(origin) = origin.to_str() else {
+        return false;
+    };
+    origin == "tauri://localhost"
+        || origin == "http://tauri.localhost"
+        || origin == "https://tauri.localhost"
+        || origin.starts_with("http://localhost:")
+        || origin.starts_with("https://localhost:")
+        || origin.starts_with("http://127.0.0.1:")
+        || origin.starts_with("https://127.0.0.1:")
+}
+
+fn desktop_cors_layer() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(
+            |origin: &HeaderValue, _request_parts: &RequestParts| desktop_origin_allowed(origin),
+        ))
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE])
+        .allow_credentials(true)
 }
 
 // ---- memory ---------------------------------------------------------------
@@ -268,6 +303,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(channel_api::router())
         .merge(graph_api::router())
         .merge(agent_commands_api::router())
+        .merge(agent_conversations_api::router())
         .merge(agent_events_api::router())
         .merge(events_api::router())
         .merge(audit_api::router())
@@ -323,5 +359,32 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(public)
         .merge(authed)
         .fallback(any(sandbox_api::preview_host_proxy))
+        .layer(desktop_cors_layer())
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn desktop_origin_allowlist_accepts_tauri_and_loopback() {
+        for origin in [
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "http://localhost:5173",
+            "http://127.0.0.1:1420",
+        ] {
+            let value = HeaderValue::from_str(origin).expect("origin header");
+            assert!(desktop_origin_allowed(&value), "{origin}");
+        }
+    }
+
+    #[test]
+    fn desktop_origin_allowlist_rejects_non_loopback_web_origins() {
+        for origin in ["https://example.com", "http://192.168.1.20:5173"] {
+            let value = HeaderValue::from_str(origin).expect("origin header");
+            assert!(!desktop_origin_allowed(&value), "{origin}");
+        }
+    }
 }

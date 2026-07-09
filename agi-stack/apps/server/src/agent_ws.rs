@@ -11,6 +11,9 @@
 
 mod subscriptions;
 
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -20,8 +23,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tokio::time::{self, Duration};
+
+use agistack_adapters_postgres::AgentExecutionEventInsertRecord;
+use agistack_core::agent::{HitlRequest, ReActObserver};
+use agistack_core::ports::CoreResult;
 
 use crate::auth::{AuthRejection, Identity};
 use crate::hitl_api::{ws_ack_message, HitlResponsePayload};
@@ -446,25 +453,33 @@ async fn handle_client_message(
                 json!({"conversation_id": conversation_id}),
             )
             .await;
-            if let Err(err) = run_agent_message(
-                app,
-                identity,
-                &conversation_id,
-                &project_id,
-                message_id.as_deref(),
-                &message,
-            )
-            .await
-            {
-                let data = json!({"message": err, "conversation_id": conversation_id});
-                let _ =
-                    append_event(app, &conversation_id, AgentEventType::Error, data.clone()).await;
-                let _ = send_json(
-                    socket,
-                    json!({"type": "error", "conversation_id": conversation_id, "data": data}),
+            let run_app = app.clone();
+            let run_identity = identity.clone();
+            let run_conversation_id = conversation_id.clone();
+            let run_project_id = project_id.clone();
+            let run_message_id = message_id.clone();
+            tokio::spawn(async move {
+                if let Err(err) = run_agent_message(
+                    &run_app,
+                    &run_identity,
+                    &run_conversation_id,
+                    &run_project_id,
+                    run_message_id.as_deref(),
+                    &message,
                 )
-                .await;
-            }
+                .await
+                {
+                    let data = agent_error_event_data(
+                        &run_conversation_id,
+                        &run_project_id,
+                        run_message_id.as_deref(),
+                        &err,
+                    );
+                    let _ =
+                        append_event(&run_app, &run_conversation_id, AgentEventType::Error, data)
+                            .await;
+                }
+            });
         }
         ClientMessage::StopSession { conversation_id } => {
             let data = json!({"conversation_id": conversation_id, "cancelled": true});
@@ -593,6 +608,20 @@ async fn run_agent_message(
     append_event(
         app,
         conversation_id,
+        AgentEventType::UserMessage,
+        json!({
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "project_id": project_id,
+            "role": "user",
+            "content": message,
+        }),
+    )
+    .await?;
+
+    append_event(
+        app,
+        conversation_id,
         AgentEventType::Start,
         json!({
             "conversation_id": conversation_id,
@@ -602,9 +631,16 @@ async fn run_agent_message(
     )
     .await?;
 
+    let observer = Arc::new(AgentWsRunObserver {
+        app: app.clone(),
+        conversation_id: conversation_id.to_string(),
+        project_id: project_id.to_string(),
+        message_id: message_id.map(ToString::to_string),
+    });
+    let run_session_id = agent_run_session_id(conversation_id, message_id);
     let state = app
         .engine
-        .run(conversation_id, message, Some(project_id))
+        .run_observed(&run_session_id, message, Some(project_id), observer)
         .await
         .map_err(|e| e.to_string())?;
     append_event(
@@ -621,6 +657,214 @@ async fn run_agent_message(
     )
     .await?;
     Ok(())
+}
+
+#[derive(Clone)]
+struct AgentWsRunObserver {
+    app: AppState,
+    conversation_id: String,
+    project_id: String,
+    message_id: Option<String>,
+}
+
+#[async_trait]
+impl ReActObserver for AgentWsRunObserver {
+    async fn on_tool_call(
+        &self,
+        _session_id: &str,
+        round: u64,
+        tool: &str,
+        input_json: &str,
+    ) -> CoreResult<()> {
+        let input = json_or_string(input_json);
+        let mut data = tool_event_base(
+            &self.conversation_id,
+            &self.project_id,
+            self.message_id.as_deref(),
+            round,
+            tool,
+        );
+        data.insert("tool_input".to_string(), input.clone());
+        data.insert(
+            "input_json".to_string(),
+            Value::String(input_json.to_string()),
+        );
+        copy_tool_metadata(&mut data, &input);
+        append_event(
+            &self.app,
+            &self.conversation_id,
+            AgentEventType::Act,
+            Value::Object(data),
+        )
+        .await
+        .map_err(agistack_core::ports::CoreError::Event)
+    }
+
+    async fn on_tool_result(
+        &self,
+        _session_id: &str,
+        round: u64,
+        tool: &str,
+        input_json: &str,
+        output_json: &str,
+    ) -> CoreResult<()> {
+        let input = json_or_string(input_json);
+        let output = json_or_string(output_json);
+        let mut data = tool_event_base(
+            &self.conversation_id,
+            &self.project_id,
+            self.message_id.as_deref(),
+            round,
+            tool,
+        );
+        data.insert("tool_input".to_string(), input.clone());
+        data.insert("tool_output".to_string(), output.clone());
+        data.insert(
+            "observation".to_string(),
+            Value::String(output_json.to_string()),
+        );
+        data.insert("is_error".to_string(), Value::Bool(false));
+        copy_tool_metadata(&mut data, &input);
+        copy_tool_metadata(&mut data, &output);
+        append_event(
+            &self.app,
+            &self.conversation_id,
+            AgentEventType::Observe,
+            Value::Object(data),
+        )
+        .await
+        .map_err(agistack_core::ports::CoreError::Event)
+    }
+
+    async fn on_finish(&self, _session_id: &str, _round: u64, answer: &str) -> CoreResult<()> {
+        append_event(
+            &self.app,
+            &self.conversation_id,
+            AgentEventType::AssistantMessage,
+            json!({
+                "conversation_id": self.conversation_id.as_str(),
+                "message_id": self.message_id.as_deref(),
+                "project_id": self.project_id.as_str(),
+                "role": "assistant",
+                "content": answer,
+            }),
+        )
+        .await
+        .map_err(agistack_core::ports::CoreError::Event)
+    }
+
+    async fn on_human_request(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        request: &HitlRequest,
+    ) -> CoreResult<()> {
+        append_event(
+            &self.app,
+            &self.conversation_id,
+            AgentEventType::ClarificationAsked,
+            json!({
+                "conversation_id": self.conversation_id.as_str(),
+                "message_id": self.message_id.as_deref(),
+                "project_id": self.project_id.as_str(),
+                "request_id": request.id.as_str(),
+                "question": request.prompt.as_str(),
+                "kind": format!("{:?}", request.kind),
+                "answered": false,
+            }),
+        )
+        .await
+        .map_err(agistack_core::ports::CoreError::Event)
+    }
+}
+
+fn agent_run_session_id(conversation_id: &str, message_id: Option<&str>) -> String {
+    match message_id.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(message_id) => format!("{conversation_id}:{message_id}"),
+        None => format!(
+            "{conversation_id}:{}",
+            chrono::Utc::now().timestamp_micros()
+        ),
+    }
+}
+
+fn tool_event_base(
+    conversation_id: &str,
+    project_id: &str,
+    message_id: Option<&str>,
+    round: u64,
+    tool: &str,
+) -> Map<String, Value> {
+    let mut data = Map::new();
+    data.insert("conversation_id".to_string(), conversation_id.into());
+    data.insert("project_id".to_string(), project_id.into());
+    data.insert(
+        "message_id".to_string(),
+        message_id.map_or(Value::Null, |value| value.into()),
+    );
+    data.insert("round".to_string(), round.into());
+    data.insert("tool_name".to_string(), tool.into());
+    data
+}
+
+fn json_or_string(raw: &str) -> Value {
+    serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_string()))
+}
+
+fn copy_tool_metadata(target: &mut Map<String, Value>, source: &Value) {
+    copy_value_path(target, source, &["display"], "display");
+    copy_value_path(target, source, &["metadata", "display"], "display");
+    copy_value_path(target, source, &["fileMetadata"], "fileMetadata");
+    copy_value_path(target, source, &["file_metadata"], "fileMetadata");
+    copy_value_path(
+        target,
+        source,
+        &["metadata", "fileMetadata"],
+        "fileMetadata",
+    );
+    copy_value_path(
+        target,
+        source,
+        &["metadata", "file_metadata"],
+        "fileMetadata",
+    );
+}
+
+fn copy_value_path(
+    target: &mut Map<String, Value>,
+    source: &Value,
+    path: &[&str],
+    target_key: &str,
+) {
+    if target.contains_key(target_key) {
+        return;
+    }
+    let mut current = source;
+    for segment in path {
+        let Some(next) = current.get(*segment) else {
+            return;
+        };
+        current = next;
+    }
+    if !current.is_null() {
+        target.insert(target_key.to_string(), current.clone());
+    }
+}
+
+fn agent_error_event_data(
+    conversation_id: &str,
+    project_id: &str,
+    message_id: Option<&str>,
+    message: &str,
+) -> Value {
+    json!({
+        "conversation_id": conversation_id,
+        "message_id": message_id,
+        "project_id": project_id,
+        "message": message,
+        "error": message,
+        "is_error": true,
+    })
 }
 
 async fn send_subscription_limit_error(
@@ -648,19 +892,15 @@ async fn append_event(
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         + 1;
     let event_time_us = chrono::Utc::now().timestamp_micros();
-    let envelope = EventEnvelope::wrap(
-        event_type,
-        data.clone(),
-        derive_event_id(&format!(
-            "{conversation_id}:{}:{counter}",
-            event_type.as_str()
-        )),
-        now_iso(),
-    )
-    .with_correlation(conversation_id.to_string(), None);
+    let event_id = derive_event_id(&format!(
+        "{conversation_id}:{}:{counter}",
+        event_type.as_str()
+    ));
+    let envelope = EventEnvelope::wrap(event_type, data.clone(), event_id.clone(), now_iso())
+        .with_correlation(conversation_id.to_string(), None);
     let payload = json!({
         "type": event_type.as_str(),
-        "data": data,
+        "data": data.clone(),
         "event_time_us": event_time_us,
         "event_counter": counter,
         "envelope": envelope.to_value(),
@@ -672,8 +912,27 @@ async fn append_event(
             EVENT_STREAM_MAX_LEN,
         )
         .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(writer) = app.agent_event_writer.as_ref() {
+        let message_id = data.get("message_id").and_then(Value::as_str);
+        let db_counter = i32::try_from(counter).unwrap_or(i32::MAX);
+        writer
+            .insert_event(AgentExecutionEventInsertRecord {
+                id: &event_id,
+                conversation_id,
+                message_id,
+                event_type: event_type.as_str(),
+                event_data: &data,
+                event_time_us,
+                event_counter: db_counter,
+                correlation_id: message_id.or(Some(conversation_id)),
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 async fn send_status_update(socket: &mut WebSocket, project_id: &str) -> Result<(), axum::Error> {
@@ -804,6 +1063,46 @@ mod tests {
         assert_eq!(message["data"]["is_active"], false);
         assert_eq!(message["data"]["is_initialized"], false);
         assert!(message["timestamp"].as_str().is_some());
+    }
+
+    #[test]
+    fn run_session_id_is_message_scoped_when_available() {
+        assert_eq!(
+            agent_run_session_id("conversation-1", Some("message-1")),
+            "conversation-1:message-1"
+        );
+        assert!(agent_run_session_id("conversation-1", None).starts_with("conversation-1:"));
+    }
+
+    #[test]
+    fn copies_structured_tool_display_metadata() {
+        let source = json!({
+            "display": {"title": "Read file", "summary": "Inspect source"},
+            "metadata": {
+                "fileMetadata": {
+                    "operation": "read",
+                    "paths": [{"path": "/tmp/example.rs", "lineCount": 12}]
+                }
+            }
+        });
+        let mut target = Map::new();
+
+        copy_tool_metadata(&mut target, &source);
+
+        assert_eq!(target["display"]["title"], "Read file");
+        assert_eq!(target["fileMetadata"]["operation"], "read");
+        assert_eq!(target["fileMetadata"]["paths"][0]["lineCount"], 12);
+    }
+
+    #[test]
+    fn error_event_data_keeps_run_scope() {
+        let data = agent_error_event_data("c1", "p1", Some("m1"), "boom");
+
+        assert_eq!(data["conversation_id"], "c1");
+        assert_eq!(data["project_id"], "p1");
+        assert_eq!(data["message_id"], "m1");
+        assert_eq!(data["error"], "boom");
+        assert_eq!(data["is_error"], true);
     }
 
     #[test]

@@ -583,6 +583,8 @@ mod tests {
             context: None,
             request_metadata: Some(json!({"agent_mode": "default"})),
             status: "pending".to_string(),
+            response: None,
+            response_metadata: None,
             expires_at: None,
         }
     }
