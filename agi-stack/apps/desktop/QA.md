@@ -335,6 +335,10 @@
   shows it opens Accounts / Usage & Plan; this follow-up changes the Chat
   composer quota status from a static dot into a pop-up button that opens a
   matching Usage & Plan settings section.
+- Computer Use comparison of the Copilot Workspace Plan tab shows a structured
+  vertical plan list with status nodes rather than raw debug JSON; this
+  follow-up changes loaded plan snapshots to render as a compact status tree,
+  with raw JSON collapsed behind `Raw snapshot`.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`

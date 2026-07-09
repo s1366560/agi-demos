@@ -80,6 +80,7 @@ import type {
   DesktopRuntimeConfig,
   DesktopServiceResponse,
   LocalMemoryResult,
+  PlanSnapshot,
   ProjectSandbox,
   RuntimeDataset,
   StatusTab,
@@ -2711,7 +2712,7 @@ function WorkspaceReviewPanel({
   const moreTabsMenuRef = useRef<HTMLDivElement>(null);
   const addTabButtonRef = useRef<HTMLButtonElement>(null);
   const addTabMenuRef = useRef<HTMLDivElement>(null);
-  const planKeys = dataset.plan ? Object.keys(dataset.plan).slice(0, 6) : [];
+  const planRows = dataset.plan ? buildPlanDisplayRows(dataset.plan) : [];
   const reviewTabs: Array<{
     tab: ReviewTab;
     label: string;
@@ -2992,15 +2993,28 @@ function WorkspaceReviewPanel({
                     loaded
                   </Badge>
                 </div>
-                <div className="plan-key-list">
-                  {planKeys.map((key) => (
-                    <div className="plan-key-row" key={key}>
-                      <CheckCircledIcon />
-                      <span>{key}</span>
-                    </div>
-                  ))}
+                <div
+                  className="review-plan-tree"
+                  aria-label={`Plan showing ${planRows.length} snapshot fields`}
+                >
+                  <div className="plan-node complete">
+                    <CheckCircledIcon />
+                    <span>Workspace plan snapshot</span>
+                  </div>
+                  <div className="plan-branch">
+                    {planRows.map((row) => (
+                      <div className="plan-node with-detail" key={row.key}>
+                        <CheckCircledIcon />
+                        <span>{row.label}</span>
+                        <small>{row.detail}</small>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <pre className="review-json">{JSON.stringify(dataset.plan, null, 2)}</pre>
+                <details className="plan-json-details">
+                  <summary>Raw snapshot</summary>
+                  <pre className="review-json">{JSON.stringify(dataset.plan, null, 2)}</pre>
+                </details>
               </>
             ) : (
               <div className="review-plan-tree">
@@ -3099,6 +3113,58 @@ function WorkspaceReviewPanel({
       </div>
     </aside>
   );
+}
+
+function buildPlanDisplayRows(plan: PlanSnapshot) {
+  const orderedKeys = [
+    'root_goal',
+    'plan',
+    'iteration',
+    'delivery',
+    'blackboard',
+    'outbox',
+    'events',
+    'plan_history',
+    'iteration_runs',
+    'run_health',
+    'artifact_index',
+    'workspace_id',
+  ];
+  const seen = new Set<string>();
+  const rows = orderedKeys.flatMap((key) => {
+    if (!(key in plan)) return [];
+    seen.add(key);
+    return [buildPlanDisplayRow(key, plan[key])];
+  });
+  Object.keys(plan)
+    .filter((key) => !seen.has(key))
+    .slice(0, Math.max(0, 12 - rows.length))
+    .forEach((key) => rows.push(buildPlanDisplayRow(key, plan[key])));
+  return rows.slice(0, 12);
+}
+
+function buildPlanDisplayRow(key: string, value: unknown) {
+  return {
+    key,
+    label: humanizePlanKey(key),
+    detail: summarizePlanValue(value),
+  };
+}
+
+function humanizePlanKey(key: string) {
+  return key
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function summarizePlanValue(value: unknown) {
+  if (value === null || value === undefined) return 'Not loaded';
+  if (Array.isArray(value)) return value.length ? `${value.length} items` : 'No items';
+  if (typeof value === 'object') return `${Object.keys(value).length} fields`;
+  if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
+  return String(value);
 }
 
 function ReviewEmpty({

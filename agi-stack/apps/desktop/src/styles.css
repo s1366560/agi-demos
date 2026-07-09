@@ -1579,6 +1579,11 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   font-size: 12px;
 }
 
+.plan-node.with-detail {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+}
+
 .plan-node svg,
 .plan-key-row svg {
   flex: 0 0 auto;
@@ -1590,6 +1595,32 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.plan-node small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--desktop-faint);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-json-details {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-json-details summary {
+  width: fit-content;
+  color: var(--desktop-faint);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.plan-json-details[open] summary {
+  color: var(--desktop-muted);
 }
 
 .plan-key-list {
