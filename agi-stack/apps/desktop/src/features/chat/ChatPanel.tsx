@@ -4,6 +4,7 @@ import { Badge, Button, Flex, Heading, ScrollArea, Text, TextArea } from '@radix
 import {
   ActivityLogIcon,
   ArchiveIcon,
+  ArrowUpIcon,
   ChatBubbleIcon,
   CodeIcon,
   DotsHorizontalIcon,
@@ -202,13 +203,14 @@ export function ChatPanel({
             </Text>
             <Button
               size="2"
+              color="green"
               className="send-pill"
               type="submit"
               aria-label="Send workspace message"
               loading={sending}
               disabled={!canSend}
             >
-              <RocketIcon />
+              <ArrowUpIcon />
             </Button>
           </Flex>
         </Flex>

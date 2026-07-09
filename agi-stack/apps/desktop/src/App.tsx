@@ -23,6 +23,7 @@ import {
 import {
   ActivityLogIcon,
   ArchiveIcon,
+  ArrowUpIcon,
   ChatBubbleIcon,
   CheckCircledIcon,
   CodeIcon,
@@ -2589,11 +2590,12 @@ function SignedOutPanel({
               </button>
               <Button
                 size="2"
+                color="green"
                 className="send-pill"
                 aria-label="Send message, sign in required"
                 disabled
               >
-                <RocketIcon />
+                <ArrowUpIcon />
               </Button>
             </Flex>
           </Flex>

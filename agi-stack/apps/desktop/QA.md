@@ -143,6 +143,10 @@
 - Broadened Agent socket error parsing so nested `payload`, `data`, or `error`
   objects can surface their concrete message in the task card instead of only a
   generic error label.
+- Replaced the composer send affordance's rocket glyph with a green circular
+  up-arrow in both signed-out and signed-in composers, matching the GitHub
+  Copilot message input affordance more closely while leaving the send action
+  semantics unchanged.
 
 ### Validation
 
@@ -271,6 +275,13 @@
   card. Rebuilt release verification was limited by Computer Use returning
   `cgWindowNotFound` after the app restart, while the release process remained
   alive.
+- Browser fallback validation after Computer Use returned `cgWindowNotFound`
+  and Browser DOM snapshot returned `incrementalAriaSnapshot is not a function`:
+  local `http://127.0.0.1:5173/` renders signed-out with the up-arrow send
+  glyph and no console warnings/errors; login against `127.0.0.1:8000` reaches
+  Chat, `New chat` creates a fresh workspace, clicking the green up-arrow send
+  button creates a user message plus an `Agent task Accepted` card, and the
+  signed-in screenshot shows the Copilot-like up-arrow composer affordance.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
