@@ -84,15 +84,12 @@ export function ComposerControls({
           <PlusIcon />
         </button>
         {openMenu === 'files' ? (
-          <ComposerPopover title="Add context">
+          <ComposerPopover title="Add files or folders">
             <button type="button" role="menuitem" disabled={Boolean(disabledHint)}>
-              Add files
+              Add files...
             </button>
             <button type="button" role="menuitem" disabled={Boolean(disabledHint)}>
-              Add folders
-            </button>
-            <button type="button" role="menuitem" disabled={Boolean(disabledHint)}>
-              Reference workspace
+              Add folder...
             </button>
             {disabledHint ? <p>{disabledHint}</p> : null}
           </ComposerPopover>

@@ -327,6 +327,10 @@
   this follow-up aligns the Chat footer labels to `Mode: Autopilot, Command +
   Shift + M`, `Select model`, `Reasoning effort: Medium`, and
   `AI credits quota: 100% used`.
+- Computer Use comparison of the Copilot `+` menu shows `Add files...` and
+  `Add folder...` under `Add files or folders`; this follow-up applies the same
+  two-item context menu to the desktop composer and removes the extra
+  `Reference workspace` item.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
