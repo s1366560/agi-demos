@@ -1891,28 +1891,6 @@ export function App() {
                 ))}
               </nav>
 
-              {showRuntimeConfig ? (
-                <nav className="sidebar-tools" aria-label="workspace tools">
-                  <div className="sidebar-heading">
-                    <Text size="1" weight="bold" color="gray">
-                      Tools
-                    </Text>
-                  </div>
-                  {toolItems.map(([section, label, icon]) => (
-                    <button
-                      className={`sidebar-row ${activeSection === section ? 'selected' : ''}`}
-                      type="button"
-                      key={String(label)}
-                      aria-label={`${String(label)} section`}
-                      onClick={() => switchSection(section)}
-                    >
-                      <span className="sidebar-icon">{icon}</span>
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </nav>
-              ) : null}
-
               <section className="sidebar-sessions">
                 <div className="sidebar-heading">
                   <Text size="1" weight="bold" color="gray">

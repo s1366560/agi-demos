@@ -398,7 +398,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
 }
 
 .quick-links,
-.sidebar-tools,
 .sidebar-sessions {
   display: grid;
   align-content: start;
@@ -407,8 +406,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   padding: 8px 10px;
 }
 
-.quick-links,
-.sidebar-tools {
+.quick-links {
   border-bottom: 1px solid var(--desktop-border-soft);
 }
 
@@ -2997,7 +2995,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   }
 
   .quick-links,
-  .sidebar-tools,
   .sidebar-sessions {
     padding-top: 8px;
     padding-bottom: 8px;

@@ -126,6 +126,10 @@
 - Ensured the Tauri main window is also created during setup, leaving
   `RunEvent::Ready` and macOS reopen handling as fallback window restoration
   paths.
+- Removed the extra signed-in `Tools` sidebar group so the left navigation now
+  matches the GitHub Copilot structure: Quick links, Sessions, then the bottom
+  account/settings area. Tool surfaces remain reachable through command
+  routing, the right Workspace panel, and bottom settings.
 
 ### Validation
 
@@ -237,6 +241,11 @@
   fix confirms a clean release launch produces one native window, login reaches
   Chat, switching Session grouping to `Recent first` changes the root to
   `Recent sessions 50 sessions in 默认项目`, and the recent list remains usable.
+- Computer Use capture of GitHub Copilot.app confirms the signed-in reference
+  sidebar has Quick links, Sessions, and bottom user/settings controls without a
+  separate tools group. Computer Use capture of the rebuilt release `.app`
+  confirms the signed-in desktop sidebar now matches that structure, and a
+  workspace message still creates an `Agent task Accepted` card.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
