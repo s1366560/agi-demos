@@ -321,6 +321,12 @@
   `Agent task Accepted` card; this follow-up removes the visible
   `No messages loaded for this workspace.` engineering empty-state from new
   Chat sessions so the conversation area matches Copilot's quieter blank start.
+- Computer Use post-fix release verification confirms the new Chat conversation
+  area now starts visually blank with only the composer visible; comparison with
+  GitHub Copilot.app found the next composer parity gap in control names, so
+  this follow-up aligns the Chat footer labels to `Mode: Autopilot, Command +
+  Shift + M`, `Select model`, `Reasoning effort: Medium`, and
+  `AI credits quota: 100% used`.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`

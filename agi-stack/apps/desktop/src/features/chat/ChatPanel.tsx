@@ -198,8 +198,8 @@ export function ChatPanel({
             <span
               className={`composer-status-dot ${disabledReason ? 'is-blocked' : 'is-connected'}`}
               role="status"
-              aria-label={disabledReason ?? 'Connected'}
-              title={disabledReason ?? 'Connected'}
+              aria-label={disabledReason ?? 'AI credits quota: 100% used'}
+              title={disabledReason ?? 'AI credits quota: 100% used'}
             />
             <Button
               size="2"

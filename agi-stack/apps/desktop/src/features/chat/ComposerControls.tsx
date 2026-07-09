@@ -104,7 +104,7 @@ export function ComposerControls({
         label={mode}
         open={openMenu === 'mode'}
         title="Mode"
-        controlLabel={`Composer mode, ${mode}`}
+        controlLabel={`Mode: ${mode}, Command + Shift + M`}
         options={Array.from(new Set([modeLabel, 'Ask', 'Plan']))}
         selected={mode}
         onToggle={() => toggleMenu('mode')}
@@ -118,7 +118,7 @@ export function ComposerControls({
         label={model}
         open={openMenu === 'model'}
         title="Model"
-        controlLabel={`Model selector, ${model}`}
+        controlLabel={`Select model, ${model}`}
         options={Array.from(new Set([modelLabel, 'Workspace model', 'Cloud model']))}
         selected={model}
         onToggle={() => toggleMenu('model')}
@@ -132,7 +132,7 @@ export function ComposerControls({
         label={effort}
         open={openMenu === 'effort'}
         title="Effort"
-        controlLabel={`Effort selector, ${effort}`}
+        controlLabel={`Reasoning effort: ${effort}`}
         options={Array.from(new Set(['Low', 'Medium', 'High', effortLabel]))}
         selected={effort}
         onToggle={() => toggleMenu('effort')}
