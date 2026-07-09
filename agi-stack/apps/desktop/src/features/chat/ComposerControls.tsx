@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { PlusIcon } from '@radix-ui/react-icons';
 
 type ComposerMenu = 'files' | 'mode' | 'model' | 'effort';
@@ -45,7 +45,7 @@ export function ComposerControls({
       setOpenMenu(null);
     };
 
-    const closeOnEscape = (event: KeyboardEvent) => {
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       setOpenMenu(null);
@@ -110,15 +110,14 @@ export function ComposerControls({
           setOpenMenu(null);
         }}
       />
-      <ComposerSelectControl
+      <ComposerModelCombobox
         compactLabel={compactComposerLabel(model)}
-        label={model}
         open={openMenu === 'model'}
-        title="Model"
         controlLabel={`Select model, ${model}`}
         options={Array.from(new Set([modelLabel, 'Workspace model', 'Cloud model']))}
         selected={model}
         onToggle={() => toggleMenu('model')}
+        onInput={setModel}
         onSelect={(value) => {
           setModel(value);
           setOpenMenu(null);
@@ -138,6 +137,75 @@ export function ComposerControls({
           setOpenMenu(null);
         }}
       />
+    </div>
+  );
+}
+
+function ComposerModelCombobox({
+  compactLabel,
+  open,
+  controlLabel,
+  options,
+  selected,
+  onToggle,
+  onInput,
+  onSelect,
+}: {
+  compactLabel: string;
+  open: boolean;
+  controlLabel: string;
+  options: string[];
+  selected: string;
+  onToggle: () => void;
+  onInput: (value: string) => void;
+  onSelect: (value: string) => void;
+}) {
+  const listboxId = 'composer-model-listbox';
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (!open) onToggle();
+    }
+    if (event.key === 'Escape' && open) {
+      event.preventDefault();
+      onToggle();
+    }
+  };
+
+  return (
+    <div className="composer-control">
+      <input
+        className="composer-mode-button composer-model-combobox"
+        data-compact-label={compactLabel}
+        type="text"
+        role="combobox"
+        aria-label={controlLabel}
+        aria-autocomplete="list"
+        aria-controls={listboxId}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        value={selected}
+        onChange={(event) => onInput(event.target.value)}
+        onClick={onToggle}
+        onKeyDown={handleKeyDown}
+      />
+      {open ? (
+        <ComposerPopover id={listboxId} role="listbox" title="Select model">
+          {options.map((option) => (
+            <button
+              className={selected === option ? 'selected' : ''}
+              type="button"
+              role="option"
+              aria-selected={selected === option}
+              key={option}
+              onClick={() => onSelect(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </ComposerPopover>
+      ) : null}
     </div>
   );
 }
@@ -196,9 +264,19 @@ function ComposerSelectControl({
   );
 }
 
-function ComposerPopover({ title, children }: { title: string; children: ReactNode }) {
+function ComposerPopover({
+  id,
+  role = 'menu',
+  title,
+  children,
+}: {
+  id?: string;
+  role?: 'listbox' | 'menu';
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="composer-popover" role="menu" aria-label={title}>
+    <div className="composer-popover" id={id} role={role} aria-label={title}>
       <strong>{title}</strong>
       {children}
     </div>

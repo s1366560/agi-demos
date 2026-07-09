@@ -339,6 +339,10 @@
   vertical plan list with status nodes rather than raw debug JSON; this
   follow-up changes loaded plan snapshots to render as a compact status tree,
   with raw JSON collapsed behind `Raw snapshot`.
+- Computer Use comparison of the Copilot model picker shows `Select model` as a
+  combobox rather than a generic pop-up button; this follow-up changes the
+  desktop composer model control to an editable combobox backed by listbox
+  options while preserving the compact footer layout.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
