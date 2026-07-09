@@ -715,10 +715,12 @@ export function App() {
 
       if (projectId) {
         await refreshRuntime(nextConfig);
+        applySectionSideEffects('chat');
       } else {
         setDataset(emptyDataset);
         setConnection('ready');
         setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        applySectionSideEffects('settings');
       }
     } catch (caught) {
       const message = formatLoginError(caught, config.apiBaseUrl);

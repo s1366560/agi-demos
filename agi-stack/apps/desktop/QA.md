@@ -108,6 +108,12 @@
   workspace requires `sandbox_code_root`. Desktop now creates timestamped
   conversation workspaces with `multi_agent_shared` collaboration so repeated
   New session clicks do not collide or require a code root.
+- Fixed the local-development sign-in modal so the default selected MemStack
+  `:8000` preset primes the session-only test account as soon as the dialog
+  opens. The visible selected preset and the enabled `Login` action now agree.
+- Changed successful password login with a project to land directly in Chat,
+  matching the GitHub Copilot session flow where the user can immediately
+  message the Agent and start a task instead of first seeing a dashboard.
 
 ### Validation
 
@@ -166,6 +172,13 @@
   workspace id, and logout returning to the signed-out New session composer with
   signed-in tools removed. Screenshot:
   `/tmp/agi-desktop-session-logout-regression.png`.
+- Playwright login-to-Agent suite verifies the sign-in dialog opens with the
+  default local preset already enabled, login lands directly in Chat, and a
+  workspace message creates an `Agent task` card that reaches `Accepted` without
+  console or network errors. Screenshots:
+  `/tmp/agi-desktop-login-preset-enabled.png`,
+  `/tmp/agi-desktop-login-auto-chat.png`, and
+  `/tmp/agi-desktop-login-chat-task.png`.
 - Mobile Agent task card regression at `390x844`: no horizontal overflow, right
   review panel hidden, Agent task card visible inside the message scroll area,
   and no overlap with the composer. Screenshot:
@@ -199,6 +212,10 @@
   new-session fixes confirms the signed-out native shell renders with workflow
   chips, connection warning, composer controls, and a working Command palette
   dialog focused on `Search commands`.
+- Computer Use capture of the rebuilt release `.app` after the login-flow fix
+  confirms the native sign-in dialog opens with `Login` enabled, successful
+  login lands directly in Chat, and sending a native release message creates an
+  `Agent task Accepted` card in the conversation timeline.
 - Local login/workspace/conversation/WS smoke against `127.0.0.1:8000`
 - `git diff --check -- agi-stack/apps/desktop`
 - `mcp__gitnexus.detect_changes({scope: "all"})` reports low risk with no

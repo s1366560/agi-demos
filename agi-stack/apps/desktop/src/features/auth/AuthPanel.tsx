@@ -80,6 +80,15 @@ export function AuthPanel({
     onApiBaseUrlChange(apiBaseUrl);
     fillLocalDevAdmin();
   };
+
+  useEffect(() => {
+    const canPrimeLocalPreset =
+      loginOpen && localDevBase && !password && (!email || email === LOCAL_DEV_ADMIN_EMAIL);
+    if (!canPrimeLocalPreset) return;
+    onEmailChange(LOCAL_DEV_ADMIN_EMAIL);
+    onPasswordChange(LOCAL_DEV_ADMIN_PASSWORD);
+  }, [email, localDevBase, loginOpen, onEmailChange, onPasswordChange, password]);
+
   const closeLogin = (restoreFocus = true) => {
     const trigger = loginTriggerRef.current;
     const fallback = getLoginRestoreTarget?.();
