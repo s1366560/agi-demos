@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 
 from src.infrastructure.agent.permission.rules import classify_sandbox_tool_permission
+from src.infrastructure.agent.tools.file_metadata import build_sandbox_tool_metadata
 from src.infrastructure.agent.tools.mcp_errors import (
     MCPToolError,
     MCPToolErrorClassifier,
@@ -1263,9 +1264,9 @@ def _with_bash_idle_heartbeat(command: str, timeout_seconds: int) -> str:
         "trap 'kill \"$__workspace_harness_heartbeat_pid\" 2>/dev/null || true' EXIT; "
         f"bash -lc {quoted_command}; "
         "__workspace_harness_status=$?; "
-        "kill \"$__workspace_harness_heartbeat_pid\" 2>/dev/null || true; "
-        "wait \"$__workspace_harness_heartbeat_pid\" 2>/dev/null || true; "
-        "exit \"$__workspace_harness_status\""
+        'kill "$__workspace_harness_heartbeat_pid" 2>/dev/null || true; '
+        'wait "$__workspace_harness_heartbeat_pid" 2>/dev/null || true; '
+        'exit "$__workspace_harness_status"'
     )
 
 
@@ -1393,10 +1394,7 @@ def _with_workspace_bash_preclean(
         return kwargs
 
     scoped = dict(kwargs)
-    scoped["command"] = (
-        f"{_workspace_bash_runtime_cleanup_command(workspace_root)}\n"
-        f"{command}"
-    )
+    scoped["command"] = f"{_workspace_bash_runtime_cleanup_command(workspace_root)}\n{command}"
     return scoped
 
 
@@ -1681,8 +1679,7 @@ async def _execute_with_retry(
                     continue
                 break
 
-            raw = result if (result.get("artifact") or result.get("results")) else None
-            return _extract_ok_output(result), raw
+            return _extract_ok_output(result), result
 
         except Exception as exc:
             elapsed_ms = int((_time.time() - start_time) * 1000)
@@ -1821,7 +1818,16 @@ def create_sandbox_mcp_tool(
                     declared_code_root=declared_code_root,
                 ):
                     raise RuntimeError(artifact_error)
-            metadata = raw_result if raw_result else {}
+            metadata = (
+                build_sandbox_tool_metadata(
+                    tool_name=tool_name,
+                    arguments=normalized_kwargs,
+                    raw_result=raw_result,
+                    output=output,
+                )
+                if raw_result
+                else {}
+            )
             return ToolResult(output=output, metadata=metadata)
         except RuntimeError as exc:
             return ToolResult(

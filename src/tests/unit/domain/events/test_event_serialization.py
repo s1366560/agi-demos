@@ -40,6 +40,22 @@ class TestEventSerialization:
         assert event_dict["data"]["call_id"] == "call_123"
         assert event_dict["data"]["status"] == "running"
 
+    def test_act_event_serializes_display_and_file_metadata(self):
+        """ActEvent should preserve LLM-authored display and file metadata."""
+        event = AgentActEvent(
+            tool_name="read",
+            tool_input={"file_path": "src/main.py"},
+            display={"title": "Read main.py", "summary": "Inspect the entry point"},
+            file_metadata={
+                "operation": "read",
+                "paths": [{"path": "/workspace/src/main.py", "relativePath": "src/main.py"}],
+            },
+        )
+        event_dict = event.to_event_dict()
+
+        assert event_dict["data"]["display"]["title"] == "Read main.py"
+        assert event_dict["data"]["file_metadata"]["operation"] == "read"
+
     def test_observe_event_serialization(self):
         """ObserveEvent should serialize correctly."""
         event = AgentObserveEvent(
@@ -54,6 +70,23 @@ class TestEventSerialization:
         assert event_dict["data"]["tool_name"] == "search"
         assert event_dict["data"]["result"] == "Found 5 results"
         assert event_dict["data"]["duration_ms"] == 100
+
+    def test_observe_event_serializes_display_and_file_metadata(self):
+        """ObserveEvent should preserve display and file metadata."""
+        event = AgentObserveEvent(
+            tool_name="grep",
+            result={"matches_found": 1},
+            display={"title": "Search files", "summary": "Find matching code"},
+            file_metadata={
+                "operation": "search",
+                "paths": [{"path": "src/app.py"}],
+                "matchCount": 1,
+            },
+        )
+        event_dict = event.to_event_dict()
+
+        assert event_dict["data"]["display"]["summary"] == "Find matching code"
+        assert event_dict["data"]["file_metadata"]["matchCount"] == 1
 
     def test_text_delta_event_serialization(self):
         """TextDeltaEvent should serialize correctly."""

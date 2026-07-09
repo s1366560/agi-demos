@@ -150,6 +150,34 @@ class TestProcessorEventValidation:
 
         assert event.tool_input == complex_input
 
+    def test_tool_call_envelope_strips_display_from_tool_input(self):
+        """Tool call envelope should keep display outside tool arguments."""
+        tool_input, display = SessionProcessor._split_tool_call_envelope(
+            {
+                "input": {"file_path": "src/app.py"},
+                "display": {
+                    "title": "Read app.py",
+                    "summary": "Inspect the application entry point",
+                },
+            }
+        )
+
+        assert tool_input == {"file_path": "src/app.py"}
+        assert display == {
+            "title": "Read app.py",
+            "summary": "Inspect the application entry point",
+        }
+        assert "display" not in tool_input
+
+    def test_tool_call_envelope_requires_explicit_input_display_shape(self):
+        """Regular tool arguments with display should not be rewritten."""
+        arguments = {"input": "plain text", "display": {"title": "Legitimate argument"}}
+
+        tool_input, display = SessionProcessor._split_tool_call_envelope(arguments)
+
+        assert tool_input is arguments
+        assert display is None
+
     def test_validate_agent_act_event_frozen_immutability(self):
         """Test AgentActEvent is immutable (frozen)."""
         event = AgentActEvent(tool_name="test")

@@ -117,6 +117,77 @@ def test_build_timeline_replays_latest_act_delta_as_act() -> None:
     ]
 
 
+def test_build_timeline_passes_through_tool_display_and_file_metadata() -> None:
+    display = {"title": "Read app.py", "summary": "Inspect the app entry point"}
+    file_metadata = {
+        "operation": "read",
+        "paths": [{"path": "/workspace/src/app.py", "relativePath": "src/app.py"}],
+    }
+
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "read",
+                    "tool_input": {"file_path": "src/app.py"},
+                    "display": display,
+                    "fileMetadata": file_metadata,
+                    "tool_execution_id": "exec-1",
+                },
+                event_time_us=1_000,
+            ),
+            _StubEvent(
+                event_type="observe",
+                event_data={
+                    "tool_name": "read",
+                    "observation": "content",
+                    "display": display,
+                    "file_metadata": file_metadata,
+                    "tool_execution_id": "exec-1",
+                },
+                event_time_us=2_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline[0]["display"] == display
+    assert timeline[0]["fileMetadata"] == file_metadata
+    assert timeline[1]["display"] == display
+    assert timeline[1]["fileMetadata"] == file_metadata
+
+
+def test_build_timeline_drops_invalid_tool_display_shapes() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "read",
+                    "tool_input": {"file_path": "src/app.py"},
+                    "display": "not an object",
+                    "fileMetadata": ["not", "an", "object"],
+                },
+            )
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert "display" not in timeline[0]
+    assert "fileMetadata" not in timeline[0]
+
+
 def test_build_timeline_repairs_truncated_act_delta_json_prefix() -> None:
     timeline = _build_timeline(
         events=[

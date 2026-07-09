@@ -375,6 +375,7 @@ def _build_act(
         "toolName": data.get("tool_name", ""),
         "toolInput": data.get("tool_input", {}),
     }
+    _copy_tool_display_fields(item, data)
     execution_keys = []
     if execution_id:
         execution_keys.append(f"{event.message_id}:{execution_id}")
@@ -490,7 +491,7 @@ def _trim_to_complete_json_object_prefix(raw_arguments: str) -> str:
 def _build_act_delta(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     tool_name = data.get("tool_name", "")
     tool_input = _parse_accumulated_tool_arguments(data.get("accumulated_arguments"))
-    return {
+    item = {
         "__timeline_type": "act",
         "toolName": tool_name,
         "toolInput": tool_input,
@@ -501,6 +502,8 @@ def _build_act_delta(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
             "synthesizeObserve": _should_synthesize_terminal_observe(tool_name, tool_input),
         },
     }
+    _copy_tool_display_fields(item, data)
+    return item
 
 
 def _should_synthesize_terminal_observe(tool_name: Any, tool_input: dict[str, Any]) -> bool:
@@ -515,6 +518,7 @@ def _build_observe(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         "toolOutput": data.get("observation", ""),
         "isError": data.get("is_error", False),
     }
+    _copy_tool_display_fields(item, data)
     execution_id = _extract_tool_execution_id(data)
     if execution_id:
         item["execution_id"] = execution_id
@@ -528,6 +532,17 @@ def _build_observe(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
             "project_id": raw_ui_meta.get("project_id"),
         }
     return item
+
+
+def _copy_tool_display_fields(item: dict[str, Any], data: dict[str, Any]) -> None:
+    display = data.get("display")
+    if isinstance(display, dict):
+        item["display"] = display
+    file_metadata = data.get("fileMetadata")
+    if file_metadata is None:
+        file_metadata = data.get("file_metadata")
+    if isinstance(file_metadata, dict):
+        item["fileMetadata"] = file_metadata
 
 
 def _build_work_plan(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
@@ -1091,7 +1106,7 @@ def _build_synthetic_observe_item(act_item: dict[str, Any]) -> dict[str, Any]:
     result = tool_input if isinstance(tool_input, dict) else {}
     metadata = dict(act_item.get("metadata") or {})
     metadata["sourceEventType"] = "synthetic_observe"
-    return {
+    item = {
         "id": f"observe-{act_item['id']}",
         "type": "observe",
         "eventTimeUs": act_item["eventTimeUs"],
@@ -1103,6 +1118,11 @@ def _build_synthetic_observe_item(act_item: dict[str, Any]) -> dict[str, Any]:
         "execution_id": act_item.get("execution_id"),
         "metadata": metadata,
     }
+    if isinstance(act_item.get("display"), dict):
+        item["display"] = act_item["display"]
+    if isinstance(act_item.get("fileMetadata"), dict):
+        item["fileMetadata"] = act_item["fileMetadata"]
+    return item
 
 
 def _event_identity(event: Any) -> tuple[int, int, str]:

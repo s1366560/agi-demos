@@ -2573,6 +2573,7 @@ class SessionProcessor:
                         raw_tool_name = event.data.get("name", "")
                         tool_name = self._canonicalize_tool_name(raw_tool_name)
                         arguments = event.data.get("arguments", {})
+                        tool_display: dict[str, Any] | None = None
 
                         if raw_tool_name != tool_name:
                             logger.info(
@@ -2595,6 +2596,7 @@ class SessionProcessor:
                                     f"Invalid tool_input type: {type(arguments).__name__}, "
                                     f"expected dict"
                                 )
+                            tool_arguments, tool_display = self._split_tool_call_envelope(arguments)
 
                             # Validate call_id is a non-empty string if provided
                             if call_id and not isinstance(call_id, str):
@@ -2604,9 +2606,10 @@ class SessionProcessor:
                             # This validates the entire schema before we proceed
                             _test_event = AgentActEvent(
                                 tool_name=tool_name,
-                                tool_input=arguments,
+                                tool_input=tool_arguments,
                                 call_id=call_id,
                                 status="running",
+                                display=tool_display,
                             )
                             # Event validated successfully, don't use _test_event
                             del _test_event
@@ -2625,11 +2628,15 @@ class SessionProcessor:
                             )
                             continue
 
+                        arguments = tool_arguments
+
                         # Update tool part
                         if call_id in self._pending_tool_calls:
                             tool_part = self._pending_tool_calls[call_id]
                             tool_part.tool = tool_name
                             tool_part.input = arguments
+                            if tool_display:
+                                tool_part.metadata["display"] = tool_display
                             tool_part.status = ToolState.RUNNING
                             tool_part.start_time = time.time()
                             # Generate unique execution_id for act/observe matching
@@ -2641,6 +2648,7 @@ class SessionProcessor:
                                 call_id=call_id,
                                 status="running",
                                 tool_execution_id=tool_part.tool_execution_id,
+                                display=tool_display,
                             )
 
                             # Execute tool: check parallel mode
@@ -2821,6 +2829,36 @@ class SessionProcessor:
         )
 
     # ── _execute_tool helper methods ──────────────────────────────────
+
+    @staticmethod
+    def _split_tool_call_envelope(
+        arguments: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Return tool input and LLM-authored display data from a tool envelope.
+
+        Only the explicit ``{"input": {...}, "display": {...}}`` shape is
+        treated as an envelope. This keeps ordinary tools with an ``input`` or
+        ``display`` argument from being rewritten.
+        """
+        raw_input = arguments.get("input")
+        raw_display = arguments.get("display")
+        if isinstance(raw_input, dict) and isinstance(raw_display, dict):
+            return dict(raw_input), dict(raw_display)
+        return arguments, None
+
+    @staticmethod
+    def _tool_display_from_part(tool_part: ToolPart) -> dict[str, Any] | None:
+        display = tool_part.metadata.get("display")
+        return dict(display) if isinstance(display, dict) else None
+
+    @staticmethod
+    def _extract_file_metadata(value: Any) -> dict[str, Any] | None:
+        if not isinstance(value, Mapping):
+            return None
+        raw_metadata = value.get("fileMetadata")
+        if raw_metadata is None:
+            raw_metadata = value.get("file_metadata")
+        return dict(raw_metadata) if isinstance(raw_metadata, Mapping) else None
 
     def _canonicalize_tool_name(self, tool_name: str) -> str:
         """Resolve common aliases/casing variants to a registered tool name.
@@ -3465,6 +3503,11 @@ class SessionProcessor:
                 "project_id": _o_project_id,
             }
 
+        tool_display = self._tool_display_from_part(tool_part)
+        file_metadata = self._extract_file_metadata(sse_result)
+        if file_metadata:
+            tool_part.metadata["fileMetadata"] = file_metadata
+
         yield AgentObserveEvent(
             tool_name=tool_name,
             result=sse_result,
@@ -3472,6 +3515,8 @@ class SessionProcessor:
             call_id=call_id,
             tool_execution_id=tool_part.tool_execution_id,
             ui_metadata=_observe_ui_meta,
+            display=tool_display,
+            file_metadata=file_metadata,
         )
 
         if tool_instance and has_ui:
@@ -4017,6 +4062,11 @@ class SessionProcessor:
                         "project_id": _o_project_id,
                     }
 
+                tool_display = self._tool_display_from_part(tool_part)
+                file_metadata = self._extract_file_metadata(sse_result)
+                if file_metadata:
+                    tool_part.metadata["fileMetadata"] = file_metadata
+
                 yield AgentObserveEvent(
                     tool_name=tool_name,
                     result=sse_result,
@@ -4027,6 +4077,8 @@ class SessionProcessor:
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
                     ui_metadata=_observe_ui_meta,
+                    display=tool_display,
+                    file_metadata=file_metadata,
                 )
 
                 # Emit AgentMCPAppResultEvent if tool has UI
@@ -4095,6 +4147,7 @@ class SessionProcessor:
                     error="Permission denied",
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
+                    display=self._tool_display_from_part(tool_part),
                 )
                 return
 
@@ -4124,6 +4177,7 @@ class SessionProcessor:
                             error="Doom loop detected and rejected",
                             call_id=call_id,
                             tool_execution_id=(tool_part.tool_execution_id),
+                            display=self._tool_display_from_part(tool_part),
                         )
                         return
                 except TimeoutError:
@@ -4135,6 +4189,7 @@ class SessionProcessor:
                         error="Permission request timed out",
                         call_id=call_id,
                         tool_execution_id=(tool_part.tool_execution_id),
+                        display=self._tool_display_from_part(tool_part),
                     )
                     return
                 # Permission granted for doom loop — pipeline already returned,
@@ -4158,6 +4213,7 @@ class SessionProcessor:
                     error="Tool execution aborted",
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
+                    display=self._tool_display_from_part(tool_part),
                 )
                 return
 
@@ -4247,6 +4303,7 @@ class SessionProcessor:
                 ),
                 call_id=call_id,
                 tool_execution_id=tool_part.tool_execution_id if tool_part else None,
+                display=self._tool_display_from_part(tool_part) if tool_part else None,
             )
             self._state = ProcessorState.OBSERVING
             return
@@ -4374,6 +4431,7 @@ class SessionProcessor:
                     ),
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
+                    display=self._tool_display_from_part(tool_part),
                 )
             finally:
                 await self._flush_tool_part_hitl_completions(tool_part)
@@ -4477,6 +4535,7 @@ class SessionProcessor:
                 else None,
                 call_id=call_id,
                 tool_execution_id=tool_part.tool_execution_id,
+                display=self._tool_display_from_part(tool_part),
             )
         finally:
             await self._flush_tool_part_hitl_completions(tool_part)

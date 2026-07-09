@@ -222,6 +222,8 @@ class AgentActEvent(AgentDomainEvent):
     call_id: str | None = None
     status: str = "running"
     tool_execution_id: str | None = None  # New field for act/observe matching
+    display: dict[str, Any] | None = None
+    file_metadata: dict[str, Any] | None = None
 
 
 class AgentActDeltaEvent(AgentDomainEvent):
@@ -237,6 +239,7 @@ class AgentActDeltaEvent(AgentDomainEvent):
     arguments_fragment: str = ""
     accumulated_arguments: str = ""
     status: str = "preparing"
+    display: dict[str, Any] | None = None
 
 
 class AgentObserveEvent(AgentDomainEvent):
@@ -255,6 +258,8 @@ class AgentObserveEvent(AgentDomainEvent):
     status: str = "completed"
     tool_execution_id: str | None = None  # New field for act/observe matching
     ui_metadata: dict[str, Any] | None = None  # MCP App UI metadata (resourceUri, etc.)
+    display: dict[str, Any] | None = None
+    file_metadata: dict[str, Any] | None = None
 
 
 # === Text Events ===

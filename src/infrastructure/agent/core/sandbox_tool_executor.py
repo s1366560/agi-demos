@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from src.infrastructure.agent.core.tool_execution_router import ToolExecutionConfig
 from src.infrastructure.agent.tools.define import ToolInfo
+from src.infrastructure.agent.tools.file_metadata import build_sandbox_tool_metadata
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -123,4 +124,10 @@ def _normalize_mcp_result(mcp_result: dict[str, Any], tool_name: str) -> ToolRes
     elif not isinstance(output, str):
         output = str(output)
     is_error = bool(mcp_result.get("isError", mcp_result.get("is_error", False)))
-    return ToolResult(output=output, is_error=is_error)
+    metadata = build_sandbox_tool_metadata(
+        tool_name=tool_name,
+        arguments={},
+        raw_result=mcp_result,
+        output=output,
+    )
+    return ToolResult(output=output, metadata=metadata, is_error=is_error)

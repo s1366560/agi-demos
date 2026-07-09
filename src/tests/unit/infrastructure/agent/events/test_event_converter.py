@@ -94,6 +94,28 @@ class TestEventConverterBasic:
         assert result["data"]["call_id"] == "call-123"
         assert result["data"]["status"] == "executing"
 
+    def test_convert_act_event_preserves_display_metadata(self, converter):
+        """ActEvent conversion should preserve UI display fields."""
+        event = AgentActEvent(
+            tool_name="read",
+            tool_input={"file_path": "README.md"},
+            call_id="call-123",
+            tool_execution_id="exec-123",
+            display={"title": "Read README", "summary": "Review project docs"},
+            file_metadata={
+                "operation": "read",
+                "paths": [{"path": "/workspace/README.md", "relativePath": "README.md"}],
+            },
+            timestamp=time.time(),
+        )
+
+        result = converter.convert(event)
+
+        assert result is not None
+        assert result["data"]["tool_execution_id"] == "exec-123"
+        assert result["data"]["display"]["title"] == "Read README"
+        assert result["data"]["fileMetadata"]["operation"] == "read"
+
     def test_convert_act_event_with_none_input(self, converter):
         """Test converting AgentActEvent with None tool_input."""
         event = AgentActEvent(
@@ -127,6 +149,27 @@ class TestEventConverterBasic:
         assert result["type"] == AgentEventType.OBSERVE.value
         # Backward compat: observation field
         assert result["data"]["observation"] == "Found 3 relevant memories"
+
+    def test_convert_observe_event_preserves_display_metadata(self, converter):
+        """ObserveEvent conversion should preserve UI display and file metadata."""
+        event = AgentObserveEvent(
+            tool_name="grep",
+            result={"matches_found": 1},
+            display={"title": "Search source", "summary": "Find one match"},
+            file_metadata={
+                "operation": "search",
+                "paths": [{"path": "src/app.py"}],
+                "matchCount": 1,
+            },
+            timestamp=time.time(),
+        )
+
+        result = converter.convert(event)
+
+        assert result is not None
+        assert result["data"]["display"]["summary"] == "Find one match"
+        assert result["data"]["fileMetadata"]["matchCount"] == 1
+        assert result["data"]["observation"] == {"matches_found": 1}
 
     def test_convert_observe_event_with_error(self, converter):
         """Test converting AgentObserveEvent with error."""

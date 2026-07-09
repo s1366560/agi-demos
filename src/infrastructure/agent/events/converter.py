@@ -160,15 +160,7 @@ class EventConverter:
 
         # OBSERVE event: add redundant 'observation' field for legacy compat
         if event_type == AgentEventType.OBSERVE and isinstance(domain_event, AgentObserveEvent):
-            observation = (
-                domain_event.result
-                if domain_event.result is not None
-                else (domain_event.error or "")
-            )
-            event_dict["data"]["observation"] = observation
-            # Include error field if present - frontend uses this
-            if domain_event.error:
-                event_dict["data"]["error"] = domain_event.error
+            self._apply_observe_transform(domain_event, event_dict)
 
         # DOOM_LOOP_DETECTED: rename to 'doom_loop' for frontend
         if event_type == AgentEventType.DOOM_LOOP_DETECTED:
@@ -183,12 +175,7 @@ class EventConverter:
 
         # ACT: normalize call_id and tool_input
         if event_type == AgentEventType.ACT and isinstance(domain_event, AgentActEvent):
-            event_dict["data"] = {
-                "tool_name": domain_event.tool_name,
-                "tool_input": domain_event.tool_input or {},
-                "call_id": domain_event.call_id or "",
-                "status": domain_event.status,
-            }
+            self._apply_act_transform(domain_event, event_dict)
 
         # ERROR: provide default code
         if event_type == AgentEventType.ERROR and isinstance(domain_event, AgentErrorEvent):
@@ -251,6 +238,41 @@ class EventConverter:
         # through without transformation -- their to_event_dict()
         # output is already frontend-compatible.
         return event_dict
+
+    def _apply_observe_transform(
+        self,
+        domain_event: AgentObserveEvent,
+        event_dict: SSEEventDict,
+    ) -> None:
+        observation = (
+            domain_event.result if domain_event.result is not None else (domain_event.error or "")
+        )
+        event_dict["data"]["observation"] = observation
+        if domain_event.display:
+            event_dict["data"]["display"] = domain_event.display
+        if domain_event.file_metadata:
+            event_dict["data"]["fileMetadata"] = domain_event.file_metadata
+        # Include error field if present - frontend uses this
+        if domain_event.error:
+            event_dict["data"]["error"] = domain_event.error
+
+    def _apply_act_transform(
+        self,
+        domain_event: AgentActEvent,
+        event_dict: SSEEventDict,
+    ) -> None:
+        event_dict["data"] = {
+            "tool_name": domain_event.tool_name,
+            "tool_input": domain_event.tool_input or {},
+            "call_id": domain_event.call_id or "",
+            "status": domain_event.status,
+        }
+        if domain_event.tool_execution_id:
+            event_dict["data"]["tool_execution_id"] = domain_event.tool_execution_id
+        if domain_event.display:
+            event_dict["data"]["display"] = domain_event.display
+        if domain_event.file_metadata:
+            event_dict["data"]["fileMetadata"] = domain_event.file_metadata
 
     def convert_plan_event(self, event: dict[str, Any]) -> SSEEventDict:
         """
