@@ -1,4 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#080c12" />
-  <path d="M16 18h32v8H16zM16 30h32v8H16zM16 42h20v8H16z" fill="#38d6ff" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="agi-stack">
+  <rect width="64" height="64" rx="14" fill="#0b111a" />
+  <path d="M15 29 32 20l17 9-17 9z" fill="#7c4dff" />
+  <path d="M15 36 32 45l17-9v-7L32 38 15 29z" fill="#16b9f2" />
+  <path d="M15 45 32 54l17-9v-7L32 47 15 38z" fill="#f6f9ff" />
+  <path d="M32 20V8" fill="none" stroke="#20c7ff" stroke-width="3" stroke-linecap="round" />
+  <path d="M23 24v-6l-7-7" fill="none" stroke="#8957ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M41 24v-6l7-7" fill="none" stroke="#8957ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <rect x="28" y="5" width="8" height="8" rx="1.5" fill="#15bdf6" />
+  <rect x="29.8" y="6.8" width="4.4" height="4.4" rx=".8" fill="#dff8ff" />
+  <rect x="12" y="7" width="8" height="8" rx="1.5" fill="#7e51ff" />
+  <rect x="13.8" y="8.8" width="4.4" height="4.4" rx=".8" fill="#f2ecff" />
+  <rect x="44" y="7" width="8" height="8" rx="1.5" fill="#7e51ff" />
+  <rect x="45.8" y="8.8" width="4.4" height="4.4" rx=".8" fill="#f2ecff" />
 </svg>
