@@ -5,7 +5,6 @@ import {
   ActivityLogIcon,
   ArchiveIcon,
   ArrowUpIcon,
-  ChatBubbleIcon,
   CodeIcon,
   DotsHorizontalIcon,
   ReaderIcon,
@@ -107,12 +106,7 @@ export function ChatPanel({
       <ScrollArea className="message-scroll">
         <div className="message-stack">
           {messages.length === 0 ? (
-            <div className="empty-state">
-              <ChatBubbleIcon />
-              <Text size="2" color="gray">
-                No messages loaded for this workspace.
-              </Text>
-            </div>
+            <div className="chat-empty-state" role="status" aria-label="Ready for a new task" />
           ) : (
             messages.map((message) => (
               <article className={`message ${messageKind(message)}`} key={message.id}>

@@ -315,6 +315,12 @@
   empty input announces the task-oriented Copilot placeholder, and sending
   `placeholder regression 1783581` creates a user message plus an
   `Agent task Accepted` card.
+- Computer Use New chat edge pass confirms the signed-in sidebar creates a fresh
+  workspace, the Chat composer stays enabled, and sending
+  `empty chat state regression 1783582` creates a user message plus an
+  `Agent task Accepted` card; this follow-up removes the visible
+  `No messages loaded for this workspace.` engineering empty-state from new
+  Chat sessions so the conversation area matches Copilot's quieter blank start.
 - `pnpm build`
 - `cargo test` in `apps/desktop/src-tauri`
 - `make desktop-bundle`
