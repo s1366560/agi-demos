@@ -30,7 +30,7 @@ class _FakePool:
 
 
 class TestAutoBroker:
-    async def test_deterministic_fallback_when_no_candidates(self) -> None:
+    async def test_structural_unavailable_verdict_when_no_candidates(self) -> None:
         broker = AutoBroker(pool_service=_FakePool())
         verdict = await broker.decide(
             tenant_id="t1",
@@ -38,12 +38,13 @@ class TestAutoBroker:
             tools=None,
         )
         assert isinstance(verdict, BrokerVerdict)
-        assert verdict.source == "fallback"
-        assert verdict.tier == "medium"
+        assert verdict.source == "unavailable"
+        assert verdict.tier is None
+        assert verdict.category is None
         assert verdict.require_vision is False
         assert verdict.require_tools is False
 
-    async def test_fallback_detects_image_and_tools(self) -> None:
+    async def test_unavailable_verdict_preserves_structural_capabilities(self) -> None:
         broker = AutoBroker(pool_service=_FakePool())
         verdict = await broker.decide(
             tenant_id="t1",
@@ -58,19 +59,21 @@ class TestAutoBroker:
             ],
             tools=[{"function": {"name": "search"}}],
         )
-        assert verdict.source == "fallback"
+        assert verdict.source == "unavailable"
+        assert verdict.tier is None
+        assert verdict.category is None
         assert verdict.require_vision is True
         assert verdict.require_tools is True
 
     async def test_cache_returns_source_cache_on_repeat(
         self, provider_config: ProviderConfig
     ) -> None:
-        # No candidates → first call falls back; second call serves cache.
+        # No candidates → first call stays unfiltered; second call serves cache.
         broker = AutoBroker(pool_service=_FakePool())
         messages = [Message.user("same prompt")]
         first = await broker.decide(tenant_id="t1", messages=messages, tools=None)
         second = await broker.decide(tenant_id="t1", messages=messages, tools=None)
-        assert first.source == "fallback"
+        assert first.source == "unavailable"
         assert second.source == "cache"
         assert second.tier == first.tier
 
@@ -110,7 +113,7 @@ class TestAutoBroker:
         assert verdict.tier == "large"
         assert verdict.require_tools is True
 
-    async def test_llm_failure_falls_back(
+    async def test_llm_failure_returns_unfiltered_structural_verdict(
         self, provider_config: ProviderConfig
     ) -> None:
         cand = CandidateModel(
@@ -135,7 +138,9 @@ class TestAutoBroker:
             messages=[Message.user("hi")],
             tools=None,
         )
-        assert verdict.source == "fallback"
+        assert verdict.source == "unavailable"
+        assert verdict.tier is None
+        assert verdict.category is None
         assert "RuntimeError" in verdict.rationale
 
     def test_verdict_to_filter_preserves_capabilities(self) -> None:

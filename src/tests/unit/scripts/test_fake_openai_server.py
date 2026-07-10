@@ -36,6 +36,36 @@ def test_fake_openai_returns_non_streaming_chat_completion() -> None:
     assert payload["choices"][0]["finish_reason"] == "stop"
 
 
+def test_fake_openai_returns_structured_auto_broker_tool_call() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "memstack-e2e",
+                "messages": [{"role": "user", "content": "route this"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {"name": "route_request", "parameters": {}},
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    choice = response.json()["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    tool_call = choice["message"]["tool_calls"][0]
+    assert tool_call["function"]["name"] == "route_request"
+    assert json.loads(tool_call["function"]["arguments"]) == {
+        "tier": "medium",
+        "require_vision": False,
+        "require_tools": False,
+        "category": "analysis",
+        "rationale": "Deterministic E2E routing verdict.",
+    }
+
+
 def test_fake_openai_returns_openai_compatible_sse_stream() -> None:
     with TestClient(app) as client:
         response = client.post(

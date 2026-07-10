@@ -10,10 +10,9 @@ the load-balancer's candidate set.
 classifies user intent and required capabilities. It MUST come from a
 structured LLM tool-call, not a regex/keyword heuristic. The broker
 therefore issues an actual LLM call against the cheapest model in the
-tenant's pool. On hard failure we DO fall back to a deterministic
-verdict (medium tier, vision iff any multimodal message, tools iff
-tools were supplied) so the platform never wedges, but every fallback
-is logged with ``source="fallback"`` for audit.
+tenant's pool. When no structured verdict is available, routing remains
+unfiltered by tier/category and preserves only objective capabilities
+present in the request; it never guesses a semantic class.
 
 Results are cached for 30 seconds keyed by ``(tenant_id,
 hash(last_user_message_text + tool_signature))`` to amortize the meta-
@@ -44,7 +43,6 @@ Tier = Literal["small", "medium", "large"]
 Category = Literal["chat", "code", "analysis", "vision", "agent_tools"]
 
 _BROKER_CACHE_TTL_SECONDS = 30.0
-_BROKER_MAX_RETRIES = 1  # single retry; broker overhead must stay small
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,17 +54,17 @@ class BrokerVerdict:
         require_vision: Whether the turn needs a vision-capable model.
         require_tools: Whether the turn needs tool-call support.
         category: Coarse task class (for telemetry only).
-        rationale: Short justification (LLM-supplied or "fallback").
-        source: ``"llm"`` for tool-call verdicts, ``"fallback"`` for
-            deterministic ones, ``"cache"`` for cache hits.
+        rationale: Short justification or structural unavailability reason.
+        source: ``"llm"`` for tool-call verdicts, ``"unavailable"`` when no
+            subjective verdict exists, or ``"cache"`` for cache hits.
     """
 
-    tier: Tier
+    tier: Tier | None
     require_vision: bool
     require_tools: bool
-    category: Category
+    category: Category | None
     rationale: str
-    source: Literal["llm", "fallback", "cache"]
+    source: Literal["llm", "unavailable", "cache"]
 
     def to_filter(self, exclude_keys: frozenset[str] = frozenset()) -> PoolFilter:
         """Convert the verdict into a pool filter."""
@@ -151,6 +149,8 @@ class AutoBroker:
         tools: list[dict[str, Any]] | None,
     ) -> BrokerVerdict:
         """Return a verdict for the current turn."""
+        has_image = self._has_image_content(messages)
+        has_tools = bool(tools)
         cache_key = self._cache_key(tenant_id, messages, tools)
         cached = self._cache.get(cache_key)
         if cached is not None and time.monotonic() - cached.cached_at <= self._cache_ttl:
@@ -163,30 +163,41 @@ class AutoBroker:
                 rationale=v.rationale,
                 source="cache",
             )
-            self._log_verdict(tenant_id, cached_verdict)
+            self._log_verdict(
+                tenant_id,
+                cached_verdict,
+                agent_id="auto-broker-cache",
+                has_image=has_image,
+                has_tools=has_tools,
+                latency_ms=0,
+            )
             return cached_verdict
-
-        has_image = self._has_image_content(messages)
-        has_tools = bool(tools)
 
         # Pick the cheapest small-tier model from the pool to host the meta-call.
         # If no small-tier exists, fall back to any candidate.
         broker_candidate = await self._pick_broker_model(tenant_id)
         if broker_candidate is None:
-            verdict = self._deterministic_verdict(
+            verdict = self._structural_unavailable_verdict(
                 has_image=has_image,
                 has_tools=has_tools,
                 reason="no broker candidate available",
             )
             self._cache[cache_key] = _CacheEntry(verdict=verdict, cached_at=time.monotonic())
-            self._log_verdict(tenant_id, verdict)
+            self._log_verdict(
+                tenant_id,
+                verdict,
+                agent_id="auto-broker-unavailable",
+                has_image=has_image,
+                has_tools=has_tools,
+                latency_ms=0,
+            )
             return verdict
 
+        decision_started = time.perf_counter()
         try:
             verdict = await self._llm_decide(broker_candidate, messages, tools)
             logger.info(
-                "AutoBroker verdict: tier=%s vision=%s tools=%s "
-                "category=%s (via %s)",
+                "AutoBroker verdict: tier=%s vision=%s tools=%s category=%s (via %s)",
                 verdict.tier,
                 verdict.require_vision,
                 verdict.require_tools,
@@ -195,10 +206,10 @@ class AutoBroker:
             )
         except Exception as exc:
             logger.warning(
-                "AutoBroker LLM call failed (%s); falling back to heuristic verdict",
-                exc,
+                "AutoBroker structured verdict unavailable; error_type=%s",
+                type(exc).__name__,
             )
-            verdict = self._deterministic_verdict(
+            verdict = self._structural_unavailable_verdict(
                 has_image=has_image,
                 has_tools=has_tools,
                 reason=f"broker error: {type(exc).__name__}",
@@ -215,11 +226,26 @@ class AutoBroker:
             verdict = replace(verdict, require_tools=False)
 
         self._cache[cache_key] = _CacheEntry(verdict=verdict, cached_at=time.monotonic())
-        self._log_verdict(tenant_id, verdict)
+        self._log_verdict(
+            tenant_id,
+            verdict,
+            agent_id=broker_candidate.candidate_key,
+            has_image=has_image,
+            has_tools=has_tools,
+            latency_ms=max(0, int((time.perf_counter() - decision_started) * 1000)),
+        )
         return verdict
 
     @staticmethod
-    def _log_verdict(tenant_id: str | None, verdict: BrokerVerdict) -> None:
+    def _log_verdict(
+        tenant_id: str | None,
+        verdict: BrokerVerdict,
+        *,
+        agent_id: str,
+        has_image: bool,
+        has_tools: bool,
+        latency_ms: int,
+    ) -> None:
         """Emit a structured verdict event (rationale text omitted by design)."""
         from src.infrastructure.llm.structured_logger import get_llm_logger
 
@@ -231,15 +257,22 @@ class AutoBroker:
             category=verdict.category,
             source=verdict.source,
             rationale_length=len(verdict.rationale or ""),
+            agent_id=agent_id,
+            input_payload={"has_image": has_image, "has_tools": has_tools},
+            output_summary=(
+                f"tier={verdict.tier or 'unfiltered'};"
+                f"category={verdict.category or 'unavailable'};"
+                f"source={verdict.source}"
+            ),
+            rationale_sha256=hashlib.sha256(verdict.rationale.encode("utf-8")).hexdigest(),
+            latency_ms=latency_ms,
         )
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
-    async def _pick_broker_model(
-        self, tenant_id: str | None
-    ) -> CandidateModel | None:
+    async def _pick_broker_model(self, tenant_id: str | None) -> CandidateModel | None:
         """Cheapest candidate (small tier preferred, else any)."""
         small = await self._pool.list_candidates(
             tenant_id=tenant_id,
@@ -292,9 +325,7 @@ class AutoBroker:
         if not tool_calls and "choices" in response:
             # Some clients return raw OpenAI shape; dig deeper defensively.
             try:
-                tool_calls = (
-                    response["choices"][0]["message"].get("tool_calls") or []
-                )
+                tool_calls = response["choices"][0]["message"].get("tool_calls") or []
             except (KeyError, IndexError, TypeError):
                 tool_calls = []
         for call in tool_calls:
@@ -339,9 +370,8 @@ class AutoBroker:
         messages: list[Message] | list[dict[str, Any]],
     ) -> str | None:
         for msg in reversed(messages):
-            role = (
-                getattr(msg, "role", None)
-                or (msg.get("role") if isinstance(msg, dict) else None)
+            role = getattr(msg, "role", None) or (
+                msg.get("role") if isinstance(msg, dict) else None
             )
             if role != "user":
                 continue
@@ -379,16 +409,16 @@ class AutoBroker:
         return False
 
     @staticmethod
-    def _deterministic_verdict(
+    def _structural_unavailable_verdict(
         *, has_image: bool, has_tools: bool, reason: str
     ) -> BrokerVerdict:
         return BrokerVerdict(
-            tier="medium",
+            tier=None,
             require_vision=has_image,
             require_tools=has_tools,
-            category="vision" if has_image else ("agent_tools" if has_tools else "chat"),
-            rationale=f"fallback: {reason}",
-            source="fallback",
+            category=None,
+            rationale=f"unavailable: {reason}",
+            source="unavailable",
         )
 
     @staticmethod
@@ -399,8 +429,7 @@ class AutoBroker:
     ) -> str:
         last_user = AutoBroker._last_user_text(messages) or ""
         tool_names = sorted(
-            (t.get("function") or {}).get("name") or t.get("name", "")
-            for t in (tools or [])
+            (t.get("function") or {}).get("name") or t.get("name", "") for t in (tools or [])
         )
         payload = f"{tenant_id or 'default'}|{last_user[:512]}|{','.join(tool_names)}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()

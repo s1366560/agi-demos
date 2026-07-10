@@ -18,6 +18,13 @@ E2E_GOAL_RESPONSE = json.dumps(
     },
     separators=(",", ":"),
 )
+E2E_BROKER_RESPONSE = {
+    "tier": "medium",
+    "require_vision": False,
+    "require_tools": False,
+    "category": "analysis",
+    "rationale": "Deterministic E2E routing verdict.",
+}
 
 app = FastAPI(title="MemStack deterministic OpenAI fixture")
 
@@ -68,9 +75,42 @@ async def chat_completions(request: Request) -> Response:
     body = cast("Mapping[str, object]", raw_body)
 
     is_streaming = body.get("stream") is True
+    tools = body.get("tools")
+    has_route_request_tool = False
+    if isinstance(tools, list):
+        for raw_tool in cast("list[object]", tools):
+            if not isinstance(raw_tool, Mapping):
+                continue
+            function = cast("Mapping[str, object]", raw_tool).get("function")
+            if not isinstance(function, Mapping):
+                continue
+            function_mapping = cast("Mapping[str, object]", function)
+            if function_mapping.get("name") == "route_request":
+                has_route_request_tool = True
+                break
+
     content = E2E_AGENT_RESPONSE if is_streaming else E2E_GOAL_RESPONSE
     if is_streaming:
         return StreamingResponse(_stream_completion(content), media_type="text/event-stream")
+
+    message: dict[str, object] = {"role": "assistant", "content": content}
+    finish_reason = "stop"
+    if has_route_request_tool:
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-memstack-e2e-route",
+                    "type": "function",
+                    "function": {
+                        "name": "route_request",
+                        "arguments": json.dumps(E2E_BROKER_RESPONSE, separators=(",", ":")),
+                    },
+                }
+            ],
+        }
+        finish_reason = "tool_calls"
 
     return JSONResponse(
         {
@@ -81,8 +121,8 @@ async def chat_completions(request: Request) -> Response:
             "choices": [
                 {
                     "index": 0,
-                    "message": {"role": "assistant", "content": content},
-                    "finish_reason": "stop",
+                    "message": message,
+                    "finish_reason": finish_reason,
                 }
             ],
             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},

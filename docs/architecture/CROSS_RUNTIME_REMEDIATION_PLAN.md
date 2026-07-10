@@ -36,6 +36,10 @@ Status: implemented and covered by regression tests in the current working tree.
   Legacy containers without a capability fail closed until rebuilt.
 - Make the Rust server require `DATABASE_URL` unless explicit development mode
   is enabled. Keep legacy unauthenticated `/v1/*` routes disabled by default.
+- Require AutoBroker's semantic tier/category verdict to come from the
+  structured `route_request` agent tool-call. If that judgment is unavailable,
+  leave semantic filters unset and preserve only objective capabilities already
+  present in the request; never substitute a keyword or default-category guess.
 
 Exit criteria:
 
@@ -92,9 +96,11 @@ Status: the first continuous-verification increment is implemented.
 - Run deterministic local and Ray Agent/LLM gates against a fresh migrated
   database, the real authenticated Agent WebSocket, Redis event streaming,
   persisted conversation history, and an OpenAI-compatible fixture with no
-  external key. Ray mode must be explicit and the API log must prove the router
-  and ProjectActor path; keep graph mutation and full Sandbox image scenarios
-  as separately provisioned full-product gates.
+  external key. The fixture must exercise AutoBroker's real structured
+  `route_request` tool-call rather than a fallback. Ray mode must be explicit
+  and the API log must prove the router and ProjectActor path; keep graph
+  mutation and full Sandbox image scenarios as separately provisioned
+  full-product gates.
 - Exclude local secrets, Git metadata, caches, reports, runtime volumes, and
   language build outputs from root Docker build contexts.
 - Build a locked, non-root MCP-only Sandbox contract image in CI and exercise
@@ -166,7 +172,10 @@ Verified on 2026-07-10:
 - Agent/LLM E2E: a fresh isolated database was initialized and migrated, then
   the deterministic OpenAI-compatible fixture drove the real authenticated
   Agent WebSocket through completion and persisted-history verification. The
-  workflow and verifier regression suite passed 12/12.
+  fixture also returned the real `route_request` tool-call: the API recorded an
+  audited `source=llm` AutoBroker verdict and did not enter a semantic heuristic
+  fallback. The broker/fake-provider/pooled-client/Agent-First regression suite
+  passed 34/34; Ruff and Mypy passed, and Pyright reported zero errors.
 - Ray Agent E2E: a host-local Ray 2.53 head, detached HITL router, and
   ProjectActor completed the same authenticated WebSocket and history contract
   with `AGENT_RUNTIME_MODE=ray`; the API log proved the non-fallback Ray path.
