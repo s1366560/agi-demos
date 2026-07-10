@@ -98,9 +98,12 @@ Status: the first continuous-verification increment is implemented.
   persisted conversation history, and an OpenAI-compatible fixture with no
   external key. The fixture must exercise AutoBroker's real structured
   `route_request` tool-call rather than a fallback. Ray mode must be explicit
-  and the API log must prove the router and ProjectActor path; keep graph
-  mutation and full Sandbox image scenarios as separately provisioned
-  full-product gates.
+  and the API log must prove the router and ProjectActor path.
+- Run a deterministic authenticated FastAPI-to-Neo4j mutation gate that proves
+  episode ingestion, entity extraction, embedding, relationship extraction,
+  project-scoped detail/list queries, hybrid search, and graph visualization.
+  Keep the full Sandbox image scenario as a separately provisioned release
+  gate.
 - Exclude local secrets, Git metadata, caches, reports, runtime volumes, and
   language build outputs from root Docker build contexts.
 - Build a locked, non-root MCP-only Sandbox contract image in CI and exercise
@@ -181,6 +184,14 @@ Verified on 2026-07-10:
   with `AGENT_RUNTIME_MODE=ray`; the API log proved the non-fallback Ray path.
   The gate disables Ray's automatic `uv run` working-directory upload and uses
   a direct same-host GCS address to avoid packaging the repository into CI.
+- Graph E2E: an isolated migrated PostgreSQL database plus disposable Redis and
+  Neo4j services rejected anonymous episode creation, then the deterministic
+  OpenAI-compatible fixture drove entity extraction and 1,536-dimensional
+  embeddings. The authenticated API wrote two typed entities, two `MENTIONS`
+  edges, and one `FOUNDED` fact, and read them back through episode detail,
+  entity list, relationship, hybrid-search, and graph-visualization endpoints.
+  The live run also exposed and fixed Neo4j temporal response serialization and
+  a malformed project-scoped `EXISTS` Cypher clause.
 - Sandbox MCP security: direct unauthenticated WebSocket access closed with
   code 4001 while the capability-authenticated `ping` contract succeeded.
   Server tests passed 57/57 (plus one skipped) and Sandbox adapter tests passed
@@ -195,7 +206,7 @@ Verified on 2026-07-10:
   loopback-only ports and no Docker socket, and removed the container cleanly.
 - GitHub Actions workflow YAML parsed successfully.
 
-The basic backend-dependent Playwright gate plus deterministic local and Ray
-Agent/LLM gates are complete. The remaining full-product E2E suite still
-requires graph mutation and the full Desktop/Terminal Sandbox fixture; the
-completed MCP-only gate is not represented as full production-image parity.
+The backend-dependent Playwright, deterministic local/Ray Agent, graph mutation,
+and MCP-only Sandbox gates are complete. The remaining full-product E2E gap is
+the full Desktop/Terminal Sandbox production-image fixture; the lightweight
+MCP-only gate is not represented as full production-image parity.

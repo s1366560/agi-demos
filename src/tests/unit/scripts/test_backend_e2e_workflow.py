@@ -24,6 +24,7 @@ def test_backend_e2e_job_provisions_real_dependencies_and_runs_smoke() -> None:
     assert "uv run uvicorn src.infrastructure.adapters.primary.web.main:app" in commands
     assert "scripts/verify_e2e_backend.py" in commands
     assert "-m scripts.verify_e2e_agent" in commands
+    assert "-m scripts.verify_e2e_graph" in commands
     assert "ray start --head" in commands
     assert "--min-worker-port=20000" in commands
     assert "--max-worker-port=29999" in commands
@@ -80,6 +81,4 @@ def test_docker_context_excludes_local_secrets_and_build_artifacts() -> None:
         for line in SANDBOX_DOCKERIGNORE_PATH.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     }
-    assert {".venv", "venv", "**/__pycache__", ".pytest_cache", ".coverage"} <= (
-        sandbox_patterns
-    )
+    assert {".venv", "venv", "**/__pycache__", ".pytest_cache", ".coverage"} <= (sandbox_patterns)

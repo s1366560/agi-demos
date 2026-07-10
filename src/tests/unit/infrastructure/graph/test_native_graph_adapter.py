@@ -106,6 +106,35 @@ class TestNativeGraphAdapterProperties:
         """Test embedder property returns embedding service."""
         assert adapter.embedder is mock_embedding_service
 
+    @pytest.mark.parametrize(
+        ("project_id", "project_ids", "expected_scope"),
+        [
+            (
+                "project-1",
+                None,
+                "(e.project_id = $project_id OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) "
+                "WHERE ep.project_id = $project_id })",
+            ),
+            (
+                None,
+                ["project-1"],
+                "(e.project_id IN $project_ids OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) "
+                "WHERE ep.project_id IN $project_ids })",
+            ),
+        ],
+    )
+    def test_mention_scope_clause_generates_balanced_exists_subquery(
+        self,
+        project_id: str | None,
+        project_ids: list[str] | None,
+        expected_scope: str,
+    ) -> None:
+        """Project entity scoping must remain valid Neo4j EXISTS syntax."""
+        clause = NativeGraphAdapter._mention_scope_clause("e", project_id, project_ids)
+
+        assert clause == expected_scope
+        assert clause.count("{") == clause.count("}")
+
 
 @pytest.mark.unit
 class TestNativeGraphAdapterEmbeddingDimension:

@@ -38,6 +38,14 @@ def _episode_props(uuid: str = "ep_123", name: str = "Test Episode") -> dict:
     }
 
 
+class _Neo4jDateTimeLike:
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    def isoformat(self) -> str:
+        return self._value
+
+
 @pytest.mark.unit
 class TestEpisodesRouter:
     """Test cases for episodes router endpoints."""
@@ -181,6 +189,20 @@ class TestEpisodesRouter:
         assert data["status"] == "completed"
 
     @pytest.mark.asyncio
+    async def test_get_episode_serializes_neo4j_datetime_values(self, client, mock_graphiti_client):
+        """Neo4j temporal values must cross the HTTP boundary as ISO strings."""
+        props = _episode_props()
+        props["created_at"] = _Neo4jDateTimeLike("2026-07-10T13:28:30+00:00")
+        props["valid_at"] = _Neo4jDateTimeLike("2026-07-10T13:20:00+00:00")
+        mock_graphiti_client.get_episode_by_name = AsyncMock(return_value=props)
+
+        response = client.get("/api/v1/episodes/by-name/Test Episode")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["created_at"] == "2026-07-10T13:28:30+00:00"
+        assert response.json()["valid_at"] == "2026-07-10T13:20:00+00:00"
+
+    @pytest.mark.asyncio
     async def test_get_episode_not_found(self, client, mock_graphiti_client):
         """Test episode retrieval when episode not found."""
         mock_graphiti_client.get_episode_by_name = AsyncMock(return_value=None)
@@ -216,6 +238,25 @@ class TestEpisodesRouter:
         assert len(data["episodes"]) == 5
         assert data["limit"] == 5
         assert data["offset"] == 0
+
+    @pytest.mark.asyncio
+    async def test_list_episodes_serializes_neo4j_datetime_values(
+        self, client, mock_graphiti_client
+    ):
+        """Episode list payloads use the same ISO temporal boundary as detail."""
+        props = _episode_props()
+        props["created_at"] = _Neo4jDateTimeLike("2026-07-10T13:28:30+00:00")
+        props["valid_at"] = _Neo4jDateTimeLike("2026-07-10T13:20:00+00:00")
+        mock_graphiti_client.list_episodes = AsyncMock(
+            return_value={"episodes": [props], "total": 1}
+        )
+
+        response = client.get("/api/v1/episodes/?limit=5&offset=0")
+
+        assert response.status_code == status.HTTP_200_OK
+        episode = response.json()["episodes"][0]
+        assert episode["created_at"] == "2026-07-10T13:28:30+00:00"
+        assert episode["valid_at"] == "2026-07-10T13:20:00+00:00"
 
     @pytest.mark.asyncio
     async def test_list_episodes_with_filters(

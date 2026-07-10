@@ -207,6 +207,9 @@ jobs:
       - name: Verify deterministic local Agent and LLM turn
         run: uv run python -m scripts.verify_e2e_agent
 
+      - name: Verify deterministic Graph mutation and queries
+        run: uv run python -m scripts.verify_e2e_graph
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:

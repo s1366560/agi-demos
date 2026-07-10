@@ -2402,13 +2402,13 @@ class NativeGraphAdapter(GraphStorePort):
             return (
                 f"({var}.project_id = $project_id OR EXISTS {{ "
                 f"MATCH ({var})<-[:MENTIONS]-(ep:Episodic) "
-                "WHERE ep.project_id = $project_id }})"
+                "WHERE ep.project_id = $project_id })"
             )
         if project_ids is not None:
             return (
                 f"({var}.project_id IN $project_ids OR EXISTS {{ "
                 f"MATCH ({var})<-[:MENTIONS]-(ep:Episodic) "
-                "WHERE ep.project_id IN $project_ids }})"
+                "WHERE ep.project_id IN $project_ids })"
             )
         return ""
 
