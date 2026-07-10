@@ -68,6 +68,54 @@ async def test_create_sandbox_generates_private_capability_and_loopback_ports(
     assert all(binding[0] == "127.0.0.1" for binding in ports.values())
 
 
+async def test_create_sandbox_honors_profile_image_and_disabled_desktop(
+    adapter: MCPSandboxAdapter,
+    docker_client: MagicMock,
+) -> None:
+    captured_config: dict[str, object] = {}
+
+    def run_container(**kwargs: object) -> MagicMock:
+        captured_config.update(kwargs)
+        container = MagicMock()
+        container.name = kwargs["name"]
+        container.status = "running"
+        container.labels = kwargs["labels"]
+        container.ports = {}
+        return container
+
+    docker_client.containers.run = Mock(side_effect=run_container)
+    config = SandboxConfig(
+        image="sandbox-mcp-server:lite",
+        desktop_enabled=False,
+    )
+
+    with (
+        patch.object(adapter, "_is_port_available", return_value=True),
+        patch.object(adapter, "_persist_sandbox_state", new=AsyncMock()),
+        patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        instance = await adapter.create_sandbox(
+            project_path="/tmp/project",
+            config=config,
+        )
+
+    assert captured_config["image"] == "sandbox-mcp-server:lite"
+    environment = captured_config["environment"]
+    assert isinstance(environment, dict)
+    assert environment["DESKTOP_ENABLED"] == "false"
+    ports = captured_config["ports"]
+    assert isinstance(ports, dict)
+    assert "6080/tcp" not in ports
+    labels = captured_config["labels"]
+    assert isinstance(labels, dict)
+    assert "memstack.sandbox.desktop_port" not in labels
+    assert instance.desktop_port is None
+    assert instance.desktop_url is None
+
+
 def test_rebuild_config_preserves_capability_and_loopback_ports(
     adapter: MCPSandboxAdapter,
 ) -> None:
@@ -91,6 +139,27 @@ def test_rebuild_config_preserves_capability_and_loopback_ports(
         "6080/tcp": ("127.0.0.1", 16080),
         "7681/tcp": ("127.0.0.1", 17681),
     }
+
+
+def test_rebuild_config_honors_profile_image_and_disabled_desktop(
+    adapter: MCPSandboxAdapter,
+) -> None:
+    container_config = adapter._build_rebuild_container_config(
+        sandbox_id="sandbox-lite",
+        config=SandboxConfig(
+            image="sandbox-mcp-server:lite",
+            desktop_enabled=False,
+        ),
+        old_ports=[18765, None, 17681],
+        project_path="/tmp/project",
+        labels={"memstack.sandbox": "true"},
+        auth_token="rebuild-capability",
+    )
+
+    assert container_config["image"] == "sandbox-mcp-server:lite"
+    environment = container_config["environment"]
+    assert environment["DESKTOP_ENABLED"] == "false"
+    assert "6080/tcp" not in container_config["ports"]
 
 
 async def test_connect_mcp_sends_capability_in_authorization_header(
@@ -168,7 +237,13 @@ async def test_recovery_reads_capability_from_container_environment(
         "memstack.sandbox.mcp_port": "18765",
     }
     container.attrs = {
-        "Config": {"Env": ["MCP_STATIC_TOKEN=recovered-capability"]},
+        "Config": {
+            "Image": "sandbox-mcp-server:lite",
+            "Env": [
+                "MCP_STATIC_TOKEN=recovered-capability",
+                "DESKTOP_ENABLED=false",
+            ],
+        },
         "Mounts": [
             {
                 "Destination": "/workspace",
@@ -183,3 +258,45 @@ async def test_recovery_reads_capability_from_container_environment(
 
     assert instance is not None
     assert instance.mcp_auth_token == "recovered-capability"
+    assert instance.config.image == "sandbox-mcp-server:lite"
+    assert instance.config.desktop_enabled is False
+
+
+async def test_cross_process_sync_recovers_profile_image_and_desktop_state(
+    adapter: MCPSandboxAdapter,
+    docker_client: MagicMock,
+) -> None:
+    container = MagicMock()
+    container.status = "running"
+    container.labels = {
+        "memstack.sandbox": "true",
+        "memstack.sandbox.id": "sandbox-sync",
+        "memstack.sandbox.mcp_port": "18765",
+        "memstack.sandbox.desktop_port": "16080",
+        "memstack.sandbox.terminal_port": "17681",
+    }
+    container.attrs = {
+        "Config": {
+            "Image": "sandbox-mcp-server:lite",
+            "Env": [
+                "MCP_STATIC_TOKEN=sync-capability",
+                "DESKTOP_ENABLED=false",
+            ],
+        },
+        "Mounts": [
+            {
+                "Destination": "/workspace",
+                "Source": "/tmp/project",
+                "RW": True,
+            }
+        ],
+    }
+    docker_client.containers.get = Mock(return_value=container)
+
+    instance = await adapter.sync_sandbox_from_docker("sandbox-sync")
+
+    assert instance is not None
+    assert instance.config.image == "sandbox-mcp-server:lite"
+    assert instance.config.desktop_enabled is False
+    assert instance.desktop_port is None
+    assert instance.desktop_url is None

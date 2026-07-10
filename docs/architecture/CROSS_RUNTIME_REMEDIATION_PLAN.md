@@ -60,6 +60,9 @@ Status: implemented for the supported Desktop contracts.
 - Render server-authorized, stateless A2UI buttons in Desktop only when the
   persisted surface and `allowed_actions` contract agree exactly. Reject
   dynamic contexts, unsafe object keys, orphan surfaces, and unsupported forms.
+- Honor the selected Sandbox profile image and desktop capability in create,
+  rebuild, API-restart recovery, and cross-process sync paths. Do not publish or
+  report a desktop endpoint when the profile disables it.
 - Accept that same stateless A2UI subset on the Rust `:8088` HITL boundary only
   after an exact persisted allow-list match. Seal the database recovery payload
   and Redis response independently with the Python-compatible AES-256-GCM
@@ -162,7 +165,7 @@ Verified on 2026-07-10:
 - Sandbox MCP security: direct unauthenticated WebSocket access closed with
   code 4001 while the capability-authenticated `ping` contract succeeded.
   Server tests passed 57/57 (plus one skipped) and Sandbox adapter tests passed
-  103/103 across create, rebuild, recovery, sync, and connection paths.
+  106/106 across create, rebuild, recovery, sync, profile, and connection paths.
 - Docker build context: the root exclusion contract is regression-tested and
   prevents local environment files, credentials, VCS state, caches, reports,
   runtime data, and compiled artifacts from entering `COPY . .` layers.
