@@ -43,7 +43,7 @@ Exit criteria:
 
 ## Phase 1 — protocol and product truth
 
-Status: implemented for the supported Desktop contracts in the current working tree.
+Status: implemented for the supported Desktop contracts.
 
 - Remove duplicate Python task detail/cancel routes so runtime routing and
   OpenAPI describe the same canonical handler.
@@ -53,6 +53,9 @@ Status: implemented for the supported Desktop contracts in the current working t
   acknowledgement, cursor replay, and conversation-scoped subscription logic.
 - Ensure Desktop local conversations can execute more than one turn and that
   terminal session identifiers are scoped and single-use.
+- Render server-authorized, stateless A2UI buttons in Desktop only when the
+  persisted surface and `allowed_actions` contract agree exactly. Reject
+  dynamic contexts, unsafe object keys, orphan surfaces, and unsupported forms.
 - Distinguish Local Memory from server Project Memory in labels and docs.
 
 Exit criteria:
@@ -64,14 +67,18 @@ Exit criteria:
 
 ## Phase 2 — continuous verification and documentation
 
-Status: implemented in CI and documentation in the current working tree.
+Status: the first continuous-verification increment is implemented.
 
-- Exclude test modules from Python coverage, enforce the current 72% production
-  baseline in CI, and ratchet the gate to the repository's 80% target as the
-  remaining production branches receive tests.
+- Exclude test modules from Python coverage, enforce the verified 72.80%
+  production baseline in CI, and ratchet the gate to the repository's 80%
+  target as the remaining production branches receive tests.
 - Run Web typecheck, unit tests, and production build on every pull request.
 - Run a backend-independent Playwright browser smoke gate without requiring LLM
-  credentials; keep full service E2E as a separately provisioned gate.
+  credentials.
+- Run a real backend-dependent Playwright gate against migrated pgvector
+  PostgreSQL, Redis, Neo4j, FastAPI bootstrap authentication, tenant/project
+  persistence, and browser rendering. Keep Agent/Ray/LLM/Sandbox scenarios as a
+  separately provisioned full-product gate.
 - Run Rust Postgres/Redis tests against real CI services and run Desktop source
   checks before bundling.
 - Make this document and `ARCHITECTURE.md` the cross-runtime authority; keep the
@@ -85,6 +92,12 @@ after the release blockers above:
 - Persist Desktop workspace, conversation, message, timeline, and checkpoint
   state transactionally instead of mixing SQLite checkpoints with process-local
   maps.
+- Add Rust `:8088` gateway support for encrypted A2UI action responses before
+  enabling Desktop A2UI through that transport; do not downgrade the Python
+  response-encryption contract.
+- Extend Desktop A2UI beyond stateless buttons only after persisted form state,
+  dynamic value resolution, and component-path validation have cross-client
+  parity tests.
 - Migrate the complete Agent worker, HITL orchestration, event replay, plugin
   hooks, graph/reflexion, and sandbox lifecycle to Rust only behind per-capability
   parity tests and explicit strangler gates.
@@ -101,21 +114,29 @@ Verified on 2026-07-10:
 
 - Python security/router regression suites: 50 targeted tests passed; Ruff,
   Mypy, Pyright, i18n, and diff checks passed.
-- Python: a clean full unit rerun passed 12,687 tests. The original 81.41%
+- Python: a clean full unit rerun passed 12,845 tests. The original 81.41%
   coverage figure incorrectly counted test code; the production-only baseline
-  is 72.48%, with a non-regression gate of 72% that omits `src/tests` and an
-  explicit follow-on target of 80%.
+  increased from 72.48% to 72.87%, with a non-regression gate of 72.80% that
+  omits `src/tests` and an explicit follow-on target of 80%.
+- Python coverage/security increments: Markdown memory path confinement,
+  heartbeat token handling, pool recommendations, pricing validation, and LLM
+  cache behavior have dedicated regression suites; the touched cache and
+  pricing modules reached 100% coverage and Markdown memory reached 88%.
 - Rust server: 526 tests passed; the production-mode binary fails closed when
   `DATABASE_URL` is absent, while explicit `AGISTACK_DEV_MODE=1` starts the
   in-memory development runtime.
 - Desktop Rust: 14 tests passed; local tools: 9 tests passed; workspace Rust
   tests, formatting, checks, and clippy passed.
-- Desktop UI: 9 protocol/authentication tests passed and the production build
-  passed.
+- Desktop UI: 14 protocol/authentication/A2UI tests passed and the production
+  build passed.
 - Web: typecheck and production build passed; 341 files / 3,555 unit tests and
   Playwright smoke tests 2/2 passed.
+- Backend E2E: migrations, bootstrap verification, FastAPI, and the dedicated
+  Playwright auth/project smoke suite passed 2/2 against real local PostgreSQL,
+  Redis, and Neo4j services.
 - GitHub Actions workflow YAML parsed successfully.
 
-The backend-dependent Playwright suite still requires a separately provisioned
-database, users, Ray worker, sandbox runtime, and deterministic LLM fixture. It
-is not represented as a completed parity gate by the browser-only smoke suite.
+The basic backend-dependent Playwright gate is complete. The remaining
+full-product E2E suite still requires deterministic Ray worker, LLM, graph
+mutation, and sandbox fixtures; the basic auth/project gate is not represented
+as complete Agent-runtime parity.

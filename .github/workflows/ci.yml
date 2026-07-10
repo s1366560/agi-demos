@@ -149,7 +149,7 @@ jobs:
             --cov=src \
             --cov-report=xml \
             --cov-report=term-missing \
-            --cov-fail-under=72
+            --cov-fail-under=72.8
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

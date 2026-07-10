@@ -26,6 +26,8 @@ import type {
   WorkspaceMessage,
 } from '../../types';
 import { ComposerControls } from './ComposerControls';
+import { resolveA2UIActionView } from './a2uiAction';
+import type { A2UIActionView } from './a2uiAction';
 
 type ChatPanelProps = {
   messages: WorkspaceMessage[];
@@ -358,6 +360,16 @@ function AgentTimeline({
   onToggleItem: (item: AgentTimelineItem) => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
 }) {
+  const a2uiActionViews = useMemo(
+    () =>
+      new Map(
+        state.items
+          .filter((item) => timelineHitlType(item) === 'a2ui_action')
+          .map((item) => [item.id, resolveA2UIActionView(item, state.items)] as const),
+      ),
+    [state.items],
+  );
+
   if (state.loading) {
     return (
       <div className="chat-empty-state timeline-loading" role="status" aria-label="Loading session history">
@@ -391,6 +403,7 @@ function AgentTimeline({
             expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
             onToggle={() => onToggleItem(item)}
             onRespondToHitl={onRespondToHitl}
+            a2uiActionView={a2uiActionViews.get(item.id)}
             key={item.id}
           />
         ))
@@ -428,11 +441,13 @@ function TimelineItemView({
   expanded,
   onToggle,
   onRespondToHitl,
+  a2uiActionView,
 }: {
   item: AgentTimelineItem;
   expanded: boolean;
   onToggle: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  a2uiActionView?: A2UIActionView;
 }) {
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') {
@@ -446,7 +461,12 @@ function TimelineItemView({
             {formatTimelineTime(item)}
           </Text>
         </div>
-        <TimelineItemBody item={item} kind={kind} onRespondToHitl={onRespondToHitl} />
+        <TimelineItemBody
+          item={item}
+          kind={kind}
+          onRespondToHitl={onRespondToHitl}
+          a2uiActionView={a2uiActionView}
+        />
       </article>
     );
   }
@@ -478,7 +498,12 @@ function TimelineItemView({
           <span className="timeline-row-summary">{timelineSummary(item, kind)}</span>
         </div>
         {expanded && hasDetails ? (
-          <TimelineItemBody item={item} kind={kind} onRespondToHitl={onRespondToHitl} />
+          <TimelineItemBody
+            item={item}
+            kind={kind}
+            onRespondToHitl={onRespondToHitl}
+            a2uiActionView={a2uiActionView}
+          />
         ) : null}
       </div>
       <div className="timeline-row-meta">
@@ -494,15 +519,22 @@ function TimelineItemBody({
   item,
   kind,
   onRespondToHitl,
+  a2uiActionView,
 }: {
   item: AgentTimelineItem;
   kind: TimelineKind;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  a2uiActionView?: A2UIActionView;
 }) {
   const hitlType = timelineHitlType(item);
   if (hitlType) {
     return (
-      <HitlResponseCard item={item} hitlType={hitlType} onRespond={onRespondToHitl} />
+      <HitlResponseCard
+        item={item}
+        hitlType={hitlType}
+        onRespond={onRespondToHitl}
+        a2uiActionView={a2uiActionView}
+      />
     );
   }
 
@@ -616,10 +648,12 @@ function HitlResponseCard({
   item,
   hitlType,
   onRespond,
+  a2uiActionView,
 }: {
   item: AgentTimelineItem;
   hitlType: HitlType;
   onRespond: (submission: HitlResponseSubmission) => Promise<void>;
+  a2uiActionView?: A2UIActionView;
 }) {
   const [answer, setAnswer] = useState('');
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
@@ -770,10 +804,34 @@ function HitlResponseCard({
       ) : null}
 
       {!answered && hitlType === 'a2ui_action' ? (
-        <Text size="1" color="amber">
-          This interactive A2UI request requires its original surface. Open the Web client to
-          respond.
-        </Text>
+        a2uiActionView?.actions.length ? (
+          <Flex gap="2" wrap="wrap">
+            {a2uiActionView.actions.map((action) => (
+              <Button
+                size="1"
+                variant="soft"
+                disabled={!requestId || busy}
+                loading={busy}
+                key={`${action.sourceComponentId}:${action.actionName}`}
+                onClick={() =>
+                  void submit({
+                    action_name: action.actionName,
+                    source_component_id: action.sourceComponentId,
+                    context: {},
+                  })
+                }
+              >
+                {action.label}
+              </Button>
+            ))}
+          </Flex>
+        ) : (
+          <Text size="1" color="amber">
+            {a2uiActionView?.reason ??
+              'This interactive A2UI request requires its original surface.'}{' '}
+            Open the Web client to respond.
+          </Text>
+        )
       ) : null}
 
       {submitError ? (

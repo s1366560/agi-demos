@@ -70,6 +70,7 @@ import {
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
 import { ComposerControls } from './features/chat/ComposerControls';
+import { markA2UIActionAnswered } from './features/chat/a2uiAction';
 import { RuntimeConfigPanel } from './features/runtime/RuntimeConfigPanel';
 import { StatusPanel } from './features/status/StatusPanel';
 import { WorkspaceDock } from './features/workspace/WorkspaceDock';
@@ -1138,8 +1139,10 @@ function mergeLiveTimelineEvent(
   if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
     return mergeStreamingTextEvent(existing, payload, type);
   }
+  const timeline =
+    type === 'a2ui_action_answered' ? markA2UIActionAnswered(existing, event) : existing;
   const item = timelineItemFromSocketEvent(event);
-  return item ? mergeTimelineItems(existing, [item]) : existing;
+  return item ? mergeTimelineItems(timeline, [item]) : timeline;
 }
 
 function mergeStreamingTextEvent(

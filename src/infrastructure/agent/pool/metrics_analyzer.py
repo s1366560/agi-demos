@@ -233,16 +233,20 @@ class PoolMetricsAnalyzer:
         else:
             slope = numerator / denominator
 
+        # Normalize against an absolute scale so zero-valued and negative-valued
+        # metrics remain well-defined.
+        value_scale = max(abs(y_mean), max(abs(value) for value in values), 1e-9)
+
         # Determine direction and strength
-        if abs(slope) < 0.01 * y_mean:  # Less than 1% change per data point
+        if abs(slope) < 0.01 * value_scale:  # Less than 1% change per data point
             direction = "stable"
             strength = 0.0
         elif slope > 0:
             direction = "increasing"
-            strength = min(1.0, slope / y_mean * 10)  # Normalize
+            strength = min(1.0, slope / value_scale * 10)
         else:
             direction = "decreasing"
-            strength = min(1.0, abs(slope) / y_mean * 10)
+            strength = min(1.0, abs(slope) / value_scale * 10)
 
         # Predict next value
         predicted = values[-1] + slope * self._prediction_horizon_hours
@@ -324,14 +328,12 @@ class PoolMetricsAnalyzer:
         else:
             cpu_based = current_count
 
-        # Consider request trend
+        # A strong request increase may raise the CPU recommendation. Otherwise
+        # it must not cancel a CPU-driven scale-down.
         if request_trend.trend_direction == "increasing" and request_trend.trend_strength > 0.5:
-            request_based = current_count + 1
-        else:
-            request_based = current_count
+            return max(cpu_based, current_count + 1)
 
-        # Take the maximum recommendation
-        return max(cpu_based, request_based)
+        return cpu_based
 
     def _calculate_confidence(
         self,

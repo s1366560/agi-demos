@@ -431,7 +431,15 @@ class SqlConversationRepository(
 
         # Multi-agent (Track B) — safe decode with defaults for legacy rows.
         mode_raw = getattr(db_conversation, "conversation_mode", None)
-        conv_mode = ConversationMode(mode_raw) if mode_raw else None
+        try:
+            conv_mode = ConversationMode(mode_raw) if mode_raw else None
+        except ValueError:
+            logger.warning(
+                "Ignoring unknown persisted conversation mode %r for conversation %s",
+                mode_raw,
+                db_conversation.id,
+            )
+            conv_mode = None
         participant_agents = list(getattr(db_conversation, "participant_agents", None) or [])
 
         return Conversation(

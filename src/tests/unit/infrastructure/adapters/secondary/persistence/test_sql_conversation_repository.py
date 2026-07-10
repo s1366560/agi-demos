@@ -249,6 +249,37 @@ class TestSqlConversationRepositoryList:
         assert all(c.project_id == "proj-1" for c in conversations)
 
     @pytest.mark.asyncio
+    async def test_list_by_project_tolerates_unknown_persisted_conversation_mode(
+        self, v2_conversation_repo: SqlConversationRepository, db_session: AsyncSession
+    ):
+        """External runtimes must not make an entire project conversation list unreadable."""
+        db_session.add(
+            DBConversation(
+                id="conv-external-mode",
+                project_id="proj-external-mode",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="External Runtime Conversation",
+                status="active",
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                current_mode="build",
+                participant_agents=[],
+                conversation_mode="workspace",
+                merge_strategy="result_only",
+            )
+        )
+        await db_session.commit()
+
+        conversations = await v2_conversation_repo.list_by_project("proj-external-mode")
+
+        assert [conversation.id for conversation in conversations] == ["conv-external-mode"]
+        assert conversations[0].conversation_mode is None
+
+    @pytest.mark.asyncio
     async def test_list_by_project_uses_stable_activity_order(
         self, v2_conversation_repo: SqlConversationRepository, db_session: AsyncSession
     ):

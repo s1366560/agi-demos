@@ -14,6 +14,7 @@ const compile = spawnSync(process.execPath, [tscEntrypoint, '-p', 'tsconfig.test
 if (compile.status !== 0) process.exit(compile.status ?? 1);
 
 const testFiles = [
+  'a2ui-action.test.mjs',
   'api-client.test.mjs',
   'local-runtime-status.test.mjs',
   'use-agent-socket.test.mjs',

@@ -109,7 +109,8 @@ source = ["src"]
 omit = ["src/tests/*"]
 
 [tool.coverage.report]
-fail_under = 72
+fail_under = 72.8
+precision = 2
 omit = ["src/tests/*"]
 
 [tool.ruff]
