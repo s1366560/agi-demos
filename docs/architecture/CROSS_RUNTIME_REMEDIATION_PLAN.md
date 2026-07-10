@@ -30,6 +30,10 @@ Status: implemented and covered by regression tests in the current working tree.
   and never return the LLM provider secret in runtime status.
 - Constrain Desktop local file operations to canonical workspace paths, reject
   symlink escapes, bound terminal queues, and terminate timed-out children.
+- Require a per-container capability for Sandbox MCP WebSockets, pass it only
+  through the authorization header, recover it from Docker metadata after an
+  API restart, and bind MCP, desktop, and terminal host ports to loopback.
+  Legacy containers without a capability fail closed until rebuilt.
 - Make the Rust server require `DATABASE_URL` unless explicit development mode
   is enabled. Keep legacy unauthenticated `/v1/*` routes disabled by default.
 
@@ -81,8 +85,14 @@ Status: the first continuous-verification increment is implemented.
   credentials.
 - Run a real backend-dependent Playwright gate against migrated pgvector
   PostgreSQL, Redis, Neo4j, FastAPI bootstrap authentication, tenant/project
-  persistence, and browser rendering. Keep Agent/Ray/LLM/Sandbox scenarios as a
-  separately provisioned full-product gate.
+  persistence, and browser rendering.
+- Run a deterministic local Agent/LLM gate against a fresh migrated database,
+  the real authenticated Agent WebSocket, Redis event streaming, persisted
+  conversation history, and an OpenAI-compatible fixture with no external key.
+  Keep Ray actor, graph mutation, and full Sandbox image scenarios as separately
+  provisioned full-product gates.
+- Exclude local secrets, Git metadata, caches, reports, runtime volumes, and
+  language build outputs from root Docker build contexts.
 - Run Rust Postgres/Redis tests against real CI services and run Desktop source
   checks before bundling.
 - Make this document and `ARCHITECTURE.md` the cross-runtime authority; keep the
@@ -145,9 +155,20 @@ Verified on 2026-07-10:
 - Backend E2E: migrations, bootstrap verification, FastAPI, and the dedicated
   Playwright auth/project smoke suite passed 2/2 against real local PostgreSQL,
   Redis, and Neo4j services.
+- Agent/LLM E2E: a fresh isolated database was initialized and migrated, then
+  the deterministic OpenAI-compatible fixture drove the real authenticated
+  Agent WebSocket through completion and persisted-history verification. The
+  workflow and verifier regression suite passed 12/12.
+- Sandbox MCP security: direct unauthenticated WebSocket access closed with
+  code 4001 while the capability-authenticated `ping` contract succeeded.
+  Server tests passed 57/57 (plus one skipped) and Sandbox adapter tests passed
+  103/103 across create, rebuild, recovery, sync, and connection paths.
+- Docker build context: the root exclusion contract is regression-tested and
+  prevents local environment files, credentials, VCS state, caches, reports,
+  runtime data, and compiled artifacts from entering `COPY . .` layers.
 - GitHub Actions workflow YAML parsed successfully.
 
-The basic backend-dependent Playwright gate is complete. The remaining
-full-product E2E suite still requires deterministic Ray worker, LLM, graph
-mutation, and sandbox fixtures; the basic auth/project gate is not represented
-as complete Agent-runtime parity.
+The basic backend-dependent Playwright gate and deterministic local Agent/LLM
+gate are complete. The remaining full-product E2E suite still requires a Ray
+worker, graph mutation, and a lightweight authenticated Sandbox fixture; these
+completed local-runtime gates are not represented as Ray or full Sandbox parity.

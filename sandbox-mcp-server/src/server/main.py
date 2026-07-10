@@ -28,6 +28,17 @@ def _env_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _auth_config_from_env() -> AuthConfig:
+    """Build fail-closed authentication settings from the environment."""
+    return AuthConfig(
+        enabled=_env_bool("MCP_AUTH_ENABLED", True),
+        platform_url=os.getenv("MEMSTACK_PLATFORM_URL"),
+        platform_service_token=os.getenv("MEMSTACK_PLATFORM_SERVICE_TOKEN"),
+        allow_localhost=_env_bool("MCP_ALLOW_LOCALHOST", False),
+        static_token=os.getenv("MCP_STATIC_TOKEN"),
+    )
+
+
 def setup_signal_handlers(
     server: MCPWebSocketServer,
     session_manager: "SessionManager | None",
@@ -98,13 +109,7 @@ async def run_server(
     )
 
     # Create server
-    auth_config = AuthConfig(
-        enabled=_env_bool("MCP_AUTH_ENABLED", False),
-        platform_url=os.getenv("MEMSTACK_PLATFORM_URL"),
-        platform_service_token=os.getenv("MEMSTACK_PLATFORM_SERVICE_TOKEN"),
-        allow_localhost=_env_bool("MCP_ALLOW_LOCALHOST", True),
-        static_token=os.getenv("MCP_STATIC_TOKEN"),
-    )
+    auth_config = _auth_config_from_env()
     server = MCPWebSocketServer(
         host=host,
         port=port,
