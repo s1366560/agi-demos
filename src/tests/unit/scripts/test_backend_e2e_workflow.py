@@ -23,6 +23,14 @@ def test_backend_e2e_job_provisions_real_dependencies_and_runs_smoke() -> None:
     assert "uv run uvicorn src.infrastructure.adapters.primary.web.main:app" in commands
     assert "scripts/verify_e2e_backend.py" in commands
     assert "-m scripts.verify_e2e_agent" in commands
+    assert "ray start --head" in commands
+    assert "--min-worker-port=20000" in commands
+    assert "--max-worker-port=29999" in commands
+    assert "-m src.agent_actor_worker" in commands
+    assert "ray.get_actor" in commands
+    assert "AGENT_RUNTIME_MODE=ray" in commands
+    assert "Using Ray Actor (AGENT_RUNTIME_MODE=ray)" in commands
+    assert commands.count("-m scripts.verify_e2e_agent") == 2
     assert "playwright test e2e/backend-smoke.spec.ts" in commands
     assert "curl -fsS http://localhost:8000/health" in commands
 
@@ -32,6 +40,8 @@ def test_backend_e2e_job_provisions_real_dependencies_and_runs_smoke() -> None:
     assert environment["LLM_PROVIDER"] == "openai"
     assert environment["OPENAI_BASE_URL"] == "http://localhost:8010/v1"
     assert environment["OPENAI_MODEL"] == "openai/memstack-e2e"
+    assert environment["RAY_ENABLE_UV_RUN_RUNTIME_ENV"] == "0"
+    assert "RAY_ADDRESS=127.0.0.1:6380" in commands
 
 
 def test_compose_api_uses_service_hostnames_for_python_dependencies() -> None:

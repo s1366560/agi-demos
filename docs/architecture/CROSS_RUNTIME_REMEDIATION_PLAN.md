@@ -89,11 +89,12 @@ Status: the first continuous-verification increment is implemented.
 - Run a real backend-dependent Playwright gate against migrated pgvector
   PostgreSQL, Redis, Neo4j, FastAPI bootstrap authentication, tenant/project
   persistence, and browser rendering.
-- Run a deterministic local Agent/LLM gate against a fresh migrated database,
-  the real authenticated Agent WebSocket, Redis event streaming, persisted
-  conversation history, and an OpenAI-compatible fixture with no external key.
-  Keep Ray actor, graph mutation, and full Sandbox image scenarios as separately
-  provisioned full-product gates.
+- Run deterministic local and Ray Agent/LLM gates against a fresh migrated
+  database, the real authenticated Agent WebSocket, Redis event streaming,
+  persisted conversation history, and an OpenAI-compatible fixture with no
+  external key. Ray mode must be explicit and the API log must prove the router
+  and ProjectActor path; keep graph mutation and full Sandbox image scenarios
+  as separately provisioned full-product gates.
 - Exclude local secrets, Git metadata, caches, reports, runtime volumes, and
   language build outputs from root Docker build contexts.
 - Run Rust Postgres/Redis tests against real CI services and run Desktop source
@@ -162,6 +163,11 @@ Verified on 2026-07-10:
   the deterministic OpenAI-compatible fixture drove the real authenticated
   Agent WebSocket through completion and persisted-history verification. The
   workflow and verifier regression suite passed 12/12.
+- Ray Agent E2E: a host-local Ray 2.53 head, detached HITL router, and
+  ProjectActor completed the same authenticated WebSocket and history contract
+  with `AGENT_RUNTIME_MODE=ray`; the API log proved the non-fallback Ray path.
+  The gate disables Ray's automatic `uv run` working-directory upload and uses
+  a direct same-host GCS address to avoid packaging the repository into CI.
 - Sandbox MCP security: direct unauthenticated WebSocket access closed with
   code 4001 while the capability-authenticated `ping` contract succeeded.
   Server tests passed 57/57 (plus one skipped) and Sandbox adapter tests passed
@@ -171,7 +177,7 @@ Verified on 2026-07-10:
   runtime data, and compiled artifacts from entering `COPY . .` layers.
 - GitHub Actions workflow YAML parsed successfully.
 
-The basic backend-dependent Playwright gate and deterministic local Agent/LLM
-gate are complete. The remaining full-product E2E suite still requires a Ray
-worker, graph mutation, and a lightweight authenticated Sandbox fixture; these
-completed local-runtime gates are not represented as Ray or full Sandbox parity.
+The basic backend-dependent Playwright gate plus deterministic local and Ray
+Agent/LLM gates are complete. The remaining full-product E2E suite still
+requires graph mutation and a lightweight authenticated Sandbox fixture; the
+completed Agent gates are not represented as graph or full Sandbox parity.

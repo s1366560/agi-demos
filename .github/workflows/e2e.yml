@@ -126,6 +126,7 @@ jobs:
       ENABLE_TELEMETRY: false
       LANGFUSE_ENABLED: false
       MCP_ENABLED: false
+      RAY_ENABLE_UV_RUN_RUNTIME_ENV: '0'
       CI: true
     steps:
       - name: Checkout code
@@ -210,6 +211,91 @@ jobs:
         working-directory: web
         run: pnpm exec playwright test e2e/backend-smoke.spec.ts
 
+      - name: Stop local-runtime API
+        run: |
+          kill "$(cat backend-e2e-logs/api.pid)"
+          for attempt in $(seq 1 30); do
+            if ! kill -0 "$(cat backend-e2e-logs/api.pid)" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Local-runtime API did not stop"
+          exit 1
+
+      - name: Start Ray head and Agent Actor worker
+        run: |
+          env AGENT_RUNTIME_MODE=ray RAY_ADDRESS=127.0.0.1:6380 \
+            RAY_NAMESPACE=memstack \
+            uv run ray start --head \
+            --node-ip-address=127.0.0.1 \
+            --port=6380 \
+            --min-worker-port=20000 \
+            --max-worker-port=29999 \
+            --num-cpus=2 \
+            --object-store-memory=268435456 \
+            --include-dashboard=false \
+            --disable-usage-stats
+          nohup env AGENT_RUNTIME_MODE=ray \
+            RAY_ADDRESS=127.0.0.1:6380 \
+            RAY_NAMESPACE=memstack \
+            uv run python -m src.agent_actor_worker \
+            > backend-e2e-logs/agent-actor.log 2>&1 &
+          echo $! > backend-e2e-logs/agent-actor.pid
+          for attempt in $(seq 1 60); do
+            if uv run python -c \
+              "import ray; ray.init(address='127.0.0.1:6380', namespace='memstack'); ray.get_actor('hitl-router', namespace='memstack'); ray.shutdown()"; then
+              grep -F "router actor is ready" backend-e2e-logs/agent-actor.log
+              exit 0
+            fi
+            sleep 2
+          done
+          tail -200 backend-e2e-logs/agent-actor.log
+          exit 1
+
+      - name: Start Ray-runtime API and wait for health
+        run: |
+          nohup env AGENT_RUNTIME_MODE=ray \
+            RAY_ADDRESS=127.0.0.1:6380 \
+            RAY_NAMESPACE=memstack \
+            uv run uvicorn src.infrastructure.adapters.primary.web.main:app \
+            --host 0.0.0.0 --port 8000 > backend-e2e-logs/api-ray.log 2>&1 &
+          echo $! > backend-e2e-logs/api.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          tail -200 backend-e2e-logs/api-ray.log
+          exit 1
+
+      - name: Verify deterministic Ray Agent and LLM turn
+        run: |
+          uv run python -m scripts.verify_e2e_agent
+          for attempt in $(seq 1 20); do
+            if grep -F "Using Ray Actor (AGENT_RUNTIME_MODE=ray)" \
+              backend-e2e-logs/api-ray.log; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -200 backend-e2e-logs/api-ray.log
+          exit 1
+
+      - name: Stop backend E2E processes
+        if: always()
+        run: |
+          for pid_file in \
+            backend-e2e-logs/api.pid \
+            backend-e2e-logs/agent-actor.pid \
+            backend-e2e-logs/fake-openai.pid; do
+            if [ -f "$pid_file" ]; then
+              kill "$(cat "$pid_file")" 2>/dev/null || true
+            fi
+          done
+          uv run ray stop --force || true
+
       - name: Upload backend and browser reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -221,11 +307,11 @@ jobs:
             web/test-results
           if-no-files-found: ignore
 
-  # The complete product E2E suite remains opt-in because Ray, Graph, Memory,
-  # and Sandbox scenarios still require deterministic container fixtures. The
+  # The complete product E2E suite remains opt-in because Graph, Memory, and
+  # Sandbox scenarios still require deterministic container fixtures. The
   # backend-e2e job above covers real DB migrations, bootstrap auth,
   # tenant/project persistence, FastAPI/browser integration, and a real local
-  # Agent turn through an isolated OpenAI-compatible fixture.
+  # plus Ray Agent turn through an isolated OpenAI-compatible fixture.
   # e2e:
   #   runs-on: ubuntu-latest
   #
