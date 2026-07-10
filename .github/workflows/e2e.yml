@@ -115,7 +115,15 @@ jobs:
       AGENT_MAX_TOKENS: 512
       AGENT_SESSION_PREWARM_ENABLED: false
       RUN_BACKGROUND_WORKERS: false
-      SANDBOX_DOCKER_SERVICES_ENABLED: false
+      SANDBOX_DOCKER_SERVICES_ENABLED: true
+      SANDBOX_DOCKER_SOCKET_ENABLED: false
+      SANDBOX_PIP_CACHE_ENABLED: false
+      SANDBOX_HOST_MEMSTACK_PATH: /tmp/memstack-e2e-meta
+      SANDBOX_DEFAULT_IMAGE: sandbox-mcp-server:lite
+      SANDBOX_PROFILE_TYPE: lite
+      SANDBOX_MEMORY_LIMIT: 512m
+      SANDBOX_CPU_LIMIT: '1'
+      WORKSPACE_SYNC_ENABLED: false
       WORKSPACE_SUPERVISOR_ENABLED: false
       SKILL_EVOLUTION_ENABLED: false
       WORKSPACE_PLAN_OUTBOX_ENABLED: false
@@ -144,6 +152,15 @@ jobs:
 
       - name: Install backend dependencies
         run: uv sync --extra dev --dev --frozen
+
+      - name: Build lightweight authenticated Sandbox fixture
+        run: |
+          docker build \
+            --file sandbox-mcp-server/Dockerfile.e2e \
+            --tag sandbox-mcp-server:lite \
+            sandbox-mcp-server
+          mkdir -p /tmp/memstack-e2e-meta
+          chmod 0777 /tmp/memstack-e2e-meta
 
       - name: Initialize schema and verify migration head
         run: |
@@ -183,6 +200,9 @@ jobs:
 
       - name: Verify backend bootstrap
         run: uv run python scripts/verify_e2e_backend.py
+
+      - name: Verify authenticated MCP-only Sandbox lifecycle
+        run: uv run python -m scripts.verify_e2e_sandbox
 
       - name: Verify deterministic local Agent and LLM turn
         run: uv run python -m scripts.verify_e2e_agent
@@ -294,6 +314,10 @@ jobs:
               kill "$(cat "$pid_file")" 2>/dev/null || true
             fi
           done
+          for container_id in $(docker ps -aq --filter label=memstack.sandbox=true); do
+            docker rm --force "$container_id" || true
+          done
+          rm -rf /tmp/memstack-e2e-meta /tmp/memstack_*
           uv run ray stop --force || true
 
       - name: Upload backend and browser reports
@@ -308,10 +332,12 @@ jobs:
           if-no-files-found: ignore
 
   # The complete product E2E suite remains opt-in because Graph, Memory, and
-  # Sandbox scenarios still require deterministic container fixtures. The
+  # full Desktop/Terminal Sandbox scenarios still require deterministic
+  # fixtures. The
   # backend-e2e job above covers real DB migrations, bootstrap auth,
   # tenant/project persistence, FastAPI/browser integration, and a real local
-  # plus Ray Agent turn through an isolated OpenAI-compatible fixture.
+  # plus Ray Agent turn through an isolated OpenAI-compatible fixture, along
+  # with an authenticated MCP-only Sandbox lifecycle.
   # e2e:
   #   runs-on: ubuntu-latest
   #

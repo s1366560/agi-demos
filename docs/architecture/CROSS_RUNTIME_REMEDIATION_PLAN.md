@@ -97,6 +97,10 @@ Status: the first continuous-verification increment is implemented.
   as separately provisioned full-product gates.
 - Exclude local secrets, Git metadata, caches, reports, runtime volumes, and
   language build outputs from root Docker build contexts.
+- Build a locked, non-root MCP-only Sandbox contract image in CI and exercise
+  authentication, tenant isolation, loopback publication, Docker metadata,
+  write/read/bash tools, workspace escape rejection, and container teardown.
+  Keep the full Desktop/Terminal production image as a separate release gate.
 - Run Rust Postgres/Redis tests against real CI services and run Desktop source
   checks before bundling.
 - Make this document and `ARCHITECTURE.md` the cross-runtime authority; keep the
@@ -175,9 +179,14 @@ Verified on 2026-07-10:
 - Docker build context: the root exclusion contract is regression-tested and
   prevents local environment files, credentials, VCS state, caches, reports,
   runtime data, and compiled artifacts from entering `COPY . .` layers.
+- Sandbox lifecycle E2E: the 786 KB filtered build context produced a locked,
+  non-root MCP-only image; a real FastAPI project lifecycle rejected anonymous
+  and cross-tenant creation, blocked direct unauthenticated MCP with code 4001,
+  completed write/read/bash calls, rejected an out-of-workspace write, verified
+  loopback-only ports and no Docker socket, and removed the container cleanly.
 - GitHub Actions workflow YAML parsed successfully.
 
 The basic backend-dependent Playwright gate plus deterministic local and Ray
 Agent/LLM gates are complete. The remaining full-product E2E suite still
-requires graph mutation and a lightweight authenticated Sandbox fixture; the
-completed Agent gates are not represented as graph or full Sandbox parity.
+requires graph mutation and the full Desktop/Terminal Sandbox fixture; the
+completed MCP-only gate is not represented as full production-image parity.

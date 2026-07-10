@@ -1,0 +1,15 @@
+.git
+.DS_Store
+.coverage
+.pytest_cache
+.ruff_cache
+.venv
+venv
+**/__pycache__
+*.py[cod]
+tests
+docs
+docker
+scripts
+*.md
+!README.md

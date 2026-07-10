@@ -6,6 +6,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "e2e.yml"
 COMPOSE_PATH = REPOSITORY_ROOT / "docker-compose.yml"
 DOCKERIGNORE_PATH = REPOSITORY_ROOT / ".dockerignore"
+SANDBOX_DOCKERIGNORE_PATH = REPOSITORY_ROOT / "sandbox-mcp-server" / ".dockerignore"
 
 
 def test_backend_e2e_job_provisions_real_dependencies_and_runs_smoke() -> None:
@@ -31,6 +32,9 @@ def test_backend_e2e_job_provisions_real_dependencies_and_runs_smoke() -> None:
     assert "AGENT_RUNTIME_MODE=ray" in commands
     assert "Using Ray Actor (AGENT_RUNTIME_MODE=ray)" in commands
     assert commands.count("-m scripts.verify_e2e_agent") == 2
+    assert "sandbox-mcp-server/Dockerfile.e2e" in commands
+    assert "sandbox-mcp-server:lite" in commands
+    assert "-m scripts.verify_e2e_sandbox" in commands
     assert "playwright test e2e/backend-smoke.spec.ts" in commands
     assert "curl -fsS http://localhost:8000/health" in commands
 
@@ -42,6 +46,10 @@ def test_backend_e2e_job_provisions_real_dependencies_and_runs_smoke() -> None:
     assert environment["OPENAI_MODEL"] == "openai/memstack-e2e"
     assert environment["RAY_ENABLE_UV_RUN_RUNTIME_ENV"] == "0"
     assert "RAY_ADDRESS=127.0.0.1:6380" in commands
+    assert environment["SANDBOX_DOCKER_SERVICES_ENABLED"] is True
+    assert environment["SANDBOX_DOCKER_SOCKET_ENABLED"] is False
+    assert environment["SANDBOX_PIP_CACHE_ENABLED"] is False
+    assert environment["SANDBOX_HOST_MEMSTACK_PATH"] == "/tmp/memstack-e2e-meta"
 
 
 def test_compose_api_uses_service_hostnames_for_python_dependencies() -> None:
@@ -66,3 +74,12 @@ def test_docker_context_excludes_local_secrets_and_build_artifacts() -> None:
     assert {".git", ".env", ".env.*", ".venv", "**/node_modules", "**/target"} <= patterns
     assert {".memstack/workspace", ".memstack/worktrees", "logs", "*.log"} <= patterns
     assert {".ssh", ".aws", ".npmrc", ".pypirc", "*.pem", "*.key"} <= patterns
+
+    sandbox_patterns = {
+        line.strip()
+        for line in SANDBOX_DOCKERIGNORE_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert {".venv", "venv", "**/__pycache__", ".pytest_cache", ".coverage"} <= (
+        sandbox_patterns
+    )
