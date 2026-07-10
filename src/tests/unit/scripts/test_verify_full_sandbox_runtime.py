@@ -1,18 +1,35 @@
 """Tests for the complete Sandbox image runtime verifier."""
 
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from scripts.verify_full_sandbox_runtime import (
+    BrowserRenderEvidence,
     _basic_auth_headers,
     _cross_network_probe_commands,
     _runtime_probe_command,
+    _validate_browser_render_evidence,
     _verify_http_service_auth,
     _verify_network_metadata,
     _wait_http,
     verify_runtime_metadata,
 )
+
+
+def _browser_evidence() -> BrowserRenderEvidence:
+    return BrowserRenderEvidence(
+        desktop_title="sandbox:1 - KasmVNC",
+        desktop_body="Connected (encrypted) to sandbox:1",
+        desktop_canvas_count=3,
+        desktop_screenshot_size=20_000,
+        terminal_title="ttyd - Terminal",
+        terminal_input_count=1,
+        terminal_before_digest="before",
+        terminal_after_digest="after",
+        console_errors=(),
+    )
 
 
 def _attrs() -> dict[str, object]:
@@ -66,6 +83,25 @@ def test_basic_auth_headers_do_not_place_capability_in_url() -> None:
     assert _basic_auth_headers("private-capability") == {
         "Authorization": "Basic c2FuZGJveDpwcml2YXRlLWNhcGFiaWxpdHk="
     }
+
+
+def test_browser_render_evidence_requires_connected_interactive_surfaces() -> None:
+    _validate_browser_render_evidence(_browser_evidence())
+
+    missing_canvas = replace(_browser_evidence(), desktop_canvas_count=0)
+    with pytest.raises(RuntimeError, match="canvas"):
+        _validate_browser_render_evidence(missing_canvas)
+
+    unchanged_terminal = replace(
+        _browser_evidence(),
+        terminal_after_digest=_browser_evidence().terminal_before_digest,
+    )
+    with pytest.raises(RuntimeError, match="visual state"):
+        _validate_browser_render_evidence(unchanged_terminal)
+
+    console_error = replace(_browser_evidence(), console_errors=("WebSocket failed",))
+    with pytest.raises(RuntimeError, match="console"):
+        _validate_browser_render_evidence(console_error)
 
 
 @patch("scripts.verify_full_sandbox_runtime.httpx.Client")

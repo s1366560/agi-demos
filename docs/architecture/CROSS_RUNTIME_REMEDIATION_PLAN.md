@@ -189,6 +189,12 @@ Verified on 2026-07-10:
   and query-token rejection against the production image, and removes every
   test-owned container. The scheduled linux/amd64 workflow runs it after the
   existing full-runtime verifier and has an exact project-label cleanup fallback.
+- Rendered Sandbox browser gate: the full-runtime verifier launches headless
+  Chromium with scoped Basic credentials, requires a connected encrypted
+  KasmVNC page with rendered canvases, requires exactly one ttyd terminal input,
+  rejects console/page errors, proves the terminal screenshot changes after an
+  interaction, and confirms the browser command wrote a marker inside the
+  sandbox. Screenshots stay ephemeral and capabilities never enter URLs.
 - Web Sandbox proxy parity: project terminal startup and sandbox service events
   ignore direct upstream URLs; desktop and terminal connection targets are
   rebuilt from authenticated API proxy routes. The unused direct-port connection
@@ -241,7 +247,7 @@ Verified on 2026-07-10:
   loopback-only ports and no Docker socket, and removed the container cleanly.
 - Full Sandbox release gate: workflow, metadata validator, MCP exploit probes,
   restart checks, and two-network isolation fixture are implemented. Its unit
-  contract passed 11/11, the current Sandbox regression selection passed
+  contract passed 12/12, the current Sandbox regression selection passed
   234/234, and the nested server suite passed 320 tests with 104 legacy
   integration scenarios skipped. The production image now uses one Python
   environment and one Playwright browser installation instead of duplicating
@@ -259,7 +265,7 @@ Verified on 2026-07-10:
 
 The backend-dependent Playwright, deterministic local/Ray Agent, graph mutation,
 and MCP-only Sandbox gates are complete. The full Desktop/Terminal fixture now
-passes against a fresh local linux/arm64 production image. The scheduled
-linux/amd64 execution and a rendered RFB/terminal browser path remain the final
-evidence gaps; local arm64 success is not represented as cross-architecture or
-browser-rendering parity.
+passes against a fresh local linux/arm64 production image, including rendered
+KasmVNC and ttyd interaction. The scheduled linux/amd64 execution remains the
+final evidence gap; local arm64 success is not represented as cross-architecture
+parity.

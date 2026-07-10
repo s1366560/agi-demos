@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import hashlib
 import json
 import os
 import secrets
@@ -15,11 +16,13 @@ import tempfile
 import time
 import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 import httpx
 import websockets
+from playwright.async_api import ConsoleMessage, Error as PlaywrightError, async_playwright
 from websockets.exceptions import ConnectionClosed
 
 import docker
@@ -33,6 +36,19 @@ DEFAULT_IMAGE = "sandbox-mcp-server:full-ci"
 INTERNAL_PORTS = (8765, 6080, 7681)
 ISOLATED_NETWORK_OPTIONS = {"com.docker.network.bridge.enable_icc": "false"}
 SERVICE_AUTH_USERNAME = "sandbox"
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserRenderEvidence:
+    desktop_title: str
+    desktop_body: str
+    desktop_canvas_count: int
+    desktop_screenshot_size: int
+    terminal_title: str
+    terminal_input_count: int
+    terminal_before_digest: str
+    terminal_after_digest: str
+    console_errors: tuple[str, ...]
 
 
 class _WebSocket(Protocol):
@@ -178,6 +194,23 @@ def _basic_auth_headers(token: str) -> dict[str, str]:
     credentials = f"{SERVICE_AUTH_USERNAME}:{token}".encode()
     encoded = base64.b64encode(credentials).decode("ascii")
     return {"Authorization": f"Basic {encoded}"}
+
+
+def _validate_browser_render_evidence(evidence: BrowserRenderEvidence) -> None:
+    if "KasmVNC" not in evidence.desktop_title:
+        raise RuntimeError("Full Sandbox browser did not render the KasmVNC page")
+    if "Connected (encrypted)" not in evidence.desktop_body:
+        raise RuntimeError("Full Sandbox browser did not establish the encrypted desktop session")
+    if evidence.desktop_canvas_count < 1 or evidence.desktop_screenshot_size < 1_024:
+        raise RuntimeError("Full Sandbox browser did not render the desktop canvas")
+    if not evidence.terminal_title.strip():
+        raise RuntimeError("Full Sandbox browser rendered an unidentified terminal page")
+    if evidence.terminal_input_count != 1:
+        raise RuntimeError("Full Sandbox browser did not render one terminal input")
+    if evidence.terminal_before_digest == evidence.terminal_after_digest:
+        raise RuntimeError("Full Sandbox terminal interaction did not change visual state")
+    if evidence.console_errors:
+        raise RuntimeError("Full Sandbox browser reported a console or page error")
 
 
 def _wait_http(
@@ -497,8 +530,7 @@ def _assert_cross_network_authentication(
                 else raw_output
             )
             raise RuntimeError(
-                "Full Sandbox cross-network authentication probe failed "
-                f"at check {probe_index}: {output[-500:]}"
+                f"Full Sandbox cross-network authentication probe failed at check {probe_index}: {output[-500:]}"
             )
 
 
@@ -553,6 +585,92 @@ def _verify_interactive_services(desktop_url: str, terminal_url: str, token: str
     _verify_http_service_auth(terminal_url, token, verify_tls=True)
 
 
+async def _verify_browser_rendering(
+    desktop_url: str,
+    terminal_url: str,
+    token: str,
+) -> BrowserRenderEvidence:
+    console_errors: list[str] = []
+
+    def record_console_error(message: ConsoleMessage) -> None:
+        if message.type == "error":
+            console_errors.append(message.text)
+
+    def record_page_error(error: PlaywrightError) -> None:
+        console_errors.append(str(error))
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        try:
+            context = await browser.new_context(
+                ignore_https_errors=True,
+                http_credentials={"username": SERVICE_AUTH_USERNAME, "password": token},
+            )
+            desktop_page = await context.new_page()
+            desktop_page.on("console", record_console_error)
+            desktop_page.on("pageerror", record_page_error)
+            _ = await desktop_page.goto(desktop_url, wait_until="networkidle", timeout=30_000)
+            await desktop_page.get_by_text("Connected (encrypted)", exact=False).wait_for(
+                state="visible",
+                timeout=30_000,
+            )
+            desktop_title = await desktop_page.title()
+            desktop_body = await desktop_page.locator("body").inner_text()
+            desktop_canvas_count = await desktop_page.locator("canvas").count()
+            desktop_screenshot = await desktop_page.screenshot()
+
+            terminal_page = await context.new_page()
+            terminal_page.on("console", record_console_error)
+            terminal_page.on("pageerror", record_page_error)
+            _ = await terminal_page.goto(terminal_url, wait_until="networkidle", timeout=30_000)
+            terminal_title = await terminal_page.title()
+            terminal_input = terminal_page.get_by_role("textbox", name="Terminal input")
+            await terminal_input.wait_for(state="visible", timeout=30_000)
+            terminal_input_count = await terminal_input.count()
+            if terminal_input_count != 1:
+                raise RuntimeError("Full Sandbox browser did not expose one terminal input")
+            terminal_before = await terminal_page.screenshot()
+            await terminal_input.type(
+                "echo BROWSER_TERMINAL_OK > /tmp/browser-terminal-ok",
+            )
+            await terminal_input.press("Enter")
+            await terminal_page.wait_for_timeout(500)
+            terminal_after = await terminal_page.screenshot()
+
+            evidence = BrowserRenderEvidence(
+                desktop_title=desktop_title,
+                desktop_body=desktop_body,
+                desktop_canvas_count=desktop_canvas_count,
+                desktop_screenshot_size=len(desktop_screenshot),
+                terminal_title=terminal_title,
+                terminal_input_count=terminal_input_count,
+                terminal_before_digest=hashlib.sha256(terminal_before).hexdigest(),
+                terminal_after_digest=hashlib.sha256(terminal_after).hexdigest(),
+                console_errors=tuple(console_errors),
+            )
+        finally:
+            await browser.close()
+
+    _validate_browser_render_evidence(evidence)
+    return evidence
+
+
+def _verify_rendered_browser_contract(
+    container: Container,
+    desktop_url: str,
+    terminal_url: str,
+    token: str,
+) -> None:
+    _ = asyncio.run(_verify_browser_rendering(desktop_url, terminal_url, token))
+    browser_marker = _assert_exec(
+        container,
+        ["cat", "/tmp/browser-terminal-ok"],
+        "browser terminal interaction",
+    )
+    if browser_marker.strip() != "BROWSER_TERMINAL_OK":
+        raise RuntimeError("Full Sandbox browser terminal marker was not persisted")
+
+
 def verify_full_runtime(image: str = DEFAULT_IMAGE) -> None:
     """Launch two sandboxes and prove services, auth, restart, and tenant isolation."""
     client = _DOCKER_MODULE.from_env()
@@ -603,6 +721,7 @@ def verify_full_runtime(image: str = DEFAULT_IMAGE) -> None:
         if runtime.strip():
             raise RuntimeError("Full Sandbox runtime process check returned unexpected output")
         asyncio.run(_verify_mcp(mcp_url, token))
+        _verify_rendered_browser_contract(victim, desktop_url, terminal_url, token)
 
         attacker = _run_container(
             client,

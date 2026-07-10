@@ -4,9 +4,7 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "e2e.yml"
-FULL_SANDBOX_WORKFLOW_PATH = (
-    REPOSITORY_ROOT / ".github" / "workflows" / "sandbox-full-runtime.yml"
-)
+FULL_SANDBOX_WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "sandbox-full-runtime.yml"
 COMPOSE_PATH = REPOSITORY_ROOT / "docker-compose.yml"
 DOCKERIGNORE_PATH = REPOSITORY_ROOT / ".dockerignore"
 SANDBOX_DOCKERIGNORE_PATH = REPOSITORY_ROOT / "sandbox-mcp-server" / ".dockerignore"
@@ -127,8 +125,7 @@ def test_full_sandbox_entrypoint_is_fail_closed_and_profile_aware() -> None:
     assert 'TERMINAL_ENABLED="${TERMINAL_ENABLED:-true}"' in entrypoint
     assert 'if [ "$TERMINAL_ENABLED" = "true" ]; then' in entrypoint
     assert (
-        'ttyd -W -c "$SERVICE_AUTH_USERNAME:$SERVICE_AUTH_TOKEN" -p "$TERMINAL_PORT"'
-        in entrypoint
+        'ttyd -W -c "$SERVICE_AUTH_USERNAME:$SERVICE_AUTH_TOKEN" -p "$TERMINAL_PORT"' in entrypoint
     )
     assert 'SERVICE_AUTH_TOKEN="${SANDBOX_SERVICE_AUTH_TOKEN:-${MCP_STATIC_TOKEN:-}}"' in entrypoint
     assert 'vncpasswd -u "$SERVICE_AUTH_USERNAME" -w "$HOME/.kasmpasswd"' in entrypoint
@@ -138,7 +135,7 @@ def test_full_sandbox_entrypoint_is_fail_closed_and_profile_aware() -> None:
     assert "start_kasmvnc || log_warn" not in entrypoint
     assert "if ! start_mcp_server; then" in entrypoint
     assert "/root" not in entrypoint
-    assert "wait_for_port \"$MCP_PORT\" 30" in entrypoint
+    assert 'wait_for_port "$MCP_PORT" 30' in entrypoint
     assert "MCP server is not running" in entrypoint
     assert "entering standby mode" not in entrypoint
     assert "DESKTOP_ENABLED" in dockerfile.split("HEALTHCHECK", maxsplit=1)[1]
@@ -158,6 +155,7 @@ def test_full_sandbox_runtime_has_scheduled_release_gate() -> None:
     assert build_step["with"]["file"] == "sandbox-mcp-server/Dockerfile"
     assert build_step["with"]["load"] is True
     commands = "\n".join(str(step.get("run", "")) for step in steps)
+    assert "playwright install --with-deps chromium" in commands
     assert "scripts.verify_full_sandbox_runtime" in commands
     assert "sandbox_api::tests::docker_live" in commands
     rust_gate = next(
@@ -166,5 +164,5 @@ def test_full_sandbox_runtime_has_scheduled_release_gate() -> None:
     assert rust_gate["env"]["AGISTACK_RUN_SANDBOX_LIVE_TESTS"] == "1"
     assert rust_gate["env"]["AGISTACK_SANDBOX_LIVE_IMAGE"] == "sandbox-mcp-server:full-ci"
     assert str(job["env"]["AGISTACK_SANDBOX_LIVE_PROJECT_ID"]).startswith("rust-live-")
-    assert 'label=agistack.project=${AGISTACK_SANDBOX_LIVE_PROJECT_ID}' in commands
+    assert "label=agistack.project=${AGISTACK_SANDBOX_LIVE_PROJECT_ID}" in commands
     assert "docker network prune" not in commands

@@ -32,6 +32,9 @@ jobs:
       - name: Install runtime verifier dependencies
         run: uv sync --frozen
 
+      - name: Install rendered-browser runtime
+        run: uv run playwright install --with-deps chromium
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
