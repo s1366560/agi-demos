@@ -159,4 +159,12 @@ def test_full_sandbox_runtime_has_scheduled_release_gate() -> None:
     assert build_step["with"]["load"] is True
     commands = "\n".join(str(step.get("run", "")) for step in steps)
     assert "scripts.verify_full_sandbox_runtime" in commands
+    assert "sandbox_api::tests::docker_live" in commands
+    rust_gate = next(
+        step for step in steps if "sandbox_api::tests::docker_live" in str(step.get("run", ""))
+    )
+    assert rust_gate["env"]["AGISTACK_RUN_SANDBOX_LIVE_TESTS"] == "1"
+    assert rust_gate["env"]["AGISTACK_SANDBOX_LIVE_IMAGE"] == "sandbox-mcp-server:full-ci"
+    assert str(job["env"]["AGISTACK_SANDBOX_LIVE_PROJECT_ID"]).startswith("rust-live-")
+    assert 'label=agistack.project=${AGISTACK_SANDBOX_LIVE_PROJECT_ID}' in commands
     assert "docker network prune" not in commands

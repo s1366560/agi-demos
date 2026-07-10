@@ -173,7 +173,7 @@ Verified on 2026-07-10:
   and Pyright passes with zero errors. The repair also aligned the graph-store
   port signature, kept tenant-scoped gene reviews fail closed, and corrected
   validated Cypher identifiers that had previously evaluated to `None`.
-- Rust server: 538 tests passed and Clippy passed with warnings denied; the
+- Rust server: 539 tests passed and Clippy passed with warnings denied; the
   production-mode binary fails closed when `DATABASE_URL` is absent, while
   explicit `AGISTACK_DEV_MODE=1` starts the in-memory development runtime.
 - Rust Sandbox proxy parity: cloud creation now requires a derived per-project
@@ -183,6 +183,12 @@ Verified on 2026-07-10:
   serialization excludes the capability, missing auth rejects creation/proxying,
   existing status remains readable, and the default image is the real Sandbox
   runtime rather than Redis. Secret rotation requires sandbox recreation.
+- Rust Sandbox live gate: an explicitly gated Rust test now creates a Standard
+  container through `ProjectSandboxService` and the Docker adapter, checks that
+  MCP/KasmVNC/ttyd publish only on loopback, proves Bearer/Basic authentication
+  and query-token rejection against the production image, and removes every
+  test-owned container. The scheduled linux/amd64 workflow runs it after the
+  existing full-runtime verifier and has an exact project-label cleanup fallback.
 - Web Sandbox proxy parity: project terminal startup and sandbox service events
   ignore direct upstream URLs; desktop and terminal connection targets are
   rebuilt from authenticated API proxy routes. The unused direct-port connection

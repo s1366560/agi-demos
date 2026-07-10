@@ -13,6 +13,8 @@ jobs:
     name: Build and verify Desktop/Terminal Sandbox
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      AGISTACK_SANDBOX_LIVE_PROJECT_ID: rust-live-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -49,10 +51,24 @@ jobs:
           SANDBOX_FULL_IMAGE: sandbox-mcp-server:full-ci
         run: uv run python -m scripts.verify_full_sandbox_runtime
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify Rust-owned creation and runtime authentication
+        env:
+          AGISTACK_RUN_SANDBOX_LIVE_TESTS: '1'
+          AGISTACK_SANDBOX_LIVE_IMAGE: sandbox-mcp-server:full-ci
+        run: >-
+          cargo test --manifest-path agi-stack/Cargo.toml -p agistack-server
+          sandbox_api::tests::docker_live -- --nocapture
+
       - name: Remove gate-owned containers and networks
         if: always()
         run: |
           for container_id in $(docker ps -aq --filter label=memstack.full-runtime=true); do
+            docker rm --force "$container_id" || true
+          done
+          for container_id in $(docker ps -aq --filter "label=agistack.project=${AGISTACK_SANDBOX_LIVE_PROJECT_ID}"); do
             docker rm --force "$container_id" || true
           done
           for network_id in $(docker network ls -q --filter label=memstack.full-runtime=true); do
