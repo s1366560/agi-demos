@@ -113,8 +113,7 @@ logs/
 *.sqlite3
 
 # Docker
-.dockerignore
-# Note: Dockerfile is now tracked for sandbox-mcp-server
+# Note: Dockerfiles and the root .dockerignore are tracked.
 
 # Terraform
 .terraform/

@@ -102,7 +102,17 @@ jobs:
       NEO4J_PASSWORD: testpassword
       SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      LLM_PROVIDER: openai
+      OPENAI_API_KEY: memstack-e2e-fixture
+      OPENAI_MODEL: openai/memstack-e2e
+      OPENAI_SMALL_MODEL: openai/memstack-e2e
+      OPENAI_BASE_URL: http://localhost:8010/v1
+      LLM_CACHE_ENABLED: false
+      LLM_MAX_RETRIES: 0
       AGENT_RUNTIME_MODE: local
+      AGENT_MEMORY_RUNTIME_MODE: disabled
+      AGENT_MAX_STEPS: 4
+      AGENT_MAX_TOKENS: 512
       AGENT_SESSION_PREWARM_ENABLED: false
       RUN_BACKGROUND_WORKERS: false
       SANDBOX_DOCKER_SERVICES_ENABLED: false
@@ -134,8 +144,26 @@ jobs:
       - name: Install backend dependencies
         run: uv sync --extra dev --dev --frozen
 
-      - name: Apply database migrations
-        run: PYTHONPATH=. uv run alembic upgrade head
+      - name: Initialize schema and verify migration head
+        run: |
+          PYTHONPATH=. uv run python -c \
+            "import asyncio; from src.infrastructure.adapters.secondary.persistence.database import initialize_database; asyncio.run(initialize_database())"
+          PYTHONPATH=. uv run alembic upgrade head
+
+      - name: Start deterministic OpenAI-compatible fixture
+        run: |
+          mkdir -p backend-e2e-logs
+          nohup uv run uvicorn scripts.fake_openai_server:app \
+            --host 127.0.0.1 --port 8010 > backend-e2e-logs/fake-openai.log 2>&1 &
+          echo $! > backend-e2e-logs/fake-openai.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8010/v1/models; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -200 backend-e2e-logs/fake-openai.log
+          exit 1
 
       - name: Start API and wait for health
         run: |
@@ -154,6 +182,9 @@ jobs:
 
       - name: Verify backend bootstrap
         run: uv run python scripts/verify_e2e_backend.py
+
+      - name: Verify deterministic local Agent and LLM turn
+        run: uv run python -m scripts.verify_e2e_agent
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -190,10 +221,11 @@ jobs:
             web/test-results
           if-no-files-found: ignore
 
-  # The complete product E2E suite remains opt-in because Agent, Graph, Memory,
-  # and Sandbox scenarios still require deterministic Ray, LLM, and container
-  # fixtures. The backend-e2e job above covers real DB migrations, bootstrap
-  # auth, tenant/project persistence, FastAPI, and browser integration.
+  # The complete product E2E suite remains opt-in because Ray, Graph, Memory,
+  # and Sandbox scenarios still require deterministic container fixtures. The
+  # backend-e2e job above covers real DB migrations, bootstrap auth,
+  # tenant/project persistence, FastAPI/browser integration, and a real local
+  # Agent turn through an isolated OpenAI-compatible fixture.
   # e2e:
   #   runs-on: ubuntu-latest
   #
