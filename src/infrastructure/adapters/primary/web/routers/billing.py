@@ -54,10 +54,9 @@ async def _require_billing_role(
 
 
 async def _get_billing_tenant_or_404(db: AsyncSession, tenant_id: str) -> Tenant:
-    tenant_result = await db.execute(
-        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = await db.scalar(
+        select(Tenant).where(Tenant.id == tenant_id).execution_options(populate_existing=True)
     )
-    tenant = tenant_result.scalar_one_or_none()
     if tenant is None:
         raise HTTPException(status_code=404, detail=_("Tenant not found"))
     return tenant

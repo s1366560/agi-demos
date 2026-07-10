@@ -18,10 +18,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, Any, Protocol, cast, override
+
+from docker.client import DockerClient
+from docker.errors import ImageNotFound, NotFound
 
 import docker
-from docker.errors import ImageNotFound, NotFound
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +58,15 @@ from src.infrastructure.agent.workspace.manifest import WorkspaceManifest
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
 logger = logging.getLogger(__name__)
+
+
+class _DockerClientFactory(Protocol):
+    """Typed view of the Docker module factory used by test and runtime wiring."""
+
+    def from_env(self) -> DockerClient: ...
+
+
+_DOCKER_CLIENT_FACTORY = cast(_DockerClientFactory, docker)
 
 _PATH_ARG_NAMES = frozenset(
     {
@@ -291,7 +302,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         # Initialize Docker client
         try:
-            self._docker = docker.from_env()
+            self._docker = _DOCKER_CLIENT_FACTORY.from_env()
             logger.info("MCPSandboxAdapter initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Docker client: {e}")

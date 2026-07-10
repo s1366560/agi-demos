@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 from typing import Any, cast
 
-import docker
+from docker.client import DockerClient
 from docker.errors import ImageNotFound, NotFound
 from docker.models.containers import Container
 
@@ -43,7 +43,7 @@ class ContainerManager:
 
     def __init__(
         self,
-        docker_client: docker.DockerClient,
+        docker_client: DockerClient,
         image: str = DEFAULT_SANDBOX_IMAGE,
         default_memory_limit: str = "8g",
         default_cpu_limit: str = "2",

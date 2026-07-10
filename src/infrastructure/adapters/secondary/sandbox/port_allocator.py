@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from docker import DockerClient
+from docker.client import DockerClient
 
 logger = logging.getLogger(__name__)
 

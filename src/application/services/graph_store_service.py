@@ -320,15 +320,17 @@ class GraphStoreService:
         backend = self._factory.build(store)
         if isawaitable(backend):
             backend = await backend
-        if hasattr(backend, "health_probe"):
-            ok = await backend.health_probe()  # type: ignore[attr-defined]
+        health_probe = getattr(backend, "health_probe", None)
+        if callable(health_probe):
+            probe_result = health_probe()
+            ok = bool(await probe_result) if isawaitable(probe_result) else bool(probe_result)
         else:
             ok = bool(backend)
         # Best-effort version detection.
         version = getattr(backend, "detected_version", None) or "ok" if ok else "unreachable"
         if hasattr(backend, "close"):
             try:
-                await backend.close()  # type: ignore[attr-defined]
+                await backend.close()
             except Exception:
                 logger.debug("Failed to close test backend", exc_info=True)
         if not ok:

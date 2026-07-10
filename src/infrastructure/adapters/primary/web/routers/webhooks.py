@@ -159,7 +159,6 @@ async def feishu_workspace_message(request: Request) -> JSONResponse:
     )
 
     try:
-        raw_handle_message_event: Any
         from memstack_agent.plugins.feishu.plugin import (  # pyright: ignore[reportMissingImports]
             handle_message_event as raw_handle_message_event,  # pyright: ignore[reportUnknownVariableType]
         )

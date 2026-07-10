@@ -114,7 +114,7 @@ Verified on 2026-07-10:
 
 - Python security/router regression suites: 50 targeted tests passed; Ruff,
   Mypy, Pyright, i18n, and diff checks passed.
-- Python: a clean full unit rerun passed 12,845 tests. The original 81.41%
+- Python: a clean full unit rerun passed 12,851 tests. The original 81.41%
   coverage figure incorrectly counted test code; the production-only baseline
   increased from 72.48% to 72.87%, with a non-regression gate of 72.80% that
   omits `src/tests` and an explicit follow-on target of 80%.
@@ -122,6 +122,10 @@ Verified on 2026-07-10:
   heartbeat token handling, pool recommendations, pricing validation, and LLM
   cache behavior have dedicated regression suites; the touched cache and
   pricing modules reached 100% coverage and Markdown memory reached 88%.
+- Python static typing: repository-wide Mypy now passes all 1,446 source files,
+  and Pyright passes with zero errors. The repair also aligned the graph-store
+  port signature, kept tenant-scoped gene reviews fail closed, and corrected
+  validated Cypher identifiers that had previously evaluated to `None`.
 - Rust server: 526 tests passed; the production-mode binary fails closed when
   `DATABASE_URL` is absent, while explicit `AGISTACK_DEV_MODE=1` starts the
   in-memory development runtime.

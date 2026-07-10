@@ -771,3 +771,89 @@ class TestNativeGraphAdapterRemoveEpisode:
         assert secret not in caplog.text
         assert "episode-with-secret" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+class TestNativeGraphAdapterTypedPrimitives:
+    """Contract-level checks for typed GraphStorePort primitives."""
+
+    @pytest.mark.asyncio
+    async def test_search_memories_accepts_port_argument_order(self, adapter):
+        expected = [{"uuid": "memory-1"}]
+
+        with patch.object(adapter, "search", AsyncMock(return_value=expected)) as search:
+            result = await adapter.search_memories(
+                "find memory",
+                project_id="project-1",
+                limit=4,
+            )
+
+        assert result == expected
+        search.assert_awaited_once_with(
+            query="find memory",
+            project_id="project-1",
+            limit=4,
+        )
+
+    @pytest.mark.asyncio
+    async def test_related_entities_defaults_non_string_entity_type(
+        self,
+        adapter,
+        mock_neo4j_client,
+    ):
+        mock_neo4j_client.execute_query.return_value = MagicMock(
+            records=[
+                {
+                    "b": {
+                        "uuid": "entity-1",
+                        "name": "Entity",
+                        "entity_type": None,
+                    }
+                }
+            ]
+        )
+
+        result = await adapter.related_entities("source-1")
+
+        assert result[0].entity_type == "Entity"
+
+    @pytest.mark.asyncio
+    async def test_count_nodes_uses_validated_label(self, adapter, mock_neo4j_client):
+        mock_neo4j_client.execute_query.return_value = MagicMock(records=[{"total": 3}])
+
+        result = await adapter.count_nodes(label="Entity")
+
+        assert result == 3
+        query = mock_neo4j_client.execute_query.await_args.args[0]
+        assert "MATCH (n:Entity)" in query
+
+    @pytest.mark.asyncio
+    async def test_list_episodes_uses_validated_sort_field(
+        self,
+        adapter,
+        mock_neo4j_client,
+    ):
+        mock_neo4j_client.execute_query.side_effect = [
+            MagicMock(records=[{"total": 1}]),
+            MagicMock(records=[{"props": {"uuid": "episode-1"}}]),
+        ]
+
+        result = await adapter.list_episodes(sort_by="created_at")
+
+        assert result == {"episodes": [{"uuid": "episode-1"}], "total": 1}
+        query = mock_neo4j_client.execute_query.await_args_list[1].args[0]
+        assert "ORDER BY e.created_at DESC" in query
+
+    @pytest.mark.asyncio
+    async def test_count_scoped_nodes_uses_validated_label(
+        self,
+        adapter,
+        mock_neo4j_client,
+    ):
+        mock_neo4j_client.execute_query.return_value = MagicMock(records=[{"count": 2}])
+
+        result = await adapter.count_scoped_nodes("Community", project_id="project-1")
+
+        assert result == 2
+        query = mock_neo4j_client.execute_query.await_args.args[0]
+        assert "MATCH (n:Community)" in query

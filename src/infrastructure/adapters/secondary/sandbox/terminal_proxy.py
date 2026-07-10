@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
-import docker
+from docker.client import from_env
 from docker.errors import NotFound
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class TerminalProxy:
 
     def __init__(self) -> None:
         """Initialize terminal proxy."""
-        self._docker = docker.from_env()
+        self._docker = from_env()
         self._sessions: dict[str, TerminalSession] = {}
         self._output_callbacks: dict[str, Callable[[str], None]] = {}
 
