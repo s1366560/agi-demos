@@ -56,6 +56,10 @@ Status: implemented for the supported Desktop contracts.
 - Render server-authorized, stateless A2UI buttons in Desktop only when the
   persisted surface and `allowed_actions` contract agree exactly. Reject
   dynamic contexts, unsafe object keys, orphan surfaces, and unsupported forms.
+- Accept that same stateless A2UI subset on the Rust `:8088` HITL boundary only
+  after an exact persisted allow-list match. Seal the database recovery payload
+  and Redis response independently with the Python-compatible AES-256-GCM
+  envelope; fail before claiming the request when encryption is unavailable.
 - Distinguish Local Memory from server Project Memory in labels and docs.
 
 Exit criteria:
@@ -92,12 +96,10 @@ after the release blockers above:
 - Persist Desktop workspace, conversation, message, timeline, and checkpoint
   state transactionally instead of mixing SQLite checkpoints with process-local
   maps.
-- Add Rust `:8088` gateway support for encrypted A2UI action responses before
-  enabling Desktop A2UI through that transport; do not downgrade the Python
-  response-encryption contract.
 - Extend Desktop A2UI beyond stateless buttons only after persisted form state,
-  dynamic value resolution, and component-path validation have cross-client
-  parity tests.
+  dynamic value resolution, safe context projection, and component-path
+  validation have cross-client parity tests. Rust continues to reject dynamic
+  A2UI context and `env_var` responses until those contracts are implemented.
 - Migrate the complete Agent worker, HITL orchestration, event replay, plugin
   hooks, graph/reflexion, and sandbox lifecycle to Rust only behind per-capability
   parity tests and explicit strangler gates.
@@ -126,9 +128,14 @@ Verified on 2026-07-10:
   and Pyright passes with zero errors. The repair also aligned the graph-store
   port signature, kept tenant-scoped gene reviews fail closed, and corrected
   validated Cypher identifiers that had previously evaluated to `None`.
-- Rust server: 526 tests passed; the production-mode binary fails closed when
-  `DATABASE_URL` is absent, while explicit `AGISTACK_DEV_MODE=1` starts the
-  in-memory development runtime.
+- Rust server: 531 tests passed and Clippy passed with warnings denied; the
+  production-mode binary fails closed when `DATABASE_URL` is absent, while
+  explicit `AGISTACK_DEV_MODE=1` starts the in-memory development runtime.
+- Rust/Python HITL parity: stateless A2UI responses require an exact persisted
+  `(source_component_id, action_name)` pair, reject dynamic context, seal DB and
+  Redis payloads with independent nonces, and never publish plaintext response
+  data. Rust's Python-compatible AES-GCM vectors passed 2/2 and the Python HITL
+  consumer/persistence regression suite passed 45/45.
 - Desktop Rust: 14 tests passed; local tools: 9 tests passed; workspace Rust
   tests, formatting, checks, and clippy passed.
 - Desktop UI: 14 protocol/authentication/A2UI tests passed and the production

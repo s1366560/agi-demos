@@ -41,6 +41,7 @@ not implicitly synchronized.
 | Capability | Python/Web | Rust server | Desktop |
 | --- | --- | --- | --- |
 | Full Agent/HITL runtime | Reference implementation | Partial migration | Cloud subset; local reduced runtime |
+| HITL response ingress | Full types and recovery | Choice/permission plus encrypted stateless A2UI; `env_var` and dynamic A2UI rejected | Reference cloud protocol for supported controls |
 | Durable event replay | PostgreSQL + Redis | Selected slices | Client recovery protocol only |
 | Memory/graph product | Full server product | Selected portable/strangler slices | Separate Local Memory UI |
 | Sandbox/terminal | Project-scoped Docker services | Selected proxy/control slices | Capability-protected host tools |

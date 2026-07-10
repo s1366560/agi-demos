@@ -24,11 +24,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use agistack_adapters_postgres::{HitlRequestRecord, PgHitlRequestRepository, PgPool};
+use agistack_adapters_secrets::try_encrypt_python_aes256_gcm;
 use agistack_core::ports::EventStream;
 
 use crate::{auth::Identity, AppState};
 
 const HITL_RESPONSE_STREAM_MAX_LEN: usize = 1000;
+const HITL_RESPONSE_ENCODING: &str = "aes256gcm+json";
 
 pub(crate) type SharedHitlResponses = Arc<dyn HitlResponseService>;
 
@@ -106,11 +108,20 @@ impl IntoResponse for HitlApiError {
 pub(crate) struct PgHitlResponseService {
     repo: PgHitlRequestRepository,
     events: Arc<dyn EventStream>,
+    encryption_key: Option<Arc<str>>,
 }
 
 impl PgHitlResponseService {
-    pub(crate) fn new(repo: PgHitlRequestRepository, events: Arc<dyn EventStream>) -> Self {
-        Self { repo, events }
+    pub(crate) fn new(
+        repo: PgHitlRequestRepository,
+        events: Arc<dyn EventStream>,
+        encryption_key: Option<Arc<str>>,
+    ) -> Self {
+        Self {
+            repo,
+            events,
+            encryption_key,
+        }
     }
 }
 
@@ -140,7 +151,7 @@ impl HitlResponseService for PgHitlResponseService {
             ));
         }
 
-        let prepared = prepare_response(&record, request, now)?;
+        let prepared = prepare_response(&record, request, now, self.encryption_key.as_deref())?;
         let updated = self
             .repo
             .update_response(
@@ -163,7 +174,7 @@ impl HitlResponseService for PgHitlResponseService {
             &record,
             user_id,
             &prepared.hitl_type,
-            prepared.response_data,
+            prepared.stream_response,
             now,
         )
         .await
@@ -181,6 +192,7 @@ impl HitlResponseService for PgHitlResponseService {
 pub(crate) struct DevHitlResponseService {
     records: Mutex<HashMap<String, HitlRequestRecord>>,
     events: Arc<dyn EventStream>,
+    encryption_key: Option<Arc<str>>,
 }
 
 impl DevHitlResponseService {
@@ -188,6 +200,18 @@ impl DevHitlResponseService {
         Self {
             records: Mutex::new(HashMap::new()),
             events,
+            encryption_key: None,
+        }
+    }
+
+    pub(crate) fn with_encryption_key(
+        events: Arc<dyn EventStream>,
+        encryption_key: impl Into<Arc<str>>,
+    ) -> Self {
+        Self {
+            records: Mutex::new(HashMap::new()),
+            events,
+            encryption_key: Some(encryption_key.into()),
         }
     }
 
@@ -199,6 +223,18 @@ impl DevHitlResponseService {
             .map_err(|_| HitlApiError::internal("hitl request store mutex poisoned"))?;
         records.insert(record.id.clone(), record);
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn get_request(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<HitlRequestRecord>, HitlApiError> {
+        let records = self
+            .records
+            .lock()
+            .map_err(|_| HitlApiError::internal("hitl request store mutex poisoned"))?;
+        Ok(records.get(request_id).cloned())
     }
 }
 
@@ -238,7 +274,7 @@ impl HitlResponseService for DevHitlResponseService {
             ));
         }
 
-        let prepared = prepare_response(&record, request, now)?;
+        let prepared = prepare_response(&record, request, now, self.encryption_key.as_deref())?;
         {
             let mut records = self
                 .records
@@ -251,6 +287,8 @@ impl HitlResponseService for DevHitlResponseService {
                 ));
             };
             stored.status = "answered".to_string();
+            stored.response = Some(prepared.response_summary.clone());
+            stored.response_metadata = prepared.response_metadata.clone();
         }
 
         let delivery_pending = publish_hitl_response(
@@ -258,7 +296,7 @@ impl HitlResponseService for DevHitlResponseService {
             &record,
             user_id,
             &prepared.hitl_type,
-            prepared.response_data,
+            prepared.stream_response,
             now,
         )
         .await
@@ -277,12 +315,23 @@ pub(crate) fn build_hitl_response_service(
     pool: Option<PgPool>,
     events: Arc<dyn EventStream>,
 ) -> SharedHitlResponses {
+    let encryption_key = std::env::var("LLM_ENCRYPTION_KEY")
+        .ok()
+        .filter(|key| !key.trim().is_empty())
+        .map(Arc::<str>::from);
     match pool {
         Some(pool) => Arc::new(PgHitlResponseService::new(
             PgHitlRequestRepository::new(pool),
             events,
+            encryption_key,
         )),
-        None => Arc::new(DevHitlResponseService::new(events)),
+        None => match encryption_key {
+            Some(encryption_key) => Arc::new(DevHitlResponseService::with_encryption_key(
+                events,
+                encryption_key,
+            )),
+            None => Arc::new(DevHitlResponseService::new(events)),
+        },
     }
 }
 
@@ -331,9 +380,15 @@ pub(crate) fn ws_ack_message(ack_type: &str, outcome: &HitlResponseOutcome) -> V
 #[derive(Debug)]
 struct PreparedHitlResponse {
     hitl_type: String,
-    response_data: Value,
+    stream_response: PreparedStreamResponse,
     response_summary: String,
     response_metadata: Option<Value>,
+}
+
+#[derive(Debug)]
+enum PreparedStreamResponse {
+    Plain(Value),
+    Encrypted(String),
 }
 
 async fn authorize_hitl_request(
@@ -390,6 +445,7 @@ fn prepare_response(
     record: &HitlRequestRecord,
     request: HitlResponsePayload,
     _now: DateTime<Utc>,
+    encryption_key: Option<&str>,
 ) -> Result<PreparedHitlResponse, HitlApiError> {
     let stored_hitl_type = stored_hitl_type(record)
         .ok_or_else(|| HitlApiError::bad_request("HITL request has an invalid stored type"))?;
@@ -398,22 +454,63 @@ fn prepare_response(
             "HITL type does not match request",
         ));
     }
-    if matches!(stored_hitl_type.as_str(), "env_var" | "a2ui_action") {
+    if stored_hitl_type == "env_var" {
         return Err(HitlApiError::bad_request(
-            "Sensitive HITL type is not supported by the Rust endpoint yet",
+            "env_var HITL is not supported by the Rust endpoint yet",
         ));
     }
 
     let response = response_object(&request.response_data)?;
     validate_response_shape(&stored_hitl_type, response)?;
+    if stored_hitl_type == "a2ui_action" {
+        validate_allowed_a2ui_action(record, response)?;
+        return prepare_a2ui_response(stored_hitl_type, request.response_data, encryption_key);
+    }
     let response_summary = summarize_response(&stored_hitl_type, response);
 
     Ok(PreparedHitlResponse {
         hitl_type: stored_hitl_type,
-        response_data: request.response_data,
+        stream_response: PreparedStreamResponse::Plain(request.response_data),
         response_summary,
         response_metadata: None,
     })
+}
+
+fn prepare_a2ui_response(
+    hitl_type: String,
+    response_data: Value,
+    encryption_key: Option<&str>,
+) -> Result<PreparedHitlResponse, HitlApiError> {
+    let encryption_key = encryption_key
+        .ok_or_else(|| HitlApiError::internal("HITL response encryption is unavailable"))?;
+    let response = response_object(&response_data)?;
+    let response_summary = summarize_response(&hitl_type, response);
+    let source_component_id = response
+        .get("source_component_id")
+        .and_then(Value::as_str)
+        .map(sanitize_hitl_text)
+        .unwrap_or_default();
+    let plaintext = serde_json::to_string(&response_data)
+        .map_err(|_| HitlApiError::internal("HITL response serialization failed"))?;
+    let sealed_response = encrypt_hitl_response(&plaintext, encryption_key)?;
+    let stream_response = encrypt_hitl_response(&plaintext, encryption_key)?;
+
+    Ok(PreparedHitlResponse {
+        hitl_type,
+        stream_response: PreparedStreamResponse::Encrypted(stream_response),
+        response_summary,
+        response_metadata: Some(json!({
+            "source_component_id": source_component_id,
+            "context": {},
+            "sealed_response": sealed_response,
+            "sealed_response_encoding": HITL_RESPONSE_ENCODING,
+        })),
+    })
+}
+
+fn encrypt_hitl_response(plaintext: &str, encryption_key: &str) -> Result<String, HitlApiError> {
+    try_encrypt_python_aes256_gcm(plaintext, encryption_key)
+        .map_err(|_| HitlApiError::internal("HITL response encryption is unavailable"))
 }
 
 fn stored_hitl_type(record: &HitlRequestRecord) -> Option<String> {
@@ -454,7 +551,67 @@ fn validate_response_shape(
         "clarification" => require_present(response_data, "answer"),
         "decision" => require_present(response_data, "decision"),
         "permission" => validate_permission_response(response_data),
+        "a2ui_action" => validate_a2ui_response_shape(response_data),
         _ => Err(HitlApiError::bad_request("Invalid HITL type")),
+    }
+}
+
+fn validate_a2ui_response_shape(response_data: &Map<String, Value>) -> Result<(), HitlApiError> {
+    let action_name_is_valid = response_data
+        .get("action_name")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    let source_component_id_is_valid = response_data
+        .get("source_component_id")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    let context_is_stateless = response_data
+        .get("context")
+        .and_then(Value::as_object)
+        .is_some_and(Map::is_empty);
+    if action_name_is_valid && source_component_id_is_valid && context_is_stateless {
+        Ok(())
+    } else {
+        Err(HitlApiError::bad_request(
+            "Invalid stateless A2UI action response",
+        ))
+    }
+}
+
+fn validate_allowed_a2ui_action(
+    record: &HitlRequestRecord,
+    response_data: &Map<String, Value>,
+) -> Result<(), HitlApiError> {
+    let action_name = response_data
+        .get("action_name")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let source_component_id = response_data
+        .get("source_component_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let is_allowed = record
+        .request_metadata
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|metadata| metadata.get("allowed_actions"))
+        .and_then(Value::as_array)
+        .is_some_and(|allowed_actions| {
+            allowed_actions.iter().any(|allowed_action| {
+                let Some(allowed_action) = allowed_action.as_object() else {
+                    return false;
+                };
+                allowed_action.get("action_name").and_then(Value::as_str) == Some(action_name)
+                    && allowed_action
+                        .get("source_component_id")
+                        .and_then(Value::as_str)
+                        == Some(source_component_id)
+            })
+        });
+    if is_allowed {
+        Ok(())
+    } else {
+        Err(HitlApiError::forbidden("A2UI action is not allowed"))
     }
 }
 
@@ -483,8 +640,35 @@ fn summarize_response(hitl_type: &str, response_data: &Map<String, Value>) -> St
         "clarification" => choice_like_summary(response_data.get("answer")),
         "decision" => choice_like_summary(response_data.get("decision")),
         "permission" => permission_summary(response_data),
+        "a2ui_action" => response_data
+            .get("action_name")
+            .and_then(Value::as_str)
+            .map(sanitize_hitl_text)
+            .unwrap_or_default(),
         _ => String::new(),
     }
+}
+
+fn sanitize_hitl_text(raw: &str) -> String {
+    let stripped = raw
+        .chars()
+        .filter(|character| {
+            !matches!(*character as u32, 0x00..=0x08 | 0x0b | 0x0c | 0x0e..=0x1f | 0x7f)
+        })
+        .collect::<String>();
+    let trimmed = stripped.trim();
+    let mut escaped = String::with_capacity(trimmed.len());
+    for character in trimmed.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#x27;"),
+            _ => escaped.push(character),
+        }
+    }
+    escaped
 }
 
 fn choice_like_summary(value: Option<&Value>) -> String {
@@ -516,7 +700,7 @@ async fn publish_hitl_response(
     record: &HitlRequestRecord,
     user_id: &str,
     hitl_type: &str,
-    response_data: Value,
+    stream_response: PreparedStreamResponse,
     now: DateTime<Utc>,
 ) -> Result<(), String> {
     let agent_mode = record
@@ -526,7 +710,7 @@ async fn publish_hitl_response(
         .and_then(|metadata| metadata.get("agent_mode"))
         .and_then(Value::as_str)
         .unwrap_or("default");
-    let payload = json!({
+    let mut payload = json!({
         "request_id": record.id,
         "hitl_type": hitl_type,
         "user_id": user_id,
@@ -536,8 +720,25 @@ async fn publish_hitl_response(
         "project_id": record.project_id,
         "agent_mode": agent_mode,
         "timestamp": now.to_rfc3339_opts(SecondsFormat::Micros, true),
-        "response_data": response_data,
     });
+    let payload_object = payload
+        .as_object_mut()
+        .ok_or_else(|| "failed to build HITL response payload".to_string())?;
+    match stream_response {
+        PreparedStreamResponse::Plain(response_data) => {
+            payload_object.insert("response_data".to_string(), response_data);
+        }
+        PreparedStreamResponse::Encrypted(response_data_encrypted) => {
+            payload_object.insert(
+                "response_data_encrypted".to_string(),
+                Value::String(response_data_encrypted),
+            );
+            payload_object.insert(
+                "response_data_encoding".to_string(),
+                Value::String(HITL_RESPONSE_ENCODING.to_string()),
+            );
+        }
+    }
     events
         .append(
             &hitl_stream_topic(&record.tenant_id, &record.project_id),
@@ -568,6 +769,10 @@ fn title_case_hitl_type(hitl_type: &str) -> String {
 mod tests {
     use super::*;
     use agistack_adapters_mem::InMemoryEventStream;
+    use agistack_adapters_secrets::try_decrypt_python_aes256_gcm;
+
+    const TEST_ENCRYPTION_KEY: &str =
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
     fn pending_request(request_id: &str, hitl_type: &str) -> HitlRequestRecord {
         HitlRequestRecord {
@@ -587,6 +792,19 @@ mod tests {
             response_metadata: None,
             expires_at: None,
         }
+    }
+
+    fn a2ui_request(request_id: &str) -> HitlRequestRecord {
+        let mut record = pending_request(request_id, "a2ui_action");
+        record.request_metadata = Some(json!({
+            "agent_mode": "default",
+            "hitl_type": "a2ui_action",
+            "allowed_actions": [{
+                "source_component_id": "approve-button",
+                "action_name": "approve",
+            }],
+        }));
+        record
     }
 
     #[tokio::test]
@@ -655,7 +873,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_sensitive_hitl_types_until_encryption_port_exists() {
+    fn rejects_env_var_until_secret_storage_is_supported() {
         let err = prepare_response(
             &pending_request("req1", "env_var"),
             HitlResponsePayload {
@@ -664,13 +882,205 @@ mod tests {
                 response_data: json!({"values": {"TOKEN": "secret"}}),
             },
             Utc::now(),
+            None,
         )
         .unwrap_err();
 
         assert_eq!(err.status, StatusCode::BAD_REQUEST);
         assert_eq!(
             err.detail(),
-            "Sensitive HITL type is not supported by the Rust endpoint yet"
+            "env_var HITL is not supported by the Rust endpoint yet"
         );
+    }
+
+    #[test]
+    fn accepts_allowlisted_stateless_a2ui_action() {
+        let prepared = prepare_response(
+            &a2ui_request("req-a2ui"),
+            HitlResponsePayload {
+                request_id: "req-a2ui".to_string(),
+                hitl_type: "a2ui_action".to_string(),
+                response_data: json!({
+                    "action_name": "approve",
+                    "source_component_id": "approve-button",
+                    "context": {},
+                }),
+            },
+            Utc::now(),
+            Some(TEST_ENCRYPTION_KEY),
+        )
+        .unwrap();
+
+        assert_eq!(prepared.hitl_type, "a2ui_action");
+        assert_eq!(prepared.response_summary, "approve");
+        let response_metadata = prepared.response_metadata.unwrap();
+        assert_eq!(response_metadata["source_component_id"], "approve-button");
+        assert_eq!(response_metadata["context"], json!({}));
+        let sealed_response = response_metadata["sealed_response"].as_str().unwrap();
+        assert_eq!(
+            response_metadata["sealed_response_encoding"],
+            HITL_RESPONSE_ENCODING
+        );
+        let decrypted_sealed =
+            try_decrypt_python_aes256_gcm(sealed_response, TEST_ENCRYPTION_KEY).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&decrypted_sealed).unwrap(),
+            json!({
+                "action_name": "approve",
+                "source_component_id": "approve-button",
+                "context": {},
+            })
+        );
+        let PreparedStreamResponse::Encrypted(stream_response) = prepared.stream_response else {
+            panic!("A2UI stream response must be encrypted");
+        };
+        assert_ne!(stream_response, sealed_response);
+        let decrypted_stream =
+            try_decrypt_python_aes256_gcm(&stream_response, TEST_ENCRYPTION_KEY).unwrap();
+        assert_eq!(decrypted_stream, decrypted_sealed);
+    }
+
+    #[test]
+    fn rejects_a2ui_without_key_or_exact_allowlist_match() {
+        let request = HitlResponsePayload {
+            request_id: "req-a2ui".to_string(),
+            hitl_type: "a2ui_action".to_string(),
+            response_data: json!({
+                "action_name": "approve",
+                "source_component_id": "approve-button",
+                "context": {},
+            }),
+        };
+        let missing_key =
+            prepare_response(&a2ui_request("req-a2ui"), request.clone(), Utc::now(), None)
+                .unwrap_err();
+        assert_eq!(missing_key.status, StatusCode::INTERNAL_SERVER_ERROR);
+
+        let mut no_allowlist = a2ui_request("req-a2ui");
+        no_allowlist.request_metadata = Some(json!({
+            "agent_mode": "default",
+            "hitl_type": "a2ui_action",
+            "allowed_actions": [],
+        }));
+        let forbidden = prepare_response(
+            &no_allowlist,
+            request,
+            Utc::now(),
+            Some(TEST_ENCRYPTION_KEY),
+        )
+        .unwrap_err();
+        assert_eq!(forbidden.status, StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn rejects_dynamic_a2ui_context_on_stateless_rust_boundary() {
+        let err = prepare_response(
+            &a2ui_request("req-a2ui"),
+            HitlResponsePayload {
+                request_id: "req-a2ui".to_string(),
+                hitl_type: "a2ui_action".to_string(),
+                response_data: json!({
+                    "action_name": "approve",
+                    "source_component_id": "approve-button",
+                    "context": {"secret": "must-not-cross-stateless-boundary"},
+                }),
+            },
+            Utc::now(),
+            Some(TEST_ENCRYPTION_KEY),
+        )
+        .unwrap_err();
+
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(err.detail(), "Invalid stateless A2UI action response");
+    }
+
+    #[tokio::test]
+    async fn dev_service_persists_and_publishes_encrypted_a2ui_response() {
+        let events = Arc::new(InMemoryEventStream::new());
+        let service =
+            DevHitlResponseService::with_encryption_key(events.clone(), TEST_ENCRYPTION_KEY);
+        service.insert_request(a2ui_request("req-a2ui")).unwrap();
+
+        let outcome = service
+            .respond(
+                "user1",
+                HitlResponsePayload {
+                    request_id: "req-a2ui".to_string(),
+                    hitl_type: "a2ui_action".to_string(),
+                    response_data: json!({
+                        "action_name": "approve",
+                        "source_component_id": "approve-button",
+                        "context": {},
+                    }),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!outcome.delivery_pending);
+        let stored = service.get_request("req-a2ui").unwrap().unwrap();
+        assert_eq!(stored.status, "answered");
+        assert_eq!(stored.response.as_deref(), Some("approve"));
+        assert_eq!(
+            stored.response_metadata.as_ref().unwrap()["sealed_response_encoding"],
+            HITL_RESPONSE_ENCODING
+        );
+
+        let entries = events
+            .read_after(&hitl_stream_topic("tenant1", "project1"), "", 10)
+            .await
+            .unwrap();
+        assert_eq!(entries.len(), 1);
+        let payload: Value = serde_json::from_str(&entries[0].payload).unwrap();
+        assert!(payload.get("response_data").is_none());
+        assert_eq!(payload["response_data_encoding"], HITL_RESPONSE_ENCODING);
+        let decrypted = try_decrypt_python_aes256_gcm(
+            payload["response_data_encrypted"].as_str().unwrap(),
+            TEST_ENCRYPTION_KEY,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&decrypted).unwrap(),
+            json!({
+                "action_name": "approve",
+                "source_component_id": "approve-button",
+                "context": {},
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn dev_service_bad_key_fails_before_claim_or_publish() {
+        let events = Arc::new(InMemoryEventStream::new());
+        let service = DevHitlResponseService::with_encryption_key(events.clone(), "invalid-key");
+        service.insert_request(a2ui_request("req-a2ui")).unwrap();
+
+        let err = service
+            .respond(
+                "user1",
+                HitlResponsePayload {
+                    request_id: "req-a2ui".to_string(),
+                    hitl_type: "a2ui_action".to_string(),
+                    response_data: json!({
+                        "action_name": "approve",
+                        "source_component_id": "approve-button",
+                        "context": {},
+                    }),
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(err.detail(), "HITL response encryption is unavailable");
+        let stored = service.get_request("req-a2ui").unwrap().unwrap();
+        assert_eq!(stored.status, "pending");
+        assert!(stored.response.is_none());
+        assert!(stored.response_metadata.is_none());
+        let entries = events
+            .read_after(&hitl_stream_topic("tenant1", "project1"), "", 10)
+            .await
+            .unwrap();
+        assert!(entries.is_empty());
     }
 }
