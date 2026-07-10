@@ -99,6 +99,8 @@ def _verify_container_ports(host_config: Mapping[str, object]) -> None:
     port_bindings = _require_mapping(host_config.get("PortBindings"), "container port bindings")
     if "6080/tcp" in port_bindings:
         raise RuntimeError("Sandbox E2E container published a disabled desktop port")
+    if "7681/tcp" in port_bindings:
+        raise RuntimeError("Sandbox E2E container published a disabled terminal port")
     for raw_bindings in port_bindings.values():
         if not isinstance(raw_bindings, list) or not raw_bindings:
             raise RuntimeError("Sandbox E2E container has an invalid port binding")
@@ -118,6 +120,8 @@ def _verify_container_auth(config: Mapping[str, object]) -> None:
         raise RuntimeError("Sandbox E2E capability token is missing")
     if environment.get("DESKTOP_ENABLED") != "false":
         raise RuntimeError("Sandbox E2E desktop profile is not disabled")
+    if environment.get("TERMINAL_ENABLED") != "false":
+        raise RuntimeError("Sandbox E2E terminal profile is not disabled")
 
 
 def verify_sandbox_container(
@@ -304,6 +308,8 @@ def verify_sandbox(
             websocket_url = _require_string(sandbox, "websocket_url", "an MCP WebSocket URL")
             if sandbox.get("desktop_port") is not None or sandbox.get("desktop_url") is not None:
                 raise RuntimeError("Sandbox E2E reported a disabled desktop service")
+            if sandbox.get("terminal_port") is not None or sandbox.get("terminal_url") is not None:
+                raise RuntimeError("Sandbox E2E reported a disabled terminal service")
 
             container = resolved_docker.containers.get(sandbox_id)
             container.reload()

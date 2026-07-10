@@ -33,6 +33,7 @@ class TestSandboxInfo:
             is_healthy=True,
             created_at=now,
             last_accessed_at=now,
+            runtime_auth_token="sandbox-runtime-secret",
         )
 
         data = info.to_dict()
@@ -42,6 +43,8 @@ class TestSandboxInfo:
         assert data["status"] == "running"
         assert data["is_healthy"] is True
         assert data["created_at"] == now.isoformat()
+        assert "runtime_auth_token" not in data
+        assert "sandbox-runtime-secret" not in repr(info)
 
 
 class TestProjectSandboxLifecycleService:
@@ -115,6 +118,15 @@ class TestProjectSandboxLifecycleService:
 
         assert config.rw_volumes["/var/run/docker.sock"] == "/var/run/docker.sock"
 
+    def test_resolve_lite_profile_disables_unavailable_terminal(self, service) -> None:
+        """Lite uses the MCP-only image and must not advertise a terminal."""
+        config = service._resolve_config(
+            profile=SandboxProfileType.LITE,
+            config_override=None,
+        )
+
+        assert config.terminal_enabled is False
+
     def test_resolve_config_includes_host_docker_socket_volume(
         self, mock_repository, mock_adapter
     ) -> None:
@@ -145,6 +157,7 @@ class TestProjectSandboxLifecycleService:
         mock_instance.mcp_port = 8765
         mock_instance.desktop_port = 6080
         mock_instance.terminal_port = 7681
+        mock_instance.mcp_auth_token = "sandbox-runtime-secret"
         mock_adapter.create_sandbox.return_value = mock_instance
         mock_adapter.get_sandbox.return_value = mock_instance
 
@@ -158,6 +171,8 @@ class TestProjectSandboxLifecycleService:
         assert result.sandbox_id == "sb-new"
         assert result.status == "running"
         assert result.is_healthy is True
+        assert result.runtime_auth_token == "sandbox-runtime-secret"
+        assert "runtime_auth_token" not in result.to_dict()
         mock_adapter.create_sandbox.assert_called_once()
         mock_repository.save.assert_called()
 

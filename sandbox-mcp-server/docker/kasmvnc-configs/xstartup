@@ -1,5 +1,5 @@
 #!/bin/bash
-# KasmVNC session startup script for KDE Plasma 6 on Ubuntu 25.04
+# KasmVNC session startup script for KDE Plasma 5.27 on Ubuntu 24.04 LTS
 # This script is executed when a KasmVNC session is started
 # IMPORTANT: This script MUST keep running or the VNC session will terminate
 
@@ -269,8 +269,8 @@ xsetroot -cursor_name left_ptr 2>/dev/null || true
 update-mime-database "$XDG_DATA_HOME/mime" 2>/dev/null &
 
 # Launch desktop session
-# Ubuntu 25.04 removed kwin-x11 (KDE Plasma 6 is Wayland-only).
-# Use openbox as the X11 window manager for title bars, dragging, and resizing,
+# Use Openbox as the small, predictable X11 window manager for title bars,
+# dragging, and resizing in the headless KasmVNC session,
 # then start plasmashell for the KDE panel, taskbar, and system tray.
 openbox --replace &
 sleep 1

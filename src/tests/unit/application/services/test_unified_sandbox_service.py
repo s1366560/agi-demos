@@ -806,6 +806,7 @@ class TestConfigResolution:
 
         assert config is not None
         assert hasattr(config, "memory_limit")
+        assert config.terminal_enabled is False
 
     def test_resolve_config_with_overrides(self):
         """Should apply config overrides."""

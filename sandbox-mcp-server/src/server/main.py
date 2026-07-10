@@ -151,7 +151,7 @@ async def run_server(
     if terminal_enabled:
         logger.info(f"[MCP] Terminal endpoint: ws://{host}:{terminal_port}")
     if desktop_enabled:
-        logger.info(f"[MCP] Desktop endpoint: http://{host}:{desktop_port}/vnc.html")
+        logger.info(f"[MCP] Desktop endpoint: https://{host}:{desktop_port}/")
 
     logger.info("[MCP] =================================")
     logger.info("[MCP] Press Ctrl+C to stop")

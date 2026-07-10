@@ -1,5 +1,6 @@
 """Security regression tests for MCP sandbox capability authentication."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -41,6 +42,7 @@ async def test_create_sandbox_generates_private_capability_and_loopback_ports(
         return container
 
     docker_client.containers.run = Mock(side_effect=run_container)
+    docker_client.networks.create = Mock(return_value=MagicMock())
 
     with (
         patch.object(adapter, "_is_port_available", return_value=True),
@@ -66,6 +68,17 @@ async def test_create_sandbox_generates_private_capability_and_loopback_ports(
     ports = captured_config["ports"]
     assert isinstance(ports, dict)
     assert all(binding[0] == "127.0.0.1" for binding in ports.values())
+    network_name = adapter._isolated_network_name(instance.id)
+    assert captured_config["network"] == network_name
+    docker_client.networks.create.assert_called_once_with(
+        network_name,
+        driver="bridge",
+        options={"com.docker.network.bridge.enable_icc": "false"},
+        labels={
+            "memstack.sandbox.network": "true",
+            "memstack.sandbox.id": instance.id,
+        },
+    )
 
 
 async def test_create_sandbox_honors_profile_image_and_disabled_desktop(
@@ -84,9 +97,11 @@ async def test_create_sandbox_honors_profile_image_and_disabled_desktop(
         return container
 
     docker_client.containers.run = Mock(side_effect=run_container)
+    docker_client.networks.create = Mock(return_value=MagicMock())
     config = SandboxConfig(
         image="sandbox-mcp-server:lite",
         desktop_enabled=False,
+        terminal_enabled=False,
     )
 
     with (
@@ -106,14 +121,65 @@ async def test_create_sandbox_honors_profile_image_and_disabled_desktop(
     environment = captured_config["environment"]
     assert isinstance(environment, dict)
     assert environment["DESKTOP_ENABLED"] == "false"
+    assert environment["TERMINAL_ENABLED"] == "false"
     ports = captured_config["ports"]
     assert isinstance(ports, dict)
     assert "6080/tcp" not in ports
+    assert "7681/tcp" not in ports
     labels = captured_config["labels"]
     assert isinstance(labels, dict)
     assert "memstack.sandbox.desktop_port" not in labels
+    assert "memstack.sandbox.terminal_port" not in labels
     assert instance.desktop_port is None
     assert instance.desktop_url is None
+    assert instance.terminal_port is None
+    assert instance.terminal_url is None
+
+
+async def test_create_sandbox_mounts_pip_cache_for_unprivileged_user(
+    adapter: MCPSandboxAdapter,
+    docker_client: MagicMock,
+    tmp_path: Path,
+) -> None:
+    captured_config: dict[str, object] = {}
+
+    def run_container(**kwargs: object) -> MagicMock:
+        captured_config.update(kwargs)
+        container = MagicMock()
+        container.name = kwargs["name"]
+        container.status = "running"
+        container.labels = kwargs["labels"]
+        container.ports = {}
+        return container
+
+    settings = MagicMock()
+    settings.sandbox_pip_cache_enabled = True
+    settings.sandbox_pip_cache_path = str(tmp_path / "pip-cache")
+    settings.sandbox_platform_url = None
+    settings.sandbox_service_token = None
+    docker_client.containers.run = Mock(side_effect=run_container)
+    docker_client.networks.create = Mock(return_value=MagicMock())
+
+    with (
+        patch.object(adapter, "_is_port_available", return_value=True),
+        patch.object(adapter, "_persist_sandbox_state", new=AsyncMock()),
+        patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.get_settings",
+            return_value=settings,
+        ),
+        patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        await adapter.create_sandbox(project_path="/tmp/project")
+
+    volumes = captured_config["volumes"]
+    assert isinstance(volumes, dict)
+    assert volumes[settings.sandbox_pip_cache_path] == {
+        "bind": "/home/sandbox/.cache/pip",
+        "mode": "rw",
+    }
 
 
 def test_rebuild_config_preserves_capability_and_loopback_ports(
@@ -139,6 +205,7 @@ def test_rebuild_config_preserves_capability_and_loopback_ports(
         "6080/tcp": ("127.0.0.1", 16080),
         "7681/tcp": ("127.0.0.1", 17681),
     }
+    assert container_config["network"] == adapter._isolated_network_name("sandbox-1")
 
 
 def test_rebuild_config_honors_profile_image_and_disabled_desktop(
@@ -149,6 +216,7 @@ def test_rebuild_config_honors_profile_image_and_disabled_desktop(
         config=SandboxConfig(
             image="sandbox-mcp-server:lite",
             desktop_enabled=False,
+            terminal_enabled=False,
         ),
         old_ports=[18765, None, 17681],
         project_path="/tmp/project",
@@ -159,7 +227,33 @@ def test_rebuild_config_honors_profile_image_and_disabled_desktop(
     assert container_config["image"] == "sandbox-mcp-server:lite"
     environment = container_config["environment"]
     assert environment["DESKTOP_ENABLED"] == "false"
+    assert environment["TERMINAL_ENABLED"] == "false"
     assert "6080/tcp" not in container_config["ports"]
+    assert "7681/tcp" not in container_config["ports"]
+
+
+async def test_container_removal_also_removes_owned_isolated_network(
+    adapter: MCPSandboxAdapter,
+    docker_client: MagicMock,
+) -> None:
+    sandbox_id = "sandbox-network-cleanup"
+    container = MagicMock()
+    container.status = "exited"
+    network = MagicMock()
+    network.attrs = {
+        "Labels": {
+            "memstack.sandbox.network": "true",
+            "memstack.sandbox.id": sandbox_id,
+        }
+    }
+    docker_client.networks.get = Mock(return_value=network)
+
+    removed = await adapter._safe_stop_and_remove_container(container, sandbox_id)
+
+    assert removed is True
+    container.remove.assert_called_once_with(force=True)
+    docker_client.networks.get.assert_called_once_with(adapter._isolated_network_name(sandbox_id))
+    network.remove.assert_called_once_with()
 
 
 async def test_connect_mcp_sends_capability_in_authorization_header(

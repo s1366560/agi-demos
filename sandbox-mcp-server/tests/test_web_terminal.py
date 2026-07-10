@@ -25,6 +25,10 @@ def create_mock_process(pid: int = 12345, returncode: int = None) -> MagicMock:
 class TestWebTerminalManager:
     """Test suite for WebTerminalManager."""
 
+    @pytest.fixture(autouse=True)
+    def runtime_auth(self, monkeypatch):
+        monkeypatch.setenv("MCP_STATIC_TOKEN", "sandbox-runtime-secret")
+
     @pytest.fixture
     def workspace_dir(self, tmp_path):
         """Provide a temporary workspace directory."""
@@ -61,8 +65,23 @@ class TestWebTerminalManager:
             assert args[0] == "ttyd"
             assert "-p" in args
             assert str(manager.port) in args
+            credential_index = args.index("-c") + 1
+            assert args[credential_index] == "sandbox:sandbox-runtime-secret"
 
             assert manager.is_running() is True
+
+    @pytest.mark.asyncio
+    async def test_start_ttyd_fails_closed_without_runtime_auth(self, manager, monkeypatch):
+        monkeypatch.delenv("SANDBOX_SERVICE_AUTH_TOKEN", raising=False)
+        monkeypatch.delenv("MCP_STATIC_TOKEN", raising=False)
+
+        with (
+            patch("asyncio.create_subprocess_exec", AsyncMock()) as mock_exec,
+            pytest.raises(RuntimeError, match="runtime authentication capability"),
+        ):
+            await manager.start()
+
+        mock_exec.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_start_ttyd_already_running(self, manager):

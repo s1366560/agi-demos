@@ -49,6 +49,7 @@ class SandboxConfig:
     volumes: dict[str, str] = field(default_factory=dict)  # host->container (ro)
     rw_volumes: dict[str, str] = field(default_factory=dict)  # host->container (rw)
     desktop_enabled: bool = True  # Whether to start desktop environment (VNC/noVNC)
+    terminal_enabled: bool = True  # Whether to start and publish the ttyd web terminal
 
 
 @dataclass

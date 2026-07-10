@@ -1,5 +1,15 @@
 .git
 .DS_Store
+.env
+.env.*
+.ssh
+.aws
+.npmrc
+.pypirc
+*.pem
+*.key
+logs
+*.log
 .coverage
 .pytest_cache
 .ruff_cache
@@ -9,7 +19,5 @@ venv
 *.py[cod]
 tests
 docs
-docker
-scripts
 *.md
 !README.md

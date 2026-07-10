@@ -109,9 +109,9 @@ class ContainerManager:
 
         # Build port bindings
         port_bindings = {
-            f"{MCP_WEBSOCKET_PORT}/tcp": ("0.0.0.0", ports.mcp_port),
-            f"{DESKTOP_PORT}/tcp": ("0.0.0.0", ports.desktop_port),
-            f"{TERMINAL_PORT}/tcp": ("0.0.0.0", ports.terminal_port),
+            f"{MCP_WEBSOCKET_PORT}/tcp": ("127.0.0.1", ports.mcp_port),
+            f"{DESKTOP_PORT}/tcp": ("127.0.0.1", ports.desktop_port),
+            f"{TERMINAL_PORT}/tcp": ("127.0.0.1", ports.terminal_port),
         }
 
         # Build environment
@@ -145,7 +145,7 @@ class ContainerManager:
         if settings.sandbox_pip_cache_enabled:
             os.makedirs(settings.sandbox_pip_cache_path, exist_ok=True)
             volumes[settings.sandbox_pip_cache_path] = {
-                "bind": "/root/.cache/pip",
+                "bind": "/home/sandbox/.cache/pip",
                 "mode": "rw",
             }
 

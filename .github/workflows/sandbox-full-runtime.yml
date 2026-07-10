@@ -1,0 +1,60 @@
+name: Complete Sandbox Runtime Gate
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 18 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  full-runtime:
+    name: Build and verify Desktop/Terminal Sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install runtime verifier dependencies
+        run: uv sync --frozen
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build complete Sandbox image
+        uses: docker/build-push-action@v6
+        with:
+          context: sandbox-mcp-server
+          file: sandbox-mcp-server/Dockerfile
+          load: true
+          platforms: linux/amd64
+          tags: sandbox-mcp-server:full-ci
+          cache-from: type=gha,scope=sandbox-full-amd64
+          cache-to: type=gha,mode=max,scope=sandbox-full-amd64
+
+      - name: Verify services, authentication, restart, and isolation
+        env:
+          SANDBOX_FULL_IMAGE: sandbox-mcp-server:full-ci
+        run: uv run python -m scripts.verify_full_sandbox_runtime
+
+      - name: Remove gate-owned containers and networks
+        if: always()
+        run: |
+          for container_id in $(docker ps -aq --filter label=memstack.full-runtime=true); do
+            docker rm --force "$container_id" || true
+          done
+          for network_id in $(docker network ls -q --filter label=memstack.full-runtime=true); do
+            docker network rm "$network_id" || true
+          done

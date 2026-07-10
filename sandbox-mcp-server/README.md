@@ -8,7 +8,7 @@ A WebSocket-based MCP (Model Context Protocol) server for sandbox file system op
 - **File Operations**: read, write, edit, glob, grep
 - **Bash Execution**: Secure command execution
 - **Web Terminal**: Browser-based terminal access via ttyd
-- **Remote Desktop**: KDE Plasma 6 desktop environment with KasmVNC (built-in web client)
+- **Remote Desktop**: KDE Plasma 5.27 desktop environment with KasmVNC (built-in web client)
 - **Docker Ready**: Isolated sandbox environment
 - **Multi-Language**: Python 3.12, Node.js 22, Java 21 pre-installed
 
@@ -45,7 +45,7 @@ After starting the container:
 
 - **MCP Server**: `ws://localhost:8765` (WebSocket)
 - **Web Terminal**: `http://localhost:7681` (ttyd)
-- **Remote Desktop**: `http://localhost:6080` (KasmVNC web client)
+- **Remote Desktop**: `https://localhost:6080` (KasmVNC web client)
 
 ## Available Tools
 
@@ -169,16 +169,20 @@ Environment variables:
 
 **Direct Access**:
 ```bash
-# Start container with desktop
-docker run -p 6080:6080 sandbox-mcp-server
+# Start container with authenticated desktop and loopback-only publication
+export SANDBOX_TOKEN="$(openssl rand -base64 32 | tr -d '\n')"
+docker run --rm \
+  -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" \
+  -p 127.0.0.1:6080:6080 \
+  sandbox-mcp-server
 
-# Open browser
-open http://localhost:6080
+# Open browser and authenticate as "sandbox" with $SANDBOX_TOKEN
+open https://localhost:6080
 ```
 
 ### Desktop Features
 
-- **KDE Plasma 6 Desktop Environment**: Modern, feature-rich desktop (Dolphin, Konsole, Kate, etc.)
+- **KDE Plasma 5.27 Desktop Environment**: Ubuntu 24.04 LTS desktop stack (Dolphin, Konsole, Kate, etc.)
 - **KasmVNC** (all-in-one): A single process provides X server + VNC server + WebSocket server + built-in web client
 - **Built-in Web Client**: No browser plugin or separate noVNC/websockify stack required
 - **WebP/QOI/JPEG Encoding**: Modern encodings for efficient remote display
@@ -197,16 +201,16 @@ validated against the KasmVNC path.
 
 Relevant runtime details:
 
-- Server command: `vncserver :1 -geometry 1920x1080 -depth 24 -websocketPort 6080 -interface 0.0.0.0 -disableBasicAuth -SecurityTypes None`
+- Server command: `vncserver :1 -geometry 1920x1080 -depth 24 -websocketPort 6080 -interface 0.0.0.0 -SecurityTypes None`
 - Display: `:1`
-- Process name: `Xkasmvnc`
-- Auth file: `/root/.kasmpasswd` (read from `$HOME`, not `~/.vnc/kasmpasswd`)
-- Auth mode: disabled (`-SecurityTypes None -disableBasicAuth`); authentication is delegated to the API proxy in front of the container
+- Process name: `Xvnc` (KasmVNC package alternative)
+- Auth file: `/home/sandbox/.kasmpasswd` (read from `$HOME`, not `~/.vnc/kasmpasswd`)
+- Auth mode: KasmVNC HTTP Basic Auth with the per-sandbox runtime capability; the API proxy injects this credential without placing it in URLs
 - Web port: `6080` (no 5901 VNC port is exposed; the built-in web client is served on the same port)
 
 **Example: Run with desktop**
 ```bash
-docker run -p 6080:6080 sandbox-mcp-server
+docker run -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" -p 127.0.0.1:6080:6080 sandbox-mcp-server
 ```
 
 ## Protocol
@@ -264,7 +268,7 @@ asyncio.run(main())
 ├──────────────────────┬──────────────────────────────────┤
 │   ttyd               │   KasmVNC :1 (all-in-one)        │
 │   (shell access)     │   ├─ X server (built-in)         │
-│                      │   ├─ KDE Plasma 6                │
+│                      │   ├─ KDE Plasma 5.27             │
 │                      │   └─ VNC + WebSocket + web       │
 │                      │      client on port 6080         │
 ├──────────────────────┴──────────────────────────────────┤
@@ -297,7 +301,7 @@ Pre-installed in the sandbox:
 - Dangerous commands blocked
 - Non-root user in Docker (UID 1001)
 - Resource limits enforced
-- VNC authentication disabled (container-safe)
+- Per-sandbox KasmVNC and ttyd authentication enabled
 - Session timeout management (optional)
 
 ## Troubleshooting
@@ -325,8 +329,8 @@ docker ps
 # Check port mapping
 docker port <container>
 
-# Test KasmVNC web client
-curl http://localhost:6080
+# Test KasmVNC web client (self-signed TLS)
+curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
 ```
 
 ### Performance Issues
@@ -337,10 +341,10 @@ curl http://localhost:6080
 
 ## Migration from LXDE
 
-**Note**: This project has been migrated from LXDE to KDE Plasma 6 with KasmVNC for a richer desktop and a single all-in-one remote display server.
+**Note**: This project has been migrated from LXDE to KDE Plasma 5.27 on Ubuntu 24.04 LTS with KasmVNC for a richer desktop and a single all-in-one remote display server.
 
 Key changes:
-- LXDE → KDE Plasma 6 desktop environment
+- LXDE → KDE Plasma 5.27 desktop environment
 - Earlier TigerVNC/x11vnc + noVNC + websockify stack → KasmVNC (single process)
 - Improved performance and session persistence
 - Better encoding options (WebP, QOI, JPEG) plus dynamic resize, clipboard, and audio
@@ -397,7 +401,7 @@ MIT License - See LICENSE file for details
 
 ## Version History
 
-- **v2.0** (2026-01-28): KDE Plasma 6 + KasmVNC desktop, 94% test coverage
+- **v2.0** (2026-01-28): KDE Plasma + KasmVNC desktop migration
 - **v1.0** (2025-01-15): Initial release with LXDE desktop
 
 ---

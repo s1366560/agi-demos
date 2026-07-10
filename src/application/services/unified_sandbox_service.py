@@ -832,6 +832,7 @@ class UnifiedSandboxService(SandboxResourcePort):
             cpu_limit=cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,
             desktop_enabled=sandbox_profile.desktop_enabled,
+            terminal_enabled=sandbox_profile.terminal_enabled,
             environment=cast(dict[str, str], config_override.get("environment", {}))
             if config_override
             else {},
@@ -848,6 +849,8 @@ class UnifiedSandboxService(SandboxResourcePort):
                 config.timeout_seconds = config_override["timeout_seconds"]
             if "desktop_enabled" in config_override:
                 config.desktop_enabled = config_override["desktop_enabled"]
+            if "terminal_enabled" in config_override:
+                config.terminal_enabled = config_override["terminal_enabled"]
             if "volumes" in config_override:
                 config.volumes.update(config_override["volumes"])
             if "rw_volumes" in config_override:

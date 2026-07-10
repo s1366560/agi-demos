@@ -12,7 +12,6 @@ import logging
 import secrets
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
-from urllib.parse import parse_qs
 
 import aiohttp
 from aiohttp import web
@@ -215,20 +214,11 @@ class MCPWebSocketServer:
             logger.debug(f"[Auth] Allowing localhost connection from {remote}")
             return True, {"mode": "localhost", "remote": remote}, None
 
-        # Extract token from query params or headers
-        token = None
-
-        # Check query params first (for WebSocket URL: ws://host:port?token=xxx)
-        query_string = request.query_string
-        if query_string:
-            params = parse_qs(query_string)
-            token = params.get("token", [None])[0]
-
-        # Fallback to header
-        if not token:
-            token = request.headers.get("X-Auth-Token") or request.headers.get("Authorization")
-            if token and token.startswith("Bearer "):
-                token = token[7:]
+        # Capabilities must stay out of URLs and access logs. WebSocket clients
+        # authenticate with a header only.
+        token = request.headers.get("X-Auth-Token") or request.headers.get("Authorization")
+        if token and token.startswith("Bearer "):
+            token = token[7:]
 
         if not token:
             return False, None, "Authentication required: no token provided"

@@ -110,6 +110,13 @@ Status: the first continuous-verification increment is implemented.
   authentication, tenant isolation, loopback publication, Docker metadata,
   write/read/bash tools, workspace escape rejection, and container teardown.
   Keep the full Desktop/Terminal production image as a separate release gate.
+- Build that full image from Ubuntu 24.04 as a non-root process, expose only the
+  profile-declared services, and launch two instances on separate owned bridge
+  networks. The release fixture must prove MCP capability authentication,
+  query-token rejection, complete toolchains, KasmVNC and ttyd readiness,
+  restart recovery, loopback publication, and cross-network authentication
+  denial. Docker-published ports remain routable across bridge networks, so
+  network metadata alone is not treated as a tenant security boundary.
 - Run Rust Postgres/Redis tests against real CI services and run Desktop source
   checks before bundling.
 - Make this document and `ARCHITECTURE.md` the cross-runtime authority; keep the
@@ -204,9 +211,27 @@ Verified on 2026-07-10:
   and cross-tenant creation, blocked direct unauthenticated MCP with code 4001,
   completed write/read/bash calls, rejected an out-of-workspace write, verified
   loopback-only ports and no Docker socket, and removed the container cleanly.
+- Full Sandbox release gate: workflow, metadata validator, MCP exploit probes,
+  restart checks, and two-network isolation fixture are implemented. Its unit
+  contract passed 11/11, the current Sandbox regression selection passed
+  234/234, and the nested server suite passed 320 tests with 104 legacy
+  integration scenarios skipped. The production image now uses one Python
+  environment and one Playwright browser installation instead of duplicating
+  both globally and in a virtual environment; shared writable pip caching is
+  disabled by default.
+- The optimized Ubuntu 24.04 production image built successfully on local
+  linux/arm64 as
+  `sha256:1e499e9ece02f5b5dea60f332b4a22918177a504cfc025509200d270de53e349`.
+  A fresh full-runtime execution proved non-root metadata, authenticated MCP,
+  authenticated KasmVNC and ttyd, restart recovery, capability non-disclosure,
+  and denial of unauthenticated and wrong-capability requests from a second
+  sandbox network. The dynamic desktop/terminal manager paths use the same
+  fail-closed runtime credential contract.
 - GitHub Actions workflow YAML parsed successfully.
 
 The backend-dependent Playwright, deterministic local/Ray Agent, graph mutation,
-and MCP-only Sandbox gates are complete. The remaining full-product E2E gap is
-the full Desktop/Terminal Sandbox production-image fixture; the lightweight
-MCP-only gate is not represented as full production-image parity.
+and MCP-only Sandbox gates are complete. The full Desktop/Terminal fixture now
+passes against a fresh local linux/arm64 production image. The scheduled
+linux/amd64 execution and a rendered RFB/terminal browser path remain the final
+evidence gaps; local arm64 success is not represented as cross-architecture or
+browser-rendering parity.

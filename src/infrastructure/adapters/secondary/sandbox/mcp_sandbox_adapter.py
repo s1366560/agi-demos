@@ -7,6 +7,7 @@ enabling file system operations via the MCP protocol over WebSocket.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -48,6 +49,7 @@ from src.domain.ports.services.sandbox_port import (
 from src.infrastructure.adapters.secondary.sandbox.constants import (
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
+    ISOLATED_NETWORK_OPTIONS,
     MCP_WEBSOCKET_PORT,
     TERMINAL_PORT,
 )
@@ -529,6 +531,8 @@ class MCPSandboxAdapter(SandboxPort):
         """Build an MCPSandboxInstance from container metadata."""
         if config is not None and not config.desktop_enabled:
             desktop_port = None
+        if config is not None and not config.terminal_enabled:
+            terminal_port = None
         websocket_url, desktop_url, terminal_url = self._build_urls_from_ports(
             sandbox_id,
             mcp_port,
@@ -591,17 +595,20 @@ class MCPSandboxAdapter(SandboxPort):
         container_config = container.attrs.get("Config", {})
         image = container_config.get("Image") or self._mcp_image
         desktop_enabled = True
+        terminal_enabled = True
         for entry in container_config.get("Env", []):
             if not isinstance(entry, str):
                 continue
             name, separator, value = entry.partition("=")
             if name == "DESKTOP_ENABLED" and separator:
                 desktop_enabled = value.strip().lower() in {"1", "true", "yes", "on"}
-                break
+            elif name == "TERMINAL_ENABLED" and separator:
+                terminal_enabled = value.strip().lower() in {"1", "true", "yes", "on"}
 
         config = SandboxConfig(
             image=image,
             desktop_enabled=desktop_enabled,
+            terminal_enabled=terminal_enabled,
         )
         for mount in container.attrs.get("Mounts", []):
             source = mount.get("Source", "")
@@ -1068,7 +1075,7 @@ class MCPSandboxAdapter(SandboxPort):
             await loop.run_in_executor(
                 None, cast(Callable[[], None], lambda c=container: c.remove(force=True))
             )
-            return True
+            return await self._remove_isolated_network(container_name)
         except Exception as e:
             logger.warning(f"Failed to stop/remove container {container_name}: {e}")
             return False
@@ -1082,6 +1089,7 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
         except NotFound:
+            await self._remove_isolated_network(sandbox_id)
             return
         except Exception as e:
             logger.warning(
@@ -1098,6 +1106,61 @@ class MCPSandboxAdapter(SandboxPort):
         )
         if removed:
             logger.info("Removed partial sandbox container %s after %s", container_name, reason)
+
+    @staticmethod
+    def _isolated_network_name(sandbox_id: str) -> str:
+        """Return a stable Docker network name without exposing tenant identifiers."""
+        digest = hashlib.sha256(sandbox_id.encode("utf-8")).hexdigest()[:20]
+        return f"memstack-sandbox-{digest}"
+
+    async def _create_isolated_network(self, sandbox_id: str) -> str:
+        """Create the one-container bridge used to block cross-sandbox traffic."""
+        network_name = self._isolated_network_name(sandbox_id)
+        labels = {
+            "memstack.sandbox.network": "true",
+            "memstack.sandbox.id": sandbox_id,
+        }
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: self._docker.networks.create(
+                network_name,
+                driver="bridge",
+                options=ISOLATED_NETWORK_OPTIONS,
+                labels=labels,
+            ),
+        )
+        return network_name
+
+    async def _remove_isolated_network(self, sandbox_id: str) -> bool:
+        """Remove only the dedicated network owned by the requested sandbox."""
+        network_name = self._isolated_network_name(sandbox_id)
+        loop = asyncio.get_event_loop()
+        try:
+            network = await loop.run_in_executor(
+                None,
+                lambda: self._docker.networks.get(network_name),
+            )
+        except NotFound:
+            return True
+        except Exception as exc:
+            logger.warning("Failed to inspect sandbox network %s: %s", network_name, exc)
+            return False
+
+        labels = network.attrs.get("Labels", {}) or {}
+        if (
+            labels.get("memstack.sandbox.network") != "true"
+            or labels.get("memstack.sandbox.id") != sandbox_id
+        ):
+            logger.warning("Refusing to remove unowned Docker network %s", network_name)
+            return False
+
+        try:
+            await loop.run_in_executor(None, network.remove)
+        except Exception as exc:
+            logger.warning("Failed to remove sandbox network %s: %s", network_name, exc)
+            return False
+        return True
 
     @override
     async def create_sandbox(  # noqa: PLR0915, C901, PLR0912
@@ -1145,7 +1208,9 @@ class MCPSandboxAdapter(SandboxPort):
             host_desktop_port = (
                 self._get_next_desktop_port_unsafe() if config.desktop_enabled else None
             )
-            host_terminal_port = self._get_next_terminal_port_unsafe()
+            host_terminal_port = (
+                self._get_next_terminal_port_unsafe() if config.terminal_enabled else None
+            )
 
         try:
             # Build sandbox environment variables
@@ -1159,6 +1224,7 @@ class MCPSandboxAdapter(SandboxPort):
                 **config.environment,
             }
             sandbox_env["DESKTOP_ENABLED"] = str(config.desktop_enabled).lower()
+            sandbox_env["TERMINAL_ENABLED"] = str(config.terminal_enabled).lower()
             self._enforce_mcp_auth_environment(sandbox_env, mcp_auth_token)
             settings = get_settings()
             if settings.sandbox_platform_url:
@@ -1174,8 +1240,12 @@ class MCPSandboxAdapter(SandboxPort):
                     break  # Use first ro volume as host source path
             published_ports: dict[str, tuple[str, int]] = {
                 f"{MCP_WEBSOCKET_PORT}/tcp": ("127.0.0.1", host_mcp_port),
-                f"{TERMINAL_PORT}/tcp": ("127.0.0.1", host_terminal_port),
             }
+            if host_terminal_port is not None:
+                published_ports[f"{TERMINAL_PORT}/tcp"] = (
+                    "127.0.0.1",
+                    host_terminal_port,
+                )
             if host_desktop_port is not None:
                 published_ports[f"{DESKTOP_PORT}/tcp"] = (
                     "127.0.0.1",
@@ -1186,7 +1256,11 @@ class MCPSandboxAdapter(SandboxPort):
                 "memstack.sandbox": "true",
                 "memstack.sandbox.id": sandbox_id,
                 "memstack.sandbox.mcp_port": str(host_mcp_port),
-                "memstack.sandbox.terminal_port": str(host_terminal_port),
+                **(
+                    {"memstack.sandbox.terminal_port": str(host_terminal_port)}
+                    if host_terminal_port is not None
+                    else {}
+                ),
                 **(
                     {"memstack.sandbox.desktop_port": str(host_desktop_port)}
                     if host_desktop_port is not None
@@ -1232,17 +1306,17 @@ class MCPSandboxAdapter(SandboxPort):
             if settings.sandbox_pip_cache_enabled:
                 os.makedirs(settings.sandbox_pip_cache_path, exist_ok=True)
                 volumes[settings.sandbox_pip_cache_path] = {
-                    "bind": "/root/.cache/pip",
+                    "bind": "/home/sandbox/.cache/pip",
                     "mode": "rw",
                 }
             if volumes:
                 container_config["volumes"] = cast("dict[str, Any]", volumes)
 
-            # Network mode - need network for WebSocket
-            # Don't use "none" as we need to connect via host port
+            # Give each sandbox its own bridge as defense in depth. Published
+            # ports can still be routed by Docker, so service auth remains the
+            # tenant boundary.
             if config.network_isolated:
-                # Create isolated network for sandbox
-                container_config["network_mode"] = "bridge"
+                container_config["network"] = await self._create_isolated_network(sandbox_id)
 
             # Run in thread pool
             loop = asyncio.get_event_loop()
@@ -1260,7 +1334,7 @@ class MCPSandboxAdapter(SandboxPort):
             instance_info = SandboxInstanceInfo(
                 mcp_port=host_mcp_port,
                 desktop_port=host_desktop_port or 0,
-                terminal_port=host_terminal_port,
+                terminal_port=host_terminal_port or 0,
                 sandbox_id=sandbox_id,
                 host="localhost",
             )
@@ -1268,7 +1342,7 @@ class MCPSandboxAdapter(SandboxPort):
 
             websocket_url = urls.mcp_url
             desktop_url = urls.desktop_url if host_desktop_port is not None else None
-            terminal_url = urls.terminal_url
+            terminal_url = urls.terminal_url if host_terminal_port is not None else None
 
             # Build labels dict for instance
             instance_labels = container_labels.copy()
@@ -1317,6 +1391,7 @@ class MCPSandboxAdapter(SandboxPort):
                     ]
                 )
             logger.error(f"MCP sandbox image not found: {config.image}")
+            await self._remove_partial_container(sandbox_id, "image not found")
             raise SandboxConnectionError(
                 message=f"Docker image not found: {config.image}. "
                 f"Build with: cd sandbox-mcp-server && docker build -t {config.image} .",
@@ -3009,13 +3084,12 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
             logger.info(f"Removing old container {sandbox_id} before rebuild")
-            try:
-                await loop.run_in_executor(None, lambda: old_container.remove(force=True))
+            removed = await self._safe_stop_and_remove_container(old_container, sandbox_id)
+            if removed:
                 logger.info(f"Successfully removed old container {sandbox_id}")
-            except Exception as remove_err:
-                logger.warning(f"Failed to remove old container: {remove_err}")
         except Exception:
             logger.debug(f"Old container {sandbox_id} not found, proceeding with rebuild")
+            await self._remove_isolated_network(sandbox_id)
 
     async def _find_running_project_sandbox(
         self,
@@ -3070,12 +3144,14 @@ class MCPSandboxAdapter(SandboxPort):
             published_ports[f"{MCP_WEBSOCKET_PORT}/tcp"] = ("127.0.0.1", old_ports[0])
         if config.desktop_enabled and len(old_ports) > 1 and old_ports[1] is not None:
             published_ports[f"{DESKTOP_PORT}/tcp"] = ("127.0.0.1", old_ports[1])
-        if len(old_ports) > 2 and old_ports[2] is not None:
+        if config.terminal_enabled and len(old_ports) > 2 and old_ports[2] is not None:
             published_ports[f"{TERMINAL_PORT}/tcp"] = ("127.0.0.1", old_ports[2])
 
         labels = labels.copy()
         if not config.desktop_enabled:
             _ = labels.pop("memstack.sandbox.desktop_port", None)
+        if not config.terminal_enabled:
+            _ = labels.pop("memstack.sandbox.terminal_port", None)
 
         container_config: dict[str, Any] = {
             "image": config.image,
@@ -3105,6 +3181,7 @@ class MCPSandboxAdapter(SandboxPort):
         settings = get_settings()
         environment = cast("dict[str, str]", container_config["environment"])
         environment["DESKTOP_ENABLED"] = str(config.desktop_enabled).lower()
+        environment["TERMINAL_ENABLED"] = str(config.terminal_enabled).lower()
         if settings.sandbox_platform_url:
             environment.setdefault("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url)
         if settings.sandbox_service_token:
@@ -3121,12 +3198,12 @@ class MCPSandboxAdapter(SandboxPort):
                 container_config.get("volumes", {}),
             )
             volumes[settings.sandbox_pip_cache_path] = {
-                "bind": "/root/.cache/pip",
+                "bind": "/home/sandbox/.cache/pip",
                 "mode": "rw",
             }
             container_config["volumes"] = cast("dict[str, Any]", volumes)
         if config.network_isolated:
-            container_config["network_mode"] = "bridge"
+            container_config["network"] = self._isolated_network_name(sandbox_id)
         return container_config
 
     async def _wait_for_container_running(
@@ -3248,6 +3325,8 @@ class MCPSandboxAdapter(SandboxPort):
         await self._remove_old_container(original_sandbox_id)
 
         try:
+            if original_config.network_isolated:
+                await self._create_isolated_network(original_sandbox_id)
             container_config = self._build_rebuild_container_config(
                 original_sandbox_id,
                 original_config,
@@ -3272,6 +3351,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
 
             now = datetime.now()
+            rebuilt_labels = cast("dict[str, str]", container_config["labels"])
             new_instance = MCPSandboxInstance(
                 id=original_sandbox_id,
                 status=SandboxStatus.RUNNING,
@@ -3288,7 +3368,7 @@ class MCPSandboxAdapter(SandboxPort):
                 terminal_port=actual_terminal,
                 desktop_url=desktop_url,
                 terminal_url=terminal_url,
-                labels=original_labels,
+                labels=rebuilt_labels,
             )
 
             logger.info(

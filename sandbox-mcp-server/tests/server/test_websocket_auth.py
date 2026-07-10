@@ -39,6 +39,16 @@ async def _assert_static_token_is_required_for_remote_clients() -> None:
     assert auth_info == {"mode": "static_token"}
     assert error is None
 
+    query_only = SimpleNamespace(
+        remote="10.0.0.8",
+        query_string="token=sandbox-capability",
+        headers={},
+    )
+    accepted, auth_info, error = await server._authenticate_request(query_only)
+    assert accepted is False
+    assert auth_info is None
+    assert error == "Authentication required: no token provided"
+
 
 class _FakeValidationResponse:
     status = 200

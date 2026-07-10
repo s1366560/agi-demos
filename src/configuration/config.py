@@ -416,7 +416,7 @@ class Settings(BaseSettings):
     )  # Periodic sync interval (0 to disable)
     workspace_s3_backup_enabled: bool = Field(default=False, alias="WORKSPACE_S3_BACKUP_ENABLED")
     workspace_s3_bucket: str = Field(default="memstack-workspaces", alias="WORKSPACE_S3_BUCKET")
-    sandbox_pip_cache_enabled: bool = Field(default=True, alias="SANDBOX_PIP_CACHE_ENABLED")
+    sandbox_pip_cache_enabled: bool = Field(default=False, alias="SANDBOX_PIP_CACHE_ENABLED")
     sandbox_pip_cache_path: str = Field(default="", alias="SANDBOX_PIP_CACHE_PATH")
     sandbox_idle_reaper_enabled: bool = Field(
         default=False, alias="SANDBOX_IDLE_REAPER_ENABLED"

@@ -15,6 +15,7 @@ def _container_attrs() -> dict[str, object]:
                 "MCP_ALLOW_LOCALHOST=false",
                 "MCP_STATIC_TOKEN=private-capability",
                 "DESKTOP_ENABLED=false",
+                "TERMINAL_ENABLED=false",
             ],
         },
         "HostConfig": {
@@ -22,7 +23,6 @@ def _container_attrs() -> dict[str, object]:
             "Binds": ["/tmp/memstack-project:/workspace:rw"],
             "PortBindings": {
                 "8765/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18765"}],
-                "7681/tcp": [{"HostIp": "127.0.0.1", "HostPort": "17681"}],
             },
         },
     }
@@ -59,6 +59,18 @@ def test_verify_sandbox_container_rejects_unsafe_runtime(
     nested[key] = value
 
     with pytest.raises(RuntimeError, match=message):
+        verify_sandbox_container(attrs, expected_image="sandbox-mcp-server:lite")
+
+
+def test_verify_sandbox_container_rejects_lite_terminal_drift() -> None:
+    attrs = _container_attrs()
+    config = attrs["Config"]
+    assert isinstance(config, dict)
+    environment = config["Env"]
+    assert isinstance(environment, list)
+    environment.append("TERMINAL_ENABLED=true")
+
+    with pytest.raises(RuntimeError, match="terminal"):
         verify_sandbox_container(attrs, expected_image="sandbox-mcp-server:lite")
 
 

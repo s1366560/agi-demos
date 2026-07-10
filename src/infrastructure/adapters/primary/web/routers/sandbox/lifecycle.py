@@ -67,6 +67,7 @@ async def list_sandbox_profiles() -> ListProfilesResponse:
             profile_type=p.profile_type.value,
             description=p.description,
             desktop_enabled=p.desktop_enabled,
+            terminal_enabled=p.terminal_enabled,
             memory_limit=p.memory_limit,
             cpu_limit=p.cpu_limit,
             timeout_seconds=p.timeout_seconds,
