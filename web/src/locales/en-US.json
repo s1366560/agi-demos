@@ -921,6 +921,10 @@
     "billing": "Billing"
   },
   "tenant": {
+    "backendStores": {
+      "testSucceeded": "Connection test succeeded. Version: {{version}}",
+      "testFailed": "Connection test failed."
+    },
     "acp": {
       "title": "ACP",
       "subtitle": "Manage external Agent Client Protocol agents and monitor runtime sessions.",

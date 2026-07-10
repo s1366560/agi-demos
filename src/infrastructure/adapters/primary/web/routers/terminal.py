@@ -10,8 +10,19 @@ import logging
 import re
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -19,7 +30,17 @@ from src.infrastructure.adapters.primary.web.websocket._limits import (
     InboundMessageTooLarge,
     receive_json_with_limit,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.primary.web.websocket.auth import (
+    authenticate_websocket_or_close,
+    select_websocket_auth_subprotocol,
+)
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import (
+    ProjectSandbox,
+    User,
+    UserProject,
+)
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
@@ -36,6 +57,7 @@ router = APIRouter(prefix="/api/v1/terminal", tags=["terminal"])
 # Global adapter instance (reuse from sandbox module)
 _sandbox_adapter: MCPSandboxAdapter | None = None
 _event_publisher: SandboxEventPublisher | None = None
+_TERMINAL_ACCESS_ROLES = ["owner", "admin", "member"]
 
 
 def get_sandbox_adapter() -> MCPSandboxAdapter:
@@ -95,6 +117,47 @@ async def get_project_id_from_sandbox(sandbox_id: str) -> str | None:
     return None
 
 
+async def _find_authorized_terminal_project_id(
+    sandbox_id: str,
+    user_id: str,
+    db: AsyncSession,
+) -> str:
+    association_result = await db.execute(
+        refresh_select_statement(
+            select(ProjectSandbox.project_id).where(ProjectSandbox.sandbox_id == sandbox_id)
+        )
+    )
+    project_id = association_result.scalar_one_or_none()
+    if project_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Sandbox not found"))
+
+    membership_result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.project_id).where(
+                UserProject.project_id == project_id,
+                UserProject.user_id == user_id,
+                UserProject.role.in_(_TERMINAL_ACCESS_ROLES),
+            )
+        )
+    )
+    if membership_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to sandbox"),
+        )
+
+    return str(project_id)
+
+
+async def require_terminal_sandbox_access(
+    sandbox_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Require project membership for a sandbox-scoped terminal operation."""
+    return await _find_authorized_terminal_project_id(sandbox_id, str(current_user.id), db)
+
+
 # --- Request/Response Schemas ---
 
 
@@ -125,6 +188,7 @@ async def create_terminal_session(
     request: CreateTerminalRequest,
     _user: User = Depends(get_current_user),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    project_id: str = Depends(require_terminal_sandbox_access),
 ) -> TerminalSessionResponse:
     """
     Create a new terminal session for a sandbox.
@@ -162,26 +226,24 @@ async def create_terminal_session(
 
     # Emit terminal_started event
     if event_publisher:
-        project_id = await get_project_id_from_sandbox(sandbox_id)
-        if project_id:
-            try:
-                # Determine port from terminal proxy (default 7681)
-                port = 7681
-                # WebSocket URL format: ws://host:port/{session_id}
-                ws_url = f"ws://localhost:{port}/{session.session_id}"
+        try:
+            # Determine port from terminal proxy (default 7681)
+            port = 7681
+            # WebSocket URL format: ws://host:port/{session_id}
+            ws_url = f"ws://localhost:{port}/{session.session_id}"
 
-                await event_publisher.publish_terminal_started(
-                    project_id=project_id,
-                    sandbox_id=sandbox_id,
-                    url=ws_url,
-                    port=port,
-                    session_id=session.session_id,
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to publish terminal_started event: error_type=%s",
-                    type(e).__name__,
-                )
+            await event_publisher.publish_terminal_started(
+                project_id=project_id,
+                sandbox_id=sandbox_id,
+                url=ws_url,
+                port=port,
+                session_id=session.session_id,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to publish terminal_started event: error_type=%s",
+                type(e).__name__,
+            )
 
     return TerminalSessionResponse(
         session_id=session.session_id,
@@ -196,6 +258,7 @@ async def create_terminal_session(
 async def list_terminal_sessions(
     sandbox_id: str,
     _user: User = Depends(get_current_user),
+    _project_id: str = Depends(require_terminal_sandbox_access),
 ) -> list[TerminalSessionResponse]:
     """List all terminal sessions for a sandbox."""
     proxy = get_terminal_proxy()
@@ -222,6 +285,7 @@ async def close_terminal_session(
     session_id: str,
     _user: User = Depends(get_current_user),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    project_id: str = Depends(require_terminal_sandbox_access),
 ) -> dict[str, Any]:
     """Close a terminal session."""
     proxy = get_terminal_proxy()
@@ -234,19 +298,17 @@ async def close_terminal_session(
 
     # Emit terminal_stopped event
     if event_publisher and success:
-        project_id = await get_project_id_from_sandbox(sandbox_id)
-        if project_id:
-            try:
-                await event_publisher.publish_terminal_stopped(
-                    project_id=project_id,
-                    sandbox_id=sandbox_id,
-                    session_id=session_id,
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to publish terminal_stopped event: error_type=%s",
-                    type(e).__name__,
-                )
+        try:
+            await event_publisher.publish_terminal_stopped(
+                project_id=project_id,
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to publish terminal_stopped event: error_type=%s",
+                type(e).__name__,
+            )
 
     return {"success": success, "session_id": session_id}
 
@@ -259,6 +321,8 @@ async def terminal_websocket(
     websocket: WebSocket,
     sandbox_id: str,
     session_id: str | None = None,
+    token: str | None = Query(None, description="Legacy API key query parameter"),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     WebSocket endpoint for terminal interaction.
@@ -271,7 +335,21 @@ async def terminal_websocket(
         {"type": "connected", "session_id": "abc123"}
         {"type": "pong"}
     """
-    await websocket.accept()
+    principal = await authenticate_websocket_or_close(websocket, db, token)
+    if principal is None:
+        return
+
+    user_id, _tenant_id = principal
+    try:
+        await _find_authorized_terminal_project_id(sandbox_id, user_id, db)
+    except HTTPException as exc:
+        reason = _("Sandbox not found")
+        if exc.status_code != status.HTTP_404_NOT_FOUND:
+            reason = _("Access denied to sandbox")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=reason)
+        return
+
+    await websocket.accept(subprotocol=select_websocket_auth_subprotocol(websocket))
     proxy = get_terminal_proxy()
     output_task: asyncio.Task[None] | None = None
 

@@ -74,6 +74,61 @@ export function RuntimeConfigPanel({
             </Button>
           ))}
         </div>
+        {config.mode === 'local' ? (
+          <>
+            <label className="field-label">
+              <span>LLM provider</span>
+              <Select.Root
+                value={config.llmProvider}
+                onValueChange={(value) => update('llmProvider', value)}
+              >
+                <Select.Trigger aria-label="Local LLM provider" />
+                <Select.Content>
+                  <Select.Item value="mock">mock</Select.Item>
+                  <Select.Item value="openai">OpenAI-compatible</Select.Item>
+                  <Select.Item value="anthropic">Anthropic-compatible</Select.Item>
+                </Select.Content>
+              </Select.Root>
+            </label>
+            <label className="field-label">
+              <span>LLM base URL</span>
+              <TextField.Root
+                aria-label="Local LLM base URL"
+                value={config.llmBaseUrl}
+                onChange={(event) => update('llmBaseUrl', event.target.value)}
+                placeholder="http://127.0.0.1:11434/v1"
+              />
+            </label>
+            <label className="field-label">
+              <span>LLM model</span>
+              <TextField.Root
+                aria-label="Local LLM model"
+                value={config.llmModel}
+                onChange={(event) => update('llmModel', event.target.value)}
+                placeholder="leave empty for mock local agent"
+              />
+            </label>
+            <label className="field-label">
+              <span>LLM API key</span>
+              <TextField.Root
+                aria-label="Local LLM API key"
+                type="password"
+                value={config.llmApiKey}
+                onChange={(event) => update('llmApiKey', event.target.value)}
+                placeholder="optional for local gateways"
+              />
+            </label>
+            <label className="field-label">
+              <span>Workspace root</span>
+              <TextField.Root
+                aria-label="Local workspace root"
+                value={config.workspaceRoot}
+                onChange={(event) => update('workspaceRoot', event.target.value)}
+                placeholder="/path/to/workspace"
+              />
+            </label>
+          </>
+        ) : null}
         <label className="field-label">
           <span>API key</span>
           <TextField.Root

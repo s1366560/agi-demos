@@ -921,6 +921,10 @@
     "billing": "账单"
   },
   "tenant": {
+    "backendStores": {
+      "testSucceeded": "连接测试成功。版本：{{version}}",
+      "testFailed": "连接测试失败。"
+    },
     "acp": {
       "title": "ACP",
       "subtitle": "管理外部 Agent Client Protocol 智能体配置，并监控运行时会话。",

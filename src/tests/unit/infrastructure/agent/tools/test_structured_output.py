@@ -324,7 +324,8 @@ class TestStructuredOutputToolFailure:
                 schema=_simple_schema(),
             )
         assert result.is_error
-        assert "boom" in result.output or "unexpected" in result.output.lower()
+        assert "RuntimeError" in result.output
+        assert "boom" not in result.output
 
     async def test_empty_schema_handled(self) -> None:
         """An empty schema should still produce a valid result."""

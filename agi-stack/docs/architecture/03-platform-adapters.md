@@ -6,7 +6,7 @@
 
 | 平台 | 存储适配器 | 向量检索 | Spike 状态 |
 |---|---|---|---|
-| 服务器 | Postgres + pgvector + Neo4j + Redis | pgvector | `adapters-mem` 桩代替(prod 待接) |
+| 服务器 | Postgres + pgvector + Neo4j + Redis | pgvector | ✅ 生产适配器已落地；具体 capability 仍按 strangler gate 逐项切换 |
 | 桌面 / iOS / Android | 嵌入式 SQLite/libsql(`rusqlite` bundled) | **HNSW**(`instant-distance`,纯 Rust)/ SQLite 暴力兜底 | ✅ `adapters-device` 已实现:`HnswVectorIndex` ANN(N=10k P50 **2.43 ms**,见 [04 #19](04-spike-evidence.md))+ `SqliteVectorIndex` 暴力基线;**不选 `sqlite-vec` C 扩展**以保跨端可移植 |
 | 浏览器 | IndexedDB / wa-sqlite | 内存 hnsw | ✅ 内存路径(`adapters-mem`);prod 待接 wa-sqlite |
 
@@ -47,7 +47,7 @@
 | 平台 | 外壳 | 绑定方式 |
 |---|---|---|
 | 服务器 | axum 二进制 | 直接链核心 |
-| 桌面 | Tauri | 直接链核心(Rust 后端 + Web 前端)(✅ `apps/desktop`,见 [04 #17](04-spike-evidence.md)) |
+| 桌面 | Tauri | React renderer + Tauri commands + capability-protected loopback Axum local runtime；链 portable core/SQLite，并提供受限 host tools。该外壳不是 Web 全功能副本(✅ `apps/desktop`) |
 | iOS | SwiftUI app | UniFFI → 生成 Swift 绑定,链 `.a` |
 | Android | Compose app | UniFFI → 生成 Kotlin 绑定,链 `.so` |
 | Web | JS/TS 前端 | wasm-bindgen → wasm-pack 包(✅ `crates/bindings-wasm`,见 [04 #16](04-spike-evidence.md)) |

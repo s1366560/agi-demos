@@ -4,6 +4,8 @@ import type {
   CurrentUser,
   DesktopRuntimeConfig,
   DesktopServiceResponse,
+  HitlResponseOutcome,
+  HitlResponseSubmission,
   LoginOutcome,
   PaginatedConversationsResponse,
   PlanSnapshot,
@@ -257,6 +259,37 @@ export class DesktopApiClient {
     );
   }
 
+  async runAgentMessage(
+    conversationId: string,
+    message: string,
+    messageId?: string,
+    projectId = this.config.projectId,
+  ): Promise<{ queued: boolean }> {
+    const requiredProjectId = requireValue(projectId, 'project id');
+    return this.request<{ queued: boolean }>(
+      `/api/v1/agent/conversations/${encodeURIComponent(conversationId)}/messages`,
+      {
+        method: 'POST',
+        body: {
+          project_id: requiredProjectId,
+          message,
+          message_id: messageId,
+        },
+      },
+    );
+  }
+
+  async respondToHitl(submission: HitlResponseSubmission): Promise<HitlResponseOutcome> {
+    return this.request<HitlResponseOutcome>('/api/v1/agent/hitl/respond', {
+      method: 'POST',
+      body: {
+        request_id: submission.requestId,
+        hitl_type: submission.hitlType,
+        response_data: submission.responseData,
+      },
+    });
+  }
+
   async listTasks(signal?: AbortSignal): Promise<WorkspaceTask[]> {
     const payload = await this.request<unknown>(this.workspaceRoot('/tasks'), { signal });
     return readArray<WorkspaceTask>(payload, ['tasks', 'items', 'data']);
@@ -356,13 +389,15 @@ export class DesktopApiClient {
   }
 
   agentWsUrl(sessionId: string): string {
-    const token = requireValue(this.config.apiKey, 'api key');
     return websocketUrl(
       this.config.apiBaseUrl,
-      `/api/v1/agent/ws?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(
-        sessionId,
-      )}`,
+      `/api/v1/agent/ws?session_id=${encodeURIComponent(sessionId)}`,
     );
+  }
+
+  agentWsProtocols(): string[] {
+    const credential = requireValue(desktopApiCredential(this.config), 'api key');
+    return ['memstack.auth', credential];
   }
 
   private workspacePath(suffix: string): string {
@@ -384,8 +419,9 @@ export class DesktopApiClient {
     if (options.body !== undefined) {
       headers.set('Content-Type', options.contentType ?? 'application/json');
     }
-    if (!options.skipAuth && this.config.apiKey.trim()) {
-      headers.set('Authorization', `Bearer ${this.config.apiKey.trim()}`);
+    const credential = desktopApiCredential(this.config);
+    if (!options.skipAuth && credential) {
+      headers.set('Authorization', `Bearer ${credential}`);
     }
 
     const body =
@@ -417,6 +453,11 @@ export class DesktopApiClient {
 
     return payload as T;
   }
+}
+
+export function desktopApiCredential(config: DesktopRuntimeConfig): string {
+  const localCapability = config.mode === 'local' ? config.localApiToken.trim() : '';
+  return localCapability || config.apiKey.trim();
 }
 
 export function absoluteUrl(baseUrl: string, path: string): string {

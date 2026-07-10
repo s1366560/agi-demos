@@ -143,6 +143,11 @@ vi.mock('@/stores/workspace', () => ({
   }),
 }));
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: (selector: (state: { token: string }) => unknown) =>
+    selector({ token: 'test-token' }),
+}));
+
 vi.mock('@/services/workspaceService', () => ({
   workspaceService: {
     listByProject: mockListByProject,

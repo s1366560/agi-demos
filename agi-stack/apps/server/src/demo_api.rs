@@ -290,6 +290,24 @@ async fn health(State(app): State<AppState>) -> &'static str {
     "ok"
 }
 
+fn legacy_routes_enabled(value: Option<&str>) -> bool {
+    crate::env_flag_enabled(value)
+}
+
+fn legacy_router() -> Router<AppState> {
+    Router::new()
+        .route("/v1/episodes", post(ingest))
+        .route("/v1/memories/search", get(search))
+        .route("/v1/memories/:id", get(get_memory))
+        .route("/v1/agent/run", post(agent_run))
+        .route("/v1/agent/resume", post(agent_resume))
+        .route("/v1/plugins", get(plugins_list))
+        .route("/v1/plugins/enable", post(plugins_enable))
+        .route("/v1/plugins/disable", post(plugins_disable))
+        .route("/v1/tools/call", post(tools_call))
+        .route("/v1/control-plane/publish", post(cp_publish))
+}
+
 pub(crate) fn router(state: AppState) -> Router {
     // The production `/api/v1` surface splits by authentication:
     //   * authed — strangled memory/episodes/recall (P1) + tenant reads (P2) —
@@ -297,7 +315,9 @@ pub(crate) fn router(state: AppState) -> Router {
     //     against `api_keys` and injects a scoped `Identity`.
     //   * public — login + oauth stub (P2) — must NOT sit behind the key
     //     middleware (you can't present a key before you have one).
-    // The legacy `/v1/*` demo routes stay open for local exercising.
+    // The legacy `/v1/*` demo surface is disabled by default. It exposes
+    // mutation endpoints without the production authentication middleware and
+    // is available only for explicit local compatibility testing.
     let authed = prod_api::router()
         .merge(enhanced_search_api::router())
         .merge(channel_api::router())
@@ -343,22 +363,19 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(channel_api::router_public())
         .merge(shares_api::router_public());
 
-    Router::new()
+    let mut app = Router::new()
         .route("/health", get(health))
-        .route("/v1/episodes", post(ingest))
-        .route("/v1/memories/search", get(search))
-        .route("/v1/memories/:id", get(get_memory))
-        .route("/v1/agent/run", post(agent_run))
-        .route("/v1/agent/resume", post(agent_resume))
         .route("/api/v1/agent/ws", get(agent_ws::agent_ws))
-        .route("/v1/plugins", get(plugins_list))
-        .route("/v1/plugins/enable", post(plugins_enable))
-        .route("/v1/plugins/disable", post(plugins_disable))
-        .route("/v1/tools/call", post(tools_call))
-        .route("/v1/control-plane/publish", post(cp_publish))
         .merge(public)
-        .merge(authed)
-        .fallback(any(sandbox_api::preview_host_proxy))
+        .merge(authed);
+    if legacy_routes_enabled(
+        std::env::var("AGISTACK_ENABLE_LEGACY_ROUTES")
+            .ok()
+            .as_deref(),
+    ) {
+        app = app.merge(legacy_router());
+    }
+    app.fallback(any(sandbox_api::preview_host_proxy))
         .layer(desktop_cors_layer())
         .with_state(state)
 }
@@ -386,5 +403,13 @@ mod tests {
             let value = HeaderValue::from_str(origin).expect("origin header");
             assert!(!desktop_origin_allowed(&value), "{origin}");
         }
+    }
+
+    #[test]
+    fn legacy_routes_are_disabled_unless_explicitly_enabled() {
+        assert!(!legacy_routes_enabled(None));
+        assert!(!legacy_routes_enabled(Some("0")));
+        assert!(legacy_routes_enabled(Some("1")));
+        assert!(legacy_routes_enabled(Some("true")));
     }
 }

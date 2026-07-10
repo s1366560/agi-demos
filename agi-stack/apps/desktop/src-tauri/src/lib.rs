@@ -16,9 +16,12 @@ use std::{
     sync::Arc,
 };
 
+mod local_runtime;
+
 use agistack_adapters_device::{SqliteMemoryRepository, SqliteVectorIndex};
 use agistack_adapters_mem::{HashEmbedding, StubLlm, SystemClock};
 use agistack_core::{Episode, MemoryService, SourceType};
+use local_runtime::{LocalRuntimeConfig, LocalRuntimeService, LocalRuntimeStatus};
 use tauri::{
     webview::PageLoadEvent, Manager, RunEvent, State, TitleBarStyle, Url, WebviewUrl,
     WebviewWindowBuilder,
@@ -159,8 +162,38 @@ fn frontend_ready(summary: String) {
     }
 }
 
+#[tauri::command]
+fn local_runtime_status(runtime: State<'_, LocalRuntimeService>) -> LocalRuntimeStatus {
+    runtime.status()
+}
+
+#[tauri::command]
+fn local_runtime_configure(
+    runtime: State<'_, LocalRuntimeService>,
+    config: LocalRuntimeConfig,
+) -> Result<LocalRuntimeStatus, String> {
+    runtime.configure(config)
+}
+
 fn desktop_db_file_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("agistack-desktop.db")
+}
+
+fn default_local_workspace_root() -> PathBuf {
+    if let Ok(root) = std::env::var("AGISTACK_WORKSPACE_ROOT") {
+        return PathBuf::from(root);
+    }
+    let Ok(mut dir) = std::env::current_dir() else {
+        return PathBuf::from(".");
+    };
+    loop {
+        if dir.join("AGENTS.md").exists() || dir.join(".git").exists() {
+            return dir;
+        }
+        if !dir.pop() {
+            return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        }
+    }
 }
 
 fn setup_error(message: String) -> Box<dyn std::error::Error> {
@@ -360,8 +393,19 @@ fn open_app_data_core(app: &tauri::AppHandle) -> Result<DesktopCore, Box<dyn std
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| setup_error(error.to_string()))?;
+            std::fs::create_dir_all(&app_data_dir)?;
             let core = open_app_data_core(app.handle())?;
+            let local_runtime = tauri::async_runtime::block_on(LocalRuntimeService::start(
+                app_data_dir,
+                default_local_workspace_root(),
+            ))
+            .map_err(setup_error)?;
             app.manage(core);
+            app.manage(local_runtime);
             ensure_main_window(app.handle())?;
             Ok(())
         })
@@ -369,7 +413,9 @@ pub fn run() {
             ingest,
             search,
             semantic_search,
-            frontend_ready
+            frontend_ready,
+            local_runtime_status,
+            local_runtime_configure
         ])
         .build(tauri::generate_context!())
         .expect("error while building the agistack desktop application")

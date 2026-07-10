@@ -10,6 +10,7 @@ export type AuthStatus = 'signed_out' | 'signing_in' | 'signed_in' | 'manual';
 
 export type WorkbenchSection =
   | 'workspace'
+  | 'review'
   | 'chat'
   | 'board'
   | 'status'
@@ -21,10 +22,68 @@ export type WorkbenchSection =
 export type DesktopRuntimeConfig = {
   apiBaseUrl: string;
   apiKey: string;
+  localApiToken: string;
   tenantId: string;
   projectId: string;
   workspaceId: string;
   mode: RuntimeMode;
+  llmProvider: 'mock' | 'openai' | 'anthropic' | string;
+  llmBaseUrl: string;
+  llmModel: string;
+  llmApiKey: string;
+  workspaceRoot: string;
+};
+
+export type LocalRuntimeStatus = {
+  running: boolean;
+  api_base_url: string;
+  api_token: string;
+  workspace_root: string;
+  tool_count: number;
+  tools: string[];
+  config: {
+    provider: string;
+    base_url: string;
+    model: string;
+    workspace_root: string;
+  };
+};
+
+export function mergeLocalRuntimeStatus(
+  config: DesktopRuntimeConfig,
+  status: LocalRuntimeStatus,
+): DesktopRuntimeConfig {
+  return {
+    ...config,
+    apiBaseUrl: status.api_base_url || config.apiBaseUrl,
+    localApiToken: status.api_token,
+    tenantId: config.tenantId.trim() || 'local',
+    projectId: config.projectId.trim() || 'local-project',
+    workspaceRoot: config.workspaceRoot.trim() || status.workspace_root || config.workspaceRoot,
+    llmProvider: config.llmProvider || status.config.provider || 'mock',
+    llmBaseUrl: config.llmBaseUrl || status.config.base_url || DEFAULT_CONFIG.llmBaseUrl,
+    llmModel: config.llmModel || status.config.model || '',
+    llmApiKey: config.llmApiKey,
+  };
+}
+
+export type HitlType =
+  | 'clarification'
+  | 'decision'
+  | 'env_var'
+  | 'permission'
+  | 'a2ui_action';
+
+export type HitlResponseSubmission = {
+  requestId: string;
+  hitlType: HitlType;
+  responseData: Record<string, unknown>;
+};
+
+export type HitlResponseOutcome = {
+  success?: boolean;
+  status?: string;
+  message?: string;
 };
 
 export type LoginOutcome = {
@@ -169,6 +228,15 @@ export type AgentTimelineItem = {
   isError?: boolean;
   requestId?: string;
   question?: string;
+  options?: unknown[];
+  allowCustom?: boolean;
+  fields?: unknown[];
+  action?: string;
+  resource?: string;
+  reason?: string;
+  riskLevel?: string;
+  description?: string;
+  allowRemember?: boolean;
   answered?: boolean;
   artifactId?: string;
   filename?: string;
@@ -320,22 +388,28 @@ export type RuntimeDataset = {
 
 export const LOCAL_DEV_SERVER_PRESETS = [
   {
-    id: 'agistack-rust',
-    label: 'agi-stack :8088',
-    apiBaseUrl: 'http://127.0.0.1:8088',
+    id: 'memstack-python',
+    label: 'MemStack reference :8000',
+    apiBaseUrl: 'http://127.0.0.1:8000',
   },
   {
-    id: 'memstack-python',
-    label: 'MemStack :8000',
-    apiBaseUrl: 'http://127.0.0.1:8000',
+    id: 'agistack-rust',
+    label: 'agi-stack strangler :8088',
+    apiBaseUrl: 'http://127.0.0.1:8088',
   },
 ] as const;
 
 export const DEFAULT_CONFIG: DesktopRuntimeConfig = {
   apiBaseUrl: LOCAL_DEV_SERVER_PRESETS[0].apiBaseUrl,
   apiKey: '',
+  localApiToken: '',
   tenantId: 'default',
   projectId: '',
   workspaceId: '',
   mode: 'local',
+  llmProvider: 'mock',
+  llmBaseUrl: 'http://127.0.0.1:11434/v1',
+  llmModel: '',
+  llmApiKey: '',
+  workspaceRoot: '',
 };

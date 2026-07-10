@@ -860,17 +860,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
   }, [sidebarWidth, isDragging]);
 
-  // Load the default project window only when the agent workspace needs it.
-  // Other tenant pages keep search available without preloading large project lists.
+  // Keep the project switcher usable on every tenant page without loading the full project list.
   useEffect(() => {
-    if (tenantId && isAgentWorkspaceRoute && tenantScopedProjects.length === 0) {
+    if (resolvedTenantId && tenantScopedProjects.length === 0) {
       void Promise.resolve(
-        listProjects(tenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE })
+        listProjects(resolvedTenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE })
       ).catch((error: unknown) => {
         console.error('Failed to load projects:', error);
       });
     }
-  }, [isAgentWorkspaceRoute, tenantId, tenantScopedProjects.length, listProjects]);
+  }, [listProjects, resolvedTenantId, tenantScopedProjects.length]);
 
   // Set default selected project
   useEffect(() => {
@@ -1296,13 +1295,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         setSelectedProject(project);
         setCurrentProject(project);
       }
-      if (!isAgentWorkspaceRoute) {
-        void navigate(buildAgentWorkspacePath({ tenantId, projectId }));
-      }
+      void navigate(buildAgentWorkspacePath({ tenantId, projectId }));
       // NOTE: loadConversations is called by useEffect when selectedProjectId changes
       // Do NOT call it here to avoid duplicate requests
     },
-    [isAgentWorkspaceRoute, navigate, projectById, resolvedTenantId, setCurrentProject, tenantId]
+    [navigate, projectById, resolvedTenantId, setCurrentProject, tenantId]
   );
 
   const handleProjectSearch = useCallback(

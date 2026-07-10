@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": "/tmp/agistack-desktop-test-dist",
+    "rootDir": "."
+  },
+  "include": [
+    "src/api/client.ts",
+    "src/hooks/useAgentSocket.ts",
+    "src/hooks/useTerminalProxy.ts",
+    "src/types.ts"
+  ]
+}

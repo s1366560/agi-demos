@@ -397,7 +397,7 @@ describe('TenantChatSidebar', () => {
     expect(screen.getByText('Select a project to view conversations')).toBeInTheDocument();
   });
 
-  it('does not preload project options on non-agent tenant pages', async () => {
+  it('preloads the project switcher window on non-agent tenant pages', async () => {
     projectState.projects = [];
     projectState.currentProject = null;
 
@@ -405,14 +405,14 @@ describe('TenantChatSidebar', () => {
       route: '/tenant/tenant-1/overview',
     });
 
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 25,
+      });
     });
 
-    expect(projectState.listProjects).not.toHaveBeenCalled();
     expect(agentState.loadConversations).not.toHaveBeenCalled();
-    expect(screen.getByRole('combobox', { name: 'Project switcher' })).toHaveValue('');
-    expect(screen.getByRole('option', { name: 'Search to select a project' })).toBeInTheDocument();
   });
 
   it('clears workspace conversations after leaving the agent workspace route', async () => {
@@ -839,6 +839,62 @@ describe('TenantChatSidebar', () => {
       id: 'project-2',
       name: 'Project Two',
       tenant_id: 'tenant-1',
+    });
+  });
+
+  it('updates the URL when switching projects inside the agent workspace', async () => {
+    render(
+      <>
+        <TenantChatSidebar tenantId="tenant-1" mobile />
+        <LocationProbe />
+      </>,
+      {
+        route: '/tenant/tenant-1/agent-workspace?projectId=project-1',
+      }
+    );
+
+    const projectSwitcher = await screen.findByRole('combobox', { name: 'Project switcher' });
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-1');
+    });
+
+    fireEvent.change(projectSwitcher, { target: { value: 'project-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(
+        '/tenant/tenant-1/agent-workspace?projectId=project-2'
+      );
+      expect(projectSwitcher).toHaveValue('project-2');
+    });
+    expect(projectState.setCurrentProject).toHaveBeenLastCalledWith({
+      id: 'project-2',
+      name: 'Project Two',
+      tenant_id: 'tenant-1',
+    });
+  });
+
+  it('clears stale conversation and workspace routing when switching projects', async () => {
+    render(
+      <>
+        <TenantChatSidebar tenantId="tenant-1" mobile />
+        <LocationProbe />
+      </>,
+      {
+        route: '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1&workspaceId=ws-current',
+      }
+    );
+
+    const projectSwitcher = await screen.findByRole('combobox', { name: 'Project switcher' });
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-1');
+    });
+
+    fireEvent.change(projectSwitcher, { target: { value: 'project-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(
+        '/tenant/tenant-1/agent-workspace?projectId=project-2'
+      );
     });
   });
 

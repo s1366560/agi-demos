@@ -104,6 +104,14 @@ line-length = 100
 target-version = ['py312']
 include = '\.pyi?$'
 
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/tests/*"]
+
+[tool.coverage.report]
+fail_under = 72
+omit = ["src/tests/*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -569,18 +577,6 @@ module = [
     "src.infrastructure.adapters.secondary.graphiti.embedding_utils",
 ]
 ignore_missing_imports = true
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-asyncio_mode = "auto"
-markers = [
-    "integration: marks tests as integration tests",
-    "slow: marks tests as slow running",
-    "unit: marks tests as unit tests",
-]
-
 [dependency-groups]
 dev = [
     "basedpyright>=1.38.1",

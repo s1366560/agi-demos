@@ -2647,10 +2647,12 @@ async def _relay_mcp_upstream_to_browser(websocket: WebSocket, upstream_ws: Any)
 @router.api_route(
     "/{project_id}/sandbox/http-services/{service_id}/proxy",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
 )
 @router.api_route(
     "/{project_id}/sandbox/http-services/{service_id}/proxy/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
 )
 async def proxy_project_http_service(
     project_id: str,

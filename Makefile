@@ -17,13 +17,15 @@
 #   - sdk/python/   : Python SDK
 # =============================================================================
 
-.PHONY: help install update clean init reset fresh restart
+.PHONY: help install update clean init reset fresh restart stop logs status
+.PHONY: dev dev-all dev-stop dev-backend dev-web dev-web-stop
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: drone-up drone-down drone-logs
 .PHONY: reranker-build reranker-up reranker-down reranker-restart reranker-logs reranker-status reranker-test
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
 .PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
+.PHONY: desktop desktop-bundle desktop-bundle-smoke run-desktop
 .PHONY: helm-build-images helm-lint helm-package helm-install-dev helm-test-dev helm-verify-dev helm-uninstall-dev
 
 # =============================================================================
@@ -60,6 +62,8 @@ RERANK_HOST ?= 0.0.0.0
 RERANKER_LOG_LEVEL ?= info
 RERANKER_SHELL_CMD ?= sh docker/reranker/run-shell.sh
 WEB_DEV_CMD ?= node_modules/.bin/vite --host 0.0.0.0 --port 3000
+DEV_STARTUP_TIMEOUT ?= 60
+AGISTACK_DIR ?= agi-stack
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -93,6 +97,7 @@ help: ## Show this help message
 	@echo "  lint      - Lint all code"
 	@echo "  format    - Format all code"
 	@echo "  check     - Run format + lint + test"
+	@echo "  desktop   - Build installable desktop client"
 	@echo "  guard-refresh-select - Check wrapped execute(select(...)) usage"
 	@echo "  plugin-template-build - Build standalone plugin template wheel"
 	@echo "  plugin-feishu-validate - Validate local Feishu plugin discovery"
@@ -208,6 +213,8 @@ help-full: ## Show all available commands
 	@echo ""
 	@echo " Production:"
 	@echo "  build            - Build all for production"
+	@echo "  desktop          - Build installable desktop client"
+	@echo "  desktop-bundle   - Build desktop client bundle"
 	@echo "  serve            - Start production server"
 	@echo "  helm-verify-dev  - Build images, package chart, install, and run Helm tests"
 	@echo ""
@@ -267,7 +274,9 @@ fresh: reset init dev ## Fresh start: reset everything and start development
 	@echo ""
 	@echo " Fresh environment ready!"
 
-restart: stop dev ## Quick restart: stop and start services
+restart: ## Quick restart: stop and start services
+	@$(MAKE) stop
+	@$(MAKE) dev
 	@echo " Services restarted"
 
 # Convenience aliases
@@ -333,9 +342,39 @@ dev-all: dev-infra-dev db-init
 	@echo "   Web: http://localhost:3000 (logs: logs/web.log)"
 	@echo "   Ray Actor Worker: running in Docker (logs: docker compose logs -f agent-actor-worker)"
 	@mkdir -p logs
-	@nohup env RAY_ADDRESS=ray://localhost:10001 RAY_NAMESPACE=memstack uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000  > logs/api.log 2>&1 & echo $$! > logs/api.pid
-	@(cd web && nohup $(WEB_DEV_CMD) > ../logs/web.log 2>&1) & echo $$! > logs/web.pid
-	@sleep 3
+	@nohup env RAY_ADDRESS=ray://localhost:10001 RAY_NAMESPACE=memstack uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 > logs/api.log 2>&1 3>&- 4>&- & echo $$! > logs/api.pid
+	@echo " Waiting for API server to become ready..."
+	@attempt=0; \
+	until curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; do \
+		attempt=$$((attempt + 1)); \
+		if [ $$attempt -ge $(DEV_STARTUP_TIMEOUT) ]; then \
+			echo " API server did not become ready within $(DEV_STARTUP_TIMEOUT) seconds"; \
+			tail -n 40 logs/api.log 2>/dev/null || true; \
+			kill -TERM $$(cat logs/api.pid 2>/dev/null) 2>/dev/null || true; \
+			rm -f logs/api.pid; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@echo " API server is ready"
+	@(cd web && nohup $(WEB_DEV_CMD) > ../logs/web.log 2>&1) 3>&- 4>&- & echo $$! > logs/web.pid
+	@echo " Waiting for Web frontend to become ready..."
+	@attempt=0; \
+	until curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; do \
+		attempt=$$((attempt + 1)); \
+		if [ $$attempt -ge $(DEV_STARTUP_TIMEOUT) ]; then \
+			echo " Web frontend did not become ready within $(DEV_STARTUP_TIMEOUT) seconds"; \
+			tail -n 40 logs/web.log 2>/dev/null || true; \
+			for port in 8000 3000; do \
+				PID=$$(lsof -tiTCP:$$port -sTCP:LISTEN 2>/dev/null); \
+				[ -n "$$PID" ] && kill -TERM $$PID 2>/dev/null || true; \
+			done; \
+			rm -f logs/api.pid logs/web.pid; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@echo " Web frontend is ready"
 	@echo " Services started!"
 	@echo ""
 	@echo "View logs with:"
@@ -359,7 +398,7 @@ dev-stop: ## Stop all background services
 	done
 	@# Kill processes on known ports
 	@for port in 8000 3000; do \
-		PID=$$(lsof -ti :$$port 2>/dev/null); \
+		PID=$$(lsof -tiTCP:$$port -sTCP:LISTEN 2>/dev/null); \
 		[ -n "$$PID" ] && kill -9 $$PID 2>/dev/null || true; \
 	done
 	@# Fallback: kill remaining processes by pattern (scoped to current project)
@@ -388,7 +427,7 @@ dev-web: ## Start web development server
 
 dev-web-stop: ## Stop web development server (kill process on port 3000)
 	@echo " Stopping web development server..."
-	@PID=$$(lsof -ti :3000 2>/dev/null); \
+	@PID=$$(lsof -tiTCP:3000 -sTCP:LISTEN 2>/dev/null); \
 	if [ -n "$$PID" ]; then \
 		kill $$PID 2>/dev/null && echo " Web server stopped (PID: $$PID)"; \
 	else \
@@ -1052,6 +1091,18 @@ sandbox-test: ## Run validation tests
 # =============================================================================
 # Production
 # =============================================================================
+
+desktop: ## Build installable desktop client
+	@$(MAKE) -C $(AGISTACK_DIR) desktop
+
+desktop-bundle: ## Build desktop client bundle
+	@$(MAKE) -C $(AGISTACK_DIR) desktop-bundle
+
+desktop-bundle-smoke: ## Verify desktop bundle artifacts
+	@$(MAKE) -C $(AGISTACK_DIR) desktop-bundle-smoke
+
+run-desktop: ## Start desktop client in development mode
+	@$(MAKE) -C $(AGISTACK_DIR) run-desktop
 
 build: build-backend build-web ## Build all for production
 	@echo " Build completed"

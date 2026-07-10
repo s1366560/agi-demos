@@ -19,6 +19,8 @@ import remarkGfm from 'remark-gfm';
 import type {
   AgentTimelineItem,
   ConversationTimelineState,
+  HitlResponseSubmission,
+  HitlType,
   ToolDisplayData,
   ToolFileMetadata,
   WorkspaceMessage,
@@ -29,17 +31,23 @@ type ChatPanelProps = {
   messages: WorkspaceMessage[];
   timelineState: ConversationTimelineState | null;
   agentTaskSignals: AgentTaskSignal[];
+  workflowCounts?: Partial<Record<ChatWorkflowTarget, number | string>>;
   sessionTitle: string;
   scopeLabel: string;
   input: string;
   sending: boolean;
   disabledReason: string | null;
   activeWorkflowTarget: ChatWorkflowTarget;
+  runtimeTargetLabel?: string;
+  runtimeTargetOptions?: string[];
   onInputChange: (value: string) => void;
   onSend: () => void;
   onRefresh: () => void;
   onLoadEarlier: () => void;
+  onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
+  onRuntimeTargetChange?: (value: string) => void;
+  onOpenCommands: (trigger?: HTMLElement | null) => void;
   onOpenUsagePlan: () => void;
 };
 
@@ -64,17 +72,23 @@ export function ChatPanel({
   messages,
   timelineState,
   agentTaskSignals,
+  workflowCounts,
   sessionTitle,
   scopeLabel,
   input,
   sending,
   disabledReason,
   activeWorkflowTarget,
+  runtimeTargetLabel,
+  runtimeTargetOptions,
   onInputChange,
   onSend,
   onRefresh,
   onLoadEarlier,
+  onRespondToHitl,
   onWorkflowSelect,
+  onRuntimeTargetChange,
+  onOpenCommands,
   onOpenUsagePlan,
 }: ChatPanelProps) {
   const disabled = Boolean(disabledReason);
@@ -215,6 +229,7 @@ export function ChatPanel({
               state={timelineState}
               expandedItems={expandedTimelineItems}
               onToggleItem={toggleTimelineItem}
+              onRespondToHitl={onRespondToHitl}
             />
           ) : messages.length === 0 ? (
             <div className="chat-empty-state" role="status" aria-label="Ready for a new task" />
@@ -265,7 +280,11 @@ export function ChatPanel({
           handleSend();
         }}
       >
-        <ChatWorkflowStrip activeTarget={activeWorkflowTarget} onSelect={onWorkflowSelect} />
+        <ChatWorkflowStrip
+          activeTarget={activeWorkflowTarget}
+          workflowCounts={workflowCounts}
+          onSelect={onWorkflowSelect}
+        />
         <TextArea
           className="chat-composer-input"
           value={input}
@@ -283,7 +302,22 @@ export function ChatPanel({
           }}
         />
         <Flex align="center" justify="between" className="chat-composer-footer">
-          <ComposerControls disabledHint={disabledReason} modelLabel="Claude Fable 5 · 1M" />
+          <button
+            className="composer-slash-button"
+            type="button"
+            aria-label="Slash commands"
+            title="Slash commands"
+            onClick={(event) => onOpenCommands(event.currentTarget)}
+          >
+            /
+          </button>
+          <ComposerControls
+            disabledHint={disabledReason}
+            modelLabel="Claude Fable 5 · 1M"
+            runtimeTargetLabel={runtimeTargetLabel}
+            runtimeTargetOptions={runtimeTargetOptions}
+            onRuntimeTargetChange={onRuntimeTargetChange}
+          />
           <Flex align="center" gap="2" className="composer-right-actions">
             <button
               className={`composer-status-button composer-status-dot ${
@@ -317,10 +351,12 @@ function AgentTimeline({
   state,
   expandedItems,
   onToggleItem,
+  onRespondToHitl,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
   onToggleItem: (item: AgentTimelineItem) => void;
+  onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
 }) {
   if (state.loading) {
     return (
@@ -354,6 +390,7 @@ function AgentTimeline({
             item={item}
             expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
             onToggle={() => onToggleItem(item)}
+            onRespondToHitl={onRespondToHitl}
             key={item.id}
           />
         ))
@@ -390,10 +427,12 @@ function TimelineItemView({
   item,
   expanded,
   onToggle,
+  onRespondToHitl,
 }: {
   item: AgentTimelineItem;
   expanded: boolean;
   onToggle: () => void;
+  onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
 }) {
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') {
@@ -407,7 +446,7 @@ function TimelineItemView({
             {formatTimelineTime(item)}
           </Text>
         </div>
-        <TimelineItemBody item={item} kind={kind} />
+        <TimelineItemBody item={item} kind={kind} onRespondToHitl={onRespondToHitl} />
       </article>
     );
   }
@@ -438,7 +477,9 @@ function TimelineItemView({
           <span className="timeline-row-title">{timelineTitle(item)}</span>
           <span className="timeline-row-summary">{timelineSummary(item, kind)}</span>
         </div>
-        {expanded && hasDetails ? <TimelineItemBody item={item} kind={kind} /> : null}
+        {expanded && hasDetails ? (
+          <TimelineItemBody item={item} kind={kind} onRespondToHitl={onRespondToHitl} />
+        ) : null}
       </div>
       <div className="timeline-row-meta">
         {status ? <span className={`timeline-status ${status.kind}`}>{status.label}</span> : null}
@@ -452,10 +493,19 @@ function TimelineItemView({
 function TimelineItemBody({
   item,
   kind,
+  onRespondToHitl,
 }: {
   item: AgentTimelineItem;
   kind: TimelineKind;
+  onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
 }) {
+  const hitlType = timelineHitlType(item);
+  if (hitlType) {
+    return (
+      <HitlResponseCard item={item} hitlType={hitlType} onRespond={onRespondToHitl} />
+    );
+  }
+
   if (kind === 'tool') {
     const display = timelineToolDisplay(item);
     const fileMetadata = timelineFileMetadata(item);
@@ -562,6 +612,278 @@ function TimelineItemBody({
   );
 }
 
+function HitlResponseCard({
+  item,
+  hitlType,
+  onRespond,
+}: {
+  item: AgentTimelineItem;
+  hitlType: HitlType;
+  onRespond: (submission: HitlResponseSubmission) => Promise<void>;
+}) {
+  const [answer, setAnswer] = useState('');
+  const [envValues, setEnvValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const requestId = timelineHitlRequestId(item);
+  const options = timelineHitlOptions(item);
+  const fields = timelineHitlFields(item);
+  const answered = Boolean(item.answered) || submitted;
+  const allowCustom =
+    item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
+  const question = timelineHitlQuestion(item);
+
+  const submit = async (responseData: Record<string, unknown>) => {
+    if (!requestId || answered || busy) return;
+    setBusy(true);
+    setSubmitError(null);
+    try {
+      await onRespond({ requestId, hitlType, responseData });
+      setSubmitted(true);
+    } catch (caught) {
+      setSubmitError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="timeline-details">
+      <Text as="p" size="2" className="timeline-detail-summary">
+        {question}
+      </Text>
+      <div className="agent-run-meta">
+        <span>{answered ? 'Answered' : 'Waiting for input'}</span>
+        {requestId ? <span>{requestId}</span> : <span>Missing request id</span>}
+      </div>
+
+      {!answered && hitlType === 'permission' ? (
+        <Flex gap="2" wrap="wrap">
+          <Button
+            size="1"
+            color="green"
+            disabled={!requestId || busy}
+            loading={busy}
+            onClick={() => void submit({ granted: true, action: 'allow' })}
+          >
+            Allow once
+          </Button>
+          <Button
+            size="1"
+            color="red"
+            variant="soft"
+            disabled={!requestId || busy}
+            onClick={() => void submit({ granted: false, action: 'deny' })}
+          >
+            Deny
+          </Button>
+        </Flex>
+      ) : null}
+
+      {!answered && hitlType === 'env_var' ? (
+        <div className="timeline-detail-block">
+          <span>Environment values</span>
+          {fields.map((field) => (
+            <label key={field.name}>
+              <span>{field.label}</span>
+              <input
+                type="password"
+                autoComplete="off"
+                required={field.required}
+                value={envValues[field.name] ?? ''}
+                onChange={(event) =>
+                  setEnvValues((current) => ({
+                    ...current,
+                    [field.name]: event.currentTarget.value,
+                  }))
+                }
+              />
+            </label>
+          ))}
+          <Button
+            size="1"
+            disabled={
+              !requestId ||
+              busy ||
+              fields.length === 0 ||
+              fields.some((field) => field.required && !envValues[field.name]?.trim())
+            }
+            loading={busy}
+            onClick={() => void submit({ values: envValues })}
+          >
+            Submit securely
+          </Button>
+        </div>
+      ) : null}
+
+      {!answered && (hitlType === 'clarification' || hitlType === 'decision') ? (
+        <div className="timeline-detail-block">
+          {options.length ? (
+            <Flex gap="2" wrap="wrap">
+              {options.map((option) => (
+                <Button
+                  size="1"
+                  variant="soft"
+                  disabled={!requestId || busy}
+                  title={option.description}
+                  key={option.value}
+                  onClick={() =>
+                    void submit(
+                      hitlType === 'clarification'
+                        ? { answer: option.value }
+                        : { decision: option.value },
+                    )
+                  }
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </Flex>
+          ) : null}
+          {allowCustom ? (
+            <>
+              <TextArea
+                size="1"
+                value={answer}
+                disabled={busy}
+                placeholder={hitlType === 'decision' ? 'Enter a decision' : 'Enter your answer'}
+                onChange={(event) => setAnswer(event.currentTarget.value)}
+              />
+              <Button
+                size="1"
+                disabled={!requestId || busy || !answer.trim()}
+                loading={busy}
+                onClick={() =>
+                  void submit(
+                    hitlType === 'clarification'
+                      ? { answer: answer.trim() }
+                      : { decision: answer.trim() },
+                  )
+                }
+              >
+                Submit response
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!answered && hitlType === 'a2ui_action' ? (
+        <Text size="1" color="amber">
+          This interactive A2UI request requires its original surface. Open the Web client to
+          respond.
+        </Text>
+      ) : null}
+
+      {submitError ? (
+        <Text size="1" color="red" role="alert">
+          {submitError}
+        </Text>
+      ) : null}
+    </div>
+  );
+}
+
+function timelineHitlType(item: AgentTimelineItem): HitlType | null {
+  if (item.type === 'clarification_asked') return 'clarification';
+  if (item.type === 'decision_asked') return 'decision';
+  if (item.type === 'env_var_requested') return 'env_var';
+  if (item.type === 'permission_asked' || item.type === 'permission_requested') {
+    return 'permission';
+  }
+  if (item.type === 'a2ui_action_asked') return 'a2ui_action';
+  return null;
+}
+
+function timelineHitlRequestId(item: AgentTimelineItem): string {
+  if (item.requestId) return item.requestId;
+  const direct = item.request_id;
+  if (typeof direct === 'string') return direct;
+  return stringPayloadField(item, 'request_id') ?? '';
+}
+
+function timelineHitlQuestion(item: AgentTimelineItem): string {
+  if (item.question) return item.question;
+  return (
+    stringPayloadField(item, 'question') ??
+    stringPayloadField(item, 'message') ??
+    item.reason ??
+    stringPayloadField(item, 'reason') ??
+    item.description ??
+    stringPayloadField(item, 'description') ??
+    'The Agent is waiting for human input.'
+  );
+}
+
+function timelineHitlOptions(
+  item: AgentTimelineItem,
+): Array<{ value: string; label: string; description?: string }> {
+  const payload = isRecord(item.payload) ? item.payload : {};
+  const source = Array.isArray(item.options)
+    ? item.options
+    : Array.isArray(payload.options)
+      ? payload.options
+      : [];
+  return source.flatMap((option) => {
+    if (typeof option === 'string') return [{ value: option, label: option }];
+    if (!isRecord(option)) return [];
+    const value = firstString(option, ['id', 'value', 'option_id', 'label']);
+    if (!value) return [];
+    return [
+      {
+        value,
+        label: firstString(option, ['label', 'title', 'name']) ?? value,
+        description: firstString(option, ['description', 'detail']) ?? undefined,
+      },
+    ];
+  });
+}
+
+function timelineHitlFields(
+  item: AgentTimelineItem,
+): Array<{ name: string; label: string; required: boolean }> {
+  const payload = isRecord(item.payload) ? item.payload : {};
+  const source = Array.isArray(item.fields)
+    ? item.fields
+    : Array.isArray(payload.fields)
+      ? payload.fields
+      : [];
+  return source.flatMap((field) => {
+    if (typeof field === 'string') return [{ name: field, label: field, required: true }];
+    if (!isRecord(field)) return [];
+    const name = firstString(field, ['name', 'key', 'variable']);
+    if (!name) return [];
+    return [
+      {
+        name,
+        label: firstString(field, ['label', 'description']) ?? name,
+        required: field.required !== false,
+      },
+    ];
+  });
+}
+
+function stringPayloadField(item: AgentTimelineItem, key: string): string | null {
+  if (!isRecord(item.payload)) return null;
+  const value = item.payload[key];
+  return typeof value === 'string' && value ? value : null;
+}
+
+function booleanPayloadField(item: AgentTimelineItem, key: string): boolean | null {
+  if (!isRecord(item.payload)) return null;
+  const value = item.payload[key];
+  return typeof value === 'boolean' ? value : null;
+}
+
+function firstString(record: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  return null;
+}
+
 function MarkdownContent({ content, className }: { content: string; className: string }) {
   return (
     <div className={`markdown-content ${className}`}>
@@ -617,9 +939,11 @@ function ToolFileMetadataView({ metadata }: { metadata: ToolFileMetadata }) {
 
 function ChatWorkflowStrip({
   activeTarget,
+  workflowCounts,
   onSelect,
 }: {
   activeTarget: ChatWorkflowTarget;
+  workflowCounts?: Partial<Record<ChatWorkflowTarget, number | string>>;
   onSelect: (target: ChatWorkflowTarget) => void;
 }) {
   const items: Array<[ChatWorkflowTarget, string, string, ReactNode]> = [
@@ -636,13 +960,13 @@ function ChatWorkflowStrip({
         <button
           className={activeTarget === target ? 'selected' : ''}
           type="button"
-          aria-label={`${label} ${value}`}
+          aria-label={`${label} ${workflowCounts?.[target] ?? value}`}
           key={target}
           onClick={() => onSelect(target)}
         >
           <span>{icon}</span>
           <strong>{label}</strong>
-          <em>{value}</em>
+          <em>{workflowCounts?.[target] ?? value}</em>
         </button>
       ))}
     </div>
@@ -696,7 +1020,7 @@ function timelineTitle(item: AgentTimelineItem): string {
   if (item.type === 'work_plan') return 'Work plan';
   if (item.type.startsWith('task_')) return 'Task';
   if (item.type.startsWith('artifact_')) return 'Artifact';
-  if (item.question) return 'Human input';
+  if (timelineHitlType(item)) return 'Human input';
   if (item.type.startsWith('subagent_')) return 'Subagent';
   if (item.type.startsWith('chain_')) return 'Chain';
   if (item.type.startsWith('agent_')) return 'Agent event';
@@ -715,7 +1039,7 @@ function isImportantTimelineItem(item: AgentTimelineItem): boolean {
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') return true;
   if (item.isError || item.error) return true;
-  if (item.question && !item.answered) return true;
+  if (timelineHitlType(item) && !item.answered) return true;
   if (item.type === 'work_plan') return true;
   if (item.type.startsWith('task_')) return true;
   if (item.type === 'artifact_error') return true;
@@ -725,7 +1049,7 @@ function isImportantTimelineItem(item: AgentTimelineItem): boolean {
 function timelineHasDetails(item: AgentTimelineItem, kind: TimelineKind): boolean {
   if (kind === 'user' || kind === 'agent') return false;
   if (timelineToolDisplay(item) || timelineFileMetadata(item)) return true;
-  if (item.question || item.error || item.content) return true;
+  if (timelineHitlType(item) || item.question || item.error || item.content) return true;
   if (item.toolInput !== undefined || item.toolOutput !== undefined) return true;
   if (item.payload !== undefined) return true;
   if (item.filename || item.artifactId) return true;
@@ -734,7 +1058,7 @@ function timelineHasDetails(item: AgentTimelineItem, kind: TimelineKind): boolea
 
 function timelineSummary(item: AgentTimelineItem, kind: TimelineKind): string {
   if (item.error) return item.error;
-  if (item.question) return item.question;
+  if (timelineHitlType(item)) return timelineHitlQuestion(item);
   if (kind === 'artifact') return item.filename || item.artifactId || item.type;
   if (kind === 'tool') {
     const display = timelineToolDisplay(item);
@@ -756,7 +1080,7 @@ function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
   if (item.isError || item.error) return { kind: 'error', label: 'error' };
   const displayStatus = timelineToolDisplay(item)?.status;
   if (displayStatus) return { kind: item.type === 'act' ? 'waiting' : 'ok', label: displayStatus };
-  if (item.question) {
+  if (timelineHitlType(item)) {
     return item.answered
       ? { kind: 'ok', label: 'answered' }
       : { kind: 'waiting', label: 'waiting' };

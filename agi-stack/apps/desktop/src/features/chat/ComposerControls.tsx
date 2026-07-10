@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { PlusIcon } from '@radix-ui/react-icons';
 
-type ComposerMenu = 'files' | 'mode' | 'model' | 'effort';
+type ComposerMenu = 'files' | 'mode' | 'model' | 'effort' | 'runtime';
 
 type ComposerControlsProps = {
   disabledHint?: string | null;
   effortLabel?: string;
   modeLabel?: string;
   modelLabel?: string;
+  runtimeTargetLabel?: string;
+  runtimeTargetOptions?: string[];
+  onRuntimeTargetChange?: (value: string) => void;
 };
 
 export function ComposerControls({
@@ -16,11 +19,15 @@ export function ComposerControls({
   effortLabel = 'Medium',
   modeLabel = 'Autopilot',
   modelLabel = 'Local model',
+  runtimeTargetLabel = 'Local Rust Core',
+  runtimeTargetOptions = ['Local Rust Core', 'Staging Runtime'],
+  onRuntimeTargetChange,
 }: ComposerControlsProps) {
   const [openMenu, setOpenMenu] = useState<ComposerMenu | null>(null);
   const [mode, setMode] = useState(modeLabel);
   const [model, setModel] = useState(modelLabel);
   const [effort, setEffort] = useState(effortLabel);
+  const [runtimeTarget, setRuntimeTarget] = useState(runtimeTargetLabel);
   const trayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +41,10 @@ export function ComposerControls({
   useEffect(() => {
     setEffort(effortLabel);
   }, [effortLabel]);
+
+  useEffect(() => {
+    setRuntimeTarget(runtimeTargetLabel);
+  }, [runtimeTargetLabel]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -134,6 +145,21 @@ export function ComposerControls({
         onToggle={() => toggleMenu('effort')}
         onSelect={(value) => {
           setEffort(value);
+          setOpenMenu(null);
+        }}
+      />
+      <ComposerSelectControl
+        compactLabel={compactComposerLabel(runtimeTarget)}
+        label={runtimeTarget}
+        open={openMenu === 'runtime'}
+        title="Runtime target"
+        controlLabel={`Runtime target: ${runtimeTarget}`}
+        options={Array.from(new Set([runtimeTarget, ...runtimeTargetOptions]))}
+        selected={runtimeTarget}
+        onToggle={() => toggleMenu('runtime')}
+        onSelect={(value) => {
+          setRuntimeTarget(value);
+          onRuntimeTargetChange?.(value);
           setOpenMenu(null);
         }}
       />
@@ -285,6 +311,12 @@ function ComposerPopover({
 
 function compactComposerLabel(label: string): string {
   const withoutSuffix = label.replace(/\s+model$/i, '');
+  if (withoutSuffix === 'Local Rust Core') {
+    return 'Local';
+  }
+  if (withoutSuffix === 'Staging Runtime') {
+    return 'Staging';
+  }
   if (withoutSuffix.toLowerCase() === 'medium') {
     return 'Med';
   }

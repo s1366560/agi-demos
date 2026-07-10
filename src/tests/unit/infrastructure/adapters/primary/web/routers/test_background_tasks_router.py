@@ -3,9 +3,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import FastAPI
 
-from src.infrastructure.adapters.primary.web.routers import background_tasks as router_mod
+from src.infrastructure.adapters.primary.web.routers import (
+    background_tasks as router_mod,
+    tasks as tasks_router_mod,
+)
 from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 
 
@@ -118,63 +121,23 @@ async def test_list_tasks_superuser_can_see_unscoped_tasks(task_manager: TaskMan
     assert session.execute_calls == 0
 
 
-@pytest.mark.asyncio
-async def test_get_task_status_rejects_inaccessible_task(task_manager: TaskManager) -> None:
-    task_id = _tracked_task(
-        task_manager,
-        "foreign",
-        owner_user_id="user-2",
-        project_id="project-foreign",
-        created_at=datetime.now(UTC),
-    )
+def test_task_detail_and_cancel_routes_have_single_canonical_handler() -> None:
+    app = FastAPI()
+    app.include_router(tasks_router_mod.router)
+    app.include_router(router_mod.router)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await router_mod.get_task_status(
-            task_id,
-            current_user=_user("user-1"),
-            db=_Session(set()),
-        )
+    route_keys = [
+        (method, route.path)
+        for route in app.routes
+        for method in getattr(route, "methods", set())
+        if route.path in {"/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/cancel"}
+    ]
 
-    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert route_keys.count(("GET", "/api/v1/tasks/{task_id}")) == 1
+    assert route_keys.count(("POST", "/api/v1/tasks/{task_id}/cancel")) == 1
 
-
-@pytest.mark.asyncio
-async def test_cancel_task_rejects_inaccessible_task(task_manager: TaskManager) -> None:
-    task_id = _tracked_task(
-        task_manager,
-        "foreign",
-        owner_user_id="user-2",
-        project_id="project-foreign",
-        created_at=datetime.now(UTC),
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        await router_mod.cancel_task(
-            task_id,
-            current_user=_user("user-1"),
-            db=_Session(set()),
-        )
-
-    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.asyncio
-async def test_cancel_task_allows_project_member(task_manager: TaskManager) -> None:
-    task_id = _tracked_task(
-        task_manager,
-        "project",
-        project_id="project-access",
-        created_at=datetime.now(UTC),
-    )
-
-    response = await router_mod.cancel_task(
-        task_id,
-        current_user=_user("user-1"),
-        db=_Session({"project-access"}),
-    )
-
-    assert response == {
-        "status": "success",
-        "message": f"Task {task_id} cancelled",
-        "task_id": task_id,
-    }
+    schema = app.openapi()
+    detail_schema = schema["paths"]["/api/v1/tasks/{task_id}"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]
+    assert detail_schema["$ref"].endswith("/TaskLogResponse")

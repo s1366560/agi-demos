@@ -9,22 +9,22 @@ type TerminalProxyState = {
   clear: () => void;
 };
 
-export function useTerminalProxy(url: string | null): TerminalProxyState {
+export function useTerminalProxy(url: string | null, credential: string): TerminalProxyState {
   const socketRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [lines, setLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!url) {
+    if (!url || !credential) {
       setConnected(false);
-      setError(null);
+      setError(url && !credential ? 'Terminal credential is unavailable' : null);
       socketRef.current?.close();
       socketRef.current = null;
       return;
     }
 
-    const socket = new WebSocket(url);
+    const socket = openTerminalSocket(url, credential);
     socketRef.current = socket;
 
     socket.onopen = () => {
@@ -41,7 +41,7 @@ export function useTerminalProxy(url: string | null): TerminalProxyState {
     return () => {
       socket.close();
     };
-  }, [url]);
+  }, [credential, url]);
 
   return {
     connected,
@@ -61,6 +61,14 @@ export function useTerminalProxy(url: string | null): TerminalProxyState {
       setLines([]);
     },
   };
+}
+
+export function openTerminalSocket(
+  url: string,
+  credential: string,
+  Socket: typeof WebSocket = WebSocket,
+): WebSocket {
+  return new Socket(url, ['memstack.auth', credential]);
 }
 
 function terminalLine(data: unknown): string {

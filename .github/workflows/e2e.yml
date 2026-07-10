@@ -1,14 +1,4 @@
-name: E2E Tests (Docker)
-
-# E2E tests are currently disabled as they require:
-# 1. Proper LLM API keys configured
-# 2. Full Docker environment with all services
-# 3. Frontend build and Playwright setup
-#
-# To re-enable:
-# 1. Set up required secrets (LLM API keys)
-# 2. Uncomment the job below
-# 3. Configure docker-compose.yml with proper environment variables
+name: E2E Browser Gates
 
 on:
   push:
@@ -17,17 +7,50 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  e2e-placeholder:
-    name: E2E Tests (Skipped)
+  web-smoke:
+    name: Web Playwright Smoke
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
-      - name: E2E tests skipped
-        run: |
-          echo "E2E tests are currently disabled"
-          echo "Main CI/CD pipeline runs unit tests"
-          echo "To run E2E tests locally: make dev && cd web && pnpm run test:e2e"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # Uncomment below when E2E infrastructure is ready
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run backend-independent smoke tests
+        env:
+          CI: true
+        run: pnpm exec playwright test e2e/smoke.spec.ts
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-report
+          path: web/playwright-report
+          if-no-files-found: ignore
+
+  # Full backend-dependent E2E remains opt-in until the CI fixture provisions
+  # migrations, default users, Ray workers, and LLM credentials. The smoke job
+  # above is an always-on browser gate and does not require those services.
   # e2e:
   #   runs-on: ubuntu-latest
   #

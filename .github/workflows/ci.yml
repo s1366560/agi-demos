@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Backend & Web Tests
+    name: Backend Tests
     runs-on: ubuntu-latest
     env:
       UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
@@ -149,7 +149,7 @@ jobs:
             --cov=src \
             --cov-report=xml \
             --cov-report=term-missing \
-            --cov-fail-under=50
+            --cov-fail-under=72
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -158,12 +158,75 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  web:
+    name: Web Typecheck, Tests & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run type-check
+
+      - name: Run unit tests
+        run: pnpm run test
+
+      - name: Build production bundle
+        run: pnpm run build
+
   agi-stack-strangler-gate:
     name: agi-stack Strangler Gate
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: agi-stack
+    env:
+      DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+      REDIS_URL: redis://localhost:6379
+      LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: memstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout code
@@ -271,6 +334,27 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+          rustup component add rustfmt clippy
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
+
+      - name: Verify desktop source
+        run: make desktop-check
+
+      - name: Verify desktop frontend contracts
+        run: |
+          make desktop-deps
+          cd apps/desktop && pnpm test
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked

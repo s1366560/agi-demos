@@ -1,6 +1,6 @@
 # MemStack Architecture
 
-Last checked against code: 2026-06-23.
+Last checked against code: 2026-07-10.
 
 MemStack is organized around DDD and hexagonal architecture, with a separate React web
 console and an agent runtime that uses Ray actors, Redis streams, MCP tools, and WebSocket
@@ -17,9 +17,39 @@ Domain model + ports
   | repository/service interfaces
 Secondary adapters
   | PostgreSQL, Redis, Neo4j, MinIO, Docker/Ray, MCP, LLM providers
-Agent runtime
+Python Agent runtime
   | ReAct processor, tools, HITL, subagents, workspace orchestration
+
+Rust gateway / server (strangler)
+  | selected API-v1 capabilities over the shared schema
+Portable Rust core
+  | memory and ReAct foundations used by server/bindings/Desktop
+
+Tauri Desktop
+  | authenticated cloud subset + capability-protected local host runtime
 ```
+
+## Cross-runtime ownership
+
+Python/FastAPI and the React Web console remain the production feature baseline.
+The Rust server is a capability-by-capability strangler and must not be treated
+as a complete replacement until the corresponding parity gates pass. The Tauri
+Desktop exposes a smaller cloud API subset plus Local Memory and an explicit
+host runtime; Local Memory is not the same store as server Project Memory and is
+not implicitly synchronized.
+
+| Capability | Python/Web | Rust server | Desktop |
+| --- | --- | --- | --- |
+| Full Agent/HITL runtime | Reference implementation | Partial migration | Cloud subset; local reduced runtime |
+| Durable event replay | PostgreSQL + Redis | Selected slices | Client recovery protocol only |
+| Memory/graph product | Full server product | Selected portable/strangler slices | Separate Local Memory UI |
+| Sandbox/terminal | Project-scoped Docker services | Selected proxy/control slices | Capability-protected host tools |
+| Tenant/admin operations | Full product | Selected route families | Not a parity target |
+
+Detailed repair stages and explicit non-parity items are tracked in
+[CROSS_RUNTIME_REMEDIATION_PLAN.md](CROSS_RUNTIME_REMEDIATION_PLAN.md). Detailed
+Rust migration evidence lives under `agi-stack/docs/architecture/`, with
+`11-i1-i7-execution-plan.md` as the current execution ledger.
 
 ## Backend Layers
 

@@ -946,9 +946,7 @@ async def test_kickoff_worker_and_snapshot_api_flow_end_to_end(
     )
 
     assert workspace_service.calls == [("ws-abc", "bridge-user-1")]
-    assert workspace_service.role_checks == [
-        ("ws-abc", "bridge-user-1", workspace_plans.WorkspaceRole.EDITOR)
-    ]
+    assert workspace_service.role_checks == []
     assert snapshot.plan is not None
     leaf_nodes = [node for node in snapshot.plan.nodes if node.kind in {"task", "verify"}]
     assert leaf_nodes

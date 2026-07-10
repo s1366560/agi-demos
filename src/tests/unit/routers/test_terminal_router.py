@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, WebSocketDisconnect, status
+from starlette.datastructures import Headers
 
 from src.infrastructure.adapters.primary.web.routers import terminal as terminal_router
 from src.infrastructure.adapters.primary.web.routers.terminal import (
@@ -21,16 +22,98 @@ class _FakeWebSocket:
     def __init__(self) -> None:
         self.sent_json: list[object] = []
         self.closed = False
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
         self.accepted = False
+        self.accepted_subprotocol: str | None = None
+        self.headers = Headers(raw=[])
 
-    async def accept(self) -> None:
+    async def accept(self, subprotocol: str | None = None) -> None:
         self.accepted = True
+        self.accepted_subprotocol = subprotocol
 
     async def send_json(self, data: object) -> None:
         self.sent_json.append(data)
 
-    async def close(self, *args, **kwargs) -> None:
+    async def close(
+        self,
+        code: int | None = None,
+        reason: str | None = None,
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
         self.closed = True
+        self.close_code = code
+        self.close_reason = reason
+
+
+class _ScalarOneResult:
+    def __init__(self, value: str | None) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self) -> str | None:
+        return self._value
+
+
+class _AccessSession:
+    def __init__(self, values: list[str | None]) -> None:
+        self._values = iter(values)
+
+    async def execute(self, _statement: object) -> _ScalarOneResult:
+        return _ScalarOneResult(next(self._values))
+
+
+def _allow_terminal_websocket(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        terminal_router,
+        "authenticate_websocket_or_close",
+        AsyncMock(return_value=("user-1", "tenant-1")),
+    )
+    monkeypatch.setattr(
+        terminal_router,
+        "_find_authorized_terminal_project_id",
+        AsyncMock(return_value="project-1"),
+    )
+
+
+@pytest.mark.unit
+async def test_require_terminal_sandbox_access_allows_project_member() -> None:
+    project_id = await terminal_router.require_terminal_sandbox_access(
+        sandbox_id="sandbox-1",
+        current_user=SimpleNamespace(id="user-1"),
+        db=_AccessSession(["project-1", "project-1"]),
+    )
+
+    assert project_id == "project-1"
+
+
+@pytest.mark.unit
+async def test_require_terminal_sandbox_access_rejects_foreign_project() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await terminal_router.require_terminal_sandbox_access(
+            sandbox_id="sandbox-1",
+            current_user=SimpleNamespace(id="user-1"),
+            db=_AccessSession(["project-1", None]),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.unit
+def test_terminal_rest_routes_require_sandbox_membership() -> None:
+    protected_paths = {
+        "/api/v1/terminal/{sandbox_id}/create",
+        "/api/v1/terminal/{sandbox_id}/sessions",
+        "/api/v1/terminal/{sandbox_id}/sessions/{session_id}",
+    }
+    protected_routes = [
+        route for route in terminal_router.router.routes if route.path in protected_paths
+    ]
+
+    assert {route.path for route in protected_routes} == protected_paths
+    for route in protected_routes:
+        dependency_calls = {dependency.call for dependency in route.dependant.dependencies}
+        assert terminal_router.require_terminal_sandbox_access in dependency_calls
 
 
 @pytest.mark.unit
@@ -83,6 +166,7 @@ async def test_terminal_websocket_sanitizes_unexpected_errors(
             )
 
     websocket = _FakeWebSocket()
+    _allow_terminal_websocket(monkeypatch)
     monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: FailingProxy())
     monkeypatch.setattr(
         terminal_router,
@@ -98,6 +182,8 @@ async def test_terminal_websocket_sanitizes_unexpected_errors(
         websocket=websocket,
         sandbox_id="sandbox-1",
         session_id=None,
+        token=None,
+        db=SimpleNamespace(),
     )
 
     assert websocket.sent_json == [{"type": "error", "message": "Terminal WebSocket failed"}]
@@ -125,6 +211,7 @@ async def test_terminal_websocket_disconnect_log_omits_session_id(
         pass
 
     websocket = _FakeWebSocket()
+    _allow_terminal_websocket(monkeypatch)
     monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: WorkingProxy())
     monkeypatch.setattr(
         terminal_router,
@@ -150,6 +237,8 @@ async def test_terminal_websocket_disconnect_log_omits_session_id(
         websocket=websocket,
         sandbox_id="sandbox-1",
         session_id=None,
+        token=None,
+        db=SimpleNamespace(),
     )
 
     assert websocket.sent_json == [
@@ -164,6 +253,65 @@ async def test_terminal_websocket_disconnect_log_omits_session_id(
     assert "WebSocket disconnected" in caplog.text
     assert "has_session_id=True" in caplog.text
     assert "session-secret" not in caplog.text
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_rejects_missing_auth_before_terminal_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    terminal_proxy = AsyncMock()
+    monkeypatch.setattr(terminal_router, "get_terminal_proxy", terminal_proxy)
+
+    await terminal_router.terminal_websocket(
+        websocket=websocket,
+        sandbox_id="sandbox-1",
+        session_id=None,
+        token=None,
+        db=SimpleNamespace(),
+    )
+
+    assert websocket.accepted is False
+    assert websocket.closed is True
+    assert websocket.close_code == 4003
+    terminal_proxy.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_rejects_foreign_sandbox_before_terminal_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    terminal_proxy = AsyncMock()
+    monkeypatch.setattr(
+        terminal_router,
+        "authenticate_websocket_or_close",
+        AsyncMock(return_value=("user-1", "tenant-1")),
+    )
+    monkeypatch.setattr(
+        terminal_router,
+        "_find_authorized_terminal_project_id",
+        AsyncMock(
+            side_effect=HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to sandbox",
+            )
+        ),
+    )
+    monkeypatch.setattr(terminal_router, "get_terminal_proxy", terminal_proxy)
+
+    await terminal_router.terminal_websocket(
+        websocket=websocket,
+        sandbox_id="sandbox-foreign",
+        session_id=None,
+        token=None,
+        db=SimpleNamespace(),
+    )
+
+    assert websocket.accepted is False
+    assert websocket.closed is True
+    assert websocket.close_code == status.WS_1008_POLICY_VIOLATION
+    terminal_proxy.assert_not_called()
 
 
 @pytest.mark.unit
@@ -262,6 +410,7 @@ async def test_create_terminal_session_sanitizes_missing_sandbox(
             request=CreateTerminalRequest(),
             _user=SimpleNamespace(id="user-1"),
             event_publisher=None,
+            project_id="project-1",
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -290,6 +439,7 @@ async def test_create_terminal_session_sanitizes_proxy_value_error(
             request=CreateTerminalRequest(),
             _user=SimpleNamespace(id="user-1"),
             event_publisher=None,
+            project_id="project-1",
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -323,11 +473,6 @@ async def test_create_terminal_session_started_event_log_omits_publisher_error_t
     )
     monkeypatch.setattr(terminal_router, "get_sandbox_adapter", lambda: ExistingSandboxAdapter())
     monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: WorkingProxy())
-    monkeypatch.setattr(
-        terminal_router,
-        "get_project_id_from_sandbox",
-        AsyncMock(return_value="project-1"),
-    )
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.terminal",
@@ -338,9 +483,17 @@ async def test_create_terminal_session_started_event_log_omits_publisher_error_t
         request=CreateTerminalRequest(),
         _user=SimpleNamespace(id="user-1"),
         event_publisher=event_publisher,
+        project_id="project-1",
     )
 
     assert response.session_id == "session-secret"
+    event_publisher.publish_terminal_started.assert_awaited_once_with(
+        project_id="project-1",
+        sandbox_id="sandbox-secret",
+        url="ws://localhost:7681/session-secret",
+        port=7681,
+        session_id="session-secret",
+    )
     assert "Failed to publish terminal_started event" in caplog.text
     assert "error_type=RuntimeError" in caplog.text
     assert "terminal started publisher secret" not in caplog.text
@@ -374,11 +527,6 @@ async def test_close_terminal_session_stopped_event_log_omits_publisher_error_te
         )
     )
     monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: WorkingProxy())
-    monkeypatch.setattr(
-        terminal_router,
-        "get_project_id_from_sandbox",
-        AsyncMock(return_value="project-1"),
-    )
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.terminal",
@@ -389,9 +537,15 @@ async def test_close_terminal_session_stopped_event_log_omits_publisher_error_te
         session_id="session-secret",
         _user=SimpleNamespace(id="user-1"),
         event_publisher=event_publisher,
+        project_id="project-1",
     )
 
     assert response == {"success": True, "session_id": "session-secret"}
+    event_publisher.publish_terminal_stopped.assert_awaited_once_with(
+        project_id="project-1",
+        sandbox_id="sandbox-secret",
+        session_id="session-secret",
+    )
     assert "Failed to publish terminal_stopped event" in caplog.text
     assert "error_type=RuntimeError" in caplog.text
     assert "terminal stopped publisher secret" not in caplog.text
@@ -425,6 +579,7 @@ async def test_create_terminal_session_error_log_omits_proxy_exception_text(
             request=CreateTerminalRequest(),
             _user=SimpleNamespace(id="user-1"),
             event_publisher=None,
+            project_id="project-1",
         )
 
     assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

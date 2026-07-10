@@ -1,7 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../api/client';
-import type { AgentWsEvent, DesktopRuntimeConfig } from '../types';
+import { desktopApiCredential, DesktopApiClient } from '../api/client';
+import type {
+  AgentWsEvent,
+  DesktopRuntimeConfig,
+  HitlResponseSubmission,
+} from '../types';
+
+const HEARTBEAT_INTERVAL_MS = 20_000;
+const WATCHDOG_INTERVAL_MS = 10_000;
+const STALE_CONNECTION_MS = 60_000;
+const MAX_SOCKET_EVENTS = 200;
+const MAX_EVENT_KEYS = 400;
+
+type AgentEventCursor = {
+  conversationId: string;
+  timeUs: number;
+  counter: number;
+};
 
 type AgentSocketState = {
   connected: boolean;
@@ -9,6 +25,7 @@ type AgentSocketState = {
   events: AgentWsEvent[];
   subscribeConversation: (conversationId: string) => boolean;
   sendAgentMessage: (message: AgentRunMessage) => boolean;
+  respondToHitl: (submission: HitlResponseSubmission) => boolean;
 };
 
 type AgentRunMessage = {
@@ -18,11 +35,18 @@ type AgentRunMessage = {
   messageId?: string;
 };
 
-export function useAgentSocket(config: DesktopRuntimeConfig, enabled: boolean): AgentSocketState {
+export function useAgentSocket(
+  config: DesktopRuntimeConfig,
+  enabled: boolean,
+): AgentSocketState {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentWsEvent[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
+  const conversationCursorsRef = useRef(new Map<string, AgentEventCursor>());
+  const subscribedConversationsRef = useRef(new Set<string>());
+  const workspaceEventIdRef = useRef<string | null>(null);
+  const seenEventKeysRef = useRef(new Set<string>());
 
   const client = useMemo(() => new DesktopApiClient(config), [config]);
 
@@ -34,94 +58,320 @@ export function useAgentSocket(config: DesktopRuntimeConfig, enabled: boolean): 
   }, []);
 
   const subscribeConversation = useCallback(
-    (conversationId: string) =>
-      sendSocketMessage({
+    (conversationId: string) => {
+      const normalizedConversationId = conversationId.trim();
+      if (!normalizedConversationId) return false;
+      subscribedConversationsRef.current.add(normalizedConversationId);
+      const cursor = conversationCursorsRef.current.get(
+        normalizedConversationId,
+      );
+      return sendSocketMessage({
         type: 'subscribe',
-        conversation_id: conversationId,
-      }),
+        conversation_id: normalizedConversationId,
+        ...(cursor
+          ? { from_time_us: cursor.timeUs, from_counter: cursor.counter + 1 }
+          : {}),
+      });
+    },
     [sendSocketMessage],
   );
 
-  const sendAgentMessage = useCallback((message: AgentRunMessage) => {
-    return sendSocketMessage({
+  const sendAgentMessage = useCallback(
+    (message: AgentRunMessage) => {
+      subscribedConversationsRef.current.add(message.conversationId);
+      return sendSocketMessage({
         type: 'send_message',
         conversation_id: message.conversationId,
         project_id: message.projectId,
         message: message.message,
         message_id: message.messageId,
-    });
-  }, [sendSocketMessage]);
+      });
+    },
+    [sendSocketMessage],
+  );
+
+  const respondToHitl = useCallback(
+    (submission: HitlResponseSubmission) =>
+      sendSocketMessage(buildHitlSocketMessage(submission)),
+    [sendSocketMessage],
+  );
 
   useEffect(() => {
-    if (!enabled || !config.apiKey.trim()) {
+    const credential = desktopApiCredential(config);
+    if (!enabled || !credential) {
       setConnected(false);
       setError(null);
       return;
     }
 
-    let socket: WebSocket | null = null;
-    try {
-      socket = new WebSocket(client.agentWsUrl(`desktop-${Date.now()}`));
-      socketRef.current = socket;
-    } catch (caught) {
-      setError(String(caught));
-      return;
-    }
+    let disposed = false;
+    let reconnectAttempt = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+    let lastMessageAt = Date.now();
 
-    socket.onopen = () => {
-      setConnected(true);
-      setError(null);
-      if (config.projectId.trim()) {
-        socket?.send(
+    const stopConnectionTimers = () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (watchdogTimer) clearInterval(watchdogTimer);
+      heartbeatTimer = null;
+      watchdogTimer = null;
+    };
+
+    const sendSubscriptions = (socket: WebSocket) => {
+      if (config.mode === 'cloud' && config.projectId.trim()) {
+        socket.send(
           JSON.stringify({
             type: 'subscribe_status',
             project_id: config.projectId,
           }),
         );
-        socket?.send(
+        socket.send(
           JSON.stringify({
             type: 'subscribe_lifecycle_state',
             project_id: config.projectId,
+            tenant_id: config.tenantId || undefined,
+          }),
+        );
+        socket.send(
+          JSON.stringify({
+            type: 'subscribe_sandbox',
+            project_id: config.projectId,
+            tenant_id: config.tenantId || undefined,
           }),
         );
       }
-      if (config.workspaceId.trim()) {
-        socket?.send(
+      if (config.mode === 'cloud' && config.workspaceId.trim()) {
+        socket.send(
           JSON.stringify({
             type: 'subscribe_workspace',
             project_id: config.projectId,
             workspace_id: config.workspaceId,
             tenant_id: config.tenantId || undefined,
+            last_event_id: workspaceEventIdRef.current || undefined,
           }),
         );
       }
-      if (config.projectId.trim()) {
-        socket?.send(JSON.stringify({ type: 'subscribe_sandbox', project_id: config.projectId }));
+      subscribedConversationsRef.current.forEach((conversationId) => {
+        const cursor = conversationCursorsRef.current.get(conversationId);
+        socket.send(
+          JSON.stringify({
+            type: 'subscribe',
+            conversation_id: conversationId,
+            ...(cursor
+              ? {
+                  from_time_us: cursor.timeUs,
+                  from_counter: cursor.counter + 1,
+                }
+              : {}),
+          }),
+        );
+      });
+    };
+
+    const scheduleReconnect = (connect: () => void) => {
+      if (disposed || reconnectTimer) return;
+      const delay = reconnectDelay(reconnectAttempt);
+      reconnectAttempt += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (disposed) return;
+      let socket: WebSocket;
+      try {
+        socket = new WebSocket(
+          client.agentWsUrl(`desktop-${Date.now()}`),
+          client.agentWsProtocols(),
+        );
+        socketRef.current = socket;
+      } catch (caught) {
+        setError(String(caught));
+        scheduleReconnect(connect);
+        return;
       }
+
+      socket.onopen = () => {
+        if (disposed || socketRef.current !== socket) return;
+        reconnectAttempt = 0;
+        lastMessageAt = Date.now();
+        setConnected(true);
+        setError(null);
+        sendSubscriptions(socket);
+        stopConnectionTimers();
+        if (config.mode === 'cloud') {
+          heartbeatTimer = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'heartbeat' }));
+            }
+          }, HEARTBEAT_INTERVAL_MS);
+          watchdogTimer = setInterval(() => {
+            if (Date.now() - lastMessageAt > STALE_CONNECTION_MS) {
+              socket.close(4000, 'Agent WebSocket heartbeat timeout');
+            }
+          }, WATCHDOG_INTERVAL_MS);
+        }
+      };
+
+      socket.onerror = () => {
+        if (!disposed) setError('Agent WebSocket error');
+      };
+
+      socket.onclose = () => {
+        if (socketRef.current === socket) socketRef.current = null;
+        stopConnectionTimers();
+        setConnected(false);
+        if (!disposed) scheduleReconnect(connect);
+      };
+
+      socket.onmessage = (message) => {
+        lastMessageAt = Date.now();
+        const event = parseEvent(message.data);
+        const type =
+          stringField(event, 'type') ?? stringField(event, 'event_type');
+        if (type === 'heartbeat' || type === 'pong') return;
+
+        const cursor = eventCursor(event);
+        if (cursor) {
+          const previous = conversationCursorsRef.current.get(
+            cursor.conversationId,
+          );
+          if (
+            !previous ||
+            cursor.timeUs > previous.timeUs ||
+            (cursor.timeUs === previous.timeUs &&
+              cursor.counter > previous.counter)
+          ) {
+            conversationCursorsRef.current.set(cursor.conversationId, cursor);
+          }
+        }
+        const workspaceId = stringField(event, 'workspace_id');
+        const eventId = stringField(event, 'event_id');
+        if (workspaceId && eventId) workspaceEventIdRef.current = eventId;
+
+        const key = socketEventKey(event);
+        if (key && seenEventKeysRef.current.has(key)) return;
+        if (key) {
+          seenEventKeysRef.current.add(key);
+          if (seenEventKeysRef.current.size > MAX_EVENT_KEYS) {
+            const oldestKey = seenEventKeysRef.current.values().next().value;
+            if (typeof oldestKey === 'string')
+              seenEventKeysRef.current.delete(oldestKey);
+          }
+        }
+        setEvents((current) => [event, ...current].slice(0, MAX_SOCKET_EVENTS));
+      };
     };
 
-    socket.onerror = () => {
-      setError('Agent WebSocket error');
-    };
-
-    socket.onclose = () => {
-      setConnected(false);
-    };
-
-    socket.onmessage = (message) => {
-      const event = parseEvent(message.data);
-      setEvents((current) => [event, ...current].slice(0, 80));
-    };
+    connect();
 
     return () => {
-      socket?.close();
-      if (socketRef.current === socket) {
-        socketRef.current = null;
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      stopConnectionTimers();
+      const socket = socketRef.current;
+      socketRef.current = null;
+      if (socket) {
+        socket.onclose = null;
+        socket.close();
       }
     };
-  }, [client, config.apiKey, config.projectId, config.workspaceId, enabled]);
+  }, [
+    client,
+    config.apiKey,
+    config.localApiToken,
+    config.mode,
+    config.projectId,
+    config.tenantId,
+    config.workspaceId,
+    enabled,
+  ]);
 
-  return { connected, error, events, subscribeConversation, sendAgentMessage };
+  return {
+    connected,
+    error,
+    events,
+    subscribeConversation,
+    sendAgentMessage,
+    respondToHitl,
+  };
+}
+
+export function buildHitlSocketMessage(
+  submission: HitlResponseSubmission,
+): Record<string, unknown> {
+  const { requestId, hitlType, responseData } = submission;
+  switch (hitlType) {
+    case 'clarification':
+      return {
+        type: 'clarification_respond',
+        request_id: requestId,
+        answer: responseData.answer,
+      };
+    case 'decision':
+      return {
+        type: 'decision_respond',
+        request_id: requestId,
+        decision: responseData.decision,
+      };
+    case 'env_var':
+      return {
+        type: 'env_var_respond',
+        request_id: requestId,
+        ...(responseData.values ? { values: responseData.values } : {}),
+        ...(responseData.cancelled === true ? { cancelled: true } : {}),
+        ...(responseData.timeout === true ? { timeout: true } : {}),
+      };
+    case 'permission': {
+      const granted =
+        typeof responseData.granted === 'boolean'
+          ? responseData.granted
+          : responseData.action === 'allow' ||
+            responseData.action === 'allow_always';
+      return {
+        type: 'permission_respond',
+        request_id: requestId,
+        granted,
+      };
+    }
+    case 'a2ui_action':
+      return {
+        type: 'a2ui_action_respond',
+        request_id: requestId,
+        action_name: responseData.action_name,
+        source_component_id: responseData.source_component_id,
+        context: responseData.context ?? {},
+      };
+  }
+}
+
+export function reconnectDelay(attempt: number): number {
+  return Math.min(500 * 2 ** Math.max(0, attempt), 15_000);
+}
+
+export function eventCursor(event: AgentWsEvent): AgentEventCursor | null {
+  const conversationId = stringField(event, 'conversation_id');
+  const timeUs =
+    numberField(event, 'event_time_us') ??
+    numberField(event, 'time_us') ??
+    numberField(event, 'eventTimeUs');
+  const counter =
+    numberField(event, 'event_counter') ??
+    numberField(event, 'counter') ??
+    numberField(event, 'eventCounter');
+  if (!conversationId || timeUs === null || counter === null) return null;
+  return { conversationId, timeUs, counter };
+}
+
+export function socketEventKey(event: AgentWsEvent): string | null {
+  const eventId = stringField(event, 'event_id') ?? stringField(event, 'seq');
+  if (eventId) return `event:${eventId}`;
+  const cursor = eventCursor(event);
+  if (!cursor) return null;
+  return `cursor:${cursor.conversationId}:${cursor.timeUs}:${cursor.counter}`;
 }
 
 function parseEvent(data: unknown): AgentWsEvent {
@@ -133,4 +383,20 @@ function parseEvent(data: unknown): AgentWsEvent {
     return { type: 'text', payload: data };
   }
   return { type: 'text', payload: data };
+}
+
+function stringField(
+  value: Record<string, unknown>,
+  key: string,
+): string | null {
+  const field = value[key];
+  return typeof field === 'string' && field ? field : null;
+}
+
+function numberField(
+  value: Record<string, unknown>,
+  key: string,
+): number | null {
+  const field = value[key];
+  return typeof field === 'number' && Number.isFinite(field) ? field : null;
 }

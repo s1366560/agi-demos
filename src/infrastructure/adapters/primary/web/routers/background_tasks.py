@@ -7,7 +7,7 @@ This router provides endpoints for managing long-running background tasks.
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,6 @@ from src.infrastructure.adapters.secondary.background_tasks import task_manager
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
-from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -56,64 +55,6 @@ def _is_task_accessible(
 
     project_id = getattr(task, "project_id", None)
     return isinstance(project_id, str) and project_id in project_ids
-
-
-async def _ensure_task_access(
-    task: Any,
-    current_user: User,
-    db: AsyncSession,
-) -> None:
-    if not _is_task_accessible(task, current_user, await _accessible_project_ids(db, current_user)):
-        raise HTTPException(status_code=403, detail=_("Access denied to task"))
-
-
-@router.get("/{task_id}")
-async def get_task_status(
-    task_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> Any:
-    """
-    Get the status of a background task.
-
-    Args:
-        task_id: Task UUID
-
-    Returns:
-        Task status and progress information
-    """
-    task = task_manager.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=_("Task not found"))
-
-    await _ensure_task_access(task, current_user, db)
-
-    return task.to_dict()
-
-
-@router.post("/{task_id}/cancel")
-async def cancel_task(
-    task_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """
-    Cancel a running background task.
-
-    Args:
-        task_id: Task UUID
-
-    Returns:
-        Confirmation of cancellation
-    """
-    task = task_manager.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=_("Task not found"))
-
-    await _ensure_task_access(task, current_user, db)
-    await task.cancel()
-
-    return {"status": "success", "message": f"Task {task_id} cancelled", "task_id": task_id}
 
 
 @router.get("/")

@@ -5,6 +5,7 @@ members = [
     "crates/plugin-host",
     "crates/adapters-mem",
     "crates/adapters-device",
+    "crates/adapters-local-tools",
     "crates/adapters-http-llm",
     "crates/adapters-cli-harness",
     "crates/adapters-postgres",

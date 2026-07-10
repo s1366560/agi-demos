@@ -172,6 +172,23 @@ def _sandbox_info(project_id: str = "proj-1") -> router_mod.SandboxInfo:
 
 
 @pytest.mark.unit
+def test_raw_http_proxy_transport_is_excluded_from_openapi() -> None:
+    app = FastAPI()
+    app.include_router(router_mod.router)
+
+    schema = app.openapi()
+
+    assert (
+        "/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy"
+        not in schema["paths"]
+    )
+    assert (
+        "/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy/{path}"
+        not in schema["paths"]
+    )
+
+
+@pytest.mark.unit
 def test_get_event_publisher_error_log_omits_exception_text(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -513,7 +530,9 @@ def test_stop_http_service_broadcast_error_log_omits_exception_text(
 
     monkeypatch.setattr(
         "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
-        lambda: _FailingSandboxStateBroadcastManager("http service broadcast secret for svc-secret"),
+        lambda: _FailingSandboxStateBroadcastManager(
+            "http service broadcast secret for svc-secret"
+        ),
     )
     caplog.set_level(
         logging.WARNING,
@@ -1072,9 +1091,7 @@ def test_start_project_desktop_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
@@ -1106,9 +1123,7 @@ def test_stop_project_desktop_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
@@ -1157,9 +1172,7 @@ def test_start_project_terminal_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
@@ -1191,9 +1204,7 @@ def test_stop_project_terminal_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
