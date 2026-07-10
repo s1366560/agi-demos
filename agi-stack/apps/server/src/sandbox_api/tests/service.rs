@@ -3,8 +3,10 @@ use super::*;
 
 #[tokio::test]
 async fn service_ensure_get_restart_and_terminate_lifecycle() {
-    let service =
-        ProjectSandboxService::new(Arc::new(InMemoryContainerRuntime::new()), "redis:7-alpine");
+    let service = with_test_runtime_auth(ProjectSandboxService::new(
+        Arc::new(InMemoryContainerRuntime::new()),
+        "redis:7-alpine",
+    ));
 
     assert!(service.get("p1").await.unwrap().is_none());
 
@@ -28,6 +30,45 @@ async fn service_ensure_get_restart_and_terminate_lifecycle() {
     assert!(service.terminate("p1").await.unwrap());
     assert!(!service.terminate("p1").await.unwrap());
     assert!(service.get("p1").await.unwrap().is_none());
+}
+#[tokio::test]
+async fn service_cloud_ensure_fails_closed_without_runtime_auth() {
+    let service =
+        ProjectSandboxService::new(Arc::new(InMemoryContainerRuntime::new()), "redis:7-alpine");
+
+    let err = service
+        .ensure("p1", "t1", Some(SandboxProfile::Lite))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        err.detail,
+        "Sandbox runtime authentication is not configured"
+    );
+}
+
+#[tokio::test]
+async fn service_cloud_status_remains_readable_without_runtime_auth() {
+    let runtime = Arc::new(InMemoryContainerRuntime::new());
+    let registry = Arc::new(InMemorySandboxRegistry::new());
+    let authenticated = with_test_runtime_auth(ProjectSandboxService::with_registry(
+        runtime.clone(),
+        "redis:7-alpine",
+        registry.clone(),
+    ));
+    authenticated
+        .ensure("p1", "t1", Some(SandboxProfile::Lite))
+        .await
+        .unwrap();
+
+    let status_only = ProjectSandboxService::with_registry(runtime, "redis:7-alpine", registry);
+    let fetched = status_only.get("p1").await.unwrap().unwrap();
+    let listed = status_only.list("t1", None, 50, 0).await.unwrap();
+
+    assert_eq!(fetched.project_id, "p1");
+    assert_eq!(listed.len(), 1);
+    assert!(fetched.runtime_auth_token.is_none());
 }
 #[tokio::test]
 async fn service_ensure_local_tunnel_from_project_config_without_container_runtime() {
@@ -86,8 +127,10 @@ async fn service_ensure_local_tunnel_from_project_config_without_container_runti
 }
 #[tokio::test]
 async fn service_lists_sandboxes_by_tenant_and_status() {
-    let service =
-        ProjectSandboxService::new(Arc::new(InMemoryContainerRuntime::new()), "redis:7-alpine");
+    let service = with_test_runtime_auth(ProjectSandboxService::new(
+        Arc::new(InMemoryContainerRuntime::new()),
+        "redis:7-alpine",
+    ));
     service
         .ensure("p1", "t1", Some(SandboxProfile::Lite))
         .await
@@ -159,9 +202,11 @@ async fn service_executes_tool_and_matches_python_wire_shape() {
         })
         .to_string(),
     };
-    let service =
-        ProjectSandboxService::new(Arc::new(InMemoryContainerRuntime::new()), "redis:7-alpine")
-            .with_tool_host(Arc::new(host));
+    let service = with_test_runtime_auth(ProjectSandboxService::new(
+        Arc::new(InMemoryContainerRuntime::new()),
+        "redis:7-alpine",
+    ))
+    .with_tool_host(Arc::new(host));
     service
         .ensure("p1", "t1", Some(SandboxProfile::Lite))
         .await
@@ -203,9 +248,10 @@ async fn service_prefers_record_mcp_endpoint_for_tool_execution() {
         Arc::new(InMemoryContainerRuntime::new()),
         "redis:7-alpine",
         registry.clone(),
-    )
-    .with_tool_host(Arc::new(fallback))
-    .with_tool_connector(connector.clone());
+    );
+    let service = with_test_runtime_auth(service)
+        .with_tool_host(Arc::new(fallback))
+        .with_tool_connector(connector.clone());
     service
         .ensure("p1", "t1", Some(SandboxProfile::Lite))
         .await
@@ -230,8 +276,10 @@ async fn service_prefers_record_mcp_endpoint_for_tool_execution() {
 }
 #[tokio::test]
 async fn service_registers_lists_previews_and_stops_http_services() {
-    let service =
-        ProjectSandboxService::new(Arc::new(InMemoryContainerRuntime::new()), "redis:7-alpine");
+    let service = with_test_runtime_auth(ProjectSandboxService::new(
+        Arc::new(InMemoryContainerRuntime::new()),
+        "redis:7-alpine",
+    ));
 
     let registered = service
         .register_http_service(

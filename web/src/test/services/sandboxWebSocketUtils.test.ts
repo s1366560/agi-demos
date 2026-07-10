@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildProjectDesktopProxyPath,
+  buildProjectTerminalWebSocketUrl,
   buildDesktopWebSocketProtocols,
   buildDesktopWebSocketUrl,
   getApiHost,
@@ -37,5 +39,14 @@ describe('sandboxWebSocketUtils', () => {
       'memstack.auth',
       'ms_sk_test',
     ]);
+  });
+
+  it('builds project-scoped proxy URLs instead of direct sandbox service ports', () => {
+    expect(buildProjectDesktopProxyPath('project-1', 'vnc.html')).toBe(
+      '/api/v1/projects/project-1/sandbox/desktop/proxy/vnc.html'
+    );
+    expect(buildProjectTerminalWebSocketUrl('project-1', 'session-1')).toBe(
+      'ws://localhost:8000/api/v1/projects/project-1/sandbox/terminal/proxy/ws?session_id=session-1'
+    );
   });
 });

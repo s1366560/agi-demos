@@ -28,6 +28,10 @@ Status: implemented and covered by regression tests in the current working tree.
 - Give each Desktop local-runtime launch a high-entropy capability token. Check
   it before HTTP handlers and WebSocket upgrades, use an exact origin allowlist,
   and never return the LLM provider secret in runtime status.
+- Derive a stable per-project Rust sandbox capability from a server-side master
+  secret. Inject it into MCP Bearer and KasmVNC/ttyd Basic authentication only
+  at the Rust proxy boundary; never persist or serialize it, and fail closed
+  when a cloud sandbox needs creation or proxying without the master secret.
 - Constrain Desktop local file operations to canonical workspace paths, reject
   symlink escapes, bound terminal queues, and terminate timed-out children.
 - Require a per-container capability for Sandbox MCP WebSockets, pass it only
@@ -119,6 +123,9 @@ Status: the first continuous-verification increment is implemented.
   network metadata alone is not treated as a tenant security boundary.
 - Run Rust Postgres/Redis tests against real CI services and run Desktop source
   checks before bundling.
+- Keep Web desktop and terminal navigation on authenticated project-scoped API
+  proxies. Upstream ports and URLs remain diagnostic metadata only and must not
+  be promoted into iframe or WebSocket connection targets.
 - Make this document and `ARCHITECTURE.md` the cross-runtime authority; keep the
   `agi-stack` execution plan as detailed Rust migration evidence.
 
@@ -137,6 +144,10 @@ after the release blockers above:
 - Migrate the complete Agent worker, HITL orchestration, event replay, plugin
   hooks, graph/reflexion, and sandbox lifecycle to Rust only behind per-capability
   parity tests and explicit strangler gates.
+- Add a Rust-owned Docker live gate for the production Sandbox image and
+  dedicated per-sandbox networks. Runtime authentication is the tenant boundary;
+  network separation remains defense in depth and must not be described as the
+  sole isolation control.
 - Replace placeholder local tool implementations with truthful capability names
   and contracts; do not treat a matching tool name as semantic parity.
 - Decide whether Local Memory synchronizes with Project Memory. Until that
@@ -162,9 +173,20 @@ Verified on 2026-07-10:
   and Pyright passes with zero errors. The repair also aligned the graph-store
   port signature, kept tenant-scoped gene reviews fail closed, and corrected
   validated Cypher identifiers that had previously evaluated to `None`.
-- Rust server: 531 tests passed and Clippy passed with warnings denied; the
+- Rust server: 538 tests passed and Clippy passed with warnings denied; the
   production-mode binary fails closed when `DATABASE_URL` is absent, while
   explicit `AGISTACK_DEV_MODE=1` starts the in-memory development runtime.
+- Rust Sandbox proxy parity: cloud creation now requires a derived per-project
+  capability, Lite publishes MCP only, Standard/Full publish declared services,
+  MCP uses an Authorization Bearer header without a query token, and KasmVNC
+  plus ttyd use an injected Basic header. Secret newtypes redact `Debug`, response
+  serialization excludes the capability, missing auth rejects creation/proxying,
+  existing status remains readable, and the default image is the real Sandbox
+  runtime rather than Redis. Secret rotation requires sandbox recreation.
+- Web Sandbox proxy parity: project terminal startup and sandbox service events
+  ignore direct upstream URLs; desktop and terminal connection targets are
+  rebuilt from authenticated API proxy routes. The unused direct-port connection
+  parser and direct desktop URL builder were removed.
 - Rust/Python HITL parity: stateless A2UI responses require an exact persisted
   `(source_component_id, action_name)` pair, reject dynamic context, seal DB and
   Redis payloads with independent nonces, and never publish plaintext response

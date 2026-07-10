@@ -14,7 +14,11 @@
 import { logger } from '../utils/logger';
 
 import { httpClient } from './client/httpClient';
-import { buildDesktopWebSocketUrl, buildTerminalWebSocketUrl } from './sandboxWebSocketUtils';
+import {
+  buildDesktopWebSocketUrl,
+  buildProjectDesktopProxyPath,
+  buildProjectTerminalWebSocketUrl,
+} from './sandboxWebSocketUtils';
 
 /**
  * Project sandbox status
@@ -692,7 +696,7 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     if (isRunning) {
       await this.ensureProxyAuthCookie(projectId);
     }
-    const proxyUrl = isRunning ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/` : null;
+    const proxyUrl = isRunning ? buildProjectDesktopProxyPath(projectId) : null;
     const wsUrl = isRunning ? buildDesktopWebSocketUrl(projectId) : null;
 
     return {
@@ -721,15 +725,14 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
       { timeout: 30000 } // 30 seconds for terminal service startup
     );
 
-    // Build WebSocket URL if session_id is provided
-    let wsUrl = response.url;
-    if (response.session_id && !wsUrl) {
-      wsUrl = buildTerminalWebSocketUrl(response.sandbox_id ?? '', response.session_id);
-    }
+    const isRunning = response.success ?? response.running ?? false;
+    const wsUrl = isRunning
+      ? buildProjectTerminalWebSocketUrl(projectId, response.session_id)
+      : null;
 
     return {
-      running: response.success ?? response.running ?? false,
-      url: wsUrl || null,
+      running: isRunning,
+      url: wsUrl,
       port: response.port || 7681,
       sessionId: response.session_id || null,
       pid: response.pid || null,

@@ -28,6 +28,8 @@ use std::{
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
 
+const DEFAULT_SANDBOX_IMAGE: &str = "sandbox-mcp-server:latest";
+
 mod admin_access;
 mod admin_dlq_api;
 mod agent_commands_api;
@@ -807,6 +809,15 @@ async fn build_container_runtime() -> Arc<dyn ContainerRuntime> {
     }
 }
 
+fn select_sandbox_auth_secret(
+    dedicated: Option<String>,
+    fallback: Option<String>,
+) -> Option<String> {
+    dedicated
+        .filter(|secret| !secret.trim().is_empty())
+        .or_else(|| fallback.filter(|secret| !secret.trim().is_empty()))
+}
+
 async fn build_state() -> ServerResult<AppState> {
     // Cloud↔local DI switch at the composition root (Phase 3, 03 §2): when
     // `AGISTACK_LLM_BASE_URL` is set, route the LLM/embedding ports to a real
@@ -1005,13 +1016,26 @@ async fn build_state() -> ServerResult<AppState> {
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
     let worker_launch_runtime_state = build_worker_launch_runtime_state_store().await;
     let workspace_mention_runtime = workspace_agent_mention_runtime_from_env(Arc::clone(&llm));
-    let sandbox_image =
-        std::env::var("AGISTACK_SANDBOX_IMAGE").unwrap_or_else(|_| "redis:7-alpine".to_string());
+    let sandbox_image = std::env::var("AGISTACK_SANDBOX_IMAGE")
+        .unwrap_or_else(|_| DEFAULT_SANDBOX_IMAGE.to_string());
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
     let mut sandbox_service = match sandbox_repo {
         Some(repo) => ProjectSandboxService::with_postgres(sandbox_runtime, sandbox_image, repo),
         None => ProjectSandboxService::new(sandbox_runtime, sandbox_image),
     };
+    let sandbox_auth_secret = select_sandbox_auth_secret(
+        std::env::var("AGISTACK_SANDBOX_AUTH_SECRET").ok(),
+        std::env::var("SECRET_KEY").ok(),
+    );
+    if let Some(secret) = sandbox_auth_secret {
+        sandbox_service = sandbox_service
+            .with_runtime_auth_secret(secret)
+            .map_err(std::io::Error::other)?;
+    } else {
+        eprintln!(
+            "[agistack] sandbox runtime auth: not configured; cloud sandbox creation will fail closed"
+        );
+    }
     if let Some(repo) = project_config_repo {
         sandbox_service = sandbox_service
             .with_project_config_source(Arc::new(PgProjectSandboxConfigSource::new(repo)));
@@ -1164,5 +1188,20 @@ mod runtime_mode_tests {
                 .expect("database mode"),
             PersistenceMode::Postgres("postgresql://db/memstack".into())
         );
+    }
+
+    #[test]
+    fn default_sandbox_image_provides_the_sandbox_runtime() {
+        assert_eq!(DEFAULT_SANDBOX_IMAGE, "sandbox-mcp-server:latest");
+        assert_ne!(DEFAULT_SANDBOX_IMAGE, "redis:7-alpine");
+    }
+
+    #[test]
+    fn blank_dedicated_sandbox_secret_uses_server_secret() {
+        assert_eq!(
+            select_sandbox_auth_secret(Some("  ".into()), Some("server-secret".into())),
+            Some("server-secret".into())
+        );
+        assert_eq!(select_sandbox_auth_secret(Some("  ".into()), None), None);
     }
 }

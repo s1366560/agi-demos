@@ -136,21 +136,27 @@ export function buildDesktopWebSocketUrl(projectId: string): string {
   return new URL(path, `${protocol}//${host}`).toString();
 }
 
-export function buildDesktopWebSocketProtocols(token = getAuthToken()): string[] {
-  return token ? ['binary', ...createWebSocketAuthProtocols(token)] : ['binary'];
+export function buildProjectDesktopProxyPath(projectId: string, path?: string): string {
+  const basePath = getApiBasePath();
+  const proxyPath = `${basePath}/projects/${encodeURIComponent(projectId)}/sandbox/desktop/proxy`;
+  const normalizedPath = path?.replace(/^\/+/, '');
+  return normalizedPath ? `${proxyPath}/${normalizedPath}` : `${proxyPath}/`;
 }
 
-/**
- * Build direct desktop URL (when direct port access is available)
- *
- * @param host - Hostname or IP
- * @param port - Port number
- * @param path - Optional path
- * @returns Direct desktop URL
- */
-export function buildDirectDesktopUrl(host: string, port: number, path = 'vnc.html'): string {
-  const protocol = window.location.protocol;
-  return `${protocol}//${host}:${String(port)}/${path}`;
+export function buildProjectTerminalWebSocketUrl(projectId: string, sessionId?: string): string {
+  const protocol = getWebSocketProtocol();
+  const host = getApiHost();
+  const basePath = getApiBasePath();
+  const path = `${basePath}/projects/${encodeURIComponent(projectId)}/sandbox/terminal/proxy/ws`;
+  const url = new URL(path, `${protocol}//${host}`);
+  if (sessionId) {
+    url.searchParams.set('session_id', sessionId);
+  }
+  return url.toString();
+}
+
+export function buildDesktopWebSocketProtocols(token = getAuthToken()): string[] {
+  return token ? ['binary', ...createWebSocketAuthProtocols(token)] : ['binary'];
 }
 
 /**
@@ -217,58 +223,5 @@ export function isValidWebSocketUrl(url: string): boolean {
     return parsed.protocol === 'ws:' || parsed.protocol === 'wss:';
   } catch {
     return false;
-  }
-}
-
-/**
- * Parse sandbox connection info from various sources
- *
- * @param sandbox - Sandbox object from API
- * @returns Normalized connection info
- */
-export function parseSandboxConnection(sandbox: {
-  id: string;
-  desktop_port?: number | undefined;
-  terminal_port?: number | undefined;
-  desktop_url?: string | undefined;
-  terminal_url?: string | undefined;
-}): {
-  desktopUrl: string | null;
-  terminalWsUrl: string | null;
-} {
-  // Priority 1: Use provided URLs
-  if (sandbox.desktop_url) {
-    return {
-      desktopUrl: sandbox.desktop_url,
-      terminalWsUrl: sandbox.terminal_url ? buildWebSocketUrlFromHttp(sandbox.terminal_url) : null,
-    };
-  }
-
-  // Priority 2: Build from ports (direct access)
-  if (sandbox.desktop_port) {
-    const host = getApiHost().split(':')[0] ?? getApiHost(); // Remove port if present
-    return {
-      desktopUrl: buildDirectDesktopUrl(host, sandbox.desktop_port),
-      terminalWsUrl: sandbox.terminal_port ? buildWebSocketUrl('terminal', sandbox.id) : null,
-    };
-  }
-
-  // Fallback: Use API proxy
-  return {
-    desktopUrl: buildDesktopUrl(sandbox.id),
-    terminalWsUrl: buildWebSocketUrl('terminal', sandbox.id),
-  };
-}
-
-/**
- * Convert HTTP URL to WebSocket URL
- */
-function buildWebSocketUrlFromHttp(httpUrl: string): string {
-  try {
-    const url = new URL(httpUrl);
-    const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${url.host}${url.pathname}`;
-  } catch {
-    return '';
   }
 }

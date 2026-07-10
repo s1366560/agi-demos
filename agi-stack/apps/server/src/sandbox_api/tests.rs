@@ -8,7 +8,17 @@ use tokio_tungstenite::tungstenite::handshake::server::{
 
 type WsHandshakeResult = Result<WsHandshakeResponse, WsHandshakeErrorResponse>;
 type WsOriginRequestSender = std::sync::mpsc::Sender<(String, Option<String>)>;
-type WsDesktopRequestSender = std::sync::mpsc::Sender<(String, Option<String>, Option<String>)>;
+type WsAuthenticatedRequestSender =
+    std::sync::mpsc::Sender<(String, Option<String>, Option<String>)>;
+type WsDesktopRequestSender =
+    std::sync::mpsc::Sender<(String, Option<String>, Option<String>, Option<String>)>;
+const TEST_RUNTIME_AUTH_SECRET: &str = "0123456789abcdef0123456789abcdef";
+
+fn with_test_runtime_auth(service: ProjectSandboxService) -> ProjectSandboxService {
+    service
+        .with_runtime_auth_secret(TEST_RUNTIME_AUTH_SECRET)
+        .unwrap()
+}
 
 #[allow(clippy::result_large_err)]
 fn capture_ws_origin_request(
@@ -22,6 +32,27 @@ fn capture_ws_origin_request(
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
     tx.send((req.uri().to_string(), origin)).unwrap();
+    Ok(response)
+}
+
+#[allow(clippy::result_large_err)]
+fn capture_authenticated_ws_request(
+    req: &WsHandshakeRequest,
+    response: WsHandshakeResponse,
+    tx: &WsAuthenticatedRequestSender,
+) -> WsHandshakeResult {
+    let origin = req
+        .headers()
+        .get("origin")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let authorization = req
+        .headers()
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    tx.send((req.uri().to_string(), origin, authorization))
+        .unwrap();
     Ok(response)
 }
 
@@ -41,11 +72,17 @@ fn capture_desktop_ws_request(
         .get("sec-websocket-protocol")
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
+    let authorization = req
+        .headers()
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
     response.headers_mut().insert(
         "sec-websocket-protocol",
         HeaderValue::from_static(DESKTOP_WEBSOCKET_SUBPROTOCOL),
     );
-    tx.send((req.uri().to_string(), origin, protocol)).unwrap();
+    tx.send((req.uri().to_string(), origin, protocol, authorization))
+        .unwrap();
     Ok(response)
 }
 
@@ -53,10 +90,9 @@ fn capture_desktop_ws_request(
 fn capture_mcp_ws_request(
     req: &WsHandshakeRequest,
     response: WsHandshakeResponse,
-    tx: &std::sync::mpsc::Sender<String>,
+    tx: &WsAuthenticatedRequestSender,
 ) -> WsHandshakeResult {
-    tx.send(req.uri().to_string()).unwrap();
-    Ok(response)
+    capture_authenticated_ws_request(req, response, tx)
 }
 
 #[derive(Default)]
@@ -177,10 +213,12 @@ fn sample_info() -> ProjectSandboxInfo {
         terminal_port: None,
         desktop_url: None,
         terminal_url: None,
+        runtime_auth_token: None,
     }
 }
 
 mod proxy;
 mod response;
+mod runtime_auth;
 mod service;
 mod ws;

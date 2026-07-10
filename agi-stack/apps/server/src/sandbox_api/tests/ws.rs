@@ -3,6 +3,8 @@ use std::time::Duration;
 use super::super::*;
 use super::*;
 
+const TEST_RUNTIME_TOKEN: &str = "private-capability";
+
 async fn spawn_http_service_ws_upstream(
 ) -> (String, std::sync::mpsc::Receiver<(String, Option<String>)>) {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
@@ -69,7 +71,7 @@ async fn spawn_http_service_ws_proxy(ws_target: String, origin: String) -> Strin
 }
 async fn spawn_desktop_ws_upstream() -> (
     String,
-    std::sync::mpsc::Receiver<(String, Option<String>, Option<String>)>,
+    std::sync::mpsc::Receiver<(String, Option<String>, Option<String>, Option<String>)>,
 ) {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
         .await
@@ -119,9 +121,14 @@ async fn spawn_desktop_ws_proxy(ws_target: String, origin: String) -> String {
         get(move |ws: WebSocketUpgrade| {
             let ws_target = ws_target.clone();
             let origin = origin.clone();
+            let auth_header =
+                sandbox_basic_auth_header(&SandboxRuntimeToken::from_exposed(TEST_RUNTIME_TOKEN))
+                    .unwrap();
             async move {
                 websocket_upgrade_with_desktop_protocol(ws)
-                    .on_upgrade(move |socket| proxy_desktop_ws_session(socket, ws_target, origin))
+                    .on_upgrade(move |socket| {
+                        proxy_desktop_ws_session(socket, ws_target, origin, auth_header)
+                    })
                     .into_response()
             }
         }),
@@ -133,7 +140,7 @@ async fn spawn_desktop_ws_proxy(ws_target: String, origin: String) -> String {
 }
 async fn spawn_terminal_ws_upstream() -> (
     String,
-    std::sync::mpsc::Receiver<(String, Option<String>)>,
+    std::sync::mpsc::Receiver<(String, Option<String>, Option<String>)>,
     std::sync::mpsc::Receiver<Vec<u8>>,
 ) {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
@@ -148,7 +155,7 @@ async fn spawn_terminal_ws_upstream() -> (
         #[allow(clippy::result_large_err)]
         let ws =
             tokio_tungstenite::accept_hdr_async(stream, |req: &WsHandshakeRequest, response| {
-                capture_ws_origin_request(req, response, &request_tx)
+                capture_authenticated_ws_request(req, response, &request_tx)
             })
             .await
             .unwrap();
@@ -205,6 +212,10 @@ async fn spawn_terminal_ws_proxy(
                 let origin = origin.clone();
                 let registry = registry.clone();
                 let project_id = project_id.clone();
+                let auth_header = sandbox_basic_auth_header(&SandboxRuntimeToken::from_exposed(
+                    TEST_RUNTIME_TOKEN,
+                ))
+                .unwrap();
                 async move {
                     let session_id = query
                         .session_id
@@ -230,6 +241,7 @@ async fn spawn_terminal_ws_proxy(
                                 session_id,
                                 initial_size,
                                 recorder,
+                                auth_header,
                             )
                         })
                         .into_response()
@@ -242,7 +254,10 @@ async fn spawn_terminal_ws_proxy(
     });
     format!("ws://{addr}/terminal/proxy/ws")
 }
-async fn spawn_mcp_ws_upstream() -> (String, std::sync::mpsc::Receiver<String>) {
+async fn spawn_mcp_ws_upstream() -> (
+    String,
+    std::sync::mpsc::Receiver<(String, Option<String>, Option<String>)>,
+) {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
         .await
         .unwrap();
@@ -290,9 +305,14 @@ async fn spawn_mcp_ws_proxy(ws_target: String) -> String {
         "/sandbox/mcp/proxy",
         get(move |ws: WebSocketUpgrade, headers: HeaderMap| {
             let ws_target = ws_target.clone();
+            let auth_header =
+                sandbox_bearer_auth_header(&SandboxRuntimeToken::from_exposed(TEST_RUNTIME_TOKEN))
+                    .unwrap();
             async move {
                 websocket_upgrade_with_auth_protocol(ws, &headers)
-                    .on_upgrade(move |socket| proxy_mcp_ws_session(socket, ws_target))
+                    .on_upgrade(move |socket| {
+                        proxy_mcp_ws_session(socket, ws_target, Some(auth_header))
+                    })
                     .into_response()
             }
         }),
@@ -401,12 +421,16 @@ async fn desktop_ws_proxy_relays_binary_and_uses_binary_subprotocol() {
     let reply = client.next().await.unwrap().unwrap();
     assert_eq!(reply, TungsteniteMessage::Binary(vec![1_u8, 2, 3]));
 
-    let (uri, origin, protocol) = rx
+    let (uri, origin, protocol, authorization) = rx
         .recv_timeout(Duration::from_secs(2))
         .expect("upstream desktop ws request");
     assert_eq!(uri, "/base/websockify");
     assert_eq!(origin.as_deref(), Some(desktop_url.as_str()));
     assert_eq!(protocol.as_deref(), Some(DESKTOP_WEBSOCKET_SUBPROTOCOL));
+    assert_eq!(
+        authorization.as_deref(),
+        Some("Basic c2FuZGJveDpwcml2YXRlLWNhcGFiaWxpdHk=")
+    );
 }
 #[tokio::test]
 async fn terminal_ws_proxy_speaks_python_envelope_over_ttyd() {
@@ -507,11 +531,15 @@ async fn terminal_ws_proxy_speaks_python_envelope_over_ttyd() {
     assert_eq!(output["type"], "output");
     assert_eq!(output["data"], "echo:ls\n");
 
-    let (uri, origin) = request_rx
+    let (uri, origin, authorization) = request_rx
         .recv_timeout(Duration::from_secs(2))
         .expect("upstream terminal ws request");
     assert_eq!(uri, "/term");
     assert_eq!(origin.as_deref(), Some(terminal_url.as_str()));
+    assert_eq!(
+        authorization.as_deref(),
+        Some("Basic c2FuZGJveDpwcml2YXRlLWNhcGFiaWxpdHk=")
+    );
 
     let init = frame_rx
         .recv_timeout(Duration::from_secs(2))
@@ -561,12 +589,7 @@ async fn terminal_ws_proxy_speaks_python_envelope_over_ttyd() {
 #[tokio::test]
 async fn mcp_ws_proxy_relays_jsonrpc_and_normalizes_app_resource_mime() {
     let (mcp_url, rx) = spawn_mcp_ws_upstream().await;
-    let upstream_token = agistack_adapters_secrets::generate_urlsafe_token(32);
-    let ws_target = append_mcp_upstream_token(
-        &build_mcp_websocket_target(&mcp_url).unwrap(),
-        &upstream_token,
-    )
-    .unwrap();
+    let ws_target = build_mcp_websocket_target(&mcp_url).unwrap();
     let proxy_url = spawn_mcp_ws_proxy(ws_target).await;
     let (mut client, _response) = connect_async(&proxy_url).await.unwrap();
     client
@@ -586,7 +609,7 @@ async fn mcp_ws_proxy_relays_jsonrpc_and_normalizes_app_resource_mime() {
         MCP_APP_MIME_TYPE
     );
 
-    let uri = rx
+    let (uri, origin, authorization) = rx
         .recv_timeout(Duration::from_secs(2))
         .expect("upstream mcp ws request");
     assert!(uri.starts_with("/mcp/sandbox?"), "unexpected uri: {uri}");
@@ -598,11 +621,9 @@ async fn mcp_ws_proxy_relays_jsonrpc_and_normalizes_app_resource_mime() {
         .map(|(key, value)| (key.into_owned(), value.into_owned()))
         .collect();
     assert_eq!(params.get("auth").map(String::as_str), Some("keep"));
-    assert_eq!(
-        params.get(MCP_UPSTREAM_TOKEN_QUERY_PARAM),
-        Some(&upstream_token)
-    );
-    assert!(agistack_parity::is_urlsafe_token_32(&upstream_token));
+    assert!(!params.contains_key(MCP_UPSTREAM_TOKEN_QUERY_PARAM));
+    assert_eq!(origin, None);
+    assert_eq!(authorization.as_deref(), Some("Bearer private-capability"));
 }
 #[tokio::test]
 async fn http_service_preview_host_ws_proxy_relays_and_filters_session_query() {

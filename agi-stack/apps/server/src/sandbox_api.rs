@@ -22,8 +22,8 @@ use axum::{
     },
     http::{
         header::{
-            ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONTENT_TYPE, LOCATION,
-            SET_COOKIE,
+            ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE,
+            LOCATION, SET_COOKIE,
         },
         HeaderMap, HeaderValue, Method, Request, StatusCode, Uri,
     },
@@ -52,6 +52,7 @@ mod handlers;
 mod http_proxy;
 mod http_registry;
 mod proxy_helpers;
+mod runtime_auth;
 mod service_helpers;
 mod service_http;
 mod service_lifecycle;
@@ -66,13 +67,15 @@ use handlers::*;
 pub(crate) use http_proxy::preview_host_proxy;
 #[cfg(test)]
 use http_proxy::{
-    proxy_http_service_preview_host_response, proxy_http_service_preview_host_ws_response,
+    desktop_upstream_headers, proxy_http_service_preview_host_response,
+    proxy_http_service_preview_host_ws_response,
 };
 use http_proxy::{
     proxy_http_service_response, proxy_project_desktop_response, HttpServiceProxyResponseInput,
 };
 pub(crate) use http_registry::{in_memory_http_service_registry, SharedHttpServiceRegistry};
 use proxy_helpers::*;
+use runtime_auth::*;
 use service_helpers::*;
 pub(crate) use service_state::PgProjectSandboxConfigSource;
 use service_state::{
@@ -169,6 +172,10 @@ impl SandboxApiError {
         Self::new(StatusCode::NOT_FOUND, detail)
     }
 
+    fn service_unavailable(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::SERVICE_UNAVAILABLE, detail)
+    }
+
     fn bad_gateway(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::BAD_GATEWAY, detail)
     }
@@ -239,6 +246,7 @@ pub(crate) struct ProjectSandboxService {
     registry: Arc<dyn SandboxRegistry>,
     http_registry: SharedHttpServiceRegistry,
     config_source: Option<Arc<dyn ProjectSandboxConfigSource>>,
+    runtime_auth: Option<SandboxRuntimeAuth>,
 }
 
 pub(crate) type SharedProjectSandboxes = Arc<ProjectSandboxService>;
@@ -264,6 +272,7 @@ struct ProjectSandboxInfo {
     terminal_port: Option<u16>,
     desktop_url: Option<String>,
     terminal_url: Option<String>,
+    runtime_auth_token: Option<SandboxRuntimeToken>,
 }
 
 impl ProjectSandboxInfo {
@@ -296,6 +305,7 @@ impl ProjectSandboxInfo {
             terminal_port,
             desktop_url,
             terminal_url,
+            runtime_auth_token: None,
         }
     }
 
@@ -505,7 +515,7 @@ fn sandbox_public_host() -> String {
         .unwrap_or_else(|| "localhost".to_string())
 }
 
-fn sandbox_port_bindings() -> Vec<PortBinding> {
+fn sandbox_port_bindings(profile: SandboxProfile) -> Vec<PortBinding> {
     let host_ip = Some(
         std::env::var("AGISTACK_SANDBOX_BIND_HOST")
             .ok()
@@ -513,18 +523,23 @@ fn sandbox_port_bindings() -> Vec<PortBinding> {
             .filter(|host| !host.is_empty())
             .unwrap_or_else(|| "127.0.0.1".to_string()),
     );
-    [
-        MCP_CONTAINER_PORT,
-        DESKTOP_CONTAINER_PORT,
-        TERMINAL_CONTAINER_PORT,
-    ]
-    .into_iter()
-    .map(|container_port| PortBinding {
-        container_port,
-        host_port: 0,
-        host_ip: host_ip.clone(),
-    })
-    .collect()
+    let ports: &[u16] = match profile {
+        SandboxProfile::Lite => &[MCP_CONTAINER_PORT],
+        SandboxProfile::Standard | SandboxProfile::Full => &[
+            MCP_CONTAINER_PORT,
+            DESKTOP_CONTAINER_PORT,
+            TERMINAL_CONTAINER_PORT,
+        ],
+    };
+    ports
+        .iter()
+        .copied()
+        .map(|container_port| PortBinding {
+            container_port,
+            host_port: 0,
+            host_ip: host_ip.clone(),
+        })
+        .collect()
 }
 
 fn preview_session_ttl_seconds() -> i64 {

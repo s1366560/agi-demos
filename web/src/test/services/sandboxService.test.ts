@@ -223,7 +223,10 @@ describe('sandboxService', () => {
       const result = await sandboxService.startDesktop('sb_123');
 
       expect(result.running).toBe(true);
-      expect(result.url).toBe('http://localhost:6080/vnc.html');
+      expect(result.url).toMatch(
+        /http:\/\/localhost:\d+\/api\/v1\/sandbox\/sb_123\/desktop\/proxy\/vnc.html/
+      );
+      expect(result.url).not.toContain(':6080');
       expect(result.display).toBe(':1');
       expect(result.resolution).toBe('1280x720');
       expect(result.port).toBe(6080);
@@ -366,7 +369,10 @@ describe('sandboxService', () => {
       const result = await sandboxService.getDesktopStatus('sb_123');
 
       expect(result.running).toBe(true);
-      expect(result.url).toBe('http://localhost:6080/vnc.html');
+      expect(result.url).toMatch(
+        /http:\/\/localhost:\d+\/api\/v1\/sandbox\/sb_123\/desktop\/proxy\/vnc.html/
+      );
+      expect(result.url).not.toContain(':6080');
       expect(result.display).toBe(':1');
       expect(result.resolution).toBe('1280x720');
       expect(result.port).toBe(6080);

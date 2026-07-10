@@ -146,6 +146,17 @@ pub(super) async fn proxy_project_desktop_ws_impl(
             })
             .into_response());
     };
+    let Some(runtime_auth_token) = info.runtime_auth_token.as_ref() else {
+        return Ok(websocket_upgrade_with_desktop_protocol(ws)
+            .on_upgrade(|socket| {
+                close_desktop_ws_with_policy_error(
+                    socket,
+                    "Sandbox runtime authentication is unavailable",
+                )
+            })
+            .into_response());
+    };
+    let auth_header = sandbox_basic_auth_header(runtime_auth_token)?;
     let ws_target = match build_desktop_websocket_target(desktop_url) {
         Ok(ws_target) => ws_target,
         Err(_) => {
@@ -156,7 +167,7 @@ pub(super) async fn proxy_project_desktop_ws_impl(
     };
     let origin = desktop_websocket_origin(desktop_url, &ws_target);
     Ok(websocket_upgrade_with_desktop_protocol(ws)
-        .on_upgrade(move |socket| proxy_desktop_ws_session(socket, ws_target, origin))
+        .on_upgrade(move |socket| proxy_desktop_ws_session(socket, ws_target, origin, auth_header))
         .into_response())
 }
 
@@ -190,6 +201,17 @@ pub(super) async fn proxy_project_terminal_ws_impl(
             })
             .into_response());
     };
+    let Some(runtime_auth_token) = info.runtime_auth_token.as_ref() else {
+        return Ok(websocket_upgrade_with_auth_protocol(ws, &headers)
+            .on_upgrade(|socket| {
+                close_terminal_ws_with_policy_error(
+                    socket,
+                    "Sandbox runtime authentication is unavailable",
+                )
+            })
+            .into_response());
+    };
+    let auth_header = sandbox_basic_auth_header(runtime_auth_token)?;
     let ws_target = match build_terminal_websocket_target(terminal_url) {
         Ok(ws_target) => ws_target,
         Err(_) => {
@@ -221,6 +243,7 @@ pub(super) async fn proxy_project_terminal_ws_impl(
                 session_id,
                 initial_size,
                 recorder,
+                auth_header,
             )
         })
         .into_response())
@@ -255,13 +278,24 @@ pub(super) async fn proxy_project_mcp_ws_impl(
             .on_upgrade(|socket| close_mcp_ws_with_policy_error(socket, MCP_SERVICE_NOT_RUNNING))
             .into_response());
     };
-    let ws_target = match build_mcp_websocket_target(mcp_url) {
-        Ok(target) => {
+    let (ws_target, auth_header) = match build_mcp_websocket_target(mcp_url) {
+        Ok(target) if info.is_local() => {
             let token = app
                 .sandboxes
                 .create_mcp_upstream_token(&project_id, &info.sandbox_id)
                 .await?;
-            append_mcp_upstream_token(&target, &token.token)?
+            (append_mcp_upstream_token(&target, &token.token)?, None)
+        }
+        Ok(target) => {
+            let runtime_auth_token = info.runtime_auth_token.as_ref().ok_or_else(|| {
+                SandboxApiError::service_unavailable(
+                    "Sandbox runtime authentication is unavailable",
+                )
+            })?;
+            (
+                target,
+                Some(sandbox_bearer_auth_header(runtime_auth_token)?),
+            )
         }
         Err(_) => {
             return Ok(websocket_upgrade_with_auth_protocol(ws, &headers)
@@ -270,7 +304,7 @@ pub(super) async fn proxy_project_mcp_ws_impl(
         }
     };
     Ok(websocket_upgrade_with_auth_protocol(ws, &headers)
-        .on_upgrade(move |socket| proxy_mcp_ws_session(socket, ws_target))
+        .on_upgrade(move |socket| proxy_mcp_ws_session(socket, ws_target, auth_header))
         .into_response())
 }
 

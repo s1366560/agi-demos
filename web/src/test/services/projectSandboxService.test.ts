@@ -89,4 +89,21 @@ describe('projectSandboxService', () => {
       'ws://localhost:8000/api/v1/projects/project-1/sandbox/desktop/proxy/websockify'
     );
   });
+
+  it('ignores a direct terminal URL and returns the authenticated project proxy', async () => {
+    mockHttpClient.post.mockResolvedValue({
+      success: true,
+      running: true,
+      url: 'ws://127.0.0.1:17681/ws',
+      port: 17681,
+      session_id: 'session-1',
+    });
+
+    const result = await projectSandboxService.startTerminal('project-1');
+
+    expect(result.url).toBe(
+      'ws://localhost:8000/api/v1/projects/project-1/sandbox/terminal/proxy/ws?session_id=session-1'
+    );
+    expect(result.url).not.toContain('17681');
+  });
 });
