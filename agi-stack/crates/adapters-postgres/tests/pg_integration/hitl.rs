@@ -66,6 +66,27 @@ async fn hitl_request_repository_matches_python_response_lifecycle() {
     .unwrap();
 
     let now = Utc::now();
+    let repo = PgHitlRequestRepository::new(pool.clone());
+    let created_request = NewHitlRequestRecord {
+        id: "hitl_repo_created".to_string(),
+        request_type: "permission".to_string(),
+        conversation_id: "hitl_repo_conversation".to_string(),
+        message_id: Some("hitl_repo_run".to_string()),
+        tenant_id: "hitl_repo_tenant".to_string(),
+        project_id: "hitl_repo_project".to_string(),
+        user_id: Some("hitl_repo_user".to_string()),
+        question: "Allow the operation?".to_string(),
+        options: None,
+        context: Some(json!({"kind": "permission"})),
+        request_metadata: Some(json!({"automation_run_id": "hitl_repo_run"})),
+        expires_at: ts(2099, 1, 1, 0, 0, 0),
+    };
+    assert!(repo.insert_pending(&created_request).await.unwrap());
+    assert!(!repo.insert_pending(&created_request).await.unwrap());
+    let mut conflicting_request = created_request.clone();
+    conflicting_request.project_id = "different_project".to_string();
+    assert!(repo.insert_pending(&conflicting_request).await.is_err());
+
     sqlx::query(
         "INSERT INTO hitl_requests \
          (id, request_type, conversation_id, message_id, tenant_id, project_id, user_id, \
@@ -84,7 +105,6 @@ async fn hitl_request_repository_matches_python_response_lifecycle() {
     .await
     .unwrap();
 
-    let repo = PgHitlRequestRepository::new(pool.clone());
     let request = repo
         .get_by_id("hitl_repo_pending")
         .await

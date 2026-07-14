@@ -31,6 +31,22 @@ pub struct HitlRequestRecord {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct NewHitlRequestRecord {
+    pub id: String,
+    pub request_type: String,
+    pub conversation_id: String,
+    pub message_id: Option<String>,
+    pub tenant_id: String,
+    pub project_id: String,
+    pub user_id: Option<String>,
+    pub question: String,
+    pub options: Option<Value>,
+    pub context: Option<Value>,
+    pub request_metadata: Option<Value>,
+    pub expires_at: DateTime<Utc>,
+}
+
 impl HitlRequestRecord {
     pub fn is_expired_at(&self, now: DateTime<Utc>) -> bool {
         self.expires_at.is_some_and(|expires_at| expires_at <= now)
@@ -44,6 +60,49 @@ pub struct PgHitlRequestRepository {
 impl PgHitlRequestRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// Insert one pending request without reopening an answered replay.
+    ///
+    /// Returns `true` when inserted and `false` for an exact idempotent replay.
+    pub async fn insert_pending(&self, request: &NewHitlRequestRecord) -> CoreResult<bool> {
+        let result = sqlx::query(
+            "INSERT INTO hitl_requests \
+                (id, request_type, conversation_id, message_id, tenant_id, project_id, user_id, \
+                 question, options, context, request_metadata, status, expires_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending', $12) \
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(&request.id)
+        .bind(&request.request_type)
+        .bind(&request.conversation_id)
+        .bind(&request.message_id)
+        .bind(&request.tenant_id)
+        .bind(&request.project_id)
+        .bind(&request.user_id)
+        .bind(&request.question)
+        .bind(&request.options)
+        .bind(&request.context)
+        .bind(&request.request_metadata)
+        .bind(request.expires_at)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        if result.rows_affected() == 1 {
+            return Ok(true);
+        }
+
+        let existing = self
+            .get_by_id(&request.id)
+            .await?
+            .ok_or_else(|| CoreError::Storage("HITL insert conflict disappeared".to_string()))?;
+        if same_request(&existing, request) {
+            Ok(false)
+        } else {
+            Err(CoreError::Storage(
+                "HITL request id conflicts with another request".to_string(),
+            ))
+        }
     }
 
     pub async fn get_by_id(&self, request_id: &str) -> CoreResult<Option<HitlRequestRecord>> {
@@ -161,6 +220,20 @@ impl PgHitlRequestRepository {
         .map(|result| result.rows_affected() > 0)
         .map_err(storage)
     }
+}
+
+fn same_request(existing: &HitlRequestRecord, request: &NewHitlRequestRecord) -> bool {
+    existing.request_type == request.request_type
+        && existing.conversation_id == request.conversation_id
+        && existing.message_id == request.message_id
+        && existing.tenant_id == request.tenant_id
+        && existing.project_id == request.project_id
+        && existing.user_id == request.user_id
+        && existing.question == request.question
+        && existing.options == request.options
+        && existing.context == request.context
+        && existing.request_metadata == request.request_metadata
+        && existing.expires_at == Some(request.expires_at)
 }
 
 #[derive(sqlx::FromRow)]

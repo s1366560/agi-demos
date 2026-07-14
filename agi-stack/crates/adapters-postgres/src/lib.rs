@@ -122,7 +122,7 @@ pub use event_log_repo::{PgEventLogRepository, TenantEventLogListQuery, TenantEv
 pub use gene_repo::{
     GeneListQuery, GeneRecord, GeneTenantAccess, GenomeListQuery, GenomeRecord, PgGeneRepository,
 };
-pub use hitl_repo::{HitlRequestRecord, PgHitlRequestRepository};
+pub use hitl_repo::{HitlRequestRecord, NewHitlRequestRecord, PgHitlRequestRepository};
 pub use instance_repo::{
     InstanceChannelRecord, InstanceListQuery, InstanceMemberListQuery, InstanceMemberRecord,
     InstanceRecord, InstanceUserSearchRecord, PgInstanceRepository,

@@ -27,7 +27,7 @@ use serde_json::{json, Map, Value};
 use tokio::time::{self, Duration};
 
 use agistack_adapters_postgres::AgentExecutionEventInsertRecord;
-use agistack_core::agent::{HitlRequest, ReActObserver};
+use agistack_core::agent::{HitlRequest, ReActObserver, SessionStatus};
 use agistack_core::ports::CoreResult;
 
 use crate::auth::{AuthRejection, Identity};
@@ -643,20 +643,37 @@ async fn run_agent_message(
         .run_observed(&run_session_id, message, Some(project_id), observer)
         .await
         .map_err(|e| e.to_string())?;
-    append_event(
-        app,
-        conversation_id,
-        AgentEventType::Complete,
+    let Some(event_type) = agent_terminal_event_type(state.status) else {
+        return Ok(());
+    };
+    let data = if event_type == AgentEventType::Complete {
         json!({
             "conversation_id": conversation_id,
             "message_id": message_id,
             "project_id": project_id,
             "answer": state.answer,
             "session": state,
-        }),
-    )
-    .await?;
+        })
+    } else {
+        json!({
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "project_id": project_id,
+            "error": "agent_run_failed",
+            "is_error": true,
+            "session": state,
+        })
+    };
+    append_event(app, conversation_id, event_type, data).await?;
     Ok(())
+}
+
+fn agent_terminal_event_type(status: SessionStatus) -> Option<AgentEventType> {
+    match status {
+        SessionStatus::Finished => Some(AgentEventType::Complete),
+        SessionStatus::Failed => Some(AgentEventType::Error),
+        _ => None,
+    }
 }
 
 #[derive(Clone)]
@@ -1072,6 +1089,23 @@ mod tests {
             "conversation-1:message-1"
         );
         assert!(agent_run_session_id("conversation-1", None).starts_with("conversation-1:"));
+    }
+
+    #[test]
+    fn agent_terminal_events_do_not_complete_suspended_sessions() {
+        assert_eq!(
+            agent_terminal_event_type(SessionStatus::Finished),
+            Some(AgentEventType::Complete)
+        );
+        assert_eq!(
+            agent_terminal_event_type(SessionStatus::Failed),
+            Some(AgentEventType::Error)
+        );
+        assert_eq!(
+            agent_terminal_event_type(SessionStatus::AwaitingInput),
+            None
+        );
+        assert_eq!(agent_terminal_event_type(SessionStatus::Running), None);
     }
 
     #[test]
