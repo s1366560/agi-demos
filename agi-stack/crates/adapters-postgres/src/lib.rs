@@ -38,6 +38,7 @@ mod channel_repo;
 mod checkpoint;
 mod conversation_events_repo;
 mod conversation_repo;
+mod cron_control_repo;
 mod cron_operation_repo;
 mod cron_repo;
 mod cron_runtime_projection_support;
@@ -105,6 +106,9 @@ pub use conversation_events_repo::{
 pub use conversation_repo::{
     AgentConversationRecord, ConversationCreateRecord, ConversationListQuery,
     ConversationModePatch, ConversationMutationAccess, PgAgentConversationRepository,
+};
+pub use cron_control_repo::{
+    CronControlRepositoryError, CronControlScope, CronReconcileAdmission, PgCronControlRepository,
 };
 pub use cron_operation_repo::{
     CronOperationErrorCode, CronOperationFailure, CronOperationKind, CronOperationRecord,
