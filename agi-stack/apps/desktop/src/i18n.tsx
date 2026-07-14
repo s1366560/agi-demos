@@ -393,6 +393,9 @@ const enUS: Record<string, string> = {
     'Authenticate once at provider level, then verify before selecting models.',
   'providers.connectProviderLocalDescription':
     'Configure the local connection, then validate it before selecting models.',
+  'providers.authCapabilityUnavailable': 'Authentication capability unavailable',
+  'providers.authCapabilityUnavailableDescription':
+    'This server did not declare a supported authentication method for the provider.',
   'providers.testModelId': 'Test model ID',
   'providers.enableModels': 'Enable discovered models',
   'providers.enableModelsDescription':
@@ -1433,6 +1436,8 @@ const zhCN: Record<string, string> = {
   'providers.connectProvider': '连接 {provider}',
   'providers.connectProviderDescription': '在供应商层级完成一次认证，验证后再选择模型。',
   'providers.connectProviderLocalDescription': '配置本地连接，校验通过后再选择模型。',
+  'providers.authCapabilityUnavailable': '认证能力不可用',
+  'providers.authCapabilityUnavailableDescription': '当前服务器未声明此供应商支持的认证方式。',
   'providers.testModelId': '测试模型 ID',
   'providers.enableModels': '启用已发现模型',
   'providers.enableModelsDescription': '启用后，模型会出现在智能体与工作区路由中。',

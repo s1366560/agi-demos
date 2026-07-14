@@ -24,6 +24,7 @@ import type {
   HitlResponseOutcome,
   HitlResponseSubmission,
   LoginOutcome,
+  LlmProviderAuthMethod,
   LlmProviderCreateInput,
   LlmProviderModelCatalog,
   LlmProviderMutationInput,
@@ -686,21 +687,11 @@ export class DesktopApiClient {
   }
 
   async listLlmProviderTypes(signal?: AbortSignal): Promise<LlmProviderTypeDescriptor[]> {
-    if (this.config.mode === 'local') {
-      return ['openai', 'openai_compatible', 'anthropic'].map((providerType) => ({
-        providerType,
-        authMethods: ['api_key', 'none'],
-        source: 'local_runtime',
-      }));
-    }
     const payload = await this.request<unknown>('/api/v1/llm-providers/types', { signal });
-    return readArray<string>(payload, ['types', 'items', 'data'])
-      .filter((providerType): providerType is string => typeof providerType === 'string')
-      .map((providerType) => ({
-        providerType,
-        authMethods: [],
-        source: 'cloud_api',
-      }));
+    return normalizeProviderTypeDescriptors(
+      payload,
+      this.config.mode === 'local' ? 'local_runtime' : 'cloud_api',
+    );
   }
 
   async listLlmProviderModels(
@@ -1117,6 +1108,49 @@ function requireValue(value: string, label: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new Error(`Missing ${label}`);
   return trimmed;
+}
+
+function normalizeProviderTypeDescriptors(
+  payload: unknown,
+  source: LlmProviderTypeDescriptor['source'],
+): LlmProviderTypeDescriptor[] {
+  const descriptors: LlmProviderTypeDescriptor[] = [];
+  const seen = new Set<string>();
+  for (const value of readArray<unknown>(payload, ['types', 'items', 'data'])) {
+    const providerType =
+      typeof value === 'string'
+        ? value.trim()
+        : value && typeof value === 'object' && !Array.isArray(value)
+          ? readTrimmedString(value as Record<string, unknown>, 'provider_type')
+          : '';
+    if (!providerType || seen.has(providerType)) continue;
+    const authMethods =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? readProviderAuthMethods((value as Record<string, unknown>).auth_methods)
+        : [];
+    seen.add(providerType);
+    descriptors.push({ providerType, authMethods, source });
+  }
+  return descriptors;
+}
+
+function readProviderAuthMethods(value: unknown): LlmProviderAuthMethod[] {
+  if (!Array.isArray(value)) return [];
+  const methods: LlmProviderAuthMethod[] = [];
+  for (const candidate of value) {
+    if (
+      (candidate === 'api_key' || candidate === 'none') &&
+      !methods.includes(candidate)
+    ) {
+      methods.push(candidate);
+    }
+  }
+  return methods;
+}
+
+function readTrimmedString(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function unavailableProviderCatalog(providerType: string): LlmProviderModelCatalog {

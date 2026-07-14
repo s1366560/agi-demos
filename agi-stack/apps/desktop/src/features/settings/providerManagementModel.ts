@@ -1,7 +1,9 @@
 import type {
+  LlmProviderAuthMethod,
   LlmProviderCatalogModel,
   LlmProviderCreateInput,
   LlmProviderMutationInput,
+  LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
   RuntimeMode,
@@ -52,6 +54,13 @@ export function providerTypeDisplayName(providerType: string): string {
       .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
       .join(' ')
   );
+}
+
+export function providerAuthMethodSupported(
+  descriptor: LlmProviderTypeDescriptor,
+  method: LlmProviderAuthMethod,
+): boolean {
+  return descriptor.authMethods.includes(method);
 }
 
 export function providerManagementAllowed(mode: RuntimeMode, roles: readonly string[]): boolean {

@@ -3,7 +3,8 @@
     "ollama": {
       "provider_type": "ollama",
       "operation_type": "llm",
-      "api_key": null,
+      "credential_source": "environment",
+      "credential_configured": false,
       "base_url": "http://ollama.test",
       "llm_model": "llama3.1:8b",
       "llm_small_model": "llama3.1:8b",
@@ -13,7 +14,8 @@
     "openai": {
       "provider_type": "openai",
       "operation_type": "llm",
-      "api_key": "sk-openai",
+      "credential_source": "environment",
+      "credential_configured": true,
       "base_url": "https://api.openai.test/v1",
       "llm_model": "gpt-4o",
       "llm_small_model": "gpt-4o-mini",

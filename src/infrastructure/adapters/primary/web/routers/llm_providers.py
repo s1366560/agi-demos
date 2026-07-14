@@ -19,11 +19,13 @@ from src.application.services.provider_service import ProviderService, get_provi
 from src.domain.llm_providers.models import (
     NoActiveProviderError,
     OperationType,
+    ProviderAuthMethod,
     ProviderConfigCreate,
     ProviderConfigResponse,
     ProviderConfigUpdate,
     ProviderHealth,
     ProviderType,
+    ProviderTypeDescriptor,
     TenantProviderMapping,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -196,14 +198,25 @@ async def list_providers(
 # Static routes must be defined before dynamic /{provider_id} route
 
 
-@router.get("/types", response_model=list[str])
+@router.get("/types", response_model=list[ProviderTypeDescriptor])
 async def list_provider_types(
     current_user: User = Depends(get_current_user),
-) -> list[str]:
+) -> list[ProviderTypeDescriptor]:
     """
     List all supported provider types.
     """
-    return [t.value for t in ProviderType]
+    no_auth_providers = {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+    return [
+        ProviderTypeDescriptor(
+            provider_type=provider_type,
+            auth_methods=[
+                ProviderAuthMethod.NONE
+                if provider_type in no_auth_providers
+                else ProviderAuthMethod.API_KEY
+            ],
+        )
+        for provider_type in ProviderType
+    ]
 
 
 # Model Catalog Endpoints (MUST be before /models/{provider_type}
@@ -474,8 +487,8 @@ async def detect_env_providers(
     """
     Detect LLM providers configured via environment variables.
 
-    Returns provider configs found in server env vars for auto-fill.
-    Requires admin access since it exposes API key values.
+    Returns non-secret provider configuration metadata found in server env vars.
+    Requires admin access because environment-derived infrastructure details are sensitive.
     """
     from src.infrastructure.llm.initializer import detect_env_providers as _detect
 
@@ -485,7 +498,8 @@ async def detect_env_providers(
             name: {
                 "provider_type": name,
                 "operation_type": config.get("operation_type", "llm"),
-                "api_key": config.get("api_key"),
+                "credential_source": "environment",
+                "credential_configured": bool(config.get("api_key")),
                 "base_url": config.get("base_url"),
                 "llm_model": config.get("llm_model"),
                 "llm_small_model": config.get("llm_small_model"),

@@ -9,6 +9,7 @@ const {
   providerConnectionStatus,
   providerCreateInputFromDraft,
   providerDraftFromProvider,
+  providerAuthMethodSupported,
   providerManagementAllowed,
   providerModelsFromProvider,
   providerMutationFromDraft,
@@ -30,6 +31,23 @@ test('provider type labels preserve public brand spelling', () => {
   assert.equal(providerTypeDisplayName('openai_compatible'), 'OpenAI-compatible');
   assert.equal(providerTypeDisplayName('lmstudio'), 'LM Studio');
   assert.equal(providerTypeDisplayName('custom_gateway'), 'Custom Gateway');
+});
+
+test('provider setup fails closed when the server does not declare an auth capability', () => {
+  const legacyDescriptor = {
+    providerType: 'legacy',
+    authMethods: [],
+    source: 'cloud_api',
+  };
+  const apiKeyDescriptor = {
+    providerType: 'openai',
+    authMethods: ['api_key'],
+    source: 'cloud_api',
+  };
+
+  assert.equal(providerAuthMethodSupported(legacyDescriptor, 'api_key'), false);
+  assert.equal(providerAuthMethodSupported(apiKeyDescriptor, 'api_key'), true);
+  assert.equal(providerAuthMethodSupported(apiKeyDescriptor, 'none'), false);
 });
 
 test('provider drafts produce trimmed mutations without retaining an empty secret', () => {
@@ -360,7 +378,18 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
     calls.push(String(input));
     const url = String(input);
     if (url.endsWith('/types')) {
-      return new Response(JSON.stringify(['openai', 'anthropic']), {
+      const types = url.startsWith('http://127.0.0.1:8088')
+        ? [
+            { provider_type: 'openai', auth_methods: ['api_key', 'none'] },
+            { provider_type: 'anthropic', auth_methods: ['api_key', 'none'] },
+            { provider_type: 'openai_compatible', auth_methods: ['api_key', 'none'] },
+          ]
+        : [
+            { provider_type: 'openai', auth_methods: ['api_key'] },
+            { provider_type: 'ollama', auth_methods: ['none'] },
+            'anthropic',
+          ];
+      return new Response(JSON.stringify(types), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -428,12 +457,12 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
         source: 'local_runtime',
       },
       {
-        providerType: 'openai_compatible',
+        providerType: 'anthropic',
         authMethods: ['api_key', 'none'],
         source: 'local_runtime',
       },
       {
-        providerType: 'anthropic',
+        providerType: 'openai_compatible',
         authMethods: ['api_key', 'none'],
         source: 'local_runtime',
       },
@@ -450,10 +479,11 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
       availability: 'unavailable',
       statistics: [],
     });
-    assert.deepEqual(calls, []);
+    assert.deepEqual(calls, ['http://127.0.0.1:8088/api/v1/llm-providers/types']);
 
     assert.deepEqual(await cloud.listLlmProviderTypes(), [
-      { providerType: 'openai', authMethods: [], source: 'cloud_api' },
+      { providerType: 'openai', authMethods: ['api_key'], source: 'cloud_api' },
+      { providerType: 'ollama', authMethods: ['none'], source: 'cloud_api' },
       { providerType: 'anthropic', authMethods: [], source: 'cloud_api' },
     ]);
     assert.deepEqual(await cloud.listLlmProviderModels('anthropic'), {
@@ -486,6 +516,7 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
       ],
     });
     assert.deepEqual(calls, [
+      'http://127.0.0.1:8088/api/v1/llm-providers/types',
       'https://api.example.test/api/v1/llm-providers/types',
       'https://api.example.test/api/v1/llm-providers/models/anthropic',
       'https://api.example.test/api/v1/llm-providers/provider-cloud/usage',

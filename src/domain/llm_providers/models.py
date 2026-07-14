@@ -340,6 +340,20 @@ class ProviderType(StrEnum):
     DASHSCOPE_RERANKER = "dashscope_reranker"
 
 
+class ProviderAuthMethod(StrEnum):
+    """Authentication methods supported by an LLM provider type."""
+
+    API_KEY = "api_key"
+    NONE = "none"
+
+
+class ProviderTypeDescriptor(BaseModel):
+    """Public capabilities for configuring an LLM provider type."""
+
+    provider_type: ProviderType
+    auth_methods: list[ProviderAuthMethod]
+
+
 class ProviderStatus(StrEnum):
     """Health status of a provider"""
 

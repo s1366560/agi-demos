@@ -1,7 +1,7 @@
 """Unit tests for LLM providers router."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -724,20 +724,78 @@ class TestLLMProvidersRouterTenantAssignment:
 class TestLLMProvidersRouterTypes:
     """Test cases for provider type information endpoints."""
 
-    @pytest.mark.asyncio
-    async def test_list_provider_types(self, llm_client):
+    def test_list_provider_types(self, llm_client):
         """Test listing supported provider types."""
         response = llm_client.get("/api/v1/llm-providers/types")
 
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert isinstance(data, list)
-        assert "openai" in data
-        assert "openrouter" in data
-        assert "dashscope" in data
-        assert "gemini" in data
-        assert "anthropic" in data
-        assert "minimax" in data
+        assert response.json() == [
+            {
+                "provider_type": provider_type.value,
+                "auth_methods": (
+                    ["none"]
+                    if provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+                    else ["api_key"]
+                ),
+            }
+            for provider_type in ProviderType
+        ]
+
+    def test_detect_env_providers_reports_credential_metadata_without_secret(self, llm_client):
+        """Environment detection reports configuration state without returning secrets."""
+        secret = "sk-must-not-leak"
+        detected = {
+            "openai": {
+                "operation_type": "llm",
+                "api_key": secret,
+                "base_url": "https://api.openai.com/v1",
+                "llm_model": "gpt-4o",
+                "llm_small_model": "gpt-4o-mini",
+                "embedding_model": "text-embedding-3-small",
+                "reranker_model": None,
+            },
+            "ollama": {
+                "operation_type": "llm",
+                "base_url": "http://localhost:11434",
+                "llm_model": "qwen3",
+            },
+        }
+
+        with patch(
+            "src.infrastructure.llm.initializer.detect_env_providers",
+            return_value=detected,
+        ):
+            response = llm_client.get("/api/v1/llm-providers/env-detection")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "detected_providers": {
+                "openai": {
+                    "provider_type": "openai",
+                    "operation_type": "llm",
+                    "credential_source": "environment",
+                    "credential_configured": True,
+                    "base_url": "https://api.openai.com/v1",
+                    "llm_model": "gpt-4o",
+                    "llm_small_model": "gpt-4o-mini",
+                    "embedding_model": "text-embedding-3-small",
+                    "reranker_model": None,
+                },
+                "ollama": {
+                    "provider_type": "ollama",
+                    "operation_type": "llm",
+                    "credential_source": "environment",
+                    "credential_configured": False,
+                    "base_url": "http://localhost:11434",
+                    "llm_model": "qwen3",
+                    "llm_small_model": None,
+                    "embedding_model": None,
+                    "reranker_model": None,
+                },
+            }
+        }
+        assert "api_key" not in response.text
+        assert secret not in response.text
 
     @pytest.mark.asyncio
     async def test_list_models_for_openai(self, llm_client):

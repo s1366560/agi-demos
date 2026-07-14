@@ -20,7 +20,10 @@ import type {
   ManagedLlmProvider,
   RuntimeMode,
 } from '../../types';
-import { providerTypeDisplayName } from './providerManagementModel';
+import {
+  providerAuthMethodSupported,
+  providerTypeDisplayName,
+} from './providerManagementModel';
 
 type AddProviderDialogProps = {
   mode: RuntimeMode;
@@ -156,9 +159,17 @@ export function AddProviderDialog({
     [apiKey, authMethod, baseUrl, name, primaryModel, selectedModels, selectedType],
   );
 
+  const selectedDescriptor = types.find(
+    (descriptor) => descriptor.providerType === selectedType,
+  );
+  const authCapabilityAvailable = selectedDescriptor
+    ? providerAuthMethodSupported(selectedDescriptor, authMethod)
+    : false;
+
   const formValid = Boolean(
     input.name &&
       input.providerType &&
+      authCapabilityAvailable &&
       input.baseUrl &&
       input.primaryModel &&
       (input.authMethod === 'none' || input.apiKey),
@@ -291,7 +302,7 @@ export function AddProviderDialog({
                     }}
                   />
                 </label>
-                {types.find((type) => type.providerType === selectedType)?.authMethods.length ? (
+                {selectedDescriptor?.authMethods.length ? (
                   <label>
                     <span>{t('providers.authenticationMethod')}</span>
                     <select
@@ -301,17 +312,23 @@ export function AddProviderDialog({
                         setValidation(null);
                       }}
                     >
-                      {types
-                        .find((type) => type.providerType === selectedType)
-                        ?.authMethods.map((method) => (
-                          <option value={method} key={method}>
-                            {t(`providers.auth.${method}`)}
-                          </option>
-                        ))}
+                      {selectedDescriptor.authMethods.map((method) => (
+                        <option value={method} key={method}>
+                          {t(`providers.auth.${method}`)}
+                        </option>
+                      ))}
                     </select>
                   </label>
-                ) : null}
-                {authMethod === 'api_key' ? (
+                ) : (
+                  <div className="provider-capability-note compact">
+                    <ExclamationTriangleIcon />
+                    <span>
+                      <b>{t('providers.authCapabilityUnavailable')}</b>
+                      <small>{t('providers.authCapabilityUnavailableDescription')}</small>
+                    </span>
+                  </div>
+                )}
+                {authCapabilityAvailable && authMethod === 'api_key' ? (
                   <label>
                     <span>{t('providers.apiKey')}</span>
                     <input

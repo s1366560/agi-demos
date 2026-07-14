@@ -77,6 +77,8 @@ const PROVIDER_TYPES: &[&str] = &[
 ];
 
 const OPERATION_TYPES: &[&str] = &["llm", "embedding", "rerank"];
+const API_KEY_AUTH_METHODS: &[&str] = &["api_key"];
+const NO_AUTH_METHODS: &[&str] = &["none"];
 
 pub(crate) type SharedLlmProviderHealth = Arc<dyn LlmProviderHealthService>;
 pub(crate) type SharedLlmProviders = Arc<dyn LlmProviderCatalogService>;
@@ -589,8 +591,21 @@ pub(crate) fn router() -> Router<AppState> {
         )
 }
 
-async fn list_provider_types() -> Json<Vec<&'static str>> {
-    Json(PROVIDER_TYPES.to_vec())
+async fn list_provider_types() -> Json<Vec<ProviderTypeDescriptor>> {
+    Json(
+        PROVIDER_TYPES
+            .iter()
+            .copied()
+            .map(|provider_type| ProviderTypeDescriptor {
+                provider_type,
+                auth_methods: if matches!(provider_type, "ollama" | "lmstudio") {
+                    NO_AUTH_METHODS
+                } else {
+                    API_KEY_AUTH_METHODS
+                },
+            })
+            .collect(),
+    )
 }
 
 async fn list_providers(
@@ -861,9 +876,15 @@ struct ProviderModelsResponse {
     source: Option<&'static str>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+struct ProviderTypeDescriptor {
+    provider_type: &'static str,
+    auth_methods: &'static [&'static str],
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct EnvDetectionResponse {
-    detected_providers: BTreeMap<String, EnvProviderConfig>,
+    detected_providers: BTreeMap<String, EnvProviderView>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1174,6 +1195,40 @@ struct EnvProviderConfig {
     llm_small_model: Option<String>,
     embedding_model: Option<String>,
     reranker_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct EnvProviderView {
+    provider_type: String,
+    operation_type: String,
+    credential_source: &'static str,
+    credential_configured: bool,
+    base_url: Option<String>,
+    llm_model: Option<String>,
+    llm_small_model: Option<String>,
+    embedding_model: Option<String>,
+    reranker_model: Option<String>,
+}
+
+impl From<EnvProviderConfig> for EnvProviderView {
+    fn from(config: EnvProviderConfig) -> Self {
+        let credential_configured = config
+            .api_key
+            .as_deref()
+            .is_some_and(|api_key| !api_key.is_empty());
+
+        Self {
+            provider_type: config.provider_type,
+            operation_type: config.operation_type,
+            credential_source: "environment",
+            credential_configured,
+            base_url: config.base_url,
+            llm_model: config.llm_model,
+            llm_small_model: config.llm_small_model,
+            embedding_model: config.embedding_model,
+            reranker_model: config.reranker_model,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, PartialEq, Eq)]
@@ -1930,7 +1985,7 @@ where
         {
             continue;
         }
-        detected_providers.insert((*provider_name).to_string(), config);
+        detected_providers.insert((*provider_name).to_string(), config.into());
         seen_providers.insert(*provider_name);
     }
 
@@ -2431,7 +2486,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn provider_types_response_matches_python_enum_order() {
+    async fn provider_types_response_matches_python_descriptor_contract() {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/golden/llm_provider_types.json"))
                 .expect("llm provider types golden must be valid JSON");
@@ -2470,6 +2525,9 @@ mod tests {
         let value = serde_json::to_value(response).expect("response serializes");
 
         agistack_parity::assert_parity(&golden, &value);
+        let serialized = serde_json::to_string(&value).expect("response JSON serializes");
+        assert!(!serialized.contains("sk-openai"));
+        assert!(!serialized.contains("\"api_key\""));
     }
 
     #[test]
@@ -2483,20 +2541,24 @@ mod tests {
         });
 
         assert!(!response.detected_providers.contains_key("openai"));
-        assert_eq!(
-            response
-                .detected_providers
-                .get("zai")
-                .and_then(|config| config.api_key.as_deref()),
-            Some("zhipu-key")
-        );
-        assert_eq!(
-            response
-                .detected_providers
-                .get("openrouter")
-                .and_then(|config| config.api_key.as_deref()),
-            Some("openrouter-key")
-        );
+        let zai = response
+            .detected_providers
+            .get("zai")
+            .expect("zai should be detected via its non-empty alias");
+        assert_eq!(zai.credential_source, "environment");
+        assert!(zai.credential_configured);
+
+        let openrouter = response
+            .detected_providers
+            .get("openrouter")
+            .expect("openrouter should be detected");
+        assert_eq!(openrouter.credential_source, "environment");
+        assert!(openrouter.credential_configured);
+
+        let serialized = serde_json::to_string(&response).expect("response JSON serializes");
+        assert!(!serialized.contains("zhipu-key"));
+        assert!(!serialized.contains("openrouter-key"));
+        assert!(!serialized.contains("\"api_key\""));
     }
 
     #[test]

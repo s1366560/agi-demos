@@ -1301,6 +1301,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             "/api/v1/llm-providers/",
             get(list_llm_providers).post(create_llm_provider),
         )
+        .route("/api/v1/llm-providers/types", get(list_llm_provider_types))
         .route(
             "/api/v1/llm-providers/:provider_id",
             patch(update_llm_provider),
@@ -1877,6 +1878,31 @@ struct LlmProviderMutation {
     is_active: Option<bool>,
     #[serde(default)]
     expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+struct LlmProviderTypeDescriptor {
+    provider_type: &'static str,
+    auth_methods: &'static [&'static str],
+}
+
+const LOCAL_LLM_PROVIDER_TYPES: &[LlmProviderTypeDescriptor] = &[
+    LlmProviderTypeDescriptor {
+        provider_type: "openai",
+        auth_methods: &["api_key", "none"],
+    },
+    LlmProviderTypeDescriptor {
+        provider_type: "anthropic",
+        auth_methods: &["api_key", "none"],
+    },
+    LlmProviderTypeDescriptor {
+        provider_type: "openai_compatible",
+        auth_methods: &["api_key", "none"],
+    },
+];
+
+async fn list_llm_provider_types() -> Json<Vec<LlmProviderTypeDescriptor>> {
+    Json(LOCAL_LLM_PROVIDER_TYPES.to_vec())
 }
 
 async fn list_llm_providers(
@@ -5642,6 +5668,41 @@ mod tests {
         assert_eq!(
             revoked_resume.status(),
             axum::http::StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_types_declare_supported_local_auth_methods() {
+        let state = test_state("provider-types-secret");
+        let app = local_router(state);
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/types",
+                "provider-types-secret",
+                json!({}),
+            ))
+            .await
+            .expect("provider types response");
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response_json(response).await,
+            json!([
+                {
+                    "provider_type": "openai",
+                    "auth_methods": ["api_key", "none"]
+                },
+                {
+                    "provider_type": "anthropic",
+                    "auth_methods": ["api_key", "none"]
+                },
+                {
+                    "provider_type": "openai_compatible",
+                    "auth_methods": ["api_key", "none"]
+                }
+            ])
         );
     }
 

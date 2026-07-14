@@ -617,9 +617,11 @@ export type LlmProviderMutationInput = {
 
 export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
 
+export type LlmProviderAuthMethod = 'api_key' | 'none';
+
 export type LlmProviderTypeDescriptor = {
   providerType: string;
-  authMethods: Array<'api_key' | 'none'>;
+  authMethods: LlmProviderAuthMethod[];
   source: 'local_runtime' | 'cloud_api';
 };
 
