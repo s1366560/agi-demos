@@ -39,6 +39,7 @@ type ModelProviderWorkspaceProps = {
   config: DesktopRuntimeConfig;
   canManage: boolean;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
+  onCountChange?: (count: number | null) => void;
 };
 
 function endpointLabel(provider: ManagedLlmProvider, fallback: string): string {
@@ -54,6 +55,7 @@ export function ModelProviderWorkspace({
   config,
   canManage,
   onConfigChange,
+  onCountChange,
 }: ModelProviderWorkspaceProps) {
   const { locale, t } = useI18n();
   const client = useMemo(() => new DesktopApiClient(config), [config]);
@@ -88,18 +90,20 @@ export function ModelProviderWorkspace({
       try {
         const items = await client.listLlmProviders(signal);
         setProviders(items);
+        onCountChange?.(items.length);
         setSelectedId((current) =>
           current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
         );
       } catch (caught) {
         if (signal?.aborted) return;
         setProviders([]);
+        onCountChange?.(null);
         setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [client],
+    [client, onCountChange],
   );
 
   useEffect(() => {
@@ -163,13 +167,14 @@ export function ModelProviderWorkspace({
     async (input: LlmProviderCreateInput) => {
       const created = await client.createLlmProvider(input);
       setProviders((current) => [...current, created]);
+      onCountChange?.(providers.length + 1);
       setSelectedId(created.id);
       setTab('overview');
       setAdding(false);
       showToast(t('providers.providerAddedInactive', { provider: created.name }));
       return created;
     },
-    [client, showToast, t],
+    [client, onCountChange, providers.length, showToast, t],
   );
 
   const selectProvider = (providerId: string) => {

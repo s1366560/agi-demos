@@ -2,7 +2,7 @@ import '@radix-ui/themes/styles.css';
 import React, { useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
-import { SettingsWindow } from '../features/settings/SettingsWindow';
+import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
 import { I18nProvider } from '../i18n';
 import type {
   AuthState,
@@ -293,6 +293,18 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
 
   const path = url.pathname;
+  if (method === 'GET' && path === '/api/v1/projects') {
+    return jsonResponse({ projects: qaAuth.projects });
+  }
+  if (method === 'GET' && path === '/api/v1/skills/') {
+    return jsonResponse({ skills: [] });
+  }
+  if (method === 'GET' && path.endsWith('/plugins')) {
+    return jsonResponse({ plugins: [] });
+  }
+  if (method === 'GET' && path === '/api/v1/agent/definitions') {
+    return jsonResponse({ definitions: [] });
+  }
   if (method === 'GET' && path === '/api/v1/llm-providers/') {
     return jsonResponse(providers);
   }
@@ -401,10 +413,26 @@ try {
 
 function ProviderSettingsQa() {
   const [config, setConfig] = useState<DesktopRuntimeConfig>(qaConfig);
+  const requestedSection = new URLSearchParams(window.location.search).get('section');
+  const supportedSections = new Set<SettingsSection>([
+    'account',
+    'workspace',
+    'general',
+    'appearance',
+    'notifications',
+    'models',
+    'skills',
+    'plugins',
+    'agents',
+  ]);
+  const initialSection =
+    requestedSection && supportedSections.has(requestedSection as SettingsSection)
+      ? (requestedSection as SettingsSection)
+      : 'models';
   return (
     <SettingsWindow
       open
-      initialSection="models"
+      initialSection={initialSection}
       auth={qaAuth}
       config={config}
       connection="ready"

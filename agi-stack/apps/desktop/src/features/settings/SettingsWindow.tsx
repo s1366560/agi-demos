@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Badge, Button, Text, Theme } from '@radix-ui/themes';
+import { Button, Theme } from '@radix-ui/themes';
 import {
-  CheckCircledIcon,
+  BellIcon,
   ComponentInstanceIcon,
   Cross2Icon,
   CubeIcon,
+  FontStyleIcon,
   GearIcon,
-  GlobeIcon,
   IdCardIcon,
   LockClosedIcon,
   MagicWandIcon,
@@ -37,17 +37,23 @@ import {
 } from './ManagedResourceViews';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
 import { providerManagementAllowed } from './providerManagementModel';
+import {
+  AccountSettingsPage,
+  GeneralSettingsPage,
+  PreferenceUnavailablePage,
+  SettingsPage,
+  WorkspaceSettingsPage,
+  type SettingsResourceCounts,
+} from './SettingsCorePages';
+import {
+  filterSettingsSections,
+  SETTINGS_GROUPS,
+  type SettingsSearchCopy,
+  type SettingsSection,
+} from './settingsNavigationModel';
 import './SettingsWindow.css';
 
-export type SettingsSection =
-  | 'account'
-  | 'workspace'
-  | 'general'
-  | 'connection'
-  | 'models'
-  | 'skills'
-  | 'plugins'
-  | 'agents';
+export type { SettingsSection } from './settingsNavigationModel';
 
 type SettingsWindowProps = {
   open: boolean;
@@ -72,11 +78,21 @@ const sectionMeta = {
     description: 'settings.workspaceDescription',
     Icon: CubeIcon,
   },
-  general: { label: 'settings.general', description: 'settings.generalDescription', Icon: GlobeIcon },
+  general: { label: 'settings.general', description: 'settings.generalDescription', Icon: GearIcon },
   connection: {
-    label: 'settings.connection',
-    description: 'settings.connectionDescription',
+    label: 'settings.connectionRecovery',
+    description: 'settings.connectionRecoveryDescription',
     Icon: GearIcon,
+  },
+  appearance: {
+    label: 'settings.appearance',
+    description: 'settings.appearanceDescription',
+    Icon: FontStyleIcon,
+  },
+  notifications: {
+    label: 'settings.notifications',
+    description: 'settings.notificationsDescription',
+    Icon: BellIcon,
   },
   models: { label: 'settings.models', description: 'settings.modelsDescription', Icon: CubeIcon },
   skills: { label: 'settings.skills', description: 'settings.skillsDescription', Icon: MagicWandIcon },
@@ -103,7 +119,7 @@ export function SettingsWindow({
   onContextChange,
   onSignOut,
 }: SettingsWindowProps) {
-  const { locale, setLocale, t } = useI18n();
+  const { t } = useI18n();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState('');
   const [resourceItems, setResourceItems] = useState<ManagedResource[]>([]);
@@ -111,72 +127,32 @@ export function SettingsWindow({
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [resourceFilter, setResourceFilter] = useState<'all' | 'active' | 'disabled'>('all');
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
-  const [selectedTenantId, setSelectedTenantId] = useState(config.tenantId);
-  const [selectedProjectId, setSelectedProjectId] = useState(config.projectId);
-  const [contextProjects, setContextProjects] = useState(auth.projects);
-  const [contextProjectsLoading, setContextProjectsLoading] = useState(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
-  const [contextApplying, setContextApplying] = useState(false);
-  const [contextError, setContextError] = useState<string | null>(null);
-  const [signingOut, setSigningOut] = useState(false);
+  const [resourceCounts, setResourceCounts] = useState<SettingsResourceCounts>({
+    models: null,
+    skills: null,
+    plugins: null,
+    agents: null,
+  });
 
-  const selectedTenant = auth.tenants.find((tenant) => tenant.id === selectedTenantId) ?? null;
-  const availableProjects = contextProjects.filter(
-    (project) => !selectedTenantId || project.tenant_id === selectedTenantId,
-  );
+  const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
+  const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
   const isResourceSection = isResource(section);
   const canManageProviders = providerManagementAllowed(config.mode, auth.user?.roles ?? []);
-
-  const signOut = async () => {
-    setSigningOut(true);
-    try {
-      await onSignOut();
-    } finally {
-      setSigningOut(false);
-    }
-  };
 
   useEffect(() => {
     if (!open) return;
     setSection(initialSection);
     setQuery('');
-    setSelectedTenantId(config.tenantId);
-    setSelectedProjectId(config.projectId);
-    setContextProjects(auth.projects);
     setResourceFilter('all');
     setSelectedResourceId(null);
-  }, [auth.projects, config.projectId, config.tenantId, initialSection, open]);
+    setResourceCounts({ models: null, skills: null, plugins: null, agents: null });
+  }, [initialSection, open]);
 
   useEffect(() => {
-    if (!open || section !== 'workspace' || !selectedTenantId) return;
-    const controller = new AbortController();
-    setContextProjectsLoading(true);
-    setContextError(null);
-    const client = new DesktopApiClient({
-      ...config,
-      tenantId: selectedTenantId,
-      projectId: '',
-      workspaceId: '',
-    });
-    void client
-      .listProjects(selectedTenantId, controller.signal)
-      .then((projects) => {
-        setContextProjects(projects);
-        setSelectedProjectId((current) =>
-          projects.some((project) => project.id === current) ? current : projects[0]?.id ?? '',
-        );
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) return;
-        setContextProjects([]);
-        setSelectedProjectId('');
-        setContextError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setContextProjectsLoading(false);
-      });
-    return () => controller.abort();
-  }, [config, open, section, selectedTenantId]);
+    if (!open) return;
+    setResourceCounts({ models: null, skills: null, plugins: null, agents: null });
+  }, [config.projectId, config.tenantId, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -200,6 +176,10 @@ export function SettingsWindow({
               ? await client.listManagedPlugins(signal)
               : await client.listManagedAgents(signal);
         setResourceItems(items);
+        setResourceCounts((current) => ({
+          ...current,
+          [resourceSection]: items.length < 100 ? items.length : null,
+        }));
         setSelectedResourceId((current) =>
           current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
         );
@@ -237,27 +217,47 @@ export function SettingsWindow({
       filteredItems.find((item) => item.id === selectedResourceId) ?? filteredItems[0] ?? null,
     [filteredItems, selectedResourceId],
   );
+  const settingsSearchCopy = useMemo(
+    (): SettingsSearchCopy => ({
+      account: [t(sectionMeta.account.label), t(sectionMeta.account.description)],
+      workspace: [t(sectionMeta.workspace.label), t(sectionMeta.workspace.description)],
+      general: [t(sectionMeta.general.label), t(sectionMeta.general.description)],
+      appearance: [t(sectionMeta.appearance.label), t(sectionMeta.appearance.description)],
+      notifications: [
+        t(sectionMeta.notifications.label),
+        t(sectionMeta.notifications.description),
+      ],
+      models: [t(sectionMeta.models.label), t(sectionMeta.models.description)],
+      skills: [t(sectionMeta.skills.label), t(sectionMeta.skills.description)],
+      plugins: [t(sectionMeta.plugins.label), t(sectionMeta.plugins.description)],
+      agents: [t(sectionMeta.agents.label), t(sectionMeta.agents.description)],
+    }),
+    [t],
+  );
+  const filteredSettingSections = useMemo(
+    () => filterSettingsSections(query, settingsSearchCopy),
+    [query, settingsSearchCopy],
+  );
+  const visibleSections = useMemo(
+    () => new Set(filteredSettingSections),
+    [filteredSettingSections],
+  );
+  const updateModelCount = useCallback((count: number | null) => {
+    setResourceCounts((current) => ({ ...current, models: count }));
+  }, []);
+
+  useEffect(() => {
+    if (
+      !query.trim() ||
+      (section !== 'connection' && visibleSections.has(section)) ||
+      filteredSettingSections.length === 0
+    ) {
+      return;
+    }
+    setSection(filteredSettingSections[0]);
+  }, [filteredSettingSections, query, section, visibleSections]);
 
   if (!open) return null;
-
-  const chooseTenant = (tenantId: string) => {
-    setSelectedTenantId(tenantId);
-    setSelectedProjectId('');
-  };
-
-  const applyContext = async () => {
-    if (!selectedTenantId || !selectedProjectId) return;
-    setContextApplying(true);
-    setContextError(null);
-    try {
-      await onContextChange(selectedTenantId, selectedProjectId);
-      onClose();
-    } catch (error) {
-      setContextError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setContextApplying(false);
-    }
-  };
 
   const toggleResource = async (item: ManagedResource) => {
     if (!isResourceSection) return;
@@ -298,7 +298,10 @@ export function SettingsWindow({
               <img src="/icon-192.png" alt="" />
               <div>
                 <strong>{t('settings.title')}</strong>
-                <small>{t('settings.subtitle')}</small>
+                <small>
+                  {selectedTenant?.name || config.tenantId || t('settings.signedOut')} /{' '}
+                  {selectedProject?.name || config.projectId || t('settings.project')}
+                </small>
               </div>
             </div>
             <label className="settings-window-search">
@@ -316,29 +319,35 @@ export function SettingsWindow({
 
           <div className="settings-window-body">
             <aside className="settings-window-rail">
-              <SettingsGroup
-                label={t('settings.accountContext')}
-                sections={['account', 'workspace']}
-                active={section}
-                onSelect={setSection}
-              />
-              <SettingsGroup
-                label={t('settings.preferences')}
-                sections={['general', 'connection']}
-                active={section}
-                onSelect={setSection}
-              />
-              <SettingsGroup
-                label={t('settings.aiResources')}
-                sections={['models', 'skills', 'plugins', 'agents']}
-                active={section}
-                onSelect={setSection}
-              />
+              {filteredSettingSections.length > 0
+                ? SETTINGS_GROUPS.map((group) => (
+                    <SettingsGroup
+                      key={group.id}
+                      label={t(
+                        group.id === 'account_context'
+                          ? 'settings.accountContext'
+                          : group.id === 'preferences'
+                            ? 'settings.preferences'
+                            : 'settings.aiResources',
+                      )}
+                      sections={group.sections.filter((candidate) => visibleSections.has(candidate))}
+                      active={section}
+                      counts={resourceCounts}
+                      onSelect={setSection}
+                    />
+                  ))
+                : null}
+              {query.trim() && filteredSettingSections.length === 0 ? (
+                <div className="settings-search-empty">
+                  <MagnifyingGlassIcon />
+                  <span>{t('settings.noSearchResults')}</span>
+                </div>
+              ) : null}
               <div className="settings-window-scope">
                 <LockClosedIcon />
                 <span>
                   <strong>{selectedTenant?.name || config.tenantId || t('settings.signedOut')}</strong>
-                  <small>{config.projectId || t('settings.project')}</small>
+                  <small>{selectedProject?.name || config.projectId || t('settings.project')}</small>
                 </span>
               </div>
             </aside>
@@ -347,142 +356,36 @@ export function SettingsWindow({
               className={`settings-window-content ${section === 'models' ? 'provider-mode' : ''}`}
             >
               {section === 'account' ? (
-                <SettingsPage
-                  eyebrow={t('settings.account')}
-                  title={t('settings.accountTitle')}
-                  description={auth.user?.email || t('settings.signedOut')}
-                >
-                  <section className="settings-profile-card">
-                    <span className="settings-profile-avatar"><PersonIcon /></span>
-                    <div>
-                      <strong>{auth.user?.name || auth.user?.email || t('settings.signedOut')}</strong>
-                      <small>{auth.user?.email || config.apiBaseUrl}</small>
-                    </div>
-                    <Badge color={auth.status === 'signed_in' ? 'green' : 'gray'} variant="soft">
-                      {auth.status}
-                    </Badge>
-                  </section>
-                  {auth.session ? (
-                    <section className="settings-session-card">
-                      <header>
-                        <div>
-                          <strong>{t('settings.currentDeviceSession')}</strong>
-                          <small>{auth.session.session_id}</small>
-                        </div>
-                        <Badge color={auth.session.trusted_device ? 'cyan' : 'gray'} variant="soft">
-                          {t(
-                            auth.session.trusted_device
-                              ? 'settings.trustedDevice'
-                              : 'settings.temporarySession',
-                          )}
-                        </Badge>
-                      </header>
-                      <dl>
-                        <div>
-                          <dt>{t('settings.authMethod')}</dt>
-                          <dd>{auth.session.auth_method}</dd>
-                        </div>
-                        <div>
-                          <dt>{t('settings.sessionExpires')}</dt>
-                          <dd>
-                            {auth.session.expires_at
-                              ? new Date(auth.session.expires_at).toLocaleString(locale)
-                              : t('settings.notAvailable')}
-                          </dd>
-                        </div>
-                      </dl>
-                    </section>
-                  ) : null}
-                  {auth.status === 'signed_in' ? (
-                    <Button
-                      color="red"
-                      variant="soft"
-                      loading={signingOut}
-                      disabled={signingOut}
-                      onClick={() => void signOut()}
-                    >
-                      {t('settings.signOut')}
-                    </Button>
-                  ) : null}
-                </SettingsPage>
+                <AccountSettingsPage
+                  auth={auth}
+                  tenant={selectedTenant}
+                  config={config}
+                  onSignOut={onSignOut}
+                />
               ) : null}
 
               {section === 'workspace' ? (
-                <SettingsPage
-                  eyebrow={t('settings.currentContext')}
-                  title={t('settings.tenantProject')}
-                  description={t('settings.tenantProjectDescription')}
-                >
-                  <ContextPicker
-                    title={t('settings.chooseTenant')}
-                    items={auth.tenants.map((tenant) => ({ id: tenant.id, label: tenant.name }))}
-                    selectedId={selectedTenantId}
-                    onSelect={chooseTenant}
-                  />
-                  <ContextPicker
-                    title={t('settings.chooseProject')}
-                    items={availableProjects.map((project) => ({ id: project.id, label: project.name }))}
-                    selectedId={selectedProjectId}
-                    onSelect={setSelectedProjectId}
-                  />
-                  {contextProjectsLoading ? <SettingsState text={t('settings.loading')} /> : null}
-                  <div className="settings-context-footer">
-                    <span>
-                      {selectedTenant?.name || '-'} /{' '}
-                      {availableProjects.find((project) => project.id === selectedProjectId)?.name || '-'}
-                    </span>
-                    <Button
-                      disabled={
-                        !selectedTenantId ||
-                        !selectedProjectId ||
-                        contextProjectsLoading ||
-                        (selectedTenantId === config.tenantId && selectedProjectId === config.projectId)
-                      }
-                      loading={contextApplying}
-                      onClick={() => void applyContext()}
-                    >
-                      {t('settings.applyContext')}
-                    </Button>
-                  </div>
-                  {contextError ? <SettingsState error text={contextError} /> : null}
-                </SettingsPage>
+                <WorkspaceSettingsPage
+                  auth={auth}
+                  config={config}
+                  onContextChange={onContextChange}
+                  onApplied={onClose}
+                />
               ) : null}
 
               {section === 'general' ? (
-                <SettingsPage
-                  eyebrow={t('settings.preferences')}
-                  title={t('settings.general')}
-                  description={t('settings.languageDescription')}
-                >
-                  <section className="settings-language-card">
-                    <GlobeIcon />
-                    <button
-                      type="button"
-                      className={locale === 'zh-CN' ? 'active' : ''}
-                      onClick={() => setLocale('zh-CN')}
-                    >
-                      <span>简</span>
-                      <strong>{t('settings.chinese')}</strong>
-                      {locale === 'zh-CN' ? <CheckCircledIcon /> : null}
-                    </button>
-                    <button
-                      type="button"
-                      className={locale === 'en' ? 'active' : ''}
-                      onClick={() => setLocale('en')}
-                    >
-                      <span>EN</span>
-                      <strong>{t('settings.english')}</strong>
-                      {locale === 'en' ? <CheckCircledIcon /> : null}
-                    </button>
-                  </section>
-                </SettingsPage>
+                <GeneralSettingsPage counts={resourceCounts} onOpenResource={setSection} />
+              ) : null}
+
+              {section === 'appearance' || section === 'notifications' ? (
+                <PreferenceUnavailablePage section={section} />
               ) : null}
 
               {section === 'connection' ? (
                 <SettingsPage
-                  eyebrow={t('runtime.connection')}
-                  title={t('settings.connection')}
-                  description={`${t('settings.server')}: ${config.apiBaseUrl}`}
+                  eyebrow={t('settings.connectionRecoveryEyebrow')}
+                  title={t('settings.connectionRecovery')}
+                  description={t('settings.connectionRecoveryDescription')}
                 >
                   <RuntimeConfigPanel
                     config={config}
@@ -501,6 +404,7 @@ export function SettingsWindow({
                   config={config}
                   canManage={canManageProviders}
                   onConfigChange={onConfigChange}
+                  onCountChange={updateModelCount}
                 />
               ) : null}
 
@@ -579,14 +483,17 @@ function SettingsGroup({
   label,
   sections,
   active,
+  counts,
   onSelect,
 }: {
   label: string;
   sections: SettingsSection[];
   active: SettingsSection;
+  counts: SettingsResourceCounts;
   onSelect: (section: SettingsSection) => void;
 }) {
   const { t } = useI18n();
+  if (sections.length === 0) return null;
   return (
     <section className="settings-rail-group">
       <span>{label}</span>
@@ -604,6 +511,9 @@ function SettingsGroup({
               <strong>{t(meta.label)}</strong>
               <small>{t(meta.description)}</small>
             </span>
+            {isCountedSection(section) && counts[section] !== null ? (
+              <em>{counts[section]}</em>
+            ) : null}
           </button>
         );
       })}
@@ -611,66 +521,12 @@ function SettingsGroup({
   );
 }
 
-function SettingsPage({
-  eyebrow,
-  title,
-  description,
-  action,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="settings-page">
-      <header className="settings-page-heading">
-        <div>
-          <Text size="1" color="gray">{eyebrow.toUpperCase()}</Text>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
-        {action}
-      </header>
-      {children}
-    </div>
-  );
-}
-
-function ContextPicker({
-  title,
-  items,
-  selectedId,
-  onSelect,
-}: {
-  title: string;
-  items: Array<{ id: string; label: string }>;
-  selectedId: string;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <section className="settings-context-picker">
-      <h2>{title}</h2>
-      <div>
-        {items.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            className={selectedId === item.id ? 'active' : ''}
-            onClick={() => onSelect(item.id)}
-          >
-            <CubeIcon />
-            <strong>{item.label}</strong>
-            {selectedId === item.id ? <CheckCircledIcon /> : null}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function isResource(section: SettingsSection): section is ResourceSection {
   return section === 'skills' || section === 'plugins' || section === 'agents';
+}
+
+function isCountedSection(
+  section: SettingsSection,
+): section is keyof SettingsResourceCounts {
+  return section === 'models' || isResource(section);
 }

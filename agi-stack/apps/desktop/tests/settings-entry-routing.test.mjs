@@ -15,6 +15,6 @@ test('Workspace Overview Configure opens workspace settings', () => {
   assert.equal(settingsSectionForEntry('workspace_overview'), 'workspace');
 });
 
-test('explicit runtime connection actions open connection settings', () => {
+test('runtime recovery actions retain a hidden connection recovery surface', () => {
   assert.equal(settingsSectionForEntry('runtime_connection'), 'connection');
 });

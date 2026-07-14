@@ -1,4 +1,4 @@
-import type { SettingsSection } from './SettingsWindow';
+import type { SettingsSection } from './settingsNavigationModel';
 
 export type SettingsEntry = 'sidebar' | 'workspace_overview' | 'runtime_connection';
 

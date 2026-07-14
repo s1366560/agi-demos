@@ -151,7 +151,7 @@
 
 .settings-rail-group button {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   min-height: 43px;
   gap: 8px;
   align-items: center;
@@ -196,6 +196,32 @@
   font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-rail-group button > em {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  color: var(--cyan-11);
+  font-size: 7px;
+  font-style: normal;
+  background: var(--cyan-3);
+  border-radius: 10px;
+}
+
+.settings-search-empty {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 9px;
+  color: #667487;
+  font-size: 7px;
+  line-height: 1.4;
+}
+
+.settings-search-empty svg {
+  flex: 0 0 auto;
 }
 
 .settings-window-scope {

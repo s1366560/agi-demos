@@ -34,6 +34,7 @@
     "src/features/session/sessionDecisionModel.ts",
     "src/features/session/sessionEvidenceModel.ts",
     "src/features/session/sessionArtifactModel.ts",
+    "src/features/settings/settingsNavigationModel.ts",
     "src/features/settings/settingsEntryRouting.ts",
     "src/features/settings/providerManagementModel.ts",
     "src/features/my-work/myWorkModel.ts",
