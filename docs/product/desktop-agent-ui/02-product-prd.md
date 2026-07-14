@@ -169,6 +169,28 @@ Settings 使用“设置分区 → 资源目录 → 详情/配置”的稳定三
 - Creation：新建 Skill/Agent 先生成 governed draft，完成依赖、权限和验证后才能 Publish/Enable。
 - Provider setup：Add Provider 使用 Choose → Authenticate & Verify → Enable Models 三步向导；连接成功不自动改变 Routing 或 Agent 配置。
 
+### 7.5 Project 内的 Workspace → Conversation 树
+
+- Settings 负责 Tenant → Project 上下文；Global rail 在当前 Project 内展示 Workspace → Conversation 树，禁止把 Project 列表继续伪装成 Workspace。
+- Workspace 根节点显示名称、会话数与在线/需关注状态；展开后按需要关注、运行中、最近、已归档组织 Conversation。
+- Conversation 行显示标题、摘要/最近状态、Work/Code 或协作模式、消息/参与者与运行状态；SubAgent Conversation 可作为第三级子节点。
+- 点击 Workspace 打开工作空间概况；点击 Conversation 打开同一 Conversation 的内容详情，不复制线程或执行。
+- 会话详情使用“Session Header + Narrative Thread + Work Canvas”。Thread 承载意图、解释、关键事件、分组工具活动、HITL 与 Steering；Canvas 承载 Plan、Changes/Artifact、Terminal/Sources 与 Checks/Verification。
+- Task、Run、权限、模型、耗时和用量进入 Header 或 Canvas Overview，不使用常驻静态第三栏。用户可显式进入 Task Canvas，但不得丢失 Conversation 状态。
+- Diff 行、文件、来源、产物章节和验证证据均支持一次点击加入 Steering 上下文；引用必须以结构化对象传递，不能依赖解析自然语言。
+- 工作空间概况覆盖 Root goal、Plan、Tasks、HITL、Agents、Members、Execution health、Delivery、Project knowledge 与 Recent activity。
+
+### 7.6 Artifact 权威生命周期
+
+- Run 完成与 Artifact 交付是两个独立状态：批准 Run 只确认本次执行可以结束，不得隐式把任何 Artifact 标记为 Delivered。
+- Artifact 使用稳定 `artifact_id`；每次导出创建新的不可变 `artifact_version_id` 和递增 `version`。新版本不得覆盖旧文件；旧的 Draft / Ready / Approved 版本进入 Superseded，历史、审查反馈与回执仍可查询。
+- Artifact Version 使用独立 `revision` 保护并发审查。Approve、Request changes、Deliver 都必须提交当前 Revision；冲突返回最新状态，客户端不得乐观伪造成功。
+- 生命周期为 Draft → Ready → Approved → Delivered，或 Draft / Ready / Approved → Superseded。只有 Approved 版本可以 Deliver；只有显式导出并进入权威版本表的内容可以被批准。
+- Ready 版本必须显示 Filename、Version、Status、Revision、Location、MIME、Bytes、Sources 与 Checks。Sources / Checks 缺失时显示“未提供”，不得从文件名、扩展名或聊天文本推断质量结论。
+- Request changes 必须绑定 Artifact Version、反馈和关联 Run Revision；当关联 Run 仍为 Ready review 时，反馈恢复同一个 Run 并把当前版本标记为 Superseded，Agent 再导出新版本。
+- Delivery 前必须验证物理文件仍存在。成功后生成包含 Artifact Version、Destination、Path、Bytes、Actor、Delivered at 与 Idempotency key 的回执；失败不得写入 Delivered 状态。
+- 启发式文件/事件聚合只可作为 Activity 中的“未版本化证据”，不可出现在 Artifact 审批主流程中。
+
 ## 8. 双模式定义
 
 ### 8.1 Work（通用 Agent）
@@ -229,18 +251,21 @@ Settings 使用“设置分区 → 资源目录 → 详情/配置”的稳定三
 1. 用户填写代码目标，选择仓库和 Local / Worktree / Cloud。
 2. Agent 在只读阶段生成可编辑 Plan，包含影响分析、回归测试、实现、验证与 Review packet。
 3. Plan Review 固定展示预计耗时、Usage、Environment、上下文与“Ask before external side effects”等边界。
-4. 用户批准后才创建 Worktree/Checkout；Header 固定显示 Environment、Checkout/Worktree、Branch。
-5. Agent 按批准计划编辑、运行测试、启动 Preview；Changes 与 Browser/Terminal 在同一 Canvas 中切换或分屏。
-6. 高风险变更在 Diff 旁触发审批；用户 Stage / Commit / Push / Create PR，或 Handoff 到 Local。
-7. CI/Review 结果回流同一 Task，完成后归档。
+4. 用户批准后才创建 Worktree/Checkout；批准事务把 `environment_id`、Kind、工作目录、Repository root、Branch 与创建时间写入 Run 的授权快照。Plan-only 阶段不得提前创建隔离目录。
+5. Header 固定显示 Environment、Checkout/Worktree、Branch。Agent 工具、Terminal、测试与 Preview 必须以该 Run 的权威工作目录为根，不能回退到全局仓库目录后继续执行。
+6. Agent 按批准计划编辑、运行测试、启动 Preview；Changes 与 Browser/Terminal 在同一 Canvas 中切换或分屏。Terminal 启动回执显示 Run ID、Environment 与实际 CWD。
+7. 高风险变更在 Diff 旁触发审批；用户 Stage / Commit / Push / Create PR，或 Handoff 到 Local。
+8. CI/Review 结果回流同一 Task，完成后归档。
 
 ### 9.4 任务恢复
 
 1. 应用启动后从服务端/本地权威存储读取 Run revision。
 2. UI 显示 Reconnecting，而不是假定 Failed。
-3. 若发现活跃执行，提供 Reattach；若无法确认，提供 Inspect status。
-4. Resume 必须使用原 Run ID；Fork recovery 才创建新 Run。
-5. 任何重复发送都进行 idempotency 检查。
+3. 若原 Environment 仍可验证，提供 Reattach：继续同一 Run ID、Revision 链与工作目录，不重新创建 Worktree，也不重复执行已完成步骤。
+4. 若原 Environment 丢失或用户需要隔离恢复，提供 Fork recovery：保留来源 Run 为 Disconnected/Interrupted，创建新 Run 与新 Worktree，并在授权快照中记录 `source_run_id`。
+5. Fork recovery 以来源仓库最后可验证的 Git `HEAD` 为起点；它不承诺复制未提交或未跟踪文件。需要保留原工作目录状态时，用户应选择 Reattach。
+6. Reattach 与 Fork 使用不同主动作、确认文案与审计事件；Retry 不得冒充任何一种恢复语义。
+7. 任何重复发送都进行 idempotency 检查；同一来源 Run + Revision + Idempotency key 只产生一个恢复 Run。
 
 ### 9.5 Workspace 资源管理
 
@@ -347,6 +372,10 @@ stateDiagram-v2
 - FR-019：支持 Workspace SSO 与邮箱登录、受信任设备会话恢复和显式退出。
 - FR-020：Settings 以独立弹出式窗口打开，关闭后恢复原任务位置与状态。
 - FR-021：Settings → Workspace 支持先 Tenant、后 Project 的两级上下文选择，并在确认后原子切换。
+- FR-022：当前 Project 的 Global rail 支持 Workspace → Conversation 树、按需展开和状态分组。
+- FR-023：Workspace 概况展示真实目标、执行、团队、交付、项目知识库与活动状态，并可跳转到最近 Conversation。
+- FR-024：Conversation 详情支持 Narrative Thread 与 mode-aware Work Canvas 并排协作，提供工具分组、HITL、Canvas Tab、Diff/证据引用、Steering、Task handoff 和验证状态。
+- FR-025：Artifact 使用稳定身份、不可变版本、独立 Revision、显式 Sources/Checks、审查状态与幂等 Delivery receipt；Run approval 不得代替 Artifact delivery。
 
 ### 12.2 P1
 
@@ -473,6 +502,19 @@ stateDiagram-v2
 15. 未登录时不能进入任务工作区；SSO/邮箱登录、表单错误、受信任设备恢复和退出均有可见反馈。
 16. Settings 作为独立弹出窗口打开和关闭，不改变底层任务、滚动或当前选择。
 17. 用户只能在所选 Tenant 的 Project 列表中选择；确认切换后 Global rail 和 Projects 页面同时显示新上下文。
+18. Global rail 中 Project、Workspace、Conversation 的层级和名称不混淆；点击 Workspace 与 Conversation 分别进入概况和会话工作区。
+19. Workspace 概况中的 Memory/Graph/Storage 明确标注为 Project 级共享统计；会话与执行状态来自权威后端字段。
+20. 点击任一 Conversation 后主区域同时展示 Narrative Thread 与 Work Canvas；用户可展开工具活动、处理输入请求、切换工作对象、引用 Diff/证据继续 Steering，并显式进入关联 Task。
+21. Code 会话至少提供 Plan、Changes、Terminal、Checks；Work 会话至少提供 Plan、Artifact、Sources、Verification，二者共享 Header、Thread、HITL 和状态模型。
+22. 同一 `artifact_id` 连续导出两次时生成两个不同 `artifact_version_id` 与物理路径，旧内容仍可读取。
+23. Ready Artifact 必须先 Approve 才可 Deliver；Request changes 必须填写反馈并绑定 Artifact 与 Run Revision。
+24. Approve Run 后 Artifact 状态不自动变为 Delivered；Artifact 交付使用独立主动作。
+25. Delivery 文件不存在时返回失败且 Artifact 继续保持 Approved；成功后写入可见且可重放的幂等回执。
+26. Artifact Sources / Checks 缺失时 UI 明确显示缺失，不从扩展名、事件文本或数量阈值推断风险与质量。
+27. Artifact 版本、审查反馈、交付回执和对应 Conversation/Run 可在重启后恢复并重建审计时间线。
+28. Code Task 的 Worktree 只在 Plan 获批后创建；Run 持久化 Environment identity、工作目录、仓库根与 Branch，Agent 工具和 Terminal 均在该工作目录运行。
+29. Reattach 继续同一 Run ID 与 Environment；Fork recovery 创建新 Run 与新 Worktree、保留来源 Run，并通过 `source_run_id` 可审计追溯。
+30. Fork recovery 明确说明其从最后 Git `HEAD` 创建，不误导用户认为未提交或未跟踪内容已被复制。
 
 ## 19. 与现有仓库的实现映射
 

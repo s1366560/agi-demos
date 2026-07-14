@@ -1,208 +1,254 @@
-# MemStack Design Context
+# Design
 
-## Users
+## Source of truth
 
-Enterprise developers and technical professionals who use AI agents as collaborative partners. They work with complex multi-layer agent systems (Tool -> Skill -> SubAgent -> Agent) and need to:
-- Monitor agent reasoning and execution
-- Manage knowledge graphs and memories
-- Configure and orchestrate specialized subagents
-- Review artifacts and execution traces
+- Status: Active
+- Last refreshed: 2026-07-13
+- Primary product surfaces: desktop Login, Home, My Work, New Task, Workspace overview,
+  Workspace → Conversation tree, Session workspace, Artifact review, recovery, Search,
+  Automations, and the independent Settings resource workbench.
+- Canonical visual reference:
+  `design-prototype/memstack-desktop-agent-mission-control`.
+- Canonical product contract:
+  `docs/product/desktop-agent-ui/02-product-prd.md`.
+- Canonical interaction and visual specification:
+  `docs/product/desktop-agent-ui/03-ui-ux-spec.md`.
+- Supporting evidence reviewed:
+  - `design-prototype/memstack-desktop-agent-mission-control/src/App.jsx`
+  - `design-prototype/memstack-desktop-agent-mission-control/src/styles.css`
+  - `design-prototype/memstack-desktop-agent-mission-control/src/components/`
+  - `design-prototype/memstack-desktop-agent-mission-control/qa/`
+  - `design-prototype/memstack-desktop-agent-mission-control/design-qa.md`
+  - `docs/product/desktop-agent-ui/05-workspace-conversation-ux-mapping.md`
+  - `docs/product/desktop-agent-ui/06-session-detail-competitive-research.md`
+  - `agi-stack/apps/desktop/src/`
+  - `agi-stack/apps/desktop/src-tauri/src/local_runtime/`
+- Precedence: explicit PRD state, authority, security, and lifecycle requirements override
+  prototype mock behavior. The prototype is authoritative for layout, hierarchy, visual language,
+  and user-visible flow when it does not conflict with the PRD.
 
-They use the platform for extended periods, often switching between detailed technical work and high-level overviews.
+## Brand
 
-## Brand Personality
+- Personality: calm mission control, precise, technically credible, restrained, and enterprise-ready.
+- Trust signals: explicit scope, authority, revision, environment, evidence, provenance, and next
+  action; secrets and external side effects are never implied or hidden.
+- Avoid: chat-first consumer styling, gradients, decorative dashboards, emoji, fake activity,
+  fabricated metrics, opaque success states, excessive pills, and panels without a user decision.
 
-**Clean, Minimal, Technical**
+## Product goals
 
-Vercel-inspired aesthetic: black/white/gray palette, function-first, zero visual noise. Every pixel serves a purpose. The interface should feel like a precision tool, not a consumer app.
+- Goals:
+  - Make Work and Code two capability modes of one Task/Conversation/Run model.
+  - Let a user identify status, execution location, required input, and latest evidence within
+    three seconds.
+  - Keep plans, permissions, changes, sources, checks, and artifacts reviewable next to the action
+    they authorize.
+  - Restore authoritative work after restart or disconnection without repeating side effects.
+  - Govern Models, Skills, Plugins, and Agents from one searchable, versioned Settings workbench.
+- Non-goals:
+  - A full IDE, full Git GUI, or general-purpose browser replacement.
+  - Exposing model hidden reasoning.
+  - Independent Work and Code histories or navigation systems.
+  - Treating more panels or metrics as product success.
+- Success signals:
+  - A completed Task has an authoritative Run state, reviewable evidence, at least one inspectable
+    artifact or change, and an auditable human decision trail.
+  - Users can finish primary flows by keyboard at the supported compact viewport.
+  - Reconnect, approval, and delivery never rely on optimistic local inference.
 
-- **Confidence & Precision**: Crisp typography, tight spacing, no decorative elements
-- **Voice**: Direct, technical, efficient - every word earns its place
-- **Tone**: Calm competence, understated authority, technical depth without complexity
+## Personas and jobs
 
-## Aesthetic Direction
+- Primary personas:
+  - Knowledge worker or product owner producing sourced deliverables.
+  - Software engineer working with repositories, environments, diffs, tests, and PRs.
+  - Reviewer supervising several concurrent Agent tasks.
+  - Enterprise administrator governing models, capabilities, permissions, and budgets.
+- User jobs:
+  - Create a Work or Code Task from a goal and approved context.
+  - Preview and revise an Agent-authored plan before execution.
+  - Supervise long-running work and handle the single current decision.
+  - Inspect sources, tool activity, changes, checks, and immutable artifact versions.
+  - Reattach or fork recovery while preserving execution identity and audit history.
+  - Configure and understand Provider, Skill, Plugin, and Agent relationships.
+- Key contexts of use: long-running desktop sessions, compact laptop windows, several parallel
+  tasks, intermittent network/runtime connectivity, and enterprise tenant/project isolation.
 
-**Vercel Design Language** - extracted from vercel.com (March 2026)
+## Information architecture
 
-### Core Visual Identity
-- **Monochrome Foundation**: Black `#000` / `#171717` text on white `#fff` / `#fafafa` backgrounds
-- **10-Level Gray Scale**: `#111` to `#fafafa` (accents-1 through accents-8 + foreground/background)
-- **Blue Accent**: `#0070f3` (success/link color), used sparingly for CTAs and interactive highlights
-- **Geist Typography**: Tight letter-spacing on headings, clean body text at 16px
+- Primary navigation: New Task, Home, My Work, Automations, Search, the current Project's
+  Workspace → Conversation tree, Notifications, Settings, and Account.
+- Core routes/screens:
+  - Login and trusted-session recovery.
+  - Home summary and resume actions.
+  - My Work semantic attention queue.
+  - New Task: Describe → Agent planning → Human plan review.
+  - Workspace overview.
+  - Session Header + Narrative Thread + mode-aware Work Canvas.
+  - Artifact version review and delivery.
+  - Reconnect / Reattach / Fork recovery.
+  - Independent Settings window with Account, Workspace, preferences, and AI resources.
+- Content hierarchy:
+  - Tenant → Project → Workspace → Conversation → Task/Run/Artifact relationships remain explicit.
+  - The Global rail shows Workspaces and Conversations only for the current Project.
+  - Thread owns intent, explanation, key events, grouped activity, HITL, and Steering.
+  - Canvas owns Plan, Changes/Artifact, Terminal/Sources, Checks/Verification, and evidence.
+  - Settings owns tenant/project switching and all resource governance.
 
-### Anti-References
-- **NOT playful/consumer apps**: Avoid over-the-top colors, whimsical illustrations, gamification
-- **NOT cluttered enterprise**: Avoid dense dashboards with competing widgets
-- **NOT legacy software**: Avoid dated UI patterns, heavy chrome, complex navigation
-- **NOT gradient-heavy**: Avoid heavy glass morphism, colored backgrounds, decorative blurs
+## Design principles
 
-### Theme Support
-- **Light mode**: Pure white backgrounds, black text, light gray borders `#eaeaea`
-- **Dark mode**: Pure black/near-black surfaces, white text, dark gray borders
+- Status before process: authoritative state, environment, and required action precede logs.
+- Work surface before chat: the Conversation explains; the Canvas proves and delivers.
+- One current decision: highlight one human gate and queue the rest.
+- Environment never disappears: Code shows Local/Worktree/Cloud, branch, and working directory;
+  Work shows project, privacy, and external-data scope.
+- Explicit state over semantic inference: UI states derive from structured fields, not text matching.
+- Progressive technical depth: default to outcome and evidence; reveal raw calls and identifiers on
+  demand.
+- Provider-first model governance: a Credential belongs to one Provider; model selection and
+  workspace routing remain separate operations.
+- Tradeoffs: dense desktop information is acceptable when hierarchy is clear; do not trade away
+  identity, authority, or evidence merely to reduce visual density.
 
-## Design Principles
+## Visual language
 
-1. **Clarity Over Cleanness**: Prioritize readable information hierarchy over minimalist aesthetics. Technical content should be scannable. Vercel uses tight negative letter-spacing on headings for maximum legibility.
+- Color:
+  - Background `#080C12`; primary panel `#0F141D`; secondary panel `#151A24`.
+  - Border `#242B36`; soft border `#1B222E`.
+  - Text `#E7EDF6`; muted `#9AA5B5`; faint `#687386`.
+  - Cyan `#38D6FF` for active selection and primary affordance.
+  - Green `#35D399` for explicit success, amber `#F0B35A` for attention/approval, red
+    `#FF6978` for explicit failure or destructive risk.
+  - Work mode violet is an identity accent only; no gradients.
+- Typography: Inter/SF Pro/Segoe/system sans for UI; SFMono/Menlo/Consolas for code and terminal.
+  Body 14/20, secondary 12/16, page title 18/24 weight 600, compact metadata 8–11 where the
+  reference requires it but never for primary authored content.
+- Spacing/layout rhythm: 4/8/12/16/24/32 spacing; 28 compact, 32 default, 36 primary control
+  heights; 220px desktop Global rail and 200px compact Global rail.
+- Shape/radius/elevation: 6–8px panel radius, 1px structural borders, pills only for status/mode/
+  filters, shadow only for menus and modal windows.
+- Motion: short state transitions only; no animation that substitutes for authority. Honor reduced
+  motion.
+- Imagery/iconography: existing MemStack mark and real avatar assets; one outline icon family,
+  normally 14/16/20px; no emoji or approximate handcrafted icons.
 
-2. **Zero Visual Noise**: Remove decorative elements. Borders are 1px, shadows are barely visible (0.08 alpha), backgrounds are solid colors. Every visual element must convey information.
+## Components
 
-3. **Pill-Shape CTAs**: Primary actions use pill-shaped buttons (border-radius: 100px, height: 48px). Secondary actions use white bg with dark text and same pill shape. Navigation uses rounded-pill ghost buttons.
+- Existing components to reuse:
+  - `LoginScreen`, `NewTaskFlow`, `MyWorkQueue`, `SessionWorkspace`, `SessionEvidenceCanvas`,
+    `SettingsWindow`, and `ProviderDetailEditor`.
+  - Current Radix primitives, tokens in `agi-stack/apps/desktop/src/styles.css`, API adapter, and
+    authoritative Rust local-runtime stores.
+- New/changed components:
+  - Home and global Search/Command Palette surfaces grounded in live data.
+  - Automations master/detail uses an explicit `Manual | Schedule | Event` Trigger union. Schedule
+    owns `At | Every | Cron`; Environment and Permission profile belong to the definition, not to
+    inferred run state. Create, edit, enable/pause, and Run now remain fail-closed unless the server
+    returns the corresponding action capability, revision, and idempotent mutation contract.
+  - Every automation mutation enters one `AutomationCommandService`. A Run now intent carries the
+    authenticated Tenant/Project/actor scope, `expected_revision`, and `Idempotency-Key`; one
+    caller-owned database transaction reserves a replayable receipt and writes the queued Run plus
+    fenced `execute_run` operation. The Run ID is also the Agent `message_id`/runtime execution ID,
+    so dispatch retries and terminal projection never correlate by job name, prompt text, or time.
+    Receipt acceptance means queued, not successful. Capabilities remain false until a production
+    worker, real Agent terminal lifecycle persistence, and idempotent terminal projection are all
+    enabled and fault-injection verified.
+  - Provider Overview/Connection/Models/Routing/Usage tabs and Add Provider wizard.
+  - Type-specific Skill, Plugin, and Agent workbenches with draft/version/audit states.
+  - Real Browser/Preview canvas and structured evidence Steering references.
+  - Recovery diagnosis and environment-specific Reattach/Fork UI.
+- Variants and states: loading, empty, read-only, dirty edit, saving, validation-only, externally
+  probed, connected, attention, revision conflict, disabled, offline, and permission denied.
+- Token/component ownership: extend `agi-stack/apps/desktop/src/styles.css` and existing feature CSS;
+  do not create a parallel design-system layer.
 
-4. **Progressive Disclosure**: Show essential information first. Complex details (execution traces, tool outputs) available on demand. Status badges use 11px uppercase text in pill shapes.
+## Accessibility
 
-5. **Consistent Component Language**: All components share the same lower-radius system (4px default controls, 6px structural surfaces), border-only shadows with 0.08 alpha, a 4px spacing base, and a 36px default app-button/form-control height. Reserve pill shapes for explicit CTAs, nav pills, and compact badges only.
+- Target standard: WCAG 2.2 AA.
+- Keyboard/focus behavior: every primary flow, tree branch, Canvas tab, decision, plan edit, resource
+  mutation, and modal action is reachable with a visible focus ring. Preserve Cmd/Ctrl shortcuts
+  documented by the UI spec.
+- Contrast/readability: status always includes text or accessible labels; Diff includes +/- and text,
+  not only red/green.
+- Screen-reader semantics: use landmark regions, real headings, tabs, dialogs, tree semantics where
+  appropriate, and restrained `aria-live` only for phase/attention changes.
+- Reduced motion and sensory considerations: honor `prefers-reduced-motion`; never rely on motion or
+  color alone.
 
-## Vercel Design System Reference
+## Responsive behavior
 
-### Typography
-```css
---font-sans: 'Geist', Arial, sans-serif
---font-mono: 'Geist Mono', ui-monospace, monospace
+- Supported breakpoints/devices: primary baseline 1440×1024; production must remain usable at
+  1280×800. The approved prototype and visual regression suite additionally exercise 1100×800.
+- Layout adaptations:
+  - ≥1440: Global rail + Thread/Queue + Canvas; optional decision rail only when needed.
+  - 1280–1439: retain Mode, Environment, state, and primary action; demote usage/elapsed.
+  - 1100 reference: 200px Global rail, about 355px Thread, adaptive Canvas; no page-level horizontal
+    overflow.
+  - Settings: centered popup, max about 1180×820; compact rail + 244px catalog at 1100.
+- Touch/hover differences: desktop keyboard/mouse is primary; hover supplements but never hides the
+  only label or action.
 
-/* Headings - tight negative tracking */
-h1: 48px / 600 / 48px line-height / -2.4px letter-spacing
-h2: 24px / 600 / 32px line-height / -0.96px letter-spacing
-h3: 12px / 500 / 12px line-height (section labels, uppercase)
+## Interaction states
 
-/* Body */
-body: 16px / 400 / normal line-height
-small: 14px / 400 (nav, secondary text)
-badge: 11px / 500 (status pills)
-```
+- Loading: render Shell and authoritative Header first; name the delayed surface, such as “Loading
+  diff” or “Reconnecting terminal”.
+- Empty: explain the current job and offer one primary action; never fabricate activity counts.
+- Error: show location, last successful checkpoint, side-effect status, and a specific recovery
+  action; diagnostics are copyable and collapsed by default.
+- Success: show the server-returned revision/receipt/result; do not infer success from a completed
+  animation.
+- Automations: read responses redact credential material and declare action capabilities. A missing
+  durable scheduler/outbox, execution principal, or reconciliation state is a visible unavailable
+  capability, never a client timer or a pre-written successful Run.
+- Disabled: explain missing permission, unavailable environment, incomplete configuration, or stale
+  revision next to the control.
+- Offline/slow network: distinguish Reconnecting, Disconnected, Failed, Reattach, and Fork recovery.
+  Retry is not a substitute for recovery semantics.
 
-### Gray Scale (Light Mode)
-```css
---accents-1: #fafafa   /* lightest background */
---accents-2: #eaeaea   /* borders, dividers */
---accents-3: #999999   /* muted text */
---accents-4: #888888   /* secondary text */
---accents-5: #666666   /* body secondary */
---accents-6: #444444   /* emphasized text */
---accents-7: #333333   /* headings secondary */
---accents-8: #111111   /* near-black text */
---foreground: #000000  /* primary text */
---background: #ffffff  /* page background */
-```
+## Content voice
 
-### Semantic Colors
-```css
---success: #0070f3     /* blue - links, active, primary CTA */
---success-light: #3291ff
---success-dark: #0761d1
---error: #ee0000
---warning: #f5a623
---violet: #7928ca      /* accent for highlights */
---cyan: #50e3c2        /* accent for code/highlights */
-```
+- Tone: concise, factual, calm, and action-oriented.
+- Terminology: Task is the user goal; Conversation is the collaboration stream; Run is one
+  authoritative execution; Workspace is a Project-scoped collaboration container; Artifact Version
+  is immutable.
+- Microcopy rules:
+  - Use concrete verbs and objects: “Approve 6 file changes”, “Deliver approved version”,
+    “Validate configuration”.
+  - Avoid “Continue”, “Proceed”, “Working”, and unqualified “Thinking”.
+  - State who or what is waiting: “Needs your input”, “Paused by you”.
+  - Preserve technical identifiers, paths, model names, authored content, and code across locales.
+  - Local Provider validation with `probed: false` must never say connected or healthy.
 
-### Spacing (4px Base Unit)
-```css
---geist-space: 4px
---geist-space-2x: 8px
---geist-space-3x: 12px
---geist-space-4x: 16px
---geist-space-6x: 24px
---geist-space-8x: 32px
---geist-space-10x: 40px
---geist-space-16x: 64px
---geist-space-24x: 96px
-```
+## Implementation constraints
 
-### Border Radius
-```css
---geist-radius: 4px           /* default controls */
---geist-marketing-radius: 6px /* structural cards */
-pill: 9999px                  /* badges, small tags */
-cta-pill: 100px               /* CTA buttons */
-```
+- Framework/styling system: React 19 + TypeScript + Vite + Radix UI; Tauri/Rust local runtime;
+  Python/FastAPI remains the cloud/reference backend. Use existing feature modules and direct imports.
+- Design-token constraints: current `--desktop-*` tokens are the production mapping of prototype
+  `--bg/--panel/--border/...` tokens; extend them instead of introducing hard-to-govern themes.
+- Performance constraints: cold Shell p95 ≤3s; readable Task switch p95 ≤1s; reconnect state p95
+  ≤3s; large lists should be incrementally loaded or virtualized.
+- Compatibility constraints: macOS and Windows are primary; Linux is P1. Local and Cloud API
+  differences belong in `DesktopApiClient`, not UI conditionals spread across components.
+- Security constraints: never persist plaintext session tokens, Provider credentials, or environment
+  secrets; every tenant/project/resource/run mutation is scope-checked and revision-guarded.
+- Architecture constraints: subjective risk, routing, or quality judgments come from structured Agent
+  tool calls. Deterministic UI code only presents structured decisions and protocol facts.
+- Test/screenshot expectations:
+  - Add pure model/API/Rust tests for every new authority or state transition.
+  - Run frontend tests/build and Rust test/fmt/clippy.
+  - Capture 1325px and 1100px visual evidence for user-facing changes.
+  - Persist a Visual Verdict score of at least 90 under `.omx/state/<scope>/ralph-progress.json`.
 
-### Shadows (Minimal)
-```css
---ds-shadow-border: 0 0 0 1px rgba(0,0,0,0.08)   /* card border */
---ds-shadow-small: 0 2px 2px rgba(0,0,0,0.04)     /* slight lift */
---ds-shadow-medium: 0 2px 2px rgba(0,0,0,0.04), 0 8px 8px -8px rgba(0,0,0,0.04)
---ds-shadow-menu: border + 0 4px 8px -4px rgba(0,0,0,0.04), 0 16px 24px -8px rgba(0,0,0,0.06)
-```
+## Open questions
 
-### Component Patterns
-
-#### Primary Button (CTA)
-- Background: `#171717` (near-black)
-- Text: `#ffffff` white, 16px, weight 500
-- Border-radius: 100px (pill)
-- Height: 48px, padding: 0 14px
-
-#### Secondary Button
-- Background: `#ffffff` white
-- Text: `#171717` dark, 16px, weight 500
-- Border-radius: 100px (pill)
-- Height: 48px, padding: 0 14px
-
-#### Default App Button
-- Background: theme-driven monochrome variants
-- Text: theme-driven contrast colors
-- Border-radius: 4px
-- Height: 36px
-- Use for the main product UI, forms, tables, and canvas actions
-
-#### Ghost Button (Nav)
-- Background: transparent
-- Text: `#4d4d4d` gray, 14px, weight 400
-- Border-radius: 9999px (pill)
-- Height: 30px, padding: 8px 12px
-
-#### Input Field
-- Background: `#ffffff`
-- Border: 1px solid `#eaeaea`
-- Border-radius: 4px
-- Height: 36px, padding: 0 12px
-- Font: 14px, weight 400
-
-#### Badge/Tag
-- Background: `#ebebeb` light gray
-- Text: `#171717`, 11px, weight 500
-- Border-radius: 9999px (pill)
-- Padding: 0 8px
-- Status variant: white bg + colored dot
-
-#### Card
-- Background: `#ffffff`
-- Border-radius: 6px
-- Box-shadow: 0 0 0 1px rgba(0,0,0,0.08) + subtle inner shadow
-- No visible border
-
-### Focus Ring
-```css
---ds-focus: 0 0 0 1px var(--ds-gray-alpha-600), 0 0 0 4px rgba(0,0,0,0.16)
-```
-
-## Implementation Notes
-
-### Typography
-- **Display/Body**: Geist (or Inter as fallback) - tight letter-spacing on headings
-- **Monospace**: Geist Mono (or JetBrains Mono as fallback)
-- **Scale**: 12px (badges) -> 14px (body small) -> 16px (body) -> 24px (h2) -> 48px (h1)
-
-### Color Token Migration
-The existing `#1e3fae` primary blue should transition to Vercel's `#0070f3` (lighter, more vibrant). The gray scale should shift from slate tones to pure neutral grays.
-
-### Spacing
-4px base unit (same as current): 4, 8, 12, 16, 24, 32, 40, 64, 96
-
-### Accessibility
-- Target: WCAG 2.1 AA compliance
-- Current: High contrast mode, reduced motion support, focus rings
-- Required: Color contrast ratios, keyboard navigation, ARIA labels
-- Vercel focus ring: 1px gray ring + 4px transparent outer ring
-
-### Animation
-- **Enter**: minimal - fade-in (0.15s), subtle slide
-- **Hover**: background color shift, no scale transforms
-- **Loading**: minimal spinner or text-based indicators
-- **Reduced motion**: All animations respect `prefers-reduced-motion`
-
-## Reference Files
-
-- Design tokens: `web/src/index.css`
-- Component patterns: `web/src/components/agent/`
-- Coding standards: `CLAUDE.md`
+- [ ] Choose the production OS credential-vault implementation for trusted sessions and Provider
+  secrets on macOS/Windows; owner: desktop platform; impact: restart recovery and NFR-011.
+- [ ] Define the supported local Provider discovery/probe contract, including timeouts and network
+  permission; owner: runtime; impact: Models Connection and discovery states.
+- [ ] Confirm whether 1100×800 remains an official production target or only a visual-regression
+  stress target below the PRD's 1280×800 minimum; owner: product/design; impact: density choices.
+- [ ] Define Cloud environment provisioning and remote terminal lifecycle; owner: platform; impact:
+  Code environment selector and recovery.
+- [ ] Define governed configuration version/audit event schemas shared by Skills, Plugins, Agents,
+  and routing policies; owner: product/backend; impact: publish/edit histories.
+- [ ] Complete packaged macOS and Windows assistive-technology validation; owner: QA; impact: final
+  WCAG sign-off.
