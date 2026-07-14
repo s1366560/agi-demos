@@ -467,13 +467,37 @@ fn prepare_response(
         return prepare_a2ui_response(stored_hitl_type, request.response_data, encryption_key);
     }
     let response_summary = summarize_response(&stored_hitl_type, response);
+    let resume_answer = canonical_resume_answer(&stored_hitl_type, response)?;
 
     Ok(PreparedHitlResponse {
         hitl_type: stored_hitl_type,
         stream_response: PreparedStreamResponse::Plain(request.response_data),
         response_summary,
-        response_metadata: None,
+        response_metadata: Some(json!({
+            "resume_answer": resume_answer,
+            "resume_answer_encoding": "utf-8",
+        })),
     })
+}
+
+fn canonical_resume_answer(
+    hitl_type: &str,
+    response_data: &Map<String, Value>,
+) -> Result<String, HitlApiError> {
+    let value = match hitl_type {
+        "clarification" => response_data.get("answer"),
+        "decision" => response_data.get("decision"),
+        "permission" => response_data
+            .get("action")
+            .or_else(|| response_data.get("granted")),
+        _ => None,
+    }
+    .ok_or_else(|| HitlApiError::bad_request("Invalid HITL response"))?;
+    match value {
+        Value::String(answer) => Ok(answer.clone()),
+        other => serde_json::to_string(other)
+            .map_err(|_| HitlApiError::internal("HITL response serialization failed")),
+    }
 }
 
 fn prepare_a2ui_response(
@@ -891,6 +915,30 @@ mod tests {
             err.detail(),
             "env_var HITL is not supported by the Rust endpoint yet"
         );
+    }
+
+    #[test]
+    fn non_secret_response_persists_canonical_resume_answer() {
+        let prepared = prepare_response(
+            &pending_request("req-decision", "decision"),
+            HitlResponsePayload {
+                request_id: "req-decision".to_string(),
+                hitl_type: "decision".to_string(),
+                response_data: json!({
+                    "decision": {"action": "approve", "version": 2}
+                }),
+            },
+            Utc::now(),
+            None,
+        )
+        .expect("prepare decision response");
+
+        let metadata = prepared.response_metadata.expect("resume metadata");
+        assert_eq!(
+            metadata["resume_answer"],
+            r#"{"action":"approve","version":2}"#
+        );
+        assert_eq!(metadata["resume_answer_encoding"], "utf-8");
     }
 
     #[test]

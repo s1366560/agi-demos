@@ -44,6 +44,7 @@ mod billing_api;
 mod channel_api;
 mod cron_api;
 mod cron_automation_runtime;
+mod cron_hitl_resume;
 mod cron_worker;
 mod data_api;
 mod demo_api;

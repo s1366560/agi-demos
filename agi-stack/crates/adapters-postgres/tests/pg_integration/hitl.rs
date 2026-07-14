@@ -187,3 +187,159 @@ async fn hitl_request_repository_matches_python_response_lifecycle() {
         .expect("timed out HITL request");
     assert_eq!(timed_out.status, "timeout");
 }
+
+#[tokio::test]
+async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope() {
+    let Some(pool) =
+        pool_or_skip("answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+    ensure_identity_tables(&pool).await;
+    ensure_hitl_tables(&pool).await;
+    ensure_hitl_resume_tables(&pool).await;
+
+    for sql in [
+        "DELETE FROM hitl_requests WHERE id LIKE 'hitl_resume_%'",
+        "DELETE FROM agistack_cron_operations WHERE id LIKE 'hitl_resume_%'",
+        "DELETE FROM cron_job_runs WHERE id LIKE 'hitl_resume_%'",
+        "DELETE FROM cron_jobs WHERE id LIKE 'hitl_resume_%'",
+        "DELETE FROM conversations WHERE id LIKE 'hitl_resume_%'",
+        "DELETE FROM user_projects WHERE project_id = 'hitl_resume_project'",
+        "DELETE FROM user_tenants WHERE tenant_id = 'hitl_resume_tenant'",
+        "DELETE FROM projects WHERE id = 'hitl_resume_project'",
+        "DELETE FROM tenants WHERE id = 'hitl_resume_tenant'",
+        "DELETE FROM users WHERE id = 'hitl_resume_user'",
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+
+    sqlx::query("INSERT INTO users (id, email) VALUES ('hitl_resume_user', 'resume@example.com')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO tenants (id, name) VALUES ('hitl_resume_tenant', 'Resume')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role) VALUES \
+         ('hitl_resume_membership', 'hitl_resume_user', 'hitl_resume_tenant', 'member')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, tenant_id, name, owner_id) VALUES \
+         ('hitl_resume_project', 'hitl_resume_tenant', 'Resume', 'hitl_resume_user')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_projects (user_id, project_id, role) VALUES \
+         ('hitl_resume_user', 'hitl_resume_project', 'member')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO conversations (id, project_id, tenant_id, user_id, title) VALUES \
+         ('hitl_resume_conversation', 'hitl_resume_project', 'hitl_resume_tenant', \
+          'hitl_resume_user', 'Resume conversation')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO cron_jobs \
+         (id, project_id, tenant_id, name, schedule_type, payload_type, created_by) VALUES \
+         ('hitl_resume_job', 'hitl_resume_project', 'hitl_resume_tenant', 'Resume job', \
+          'every', 'agent_turn', 'hitl_resume_user')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO cron_job_runs \
+         (id, job_id, project_id, status, runtime_execution_id, conversation_id, deadline_at) \
+         VALUES ('hitl_resume_run', 'hitl_resume_job', 'hitl_resume_project', 'waiting_human', \
+                 'hitl_resume_run', 'hitl_resume_conversation', $1)",
+    )
+    .bind(ts(2099, 1, 1, 0, 0, 0))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO agistack_cron_operations \
+         (id, tenant_id, project_id, job_id, job_revision, operation_kind, run_id, status) \
+         VALUES ('hitl_resume_operation', 'hitl_resume_tenant', 'hitl_resume_project', \
+                 'hitl_resume_job', 1, 'execute_run', 'hitl_resume_run', 'waiting_runtime')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO hitl_requests \
+         (id, request_type, conversation_id, message_id, tenant_id, project_id, user_id, \
+          question, request_metadata, status, response, response_metadata, expires_at, answered_at) \
+         VALUES \
+         ('hitl_resume_permission', 'permission', 'hitl_resume_conversation', 'hitl_resume_run', \
+          'hitl_resume_tenant', 'hitl_resume_project', 'hitl_resume_user', 'Allow?', \
+          '{\"automation_run_id\":\"hitl_resume_run\",\"runtime_execution_id\":\"hitl_resume_run\",\"checkpoint_session_id\":\"hitl_resume_run\"}'::json, \
+          'answered', 'allow', '{\"resume_answer\":\"allow\"}'::json, $1, now()), \
+         ('hitl_resume_env', 'env_var', 'hitl_resume_conversation', 'hitl_resume_run', \
+          'hitl_resume_tenant', 'hitl_resume_project', 'hitl_resume_user', 'Secret?', \
+          '{\"automation_run_id\":\"hitl_resume_run\",\"runtime_execution_id\":\"hitl_resume_run\",\"checkpoint_session_id\":\"hitl_resume_run\"}'::json, \
+          'answered', '[REDACTED]', '{\"resume_answer\":\"must-not-resume\"}'::json, $1, now())",
+    )
+    .bind(ts(2099, 1, 1, 0, 0, 0))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let repo = PgHitlRequestRepository::new(pool.clone());
+    let candidates = repo
+        .list_automation_resume_candidates(
+            "hitl_resume_tenant",
+            "hitl_resume_project",
+            10,
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].request_id, "hitl_resume_permission");
+    assert_eq!(candidates[0].run_id, "hitl_resume_run");
+    assert_eq!(candidates[0].checkpoint_session_id, "hitl_resume_run");
+    assert_eq!(candidates[0].answer, "allow");
+    assert!(repo
+        .list_automation_resume_candidates("hitl_resume_tenant", "another_project", 10, Utc::now(),)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+async fn ensure_hitl_resume_tables(pool: &PgPool) {
+    for ddl in [
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_execution_id text",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS deadline_at timestamptz",
+        "CREATE TABLE IF NOT EXISTS agistack_cron_operations ( \
+            id text PRIMARY KEY, tenant_id text NOT NULL, project_id text NOT NULL, \
+            job_id text NOT NULL, job_revision bigint NOT NULL, schedule_revision bigint, \
+            operation_kind varchar(40) NOT NULL, run_id text, trigger_type varchar(40), \
+            scheduled_for timestamptz, input_json jsonb NOT NULL DEFAULT '{}'::jsonb, \
+            status varchar(32) NOT NULL DEFAULT 'pending', attempt_count integer NOT NULL DEFAULT 0, \
+            max_attempts integer NOT NULL DEFAULT 5, next_attempt_at timestamptz, \
+            lease_owner varchar(255), lease_token varchar(255), lease_expires_at timestamptz, \
+            actor_user_id text, actor_api_key_id text, request_receipt_id text, \
+            result_json jsonb NOT NULL DEFAULT '{}'::jsonb, last_error_code varchar(100), \
+            last_error_redacted text, created_at timestamptz NOT NULL DEFAULT now(), \
+            updated_at timestamptz NOT NULL DEFAULT now(), started_at timestamptz, \
+            completed_at timestamptz, cancel_requested_at timestamptz)",
+    ] {
+        sqlx::query(ddl).execute(pool).await.unwrap();
+    }
+}

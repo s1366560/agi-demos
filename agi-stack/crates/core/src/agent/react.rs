@@ -435,21 +435,19 @@ impl ReActEngine {
         }
     }
 
-    /// Resume a session that is [`AwaitingInput`] by supplying the human answer
-    /// to its pending HITL request, then drive the loop to completion.
+    /// Accept and persist the human answer for a session that is
+    /// [`AwaitingInput`] without driving the loop beyond the Running boundary.
     ///
     /// The answer is persisted before the loop restarts while the pending request
     /// remains durable, so this is **idempotent and crash-safe**: a fresh engine
-    /// (new process) replays the persisted pending request plus recorded answer
-    /// directly, without relying on the planner to re-emit the same request, then
-    /// continues — reusing any already-completed tool calls exactly as ordinary
-    /// recovery does (ADR-0005).
+    /// can replay the persisted pending request plus recorded answer directly,
+    /// without relying on the planner to re-emit the same request (ADR-0005).
     ///
     /// Errors if the session is not awaiting input or if `request_id` does not
     /// match the pending request (a structural guard, not a semantic judgment).
     ///
     /// [`AwaitingInput`]: SessionStatus::AwaitingInput
-    pub async fn resume(
+    pub async fn accept_human_response(
         &self,
         session_id: &str,
         request_id: &str,
@@ -486,6 +484,26 @@ impl ReActEngine {
         state.record_hitl_answer(request_id, answer);
         state.status = SessionStatus::Running;
         self.checkpoints.save(&state).await?;
+
+        Ok(state)
+    }
+
+    /// Persist a human answer, then drive the resumed session to its next
+    /// boundary. Hosts that need their own observer and status projection can
+    /// call [`Self::accept_human_response`] followed by [`Self::run_observed`].
+    pub async fn resume(
+        &self,
+        session_id: &str,
+        request_id: &str,
+        answer: &str,
+    ) -> CoreResult<SessionState> {
+        let state = self
+            .accept_human_response(session_id, request_id, answer)
+            .await?;
+
+        if state.status != SessionStatus::Running {
+            return Ok(state);
+        }
 
         let goal = state.goal.clone();
         let project_id = state.project_id.clone();

@@ -47,6 +47,18 @@ pub struct NewHitlRequestRecord {
     pub expires_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutomationHitlResumeCandidate {
+    pub request_id: String,
+    pub request_type: String,
+    pub tenant_id: String,
+    pub project_id: String,
+    pub conversation_id: String,
+    pub run_id: String,
+    pub checkpoint_session_id: String,
+    pub answer: String,
+}
+
 impl HitlRequestRecord {
     pub fn is_expired_at(&self, now: DateTime<Utc>) -> bool {
         self.expires_at.is_some_and(|expires_at| expires_at <= now)
@@ -132,6 +144,56 @@ impl PgHitlRequestRepository {
              ORDER BY created_at ASC, id ASC",
         )
         .bind(conversation_id)
+        .fetch_all(&self.pool)
+        .await
+        .map(|rows| rows.into_iter().map(Into::into).collect())
+        .map_err(storage)
+    }
+
+    /// List answered non-secret automation requests whose run still awaits resume.
+    pub async fn list_automation_resume_candidates(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        limit: i64,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Vec<AutomationHitlResumeCandidate>> {
+        sqlx::query_as::<_, AutomationHitlResumeRow>(
+            "SELECT hitl.id AS request_id, hitl.request_type, hitl.tenant_id, \
+                    hitl.project_id, hitl.conversation_id, run.id AS run_id, \
+                    hitl.request_metadata ->> 'checkpoint_session_id' \
+                        AS checkpoint_session_id, \
+                    hitl.response_metadata ->> 'resume_answer' AS answer \
+             FROM hitl_requests AS hitl \
+             JOIN cron_job_runs AS run \
+               ON run.id = hitl.message_id \
+              AND run.runtime_execution_id = run.id \
+              AND run.conversation_id = hitl.conversation_id \
+             JOIN cron_jobs AS job ON job.id = run.job_id \
+             JOIN agistack_cron_operations AS operation \
+               ON operation.run_id = run.id \
+              AND operation.operation_kind = 'execute_run' \
+             WHERE hitl.tenant_id = $1 AND hitl.project_id = $2 \
+               AND hitl.status = 'answered' \
+               AND hitl.request_type IN ('clarification', 'decision', 'permission') \
+               AND hitl.expires_at > $3 \
+               AND hitl.request_metadata ->> 'automation_run_id' = run.id \
+               AND hitl.request_metadata ->> 'runtime_execution_id' = run.id \
+               AND hitl.request_metadata ->> 'checkpoint_session_id' = run.id \
+               AND hitl.response_metadata ->> 'resume_answer' IS NOT NULL \
+               AND run.project_id = hitl.project_id \
+               AND run.status = 'waiting_human' \
+               AND run.deadline_at IS NOT NULL AND run.deadline_at > $3 \
+               AND job.tenant_id = hitl.tenant_id AND job.project_id = hitl.project_id \
+               AND operation.tenant_id = hitl.tenant_id \
+               AND operation.project_id = hitl.project_id \
+               AND operation.status = 'waiting_runtime' \
+             ORDER BY hitl.answered_at, hitl.id LIMIT $4",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(now)
+        .bind(limit.clamp(1, 100))
         .fetch_all(&self.pool)
         .await
         .map(|rows| rows.into_iter().map(Into::into).collect())
@@ -255,6 +317,18 @@ struct HitlRequestRow {
     expires_at: Option<DateTime<Utc>>,
 }
 
+#[derive(sqlx::FromRow)]
+struct AutomationHitlResumeRow {
+    request_id: String,
+    request_type: String,
+    tenant_id: String,
+    project_id: String,
+    conversation_id: String,
+    run_id: String,
+    checkpoint_session_id: String,
+    answer: String,
+}
+
 impl From<HitlRequestRow> for HitlRequestRecord {
     fn from(row: HitlRequestRow) -> Self {
         Self {
@@ -273,6 +347,21 @@ impl From<HitlRequestRow> for HitlRequestRecord {
             response: row.response,
             response_metadata: row.response_metadata,
             expires_at: row.expires_at,
+        }
+    }
+}
+
+impl From<AutomationHitlResumeRow> for AutomationHitlResumeCandidate {
+    fn from(row: AutomationHitlResumeRow) -> Self {
+        Self {
+            request_id: row.request_id,
+            request_type: row.request_type,
+            tenant_id: row.tenant_id,
+            project_id: row.project_id,
+            conversation_id: row.conversation_id,
+            run_id: row.run_id,
+            checkpoint_session_id: row.checkpoint_session_id,
+            answer: row.answer,
         }
     }
 }
