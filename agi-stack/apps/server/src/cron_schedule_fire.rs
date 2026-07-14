@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use agistack_adapters_postgres::{
     CronDueSchedule, CronOperationScope, CronScheduleFireError, CronScheduleProjection,
-    CronScheduledFireResult, NewCronScheduledFire, PgCronScheduleFireRepository,
+    CronScheduledFireResult, CronSchedulerLease, CronSchedulerOwnerError, NewCronScheduledFire,
+    PgCronScheduleFireRepository, PgCronSchedulerOwnerRepository,
 };
 use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
@@ -33,6 +34,7 @@ pub(crate) trait CronScheduleFireStore: Send + Sync {
         candidate: &CronDueSchedule,
         next: &CronScheduleProjection,
         fire: &NewCronScheduledFire,
+        authority: &CronSchedulerLease,
         observed_at: DateTime<Utc>,
     ) -> Result<Option<CronScheduledFireResult>, CronScheduleFireError>;
 }
@@ -54,10 +56,39 @@ impl CronScheduleFireStore for PgCronScheduleFireRepository {
         candidate: &CronDueSchedule,
         next: &CronScheduleProjection,
         fire: &NewCronScheduledFire,
+        authority: &CronSchedulerLease,
         observed_at: DateTime<Utc>,
     ) -> Result<Option<CronScheduledFireResult>, CronScheduleFireError> {
-        PgCronScheduleFireRepository::commit_fire(self, scope, candidate, next, fire, observed_at)
-            .await
+        PgCronScheduleFireRepository::commit_fire(
+            self,
+            scope,
+            candidate,
+            next,
+            fire,
+            authority,
+            observed_at,
+        )
+        .await
+    }
+}
+
+#[async_trait]
+pub(crate) trait CronSchedulerOwnershipStore: Send + Sync {
+    async fn is_current(
+        &self,
+        lease: &CronSchedulerLease,
+        now: DateTime<Utc>,
+    ) -> Result<bool, CronSchedulerOwnerError>;
+}
+
+#[async_trait]
+impl CronSchedulerOwnershipStore for PgCronSchedulerOwnerRepository {
+    async fn is_current(
+        &self,
+        lease: &CronSchedulerLease,
+        now: DateTime<Utc>,
+    ) -> Result<bool, CronSchedulerOwnerError> {
+        PgCronSchedulerOwnerRepository::is_current(self, lease, now).await
     }
 }
 
@@ -70,25 +101,44 @@ pub(crate) struct CronScheduleFireSummary {
 
 pub(crate) struct CronScheduleFireCoordinator {
     store: Arc<dyn CronScheduleFireStore>,
+    ownership: Arc<dyn CronSchedulerOwnershipStore>,
     clock: Arc<dyn CronWorkerClock>,
 }
 
 impl CronScheduleFireCoordinator {
     pub(crate) fn new(
         store: Arc<dyn CronScheduleFireStore>,
+        ownership: Arc<dyn CronSchedulerOwnershipStore>,
         clock: Arc<dyn CronWorkerClock>,
     ) -> Self {
-        Self { store, clock }
+        Self {
+            store,
+            ownership,
+            clock,
+        }
     }
 
     pub(crate) async fn fire_due(
         &self,
+        authority: &CronSchedulerLease,
         tenant_id: &str,
         project_id: &str,
         limit: i64,
     ) -> CoreResult<CronScheduleFireSummary> {
         let scope = validated_scope(tenant_id, project_id)?;
         let observed_at = self.clock.now();
+        if !authority.is_structurally_valid()
+            || authority.lease_expires_at <= observed_at
+            || !self
+                .ownership
+                .is_current(authority, observed_at)
+                .await
+                .map_err(redacted_ownership)?
+        {
+            return Err(CoreError::Storage(
+                "cron scheduler authority is not current".to_string(),
+            ));
+        }
         let candidates = self
             .store
             .list_due(scope, observed_at, limit)
@@ -110,7 +160,7 @@ impl CronScheduleFireCoordinator {
             let fire = deterministic_fire(candidate);
             match self
                 .store
-                .commit_fire(scope, candidate, &next, &fire, observed_at)
+                .commit_fire(scope, candidate, &next, &fire, authority, observed_at)
                 .await
                 .map_err(redacted_storage)?
             {
@@ -192,6 +242,10 @@ fn deterministic_fire(candidate: &CronDueSchedule) -> NewCronScheduledFire {
 
 fn redacted_storage(_error: CronScheduleFireError) -> CoreError {
     CoreError::Storage("cron scheduled fire storage failed".to_string())
+}
+
+fn redacted_ownership(_error: CronSchedulerOwnerError) -> CoreError {
+    CoreError::Storage("cron scheduler ownership storage failed".to_string())
 }
 
 #[cfg(test)]

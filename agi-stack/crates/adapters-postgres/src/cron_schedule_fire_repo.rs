@@ -8,7 +8,8 @@ use sqlx::types::chrono::{DateTime, Utc};
 use agistack_core::ports::CoreError;
 
 use crate::{
-    CronOperationScope, CronScheduleProjection, CronScheduleSnapshot, CronScheduleStatus, PgPool,
+    CronOperationScope, CronScheduleProjection, CronScheduleSnapshot, CronScheduleStatus,
+    CronSchedulerLease, PgPool, GLOBAL_CRON_SCHEDULER_SCOPE,
 };
 
 const LIST_DUE_SQL: &str = "SELECT job.id AS job_id, job.tenant_id, job.project_id, \
@@ -29,13 +30,17 @@ ORDER BY state.next_fire_at, state.job_id LIMIT $4";
 const LOCK_CURSOR_SQL: &str = "SELECT job.id \
 FROM agistack_cron_schedule_state AS state \
 JOIN cron_jobs AS job ON job.id = state.job_id \
+JOIN agistack_cron_scheduler_owners AS scheduler_owner ON scheduler_owner.scope_id = $8 \
 WHERE state.job_id = $1 AND state.tenant_id = $2 AND state.project_id = $3 \
   AND state.status = 'active' AND state.schedule_revision = $4 \
   AND state.schedule_fingerprint = $5 AND state.next_fire_at = $6 \
   AND job.tenant_id = state.tenant_id AND job.project_id = state.project_id \
   AND job.revision = $7 AND job.schedule_revision = state.schedule_revision \
   AND job.enabled IS TRUE \
-FOR UPDATE OF state, job";
+  AND scheduler_owner.owner_kind = 'rust' AND scheduler_owner.owner_id = $9 \
+  AND scheduler_owner.owner_epoch = $10 AND scheduler_owner.lease_token = $11 \
+  AND scheduler_owner.lease_expires_at = $12 AND scheduler_owner.lease_expires_at > $13 \
+FOR UPDATE OF state, job, scheduler_owner";
 
 /// Exact materialized cursor plus the immutable run policy needed to fire it.
 #[derive(Debug, Clone, PartialEq)]
@@ -125,9 +130,10 @@ impl PgCronScheduleFireRepository {
         candidate: &CronDueSchedule,
         next: &CronScheduleProjection,
         fire: &NewCronScheduledFire,
+        authority: &CronSchedulerLease,
         observed_at: DateTime<Utc>,
     ) -> Result<Option<CronScheduledFireResult>, CronScheduleFireError> {
-        validate_fire(scope, candidate, next, fire, observed_at)?;
+        validate_fire(scope, candidate, next, fire, authority, observed_at)?;
         let actor_user_id = candidate
             .actor_user_id
             .as_deref()
@@ -141,6 +147,12 @@ impl PgCronScheduleFireRepository {
             .bind(&candidate.schedule_fingerprint)
             .bind(candidate.scheduled_for)
             .bind(candidate.snapshot.job_revision)
+            .bind(&authority.scope_id)
+            .bind(&authority.owner_id)
+            .bind(authority.owner_epoch)
+            .bind(&authority.lease_token)
+            .bind(authority.lease_expires_at)
+            .bind(observed_at)
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?;
@@ -242,6 +254,7 @@ fn validate_fire(
     candidate: &CronDueSchedule,
     next: &CronScheduleProjection,
     fire: &NewCronScheduledFire,
+    authority: &CronSchedulerLease,
     observed_at: DateTime<Utc>,
 ) -> Result<(), CronScheduleFireError> {
     let required = [
@@ -277,6 +290,9 @@ fn validate_fire(
         || candidate.snapshot.job_revision <= 0
         || candidate.snapshot.schedule_revision <= 0
         || candidate.scheduled_for > observed_at
+        || !authority.is_structurally_valid()
+        || authority.scope_id != GLOBAL_CRON_SCHEDULER_SCOPE
+        || authority.lease_expires_at <= observed_at
         || !fingerprint_is_sha256
         || next.schedule_fingerprint != candidate.schedule_fingerprint
         || !next_is_valid
@@ -374,6 +390,10 @@ mod tests {
         assert!(sql.contains("state.schedule_fingerprint = $5"));
         assert!(sql.contains("state.next_fire_at = $6"));
         assert!(sql.contains("job.revision = $7"));
-        assert!(sql.contains("FOR UPDATE OF state, job"));
+        assert!(sql.contains("scheduler_owner.scope_id = $8"));
+        assert!(sql.contains("scheduler_owner.owner_epoch = $10"));
+        assert!(sql.contains("scheduler_owner.lease_token = $11"));
+        assert!(sql.contains("scheduler_owner.lease_expires_at = $12"));
+        assert!(sql.contains("FOR UPDATE OF state, job, scheduler_owner"));
     }
 }

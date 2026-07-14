@@ -1,7 +1,7 @@
 use agistack_adapters_postgres::{
     CronOperationKind, CronOperationRecord, CronOperationScope, CronOperationStatus,
     CronScheduleProjection, CronScheduleRepositoryError, CronScheduleStatus, NewCronScheduledFire,
-    PgCronScheduleFireRepository, PgCronScheduleRepository,
+    PgCronScheduleFireRepository, PgCronScheduleRepository, PgCronSchedulerOwnerRepository,
 };
 use serde_json::json;
 
@@ -167,6 +167,21 @@ async fn due_schedule_fire_atomically_creates_run_operation_and_advances_cursor(
     .execute(&pool)
     .await
     .expect("insert due cursor");
+    sqlx::query(
+        "INSERT INTO agistack_cron_scheduler_owners (scope_id, owner_kind, owner_epoch, updated_at) \
+         VALUES ('global', 'rust', 0, $1) \
+         ON CONFLICT (scope_id) DO UPDATE SET owner_kind = 'rust', owner_id = NULL, \
+            lease_token = NULL, lease_expires_at = NULL, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(now)
+    .execute(&pool)
+    .await
+    .expect("delegate scheduler ownership to Rust");
+    let authority = PgCronSchedulerOwnerRepository::new(pool.clone())
+        .try_acquire_global("cron-schedule-test", 60, now)
+        .await
+        .expect("acquire scheduler authority")
+        .expect("Rust cutover row grants authority");
 
     let scope = CronOperationScope {
         tenant_id: &tenant_id,
@@ -192,8 +207,8 @@ async fn due_schedule_fire_atomically_creates_run_operation_and_advances_cursor(
 
     let competing_repo = repo.clone();
     let (left, right) = tokio::join!(
-        repo.commit_fire(scope, &candidate, &next, &fire, now),
-        competing_repo.commit_fire(scope, &candidate, &next, &fire, now),
+        repo.commit_fire(scope, &candidate, &next, &fire, &authority, now),
+        competing_repo.commit_fire(scope, &candidate, &next, &fire, &authority, now),
     );
     let left = left.expect("first competing scheduler query");
     let right = right.expect("second competing scheduler query");
@@ -206,7 +221,7 @@ async fn due_schedule_fire_atomically_creates_run_operation_and_advances_cursor(
         .expect("one exact cursor wins compare-and-set");
     assert_eq!(committed.scheduled_for, now);
     assert!(repo
-        .commit_fire(scope, &candidate, &next, &fire, now)
+        .commit_fire(scope, &candidate, &next, &fire, &authority, now)
         .await
         .expect("replay is a closed compare-and-set")
         .is_none());
@@ -306,6 +321,11 @@ async fn ensure_scheduled_fire_tables(pool: &PgPool) {
         "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_execution_id text",
         "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)",
         "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS request_receipt_id text",
+        "CREATE TABLE IF NOT EXISTS agistack_cron_scheduler_owners ( \
+            scope_id varchar(100) PRIMARY KEY, owner_kind varchar(20) NOT NULL DEFAULT 'off', \
+            owner_id varchar(255), owner_epoch bigint NOT NULL DEFAULT 0, \
+            lease_token varchar(255), lease_expires_at timestamptz, acquired_at timestamptz, \
+            updated_at timestamptz NOT NULL DEFAULT now())",
         "CREATE TABLE IF NOT EXISTS agistack_cron_operations ( \
             id varchar PRIMARY KEY, tenant_id varchar NOT NULL, project_id varchar NOT NULL, \
             job_id varchar NOT NULL, job_revision bigint NOT NULL, schedule_revision bigint, \
@@ -344,4 +364,8 @@ async fn clean_rows(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("clean schedule job");
+    sqlx::query("DELETE FROM agistack_cron_scheduler_owners WHERE scope_id = 'global'")
+        .execute(pool)
+        .await
+        .expect("clean scheduler owner");
 }
