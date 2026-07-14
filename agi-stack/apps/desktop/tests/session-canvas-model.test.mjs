@@ -3,9 +3,32 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { defaultSessionCanvasTab, hasAuthoritativeChangeReview, sessionCanvasTabs } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/session/sessionCanvasModel.js'
-);
+const {
+  defaultSessionCanvasTab,
+  hasAuthoritativeChangeReview,
+  sessionCanvasTabs,
+  shouldShowSessionCanvas,
+} = require('/tmp/agistack-desktop-test-dist/src/features/session/sessionCanvasModel.js');
+
+test('only a selected conversation can open the Thread and Canvas split', () => {
+  const base = { authenticated: true, canvasOpen: true, sessionSelected: true };
+
+  assert.equal(shouldShowSessionCanvas({ ...base, surface: 'conversation' }), true);
+  assert.equal(shouldShowSessionCanvas({ ...base, surface: 'workspace' }), false);
+  assert.equal(shouldShowSessionCanvas({ ...base, surface: 'other' }), false);
+  assert.equal(
+    shouldShowSessionCanvas({ ...base, surface: 'conversation', sessionSelected: false }),
+    false
+  );
+  assert.equal(
+    shouldShowSessionCanvas({ ...base, surface: 'conversation', canvasOpen: false }),
+    false
+  );
+  assert.equal(
+    shouldShowSessionCanvas({ ...base, surface: 'conversation', authenticated: false }),
+    false
+  );
+});
 
 test('standalone Code workspace drawer keeps its complete review inventory', () => {
   assert.deepEqual(

@@ -2,9 +2,7 @@
   min-width: 0;
   height: 100%;
   overflow: auto;
-  background:
-    radial-gradient(circle at 72% -18%, rgba(32, 168, 207, 0.08), transparent 38%),
-    #080d14;
+  background: #090e15;
   color: var(--desktop-text);
 }
 

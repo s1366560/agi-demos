@@ -23,6 +23,22 @@ export type SessionCanvasTabs = {
 
 export type SessionCanvasVariant = 'workspace' | 'session';
 
+export type SessionCanvasSurface = 'conversation' | 'workspace' | 'other';
+
+export function shouldShowSessionCanvas(input: {
+  authenticated: boolean;
+  canvasOpen: boolean;
+  sessionSelected: boolean;
+  surface: SessionCanvasSurface;
+}): boolean {
+  return (
+    input.authenticated &&
+    input.canvasOpen &&
+    input.sessionSelected &&
+    input.surface === 'conversation'
+  );
+}
+
 export function hasAuthoritativeChangeReview(input: {
   changedFileCount: number;
   hasPendingHitlRequest: boolean;

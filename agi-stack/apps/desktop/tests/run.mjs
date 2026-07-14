@@ -31,6 +31,7 @@ const testFiles = [
   'automation-model.test.mjs',
   'auth-context-model.test.mjs',
   'chat-composer-model.test.mjs',
+  'desktop-shell-fidelity.test.mjs',
   'login-screen-model.test.mjs',
   'trusted-local-session-reference.test.mjs',
   'local-runtime-status.test.mjs',
@@ -59,6 +60,7 @@ const testFiles = [
   'use-terminal-proxy.test.mjs',
   'workspace-tree-model.test.mjs',
   'workspace-overview-model.test.mjs',
+  'workspace-overview-style.test.mjs',
   'workspace-execution-model.test.mjs',
 ].map((filename) => join(testsDirectory, filename));
 const run = spawnSync(process.execPath, ['--test', ...testFiles], {
