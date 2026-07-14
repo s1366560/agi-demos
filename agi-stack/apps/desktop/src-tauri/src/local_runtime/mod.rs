@@ -2610,6 +2610,47 @@ fn my_work_required_action(status: DesktopRunStatus) -> &'static str {
     }
 }
 
+fn my_work_capability_mode(
+    capability_mode: ConversationCapabilityMode,
+) -> Option<ConversationCapabilityMode> {
+    match capability_mode {
+        ConversationCapabilityMode::Work | ConversationCapabilityMode::Code => {
+            Some(capability_mode)
+        }
+        ConversationCapabilityMode::Unavailable => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum DesktopMyWorkAuthorityKind {
+    DesktopRun,
+}
+
+#[derive(Debug, Serialize)]
+struct DesktopMyWorkItem {
+    id: String,
+    authority_kind: DesktopMyWorkAuthorityKind,
+    authority_id: String,
+    attempt_number: Option<u64>,
+    run_id: String,
+    conversation_id: String,
+    workspace_id: Option<String>,
+    project_id: String,
+    title: String,
+    capability_mode: Option<ConversationCapabilityMode>,
+    group: &'static str,
+    status: DesktopRunStatus,
+    required_action: &'static str,
+    revision: u64,
+    permission_profile: DesktopPermissionProfile,
+    environment: Option<DesktopExecutionEnvironment>,
+    error: Option<String>,
+    created_at: String,
+    updated_at: String,
+    last_heartbeat_at: Option<String>,
+}
+
 async fn list_project_my_work(
     State(state): State<Arc<LocalRuntimeState>>,
     Path(project_id): Path<String>,
@@ -2639,25 +2680,28 @@ async fn list_project_my_work(
                 Json(json!({ "detail": "run conversation project mismatch" })),
             ));
         }
-        items.push(json!({
-            "id": run.id,
-            "run_id": run.id,
-            "conversation_id": run.conversation_id,
-            "workspace_id": conversation.workspace_id,
-            "project_id": run.project_id,
-            "title": conversation.title,
-            "capability_mode": conversation.capability_mode,
-            "group": group,
-            "status": run.status,
-            "required_action": my_work_required_action(run.status),
-            "revision": run.revision,
-            "permission_profile": run.permission_profile,
-            "environment": run.environment,
-            "error": run.error,
-            "created_at": run.created_at,
-            "updated_at": run.updated_at,
-            "last_heartbeat_at": run.last_heartbeat_at,
-        }));
+        items.push(DesktopMyWorkItem {
+            id: run.id.clone(),
+            authority_kind: DesktopMyWorkAuthorityKind::DesktopRun,
+            authority_id: run.id.clone(),
+            attempt_number: None,
+            run_id: run.id,
+            conversation_id: run.conversation_id,
+            workspace_id: conversation.workspace_id,
+            project_id: run.project_id,
+            title: conversation.title,
+            capability_mode: my_work_capability_mode(conversation.capability_mode),
+            group,
+            status: run.status,
+            required_action: my_work_required_action(run.status),
+            revision: run.revision,
+            permission_profile: run.permission_profile,
+            environment: run.environment,
+            error: run.error,
+            created_at: run.created_at,
+            updated_at: run.updated_at,
+            last_heartbeat_at: run.last_heartbeat_at,
+        });
     }
 
     Ok(Json(json!({
@@ -7013,77 +7057,90 @@ mod tests {
         );
         assert_eq!(my_work_group(DesktopRunStatus::Completed), None);
         assert_eq!(my_work_group(DesktopRunStatus::Cancelled), None);
+        assert_eq!(
+            my_work_capability_mode(ConversationCapabilityMode::Code),
+            Some(ConversationCapabilityMode::Code)
+        );
+        assert_eq!(
+            my_work_capability_mode(ConversationCapabilityMode::Unavailable),
+            None
+        );
     }
 
     #[tokio::test]
     async fn my_work_route_is_project_scoped_and_uses_run_status_without_text_inference() {
         let state = test_state("launch-secret");
-        let seed =
-            |conversation_id: &str, project_id: &str, status: DesktopRunStatus| -> DesktopRun {
-                let conversation = LocalConversation {
-                    id: conversation_id.to_string(),
-                    project_id: project_id.to_string(),
-                    tenant_id: "local".to_string(),
-                    title: format!("Attention item {conversation_id}"),
-                    workspace_id: Some(format!("workspace-{project_id}")),
-                    capability_mode: ConversationCapabilityMode::Code,
-                    current_mode: ConversationRunMode::Plan,
-                    created_at: now_iso(),
-                    updated_at: now_iso(),
-                };
-                state
-                    .session_store
-                    .insert_conversation(&conversation)
-                    .expect("insert conversation");
-                state
-                    .session_store
-                    .replace_agent_plan_tasks(
-                        &conversation.id,
-                        &[json!({
-                            "id": format!("task-{conversation_id}"),
-                            "conversation_id": conversation.id,
-                            "content": "A title with no status keywords",
-                            "status": "pending",
-                            "priority": "high",
-                            "order_index": 0,
-                            "created_at": now_iso(),
-                            "updated_at": now_iso(),
-                        })],
-                    )
-                    .expect("store plan");
-                let approved = state
-                    .session_store
-                    .approve_plan_and_start(
-                        &conversation.id,
-                        project_id,
-                        &format!("approval-{conversation_id}"),
-                        &format!("message-{conversation_id}"),
-                        "Execute the reviewed plan",
-                        &now_iso(),
-                    )
-                    .expect("approve run");
-                let running = state
-                    .session_store
-                    .prepare_run_for_execution(&approved.run.id, &now_iso())
-                    .expect("prepare run")
-                    .expect("running run");
-                if status == DesktopRunStatus::Running {
-                    running
-                } else {
-                    state
-                        .session_store
-                        .transition_run(&running.id, running.revision, status, None, &now_iso())
-                        .expect("transition attention run")
-                }
+        let seed = |conversation_id: &str,
+                    project_id: &str,
+                    capability_mode: ConversationCapabilityMode,
+                    status: DesktopRunStatus|
+         -> DesktopRun {
+            let conversation = LocalConversation {
+                id: conversation_id.to_string(),
+                project_id: project_id.to_string(),
+                tenant_id: "local".to_string(),
+                title: format!("Attention item {conversation_id}"),
+                workspace_id: Some(format!("workspace-{project_id}")),
+                capability_mode,
+                current_mode: ConversationRunMode::Plan,
+                created_at: now_iso(),
+                updated_at: now_iso(),
             };
+            state
+                .session_store
+                .insert_conversation(&conversation)
+                .expect("insert conversation");
+            state
+                .session_store
+                .replace_agent_plan_tasks(
+                    &conversation.id,
+                    &[json!({
+                        "id": format!("task-{conversation_id}"),
+                        "conversation_id": conversation.id,
+                        "content": "A title with no status keywords",
+                        "status": "pending",
+                        "priority": "high",
+                        "order_index": 0,
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    })],
+                )
+                .expect("store plan");
+            let approved = state
+                .session_store
+                .approve_plan_and_start(
+                    &conversation.id,
+                    project_id,
+                    &format!("approval-{conversation_id}"),
+                    &format!("message-{conversation_id}"),
+                    "Execute the reviewed plan",
+                    &now_iso(),
+                )
+                .expect("approve run");
+            let running = state
+                .session_store
+                .prepare_run_for_execution(&approved.run.id, &now_iso())
+                .expect("prepare run")
+                .expect("running run");
+            if status == DesktopRunStatus::Running {
+                running
+            } else {
+                state
+                    .session_store
+                    .transition_run(&running.id, running.revision, status, None, &now_iso())
+                    .expect("transition attention run")
+            }
+        };
         let expected = seed(
             "conversation-local-project",
             "local-project",
+            ConversationCapabilityMode::Unavailable,
             DesktopRunStatus::NeedsApproval,
         );
         seed(
             "conversation-project-b",
             "project-b",
+            ConversationCapabilityMode::Code,
             DesktopRunStatus::ReadyReview,
         );
 
@@ -7106,6 +7163,27 @@ mod tests {
         assert_eq!(payload["project_id"], "local-project");
         assert_eq!(payload["total"], 1);
         assert_eq!(payload["items"][0]["run_id"], expected.id);
+        assert_eq!(payload["items"][0]["authority_kind"], "desktop_run");
+        assert_eq!(payload["items"][0]["authority_id"], expected.id);
+        assert!(payload["items"][0]
+            .as_object()
+            .expect("my work item")
+            .contains_key("attempt_number"));
+        assert!(payload["items"][0]["attempt_number"].is_null());
+        assert!(payload["items"][0]["capability_mode"].is_null());
+        assert_eq!(payload["items"][0]["revision"], expected.revision);
+        assert_eq!(
+            payload["items"][0]["permission_profile"],
+            serde_json::to_value(expected.permission_profile).expect("permission profile json")
+        );
+        assert_eq!(
+            payload["items"][0]["environment"],
+            serde_json::to_value(expected.environment).expect("environment json")
+        );
+        assert_eq!(
+            payload["items"][0]["last_heartbeat_at"],
+            serde_json::to_value(expected.last_heartbeat_at).expect("heartbeat json")
+        );
         assert_eq!(payload["items"][0]["group"], "needs_approval");
         assert_eq!(payload["items"][0]["required_action"], "review_approval");
     }

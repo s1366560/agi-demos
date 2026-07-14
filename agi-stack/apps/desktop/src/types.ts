@@ -472,15 +472,16 @@ export type PromoteRunInputResponse = {
 };
 
 export type MyWorkGroup = 'needs_input' | 'needs_approval' | 'running' | 'ready_review';
+export type MyWorkAuthorityKind = 'desktop_run' | 'workspace_attempt' | 'hitl_request';
 
-export type ProjectWorkItem = {
+type ProjectWorkItemBase = {
   id: string;
-  run_id: string;
+  authority_id: string;
   conversation_id: string;
   workspace_id?: string | null;
   project_id: string;
   title: string;
-  capability_mode: AgentCapabilityMode;
+  capability_mode: AgentCapabilityMode | null;
   group: MyWorkGroup;
   status: DesktopRunStatus;
   required_action:
@@ -491,14 +492,45 @@ export type ProjectWorkItem = {
     | 'reattach'
     | 'inspect_failure'
     | 'review_result';
-  revision: number;
-  permission_profile: DesktopPermissionProfile;
-  environment?: DesktopExecutionEnvironment | null;
   error?: string | null;
   created_at: string;
   updated_at: string;
   last_heartbeat_at?: string | null;
 };
+
+type DesktopRunWorkItem = ProjectWorkItemBase & {
+  authority_kind: 'desktop_run';
+  run_id: string;
+  revision: number;
+  permission_profile: DesktopPermissionProfile;
+  attempt_number: null;
+  environment?: DesktopExecutionEnvironment | null;
+};
+
+type WorkspaceAttemptWorkItem = ProjectWorkItemBase & {
+  authority_kind: 'workspace_attempt';
+  run_id: null;
+  revision: null;
+  permission_profile: null;
+  attempt_number: number;
+  environment?: null;
+  last_heartbeat_at?: null;
+};
+
+type HitlRequestWorkItem = ProjectWorkItemBase & {
+  authority_kind: 'hitl_request';
+  run_id: null;
+  revision: null;
+  permission_profile: null;
+  attempt_number: null;
+  environment?: null;
+  last_heartbeat_at?: null;
+};
+
+export type ProjectWorkItem =
+  | DesktopRunWorkItem
+  | WorkspaceAttemptWorkItem
+  | HitlRequestWorkItem;
 
 export type ProjectMyWorkResponse = {
   project_id: string;

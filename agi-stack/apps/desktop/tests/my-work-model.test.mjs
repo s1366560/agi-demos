@@ -5,8 +5,10 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   countMyWorkGroups,
+  describeMyWorkAuthority,
   filterMyWorkItems,
   myWorkConversationMatchesScope,
+  myWorkItemKey,
   socketEventInvalidatesMyWork,
 } = require('/tmp/agistack-desktop-test-dist/src/features/my-work/myWorkModel.js');
 
@@ -35,16 +37,39 @@ const items = [
     updated_at: '2026-07-13T04:00:00Z',
     created_at: '2026-07-13T01:00:00Z',
   },
+  {
+    id: 'unclassified',
+    title: 'Inspect imported workspace task',
+    group: 'running',
+    capability_mode: null,
+    updated_at: '2026-07-13T05:00:00Z',
+    created_at: '2026-07-13T01:00:00Z',
+  },
 ];
 
-test('My Work filters only explicit backend groups and capability modes', () => {
+test('My Work keeps an unclassified backend item visible without guessing its mode', () => {
   assert.deepEqual(
     filterMyWorkItems(items, 'all', 'code').map((item) => item.id),
-    ['review', 'approval']
+    ['unclassified', 'review', 'approval']
+  );
+  assert.deepEqual(
+    filterMyWorkItems(items, 'all', 'work').map((item) => item.id),
+    ['unclassified', 'input']
   );
   assert.deepEqual(
     filterMyWorkItems(items, 'needs_input', 'all').map((item) => item.id),
     ['input']
+  );
+});
+
+test('My Work list identity includes the authority namespace', () => {
+  assert.equal(
+    myWorkItemKey({ authority_kind: 'workspace_attempt', authority_id: 'shared-1' }),
+    'workspace_attempt:shared-1'
+  );
+  assert.notEqual(
+    myWorkItemKey({ authority_kind: 'workspace_attempt', authority_id: 'shared-1' }),
+    myWorkItemKey({ authority_kind: 'hitl_request', authority_id: 'shared-1' })
   );
 });
 
@@ -63,9 +88,108 @@ test('My Work counts preserve the four authoritative attention groups', () => {
   assert.deepEqual(countMyWorkGroups(items), {
     needs_input: 1,
     needs_approval: 1,
-    running: 0,
+    running: 1,
     ready_review: 1,
   });
+});
+
+test('My Work exposes desktop runtime facts only for desktop-run authority', () => {
+  assert.deepEqual(
+    describeMyWorkAuthority({
+      authority_kind: 'desktop_run',
+      authority_id: 'run-1',
+      run_id: 'run-1',
+      revision: 7,
+      attempt_number: null,
+      permission_profile: 'workspace_write',
+      environment: { id: 'environment-1', label: 'main worktree' },
+      last_heartbeat_at: '2026-07-13T05:00:00Z',
+    }),
+    {
+      sourceKey: 'myWork.authorityKind.desktop_run',
+      descriptionKey: 'myWork.authorityDescription.desktop_run',
+      identifier: 'run-1',
+      sequence: { labelKey: 'myWork.runRevisionLabel', value: '7' },
+      runtime: {
+        runId: 'run-1',
+        revision: 7,
+        permissionProfile: 'workspace_write',
+        environment: { id: 'environment-1', label: 'main worktree' },
+        lastHeartbeatAt: '2026-07-13T05:00:00Z',
+      },
+    }
+  );
+});
+
+test('My Work presents workspace attempts without fabricated desktop runtime facts', () => {
+  assert.deepEqual(
+    describeMyWorkAuthority({
+      authority_kind: 'workspace_attempt',
+      authority_id: 'attempt-4',
+      run_id: null,
+      revision: null,
+      attempt_number: 4,
+      permission_profile: null,
+      environment: null,
+      last_heartbeat_at: null,
+    }),
+    {
+      sourceKey: 'myWork.authorityKind.workspace_attempt',
+      descriptionKey: 'myWork.authorityDescription.workspace_attempt',
+      identifier: 'attempt-4',
+      sequence: { labelKey: 'myWork.attemptNumber', value: '4' },
+      runtime: null,
+    }
+  );
+});
+
+test('My Work presents HITL authority without exposing request payload details', () => {
+  const presentation = describeMyWorkAuthority({
+    authority_kind: 'hitl_request',
+    authority_id: 'hitl-2',
+    run_id: null,
+    revision: null,
+    attempt_number: null,
+    permission_profile: null,
+    environment: null,
+    last_heartbeat_at: null,
+    question: 'SECRET prompt text',
+    options: ['SECRET option'],
+    context: { secret: 'SECRET context' },
+  });
+
+  assert.deepEqual(presentation, {
+    sourceKey: 'myWork.authorityKind.hitl_request',
+    descriptionKey: 'myWork.authorityDescription.hitl_request',
+    identifier: 'hitl-2',
+    sequence: null,
+    runtime: null,
+  });
+  assert.equal('question' in presentation, false);
+  assert.equal('options' in presentation, false);
+  assert.equal('context' in presentation, false);
+});
+
+test('My Work fails closed when a backend sends an unknown authority discriminator', () => {
+  assert.deepEqual(
+    describeMyWorkAuthority({
+      authority_kind: 'legacy_guess',
+      authority_id: 'legacy-1',
+      run_id: null,
+      revision: null,
+      attempt_number: null,
+      permission_profile: null,
+      environment: null,
+      last_heartbeat_at: null,
+    }),
+    {
+      sourceKey: 'myWork.authorityKind.unknown',
+      descriptionKey: 'myWork.authorityDescription.unknown',
+      identifier: 'legacy-1',
+      sequence: null,
+      runtime: null,
+    }
+  );
 });
 
 test('My Work refreshes only for structured run, HITL, and review state events', () => {
@@ -75,6 +199,16 @@ test('My Work refreshes only for structured run, HITL, and review state events',
   );
   assert.equal(socketEventInvalidatesMyWork({ event_type: 'permission_asked' }), true);
   assert.equal(socketEventInvalidatesMyWork({ type: 'review_decision' }), true);
+  for (const eventType of [
+    'a2ui_action_asked',
+    'a2ui_action_answered',
+    'clarification_answered',
+    'decision_answered',
+    'env_var_provided',
+    'permission_replied',
+  ]) {
+    assert.equal(socketEventInvalidatesMyWork({ event_type: eventType }), true, eventType);
+  }
   assert.equal(socketEventInvalidatesMyWork({ type: 'text_delta' }), false);
   assert.equal(socketEventInvalidatesMyWork({ payload: { type: 'assistant_message' } }), false);
 });
@@ -95,6 +229,30 @@ test('My Work opens only the exact tenant, project, workspace, and conversation 
   const context = { tenantId: 'tenant-1', projectId: 'project-1' };
 
   assert.equal(myWorkConversationMatchesScope(item, conversation, context), true);
+  assert.equal(
+    myWorkConversationMatchesScope(
+      item,
+      { ...conversation, id: 'conversation-2' },
+      context
+    ),
+    false
+  );
+  assert.equal(
+    myWorkConversationMatchesScope(
+      item,
+      { ...conversation, project_id: 'project-2' },
+      context
+    ),
+    false
+  );
+  assert.equal(
+    myWorkConversationMatchesScope(
+      { ...item, project_id: 'project-2' },
+      conversation,
+      context
+    ),
+    false
+  );
   assert.equal(
     myWorkConversationMatchesScope(
       item,

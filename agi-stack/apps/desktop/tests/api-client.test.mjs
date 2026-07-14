@@ -522,10 +522,12 @@ test('listMyWork loads the project-scoped authoritative attention queue', async 
     return new Response(
       JSON.stringify({
         project_id: 'project/1',
-        total: 1,
+        total: 2,
         items: [
           {
             id: 'run-1',
+            authority_kind: 'desktop_run',
+            authority_id: 'run-1',
             run_id: 'run-1',
             conversation_id: 'conversation-1',
             project_id: 'project/1',
@@ -536,8 +538,30 @@ test('listMyWork loads the project-scoped authoritative attention queue', async 
             required_action: 'review_result',
             revision: 4,
             permission_profile: 'workspace_write',
+            attempt_number: null,
             created_at: '2026-07-13T00:00:00Z',
             updated_at: '2026-07-13T00:05:00Z',
+          },
+          {
+            id: 'attempt-2',
+            authority_kind: 'workspace_attempt',
+            authority_id: 'attempt-2',
+            run_id: null,
+            conversation_id: 'conversation-2',
+            workspace_id: 'workspace-1',
+            project_id: 'project/1',
+            title: 'Execute the workspace task',
+            capability_mode: null,
+            group: 'running',
+            status: 'running',
+            required_action: 'observe',
+            revision: null,
+            permission_profile: null,
+            attempt_number: 2,
+            environment: null,
+            created_at: '2026-07-13T00:00:00Z',
+            updated_at: '2026-07-13T00:06:00Z',
+            last_heartbeat_at: null,
           },
         ],
       }),
@@ -556,6 +580,9 @@ test('listMyWork loads the project-scoped authoritative attention queue', async 
     const result = await client.listMyWork('project/1');
 
     assert.equal(result.items[0]?.group, 'ready_review');
+    assert.equal(result.items[0]?.authority_kind, 'desktop_run');
+    assert.equal(result.items[1]?.authority_kind, 'workspace_attempt');
+    assert.equal(result.items[1]?.permission_profile, null);
     assert.equal(
       String(calls[0]?.input),
       'http://127.0.0.1:8088/api/v1/projects/project%2F1/my-work'

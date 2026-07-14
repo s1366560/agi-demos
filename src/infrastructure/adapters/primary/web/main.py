@@ -68,6 +68,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     memories,
     notifications,
     observability,
+    project_my_work,
     project_sandbox,
     projects,
     recall,
@@ -710,6 +711,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     # Register project sandbox routes before the generic project routes so
     # /api/v1/projects/sandboxes is not captured as a project id.
     app.include_router(project_sandbox.router)
+    app.include_router(project_my_work.router)
     app.include_router(projects.router)
     app.include_router(agent_router)  # Modular agent router
     app.include_router(websocket_router)  # WebSocket for agent chat

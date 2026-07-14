@@ -8,7 +8,6 @@ import {
   CodeIcon,
   DesktopIcon,
   ExclamationTriangleIcon,
-  LockClosedIcon,
   MagnifyingGlassIcon,
   ReloadIcon,
   RocketIcon,
@@ -25,8 +24,10 @@ import type {
 } from '../../types';
 import {
   countMyWorkGroups,
+  describeMyWorkAuthority,
   filterMyWorkItems,
   MY_WORK_GROUPS,
+  myWorkItemKey,
 } from './myWorkModel';
 import './MyWorkQueue.css';
 
@@ -76,11 +77,14 @@ export function MyWorkQueue({
   const counts = useMemo(() => countMyWorkGroups(visibleItems), [visibleItems]);
   const selectedItem = error
     ? null
-    : (visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null);
+    : (visibleItems.find((item) => myWorkItemKey(item) === selectedId) ??
+      visibleItems[0] ??
+      null);
 
   useEffect(() => {
-    if (selectedItem?.id !== selectedId) setSelectedId(selectedItem?.id ?? null);
-  }, [selectedId, selectedItem?.id]);
+    const selectedKey = selectedItem ? myWorkItemKey(selectedItem) : null;
+    if (selectedKey !== selectedId) setSelectedId(selectedKey);
+  }, [selectedId, selectedItem]);
 
   const toggleGroup = (group: MyWorkGroup) => {
     setCollapsedGroups((current) => {
@@ -117,14 +121,17 @@ export function MyWorkQueue({
         <label className="my-work-search">
           <MagnifyingGlassIcon />
           <input
+            name="my-work-search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t('myWork.search')}
             aria-label={t('myWork.search')}
+            autoComplete="off"
+            spellCheck={false}
           />
         </label>
 
-        <div className="my-work-filter-row" aria-label={t('myWork.statusFilter')} role="toolbar">
+        <div className="my-work-filter-row" aria-label={t('myWork.statusFilter')}>
           {(['all', 'attention', 'running', 'ready_review'] as const).map((value) => (
             <button
               type="button"
@@ -188,7 +195,7 @@ export function MyWorkQueue({
               const groupItems = visibleItems.filter((item) => item.group === group);
               const expanded = !collapsedGroups.has(group);
               return (
-                <section className="my-work-group" key={group}>
+                <div className="my-work-group" key={group}>
                   <button
                     type="button"
                     className="my-work-group-heading"
@@ -201,28 +208,34 @@ export function MyWorkQueue({
                     <ChevronDownIcon className={expanded ? 'expanded' : ''} />
                   </button>
                   {expanded
-                    ? groupItems.map((item) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          className={`my-work-item ${selectedItem?.id === item.id ? 'selected' : ''}`}
-                          aria-current={selectedItem?.id === item.id ? 'true' : undefined}
-                          onClick={() => setSelectedId(item.id)}
-                        >
-                          <span className={`my-work-status status-${item.group}`} aria-hidden />
-                          <span>
-                            <strong>{item.title}</strong>
-                            <small>{t(`myWork.action.${item.required_action}`)}</small>
-                            <em>
-                              {t('myWork.updated', {
-                                time: formatRelativeTime(item.updated_at, locale),
-                              })}
-                            </em>
-                          </span>
-                        </button>
-                      ))
+                    ? groupItems.map((item) => {
+                        const itemKey = myWorkItemKey(item);
+                        const isSelected = selectedItem
+                          ? myWorkItemKey(selectedItem) === itemKey
+                          : false;
+                        return (
+                          <button
+                            type="button"
+                            key={itemKey}
+                            className={`my-work-item ${isSelected ? 'selected' : ''}`}
+                            aria-current={isSelected ? 'true' : undefined}
+                            onClick={() => setSelectedId(itemKey)}
+                          >
+                            <span className={`my-work-status status-${item.group}`} aria-hidden />
+                            <span>
+                              <strong>{item.title}</strong>
+                              <small>{t(`myWork.action.${item.required_action}`)}</small>
+                              <em>
+                                {t('myWork.updated', {
+                                  time: formatRelativeTime(item.updated_at, locale),
+                                })}
+                              </em>
+                            </span>
+                          </button>
+                        );
+                      })
                     : null}
-                </section>
+                </div>
               );
             })}
           </div>
@@ -270,10 +283,24 @@ function MyWorkDetail({
   onOpenSession: () => void;
 }) {
   const { t } = useI18n();
-  const ModeIcon = item.capability_mode === 'code' ? CodeIcon : RocketIcon;
+  const ModeIcon =
+    item.capability_mode === 'code'
+      ? CodeIcon
+      : item.capability_mode === 'work'
+        ? RocketIcon
+        : ActivityLogIcon;
   const attention = item.group === 'needs_input' || item.group === 'needs_approval';
-  const environmentLabel =
-    item.environment?.label ?? item.environment?.kind ?? t('session.notAvailable');
+  const authority = describeMyWorkAuthority(item);
+  const environmentLabel = authority.runtime?.environment
+    ? authority.runtime.environment.label || authority.runtime.environment.kind
+    : t('session.notAvailable');
+  const permissionLabel = authority.runtime?.permissionProfile
+    ? t(permissionTranslationKey(authority.runtime.permissionProfile))
+    : t('session.notAvailable');
+  const modeLabel =
+    item.capability_mode === null
+      ? t('myWork.modeUnclassified')
+      : t(item.capability_mode === 'code' ? 'session.code' : 'session.work');
 
   return (
     <article className="my-work-detail">
@@ -292,11 +319,11 @@ function MyWorkDetail({
       <div className="my-work-detail-content">
         <section className="my-work-summary-card">
           <div className="my-work-summary-title">
-            <span className={`my-work-mode-icon ${item.capability_mode}`}>
+            <span className={`my-work-mode-icon ${item.capability_mode ?? 'unclassified'}`}>
               <ModeIcon />
             </span>
             <div>
-              <small>{t(item.capability_mode === 'code' ? 'session.code' : 'session.work')}</small>
+              <small>{modeLabel}</small>
               <h2>{item.title}</h2>
               <p>{t(`myWork.action.${item.required_action}`)}</p>
             </div>
@@ -311,15 +338,15 @@ function MyWorkDetail({
               <dd>{workspaceLabel ?? t('session.notAvailable')}</dd>
             </div>
             <div>
-              <dt>{t('session.overviewEnvironment')}</dt>
+              <dt>{t('myWork.authoritySource')}</dt>
               <dd>
-                <DesktopIcon /> {environmentLabel}
+                <ActivityLogIcon /> {t(authority.sourceKey)}
               </dd>
             </div>
             <div>
-              <dt>{t('session.overviewPermission')}</dt>
+              <dt>{t('myWork.lastUpdated')}</dt>
               <dd>
-                <LockClosedIcon /> {t(permissionTranslationKey(item.permission_profile))}
+                <ClockIcon /> {formatRelativeTime(item.updated_at, locale)}
               </dd>
             </div>
           </dl>
@@ -340,9 +367,9 @@ function MyWorkDetail({
 
         <section className="my-work-insight-grid">
           <article>
-            <span>{t('session.overviewRun')}</span>
-            <strong>{item.run_id}</strong>
-            <small>{t('myWork.runRevision', { revision: item.revision })}</small>
+            <span>{t('myWork.authorityId')}</span>
+            <strong translate="no">{authority.identifier}</strong>
+            <small>{t(authority.sourceKey)}</small>
           </article>
           <article>
             <span>{t('myWork.requiredAction')}</span>
@@ -350,48 +377,79 @@ function MyWorkDetail({
             <small>{t(`myWork.action.${item.required_action}`)}</small>
           </article>
           <article>
-            <span>{t('myWork.lastHeartbeat')}</span>
-            <strong>
-              {item.last_heartbeat_at
-                ? formatRelativeTime(item.last_heartbeat_at, locale)
-                : t('session.notAvailable')}
-            </strong>
-            <small>{t('myWork.persistedOnly')}</small>
+            <span>{t('myWork.lastUpdated')}</span>
+            <strong>{formatRelativeTime(item.updated_at, locale)}</strong>
+            <small>{t('myWork.persistedRecordOnly')}</small>
           </article>
         </section>
 
         <section className="my-work-authority-card">
           <header>
             <div>
-              <span>{t('myWork.runAuthority')}</span>
-              <h3>{t('myWork.currentRun')}</h3>
+              <span>{t('myWork.authoritySource')}</span>
+              <h3>{t('myWork.currentAuthority')}</h3>
             </div>
             <span className={`my-work-status-badge status-${item.group}`}>
               <i /> {t(statusTranslationKey(item.status))}
             </span>
           </header>
-          <p>{t('myWork.runAuthorityDescription')}</p>
+          <p>{t(authority.descriptionKey)}</p>
           <dl>
             <div>
-              <dt>{t('session.overviewRun')}</dt>
-              <dd>{item.run_id}</dd>
+              <dt>{t('myWork.authorityType')}</dt>
+              <dd>{t(authority.sourceKey)}</dd>
             </div>
             <div>
-              <dt>{t('myWork.runRevisionLabel')}</dt>
-              <dd>{item.revision}</dd>
+              <dt>{t('myWork.authorityId')}</dt>
+              <dd translate="no">{authority.identifier}</dd>
+            </div>
+            {authority.sequence ? (
+              <div>
+                <dt>{t(authority.sequence.labelKey)}</dt>
+                <dd>{authority.sequence.value}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>{t('myWork.recordStatus')}</dt>
+              <dd>{t(statusTranslationKey(item.status))}</dd>
             </div>
             <div>
-              <dt>{t('session.overviewEnvironment')}</dt>
-              <dd>{environmentLabel}</dd>
+              <dt>{t('myWork.lastUpdated')}</dt>
+              <dd>{formatDateTime(item.updated_at, locale)}</dd>
             </div>
-            <div>
-              <dt>{t('session.overviewPermission')}</dt>
-              <dd>{t(permissionTranslationKey(item.permission_profile))}</dd>
-            </div>
+            {authority.runtime ? (
+              <>
+                <div>
+                  <dt>{t('session.overviewEnvironment')}</dt>
+                  <dd>{environmentLabel}</dd>
+                </div>
+                <div>
+                  <dt>{t('session.overviewPermission')}</dt>
+                  <dd>{permissionLabel}</dd>
+                </div>
+                <div>
+                  <dt>{t('myWork.lastHeartbeat')}</dt>
+                  <dd>
+                    {authority.runtime.lastHeartbeatAt
+                      ? formatDateTime(authority.runtime.lastHeartbeatAt, locale)
+                      : t('session.notAvailable')}
+                  </dd>
+                </div>
+              </>
+            ) : null}
           </dl>
+          {!authority.runtime ? (
+            <div className="my-work-runtime-unavailable">
+              <DesktopIcon />
+              <span>
+                <strong>{t('myWork.desktopRuntimeUnavailable')}</strong>
+                <small>{t('myWork.desktopRuntimeUnavailableDescription')}</small>
+              </span>
+            </div>
+          ) : null}
           {item.error ? (
             <div className="my-work-run-error">
-              <ExclamationTriangleIcon /> {item.error}
+              <ExclamationTriangleIcon /> {t('myWork.failureRecorded')}
             </div>
           ) : null}
         </section>

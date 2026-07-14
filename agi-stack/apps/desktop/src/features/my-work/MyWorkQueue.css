@@ -374,6 +374,11 @@
 }
 
 .my-work-mode-icon.code { color: #aa97ff; background: #1d1931; border-color: #4d427d; }
+.my-work-mode-icon.unclassified {
+  color: var(--desktop-muted);
+  background: #151b22;
+  border-color: #39434d;
+}
 
 .my-work-summary-title > div { min-width: 0; }
 
@@ -491,6 +496,29 @@
 .my-work-authority-card dt { margin-bottom: 5px; color: var(--desktop-faint); font-size: 8px; }
 .my-work-authority-card dd { overflow: hidden; margin: 0; color: var(--desktop-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .my-work-run-error { display: flex; align-items: flex-start; gap: 7px; margin: 0 14px 14px; padding: 10px; color: var(--red-9); font-size: 9px; line-height: 1.45; background: #1b1114; border: 1px solid #4c2830; border-radius: 6px; }
+
+.my-work-runtime-unavailable {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 14px 14px;
+  padding: 10px;
+  color: var(--desktop-muted);
+  background: #0a1017;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 6px;
+}
+
+.my-work-runtime-unavailable > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.my-work-runtime-unavailable > span { display: grid; gap: 3px; }
+.my-work-runtime-unavailable strong { color: var(--desktop-text); font-size: 9px; }
+.my-work-runtime-unavailable small { font-size: 8px; line-height: 1.45; }
 
 .my-work-action-dock {
   display: flex;
