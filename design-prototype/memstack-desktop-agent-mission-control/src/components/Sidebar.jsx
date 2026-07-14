@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ArchiveIcon,
+  ActivityLogIcon,
   BellIcon,
+  CheckCircledIcon,
+  ChevronDownIcon,
   ChevronUpIcon,
   CodeIcon,
   CubeIcon,
@@ -23,9 +25,20 @@ const primaryItems = [
   ['Search', 'nav.search', MagnifyingGlassIcon],
 ];
 
-export function Sidebar({ activeNav, mode, taskCount, tenant, project, settingsOpen, onModeChange, onNavigate, onNewTask, onOpenSettings, onSignOut }) {
+export function Sidebar({ activeNav, activeWorkspaceId, activeSessionId, mode, taskCount, tenant, project, workspaces, settingsOpen, onModeChange, onNavigate, onOpenWorkspace, onOpenSession, onNewTask, onOpenSettings, onSignOut }) {
   const { t } = useI18n();
   const [profileOpen, setProfileOpen] = useState(false);
+  const workspaceIds = workspaces.map((workspace) => workspace.id).join('|');
+  const [expanded, setExpanded] = useState(() => Object.fromEntries(workspaces.map((workspace) => [workspace.id, true])));
+
+  useEffect(() => {
+    setExpanded((current) => ({ ...Object.fromEntries(workspaces.map((workspace) => [workspace.id, true])), ...current }));
+  }, [workspaceIds]);
+
+  function toggleWorkspace(workspaceId) {
+    setExpanded((current) => ({ ...current, [workspaceId]: !current[workspaceId] }));
+  }
+
   return (
     <aside className="sidebar" aria-label="Primary navigation">
       <div className="brand-row">
@@ -56,12 +69,22 @@ export function Sidebar({ activeNav, mode, taskCount, tenant, project, settingsO
         ))}
       </nav>
 
-      <div className="nav-section-label sidebar-tenant-label"><span>{tenant.shortName}</span><small>{t('nav.projects')}</small></div>
-      <nav className="nav-list project-list">
-        {tenant.projects.slice(0, 3).map((item) => {
-          const Icon = item.icon === 'code' ? CodeIcon : item.icon === 'archive' ? ArchiveIcon : CubeIcon;
-          return <button className={`nav-item ${activeNav === 'Projects' && project.id === item.id ? 'active' : ''}`} type="button" key={item.id} onClick={() => onNavigate('Projects')}><Icon /><span>{item.name}</span>{project.id === item.id ? <small>{t('Current')}</small> : null}</button>;
-        })}
+      <div className="nav-section-label sidebar-tenant-label"><span>{project.name}</span><small>{t('Workspaces')}</small></div>
+      <nav className="workspace-tree" aria-label={t('Workspace sessions')}>
+        {workspaces.map((workspace) => (
+          <div className="workspace-tree-node" key={workspace.id}>
+            <div className="workspace-tree-root">
+              <button className={`workspace-tree-toggle ${expanded[workspace.id] ? 'expanded' : ''}`} type="button" aria-label={`${expanded[workspace.id] ? t('Collapse') : t('Expand')} ${workspace.name}`} onClick={() => toggleWorkspace(workspace.id)}><ChevronDownIcon /></button>
+              <button className={`workspace-tree-workspace ${activeNav === 'Projects' && activeWorkspaceId === workspace.id ? 'active' : ''}`} type="button" onClick={() => onOpenWorkspace(workspace.id)}><CubeIcon /><span><b>{workspace.name}</b><small>{workspace.sessions.length} {t('sessions')}</small></span>{workspace.status === 'attention' ? <i className="attention" /> : <i />}</button>
+            </div>
+            {expanded[workspace.id] ? <div className="workspace-session-tree" role="group" aria-label={`${workspace.name} ${t('sessions')}`}>
+              {workspace.sessions.map((session) => {
+                const SessionIcon = session.mode === 'code' ? CodeIcon : ActivityLogIcon;
+                return <button className={(activeNav === 'Conversation' || activeNav === 'My Work') && activeSessionId === session.id ? 'active' : ''} type="button" key={session.id} onClick={() => onOpenSession(session, workspace.id)}><SessionIcon /><span><b>{session.title}</b><small>{t(session.meta)}</small></span>{session.status === 'ready' ? <CheckCircledIcon className="ready" /> : <i className={session.status} />}</button>;
+              })}
+            </div> : null}
+          </div>
+        ))}
       </nav>
 
       <div className="mode-switcher" aria-label="Workspace mode">

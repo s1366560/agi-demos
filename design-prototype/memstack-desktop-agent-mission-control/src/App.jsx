@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import {
-  ArchiveIcon,
   DashboardIcon,
   LightningBoltIcon,
   MagnifyingGlassIcon,
@@ -8,15 +7,17 @@ import {
 } from '@radix-ui/react-icons';
 
 import { Dialog } from './components/Dialog';
+import { ConversationDetail } from './components/ConversationDetail';
 import { LoginScreen } from './components/LoginScreen';
 import { NewTaskFlow } from './components/NewTaskFlow';
 import { SettingsWorkspace } from './components/SettingsWorkspace';
 import { Sidebar } from './components/Sidebar';
 import { SourcesDialog, TaskDetail } from './components/TaskDetail';
 import { TaskQueue } from './components/TaskQueue';
+import { WorkspaceOverview } from './components/WorkspaceOverview';
 import { codeTasks, workTasks } from './data';
 import { useI18n } from './i18n';
-import { getProject, getTenant } from './workspaceContext';
+import { getProject, getProjectWorkspaces, getTenant, getWorkspace } from './workspaceContext';
 
 const SESSION_KEY = 'memstack.prototype.session.v1';
 
@@ -33,16 +34,14 @@ const auxiliaryCopy = {
   Home: ['Good afternoon, Alex', 'Three tasks are running and two artifacts are ready for review.', DashboardIcon],
   Automations: ['Automations', 'Schedule recurring agent tasks with explicit inputs, approval boundaries, and delivery targets.', LightningBoltIcon],
   Search: ['Search workspace', 'Find tasks, conversations, sources, code changes, and artifacts across every project.', MagnifyingGlassIcon],
-  Projects: ['Projects', 'Shared context containers for tasks, memory, environments, people, and deliverables.', ArchiveIcon],
 };
 
-function AuxiliaryView({ name, onOpenWork, tenant, project }) {
+function AuxiliaryView({ name, onOpenWork }) {
   const { t } = useI18n();
   const [title, description, Icon] = auxiliaryCopy[name] ?? auxiliaryCopy.Home;
-  const isProject = name === 'Projects';
   return (
     <main className="auxiliary-view">
-      <header><span>{isProject ? tenant.name.toUpperCase() : 'MEMSTACK'}</span><h1>{isProject ? project.name : name === 'Home' ? title : t(`nav.${name === 'Automations' ? 'automations' : name === 'Search' ? 'search' : 'projects'}`)}</h1><p>{isProject ? t(project.description) : description}</p></header>
+      <header><span>MEMSTACK</span><h1>{name === 'Home' ? title : t(`nav.${name === 'Automations' ? 'automations' : 'search'}`)}</h1><p>{description}</p></header>
       <section className="overview-grid">
         <article className="overview-hero"><Icon /><h2>One workspace for every agent task</h2><p>Move from research to code without losing context, approvals, sources, or the final artifact.</p><button className="primary" type="button" onClick={onOpenWork}><PlusIcon /> {t('nav.myWork')}</button></article>
         <article><span>RUNNING</span><b>3</b><p>Across Work and Code</p></article>
@@ -55,7 +54,7 @@ function AuxiliaryView({ name, onOpenWork, tenant, project }) {
 
 export function App() {
   const [session, setSession] = useState(getInitialSession);
-  const [activeNav, setActiveNav] = useState('My Work');
+  const [activeNav, setActiveNav] = useState('Projects');
   const [mode, setMode] = useState('work');
   const [selected, setSelected] = useState({ work: 'strategy-brief', code: 'flaky-test' });
   const [paused, setPaused] = useState(false);
@@ -67,11 +66,14 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState('account');
   const [tenantId, setTenantId] = useState('northstar');
-  const [projectId, setProjectId] = useState('product-strategy');
+  const [projectId, setProjectId] = useState('desktop-client');
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState('desktop-client-main');
   const tasks = mode === 'work' ? workItems : codeItems;
   const task = useMemo(() => tasks.find((item) => item.id === selected[mode]) ?? tasks[0], [mode, selected, tasks]);
   const tenant = getTenant(tenantId);
   const project = getProject(tenantId, projectId);
+  const workspaces = getProjectWorkspaces(tenantId, projectId);
+  const workspace = getWorkspace(tenantId, projectId, activeWorkspaceId);
 
   function showToast(message) {
     setToast(message);
@@ -130,8 +132,22 @@ export function App() {
   function changeContext(nextContext) {
     setTenantId(nextContext.tenantId);
     setProjectId(nextContext.projectId);
+    setActiveWorkspaceId(getProjectWorkspaces(nextContext.tenantId, nextContext.projectId)[0].id);
     setActiveNav('Projects');
     setSettingsOpen(false);
+  }
+
+  function openWorkspace(workspaceId) {
+    setActiveWorkspaceId(workspaceId);
+    setActiveNav('Projects');
+  }
+
+  function openSession(session, workspaceId = activeWorkspaceId) {
+    setActiveWorkspaceId(workspaceId);
+    setMode(session.mode);
+    setSelected((current) => ({ ...current, [session.mode]: session.taskId }));
+    setPaused(false);
+    setActiveNav('Conversation');
   }
 
   if (!session) {
@@ -146,9 +162,14 @@ export function App() {
         taskCount={workItems.length + codeItems.length}
         tenant={tenant}
         project={project}
+        workspaces={workspaces}
+        activeWorkspaceId={workspace.id}
+        activeSessionId={selected[mode]}
         settingsOpen={settingsOpen}
         onModeChange={changeMode}
         onNavigate={setActiveNav}
+        onOpenWorkspace={openWorkspace}
+        onOpenSession={openSession}
         onNewTask={() => { setActiveNav('My Work'); setNewTaskOpen(true); }}
         onOpenSettings={openSettings}
         onSignOut={signOut}
@@ -172,7 +193,26 @@ export function App() {
             onToast={showToast}
           />
         </main>
-      ) : <AuxiliaryView name={activeNav} tenant={tenant} project={project} onOpenWork={() => setActiveNav('My Work')} />}
+      ) : activeNav === 'Conversation' ? (
+        <ConversationDetail
+          key={`${mode}-${task.id}`}
+          mode={mode}
+          task={task}
+          workspace={workspace}
+          onOpenTask={() => setActiveNav('My Work')}
+          onInput={(inputTask) => setDialog({ type: 'input', task: inputTask })}
+          onToast={showToast}
+        />
+      ) : activeNav === 'Projects' ? (
+        <WorkspaceOverview
+          tenant={tenant}
+          project={project}
+          workspace={workspace}
+          onNewTask={() => { setActiveNav('My Work'); setNewTaskOpen(true); }}
+          onOpenSession={(session) => openSession(session, workspace.id)}
+          onConfigure={() => openSettings('workspace')}
+        />
+      ) : <AuxiliaryView name={activeNav} onOpenWork={() => setActiveNav('My Work')} />}
 
       {dialog?.type === 'input' && (
         <Dialog title="Review agent request" onClose={() => setDialog(null)}>
