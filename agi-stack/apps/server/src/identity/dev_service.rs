@@ -37,10 +37,9 @@ mod tenant;
 
 // ---- offline dev impl -----------------------------------------------------
 
-/// Offline identity service: mints a fake `ms_sk_` key for any non-empty
-/// credentials and serves a single deterministic dev tenant. Never used when
-/// `DATABASE_URL` is set. Keeps `cargo run`/tests keyless and DB-free, exactly
-/// like [`crate::auth::DevAuthenticator`].
+/// Isolated-test identity service: mints a fake `ms_sk_` key for any non-empty
+/// credentials and serves a deterministic tenant. Native server startup never
+/// selects it because repository-root `.env` database configuration is required.
 pub struct DevIdentityService {
     dev_user_id: String,
     device_grants: SharedDeviceGrantStore,

@@ -18,8 +18,6 @@ RUSTUP       ?= rustup
 PNPM         ?= pnpm
 PROFILE      ?= release
 ADDR         ?= 127.0.0.1:8088
-DEV_ENV      ?= ../.env
-RUN_SERVER_DEV_STUB ?= 0
 DESKTOP_APP_DIR ?= apps/desktop
 DESKTOP_ICON_PNG ?= $(DESKTOP_APP_DIR)/src-tauri/icons/icon.png
 DESKTOP_ICON_ICNS ?= $(DESKTOP_APP_DIR)/src-tauri/icons/icon.icns
@@ -78,30 +76,8 @@ server: ## 云端:原生 axum 服务器 release 二进制(~5.5 MB)
 	$(CARGO) build -p agistack-server --profile $(PROFILE)
 	@echo "==> 产物:target/$(PROFILE)/agistack-server"
 
-run-server: ## 启动服务器(默认读取 ../.env 拼接 DATABASE_URL; RUN_SERVER_DEV_STUB=1 用内存 stub)
-	@set -a; \
-	if [ -f "$(DEV_ENV)" ]; then . "$(DEV_ENV)"; fi; \
-	if [ "$(RUN_SERVER_DEV_STUB)" = "1" ]; then \
-		DATABASE_URL=""; \
-	else \
-		if [ -z "$$DATABASE_URL" ]; then \
-			POSTGRES_HOST="$${POSTGRES_HOST:-localhost}"; \
-			POSTGRES_PORT="$${POSTGRES_PORT:-5432}"; \
-			POSTGRES_DB="$${POSTGRES_DB:-memstack}"; \
-			POSTGRES_USER="$${POSTGRES_USER:-postgres}"; \
-			POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-password}"; \
-			DATABASE_URL="postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@$${POSTGRES_HOST}:$${POSTGRES_PORT}/$${POSTGRES_DB}"; \
-		fi; \
-	fi; \
-	if [ -n "$$DATABASE_URL" ]; then \
-		echo "==> DATABASE_URL configured for $${POSTGRES_HOST:-localhost}:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB:-memstack}"; \
-	else \
-		echo "==> DATABASE_URL unset; using in-memory dev stub"; \
-	fi; \
-	AGISTACK_ADDR=$(ADDR) \
-	AGISTACK_DEV_MODE="$(RUN_SERVER_DEV_STUB)" \
-	AGISTACK_ENABLE_LEGACY_ROUTES="$(RUN_SERVER_DEV_STUB)" \
-	DATABASE_URL="$$DATABASE_URL" $(CARGO) run -p agistack-server
+run-server: ## 启动服务器(Rust 仅从仓库根目录 .env 读取 DATABASE_URL)
+	AGISTACK_ADDR=$(ADDR) $(CARGO) run -p agistack-server
 
 # ---- Web(浏览器 WASM) ----
 wasm-web: ## Web:wasm-bindgen 浏览器包 + node 冒烟(core-as-guest,~124 KB)

@@ -196,10 +196,9 @@ impl Authenticator for PgAuthenticator {
     }
 }
 
-/// Explicit offline-development authenticator: accepts any well-formed `ms_sk_`
-/// key, maps it to a fixed dev user, and permits every project. The composition
-/// root only selects it when `AGISTACK_DEV_MODE=1`; a missing `DATABASE_URL`
-/// otherwise fails closed.
+/// Isolated-test authenticator: accepts any well-formed `ms_sk_` key, maps it to
+/// a fixed dev user, and permits every project. Native server startup never
+/// selects it because repository-root `.env` database configuration is required.
 pub struct DevAuthenticator {
     dev_user_id: String,
 }

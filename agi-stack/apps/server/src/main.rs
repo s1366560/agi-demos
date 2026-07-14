@@ -74,6 +74,7 @@ mod schema_api;
 mod shares_api;
 mod skill_api;
 mod skill_evolution_wiring;
+mod startup_config;
 mod subagents_api;
 mod support_api;
 mod system_api;
@@ -170,6 +171,7 @@ use crate::skill_api::{
     SharedSkillEvolutionWorker, SharedSkills,
 };
 use crate::skill_evolution_wiring::skill_evolution_executor_from_env;
+use crate::startup_config::{repository_database_url, DatabaseUrl};
 use crate::subagents_api::{
     DevSubagentTemplateService, PgSubagentTemplateService, SharedSubagentTemplates,
 };
@@ -337,7 +339,7 @@ type ServerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Debug, Eq, PartialEq)]
 enum PersistenceMode {
-    Postgres(String),
+    Postgres(DatabaseUrl),
     InMemoryDev,
 }
 
@@ -346,17 +348,17 @@ pub(crate) fn env_flag_enabled(value: Option<&str>) -> bool {
 }
 
 fn select_persistence_mode(
-    database_url: Option<String>,
-    explicit_dev_mode: bool,
+    database_url: Option<DatabaseUrl>,
+    allow_in_memory_for_tests: bool,
 ) -> ServerResult<PersistenceMode> {
-    if let Some(url) = database_url.filter(|url| !url.trim().is_empty()) {
+    if let Some(url) = database_url {
         return Ok(PersistenceMode::Postgres(url));
     }
-    if explicit_dev_mode {
+    if allow_in_memory_for_tests {
         return Ok(PersistenceMode::InMemoryDev);
     }
     Err(std::io::Error::other(
-        "DATABASE_URL is required; set AGISTACK_DEV_MODE=1 only for an explicit local in-memory runtime",
+        "validated repository .env DATABASE_URL is required for native server startup",
     )
     .into())
 }
@@ -528,29 +530,27 @@ async fn build_object_store() -> Arc<dyn ObjectStore> {
 }
 
 /// Persistence + auth selection at the composition root — the strangler switch
-/// (plan.md Section 14). When `DATABASE_URL` is set, bind the production Postgres
-/// tier (**the same schema Python owns**, ADR-0001) and the SHA256 `api_keys`
-/// authenticator. The zero-dependency in-memory adapters and dev authenticator
-/// require the explicit `AGISTACK_DEV_MODE=1` capability; an accidental missing
-/// database configuration fails closed. The heavy `sqlx`/`tokio` deps stay
-/// inside `adapters-postgres`; the core only ever sees `Arc<dyn _>`.
+/// (plan.md Section 14). Native startup binds the production Postgres tier
+/// (**the same schema Python owns**, ADR-0001) and SHA256 `api_keys`
+/// authenticator from only the validated `DATABASE_URL` loaded from the
+/// repository-root `.env`. A missing database configuration fails closed. The
+/// heavy `sqlx`/`tokio` deps stay inside `adapters-postgres`; the core only ever
+/// sees `Arc<dyn _>`.
 async fn build_memory_and_auth(
     llm: Arc<dyn LlmPort>,
     embedding: Arc<dyn EmbeddingPort>,
     object_store: Arc<dyn ObjectStore>,
     autonomy_cooldown: Option<SharedAutonomyCooldownStore>,
+    database_url: &DatabaseUrl,
 ) -> ServerResult<MemoryAndAuth> {
     let email = select_email_sender();
     let device_grants = build_device_grant_store().await;
     let invitation_base_url = std::env::var("AGISTACK_INVITATION_BASE_URL")
         .unwrap_or_else(|_| "http://localhost:8000".into());
-    let mode = select_persistence_mode(
-        std::env::var("DATABASE_URL").ok(),
-        env_flag_enabled(std::env::var("AGISTACK_DEV_MODE").ok().as_deref()),
-    )?;
+    let mode = select_persistence_mode(Some(database_url.clone()), false)?;
     match mode {
         PersistenceMode::Postgres(url) => {
-            let pool = connect(&url).await?;
+            let pool = connect(url.expose()).await?;
             // Additive-only: create the Rust-owned aux tables; never alters a
             // Python-owned table (shared-DB invariant).
             ensure_aux_schema(&pool).await?;
@@ -644,7 +644,7 @@ async fn build_memory_and_auth(
                 "dev-user",
                 object_store,
             ));
-            eprintln!("[agistack] persistence: in-memory (dev); auth: dev stub (any ms_sk_ key)");
+            eprintln!("[agistack] persistence: in-memory (isolated tests)");
             Ok((
                 memory,
                 checkpoint,
@@ -833,7 +833,7 @@ fn select_sandbox_auth_secret(
         .or_else(|| fallback.filter(|secret| !secret.trim().is_empty()))
 }
 
-async fn build_state() -> ServerResult<AppState> {
+async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
     // Cloud↔local DI switch at the composition root (Phase 3, 03 §2): when
     // `AGISTACK_LLM_BASE_URL` is set, route the LLM/embedding ports to a real
     // OpenAI-/LiteLLM-compatible endpoint (`adapters-http-llm`); otherwise use
@@ -845,8 +845,8 @@ async fn build_state() -> ServerResult<AppState> {
     let object_store = build_object_store().await;
     let autonomy_cooldown = build_workspace_autonomy_cooldown_store().await;
 
-    // Persistence + auth: Postgres (production) or in-memory (dev), selected by
-    // `DATABASE_URL`. This is the strangler cutover switch.
+    // Native startup always binds Postgres from the validated repository `.env`.
+    // The in-memory composition remains reachable only through isolated tests.
     let (
         memory,
         checkpoint,
@@ -865,6 +865,7 @@ async fn build_state() -> ServerResult<AppState> {
         embedding,
         Arc::clone(&object_store),
         autonomy_cooldown,
+        database_url,
     )
     .await?;
     let events = build_event_stream().await;
@@ -1161,7 +1162,8 @@ async fn build_state() -> ServerResult<AppState> {
 #[tokio::main]
 async fn main() -> ServerResult<()> {
     let addr = std::env::var("AGISTACK_ADDR").unwrap_or_else(|_| "127.0.0.1:8088".to_string());
-    let state = build_state().await?;
+    let database_url = repository_database_url()?;
+    let state = build_state(&database_url).await?;
     let _workspace_plan_outbox_runtime = state
         .workspace_plan_outbox_worker
         .as_ref()
@@ -1202,25 +1204,26 @@ mod runtime_mode_tests {
     use super::*;
 
     #[test]
-    fn missing_database_requires_explicit_dev_mode() {
+    fn missing_database_fails_closed_without_test_capability() {
         let error = select_persistence_mode(None, false).expect_err("must fail closed");
-        assert!(error.to_string().contains("DATABASE_URL"));
+        assert!(error.to_string().contains("repository .env DATABASE_URL"));
     }
 
     #[test]
-    fn explicit_dev_mode_preserves_offline_runtime() {
+    fn isolated_test_capability_preserves_in_memory_runtime() {
         assert_eq!(
-            select_persistence_mode(None, true).expect("explicit dev mode"),
+            select_persistence_mode(None, true).expect("isolated test mode"),
             PersistenceMode::InMemoryDev
         );
     }
 
     #[test]
-    fn configured_database_always_selects_postgres() {
+    fn validated_database_always_selects_postgres() {
+        let database_url = DatabaseUrl::for_test("postgresql://db.example/memstack");
+
         assert_eq!(
-            select_persistence_mode(Some("postgresql://db/memstack".into()), false)
-                .expect("database mode"),
-            PersistenceMode::Postgres("postgresql://db/memstack".into())
+            select_persistence_mode(Some(database_url.clone()), false).expect("database mode"),
+            PersistenceMode::Postgres(database_url)
         );
     }
 

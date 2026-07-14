@@ -123,14 +123,13 @@ cargo run -p agistack-bindings-uniffi --bin uniffi-bindgen -- generate \
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 ./scripts/build-ios.sh            # 产出 target/AgistackMobile.xcframework + 模拟器实跑 SMOKE_OK
 
-# 生产/strangler 启动必须提供 DATABASE_URL；缺失时服务会 fail closed。
-DATABASE_URL=postgresql://postgres:password@127.0.0.1:5432/memstack \
-  cargo run -p agistack-server
+# Rust server 仅使用仓库根目录当前 .env 中的 DATABASE_URL；文件、键或值
+# 缺失时都会 fail closed，进程环境不会覆盖该值。
+make run-server
 
-# 显式离线开发 stub；同时只在该模式启用 legacy /v1/* demo 路由。
-make run-server RUN_SERVER_DEV_STUB=1
-
-# legacy demo 端点冒烟(仅显式开发 stub，另开终端)
+# legacy demo 端点默认关闭；如需冒烟，显式启用路由后另开终端执行下列 curl。
+# 数据库配置仍只读取仓库根目录 .env。
+AGISTACK_ENABLE_LEGACY_ROUTES=1 make run-server
 curl -s localhost:8088/health
 curl -s -X POST localhost:8088/v1/episodes -H 'content-type: application/json' \
   -d '{"project_id":"p1","author_id":"u1","content":"Vector databases enable semantic memory"}'

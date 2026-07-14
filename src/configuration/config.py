@@ -1,10 +1,41 @@
 """Configuration management for MemStack."""
 
 from functools import lru_cache
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal, override
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, field_validator
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
+_REPOSITORY_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+
+class _RepositoryDatabaseUrlSource(PydanticBaseSettingsSource):
+    """Load DATABASE_URL only from the repository dotenv source."""
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        source: PydanticBaseSettingsSource,
+    ) -> None:
+        super().__init__(settings_cls)
+        self._source = source
+
+    @override
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        return self._source.get_field_value(field, field_name)
+
+    @override
+    def __call__(self) -> dict[str, Any]:
+        for key, value in self._source().items():
+            if key.casefold() == "database_url":
+                return {key: value}
+        # A high-priority explicit null prevents later ambient/secret sources
+        # from becoming an implicit fallback when the repository key is absent.
+        return {"DATABASE_URL": None}
 
 
 class Settings(BaseSettings):
@@ -47,6 +78,24 @@ class Settings(BaseSettings):
     postgres_db: str = Field(default="memstack", alias="POSTGRES_DB")
     postgres_user: str = Field(default="postgres", alias="POSTGRES_USER")
     postgres_password: str = Field(default="password", alias="POSTGRES_PASSWORD")
+    database_url: SecretStr = Field(alias="DATABASE_URL", repr=False)
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def validate_database_url(cls, value: object) -> str:
+        raw_url = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            raise ValueError("DATABASE_URL must be a non-empty PostgreSQL URL")
+        normalized_url = raw_url.strip()
+        try:
+            parsed = make_url(normalized_url)
+        except (ArgumentError, ValueError) as exc:
+            raise ValueError("DATABASE_URL must be a valid PostgreSQL URL") from exc
+        if parsed.drivername not in {"postgres", "postgresql", "postgresql+asyncpg"}:
+            raise ValueError("DATABASE_URL must use a PostgreSQL scheme")
+        if not parsed.database:
+            raise ValueError("DATABASE_URL must identify a PostgreSQL database")
+        return normalized_url
 
     # PostgreSQL Connection Pool Settings (for high concurrency)
     postgres_pool_size: int = Field(default=20, alias="POSTGRES_POOL_SIZE")
@@ -593,11 +642,30 @@ class Settings(BaseSettings):
     volc_doubao_endpoint_id: str | None = Field(default=None, alias="DOUBAO_ENDPOINT_ID")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_REPOSITORY_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @classmethod
+    @override
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Make repository dotenv authoritative for DATABASE_URL only."""
+        return (
+            init_settings,
+            _RepositoryDatabaseUrlSource(settings_cls, dotenv_settings),
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     @field_validator("agent_runtime_mode", mode="before")
     @classmethod
@@ -647,9 +715,9 @@ class Settings(BaseSettings):
     @property
     def postgres_url(self) -> str:
         """Get PostgreSQL connection URL."""
-        return (
-            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        database_url = make_url(self.database_url.get_secret_value())
+        return database_url.set(drivername="postgresql+asyncpg").render_as_string(
+            hide_password=False
         )
 
     @property
@@ -663,4 +731,5 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance."""
-    return Settings()
+    # DATABASE_URL is supplied by the authoritative repository dotenv source.
+    return Settings()  # type: ignore[call-arg]
