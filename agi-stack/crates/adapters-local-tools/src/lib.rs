@@ -438,6 +438,11 @@ fn description_for(name: &str) -> &'static str {
         "grep" => "Search workspace files by regular expression.",
         "list" => "List workspace directory entries.",
         "patch" => "Apply a unified diff inside the workspace.",
+        "export_artifact" => {
+            "Export an immutable artifact version. Reuse artifact_id when publishing a new version."
+        }
+        "list_artifacts" => "List exported immutable artifact versions.",
+        "batch_export_artifacts" => "Export multiple immutable artifact versions.",
         "bash" => "Run a shell command inside the workspace.",
         _ => "Desktop local MCP-compatible tool.",
     }
@@ -466,6 +471,22 @@ fn schema_for(name: &str) -> Value {
         "grep" => {
             properties.insert("pattern".into(), json!({ "type": "string" }));
             required.push("pattern");
+        }
+        "export_artifact" => {
+            properties.insert("artifact_id".into(), json!({ "type": "string" }));
+            properties.insert("filename".into(), json!({ "type": "string" }));
+            properties.insert("content".into(), json!({ "type": "string" }));
+            properties.insert("mime_type".into(), json!({ "type": "string" }));
+            properties.insert("sources".into(), json!({ "type": "array" }));
+            properties.insert("checks".into(), json!({ "type": "array" }));
+            required.extend(["filename", "content"]);
+        }
+        "batch_export_artifacts" => {
+            properties.insert(
+                "artifacts".into(),
+                json!({ "type": "array", "items": { "type": "object" } }),
+            );
+            required.push("artifacts");
         }
         "bash" | "deps_install" | "deps_check" | "plugin_tool_exec" => {
             properties.insert("command".into(), json!({ "type": "string" }));
@@ -656,37 +677,74 @@ async fn export_artifact_tool(
 ) -> Result<Value, String> {
     let filename = string_opt(&input, &["filename", "name"])
         .unwrap_or_else(|| format!("artifact-{}.txt", Uuid::new_v4()));
+    let safe_name = safe_filename(&filename);
+    let artifact_id = string_opt(&input, &["artifact_id", "artifactId"])
+        .map(|value| safe_filename(&value))
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("artifact-{}", Uuid::new_v4()));
+    let artifact_version_id = format!("artifact-version-{}", Uuid::new_v4());
     let content = string_any(&input, &["content", "data", "text"])?;
     let path = runtime.resolve_write_path(
         &Path::new(".agistack")
             .join("artifacts")
-            .join(safe_filename(&filename))
+            .join(&artifact_id)
+            .join(&artifact_version_id)
+            .join(&safe_name)
             .to_string_lossy(),
     )?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
     fs::write(&path, content.as_bytes())
         .await
         .map_err(|error| error.to_string())?;
+    let relative_path = relative_string(runtime.workspace_root(), &path);
     Ok(json!({
-        "artifact_id": path.file_name().and_then(|name| name.to_str()).unwrap_or_default(),
+        "artifact_id": artifact_id,
+        "artifact_version_id": artifact_version_id,
+        "filename": safe_name,
         "path": path,
+        "relative_path": relative_path,
         "bytes": content.len(),
+        "mime_type": string_opt(&input, &["mime_type", "mimeType"])
+            .unwrap_or_else(|| "application/octet-stream".to_string()),
+        "status": "ready",
+        "sources": input.get("sources").cloned().unwrap_or_else(|| json!([])),
+        "checks": input.get("checks").cloned().unwrap_or_else(|| json!([])),
     }))
 }
 
 async fn list_artifacts_tool(runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
     let mut artifacts = Vec::new();
-    let mut read_dir = fs::read_dir(runtime.artifacts_root())
-        .await
-        .map_err(|error| error.to_string())?;
-    while let Some(entry) = read_dir
-        .next_entry()
-        .await
-        .map_err(|error| error.to_string())?
+    for entry in WalkDir::new(runtime.artifacts_root())
+        .min_depth(3)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
     {
-        let meta = entry.metadata().await.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(runtime.artifacts_root())
+            .map_err(|error| error.to_string())?;
+        let mut components = relative.components();
+        let artifact_id = components
+            .next()
+            .and_then(|component| component.as_os_str().to_str())
+            .unwrap_or_default();
+        let artifact_version_id = components
+            .next()
+            .and_then(|component| component.as_os_str().to_str())
+            .unwrap_or_default();
+        let meta = entry.metadata().map_err(|error| error.to_string())?;
         artifacts.push(json!({
-            "artifact_id": entry.file_name().to_string_lossy(),
-            "path": entry.path(),
+            "artifact_id": artifact_id,
+            "artifact_version_id": artifact_version_id,
+            "filename": entry.file_name().to_string_lossy(),
+            "path": path,
+            "relative_path": relative_string(runtime.workspace_root(), path),
             "bytes": meta.len(),
         }));
     }
@@ -970,15 +1028,39 @@ async fn analyze_coverage_tool(
 }
 
 async fn git_diff_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
-    let args = string_opt(&input, &["args"]).unwrap_or_default();
-    let command = if args.is_empty() {
-        "git diff --stat && git diff --".to_string()
-    } else {
-        format!("git diff {args}")
+    let timeout = timeout_ms(&input);
+    let stat = run_command(
+        "git",
+        &["diff", "--no-ext-diff", "--stat", "--"],
+        None,
+        runtime.workspace_root(),
+        timeout,
+    )
+    .await?;
+    let mut diff = run_command(
+        "git",
+        &["diff", "--no-ext-diff", "--no-color", "--"],
+        None,
+        runtime.workspace_root(),
+        timeout,
+    )
+    .await?;
+    diff.stdout = match (stat.stdout.trim(), diff.stdout.trim()) {
+        ("", _) => diff.stdout,
+        (_, "") => stat.stdout,
+        _ => format!("{}\n{}", stat.stdout.trim_end(), diff.stdout),
     };
-    Ok(command_json(
-        run_shell(&command, runtime.workspace_root(), timeout_ms(&input)).await?,
-    ))
+    if !stat.stderr.trim().is_empty() {
+        if !diff.stderr.is_empty() {
+            diff.stderr.push('\n');
+        }
+        diff.stderr.push_str(stat.stderr.trim_end());
+    }
+    diff.timed_out |= stat.timed_out;
+    if stat.exit_code != Some(0) {
+        diff.exit_code = stat.exit_code;
+    }
+    Ok(command_json(diff))
 }
 
 async fn git_log_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
@@ -1850,6 +1932,41 @@ mod tests {
         assert!(output.contains("ok"));
     }
 
+    #[tokio::test]
+    async fn git_diff_rejects_shell_injection_by_ignoring_free_form_arguments() {
+        let root = temp_root();
+        std::fs::create_dir_all(&root).expect("workspace");
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .expect("git command");
+            assert!(output.status.success());
+        };
+        git(&["init"]);
+        git(&["config", "user.email", "test@agistack.local"]);
+        git(&["config", "user.name", "Agistack Test"]);
+        std::fs::write(root.join("tracked.txt"), "before\n").expect("tracked file");
+        git(&["add", "tracked.txt"]);
+        git(&["commit", "-m", "base"]);
+        std::fs::write(root.join("tracked.txt"), "after\n").expect("changed file");
+        let host = LocalToolHost::new(&root).expect("host");
+
+        let output = host
+            .call(
+                "git_diff",
+                r#"{"args":"--stat; touch injected-by-git-diff"}"#,
+            )
+            .await
+            .expect("safe git diff");
+
+        assert!(output.contains("tracked.txt"));
+        assert!(!root.join("injected-by-git-diff").exists());
+        std::fs::remove_dir_all(root).expect("remove workspace");
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn write_rejects_symlink_target_even_when_parent_is_inside_workspace() {
@@ -1904,26 +2021,85 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let root = temp_root();
-        let outside = temp_root().join("outside.txt");
+        let outside = temp_root().join("outside");
         std::fs::create_dir_all(&root).expect("workspace");
-        std::fs::create_dir_all(outside.parent().expect("outside parent"))
-            .expect("outside directory");
-        std::fs::write(&outside, "protected").expect("outside file");
+        std::fs::create_dir_all(&outside).expect("outside directory");
+        let protected = outside.join("report.txt");
+        std::fs::write(&protected, "protected").expect("outside file");
         let host = LocalToolHost::new(&root).expect("host");
-        symlink(&outside, host.runtime().artifacts_root().join("report.txt")).expect("symlink");
+        symlink(&outside, host.runtime().artifacts_root().join("report")).expect("symlink");
 
         let error = host
             .call(
                 "export_artifact",
-                r#"{"filename":"report.txt","content":"overwrite"}"#,
+                r#"{"artifact_id":"report","filename":"report.txt","content":"overwrite"}"#,
             )
             .await
             .expect_err("symlink artifact rejected");
 
         assert!(error.to_string().contains("symlink path rejected"));
         assert_eq!(
-            std::fs::read_to_string(outside).expect("outside content"),
+            std::fs::read_to_string(protected).expect("outside content"),
             "protected"
+        );
+    }
+
+    #[tokio::test]
+    async fn artifact_export_creates_immutable_versions_for_one_artifact() {
+        let root = temp_root();
+        std::fs::create_dir_all(&root).expect("workspace");
+        let host = LocalToolHost::new(&root).expect("host");
+
+        let first = host
+            .mcp_tools_call_result(
+                "export_artifact",
+                json!({
+                    "artifact_id": "release-notes",
+                    "filename": "release-notes.md",
+                    "content": "version one",
+                    "sources": [{ "kind": "file", "id": "README.md", "label": "README" }],
+                    "checks": [{ "kind": "test", "id": "docs-lint", "status": "passed" }]
+                }),
+            )
+            .await;
+        assert!(!first.is_error);
+        let first_value: Value =
+            serde_json::from_str(&first.content[0].text).expect("first artifact value");
+
+        let second = host
+            .mcp_tools_call_result(
+                "export_artifact",
+                json!({
+                    "artifact_id": "release-notes",
+                    "filename": "release-notes.md",
+                    "content": "version two"
+                }),
+            )
+            .await;
+        assert!(!second.is_error);
+        let second_value: Value =
+            serde_json::from_str(&second.content[0].text).expect("second artifact value");
+
+        assert_eq!(first_value["artifact_id"], "release-notes");
+        assert_eq!(second_value["artifact_id"], "release-notes");
+        assert_ne!(
+            first_value["artifact_version_id"],
+            second_value["artifact_version_id"]
+        );
+        assert_ne!(first_value["path"], second_value["path"]);
+        assert_eq!(first_value["status"], "ready");
+        assert_eq!(first_value["sources"].as_array().map(Vec::len), Some(1));
+        assert_eq!(first_value["checks"].as_array().map(Vec::len), Some(1));
+
+        let first_path = PathBuf::from(first_value["path"].as_str().expect("first path"));
+        let second_path = PathBuf::from(second_value["path"].as_str().expect("second path"));
+        assert_eq!(
+            std::fs::read_to_string(first_path).expect("first content"),
+            "version one"
+        );
+        assert_eq!(
+            std::fs::read_to_string(second_path).expect("second content"),
+            "version two"
         );
     }
 
