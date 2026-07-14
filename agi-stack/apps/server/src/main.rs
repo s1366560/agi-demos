@@ -47,6 +47,7 @@ mod cron_automation_runtime;
 mod cron_hitl_resume;
 mod cron_schedule_fire;
 mod cron_schedule_reconcile;
+mod cron_scheduler;
 mod cron_scheduler_ownership;
 mod cron_tool_authority;
 mod cron_worker;
@@ -132,6 +133,7 @@ use crate::channel_api::{
     FeishuWebhookDeliverer, PgChannelService, SharedChannelOutboxDeliveryWorker, SharedChannels,
 };
 use crate::cron_api::{DevCronJobService, PgCronJobService, SharedCronJobs};
+use crate::cron_scheduler::{build_pg_cron_scheduler, SharedCronScheduler};
 use crate::data_api::{DevDataStatsScopeService, PgDataStatsScopeService, SharedDataStats};
 use crate::deploy_api::{DevDeployService, PgDeployService, SharedDeploys};
 use crate::events_api::{DevEventLogService, PgEventLogService, SharedEventLogs};
@@ -290,8 +292,11 @@ pub(crate) struct AppState {
     /// P7 project schema CRUD surface over Python-owned schema tables.
     pub(crate) project_schema: SharedProjectSchema,
     /// P7 cron job read surface over Python-owned `cron_jobs` and
-    /// `cron_job_runs`. Scheduler runtime and write paths remain Python-owned.
+    /// `cron_job_runs`.
     pub(crate) cron_jobs: SharedCronJobs,
+    /// Fenced Rust scheduler cutover runtime. It is composed only with
+    /// PostgreSQL and remains double-gated at startup.
+    pub(crate) cron_scheduler: Option<SharedCronScheduler>,
     /// P7 exact graph data stats/export read surface over the portable
     /// GraphStore. Cleanup stays Python-owned.
     pub(crate) data_stats: SharedDataStats,
@@ -1053,7 +1058,7 @@ async fn build_state() -> ServerResult<AppState> {
             .with_tool_host(Arc::clone(&tool_host))
             .with_ws_mcp_connector(),
     );
-    let workspace_plan_outbox_worker = workspace_plan_pool.map(|pool| {
+    let workspace_plan_outbox_worker = workspace_plan_pool.clone().map(|pool| {
         let stage_runner: Arc<dyn WorkspacePipelineStageRunner> = Arc::new(
             ProjectSandboxPipelineStageRunner::new(Arc::clone(&sandboxes)),
         );
@@ -1090,6 +1095,8 @@ async fn build_state() -> ServerResult<AppState> {
         checkpoint,
         Arc::new(SystemClock),
     ));
+    let cron_scheduler = workspace_plan_pool
+        .map(|pool| build_pg_cron_scheduler(pool, Arc::clone(&engine), registry.clone()));
 
     let plugins = Arc::new(PluginHost::new(registry.clone()));
     let control = Arc::new(Mutex::new(ControlPlane::new()));
@@ -1134,6 +1141,7 @@ async fn build_state() -> ServerResult<AppState> {
         tenant_webhooks,
         project_schema,
         cron_jobs,
+        cron_scheduler,
         data_stats,
         deploys,
         subagent_templates,
@@ -1163,11 +1171,27 @@ async fn main() -> ServerResult<()> {
         .channel_outbox_delivery_worker
         .as_ref()
         .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
+    let cron_scheduler_runtime = state
+        .cron_scheduler
+        .as_ref()
+        .and_then(|scheduler| Arc::clone(scheduler).spawn_if_enabled());
     let app = demo_api::router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     println!("agistack-server listening on http://{addr}");
-    axum::serve(listener, app).await?;
+    let serve_result = axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await;
+    if let Some(runtime) = cron_scheduler_runtime {
+        runtime.shutdown().await;
+    }
+    serve_result?;
     Ok(())
+}
+
+async fn shutdown_signal() {
+    if let Err(error) = tokio::signal::ctrl_c().await {
+        eprintln!("[agistack] failed to install shutdown signal handler: {error}");
+    }
 }
 
 #[cfg(test)]

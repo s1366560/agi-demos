@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use agistack_adapters_postgres::{
-    CronControlScope, CronSchedulerLease, CronSchedulerOwnerError,
-};
+use agistack_adapters_postgres::{CronControlScope, CronSchedulerLease, CronSchedulerOwnerError};
 use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -116,6 +114,7 @@ impl CronScheduler {
         })
     }
 
+    #[cfg(test)]
     pub(crate) async fn run_once(&self) -> CoreResult<CronSchedulerRunReport> {
         let gate = self.gate();
         if gate != CronSchedulerGate::Open {
@@ -138,11 +137,7 @@ impl CronScheduler {
         let now = self.clock.now();
         let Some(mut authority) = self
             .ownership
-            .try_acquire_global(
-                &self.config.owner_id,
-                self.config.owner_lease_seconds,
-                now,
-            )
+            .try_acquire_global(&self.config.owner_id, self.config.owner_lease_seconds, now)
             .await
             .map_err(ownership_error)?
         else {
@@ -208,11 +203,7 @@ impl CronScheduler {
             }
             let renewed = self
                 .ownership
-                .renew(
-                    authority,
-                    self.config.owner_lease_seconds,
-                    self.clock.now(),
-                )
+                .renew(authority, self.config.owner_lease_seconds, self.clock.now())
                 .await
                 .map_err(ownership_error)?;
             let Some(renewed) = renewed else {
@@ -288,4 +279,3 @@ impl Drop for CronSchedulerRuntime {
 
 #[cfg(test)]
 mod tests;
-

@@ -21,7 +21,7 @@ agistack-adapters-smtp = { path = "../../crates/adapters-smtp" }
 agistack-adapters-wasmtime = { path = "../../crates/adapters-wasmtime" }
 axum = { version = "0.7", features = ["multipart", "ws"] }
 tower-http = { version = "0.6", features = ["cors"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "process", "signal", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "process", "signal", "sync", "time"] }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng = "0.10"
