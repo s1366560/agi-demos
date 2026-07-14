@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   isCurrentContextRevision,
+  isSameDesktopRequestScope,
   isWorkspaceAuthenticated,
   nextRemoteWorkspaceContext,
 } = require('/tmp/agistack-desktop-test-dist/src/features/auth/authContextModel.js');
@@ -70,4 +71,29 @@ test('context revisions reject stale responses and advance remote context monoto
       updated_at: '2026-07-13T01:00:00Z',
     },
   );
+});
+
+test('desktop request scope invalidates every identity and hierarchy boundary', () => {
+  const scope = {
+    mode: 'cloud',
+    apiBaseUrl: 'http://127.0.0.1:8000',
+    apiKey: 'session-a',
+    localApiToken: '',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  };
+
+  assert.equal(isSameDesktopRequestScope(scope, { ...scope }), true);
+  for (const [field, value] of [
+    ['mode', 'local'],
+    ['apiBaseUrl', 'http://127.0.0.1:8088'],
+    ['apiKey', 'session-b'],
+    ['localApiToken', 'launch-b'],
+    ['tenantId', 'tenant-2'],
+    ['projectId', 'project-2'],
+    ['workspaceId', 'workspace-2'],
+  ]) {
+    assert.equal(isSameDesktopRequestScope(scope, { ...scope, [field]: value }), false, field);
+  }
 });

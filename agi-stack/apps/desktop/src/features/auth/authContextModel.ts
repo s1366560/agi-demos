@@ -1,4 +1,4 @@
-import type { AuthState, WorkspaceContextSnapshot } from '../../types';
+import type { AuthState, DesktopRuntimeConfig, WorkspaceContextSnapshot } from '../../types';
 
 export function isWorkspaceAuthenticated(auth: AuthState): boolean {
   return (
@@ -12,6 +12,21 @@ export function isWorkspaceAuthenticated(auth: AuthState): boolean {
 
 export function isCurrentContextRevision(expected: number, current: number): boolean {
   return expected === current;
+}
+
+export function isSameDesktopRequestScope(
+  expected: DesktopRuntimeConfig,
+  current: DesktopRuntimeConfig,
+): boolean {
+  return (
+    expected.mode === current.mode &&
+    expected.apiBaseUrl === current.apiBaseUrl &&
+    expected.apiKey === current.apiKey &&
+    expected.localApiToken === current.localApiToken &&
+    expected.tenantId === current.tenantId &&
+    expected.projectId === current.projectId &&
+    expected.workspaceId === current.workspaceId
+  );
 }
 
 export function nextRemoteWorkspaceContext(

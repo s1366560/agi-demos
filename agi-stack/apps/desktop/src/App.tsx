@@ -72,6 +72,7 @@ import { AuthPanel } from './features/auth/AuthPanel';
 import { AutomationsPage } from './features/automations/AutomationsPage';
 import {
   isCurrentContextRevision,
+  isSameDesktopRequestScope,
   isWorkspaceAuthenticated,
   nextRemoteWorkspaceContext,
 } from './features/auth/authContextModel';
@@ -1992,6 +1993,8 @@ export function App() {
   const myWorkAbortRef = useRef<AbortController | null>(null);
   const myWorkRefreshTimerRef = useRef<number | null>(null);
   const contextRevisionRef = useRef(0);
+  const configRef = useRef(config);
+  const configScopeEpochRef = useRef(0);
   const localResumeAttemptRef = useRef('');
   const runInputRequestRef = useRef<{
     signature: string;
@@ -2001,6 +2004,14 @@ export function App() {
   const terminalStartGenerationRef = useRef(0);
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
   const terminalRunScopeKeyRef = useRef('');
+
+  const commitRuntimeConfig = useCallback((nextConfig: DesktopRuntimeConfig) => {
+    if (!isSameDesktopRequestScope(configRef.current, nextConfig)) {
+      configScopeEpochRef.current += 1;
+    }
+    configRef.current = nextConfig;
+    setConfig(nextConfig);
+  }, []);
 
   const api = useMemo(() => new DesktopApiClient(config), [config]);
   const socket = useAgentSocket(
@@ -2042,7 +2053,7 @@ export function App() {
       .then((status) => {
         if (cancelled) return;
         setLocalRuntimeStatus(status);
-        setConfig((current) => mergeLocalRuntimeStatus(current, status));
+        commitRuntimeConfig(mergeLocalRuntimeStatus(configRef.current, status));
       })
       .catch((caught) => {
         if (!cancelled) setError(formatError(caught));
@@ -2050,7 +2061,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [localRuntimeMode]);
+  }, [commitRuntimeConfig, localRuntimeMode]);
 
   const scopedConversation =
     agentConversationSession?.scopeKey === agentConversationScopeKey(config)
@@ -2875,8 +2886,10 @@ export function App() {
   const refreshRuntime = useCallback(
     async (nextConfig: DesktopRuntimeConfig = config, projectOverride?: ProjectSummary[]) => {
       const expectedContextRevision = contextRevisionRef.current;
+      const expectedScopeEpoch = configScopeEpochRef.current;
       const contextIsCurrent = () =>
-        isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current);
+        isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
+        expectedScopeEpoch === configScopeEpochRef.current;
       setConnection('loading');
       setError(null);
       try {
@@ -3006,7 +3019,7 @@ export function App() {
         );
 
         if (!contextIsCurrent()) return false;
-        setConfig(resolvedConfig);
+        commitRuntimeConfig(resolvedConfig);
         setDataset({
           workspaces,
           workspacesByProject,
@@ -3030,7 +3043,7 @@ export function App() {
         return false;
       }
     },
-    [auth.projects, auth.status, config, syncLocalRuntimeConfig],
+    [auth.projects, auth.status, commitRuntimeConfig, config, syncLocalRuntimeConfig],
   );
 
   const refreshMyWork = useCallback(async () => {
@@ -3042,13 +3055,15 @@ export function App() {
     const controller = new AbortController();
     myWorkAbortRef.current = controller;
     const expectedContextRevision = contextRevisionRef.current;
+    const expectedScopeEpoch = configScopeEpochRef.current;
     setMyWorkRefreshing(true);
     try {
       const response = await api.listMyWork(projectId, controller.signal);
       if (
         controller.signal.aborted ||
         myWorkRequestRef.current !== requestId ||
-        !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current)
+        !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+        expectedScopeEpoch !== configScopeEpochRef.current
       ) {
         return;
       }
@@ -3058,7 +3073,14 @@ export function App() {
         myWorkError: null,
       }));
     } catch (caught) {
-      if (controller.signal.aborted || myWorkRequestRef.current !== requestId) return;
+      if (
+        controller.signal.aborted ||
+        myWorkRequestRef.current !== requestId ||
+        !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+        expectedScopeEpoch !== configScopeEpochRef.current
+      ) {
+        return;
+      }
       setDataset((current) => ({
         ...current,
         myWorkError: formatError(caught),
@@ -3143,7 +3165,7 @@ export function App() {
 
       contextRevisionRef.current = context.revision;
       resetProjectScopedState();
-      setConfig(nextConfig);
+      commitRuntimeConfig(nextConfig);
       setAuth({
         status: 'signed_in',
         credentialKind: 'cloud_session',
@@ -3201,7 +3223,7 @@ export function App() {
 
     contextRevisionRef.current = outcome.context.revision;
     resetProjectScopedState();
-    setConfig(tokenConfig);
+    commitRuntimeConfig(tokenConfig);
     setAuth({
       status: 'signed_in',
       credentialKind: 'local_session',
@@ -3252,7 +3274,12 @@ export function App() {
             projectId: nextConfig.projectId.trim() || 'local-project',
           }
         : nextConfig;
-    setConfig(resolvedConfig);
+    const requestScopeChanged = !isSameDesktopRequestScope(configRef.current, resolvedConfig);
+    commitRuntimeConfig(resolvedConfig);
+    if (requestScopeChanged) {
+      resetProjectScopedState();
+      return;
+    }
     setConnection('idle');
     setAgentConversationSession(null);
     setConversationTimeline(emptyConversationTimeline);
@@ -3276,7 +3303,7 @@ export function App() {
     contextRevisionRef.current += 1;
     setAuth(emptyAuthState);
     setLoginModalOpen(false);
-    setConfig({
+    commitRuntimeConfig({
       ...DEFAULT_CONFIG,
       apiBaseUrl: config.apiBaseUrl,
       localApiToken: config.localApiToken,
@@ -3312,7 +3339,7 @@ export function App() {
       projectId,
       workspaceId,
     };
-    setConfig(nextConfig);
+    commitRuntimeConfig(nextConfig);
     setAgentConversationSession(null);
     setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
@@ -3337,7 +3364,7 @@ export function App() {
       projectId,
       workspaceId,
     };
-    setConfig(nextConfig);
+    commitRuntimeConfig(nextConfig);
     setAgentConversationSession({
       scopeKey: agentConversationScopeKeyFor(projectId, workspaceId),
       conversation,
@@ -3378,7 +3405,7 @@ export function App() {
         projectId,
         workspaceId: created.id,
       };
-      setConfig(nextConfig);
+      commitRuntimeConfig(nextConfig);
       setAgentConversationSession(null);
       setConversationTimeline(emptyConversationTimeline);
       setAgentTaskSignals([]);
@@ -3422,7 +3449,7 @@ export function App() {
         { workspace_id: workspaceId },
         projectId,
       );
-      setConfig(nextConfig);
+      commitRuntimeConfig(nextConfig);
       setAgentConversationSession({
         scopeKey: agentConversationScopeKeyFor(projectId, workspaceId),
         conversation,
@@ -3472,7 +3499,7 @@ export function App() {
 
   const adoptNewTaskSession = (session: NewTaskSession) => {
     const { workspace, conversation, config: sessionConfig } = session;
-    setConfig(sessionConfig);
+    commitRuntimeConfig(sessionConfig);
     setAgentConversationSession({
       scopeKey: agentConversationScopeKeyFor(sessionConfig.projectId, workspace.id),
       conversation,
@@ -4710,7 +4737,7 @@ export function App() {
     const nextConfig = { ...config, tenantId, projectId, workspaceId: '' };
     contextRevisionRef.current = nextContext.revision;
     resetProjectScopedState();
-    setConfig(nextConfig);
+    commitRuntimeConfig(nextConfig);
     setAuth((current) => ({ ...current, context: nextContext, projects }));
     applySectionSideEffects('workspace');
     const applied = await refreshRuntime(nextConfig, [selectedProject]);
@@ -5043,6 +5070,7 @@ export function App() {
   const openMyWorkSession = async (item: ProjectWorkItem) => {
     const workspaceId = item.workspace_id ?? '';
     const expectedContextRevision = contextRevisionRef.current;
+    const expectedScopeEpoch = configScopeEpochRef.current;
     let conversation = (dataset.conversationsByWorkspace[workspaceId] ?? []).find(
       (candidate) => candidate.id === item.conversation_id,
     );
@@ -5055,16 +5083,24 @@ export function App() {
         const response = await api.listConversations(item.project_id, workspaceId);
         conversation = response.items.find((candidate) => candidate.id === item.conversation_id);
       } catch (caught) {
+        if (
+          !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+          expectedScopeEpoch !== configScopeEpochRef.current
+        ) {
+          return;
+        }
         setError(formatError(caught));
         return;
       }
     }
-    if (!conversation) {
-      setError(t('myWork.sessionUnavailable'));
+    if (
+      !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+      expectedScopeEpoch !== configScopeEpochRef.current
+    ) {
       return;
     }
     if (
-      !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+      !conversation ||
       !myWorkConversationMatchesScope(item, conversation, {
         tenantId: config.tenantId,
         projectId: config.projectId,
