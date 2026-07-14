@@ -1029,7 +1029,74 @@ test('listAgentPlanTasks loads the structured plan for human review', async () =
   }
 });
 
-test('management APIs keep runtime plugins distinct from MCP Apps', async () => {
+test('managed skill APIs preserve tenant and project collection scope and status contracts', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify(
+        calls.length === 1
+          ? {
+              items: [
+                {
+                  id: 'skill/1',
+                  name: 'Repository review',
+                  description: 'Review repository changes',
+                  status: 'active',
+                  scope: 'tenant',
+                  tools: ['git_diff'],
+                },
+              ],
+            }
+          : {
+              id: 'skill/1',
+              name: 'Repository review',
+              description: 'Review repository changes',
+              status: 'disabled',
+              scope: 'tenant',
+              tools: ['git_diff'],
+            }
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+    });
+
+    const skills = await client.listManagedSkills();
+    const updated = await client.setManagedSkillStatus(skills[0].id, 'disabled');
+
+    assert.equal(skills[0].id, 'skill/1');
+    assert.equal(updated.status, 'disabled');
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/skills/?limit=100&tenant_id=tenant+1&project_id=project%2F1',
+          'GET',
+          undefined,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/skills/skill%2F1/status?status=disabled&tenant_id=tenant+1',
+          'PATCH',
+          undefined,
+        ],
+      ]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('managed plugin APIs preserve authoritative ids and toggle by id', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -1038,9 +1105,17 @@ test('management APIs keep runtime plugins distinct from MCP Apps', async () => 
       JSON.stringify({
         items: [
           {
-            name: 'github',
+            id: 'runtime/github',
+            name: 'github-display-name',
             source: 'entrypoint',
             enabled: true,
+            discovered: true,
+            channel_types: [],
+          },
+          {
+            name: 'legacy-plugin',
+            source: 'entrypoint',
+            enabled: false,
             discovered: true,
             channel_types: [],
           },
@@ -1059,13 +1134,143 @@ test('management APIs keep runtime plugins distinct from MCP Apps', async () => 
       tenantId: 'tenant 1',
     });
     const plugins = await client.listManagedPlugins();
+    await client.setManagedPluginEnabled(plugins[0].id, false);
+    await client.setManagedPluginEnabled(plugins[1].id, true);
 
-    assert.equal(plugins[0].id, 'github');
-    assert.equal(
-      String(calls[0]?.input),
-      'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins'
+    assert.equal(plugins[0].id, 'runtime/github');
+    assert.equal(plugins[1].id, 'legacy-plugin');
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins',
+          'GET',
+          undefined,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/runtime%2Fgithub/disable',
+          'POST',
+          undefined,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/legacy-plugin/enable',
+          'POST',
+          undefined,
+        ],
+      ]
     );
     assert.doesNotMatch(String(calls[0]?.input), /mcp\/apps/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('cloud managed plugins use the response name as the operation key when id is absent', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        plugins: [
+          {
+            name: 'github',
+            source: 'entrypoint',
+            enabled: true,
+            discovered: true,
+            channel_types: [],
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session-token',
+      localApiToken: '',
+      tenantId: 'tenant 1',
+      mode: 'cloud',
+    });
+    const plugins = await client.listManagedPlugins();
+    await client.setManagedPluginEnabled(plugins[0].id, false);
+
+    assert.equal(plugins[0].id, 'github');
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method]),
+      [
+        ['https://api.memstack.test/api/v1/channels/tenants/tenant%201/plugins', 'GET'],
+        [
+          'https://api.memstack.test/api/v1/channels/tenants/tenant%201/plugins/github/disable',
+          'POST',
+        ],
+      ]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('managed agent APIs preserve project scope and the enabled mutation body', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify(
+        calls.length === 1
+          ? {
+              items: [
+                {
+                  id: 'agent/1',
+                  name: 'coding-agent',
+                  display_name: 'Coding agent',
+                  enabled: false,
+                },
+              ],
+            }
+          : {
+              id: 'agent/1',
+              name: 'coding-agent',
+              display_name: 'Coding agent',
+              enabled: true,
+            }
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+    });
+
+    const agents = await client.listManagedAgents();
+    const updated = await client.setManagedAgentEnabled(agents[0].id, true);
+
+    assert.equal(updated.enabled, true);
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/agent/definitions?limit=100&enabled_only=false&project_id=project%2F1&tenant_id=tenant+1',
+          'GET',
+          undefined,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1/enabled?tenant_id=tenant+1&project_id=project%2F1',
+          'PATCH',
+          JSON.stringify({ enabled: true }),
+        ],
+      ]
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

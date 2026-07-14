@@ -7,10 +7,15 @@ import { I18nProvider } from '../i18n';
 import type {
   AuthState,
   DesktopRuntimeConfig,
+  ManagedAgentDefinition,
   ManagedLlmProvider,
+  ManagedPlugin,
+  ManagedSkill,
 } from '../types';
 import { DEFAULT_CONFIG } from '../types';
 import '../styles.css';
+
+type QaPlugin = Omit<ManagedPlugin, 'id'> & { id?: string };
 
 declare global {
   var __providerSettingsQaRoot: Root | undefined;
@@ -156,6 +161,136 @@ const modelCatalogs: Record<string, Record<'chat' | 'embedding' | 'rerank', stri
 
 let providers = initialProviders.map((provider) => ({ ...provider }));
 
+let skills: ManagedSkill[] = [
+  {
+    id: 'competitive-research',
+    name: 'Competitive research',
+    description: 'Builds an evidence-backed market brief from verified sources.',
+    status: 'active',
+    scope: 'tenant',
+    tools: ['web_search', 'browser', 'documents', 'citations'],
+    current_version: 4,
+    is_system_skill: false,
+    updated_at: NOW,
+  },
+  {
+    id: 'code-verification',
+    name: 'Code verification',
+    description: 'Runs tests and collects structured review evidence.',
+    status: 'active',
+    scope: 'system',
+    tools: ['run_tests', 'analyze_coverage', 'git_diff'],
+    current_version: 2,
+    is_system_skill: true,
+    updated_at: '2026-07-13T08:20:00.000Z',
+  },
+  {
+    id: 'meeting-brief',
+    name: 'Meeting brief',
+    description: 'Prepares an agenda and decision record from project context.',
+    status: 'disabled',
+    scope: 'tenant',
+    tools: ['read', 'documents'],
+    current_version: 1,
+    is_system_skill: false,
+    updated_at: '2026-07-11T05:20:00.000Z',
+  },
+];
+
+let plugins: QaPlugin[] = [
+  {
+    name: 'github',
+    source: 'entrypoint',
+    package: '@memstack/github',
+    version: '2.4.1',
+    kind: 'mcp',
+    enabled: true,
+    discovered: true,
+    providers: ['github'],
+    skills: ['pull-request-review'],
+    channel_types: ['issues', 'pull_requests'],
+    tool_definitions: [
+      { name: 'list_pull_requests' },
+      { name: 'review_pull_request' },
+      { name: 'read_issue' },
+    ],
+    updated_at: NOW,
+  },
+  {
+    name: 'slack',
+    source: 'entrypoint',
+    package: '@memstack/slack',
+    version: '3.2.0',
+    kind: 'channel',
+    enabled: true,
+    discovered: true,
+    providers: ['slack'],
+    skills: ['incident-triage'],
+    channel_types: ['messages', 'threads'],
+    tool_definitions: [{ name: 'search_messages' }, { name: 'post_message' }],
+    updated_at: NOW,
+  },
+  {
+    name: 'google-drive',
+    source: 'entrypoint',
+    package: '@memstack/google-drive',
+    version: '1.8.0',
+    kind: 'channel',
+    enabled: false,
+    discovered: false,
+    providers: ['google'],
+    skills: [],
+    channel_types: ['documents'],
+    tool_definitions: [],
+    updated_at: '2026-07-09T04:10:00.000Z',
+  },
+];
+
+let agents: ManagedAgentDefinition[] = [
+  {
+    id: 'agent-atlas',
+    name: 'atlas',
+    display_name: 'Atlas',
+    system_prompt: 'Internal prompt must never be rendered or searched.',
+    enabled: true,
+    status: 'active',
+    model: 'openai/gpt-5.1',
+    project_id: QA_PROJECT_ID,
+    allowed_tools: ['web_search', 'browser', 'documents'],
+    allowed_skills: ['competitive-research', 'meeting-brief'],
+    allowed_mcp_servers: ['github'],
+    fallback_models: ['anthropic/claude-sonnet-4-5'],
+    updated_at: NOW,
+  },
+  {
+    id: 'agent-reviewer',
+    name: 'review_guardian',
+    display_name: 'Review guardian',
+    system_prompt: 'Private review policy.',
+    enabled: false,
+    status: 'disabled',
+    model_name: 'anthropic/claude-sonnet-4-5',
+    project_id: QA_PROJECT_ID,
+    allowed_tools: ['read', 'git_diff'],
+    allowed_skills: ['code-verification'],
+    allowed_mcp_servers: ['github'],
+    updated_at: '2026-07-12T09:10:00.000Z',
+  },
+  {
+    id: 'builtin:all-access',
+    name: 'local_agent',
+    display_name: 'General and coding Agent',
+    enabled: true,
+    status: 'active',
+    model_name: null,
+    project_id: QA_PROJECT_ID,
+    allowed_tools: ['read', 'write', 'edit', 'terminal'],
+    allowed_skills: ['code-verification'],
+    allowed_mcp_servers: ['local-runtime'],
+    updated_at: NOW,
+  },
+];
+
 const qaAuth: AuthState = {
   status: 'signed_in',
   credentialKind: 'cloud_session',
@@ -297,13 +432,13 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     return jsonResponse({ projects: qaAuth.projects });
   }
   if (method === 'GET' && path === '/api/v1/skills/') {
-    return jsonResponse({ skills: [] });
+    return jsonResponse({ skills });
   }
   if (method === 'GET' && path.endsWith('/plugins')) {
-    return jsonResponse({ plugins: [] });
+    return jsonResponse({ plugins });
   }
   if (method === 'GET' && path === '/api/v1/agent/definitions') {
-    return jsonResponse({ definitions: [] });
+    return jsonResponse({ definitions: agents });
   }
   if (method === 'GET' && path === '/api/v1/llm-providers/') {
     return jsonResponse(providers);
@@ -335,6 +470,38 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       response_time_ms: configured ? 196 : null,
       error_message: configured ? null : 'Required connection fields are missing.',
     });
+  }
+
+  const skillStatusMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/status$/);
+  if (method === 'PATCH' && skillStatusMatch) {
+    const skillId = decodeURIComponent(skillStatusMatch[1]);
+    const status = url.searchParams.get('status') ?? 'disabled';
+    skills = skills.map((skill) => (skill.id === skillId ? { ...skill, status } : skill));
+    return jsonResponse(skills.find((skill) => skill.id === skillId) ?? null);
+  }
+
+  const pluginStatusMatch = path.match(
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/(enable|disable)$/,
+  );
+  if (method === 'POST' && pluginStatusMatch) {
+    const pluginName = decodeURIComponent(pluginStatusMatch[1]);
+    const enabled = pluginStatusMatch[2] === 'enable';
+    plugins = plugins.map((plugin) =>
+      plugin.name === pluginName ? { ...plugin, enabled } : plugin,
+    );
+    return jsonResponse(plugins.find((plugin) => plugin.name === pluginName) ?? null);
+  }
+
+  const agentStatusMatch = path.match(/^\/api\/v1\/agent\/definitions\/([^/]+)\/enabled$/);
+  if (method === 'PATCH' && agentStatusMatch) {
+    const agentId = decodeURIComponent(agentStatusMatch[1]);
+    const enabled = booleanValue(readJsonBody(body).enabled, false);
+    agents = agents.map((agent) =>
+      agent.id === agentId
+        ? { ...agent, enabled, status: enabled ? 'active' : 'disabled' }
+        : agent,
+    );
+    return jsonResponse(agents.find((agent) => agent.id === agentId) ?? null);
   }
 
   if (method === 'POST' && path === '/api/v1/llm-providers/') {

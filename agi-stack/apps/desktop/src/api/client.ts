@@ -834,6 +834,7 @@ export class DesktopApiClient {
   async listManagedSkills(signal?: AbortSignal): Promise<ManagedSkill[]> {
     const params = new URLSearchParams({ limit: '100' });
     if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    if (this.config.projectId) params.set('project_id', this.config.projectId);
     const payload = await this.request<unknown>(`/api/v1/skills/?${params.toString()}`, {
       signal,
     });
@@ -860,15 +861,15 @@ export class DesktopApiClient {
     );
     return readArray<ManagedPlugin>(payload, ['items', 'plugins', 'data']).map((plugin) => ({
       ...plugin,
-      id: plugin.name,
+      id: plugin.id ?? plugin.name,
     }));
   }
 
-  async setManagedPluginEnabled(pluginName: string, enabled: boolean): Promise<unknown> {
+  async setManagedPluginEnabled(pluginId: string, enabled: boolean): Promise<unknown> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     return this.request<unknown>(
       `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
-        pluginName,
+        pluginId,
       )}/${enabled ? 'enable' : 'disable'}`,
       { method: 'POST' },
     );
@@ -891,6 +892,7 @@ export class DesktopApiClient {
   ): Promise<ManagedAgentDefinition> {
     const params = new URLSearchParams();
     if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    if (this.config.projectId) params.set('project_id', this.config.projectId);
     const query = params.toString();
     return this.request<ManagedAgentDefinition>(
       `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}/enabled${

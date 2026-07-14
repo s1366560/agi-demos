@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Theme } from '@radix-ui/themes';
+import { Theme } from '@radix-ui/themes';
 import {
   BellIcon,
   ComponentInstanceIcon,
@@ -13,7 +13,6 @@ import {
   MagicWandIcon,
   MagnifyingGlassIcon,
   PersonIcon,
-  ReloadIcon,
 } from '@radix-ui/react-icons';
 
 import { DesktopApiClient } from '../../api/client';
@@ -28,13 +27,18 @@ import type {
 } from '../../types';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import {
-  ResourceDetail,
-  ResourceRow,
-  SettingsState,
-  resourceIsActive,
+  ManagedResourceWorkspace,
   type ManagedResource,
   type ResourceSection,
 } from './ManagedResourceViews';
+import {
+  filterManagedResources,
+  managedResourceAction,
+  managedResourceManagementAllowed,
+  managedResourceSnapshotIsCurrent,
+  resolveManagedResourceSelection,
+  type ManagedResourceListFilter,
+} from './managedResourceModel';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
@@ -72,13 +76,21 @@ type SettingsWindowProps = {
 };
 
 const sectionMeta = {
-  account: { label: 'settings.account', description: 'settings.accountDescription', Icon: IdCardIcon },
+  account: {
+    label: 'settings.account',
+    description: 'settings.accountDescription',
+    Icon: IdCardIcon,
+  },
   workspace: {
     label: 'settings.workspace',
     description: 'settings.workspaceDescription',
     Icon: CubeIcon,
   },
-  general: { label: 'settings.general', description: 'settings.generalDescription', Icon: GearIcon },
+  general: {
+    label: 'settings.general',
+    description: 'settings.generalDescription',
+    Icon: GearIcon,
+  },
   connection: {
     label: 'settings.connectionRecovery',
     description: 'settings.connectionRecoveryDescription',
@@ -95,7 +107,11 @@ const sectionMeta = {
     Icon: BellIcon,
   },
   models: { label: 'settings.models', description: 'settings.modelsDescription', Icon: CubeIcon },
-  skills: { label: 'settings.skills', description: 'settings.skillsDescription', Icon: MagicWandIcon },
+  skills: {
+    label: 'settings.skills',
+    description: 'settings.skillsDescription',
+    Icon: MagicWandIcon,
+  },
   plugins: {
     label: 'settings.plugins',
     description: 'settings.pluginsDescription',
@@ -122,12 +138,22 @@ export function SettingsWindow({
   const { t } = useI18n();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState('');
+  const [resourceQuery, setResourceQuery] = useState('');
   const [resourceItems, setResourceItems] = useState<ManagedResource[]>([]);
+  const [loadedResourceSection, setLoadedResourceSection] = useState<ResourceSection | null>(null);
+  const [loadedResourceContextKey, setLoadedResourceContextKey] = useState<string | null>(null);
   const [resourceLoading, setResourceLoading] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
-  const [resourceFilter, setResourceFilter] = useState<'all' | 'active' | 'disabled'>('all');
+  const [resourceActionError, setResourceActionError] = useState<string | null>(null);
+  const [resourceFilter, setResourceFilter] = useState<ManagedResourceListFilter>('all');
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const resourceRequestId = useRef(0);
+  const activeSectionRef = useRef(section);
+  const resourceContextKey = `${config.mode}:${config.tenantId}:${config.projectId}`;
+  const resourceContextKeyRef = useRef(resourceContextKey);
+  activeSectionRef.current = section;
+  resourceContextKeyRef.current = resourceContextKey;
   const [resourceCounts, setResourceCounts] = useState<SettingsResourceCounts>({
     models: null,
     skills: null,
@@ -144,7 +170,11 @@ export function SettingsWindow({
     if (!open) return;
     setSection(initialSection);
     setQuery('');
+    setResourceQuery('');
     setResourceFilter('all');
+    setLoadedResourceSection(null);
+    setLoadedResourceContextKey(null);
+    setResourceItems([]);
     setSelectedResourceId(null);
     setResourceCounts({ models: null, skills: null, plugins: null, agents: null });
   }, [initialSection, open]);
@@ -165,6 +195,8 @@ export function SettingsWindow({
 
   const loadResources = useCallback(
     async (resourceSection: ResourceSection, signal?: AbortSignal) => {
+      const requestId = resourceRequestId.current + 1;
+      resourceRequestId.current = requestId;
       setResourceLoading(true);
       setResourceError(null);
       try {
@@ -175,7 +207,10 @@ export function SettingsWindow({
             : resourceSection === 'plugins'
               ? await client.listManagedPlugins(signal)
               : await client.listManagedAgents(signal);
+        if (requestId !== resourceRequestId.current) return;
         setResourceItems(items);
+        setLoadedResourceSection(resourceSection);
+        setLoadedResourceContextKey(resourceContextKey);
         setResourceCounts((current) => ({
           ...current,
           [resourceSection]: items.length < 100 ? items.length : null,
@@ -184,39 +219,86 @@ export function SettingsWindow({
           current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
         );
       } catch (error) {
+        if (requestId !== resourceRequestId.current || signal?.aborted) return;
         setResourceItems([]);
+        setLoadedResourceSection(null);
+        setLoadedResourceContextKey(null);
         setResourceError(error instanceof Error ? error.message : String(error));
       } finally {
-        setResourceLoading(false);
+        if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config],
+    [config, resourceContextKey],
   );
 
   useEffect(() => {
     if (!open || !isResourceSection) return;
     const controller = new AbortController();
+    setResourceQuery('');
+    setResourceFilter('all');
+    setResourceActionError(null);
+    setLoadedResourceSection(null);
+    setLoadedResourceContextKey(null);
+    setResourceItems([]);
+    setSelectedResourceId(null);
     void loadResources(section, controller.signal);
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      resourceRequestId.current += 1;
+    };
   }, [isResourceSection, loadResources, open, section]);
 
   const filteredItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return resourceItems.filter((item) => {
-      const matchesQuery =
-        !normalizedQuery || JSON.stringify(item).toLowerCase().includes(normalizedQuery);
-      const active = resourceIsActive(isResourceSection ? section : 'skills', item);
-      const matchesFilter =
-        resourceFilter === 'all' ||
-        (resourceFilter === 'active' ? active : !active);
-      return matchesQuery && matchesFilter;
-    });
-  }, [isResourceSection, query, resourceFilter, resourceItems, section]);
+    if (
+      !isResourceSection ||
+      !managedResourceSnapshotIsCurrent(
+        section,
+        resourceContextKey,
+        loadedResourceSection,
+        loadedResourceContextKey,
+      )
+    ) {
+      return [];
+    }
+    return filterManagedResources(section, resourceItems, resourceQuery, resourceFilter);
+  }, [
+    isResourceSection,
+    loadedResourceContextKey,
+    loadedResourceSection,
+    resourceFilter,
+    resourceItems,
+    resourceQuery,
+    resourceContextKey,
+    section,
+  ]);
   const selectedResource = useMemo(
     () =>
-      filteredItems.find((item) => item.id === selectedResourceId) ?? filteredItems[0] ?? null,
-    [filteredItems, selectedResourceId],
+      resourceLoading ||
+      !isResourceSection ||
+      !managedResourceSnapshotIsCurrent(
+        section,
+        resourceContextKey,
+        loadedResourceSection,
+        loadedResourceContextKey,
+      )
+        ? null
+        : resolveManagedResourceSelection(filteredItems, selectedResourceId),
+    [
+      filteredItems,
+      isResourceSection,
+      loadedResourceContextKey,
+      loadedResourceSection,
+      resourceContextKey,
+      resourceLoading,
+      section,
+      selectedResourceId,
+    ],
   );
+
+  useEffect(() => {
+    const nextId = selectedResource?.id ?? null;
+    if (nextId !== selectedResourceId) setSelectedResourceId(nextId);
+  }, [selectedResource, selectedResourceId]);
   const settingsSearchCopy = useMemo(
     (): SettingsSearchCopy => ({
       account: [t(sectionMeta.account.label), t(sectionMeta.account.description)],
@@ -261,23 +343,43 @@ export function SettingsWindow({
 
   const toggleResource = async (item: ManagedResource) => {
     if (!isResourceSection) return;
+    const mutationSection = section;
+    const mutationContextKey = resourceContextKey;
+    const canManageResource = managedResourceManagementAllowed(
+      config.mode,
+      auth.user?.roles ?? [],
+      section,
+      item,
+    );
+    const action = managedResourceAction(section, item, canManageResource, config.mode);
+    if (!action) return;
     setActionBusyId(item.id);
-    setResourceError(null);
+    setResourceActionError(null);
     try {
       const client = new DesktopApiClient(config);
-      if (section === 'skills') {
+      if (action.kind === 'set_skill_status') {
         const skill = item as ManagedSkill;
-        await client.setManagedSkillStatus(skill.id, skill.status === 'active' ? 'disabled' : 'active');
-      } else if (section === 'plugins') {
+        await client.setManagedSkillStatus(skill.id, action.nextActive ? 'active' : 'disabled');
+      } else if (action.kind === 'set_plugin_enabled') {
         const plugin = item as ManagedPlugin;
-        await client.setManagedPluginEnabled(plugin.name, !plugin.enabled);
+        await client.setManagedPluginEnabled(plugin.id, action.nextActive);
       } else {
         const agent = item as ManagedAgentDefinition;
-        await client.setManagedAgentEnabled(agent.id, agent.enabled === false);
+        await client.setManagedAgentEnabled(agent.id, action.nextActive);
       }
-      await loadResources(section);
+      if (
+        activeSectionRef.current === mutationSection &&
+        resourceContextKeyRef.current === mutationContextKey
+      ) {
+        await loadResources(mutationSection);
+      }
     } catch (error) {
-      setResourceError(error instanceof Error ? error.message : String(error));
+      if (
+        activeSectionRef.current === mutationSection &&
+        resourceContextKeyRef.current === mutationContextKey
+      ) {
+        setResourceActionError(error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setActionBusyId(null);
     }
@@ -330,7 +432,9 @@ export function SettingsWindow({
                             ? 'settings.preferences'
                             : 'settings.aiResources',
                       )}
-                      sections={group.sections.filter((candidate) => visibleSections.has(candidate))}
+                      sections={group.sections.filter((candidate) =>
+                        visibleSections.has(candidate),
+                      )}
                       active={section}
                       counts={resourceCounts}
                       onSelect={setSection}
@@ -346,14 +450,20 @@ export function SettingsWindow({
               <div className="settings-window-scope">
                 <LockClosedIcon />
                 <span>
-                  <strong>{selectedTenant?.name || config.tenantId || t('settings.signedOut')}</strong>
-                  <small>{selectedProject?.name || config.projectId || t('settings.project')}</small>
+                  <strong>
+                    {selectedTenant?.name || config.tenantId || t('settings.signedOut')}
+                  </strong>
+                  <small>
+                    {selectedProject?.name || config.projectId || t('settings.project')}
+                  </small>
                 </span>
               </div>
             </aside>
 
             <main
-              className={`settings-window-content ${section === 'models' ? 'provider-mode' : ''}`}
+              className={`settings-window-content ${
+                section === 'models' ? 'provider-mode' : isResourceSection ? 'managed-mode' : ''
+              }`}
             >
               {section === 'account' ? (
                 <AccountSettingsPage
@@ -409,65 +519,36 @@ export function SettingsWindow({
               ) : null}
 
               {isResourceSection ? (
-                <SettingsPage
-                  eyebrow={t(sectionMeta[section].label)}
-                  title={t('settings.resourceTitle', { resource: t(sectionMeta[section].label) })}
-                  description={t('settings.resourceDescription')}
-                  action={
-                    <div className="settings-resource-actions">
-                      <div role="group" aria-label={t('settings.status')}>
-                        {(['all', 'active', 'disabled'] as const).map((filter) => (
-                          <button
-                            type="button"
-                            key={filter}
-                            className={resourceFilter === filter ? 'active' : ''}
-                            onClick={() => setResourceFilter(filter)}
-                          >
-                            {filter === 'all'
-                              ? t('settings.all')
-                              : filter === 'active'
-                                ? t('settings.active')
-                                : t('settings.disabled')}
-                          </button>
-                        ))}
-                      </div>
-                      <Button variant="soft" onClick={() => void loadResources(section)}>
-                        <ReloadIcon /> {t('settings.refresh')}
-                      </Button>
-                    </div>
+                <ManagedResourceWorkspace
+                  section={section}
+                  items={filteredItems}
+                  selected={selectedResource}
+                  query={resourceQuery}
+                  filter={resourceFilter}
+                  loading={resourceLoading}
+                  error={resourceError}
+                  actionError={resourceActionError}
+                  busy={actionBusyId !== null}
+                  mode={config.mode}
+                  canManage={
+                    selectedResource
+                      ? managedResourceManagementAllowed(
+                          config.mode,
+                          auth.user?.roles ?? [],
+                          section,
+                          selectedResource,
+                        )
+                      : false
                   }
-                >
-                  {resourceLoading ? <SettingsState text={t('settings.loading')} /> : null}
-                  {!resourceLoading && resourceError ? (
-                    <SettingsState error text={t('settings.unavailable')} detail={resourceError} />
-                  ) : null}
-                  {!resourceLoading && !resourceError && filteredItems.length === 0 ? (
-                    <SettingsState text={t('settings.empty')} />
-                  ) : null}
-                  {!resourceLoading && filteredItems.length > 0 ? (
-                    <div className="settings-resource-workspace">
-                      <div className="settings-resource-list">
-                        {filteredItems.map((item) => (
-                          <ResourceRow
-                            key={item.id}
-                            section={section}
-                            item={item}
-                            selected={selectedResource?.id === item.id}
-                            busy={actionBusyId === item.id}
-                            onSelect={() => setSelectedResourceId(item.id)}
-                            onAction={() => void toggleResource(item)}
-                          />
-                        ))}
-                      </div>
-                      {selectedResource ? (
-                        <ResourceDetail
-                          section={section}
-                          item={selectedResource}
-                        />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </SettingsPage>
+                  onQueryChange={setResourceQuery}
+                  onFilterChange={setResourceFilter}
+                  onSelect={(id) => {
+                    setSelectedResourceId(id);
+                    setResourceActionError(null);
+                  }}
+                  onRetry={() => void loadResources(section)}
+                  onAction={(item) => void toggleResource(item)}
+                />
               ) : null}
             </main>
           </div>
