@@ -82,6 +82,13 @@ export function isLegacyWorkspaceContextRouteMissing(error: unknown): boolean {
   return (error.payload as { detail?: unknown }).detail === 'Not Found';
 }
 
+export function isLegacyConversationSessionRouteMissing(error: unknown): boolean {
+  if (!(error instanceof DesktopApiError) || error.status !== 404) return false;
+  if (typeof error.payload !== 'object' || error.payload === null) return false;
+  const detail = (error.payload as { detail?: unknown }).detail;
+  return detail === 'Not Found' || detail === 'Not found';
+}
+
 export class DesktopApiClient {
   private readonly config: DesktopRuntimeConfig;
 
@@ -147,6 +154,14 @@ export class DesktopApiClient {
 
   async getWorkspaceContext(signal?: AbortSignal): Promise<WorkspaceContextResponse> {
     return this.request<WorkspaceContextResponse>('/api/v1/workspace-context', { signal });
+  }
+
+  async getConversationSession(conversationId: string, signal?: AbortSignal): Promise<unknown> {
+    const resolvedConversationId = requireValue(conversationId, 'conversation id');
+    return this.request<unknown>(
+      `/api/v1/agent/conversations/${encodeURIComponent(resolvedConversationId)}/session`,
+      { signal },
+    );
   }
 
   async switchWorkspaceContext(

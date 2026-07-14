@@ -154,6 +154,7 @@ function SessionEvidenceQa() {
               collection={checksView ? 'checks' : 'sources'}
               presentation={presentation}
               versions={versions}
+              available
               onOpenArtifact={() => undefined}
             />
           </div>

@@ -19,6 +19,8 @@
     "src/features/chat/chatComposerModel.ts",
     "src/hooks/useAgentSocket.ts",
     "src/hooks/useTerminalProxy.ts",
+    "src/features/session/sessionProjectionModel.ts",
+    "src/features/session/sessionProjectionTypes.ts",
     "src/features/session/sessionViewModel.ts",
     "src/features/session/sessionScope.ts",
     "src/features/session/sessionLayoutModel.ts",

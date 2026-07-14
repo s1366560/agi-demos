@@ -33,6 +33,7 @@ const testFiles = [
   'my-work-model.test.mjs',
   'new-task-plan-model.test.mjs',
   'new-task-plan-approval.test.mjs',
+  'session-projection-model.test.mjs',
   'session-view-model.test.mjs',
   'session-scope.test.mjs',
   'session-layout-model.test.mjs',

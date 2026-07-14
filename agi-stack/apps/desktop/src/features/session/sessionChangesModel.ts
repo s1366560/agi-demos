@@ -15,6 +15,13 @@ export function allowedRunInputDeliveries(
   return attached ? ['steer_now', 'queue_next'] : ['queue_next'];
 }
 
+export function effectiveRunInputDelivery(
+  selected: RunInputDelivery | null,
+  allowed: readonly RunInputDelivery[],
+): RunInputDelivery | null {
+  return selected && allowed.includes(selected) ? selected : (allowed[0] ?? null);
+}
+
 export function referenceForChangeLine(
   snapshot: ChangeSnapshot,
   file: ChangeFile,

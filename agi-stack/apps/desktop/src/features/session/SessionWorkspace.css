@@ -415,6 +415,28 @@
 }
 .session-workspace-thread .chat-composer-input,
 .session-workspace-thread .composer textarea { min-height: 64px; }
+.session-authority-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  color: var(--desktop-muted);
+  background: rgba(17, 25, 35, 0.9);
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 7px;
+}
+.session-authority-notice > svg { color: var(--cyan-9); }
+.session-authority-notice > span { display: grid; min-width: 0; gap: 2px; }
+.session-authority-notice strong { color: var(--desktop-text); font-size: 11px; }
+.session-authority-notice small { font-size: 9px; line-height: 1.4; }
+.session-authority-notice.tone-warning > svg { color: var(--amber-9); }
+.session-authority-notice.tone-error {
+  background: rgba(53, 22, 27, 0.72);
+  border-color: rgba(248, 113, 113, 0.28);
+}
+.session-authority-notice.tone-error > svg { color: var(--red-9); }
+.review-authority-notice { margin-bottom: 12px; }
 .session-workspace-canvas .review-panel { height: 100%; border-left: 0; }
 
 @media (max-width: 1280px) {

@@ -8,6 +8,7 @@ const {
   desktopLaunchCapability,
   DesktopApiClient,
   DesktopApiError,
+  isLegacyConversationSessionRouteMissing,
   isLegacyWorkspaceContextRouteMissing,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/api/client.js'
@@ -90,6 +91,64 @@ test('workspace context compatibility fallback accepts only the legacy missing-r
     ),
     false,
   );
+});
+
+test('conversation session authority request preserves identity and only accepts legacy route absence', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    calls.push(String(input));
+    return new Response(
+      JSON.stringify({
+        schema_version: 1,
+        conversation: { id: 'conversation/1' },
+        snapshot_revision: 'snapshot-1',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+    });
+    const payload = await client.getConversationSession('conversation/1');
+
+    assert.equal(payload.snapshot_revision, 'snapshot-1');
+    assert.deepEqual(calls, [
+      'http://127.0.0.1:8088/api/v1/agent/conversations/conversation%2F1/session',
+    ]);
+    assert.equal(
+      isLegacyConversationSessionRouteMissing(
+        new DesktopApiError('Not Found', 404, { detail: 'Not Found' }),
+      ),
+      true,
+    );
+    assert.equal(
+      isLegacyConversationSessionRouteMissing(
+        new DesktopApiError('conversation not found', 404, {
+          detail: 'conversation not found',
+        }),
+      ),
+      false,
+    );
+    assert.equal(
+      isLegacyConversationSessionRouteMissing(
+        new DesktopApiError('Not found', 404, { detail: 'Not found' }),
+      ),
+      true,
+    );
+    assert.equal(
+      isLegacyConversationSessionRouteMissing(
+        new DesktopApiError('Not Found', 403, { detail: 'Not Found' }),
+      ),
+      false,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('respondToHitl sends the authenticated unified HITL payload', async () => {

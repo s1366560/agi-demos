@@ -49,6 +49,7 @@ import {
   PlayIcon,
   PlusIcon,
   ReaderIcon,
+  ReloadIcon,
   RocketIcon,
   ExclamationTriangleIcon,
   StopIcon,
@@ -59,6 +60,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
+  isLegacyConversationSessionRouteMissing,
   isLegacyWorkspaceContextRouteMissing,
 } from './api/client';
 import {
@@ -107,7 +109,7 @@ import {
   type SessionCanvasTabId,
 } from './features/session/sessionCanvasModel';
 import {
-  allowedRunInputDeliveries,
+  effectiveRunInputDelivery,
   snapshotMatchesRun,
   toggleRunInputReference,
 } from './features/session/sessionChangesModel';
@@ -122,6 +124,16 @@ import {
   sessionInvocationLedgerSummary,
 } from './features/session/sessionInvocationLedgerModel';
 import {
+  decodeConversationSessionProjection,
+  socketEventInvalidatesSessionProjection,
+} from './features/session/sessionProjectionModel';
+import {
+  emptySessionProjectionState,
+  type ConversationSessionProjection,
+  type SessionProjectionCapabilities,
+  type SessionProjectionLoadState,
+} from './features/session/sessionProjectionTypes';
+import {
   terminalBindingState,
   terminalRunScopeKey,
   terminalSessionMatchesRun,
@@ -129,7 +141,6 @@ import {
 } from './features/session/sessionTerminalModel';
 import {
   authoritativeRunsFromSocketEvents,
-  authoritativeRunFromConversation,
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
   type SessionCapabilityMode,
@@ -142,11 +153,7 @@ import {
   type SessionCanvasControls,
   type WorkspaceReviewPanelVariant,
 } from './features/session/workspaceReviewPanelModel';
-import {
-  planForConversation,
-  socketEventBelongsToConversation,
-  taskBelongsToConversation,
-} from './features/session/sessionScope';
+import { socketEventBelongsToConversation } from './features/session/sessionScope';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import {
@@ -1949,10 +1956,17 @@ export function App() {
   const [creatingSessionWorkspaceId, setCreatingSessionWorkspaceId] = useState<string | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
+  const [sessionProjectionState, setSessionProjectionState] =
+    useState<SessionProjectionLoadState>(emptySessionProjectionState);
+  const [sessionDisplayProjection, setSessionDisplayProjection] =
+    useState<ConversationSessionProjection | null>(null);
+  const [sessionProjectionRefreshRevision, setSessionProjectionRefreshRevision] = useState(0);
   const [conversationTimeline, setConversationTimeline] =
     useState<ConversationTimelineState>(emptyConversationTimeline);
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
   const timelineRequestRef = useRef(0);
+  const sessionProjectionRequestRef = useRef(0);
+  const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
   const contextRevisionRef = useRef(0);
   const localResumeAttemptRef = useRef('');
   const runInputRequestRef = useRef<{
@@ -2018,18 +2032,176 @@ export function App() {
     agentConversationSession?.scopeKey === agentConversationScopeKey(config)
       ? agentConversationSession.conversation
       : null;
+  const scopedConversationId = scopedConversation?.id ?? '';
+  const invalidateSessionAuthority = useCallback(() => {
+    if (!scopedConversationId) return;
+    sessionProjectionRequestRef.current += 1;
+    setSessionProjectionState({
+      status: 'loading',
+      conversationId: scopedConversationId,
+      projection: null,
+      error: null,
+    });
+    setSessionProjectionRefreshRevision((revision) => revision + 1);
+  }, [scopedConversationId]);
+  useEffect(() => {
+    if (!scopedConversationId) {
+      sessionProjectionRequestRef.current += 1;
+      setSessionProjectionState(emptySessionProjectionState);
+      setSessionDisplayProjection(null);
+      return;
+    }
+    const requestId = sessionProjectionRequestRef.current + 1;
+    sessionProjectionRequestRef.current = requestId;
+    const controller = new AbortController();
+    setSessionDisplayProjection((current) =>
+      current?.conversation.id === scopedConversationId ? current : null,
+    );
+    setSessionProjectionState({
+      status: 'loading',
+      conversationId: scopedConversationId,
+      projection: null,
+      error: null,
+    });
+    void api
+      .getConversationSession(scopedConversationId, controller.signal)
+      .then((payload) => {
+        if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
+        const projection = decodeConversationSessionProjection(payload, {
+          conversationId: scopedConversationId,
+          projectId: config.projectId,
+          tenantId: config.tenantId,
+          workspaceId: config.workspaceId || null,
+        });
+        if (projection) setSessionDisplayProjection(projection);
+        setSessionProjectionState(
+          projection
+            ? {
+                status: 'ready',
+                conversationId: scopedConversationId,
+                projection,
+                error: null,
+              }
+            : {
+                status: 'error',
+                conversationId: scopedConversationId,
+                projection: null,
+                error: 'invalid_projection',
+              },
+        );
+      })
+      .catch((caught) => {
+        if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
+        if (isLegacyConversationSessionRouteMissing(caught)) {
+          setSessionProjectionState({
+            status: 'unsupported',
+            conversationId: scopedConversationId,
+            projection: null,
+            error: null,
+          });
+          return;
+        }
+        setSessionProjectionState({
+          status: 'error',
+          conversationId: scopedConversationId,
+          projection: null,
+          error: formatConnectionError(caught, config.apiBaseUrl),
+        });
+      });
+    return () => controller.abort();
+  }, [
+    api,
+    config.apiBaseUrl,
+    config.projectId,
+    config.tenantId,
+    config.workspaceId,
+    scopedConversationId,
+    sessionProjectionRefreshRevision,
+  ]);
+  const sessionProjection =
+    sessionProjectionState.status === 'ready' &&
+    sessionProjectionState.conversationId === scopedConversationId
+      ? sessionProjectionState.projection
+      : null;
+  const displaySessionProjection =
+    sessionDisplayProjection?.conversation.id === scopedConversationId
+      ? sessionDisplayProjection
+      : null;
+  const respondableHitlRequestIds = useMemo(
+    () =>
+      sessionProjection?.capabilities.canRespondToHitl &&
+      sessionProjection.capabilities.allowedActions.includes('respond_to_hitl')
+        ? sessionProjection.pendingHitl.map((request) => request.id)
+        : [],
+    [sessionProjection],
+  );
+  const respondableHitlRequestIdSet = useMemo(
+    () => new Set(respondableHitlRequestIds),
+    [respondableHitlRequestIds],
+  );
   const activeDataset = dataset;
+  const sessionTasks = useMemo<WorkspaceTask[]>(
+    () =>
+      displaySessionProjection?.tasks.map((task) => {
+        const content = typeof task.content === 'string' ? task.content : undefined;
+        return {
+          id: task.id,
+          conversation_id: displaySessionProjection.conversation.id,
+          title: content,
+          description: content,
+          status: typeof task.status === 'string' ? task.status : undefined,
+          priority:
+            typeof task.priority === 'string' || typeof task.priority === 'number'
+              ? task.priority
+              : undefined,
+          created_at: typeof task.created_at === 'string' ? task.created_at : undefined,
+          updated_at: typeof task.updated_at === 'string' ? task.updated_at : undefined,
+          plan_version_id: displaySessionProjection.currentPlan?.id,
+          plan_version: displaySessionProjection.currentPlan?.version,
+          plan_status: displaySessionProjection.currentPlan?.status,
+          run_id: displaySessionProjection.currentRun?.id ?? null,
+          run_status: displaySessionProjection.currentRun?.status ?? null,
+          run_revision: displaySessionProjection.currentRun?.revision ?? null,
+          source: 'agent_plan_task',
+          task,
+        };
+      }) ?? [],
+    [displaySessionProjection],
+  );
+  const sessionPlan = useMemo<PlanSnapshot | null>(() => {
+    if (!displaySessionProjection) return null;
+    return {
+      conversation_id: displaySessionProjection.conversation.id,
+      project_id: displaySessionProjection.conversation.project_id,
+      workspace_id: displaySessionProjection.conversation.workspace_id ?? undefined,
+      plan: displaySessionProjection.currentPlan
+        ? { ...displaySessionProjection.currentPlan }
+        : null,
+      plan_history: displaySessionProjection.planHistory.map((plan) => ({ ...plan })),
+      run_health: displaySessionProjection.runHistory,
+      pending_hitl: displaySessionProjection.pendingHitl.map((request) => ({ ...request })),
+      delivery: displaySessionProjection.artifactDeliveries,
+      artifact_index: displaySessionProjection.artifactVersions,
+    };
+  }, [displaySessionProjection]);
   const sessionDataset = useMemo<RuntimeDataset>(() => {
     if (!scopedConversation) return activeDataset;
-    const conversationId = scopedConversation.id;
     return {
       ...activeDataset,
-      tasks: activeDataset.tasks.filter((task) =>
-        taskBelongsToConversation(task, conversationId),
-      ),
-      plan: planForConversation(activeDataset.plan, conversationId),
+      tasks: sessionTasks,
+      plan: sessionPlan,
     };
-  }, [activeDataset, scopedConversation]);
+  }, [activeDataset, scopedConversation, sessionPlan, sessionTasks]);
+  const sessionTimeline = useMemo<ConversationTimelineState>(
+    () => ({
+      ...conversationTimeline,
+      approvalRequests: displaySessionProjection?.pendingHitl ?? [],
+      artifactVersions: displaySessionProjection?.artifactVersions ?? [],
+      artifactDeliveries: displaySessionProjection?.artifactDeliveries ?? [],
+      toolInvocations: displaySessionProjection?.toolInvocations ?? [],
+    }),
+    [conversationTimeline, displaySessionProjection],
+  );
   const selectedTask = useMemo(
     () =>
       activeDataset.tasks.find((task) => task.id === selectedTaskId) ??
@@ -2055,20 +2227,27 @@ export function App() {
   );
   const workspaceArtifacts = useMemo(
     () =>
-      buildWorkspaceArtifacts(
-        conversationTimeline.items,
-        workspaceEventInputs,
-        sessionDataset.plan,
-      ),
-    [conversationTimeline.items, sessionDataset.plan, workspaceEventInputs],
+      scopedConversation
+        ? []
+        : buildWorkspaceArtifacts(
+            conversationTimeline.items,
+            workspaceEventInputs,
+            sessionDataset.plan,
+          ),
+    [conversationTimeline.items, scopedConversation, sessionDataset.plan, workspaceEventInputs],
   );
   const chatWorkflowCounts = useMemo<Partial<Record<ChatWorkflowTarget, number | string>>>(
     () => ({
       plan: sessionDataset.plan ? 'ready' : 'idle',
       background: workspaceEventInputs.length,
-      artifacts: workspaceArtifacts.length,
+      artifacts: displaySessionProjection?.artifactVersions.length ?? workspaceArtifacts.length,
     }),
-    [sessionDataset.plan, workspaceEventInputs.length, workspaceArtifacts.length],
+    [
+      sessionDataset.plan,
+      displaySessionProjection?.artifactVersions.length,
+      workspaceArtifacts.length,
+      workspaceEventInputs.length,
+    ],
   );
   const upsertAgentTaskSignal = useCallback((patch: AgentTaskSignalPatch) => {
     setAgentTaskSignals((current) => {
@@ -2189,9 +2368,27 @@ export function App() {
 
   const respondToHitl = useCallback(
     async (submission: HitlResponseSubmission) => {
+      if (scopedConversation) {
+        const request = sessionProjection?.pendingHitl.find(
+          (candidate) => candidate.id === submission.requestId,
+        );
+        const revisionMatches = request?.run_id
+          ? request.run_revision === submission.expectedRevision
+          : submission.expectedRevision === undefined;
+        if (
+          !request ||
+          request.status !== 'pending' ||
+          request.kind !== submission.hitlType ||
+          !revisionMatches ||
+          !respondableHitlRequestIdSet.has(submission.requestId)
+        ) {
+          throw new Error(t('session.authorityActionUnavailable'));
+        }
+      }
       setError(null);
       try {
         await api.respondToHitl(submission);
+        invalidateSessionAuthority();
         const conversation = agentConversationSession?.conversation;
         if (conversation) {
           await loadConversationTimeline(conversation, config.projectId);
@@ -2207,7 +2404,12 @@ export function App() {
       api,
       config.apiBaseUrl,
       config.projectId,
+      invalidateSessionAuthority,
       loadConversationTimeline,
+      respondableHitlRequestIdSet,
+      scopedConversation,
+      sessionProjection,
+      t,
     ],
   );
 
@@ -2446,13 +2648,13 @@ export function App() {
   useEffect(() => {
     const latest = socket.events[0];
     if (!latest || typeof latest !== 'object') return;
-    const payload = latest as Record<string, unknown>;
-    const conversationId = readStringField(payload, 'conversation_id');
-    const activeConversation =
-      agentConversationSession?.scopeKey === agentConversationScopeKey(config)
-        ? agentConversationSession.conversation
-        : null;
-    if (!activeConversation || conversationId !== activeConversation.id) return;
+    const activeConversation = scopedConversation;
+    if (
+      !activeConversation ||
+      !socketEventBelongsToConversation(latest, activeConversation.id)
+    ) {
+      return;
+    }
     setConversationTimeline((current) => {
       if (current.conversationId !== activeConversation.id) return current;
       const items = mergeLiveTimelineEvent(current.items, latest);
@@ -2464,7 +2666,26 @@ export function App() {
         lastCursor: timelineCursorFromLast(items),
       };
     });
-  }, [agentConversationSession, config, socket.events]);
+    if (
+      socketEventInvalidatesSessionProjection(latest) &&
+      sessionProjectionRefreshTimerRef.current === null
+    ) {
+      sessionProjectionRefreshTimerRef.current = window.setTimeout(() => {
+        sessionProjectionRefreshTimerRef.current = null;
+        invalidateSessionAuthority();
+      }, 150);
+    }
+  }, [invalidateSessionAuthority, scopedConversation, socket.events]);
+
+  useEffect(
+    () => () => {
+      if (sessionProjectionRefreshTimerRef.current !== null) {
+        window.clearTimeout(sessionProjectionRefreshTimerRef.current);
+        sessionProjectionRefreshTimerRef.current = null;
+      }
+    },
+    [scopedConversationId],
+  );
 
   useEffect(() => {
     const runs = authoritativeRunsFromSocketEvents(socket.events);
@@ -2568,6 +2789,8 @@ export function App() {
     setTerminalInput('');
     setMemoryResult(null);
     setAgentConversationSession(null);
+    setSessionProjectionState(emptySessionProjectionState);
+    setSessionDisplayProjection(null);
     setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
     setChangeSnapshot(null);
@@ -3207,6 +3430,20 @@ export function App() {
   const sendMessageContent = async (rawContent: string, onWorkspaceMessageSaved?: () => void) => {
     const content = rawContent.trim();
     if (!content) return;
+    const canSendConversationMessage = Boolean(
+      sessionProjection?.capabilities.canSendMessage &&
+        sessionProjection.capabilities.allowedActions.includes('send_message'),
+    );
+    const canSendRunInput = Boolean(
+      localRuntimeMode &&
+        currentArtifactRun &&
+        selectedConversation?.id === currentArtifactRun.conversation_id &&
+        effectiveRunInputDeliveryValue,
+    );
+    if (selectedConversation && !canSendConversationMessage && !canSendRunInput) {
+      setError(t('session.authorityActionUnavailable'));
+      return;
+    }
     if (sessionChatDisabledReason) {
       setError(sessionChatDisabledReason);
       return;
@@ -3223,16 +3460,13 @@ export function App() {
     });
     try {
       const sendsRunInput = Boolean(
-        localRuntimeMode &&
-          currentArtifactRun?.status === 'running' &&
-          selectedConversation?.id === currentArtifactRun.conversation_id &&
-          runInputDelivery,
+        canSendRunInput && currentArtifactRun && effectiveRunInputDeliveryValue,
       );
-      if (sendsRunInput && currentArtifactRun && runInputDelivery) {
+      if (sendsRunInput && currentArtifactRun && effectiveRunInputDeliveryValue) {
         const signature = JSON.stringify({
           runId: currentArtifactRun.id,
           revision: currentArtifactRun.revision,
-          delivery: runInputDelivery,
+          delivery: effectiveRunInputDeliveryValue,
           content,
           references: runInputReferences,
         });
@@ -3251,7 +3485,7 @@ export function App() {
           message: content,
           messageId: request.messageId,
           idempotencyKey: request.idempotencyKey,
-          delivery: runInputDelivery,
+          delivery: effectiveRunInputDeliveryValue,
           references: runInputReferences,
         });
         onWorkspaceMessageSaved?.();
@@ -3273,6 +3507,7 @@ export function App() {
                   position: acknowledgement.queue_position ?? '—',
                 }),
         });
+        invalidateSessionAuthority();
         if (selectedConversation) {
           await loadConversationTimeline(selectedConversation, config.projectId);
         }
@@ -3319,6 +3554,7 @@ export function App() {
           });
           if (!queued && localRuntimeMode) {
             await api.runAgentMessage(conversation.id, content, messageId, config.projectId);
+            invalidateSessionAuthority();
             upsertAgentTaskSignal({
               id: signalId,
               status: 'queued',
@@ -3475,36 +3711,29 @@ export function App() {
       selectedConversation
         ? buildSessionDetailViewModel({
             conversation: selectedConversation,
-            config,
             workspace: selectedWorkspace,
             timeline: conversationTimeline,
-            tasks: sessionDataset.tasks,
-            plan: sessionDataset.plan,
+            projection: displaySessionProjection,
+            authorityAvailable: sessionProjection !== null,
           })
         : null,
     [
-      config,
       conversationTimeline,
       selectedConversation,
       selectedWorkspace,
-      sessionDataset.plan,
-      sessionDataset.tasks,
+      displaySessionProjection,
+      sessionProjection,
     ],
   );
-  const currentArtifactRun = useMemo(
-    () => authoritativeRunFromConversation(selectedConversation),
-    [selectedConversation],
-  );
+  const currentArtifactRun = sessionProjection?.currentRun ?? null;
   const sessionInspectorEvidence = useMemo(() => {
-    const artifactVersions = conversationTimeline.artifactVersions;
-    const artifacts = currentArtifactVersions(artifactVersions);
-    const checks = artifactEvidenceForCurrentVersions(artifactVersions, 'checks');
+    const evidence = displaySessionProjection?.evidenceSummary;
     return {
-      artifacts: artifacts.length,
+      artifacts: evidence?.artifactVersionCount ?? null,
       changedFiles: changeSnapshot?.status === 'ready' ? changeSnapshot.files_changed : null,
-      checks: artifacts.length && !checks.missing.length ? checks.rows.length : null,
+      checks: evidence?.checks?.total ?? null,
     };
-  }, [changeSnapshot, conversationTimeline.artifactVersions]);
+  }, [changeSnapshot, displaySessionProjection?.evidenceSummary]);
   currentArtifactRunRef.current = currentArtifactRun;
   const currentTerminalRunScopeKey = terminalRunScopeKey(currentArtifactRun);
   if (terminalRunScopeKeyRef.current !== currentTerminalRunScopeKey) {
@@ -3530,19 +3759,72 @@ export function App() {
     [currentArtifactRun, terminal, terminalProxy.status],
   );
   const runInputDeliveryOptions = useMemo(
-    () =>
-      localRuntimeMode && sessionDetailViewModel?.capabilityMode === 'code'
-        ? allowedRunInputDeliveries(currentArtifactRun?.status, true)
-        : [],
-    [currentArtifactRun?.status, localRuntimeMode, sessionDetailViewModel?.capabilityMode],
+    () => {
+      if (!localRuntimeMode || sessionDetailViewModel?.capabilityMode !== 'code') return [];
+      const options: RunInputDelivery[] = [];
+      if (
+        sessionProjection?.capabilities.canSteerNow &&
+        sessionProjection.capabilities.allowedActions.includes('steer_now')
+      ) {
+        options.push('steer_now');
+      }
+      if (
+        sessionProjection?.capabilities.canQueueNext &&
+        sessionProjection.capabilities.allowedActions.includes('queue_next')
+      ) {
+        options.push('queue_next');
+      }
+      return options;
+    },
+    [localRuntimeMode, sessionDetailViewModel?.capabilityMode, sessionProjection?.capabilities],
+  );
+  const effectiveRunInputDeliveryValue = effectiveRunInputDelivery(
+    runInputDelivery,
+    runInputDeliveryOptions,
   );
   const sessionChatDisabledReason =
     chatDisabledReason ??
-    (selectedConversation?.current_mode === 'build' &&
-    currentArtifactRun &&
-    currentArtifactRun.status !== 'running'
-      ? t('session.composerBlockedByRunState')
+    (selectedConversation
+      ? sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading'
+        ? t('session.authorityLoading')
+        : sessionProjectionState.status === 'unsupported'
+          ? t('session.authorityUnavailable')
+          : sessionProjectionState.status === 'error'
+            ? t('session.authorityError')
+            : !(
+                  sessionProjection?.capabilities.canSendMessage &&
+                  sessionProjection.capabilities.allowedActions.includes('send_message')
+                ) && !runInputDeliveryOptions.length
+              ? t('session.composerBlockedByRunState')
+              : null
       : null);
+  const sessionAuthorityNotice = useMemo(() => {
+    if (!selectedConversation || sessionProjectionState.status === 'ready') return null;
+    if (
+      sessionProjectionState.status === 'idle' ||
+      sessionProjectionState.status === 'loading'
+    ) {
+      return {
+        tone: 'loading' as const,
+        title: t('session.authorityLoading'),
+        description: t('session.authorityLoadingDescription'),
+      };
+    }
+    if (sessionProjectionState.status === 'unsupported') {
+      return {
+        tone: 'warning' as const,
+        title: t('session.authorityUnavailable'),
+        description: t('session.authorityUnavailableDescription'),
+        actionLabel: t('automations.openConnection'),
+      };
+    }
+    return {
+      tone: 'error' as const,
+      title: t('session.authorityError'),
+      description: t('session.authorityErrorDescription'),
+      actionLabel: t('session.authorityRetry'),
+    };
+  }, [selectedConversation, sessionProjectionState.status, t]);
   const loadRunChanges = useCallback(async () => {
     if (!currentArtifactRun || sessionDetailViewModel?.capabilityMode !== 'code') {
       setChangeSnapshot(null);
@@ -3635,6 +3917,7 @@ export function App() {
           currentArtifactRun.revision,
           `desktop-run-input-promotion:${input.id}`,
         );
+        invalidateSessionAuthority();
         setRunInputs((current) =>
           current.map((candidate) =>
             candidate.id === outcome.input.id ? outcome.input : candidate,
@@ -3668,7 +3951,15 @@ export function App() {
         setPromotingRunInputId(null);
       }
     },
-    [api, config.apiBaseUrl, config.projectId, currentArtifactRun, loadConversationTimeline, t],
+    [
+      api,
+      config.apiBaseUrl,
+      config.projectId,
+      currentArtifactRun,
+      invalidateSessionAuthority,
+      loadConversationTimeline,
+      t,
+    ],
   );
   const titlebarRunState = sessionDetailViewModel
     ? titlebarRunStateFromStatus(sessionDetailViewModel.status)
@@ -3706,6 +3997,10 @@ export function App() {
         setError(t('session.runControlUnavailable'));
         return;
       }
+      if (!sessionDetailViewModel.runActions.includes(action)) {
+        setError(t('session.authorityActionUnavailable'));
+        return;
+      }
       setSessionRunActionPending(action);
       setError(null);
       try {
@@ -3728,13 +4023,14 @@ export function App() {
                     ...(feedback ? { feedback } : {}),
                   });
         applyAuthoritativeRun(outcome.run);
+        invalidateSessionAuthority();
       } catch (caught) {
         setError(formatError(caught));
       } finally {
         setSessionRunActionPending(null);
       }
     },
-    [api, applyAuthoritativeRun, sessionDetailViewModel, t],
+    [api, applyAuthoritativeRun, invalidateSessionAuthority, sessionDetailViewModel, t],
   );
   const handleArtifactAction = useCallback(
     async (
@@ -3742,46 +4038,61 @@ export function App() {
       action: ArtifactVersionAction,
       feedback?: string,
     ) => {
-      setArtifactActionPending({ versionId: version.id, action });
+      const capabilities = sessionProjection?.capabilities;
+      const authoritativeVersion = selectedConversation
+        ? sessionProjection?.artifactVersions.find((candidate) => candidate.id === version.id)
+        : version;
+      const actionAllowed =
+        Boolean(authoritativeVersion) &&
+        authoritativeVersion?.revision === version.revision &&
+        artifactVersionActions(authoritativeVersion, currentArtifactRun).includes(action) &&
+        (!selectedConversation ||
+          (action === 'deliver'
+            ? Boolean(
+                capabilities?.canDeliverArtifacts &&
+                  capabilities.allowedActions.includes('deliver_artifact'),
+              )
+            : Boolean(
+                capabilities?.canReviewArtifacts &&
+                  capabilities.allowedActions.includes('review_artifact'),
+              )));
+      if (!actionAllowed || !authoritativeVersion) {
+        setError(t('session.authorityActionUnavailable'));
+        return;
+      }
+      setArtifactActionPending({ versionId: authoritativeVersion.id, action });
       setError(null);
       try {
         if (action === 'deliver') {
           const outcome = await api.deliverArtifactVersion(
-            version.id,
-            artifactDeliveryRequest(version),
+            authoritativeVersion.id,
+            artifactDeliveryRequest(authoritativeVersion),
           );
-          setConversationTimeline((current) => ({
-            ...current,
-            artifactVersions: current.artifactVersions.map((item) =>
-              item.id === outcome.artifact_version.id ? outcome.artifact_version : item,
-            ),
-            artifactDeliveries: [
-              outcome.delivery,
-              ...current.artifactDeliveries.filter(
-                (delivery) => delivery.id !== outcome.delivery.id,
-              ),
-            ],
-          }));
+          if (!outcome.accepted) throw new Error(t('session.authorityActionUnavailable'));
         } else {
           const outcome = await api.reviewArtifactVersion(
-            version.id,
-            artifactReviewRequest(version, action, currentArtifactRun, feedback),
+            authoritativeVersion.id,
+            artifactReviewRequest(authoritativeVersion, action, currentArtifactRun, feedback),
           );
-          setConversationTimeline((current) => ({
-            ...current,
-            artifactVersions: current.artifactVersions.map((item) =>
-              item.id === outcome.artifact_version.id ? outcome.artifact_version : item,
-            ),
-          }));
           if (outcome.run) applyAuthoritativeRun(outcome.run);
         }
+        invalidateSessionAuthority();
       } catch (caught) {
         setError(formatConnectionError(caught, config.apiBaseUrl));
       } finally {
         setArtifactActionPending(null);
       }
     },
-    [api, applyAuthoritativeRun, config.apiBaseUrl, currentArtifactRun],
+    [
+      api,
+      applyAuthoritativeRun,
+      config.apiBaseUrl,
+      currentArtifactRun,
+      invalidateSessionAuthority,
+      selectedConversation,
+      sessionProjection?.capabilities,
+      t,
+    ],
   );
   const hasWorkspaceScope = Boolean(config.workspaceId.trim());
   const hasProjectScope = Boolean(config.projectId.trim());
@@ -4478,7 +4789,7 @@ export function App() {
   const renderChatPanel = () => (
     <ChatPanel
       messages={dataset.messages}
-      timelineState={selectedConversation ? conversationTimeline : null}
+      timelineState={selectedConversation ? sessionTimeline : null}
       agentTaskSignals={agentTaskSignals}
       workflowCounts={chatWorkflowCounts}
       sessionTitle={selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined)}
@@ -4495,12 +4806,13 @@ export function App() {
       modelLabel={config.llmModel.trim() || undefined}
       runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
       runtimeTargetOptions={runtimeTargetComposerOptions}
-      runInputDelivery={runInputDelivery}
+      runInputDelivery={effectiveRunInputDeliveryValue}
       runInputDeliveryOptions={runInputDeliveryOptions}
       runInputs={runInputs}
       runInputsLoading={runInputsLoading}
       runInputsError={runInputsError}
       promotingRunInputId={promotingRunInputId}
+      runInputAuthorityRunId={currentArtifactRun?.id ?? null}
       references={runInputReferences}
       onInputChange={setChatInput}
       onRunInputDeliveryChange={setRunInputDelivery}
@@ -4509,13 +4821,25 @@ export function App() {
         setRunInputReferences((current) => toggleRunInputReference(current, reference))
       }
       onSend={() => void sendMessage()}
-      onRefresh={() =>
-        selectedConversation
-          ? void loadConversationTimeline(selectedConversation, config.projectId)
-          : void refreshRuntime()
-      }
+      onRefresh={() => {
+        if (selectedConversation) {
+          void loadConversationTimeline(selectedConversation, config.projectId);
+          invalidateSessionAuthority();
+          return;
+        }
+        void refreshRuntime();
+      }}
       onLoadEarlier={() => void loadEarlierTimeline()}
       onRespondToHitl={respondToHitl}
+      respondableHitlRequestIds={respondableHitlRequestIds}
+      authorityNotice={sessionAuthorityNotice}
+      onAuthorityAction={
+        sessionProjectionState.status === 'unsupported'
+          ? openConnectionSettings
+          : sessionProjectionState.status === 'error'
+            ? invalidateSessionAuthority
+            : undefined
+      }
       onWorkflowSelect={selectChatWorkflowTarget}
       onRuntimeTargetChange={(value) =>
         setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local')
@@ -4678,9 +5002,21 @@ export function App() {
       socketEvents={workspaceEventInputs}
       timelineItems={conversationTimeline.items}
       artifacts={workspaceArtifacts}
-      artifactVersions={conversationTimeline.artifactVersions}
-      artifactDeliveries={conversationTimeline.artifactDeliveries}
-      toolInvocations={conversationTimeline.toolInvocations}
+      artifactVersions={
+        scopedConversation
+          ? (displaySessionProjection?.artifactVersions ?? [])
+          : conversationTimeline.artifactVersions
+      }
+      artifactDeliveries={
+        scopedConversation
+          ? (displaySessionProjection?.artifactDeliveries ?? [])
+          : conversationTimeline.artifactDeliveries
+      }
+      toolInvocations={
+        scopedConversation
+          ? (displaySessionProjection?.toolInvocations ?? [])
+          : conversationTimeline.toolInvocations
+      }
       currentRun={currentArtifactRun}
       changeSnapshot={changeSnapshot}
       changeSnapshotLoading={changeSnapshotLoading}
@@ -4694,7 +5030,28 @@ export function App() {
       terminalLines={terminalProxy.lines}
       terminalBusy={sandboxBusy}
       capabilityMode={sessionDetailViewModel?.capabilityMode ?? 'unavailable'}
-      approvalRequests={conversationTimeline.approvalRequests}
+      approvalRequests={
+        scopedConversation
+          ? (displaySessionProjection?.pendingHitl ?? [])
+          : conversationTimeline.approvalRequests
+      }
+      sessionCapabilities={scopedConversation ? (sessionProjection?.capabilities ?? null) : null}
+      respondableHitlRequestIds={
+        scopedConversation
+          ? respondableHitlRequestIds
+          : conversationTimeline.approvalRequests
+              .filter((request) => request.status === 'pending')
+              .map((request) => request.id)
+      }
+      sessionDataAvailable={!scopedConversation || displaySessionProjection !== null}
+      authorityNotice={scopedConversation ? sessionAuthorityNotice : null}
+      onAuthorityAction={
+        sessionProjectionState.status === 'unsupported'
+          ? openConnectionSettings
+          : sessionProjectionState.status === 'error'
+            ? invalidateSessionAuthority
+            : undefined
+      }
       currentRunId={sessionDetailViewModel?.runId ?? null}
       sessionViewModel={sessionDetailViewModel}
       onRespondToHitl={respondToHitl}
@@ -6176,6 +6533,11 @@ function WorkspaceReviewPanel({
   terminalBusy,
   capabilityMode,
   approvalRequests,
+  sessionCapabilities,
+  respondableHitlRequestIds,
+  sessionDataAvailable,
+  authorityNotice,
+  onAuthorityAction,
   currentRunId,
   sessionViewModel,
   onRespondToHitl,
@@ -6213,6 +6575,16 @@ function WorkspaceReviewPanel({
   terminalBusy: boolean;
   capabilityMode: SessionCapabilityMode;
   approvalRequests: DesktopApprovalRequest[];
+  sessionCapabilities: SessionProjectionCapabilities | null;
+  respondableHitlRequestIds: readonly string[];
+  sessionDataAvailable: boolean;
+  authorityNotice: {
+    tone: 'loading' | 'warning' | 'error';
+    title: string;
+    description: string;
+    actionLabel?: string;
+  } | null;
+  onAuthorityAction?: () => void;
   currentRunId: string | null;
   sessionViewModel: SessionDetailViewModel | null;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
@@ -6265,6 +6637,9 @@ function WorkspaceReviewPanel({
   const approvalRequest = useMemo(
     () => latestPendingApproval(approvalRequests, currentRunId),
     [approvalRequests, currentRunId],
+  );
+  const canRespondToApproval = Boolean(
+    approvalRequest && respondableHitlRequestIds.includes(approvalRequest.id),
   );
   const reviewDecision = useMemo(
     () =>
@@ -6696,6 +7071,25 @@ function WorkspaceReviewPanel({
       </div>
 
       <div className="review-content">
+        {authorityNotice ? (
+          <div
+            className={`session-authority-notice review-authority-notice tone-${authorityNotice.tone}`}
+            role={authorityNotice.tone === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            <ReloadIcon aria-hidden="true" />
+            <span>
+              <strong>{authorityNotice.title}</strong>
+              <small>{authorityNotice.description}</small>
+            </span>
+            {authorityNotice.actionLabel && onAuthorityAction ? (
+              <Button type="button" size="1" variant="soft" onClick={onAuthorityAction}>
+                {authorityNotice.actionLabel}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         {activeTab === 'overview' ? (
           <section className="session-overview-canvas" aria-label={t('session.canvasOverview')}>
             <header>
@@ -6718,7 +7112,9 @@ function WorkspaceReviewPanel({
                 <span>{t('session.overviewEvidence')}</span>
                 <strong>
                   {t('session.overviewEvidenceCount', {
-                    artifacts: artifactVersions.length || artifacts.length,
+                    artifacts: sessionDataAvailable
+                      ? artifactVersions.length || artifacts.length
+                      : t('session.notAvailable'),
                     events: workspaceEvents.length,
                   })}
                 </strong>
@@ -6730,7 +7126,13 @@ function WorkspaceReviewPanel({
                 <ActivityLogIcon />
                 <span>
                   <strong>{t('session.canvasPlan')}</strong>
-                  <small>{dataset.plan ? t('session.planReady') : t('session.noPlanShort')}</small>
+                  <small>
+                    {sessionDataAvailable
+                      ? dataset.plan
+                        ? t('session.planReady')
+                        : t('session.noPlanShort')
+                      : t('session.notAvailable')}
+                  </small>
                 </span>
                 <ChevronRightIcon />
               </button>
@@ -6748,7 +7150,9 @@ function WorkspaceReviewPanel({
                   <strong>{t('session.canvasArtifacts')}</strong>
                   <small>
                     {t('session.overviewArtifactCount', {
-                      count: artifactVersions.length || artifacts.length,
+                      count: sessionDataAvailable
+                        ? artifactVersions.length || artifacts.length
+                        : t('session.notAvailable'),
                     })}
                   </small>
                 </span>
@@ -6793,6 +7197,7 @@ function WorkspaceReviewPanel({
                 <ReviewDecisionPanel
                   summary={reviewDecision}
                   request={approvalRequest}
+                  canRespond={canRespondToApproval}
                   onRespond={onRespondToHitl}
                   onOpenArtifacts={() => selectTab('artifacts')}
                 />
@@ -6805,6 +7210,7 @@ function WorkspaceReviewPanel({
           <ReviewDecisionPanel
             summary={reviewDecision}
             request={approvalRequest}
+            canRespond={canRespondToApproval}
             onRespond={onRespondToHitl}
             onOpenArtifacts={() => selectTab('artifacts')}
           />
@@ -6856,8 +7262,14 @@ function WorkspaceReviewPanel({
             ) : (
               <ReviewEmpty
                 icon={<ActivityLogIcon />}
-                title={t('session.noPlan')}
-                body={t('session.noPlanDescription')}
+                title={
+                  sessionDataAvailable ? t('session.noPlan') : t('session.notAvailable')
+                }
+                body={
+                  sessionDataAvailable
+                    ? t('session.noPlanDescription')
+                    : (authorityNotice?.description ?? t('session.authorityErrorDescription'))
+                }
               />
             )}
           </div>
@@ -6872,6 +7284,9 @@ function WorkspaceReviewPanel({
             versions={artifactVersions}
             deliveries={artifactDeliveries}
             currentRun={currentRun}
+            capabilities={variant === 'session' ? sessionCapabilities : null}
+            enforceCapabilities={variant === 'session'}
+            available={sessionDataAvailable}
             focusVersionId={focusedArtifactVersionId}
             unversionedEvidenceCount={artifacts.length}
             pending={artifactActionPending}
@@ -6896,6 +7311,7 @@ function WorkspaceReviewPanel({
             collection="checks"
             presentation="checks"
             versions={artifactVersions}
+            available={sessionDataAvailable}
             onOpenArtifact={(artifactVersionId) => {
               setFocusedArtifactVersionId(artifactVersionId);
               selectTab('artifacts');
@@ -6908,6 +7324,7 @@ function WorkspaceReviewPanel({
             collection="sources"
             presentation="sources"
             versions={artifactVersions}
+            available={sessionDataAvailable}
             onOpenArtifact={(artifactVersionId) => {
               setFocusedArtifactVersionId(artifactVersionId);
               selectTab('artifacts');
@@ -6920,6 +7337,7 @@ function WorkspaceReviewPanel({
             collection="checks"
             presentation="verification"
             versions={artifactVersions}
+            available={sessionDataAvailable}
             onOpenArtifact={(artifactVersionId) => {
               setFocusedArtifactVersionId(artifactVersionId);
               selectTab('artifacts');
@@ -7101,6 +7519,9 @@ function ArtifactLifecyclePanel({
   versions,
   deliveries,
   currentRun,
+  capabilities,
+  enforceCapabilities,
+  available,
   focusVersionId,
   unversionedEvidenceCount,
   pending,
@@ -7109,6 +7530,9 @@ function ArtifactLifecyclePanel({
   versions: DesktopArtifactVersion[];
   deliveries: DesktopArtifactDelivery[];
   currentRun: DesktopRun | null;
+  capabilities: SessionProjectionCapabilities | null;
+  enforceCapabilities: boolean;
+  available: boolean;
   focusVersionId: string | null;
   unversionedEvidenceCount: number;
   pending: { versionId: string; action: ArtifactVersionAction } | null;
@@ -7156,7 +7580,19 @@ function ArtifactLifecyclePanel({
     artifactVersions.find((version) => version.id === selectedVersionId) ??
     artifactVersions[0] ??
     null;
-  const actions = selectedVersion ? artifactVersionActions(selectedVersion, currentRun) : [];
+  const actions = selectedVersion
+    ? artifactVersionActions(selectedVersion, currentRun).filter((action) =>
+        !enforceCapabilities
+          ? true
+          : capabilities === null
+            ? false
+          : action === 'deliver'
+            ? capabilities.canDeliverArtifacts &&
+              capabilities.allowedActions.includes('deliver_artifact')
+            : capabilities.canReviewArtifacts &&
+              capabilities.allowedActions.includes('review_artifact'),
+      )
+    : [];
   const delivery = selectedVersion
     ? deliveryForArtifactVersion(deliveries, selectedVersion.id)
     : null;
@@ -7168,6 +7604,21 @@ function ArtifactLifecyclePanel({
     setFeedbackOpen(false);
     setFeedback('');
   }, [selectedVersion?.id]);
+
+  if (!available) {
+    return (
+      <section
+        className="artifact-lifecycle artifact-lifecycle-empty"
+        aria-label={t('artifact.title')}
+      >
+        <ReviewEmpty
+          icon={<ExclamationTriangleIcon />}
+          title={t('session.dataUnavailableTitle')}
+          body={t('session.dataUnavailableDescription')}
+        />
+      </section>
+    );
+  }
 
   if (!versions.length) {
     return (
@@ -7309,7 +7760,7 @@ function ArtifactLifecyclePanel({
                 <span>
                   <strong>{t('artifact.deliveryReceipt')}</strong>
                   <small>{delivery.destination}</small>
-                  <code>{String(delivery.receipt.relative_path ?? delivery.receipt.path ?? '')}</code>
+                  <code>{artifactDeliveryReceiptPath(delivery.receipt)}</code>
                 </span>
                 <time>{new Date(delivery.created_at).toLocaleString()}</time>
               </div>
@@ -7401,6 +7852,13 @@ function ArtifactLifecyclePanel({
   );
 }
 
+function artifactDeliveryReceiptPath(receipt: unknown): string {
+  if (receipt === null || typeof receipt !== 'object' || Array.isArray(receipt)) return '';
+  const value = receipt as Record<string, unknown>;
+  const path = value.relative_path ?? value.path;
+  return typeof path === 'string' ? path : '';
+}
+
 function ArtifactEvidenceSection({
   title,
   empty,
@@ -7462,11 +7920,13 @@ function artifactStatusColor(
 function ReviewDecisionPanel({
   summary,
   request,
+  canRespond,
   onRespond,
   onOpenArtifacts,
 }: {
   summary: ReviewDecisionSummary;
   request: DesktopApprovalRequest;
+  canRespond: boolean;
   onRespond: (submission: HitlResponseSubmission) => Promise<void>;
   onOpenArtifacts: () => void;
 }) {
@@ -7480,7 +7940,7 @@ function ReviewDecisionPanel({
     summary.risk === 'High' ? 'red' : summary.risk === 'Medium' ? 'amber' : 'gray';
 
   const submit = async (action: 'approve' | 'request_changes') => {
-    if (submitting) return;
+    if (!canRespond || submitting) return;
     if (action === 'approve' && !validation.canApprove) return;
     if (action === 'request_changes' && !feedback.trim()) return;
     setSubmitting(action);
@@ -7625,11 +8085,16 @@ function ReviewDecisionPanel({
               {t('approval.incomplete', { fields: validation.missing.join(', ') })}
             </Text>
           ) : null}
+          {!canRespond ? (
+            <Text as="p" size="1" color="amber">
+              {t('session.authorityActionUnavailable')}
+            </Text>
+          ) : null}
         </div>
         <button
           className="decision-approve-button"
           type="button"
-          disabled={!validation.canApprove || Boolean(submitting)}
+          disabled={!canRespond || !validation.canApprove || Boolean(submitting)}
           onClick={() => void submit('approve')}
         >
           <CheckCircledIcon />
@@ -7644,6 +8109,7 @@ function ReviewDecisionPanel({
           <span>{t('approval.feedback')}</span>
           <textarea
             value={feedback}
+            disabled={!canRespond || Boolean(submitting)}
             placeholder={t('approval.feedbackPlaceholder')}
             onChange={(event) => setFeedback(event.currentTarget.value)}
           />
@@ -7651,7 +8117,7 @@ function ReviewDecisionPanel({
         <button
           className="decision-request-button"
           type="button"
-          disabled={!feedback.trim() || Boolean(submitting)}
+          disabled={!canRespond || !feedback.trim() || Boolean(submitting)}
           onClick={() => void submit('request_changes')}
         >
           <MixerHorizontalIcon />

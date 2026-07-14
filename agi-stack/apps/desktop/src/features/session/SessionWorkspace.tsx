@@ -34,7 +34,6 @@ import type { SessionCanvasControls } from './workspaceReviewPanelModel';
 import {
   sessionRecoveryPresentation,
   sessionStatusPresentation,
-  sessionRunActions,
   type SessionDetailViewModel,
   type SessionRunAction,
   type SessionStage,
@@ -81,7 +80,7 @@ export function SessionWorkspace({
   const [recoveryConfirmOpen, setRecoveryConfirmOpen] = useState(false);
   const canvasTriggerRef = useRef<string | null>(null);
   const statusPresentation = sessionStatusPresentation(viewModel.status);
-  const runActions = sessionRunActions(viewModel.status);
+  const runActions = viewModel.runActions;
   const reattachPresentation = sessionRecoveryPresentation('reconnect');
   const forkPresentation = sessionRecoveryPresentation('fork');
   const actionDisabled = runActionPending !== null || viewModel.runRevision === null;
@@ -153,7 +152,9 @@ export function SessionWorkspace({
     >
       <header className="session-workspace-header">
         <div className="session-workspace-identity">
-          <span>{viewModel.workspaceLabel} / {t('session.session')}</span>
+          <span>
+            {viewModel.workspaceLabel ?? t('session.notAvailable')} / {t('session.session')}
+          </span>
           <div>
             <h1>{viewModel.title}</h1>
             <Badge color={statusColor(viewModel.status)} variant="soft">
@@ -193,7 +194,7 @@ export function SessionWorkspace({
 
         <div className="session-workspace-actions">
           <div className="session-workspace-header-runtime">
-            {viewModel.environmentLabel !== 'Environment unavailable' ? (
+            {viewModel.environmentLabel ? (
               <span title={viewModel.environmentLabel}>
                 <DesktopIcon /> {viewModel.environmentLabel}
               </span>
@@ -203,7 +204,7 @@ export function SessionWorkspace({
                 <CodeIcon /> {viewModel.branchLabel}
               </span>
             ) : null}
-            {viewModel.elapsedLabel !== 'Elapsed unavailable' ? (
+            {viewModel.elapsedLabel ? (
               <span>
                 <ClockIcon /> {viewModel.elapsedLabel}
               </span>
@@ -294,7 +295,9 @@ export function SessionWorkspace({
                     </div>
                     <div>
                       <dt>{t('session.sourceEnvironment')}</dt>
-                      <dd title={viewModel.environmentLabel}>{viewModel.environmentLabel}</dd>
+                      <dd title={viewModel.environmentLabel ?? undefined}>
+                        {viewModel.environmentLabel ?? t('session.notAvailable')}
+                      </dd>
                     </div>
                     {viewModel.branchLabel ? (
                       <div>

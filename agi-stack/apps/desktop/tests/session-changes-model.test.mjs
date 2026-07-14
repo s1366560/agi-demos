@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   allowedRunInputDeliveries,
+  effectiveRunInputDelivery,
   referenceForChangeLine,
   runInputReferenceLabel,
   snapshotMatchesRun,
@@ -82,6 +83,9 @@ test('delivery and snapshot availability follow authoritative run state', () => 
   assert.deepEqual(allowedRunInputDeliveries('running', true), ['steer_now', 'queue_next']);
   assert.deepEqual(allowedRunInputDeliveries('running', false), ['queue_next']);
   assert.deepEqual(allowedRunInputDeliveries('needs_approval', true), []);
+  assert.equal(effectiveRunInputDelivery(null, ['steer_now', 'queue_next']), 'steer_now');
+  assert.equal(effectiveRunInputDelivery('steer_now', ['queue_next']), 'queue_next');
+  assert.equal(effectiveRunInputDelivery('queue_next', []), null);
   assert.equal(snapshotMatchesRun(snapshot, 'run-1', 7), true);
   assert.equal(snapshotMatchesRun(snapshot, 'run-1', 8), false);
 });

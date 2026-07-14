@@ -45,6 +45,7 @@ const viewModel: SessionDetailViewModel = {
   runRevision: 7,
   error: null,
   lastHeartbeatAt: '2026-07-14T08:42:00Z',
+  runActions: ['reconnect', 'fork', 'cancel'],
 };
 
 function SessionRecoveryQa() {

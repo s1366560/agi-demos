@@ -180,6 +180,8 @@ function SessionSteeringQa() {
               runInputsLoading={false}
               runInputsError={null}
               promotingRunInputId={null}
+              runInputAuthorityRunId="run-desktop-session-42"
+              respondableHitlRequestIds={[]}
               references={references}
               onInputChange={setInput}
               onRunInputDeliveryChange={setDelivery}

@@ -3,11 +3,14 @@ import type {
   ConversationTimelineState,
   DesktopRun,
   DesktopRunStatus,
-  DesktopRuntimeConfig,
-  PlanSnapshot,
   WorkspaceSummary,
-  WorkspaceTask,
 } from '../../types';
+import type {
+  ConversationSessionProjection,
+  SessionRunAction,
+} from './sessionProjectionTypes';
+
+export type { SessionRunAction } from './sessionProjectionTypes';
 
 export type SessionCapabilityMode = 'work' | 'code' | 'unavailable';
 export type SessionStage = 'understand' | 'implement' | 'verify' | 'review' | 'unavailable';
@@ -16,17 +19,17 @@ export type SessionExecutionMode = 'plan' | 'build' | 'unavailable';
 export type SessionDetailViewModel = {
   id: string;
   title: string;
-  workspaceLabel: string;
+  workspaceLabel: string | null;
   status: string;
   capabilityMode: SessionCapabilityMode;
   executionMode: SessionExecutionMode;
   stage: SessionStage;
-  environmentLabel: string;
+  environmentLabel: string | null;
   branchLabel: string | null;
-  modelLabel: string;
-  permissionLabel: string;
-  elapsedLabel: string;
-  usageLabel: string;
+  modelLabel: string | null;
+  permissionLabel: string | null;
+  elapsedLabel: string | null;
+  usageLabel: string | null;
   taskCount: number;
   eventCount: number;
   hasPlan: boolean;
@@ -34,6 +37,7 @@ export type SessionDetailViewModel = {
   runRevision: number | null;
   error: string | null;
   lastHeartbeatAt: string | null;
+  runActions: SessionRunAction[];
 };
 
 export type SessionStatusPresentation = {
@@ -44,19 +48,11 @@ export type SessionStatusPresentation = {
 
 type SessionViewModelInput = {
   conversation: AgentConversation;
-  config: DesktopRuntimeConfig;
   workspace: WorkspaceSummary | null;
   timeline: ConversationTimelineState;
-  tasks: WorkspaceTask[];
-  plan: PlanSnapshot | null;
+  projection: ConversationSessionProjection | null;
+  authorityAvailable?: boolean;
 };
-
-const sessionStages: ReadonlySet<string> = new Set([
-  'understand',
-  'implement',
-  'verify',
-  'review',
-]);
 
 const capabilityModes: ReadonlySet<string> = new Set(['work', 'code']);
 const runStatuses: ReadonlySet<string> = new Set<DesktopRunStatus>([
@@ -72,15 +68,6 @@ const runStatuses: ReadonlySet<string> = new Set<DesktopRunStatus>([
   'interrupted',
   'cancelled',
 ]);
-
-export type SessionRunAction =
-  | 'pause'
-  | 'resume'
-  | 'cancel'
-  | 'reconnect'
-  | 'fork'
-  | 'request_changes'
-  | 'approve';
 
 export type SessionRecoveryPresentation = {
   action: Extract<SessionRunAction, 'reconnect' | 'fork'>;
@@ -177,57 +164,46 @@ export function buildSessionDetailViewModel({
   conversation,
   workspace,
   timeline,
-  tasks,
-  plan,
+  projection,
+  authorityAvailable = true,
 }: SessionViewModelInput): SessionDetailViewModel {
-  const metadata = recordValue(conversation.metadata);
-  const runMetadata = recordValue(metadata.run);
-  const agentConfig = recordValue(conversation.agent_config);
-  const explicitStage = stringValue(runMetadata.stage) ?? stringValue(metadata.stage);
-  const explicitStatus = stringValue(runMetadata.status);
-  const explicitMode =
-    stringValue(metadata.capability_mode) ?? stringValue(agentConfig.capability_mode);
-  const executionMode = stringValue(conversation.current_mode);
-  const elapsedSeconds = numberValue(runMetadata.elapsed_seconds);
-  const usageUsd = numberValue(runMetadata.usage_usd);
-  const runEnvironment = recordValue(runMetadata.environment);
-  const metadataEnvironment = recordValue(metadata.environment);
-  const environment =
-    stringValue(runEnvironment.id) || stringValue(runEnvironment.kind)
-      ? runEnvironment
-      : metadataEnvironment;
+  const authorityConversation = projection?.conversation ?? conversation;
+  const run = projection?.currentRun ?? null;
+  const agentConfig = projection ? recordValue(authorityConversation.agent_config) : {};
+  const explicitStatus = run?.status ?? null;
+  const explicitMode = stringValue(agentConfig.capability_mode);
+  const executionMode = projection ? stringValue(authorityConversation.current_mode) : null;
+  const elapsedSeconds = run ? elapsedSecondsForRun(run) : null;
+  const environment = recordValue(run?.environment);
 
   return {
-    id: conversation.id,
-    title: conversation.title || 'Untitled session',
-    workspaceLabel: workspace?.name ?? workspace?.title ?? workspace?.id ?? 'Workspace unavailable',
+    id: authorityConversation.id,
+    title: authorityConversation.title || 'Untitled session',
+    workspaceLabel: workspace?.name ?? workspace?.title ?? workspace?.id ?? null,
     status: explicitStatus && runStatuses.has(explicitStatus) ? explicitStatus : 'unavailable',
     capabilityMode: capabilityModes.has(explicitMode ?? '')
       ? (explicitMode as SessionCapabilityMode)
       : 'unavailable',
     executionMode:
       executionMode === 'plan' || executionMode === 'build' ? executionMode : 'unavailable',
-    stage: sessionStages.has(explicitStage ?? '') ? (explicitStage as SessionStage) : 'unavailable',
+    stage: 'unavailable',
     environmentLabel:
       stringValue(environment.label) ??
       stringValue(environment.kind) ??
-      'Environment unavailable',
-    branchLabel: stringValue(environment.branch) ?? stringValue(metadata.branch),
-    modelLabel: stringValue(agentConfig.model) ?? 'Model unavailable',
-    permissionLabel:
-      stringValue(runMetadata.permission_profile) ??
-      stringValue(runMetadata.permission_policy) ??
-      stringValue(metadata.permission_policy) ??
-      'Permission policy unavailable',
-    elapsedLabel: elapsedSeconds === null ? 'Elapsed unavailable' : formatDuration(elapsedSeconds),
-    usageLabel: usageUsd === null ? 'Usage unavailable' : `$${usageUsd.toFixed(2)}`,
-    taskCount: tasks.length,
+      null,
+    branchLabel: stringValue(environment.branch),
+    modelLabel: stringValue(agentConfig.model),
+    permissionLabel: run?.permission_profile ?? null,
+    elapsedLabel: elapsedSeconds === null ? null : formatDuration(elapsedSeconds),
+    usageLabel: null,
+    taskCount: projection?.tasks.length ?? 0,
     eventCount: timeline.items.length,
-    hasPlan: plan !== null,
-    runId: stringValue(runMetadata.id),
-    runRevision: numberValue(runMetadata.revision),
-    error: stringValue(runMetadata.error),
-    lastHeartbeatAt: stringValue(runMetadata.last_heartbeat_at),
+    hasPlan: projection?.currentPlan !== null && projection !== null,
+    runId: run?.id ?? null,
+    runRevision: run?.revision ?? null,
+    error: run?.error ?? null,
+    lastHeartbeatAt: run?.last_heartbeat_at ?? null,
+    runActions: authorityAvailable ? (projection?.capabilities.runActions ?? []) : [],
   };
 }
 
@@ -270,22 +246,6 @@ export function sessionStatusPresentation(status: string): SessionStatusPresenta
     },
   };
   return presentations[status.trim().toLowerCase()] ?? null;
-}
-
-export function sessionRunActions(status: string): SessionRunAction[] {
-  switch (status.trim().toLowerCase()) {
-    case 'running':
-      return ['pause', 'cancel'];
-    case 'paused':
-      return ['resume', 'cancel'];
-    case 'disconnected':
-    case 'interrupted':
-      return ['reconnect', 'fork', 'cancel'];
-    case 'ready_review':
-      return ['request_changes', 'approve'];
-    default:
-      return [];
-  }
 }
 
 export function sessionRecoveryPresentation(
@@ -335,4 +295,14 @@ function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor((totalSeconds / 60) % 60);
   const hours = Math.floor(totalSeconds / 3600);
   return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
+}
+
+function elapsedSecondsForRun(run: DesktopRun): number | null {
+  if (!run.started_at) return null;
+  const startedAt = Date.parse(run.started_at);
+  const stoppedAt = Date.parse(run.completed_at ?? run.updated_at);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(stoppedAt) || stoppedAt < startedAt) {
+    return null;
+  }
+  return Math.floor((stoppedAt - startedAt) / 1000);
 }

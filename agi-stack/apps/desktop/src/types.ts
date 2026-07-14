@@ -799,7 +799,7 @@ export type DesktopApprovalRequest = {
   run_id?: string | null;
   run_revision?: number | null;
   round: number;
-  kind: Extract<HitlType, 'decision' | 'permission'>;
+  kind: Exclude<HitlType, 'a2ui_action'>;
   prompt: string;
   decision?: DecisionContext | null;
   status: 'pending' | 'responded';
@@ -849,7 +849,7 @@ export type DesktopArtifactDelivery = {
   conversation_id: string;
   run_id?: string | null;
   destination: string;
-  receipt: Record<string, unknown>;
+  receipt: unknown;
   idempotency_key: string;
   created_at: string;
 };

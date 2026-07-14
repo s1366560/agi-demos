@@ -71,6 +71,7 @@ type ChatPanelProps = {
   runInputsLoading: boolean;
   runInputsError: string | null;
   promotingRunInputId: string | null;
+  runInputAuthorityRunId: string | null;
   references: CodeRangeReference[];
   onInputChange: (value: string) => void;
   onRunInputDeliveryChange: (delivery: RunInputDelivery) => void;
@@ -80,6 +81,14 @@ type ChatPanelProps = {
   onRefresh: () => void;
   onLoadEarlier: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  respondableHitlRequestIds: readonly string[];
+  authorityNotice?: {
+    tone: 'loading' | 'warning' | 'error';
+    title: string;
+    description: string;
+    actionLabel?: string;
+  } | null;
+  onAuthorityAction?: () => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
   onRuntimeTargetChange?: (value: string) => void;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
@@ -123,6 +132,7 @@ export function ChatPanel({
   runInputsLoading,
   runInputsError,
   promotingRunInputId,
+  runInputAuthorityRunId,
   references,
   onInputChange,
   onRunInputDeliveryChange,
@@ -132,6 +142,9 @@ export function ChatPanel({
   onRefresh,
   onLoadEarlier,
   onRespondToHitl,
+  respondableHitlRequestIds,
+  authorityNotice,
+  onAuthorityAction,
   onWorkflowSelect,
   onRuntimeTargetChange,
   onOpenCommands,
@@ -317,6 +330,7 @@ export function ChatPanel({
                 expandedItems={expandedTimelineItems}
                 onToggleItem={toggleTimelineItem}
                 onRespondToHitl={onRespondToHitl}
+                respondableHitlRequestIds={respondableHitlRequestIds}
               />
             </>
           ) : messages.length === 0 ? (
@@ -436,7 +450,15 @@ export function ChatPanel({
                       size="1"
                       color="cyan"
                       loading={promotingRunInputId === queuedInput.id}
-                      disabled={Boolean(promotingRunInputId)}
+                      disabled={
+                        Boolean(promotingRunInputId) ||
+                        queuedInput.run_id !== runInputAuthorityRunId
+                      }
+                      title={
+                        queuedInput.run_id === runInputAuthorityRunId
+                          ? undefined
+                          : t('session.authorityActionUnavailable')
+                      }
                       onClick={() => onPromoteRunInput(queuedInput)}
                     >
                       <RocketIcon />
@@ -449,6 +471,24 @@ export function ChatPanel({
               );
             })}
           </section>
+        ) : null}
+        {authorityNotice ? (
+          <div
+            className={`session-authority-notice tone-${authorityNotice.tone}`}
+            role={authorityNotice.tone === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            <ReloadIcon aria-hidden="true" />
+            <span>
+              <strong>{authorityNotice.title}</strong>
+              <small>{authorityNotice.description}</small>
+            </span>
+            {authorityNotice.actionLabel && onAuthorityAction ? (
+              <Button type="button" size="1" variant="soft" onClick={onAuthorityAction}>
+                {authorityNotice.actionLabel}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
         {references.length ? (
           <div className="composer-reference-chips" aria-label={t('session.attachedReferences')}>
@@ -580,13 +620,19 @@ function AgentTimeline({
   expandedItems,
   onToggleItem,
   onRespondToHitl,
+  respondableHitlRequestIds,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
   onToggleItem: (item: AgentTimelineItem) => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  respondableHitlRequestIds: readonly string[];
 }) {
   const { t } = useI18n();
+  const respondableHitlRequestIdSet = useMemo(
+    () => new Set(respondableHitlRequestIds),
+    [respondableHitlRequestIds],
+  );
   const a2uiActionViews = useMemo(
     () =>
       new Map(
@@ -645,33 +691,43 @@ function AgentTimeline({
                   <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden />
                 </summary>
                 <div className="timeline-tool-group-items">
-                  {node.items.map((item) => (
-                    <TimelineItemView
-                      item={item}
-                      expanded={expandedItems[item.id] ?? false}
-                      onToggle={() => onToggleItem(item)}
-                      onRespondToHitl={onRespondToHitl}
-                      a2uiActionView={a2uiActionViews.get(item.id)}
-                      approvalRequest={state.approvalRequests.find(
-                        (request) => request.id === timelineHitlRequestId(item),
-                      )}
-                      key={item.id}
-                    />
-                  ))}
+                  {node.items.map((item) => {
+                    const requestId = timelineHitlRequestId(item);
+                    return (
+                      <TimelineItemView
+                        item={item}
+                        expanded={expandedItems[item.id] ?? false}
+                        onToggle={() => onToggleItem(item)}
+                        onRespondToHitl={onRespondToHitl}
+                        canRespondToHitl={Boolean(
+                          requestId && respondableHitlRequestIdSet.has(requestId),
+                        )}
+                        a2uiActionView={a2uiActionViews.get(item.id)}
+                        approvalRequest={state.approvalRequests.find(
+                          (request) => request.id === requestId,
+                        )}
+                        key={item.id}
+                      />
+                    );
+                  })}
                 </div>
               </details>
             );
           }
           const item = node.item;
+          const requestId = timelineHitlRequestId(item);
           return (
             <TimelineItemView
               item={item}
               expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
               onToggle={() => onToggleItem(item)}
               onRespondToHitl={onRespondToHitl}
+              canRespondToHitl={Boolean(
+                requestId && respondableHitlRequestIdSet.has(requestId),
+              )}
               a2uiActionView={a2uiActionViews.get(item.id)}
               approvalRequest={state.approvalRequests.find(
-                (request) => request.id === timelineHitlRequestId(item),
+                (request) => request.id === requestId,
               )}
               key={node.id}
             />
@@ -724,6 +780,7 @@ function TimelineItemView({
   expanded,
   onToggle,
   onRespondToHitl,
+  canRespondToHitl,
   a2uiActionView,
   approvalRequest,
 }: {
@@ -731,6 +788,7 @@ function TimelineItemView({
   expanded: boolean;
   onToggle: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  canRespondToHitl: boolean;
   a2uiActionView?: A2UIActionView;
   approvalRequest?: DesktopApprovalRequest;
 }) {
@@ -750,6 +808,7 @@ function TimelineItemView({
           item={item}
           kind={kind}
           onRespondToHitl={onRespondToHitl}
+          canRespondToHitl={canRespondToHitl}
           a2uiActionView={a2uiActionView}
           approvalRequest={approvalRequest}
         />
@@ -792,6 +851,7 @@ function TimelineItemView({
             item={item}
             kind={kind}
             onRespondToHitl={onRespondToHitl}
+            canRespondToHitl={canRespondToHitl}
             a2uiActionView={a2uiActionView}
             approvalRequest={approvalRequest}
           />
@@ -810,12 +870,14 @@ function TimelineItemBody({
   item,
   kind,
   onRespondToHitl,
+  canRespondToHitl,
   a2uiActionView,
   approvalRequest,
 }: {
   item: AgentTimelineItem;
   kind: TimelineKind;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  canRespondToHitl: boolean;
   a2uiActionView?: A2UIActionView;
   approvalRequest?: DesktopApprovalRequest;
 }) {
@@ -826,6 +888,7 @@ function TimelineItemBody({
         item={item}
         hitlType={hitlType}
         onRespond={onRespondToHitl}
+        canRespond={canRespondToHitl}
         a2uiActionView={a2uiActionView}
         approvalRequest={approvalRequest}
       />
@@ -942,12 +1005,14 @@ function HitlResponseCard({
   item,
   hitlType,
   onRespond,
+  canRespond,
   a2uiActionView,
   approvalRequest,
 }: {
   item: AgentTimelineItem;
   hitlType: HitlType;
   onRespond: (submission: HitlResponseSubmission) => Promise<void>;
+  canRespond: boolean;
   a2uiActionView?: A2UIActionView;
   approvalRequest?: DesktopApprovalRequest;
 }) {
@@ -961,6 +1026,7 @@ function HitlResponseCard({
   const options = timelineHitlOptions(item);
   const fields = timelineHitlFields(item);
   const answered = Boolean(item.answered) || submitted;
+  const authorityDisabled = !answered && !canRespond;
   const allowCustom =
     item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
   const question = timelineHitlQuestion(item);
@@ -969,11 +1035,18 @@ function HitlResponseCard({
     : null;
 
   const submit = async (responseData: Record<string, unknown>) => {
-    if (!requestId || answered || busy) return;
+    if (!requestId || answered || busy || authorityDisabled) return;
     setBusy(true);
     setSubmitError(null);
     try {
-      await onRespond({ requestId, hitlType, responseData });
+      const expectedRevision = approvalRequest?.run_revision;
+      await onRespond({
+        requestId,
+        hitlType,
+        responseData,
+        ...(typeof expectedRevision === 'number' ? { expectedRevision } : {}),
+        idempotencyKey: [requestId, expectedRevision ?? 'unversioned', hitlType].join(':'),
+      });
       setSubmitted(true);
     } catch (caught) {
       setSubmitError(caught instanceof Error ? caught.message : String(caught));
@@ -983,7 +1056,7 @@ function HitlResponseCard({
   };
 
   const submitApproval = async (action: 'approve' | 'request_changes') => {
-    if (!approvalRequest || answered || busy) return;
+    if (!approvalRequest || answered || busy || authorityDisabled) return;
     setBusy(true);
     setSubmitError(null);
     try {
@@ -1005,6 +1078,12 @@ function HitlResponseCard({
         <span>{answered ? 'Answered' : 'Waiting for input'}</span>
         {requestId ? <span>{requestId}</span> : <span>Missing request id</span>}
       </div>
+
+      {authorityDisabled ? (
+        <Text size="1" color="amber">
+          {t('session.authorityActionUnavailable')}
+        </Text>
+      ) : null}
 
       {approvalRequest?.decision ? (
         <div className="timeline-approval-evidence">
@@ -1050,7 +1129,7 @@ function HitlResponseCard({
           <Button
             size="1"
             color="green"
-            disabled={!requestId || busy || !approvalValidation?.canApprove}
+            disabled={authorityDisabled || !requestId || busy || !approvalValidation?.canApprove}
             loading={busy}
             onClick={() => void submitApproval('approve')}
           >
@@ -1060,7 +1139,7 @@ function HitlResponseCard({
             size="1"
             color="red"
             variant="soft"
-            disabled={!requestId || busy}
+            disabled={authorityDisabled || !requestId || busy}
             onClick={() =>
               void (approvalRequest
                 ? submitApproval('request_changes')
@@ -1081,6 +1160,7 @@ function HitlResponseCard({
               <input
                 type="password"
                 autoComplete="off"
+                disabled={authorityDisabled || busy}
                 required={field.required}
                 value={envValues[field.name] ?? ''}
                 onChange={(event) =>
@@ -1096,6 +1176,7 @@ function HitlResponseCard({
             size="1"
             disabled={
               !requestId ||
+              authorityDisabled ||
               busy ||
               fields.length === 0 ||
               fields.some((field) => field.required && !envValues[field.name]?.trim())
@@ -1116,7 +1197,7 @@ function HitlResponseCard({
                 <Button
                   size="1"
                   variant="soft"
-                  disabled={!requestId || busy}
+                  disabled={authorityDisabled || !requestId || busy}
                   title={option.description}
                   key={option.value}
                   onClick={() =>
@@ -1137,13 +1218,13 @@ function HitlResponseCard({
               <TextArea
                 size="1"
                 value={answer}
-                disabled={busy}
+                disabled={authorityDisabled || busy}
                 placeholder={hitlType === 'decision' ? 'Enter a decision' : 'Enter your answer'}
                 onChange={(event) => setAnswer(event.currentTarget.value)}
               />
               <Button
                 size="1"
-                disabled={!requestId || busy || !answer.trim()}
+                disabled={authorityDisabled || !requestId || busy || !answer.trim()}
                 loading={busy}
                 onClick={() =>
                   void submit(
@@ -1167,7 +1248,7 @@ function HitlResponseCard({
               <Button
                 size="1"
                 variant="soft"
-                disabled={!requestId || busy}
+                disabled={authorityDisabled || !requestId || busy}
                 loading={busy}
                 key={`${action.sourceComponentId}:${action.actionName}`}
                 onClick={() =>

@@ -9,12 +9,10 @@ const {
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
   sessionRecoveryPresentation,
-  sessionRunActions,
   sessionStatusPresentation,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/session/sessionViewModel.js'
 );
-const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 function conversation(overrides = {}) {
   return {
@@ -33,7 +31,6 @@ function conversation(overrides = {}) {
 function build(overrides = {}) {
   return buildSessionDetailViewModel({
     conversation: conversation(),
-    config: { ...DEFAULT_CONFIG, llmModel: 'gpt-5.5' },
     workspace: { id: 'workspace-1', name: 'Desktop Client' },
     timeline: {
       conversationId: 'conversation-1',
@@ -45,68 +42,159 @@ function build(overrides = {}) {
       firstCursor: null,
       lastCursor: null,
     },
-    tasks: [{ id: 'task-1' }],
-    plan: { revision: 2 },
+    projection: null,
     ...overrides,
   });
 }
 
-test('session view model reads explicit mode, stage, environment, permission, and usage', () => {
+function projection(overrides = {}) {
+  const authorityConversation = conversation({
+    current_mode: 'build',
+    agent_config: { model: 'claude-sonnet-4.5', capability_mode: 'code' },
+  });
+  const currentRun = {
+    id: 'run-1',
+    conversation_id: 'conversation-1',
+    project_id: 'project-1',
+    plan_version_id: 'plan-1',
+    idempotency_key: 'approval-1',
+    message_id: 'message-1',
+    request_message: 'Execute',
+    status: 'running',
+    revision: 4,
+    created_at: '2026-07-13T00:00:00Z',
+    updated_at: '2026-07-13T00:24:19Z',
+    started_at: '2026-07-13T00:00:01Z',
+    permission_profile: 'workspace_write',
+    environment: {
+      id: 'environment-1',
+      kind: 'worktree',
+      label: 'Worktree · agistack/environment-1',
+      workspace_path: '/tmp/environment-1',
+      branch: 'agistack/environment-1',
+      created_at: '2026-07-13T00:00:00Z',
+    },
+    authorization_snapshot: {},
+  };
+  const currentPlan = {
+    id: 'plan-1',
+    conversation_id: 'conversation-1',
+    version: 1,
+    status: 'approved',
+    tasks: [{ id: 'task-1', conversation_id: 'conversation-1' }],
+    created_at: '2026-07-13T00:00:00Z',
+  };
+  return {
+    schemaVersion: 1,
+    conversation: authorityConversation,
+    currentRun,
+    runHistory: [currentRun],
+    currentPlan,
+    planHistory: [currentPlan],
+    tasks: currentPlan.tasks,
+    pendingHitl: [],
+    artifactVersions: [],
+    artifactDeliveries: [],
+    toolInvocations: [],
+    evidenceSummary: {
+      artifactVersionCount: 0,
+      artifactDeliveryCount: 0,
+      artifactSourceCount: 0,
+      toolInvocationCount: 0,
+      unknownOutcomeCount: 0,
+      checks: null,
+      changes: null,
+    },
+    capabilities: {
+      canSendMessage: false,
+      canApprovePlan: false,
+      canRespondToHitl: false,
+      canSteerNow: true,
+      canQueueNext: true,
+      canReviewArtifacts: false,
+      canDeliverArtifacts: false,
+      runActions: ['pause', 'cancel'],
+      allowedActions: ['steer_now', 'queue_next', 'pause', 'cancel'],
+    },
+    snapshotRevision: 'snapshot-1',
+    updatedAt: '2026-07-13T00:24:19Z',
+    ...overrides,
+  };
+}
+
+test('session view model reads only the scoped authority projection', () => {
   const view = build({
     conversation: conversation({
-      current_mode: 'build',
-      agent_config: { model: 'claude-sonnet-4.5', capability_mode: 'code' },
       metadata: {
         run: {
-          status: 'running',
+          status: 'failed',
           stage: 'verify',
-          permission_policy: 'ask',
-          elapsed_seconds: 1458,
-          usage_usd: 1.84,
-          environment: {
-            id: 'environment-1',
-            kind: 'worktree',
-            label: 'Worktree · agistack/environment-1',
-            branch: 'agistack/environment-1',
-          },
+          permission_policy: 'full_access',
+          elapsed_seconds: 99,
+          usage_usd: 99,
         },
-        environment: { label: 'Stale environment', branch: 'stale-branch' },
       },
     }),
+    projection: projection(),
   });
 
   assert.equal(view.capabilityMode, 'code');
   assert.equal(view.status, 'running');
   assert.equal(view.executionMode, 'build');
-  assert.equal(view.stage, 'verify');
+  assert.equal(view.stage, 'unavailable');
   assert.equal(view.environmentLabel, 'Worktree · agistack/environment-1');
   assert.equal(view.branchLabel, 'agistack/environment-1');
   assert.equal(view.modelLabel, 'claude-sonnet-4.5');
-  assert.equal(view.permissionLabel, 'ask');
+  assert.equal(view.permissionLabel, 'workspace_write');
   assert.equal(view.elapsedLabel, '00:24:18');
-  assert.equal(view.usageLabel, '$1.84');
+  assert.equal(view.usageLabel, null);
   assert.equal(view.taskCount, 1);
   assert.equal(view.eventCount, 1);
   assert.equal(view.hasPlan, true);
+  assert.deepEqual(view.runActions, ['pause', 'cancel']);
 });
 
-test('session view model does not infer subjective mode or stage from the title or events', () => {
+test('session view model preserves stale read-only context while revoking mutation authority', () => {
+  const view = build({
+    projection: projection(),
+    authorityAvailable: false,
+  });
+
+  assert.equal(view.status, 'running');
+  assert.equal(view.hasPlan, true);
+  assert.equal(view.taskCount, 1);
+  assert.deepEqual(view.runActions, []);
+});
+
+test('session view model fails closed instead of reading authority from conversation metadata', () => {
   const view = build({
     conversation: conversation({
       title: 'Implement code and run tests before review',
-      metadata: {},
+      current_mode: 'build',
+      agent_config: { model: 'unsafe-fallback', capability_mode: 'code' },
+      metadata: {
+        run: {
+          id: 'metadata-run',
+          status: 'running',
+          revision: 9,
+          environment: { label: 'Unsafe fallback' },
+        },
+      },
     }),
+    projection: null,
   });
 
   assert.equal(view.capabilityMode, 'unavailable');
   assert.equal(view.status, 'unavailable');
   assert.equal(view.executionMode, 'unavailable');
   assert.equal(view.stage, 'unavailable');
-  assert.equal(view.environmentLabel, 'Environment unavailable');
-  assert.equal(view.modelLabel, 'Model unavailable');
-  assert.equal(view.permissionLabel, 'Permission policy unavailable');
-  assert.equal(view.elapsedLabel, 'Elapsed unavailable');
-  assert.equal(view.usageLabel, 'Usage unavailable');
+  assert.equal(view.environmentLabel, null);
+  assert.equal(view.modelLabel, null);
+  assert.equal(view.permissionLabel, null);
+  assert.equal(view.elapsedLabel, null);
+  assert.equal(view.usageLabel, null);
+  assert.equal(view.runId, null);
+  assert.deepEqual(view.runActions, []);
 });
 
 test('authoritative run socket events update conversation status by monotonic revision', () => {
@@ -247,16 +335,6 @@ test('session status presentation distinguishes human gates, failure, and review
   assert.equal(sessionStatusPresentation('disconnected')?.tone, 'danger');
   assert.equal(sessionStatusPresentation('ready_review')?.tone, 'success');
   assert.equal(sessionStatusPresentation('running'), null);
-});
-
-test('session run actions expose only valid authoritative transitions', () => {
-  assert.deepEqual(sessionRunActions('running'), ['pause', 'cancel']);
-  assert.deepEqual(sessionRunActions('paused'), ['resume', 'cancel']);
-  assert.deepEqual(sessionRunActions('disconnected'), ['reconnect', 'fork', 'cancel']);
-  assert.deepEqual(sessionRunActions('interrupted'), ['reconnect', 'fork', 'cancel']);
-  assert.deepEqual(sessionRunActions('ready_review'), ['request_changes', 'approve']);
-  assert.deepEqual(sessionRunActions('completed'), []);
-  assert.deepEqual(sessionRunActions('needs_approval'), []);
 });
 
 test('session recovery choices distinguish reattach authority from a lossy fork', () => {

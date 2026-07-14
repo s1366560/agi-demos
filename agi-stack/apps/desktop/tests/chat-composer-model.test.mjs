@@ -5,7 +5,7 @@ import {
   chatComposerPresentation,
 } from '/tmp/agistack-desktop-test-dist/src/features/chat/chatComposerModel.js';
 
-test('session composer keeps only conversation steering affordances', () => {
+test('session composer keeps run-scoped steering and queue handoff affordances', () => {
   assert.deepEqual(chatComposerPresentation('session'), {
     placeholderKey: 'session.steerComposerPlaceholder',
     showCommands: false,
@@ -13,11 +13,11 @@ test('session composer keeps only conversation steering affordances', () => {
     showRuntimeStatus: false,
     showWorkflowStrip: false,
     showPaneHeader: false,
-    showQueueHandoff: false,
+    showQueueHandoff: true,
   });
 });
 
-test('workspace composer retains workspace navigation and runtime affordances', () => {
+test('workspace composer omits run-scoped queue handoff without a selected session', () => {
   assert.deepEqual(chatComposerPresentation('workspace'), {
     placeholderKey: null,
     showCommands: true,
@@ -25,6 +25,6 @@ test('workspace composer retains workspace navigation and runtime affordances', 
     showRuntimeStatus: true,
     showWorkflowStrip: true,
     showPaneHeader: true,
-    showQueueHandoff: true,
+    showQueueHandoff: false,
   });
 });

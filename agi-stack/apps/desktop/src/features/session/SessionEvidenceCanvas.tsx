@@ -19,6 +19,7 @@ type SessionEvidenceCanvasProps = {
   collection: ArtifactEvidenceCollection;
   presentation: 'sources' | 'checks' | 'verification';
   versions: DesktopArtifactVersion[];
+  available: boolean;
   onOpenArtifact: (artifactVersionId: string) => void;
 };
 
@@ -45,6 +46,7 @@ export function SessionEvidenceCanvas({
   collection,
   presentation,
   versions,
+  available,
   onOpenArtifact,
 }: SessionEvidenceCanvasProps) {
   const { t } = useI18n();
@@ -63,12 +65,20 @@ export function SessionEvidenceCanvas({
           <strong>{title}</strong>
           <small>{description}</small>
         </div>
-        <Badge color={model.rows.length ? 'cyan' : 'gray'} variant="soft">
-          {t('session.evidence.recordCount', { count: model.rows.length })}
+        <Badge color={available && model.rows.length ? 'cyan' : 'gray'} variant="soft">
+          {available
+            ? t('session.evidence.recordCount', { count: model.rows.length })
+            : t('session.notAvailable')}
         </Badge>
       </header>
 
-      {!model.currentVersions.length ? (
+      {!available ? (
+        <div className="session-evidence-empty">
+          <ExclamationTriangleIcon />
+          <strong>{t('session.dataUnavailableTitle')}</strong>
+          <p>{t('session.dataUnavailableDescription')}</p>
+        </div>
+      ) : !model.currentVersions.length ? (
         <div className="session-evidence-empty">
           <FileTextIcon />
           <strong>{t('session.evidence.noArtifacts')}</strong>
@@ -146,7 +156,7 @@ export function SessionEvidenceCanvas({
         </div>
       )}
 
-      {model.currentVersions.length ? (
+      {available && model.currentVersions.length ? (
         <footer>
           <span>
             {t('session.evidence.currentArtifactCount', {

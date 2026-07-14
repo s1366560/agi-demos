@@ -22,7 +22,7 @@ import {
 import './SessionInspector.css';
 
 export type SessionInspectorEvidence = {
-  artifacts: number;
+  artifacts: number | null;
   changedFiles: number | null;
   checks: number | null;
 };
@@ -95,19 +95,19 @@ export function SessionInspector({
           <InspectorFact
             icon={<DesktopIcon />}
             label={t('session.overviewEnvironment')}
-            value={availableValue(viewModel.environmentLabel, 'Environment unavailable', t)}
+            value={availableValue(viewModel.environmentLabel, t)}
           />
           <InspectorFact
             label={t('session.overviewPermission')}
-            value={availableValue(viewModel.permissionLabel, 'Permission policy unavailable', t)}
+            value={availableValue(viewModel.permissionLabel, t)}
           />
           <InspectorFact
             label={t('session.overviewModel')}
-            value={availableValue(viewModel.modelLabel, 'Model unavailable', t)}
+            value={availableValue(viewModel.modelLabel, t)}
           />
           <InspectorFact
             label={t('session.elapsed')}
-            value={availableValue(viewModel.elapsedLabel, 'Elapsed unavailable', t)}
+            value={availableValue(viewModel.elapsedLabel, t)}
           />
         </dl>
       </section>
@@ -289,9 +289,8 @@ function stageLabel(
 }
 
 function availableValue(
-  value: string,
-  unavailableValue: string,
+  value: string | null,
   t: (key: string, values?: Record<string, string | number>) => string,
 ) {
-  return value === unavailableValue ? t('session.notAvailable') : value;
+  return value ?? t('session.notAvailable');
 }
