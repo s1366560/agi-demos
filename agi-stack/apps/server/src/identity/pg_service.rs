@@ -6,27 +6,52 @@ pub struct PgIdentityService {
     pub(super) users: PgUserStore,
     pub(super) tenants: PgTenantRepository,
     pub(super) projects: PgProjectReadRepository,
+    pub(super) workspace_contexts: PgWorkspaceContextRepository,
     pub(super) invitations: PgInvitationRepository,
     pub(super) email: Arc<dyn EmailSender>,
     pub(super) device_grants: SharedDeviceGrantStore,
     pub(super) invitation_base_url: String,
 }
 
-impl PgIdentityService {
+pub struct PgIdentityRepositories {
+    users: PgUserStore,
+    tenants: PgTenantRepository,
+    projects: PgProjectReadRepository,
+    workspace_contexts: PgWorkspaceContextRepository,
+    invitations: PgInvitationRepository,
+}
+
+impl PgIdentityRepositories {
     pub fn new(
         users: PgUserStore,
         tenants: PgTenantRepository,
         projects: PgProjectReadRepository,
+        workspace_contexts: PgWorkspaceContextRepository,
         invitations: PgInvitationRepository,
-        email: Arc<dyn EmailSender>,
-        device_grants: SharedDeviceGrantStore,
-        invitation_base_url: impl Into<String>,
     ) -> Self {
         Self {
             users,
             tenants,
             projects,
+            workspace_contexts,
             invitations,
+        }
+    }
+}
+
+impl PgIdentityService {
+    pub fn new(
+        repositories: PgIdentityRepositories,
+        email: Arc<dyn EmailSender>,
+        device_grants: SharedDeviceGrantStore,
+        invitation_base_url: impl Into<String>,
+    ) -> Self {
+        Self {
+            users: repositories.users,
+            tenants: repositories.tenants,
+            projects: repositories.projects,
+            workspace_contexts: repositories.workspace_contexts,
+            invitations: repositories.invitations,
             email,
             device_grants,
             invitation_base_url: invitation_base_url.into(),
@@ -180,6 +205,39 @@ impl IdentityService for PgIdentityService {
             .map_err(IdentityError::internal)?
             .map(CurrentUserView::from)
             .ok_or_else(|| IdentityError::not_found("User not found"))
+    }
+
+    async fn workspace_context(
+        &self,
+        user_id: &str,
+        now_ms: i64,
+    ) -> Result<WorkspaceContextResponseView, IdentityError> {
+        self.workspace_contexts
+            .get_or_initialize(user_id, ms_to_datetime(now_ms))
+            .await
+            .map(WorkspaceContextResponseView::from)
+            .map_err(workspace_context_error)
+    }
+
+    async fn switch_workspace_context(
+        &self,
+        user_id: &str,
+        actor_api_key_id: Option<&str>,
+        input: WorkspaceContextSwitchInput,
+        now_ms: i64,
+    ) -> Result<WorkspaceContextSwitchOutcomeView, IdentityError> {
+        validate_workspace_context_input(&input)?;
+        let request = agistack_adapters_postgres::WorkspaceContextSwitchRequest {
+            tenant_id: input.tenant_id,
+            project_id: input.project_id,
+            expected_revision: input.expected_revision,
+            idempotency_key: input.idempotency_key,
+        };
+        self.workspace_contexts
+            .switch(user_id, actor_api_key_id, &request, ms_to_datetime(now_ms))
+            .await
+            .map(WorkspaceContextSwitchOutcomeView::from)
+            .map_err(workspace_context_error)
     }
 
     async fn create_device_code(&self) -> Result<DeviceCodeView, IdentityError> {

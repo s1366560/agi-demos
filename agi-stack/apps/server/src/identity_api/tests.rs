@@ -146,6 +146,29 @@ fn device_requests_default_missing_fields_like_python_dict_get() {
 }
 
 #[test]
+fn workspace_context_switch_request_requires_revision_and_idempotency() {
+    let request: WorkspaceContextSwitchRequest = serde_json::from_value(json!({
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "expected_revision": 7,
+        "idempotency_key": "context-switch-1"
+    }))
+    .expect("workspace context switch request must deserialize");
+    assert_eq!(request.tenant_id, "tenant-1");
+    assert_eq!(request.project_id, "project-1");
+    assert_eq!(request.expected_revision, 7);
+    assert_eq!(request.idempotency_key, "context-switch-1");
+
+    assert!(
+        serde_json::from_value::<WorkspaceContextSwitchRequest>(json!({
+            "tenant_id": "tenant-1",
+            "project_id": "project-1"
+        }))
+        .is_err()
+    );
+}
+
+#[test]
 fn invitation_query_defaults_match_python() {
     let q: InvitationListQuery =
         serde_urlencoded::from_str("").expect("empty invitation query must deserialize");

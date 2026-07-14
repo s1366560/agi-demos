@@ -59,6 +59,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
+  isLegacyWorkspaceContextRouteMissing,
 } from './api/client';
 import {
   ingestLocalMemory,
@@ -180,6 +181,7 @@ import type {
   StatusTab,
   TerminalServiceResponse,
   WorkbenchSection,
+  WorkspaceContextSnapshot,
   WorkspaceSummary,
   WorkspaceTask,
 } from './types';
@@ -2762,20 +2764,33 @@ export function App() {
       const outcome = await loginClient.login(username, loginPassword);
       const tokenConfig = { ...config, apiKey: outcome.access_token, workspaceId: '' };
       const identityClient = new DesktopApiClient(tokenConfig);
-      const [user, tenants] = await Promise.all([
+      const [user, tenants, authoritativeContext] = await Promise.all([
         identityClient.currentUser(),
         identityClient.listTenants(),
+        identityClient
+          .getWorkspaceContext()
+          .then((response) => response.context)
+          .catch((caught) => {
+            if (isLegacyWorkspaceContextRouteMissing(caught)) return null;
+            throw caught;
+          }),
       ]);
-      const preferredTenantId = outcome.context?.tenant_id ?? tenants[0]?.id ?? '';
+      const preferredTenantId =
+        authoritativeContext?.tenant_id ?? outcome.context?.tenant_id ?? tenants[0]?.id ?? '';
       const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId: preferredTenantId });
       const projects = await projectClient.listProjects(preferredTenantId || undefined);
       const tenantId = preferredTenantId || projects[0]?.tenant_id || '';
-      const preferredProjectId = outcome.context?.project_id ?? '';
+      const preferredProjectId =
+        authoritativeContext?.project_id ?? outcome.context?.project_id ?? '';
       const projectId = projects.some((project) => project.id === preferredProjectId)
         ? preferredProjectId
         : projects[0]?.id ?? '';
-      const context =
-        outcome.context?.tenant_id === tenantId && outcome.context.project_id === projectId
+      if (authoritativeContext && authoritativeContext.project_id !== projectId) {
+        throw new Error('The authoritative workspace project is no longer available.');
+      }
+      const context = authoritativeContext
+        ? authoritativeContext
+        : outcome.context?.tenant_id === tenantId && outcome.context.project_id === projectId
           ? outcome.context
           : {
               tenant_id: tenantId,
@@ -4183,24 +4198,30 @@ export function App() {
       throw new Error('The selected project is not available for this tenant.');
     }
 
-    const nextContext =
-      auth.credentialKind === 'local_session'
-        ? (
-            await api.switchWorkspaceContext(
-              tenantId,
-              projectId,
-              auth.context.revision,
-              globalThis.crypto.randomUUID(),
-            )
-          ).context
-        : {
-            ...nextRemoteWorkspaceContext(
-              auth.context,
-              tenantId,
-              projectId,
-              new Date().toISOString(),
-            ),
-          };
+    let nextContext: WorkspaceContextSnapshot;
+    try {
+      nextContext = (
+        await api.switchWorkspaceContext(
+          tenantId,
+          projectId,
+          auth.context.revision,
+          globalThis.crypto.randomUUID(),
+        )
+      ).context;
+    } catch (caught) {
+      if (
+        auth.credentialKind !== 'cloud_session' ||
+        !isLegacyWorkspaceContextRouteMissing(caught)
+      ) {
+        throw caught;
+      }
+      nextContext = nextRemoteWorkspaceContext(
+        auth.context,
+        tenantId,
+        projectId,
+        new Date().toISOString(),
+      );
+    }
     const nextConfig = { ...config, tenantId, projectId, workspaceId: '' };
     contextRevisionRef.current = nextContext.revision;
     resetProjectScopedState();

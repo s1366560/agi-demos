@@ -45,6 +45,94 @@ async fn dev_current_user_matches_authenticated_identity() {
 }
 
 #[tokio::test]
+async fn dev_workspace_context_is_authoritative_and_switches_idempotently() {
+    let svc = DevIdentityService::new("dev-user");
+    let initial = svc.workspace_context("dev-user", 0).await.unwrap();
+    assert_eq!(initial.membership_role, "owner");
+    assert_eq!(initial.context.tenant_id, "dev-tenant");
+    assert_eq!(initial.context.project_id, "dev-project");
+    assert_eq!(initial.context.revision, 0);
+
+    let request = WorkspaceContextSwitchInput {
+        tenant_id: "dev-tenant".to_string(),
+        project_id: "dev-project".to_string(),
+        expected_revision: 0,
+        idempotency_key: "context-switch-1".to_string(),
+    };
+    let switched = svc
+        .switch_workspace_context("dev-user", Some("api-key-1"), request.clone(), 1_000)
+        .await
+        .unwrap();
+    assert!(switched.changed);
+    assert_eq!(switched.context.revision, 1);
+
+    let replay = svc
+        .switch_workspace_context("dev-user", Some("api-key-1"), request, 2_000)
+        .await
+        .unwrap();
+    assert!(!replay.changed);
+    assert_eq!(replay.context, switched.context);
+}
+
+#[tokio::test]
+async fn dev_workspace_context_rejects_stale_and_conflicting_switches() {
+    let svc = DevIdentityService::new("dev-user");
+    let first = WorkspaceContextSwitchInput {
+        tenant_id: "dev-tenant".to_string(),
+        project_id: "dev-project".to_string(),
+        expected_revision: 0,
+        idempotency_key: "context-switch-1".to_string(),
+    };
+    svc.switch_workspace_context("dev-user", None, first, 1_000)
+        .await
+        .unwrap();
+
+    let stale = svc
+        .switch_workspace_context(
+            "dev-user",
+            None,
+            WorkspaceContextSwitchInput {
+                tenant_id: "dev-tenant".to_string(),
+                project_id: "dev-project".to_string(),
+                expected_revision: 0,
+                idempotency_key: "context-switch-2".to_string(),
+            },
+            2_000,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(stale.status, StatusCode::CONFLICT);
+    assert_eq!(
+        stale.detail_value.unwrap(),
+        json!({
+            "code": "workspace_context_revision_conflict",
+            "expected_revision": 0,
+            "actual_revision": 1
+        })
+    );
+
+    let reused = svc
+        .switch_workspace_context(
+            "dev-user",
+            None,
+            WorkspaceContextSwitchInput {
+                tenant_id: "dev-tenant".to_string(),
+                project_id: "unavailable".to_string(),
+                expected_revision: 1,
+                idempotency_key: "context-switch-1".to_string(),
+            },
+            3_000,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(reused.status, StatusCode::CONFLICT);
+    assert_eq!(
+        reused.detail_value.unwrap(),
+        json!({"code": "workspace_context_idempotency_conflict"})
+    );
+}
+
+#[tokio::test]
 async fn dev_list_tenants_paginates_and_filters() {
     let svc = DevIdentityService::new("dev-user");
     let page = svc.list_tenants("dev-user", None, 1, 20).await.unwrap();

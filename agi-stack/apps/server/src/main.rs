@@ -102,7 +102,7 @@ use agistack_adapters_postgres::{
     PgRetrievalStoreRepository, PgSchemaRepository, PgShareRepository, PgSkillEvolutionRepository,
     PgSkillRepository, PgSubagentTemplateRepository, PgSupportRepository, PgTenantRepository,
     PgTenantSkillConfigRepository, PgTenantWebhookRepository, PgTrustRepository, PgUserStore,
-    PgVectorIndex, PgWorkspaceRepository,
+    PgVectorIndex, PgWorkspaceContextRepository, PgWorkspaceRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -143,8 +143,8 @@ use crate::graph_stores_api::{
 };
 use crate::hitl_api::{build_hitl_response_service, SharedHitlResponses};
 use crate::identity::{
-    DevIdentityService, InMemoryDeviceGrantStore, PgIdentityService, SharedDeviceGrantStore,
-    SharedIdentity,
+    DevIdentityService, InMemoryDeviceGrantStore, PgIdentityRepositories, PgIdentityService,
+    SharedDeviceGrantStore, SharedIdentity,
 };
 use crate::instance_api::{DevInstanceService, PgInstanceService, SharedInstances};
 use crate::llm_providers_api::{
@@ -568,10 +568,13 @@ async fn build_memory_and_auth(
                 Arc::new(PgCheckpointStore::new(pool.clone()));
             // P2 identity over the same shared schema (users/api_keys/tenants).
             let identity: SharedIdentity = Arc::new(PgIdentityService::new(
-                PgUserStore::new(pool.clone()),
-                PgTenantRepository::new(pool.clone()),
-                PgProjectReadRepository::new(pool.clone()),
-                PgInvitationRepository::new(pool.clone()),
+                PgIdentityRepositories::new(
+                    PgUserStore::new(pool.clone()),
+                    PgTenantRepository::new(pool.clone()),
+                    PgProjectReadRepository::new(pool.clone()),
+                    PgWorkspaceContextRepository::new(pool.clone()),
+                    PgInvitationRepository::new(pool.clone()),
+                ),
                 email,
                 device_grants,
                 invitation_base_url,
