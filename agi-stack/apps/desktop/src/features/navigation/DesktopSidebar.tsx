@@ -27,7 +27,7 @@ import './DesktopSidebar.css';
 type DesktopSidebarSection = 'home' | 'my-work' | 'automations' | 'search' | 'notifications';
 
 type DesktopSidebarProps = {
-  activeSection: DesktopSidebarSection;
+  activeSection: DesktopSidebarSection | null;
   mode: 'work' | 'code';
   taskCount: number;
   tenantName: string;

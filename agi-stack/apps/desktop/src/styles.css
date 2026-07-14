@@ -1928,6 +1928,11 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   overflow: auto;
 }
 
+.pane-stage.single-stage.my-work-stage {
+  padding: 0;
+  overflow: hidden;
+}
+
 .signed-out-mode .pane-stage.single-stage {
   padding: 0;
   overflow: hidden;

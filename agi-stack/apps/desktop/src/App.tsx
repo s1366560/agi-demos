@@ -81,7 +81,6 @@ import {
   readTrustedLocalSessionReference,
   writeTrustedLocalSessionReference,
 } from './features/auth/trustedLocalSessionReference';
-import { BoardPanel } from './features/board/BoardPanel';
 import {
   ChatPanel,
   type AgentTaskSignal,
@@ -155,6 +154,10 @@ import {
 } from './features/session/workspaceReviewPanelModel';
 import { socketEventBelongsToConversation } from './features/session/sessionScope';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
+import {
+  myWorkConversationMatchesScope,
+  socketEventInvalidatesMyWork,
+} from './features/my-work/myWorkModel';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import {
   settingsSectionForEntry,
@@ -180,7 +183,6 @@ import type {
   AgentConversation,
   AgentTimelineItem,
   AuthState,
-  BoardMode,
   ConnectionState,
   ConversationTimelineState,
   ChangeSnapshot,
@@ -1924,7 +1926,7 @@ export function App() {
   const [runControlState, setRunControlState] = useState<RunControlState>('running');
   const [runtimeTarget, setRuntimeTarget] = useState<RuntimeTarget>('local');
   const [runLiveMode, setRunLiveMode] = useState(true);
-  const [showLegacyBoard, setShowLegacyBoard] = useState(false);
+  const [myWorkRefreshing, setMyWorkRefreshing] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
   const [changeSnapshot, setChangeSnapshot] = useState<ChangeSnapshot | null>(null);
@@ -1948,7 +1950,6 @@ export function App() {
   const [sectionForwardStack, setSectionForwardStack] = useState<WorkbenchSection[]>([]);
   const [reviewTab, setReviewTab] = useState<ReviewTab>('overview');
   const [reviewPanelOpen, setReviewPanelOpen] = useState(true);
-  const [boardMode, setBoardMode] = useState<BoardMode>('flow');
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [statusTab, setStatusTab] = useState<StatusTab>('overview');
   const [sandboxBusy, setSandboxBusy] = useState(false);
@@ -1987,6 +1988,9 @@ export function App() {
   const timelineRequestRef = useRef(0);
   const sessionProjectionRequestRef = useRef(0);
   const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
+  const myWorkRequestRef = useRef(0);
+  const myWorkAbortRef = useRef<AbortController | null>(null);
+  const myWorkRefreshTimerRef = useRef<number | null>(null);
   const contextRevisionRef = useRef(0);
   const localResumeAttemptRef = useRef('');
   const runInputRequestRef = useRef<{
@@ -2824,6 +2828,14 @@ export function App() {
   }, [activeDataset.tasks, selectedTaskId]);
 
   const resetProjectScopedState = () => {
+    myWorkAbortRef.current?.abort();
+    myWorkAbortRef.current = null;
+    myWorkRequestRef.current += 1;
+    if (myWorkRefreshTimerRef.current !== null) {
+      window.clearTimeout(myWorkRefreshTimerRef.current);
+      myWorkRefreshTimerRef.current = null;
+    }
+    setMyWorkRefreshing(false);
     setDataset(emptyDataset);
     setConnection('idle');
     setError(null);
@@ -3019,6 +3031,66 @@ export function App() {
       }
     },
     [auth.projects, auth.status, config, syncLocalRuntimeConfig],
+  );
+
+  const refreshMyWork = useCallback(async () => {
+    const projectId = config.projectId.trim();
+    if (!projectId) return;
+    const requestId = myWorkRequestRef.current + 1;
+    myWorkRequestRef.current = requestId;
+    myWorkAbortRef.current?.abort();
+    const controller = new AbortController();
+    myWorkAbortRef.current = controller;
+    const expectedContextRevision = contextRevisionRef.current;
+    setMyWorkRefreshing(true);
+    try {
+      const response = await api.listMyWork(projectId, controller.signal);
+      if (
+        controller.signal.aborted ||
+        myWorkRequestRef.current !== requestId ||
+        !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current)
+      ) {
+        return;
+      }
+      setDataset((current) => ({
+        ...current,
+        myWork: response.items,
+        myWorkError: null,
+      }));
+    } catch (caught) {
+      if (controller.signal.aborted || myWorkRequestRef.current !== requestId) return;
+      setDataset((current) => ({
+        ...current,
+        myWorkError: formatError(caught),
+      }));
+    } finally {
+      if (myWorkRequestRef.current === requestId) {
+        myWorkAbortRef.current = null;
+        setMyWorkRefreshing(false);
+      }
+    }
+  }, [api, config.projectId]);
+
+  useEffect(() => {
+    const latest = socket.events[0];
+    if (!socketEventInvalidatesMyWork(latest)) return;
+    if (myWorkRefreshTimerRef.current !== null) {
+      window.clearTimeout(myWorkRefreshTimerRef.current);
+    }
+    myWorkRefreshTimerRef.current = window.setTimeout(() => {
+      myWorkRefreshTimerRef.current = null;
+      void refreshMyWork();
+    }, 180);
+  }, [refreshMyWork, socket.events]);
+
+  useEffect(
+    () => () => {
+      myWorkAbortRef.current?.abort();
+      if (myWorkRefreshTimerRef.current !== null) {
+        window.clearTimeout(myWorkRefreshTimerRef.current);
+      }
+    },
+    [],
   );
 
   const login = async () => {
@@ -3774,7 +3846,8 @@ export function App() {
 
   const memoryProjectId = config.projectId.trim() || 'desktop-local';
   const memoryAuthorId = auth.user?.user_id ?? 'desktop-user';
-  const paneStageClassName = 'pane-stage single-stage';
+  const paneStageClassName =
+    activeSection === 'board' ? 'pane-stage single-stage my-work-stage' : 'pane-stage single-stage';
   const configuredProject = useMemo(
     () => projectSummaryFromConfig(config),
     [config.projectId, config.tenantId],
@@ -3793,6 +3866,16 @@ export function App() {
       auth.projects.find((project) => project.id === config.projectId) ??
       null,
     [auth.projects, config.projectId, sidebarProjects],
+  );
+  const myWorkWorkspaceLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        (dataset.workspacesByProject[config.projectId] ?? []).map((workspace) => [
+          workspace.id,
+          workspaceLabel(workspace),
+        ]),
+      ),
+    [config.projectId, dataset.workspacesByProject],
   );
   const selectedConversation = scopedConversation;
   const sessionDetailViewModel = useMemo(
@@ -4501,16 +4584,6 @@ export function App() {
     selectWorkflowTarget('board');
   };
 
-  const selectBoardTask = (taskId: string, selectionViewLabel?: string) => {
-    setSelectedTaskId(taskId);
-    const task = activeDataset.tasks.find((candidate) => candidate.id === taskId);
-    if (!task) return;
-  };
-
-  const submitBoardCommand = async (command: string) => {
-    await sendMessageContent(command);
-  };
-
   const applySectionSideEffects = (section: WorkbenchSection) => {
     activeSectionRef.current = section;
     setActiveSection(section);
@@ -4781,8 +4854,8 @@ export function App() {
     },
     {
       id: 'my-work',
-      label: 'My work',
-      description: 'Open tasks, board lanes, and active work.',
+      label: t('myWork.title'),
+      description: t('myWork.commandDescription'),
       icon: <GridIcon />,
       onSelect: () => switchSection('board'),
     },
@@ -4967,59 +5040,54 @@ export function App() {
     );
   };
 
-  const openMyWorkSession = (item: ProjectWorkItem) => {
+  const openMyWorkSession = async (item: ProjectWorkItem) => {
     const workspaceId = item.workspace_id ?? '';
-    const conversation = Object.values(dataset.conversationsByWorkspace)
-      .flat()
-      .find((candidate) => candidate.id === item.conversation_id);
-    if (!workspaceId || !conversation) {
+    const expectedContextRevision = contextRevisionRef.current;
+    let conversation = (dataset.conversationsByWorkspace[workspaceId] ?? []).find(
+      (candidate) => candidate.id === item.conversation_id,
+    );
+    if (!workspaceId || item.project_id !== config.projectId) {
+      setError(t('myWork.sessionUnavailable'));
+      return;
+    }
+    if (!conversation) {
+      try {
+        const response = await api.listConversations(item.project_id, workspaceId);
+        conversation = response.items.find((candidate) => candidate.id === item.conversation_id);
+      } catch (caught) {
+        setError(formatError(caught));
+        return;
+      }
+    }
+    if (!conversation) {
+      setError(t('myWork.sessionUnavailable'));
+      return;
+    }
+    if (
+      !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+      !myWorkConversationMatchesScope(item, conversation, {
+        tenantId: config.tenantId,
+        projectId: config.projectId,
+      })
+    ) {
       setError(t('myWork.sessionUnavailable'));
       return;
     }
     selectConversation(item.project_id, workspaceId, conversation, 'chat');
   };
 
-  const renderLegacyBoardPanel = () => (
-    <section className="my-work-legacy-board">
-      <header>
-        <Button variant="soft" onClick={() => setShowLegacyBoard(false)}>
-          <ChevronLeftIcon /> {t('myWork.backToQueue')}
-        </Button>
-      </header>
-      <BoardPanel
-      tasks={activeDataset.tasks}
-      boardMode={boardMode}
-      selectedTaskId={selectedTaskId}
-      activeRunLabel={activeSidebarRun?.label ?? 'Current run'}
-      activeRunTimeLabel={titlebarRunTimeLabel}
-      commandDisabledReason={chatDisabledReason}
-      commandSending={sending}
-      runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
-      runtimeTargetOptions={runtimeTargetComposerOptions}
-      onBoardModeChange={setBoardMode}
-      onSelectTask={selectBoardTask}
-      onOpenCommands={openCommandPalette}
-      onRuntimeTargetChange={(value) =>
-        setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local')
-      }
-      onSubmitCommand={submitBoardCommand}
+  const renderBoardPanel = () => (
+    <MyWorkQueue
+      items={dataset.myWork}
+      error={dataset.myWorkError}
+      loading={connection === 'loading' || myWorkRefreshing}
+      mode={preferredTaskMode}
+      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
+      workspaceLabels={myWorkWorkspaceLabels}
+      onRefresh={() => void refreshMyWork()}
+      onOpenSession={(item) => void openMyWorkSession(item)}
     />
-    </section>
   );
-
-  const renderBoardPanel = () =>
-    showLegacyBoard ? (
-      renderLegacyBoardPanel()
-    ) : (
-      <MyWorkQueue
-        items={dataset.myWork}
-        error={dataset.myWorkError}
-        loading={connection === 'loading'}
-        onRefresh={() => void refreshRuntime()}
-        onOpenSession={openMyWorkSession}
-        onOpenBoard={() => setShowLegacyBoard(true)}
-      />
-    );
 
   const renderAutomationsPage = () => (
     <AutomationsPage
@@ -5616,14 +5684,9 @@ export function App() {
                   ? 'automations'
                   : activeSection === 'review'
                     ? 'notifications'
-                    : 'home'
+                    : null
             }
-            mode={
-              sessionDetailViewModel?.capabilityMode === 'code' ||
-              sessionDetailViewModel?.capabilityMode === 'work'
-                ? sessionDetailViewModel.capabilityMode
-                : preferredTaskMode
-            }
+            mode={preferredTaskMode}
             taskCount={dataset.myWork.length}
             tenantName={
               auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ??

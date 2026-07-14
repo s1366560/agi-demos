@@ -2,8 +2,6 @@ export type RuntimeMode = 'local' | 'cloud';
 
 export type ConnectionState = 'idle' | 'loading' | 'ready' | 'error';
 
-export type BoardMode = 'flow' | 'list';
-
 export type StatusTab = 'overview' | 'plan' | 'sandbox' | 'memory' | 'events';
 
 export type AuthStatus = 'signed_out' | 'signing_in' | 'signed_in' | 'manual';
