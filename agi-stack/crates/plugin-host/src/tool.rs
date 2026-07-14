@@ -16,6 +16,24 @@ pub enum Trust {
     SandboxedWasm,
 }
 
+/// Static access class declared by a tool implementation.
+///
+/// Automation runtimes may execute [`Pure`](Self::Pure) tools without a scoped
+/// data adapter or mutation grant. Every other class requires a stronger host
+/// boundary; the default is [`Unknown`](Self::Unknown) so newly added tools are
+/// fail-closed rather than accidentally treated as safe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolAccessClass {
+    /// Deterministic computation over the supplied input only.
+    Pure,
+    /// Reads external or durable state and therefore requires exact scope.
+    ScopedRead,
+    /// May change files, processes, remote systems, or other durable state.
+    Mutating,
+    /// No reviewed access declaration is available.
+    Unknown,
+}
+
 /// OpenClaw-style classification of a plugin by its **actual** registration
 /// behaviour (not static metadata). Mirrors `docs/plugins/architecture.md`
 /// "Plugin shapes": `plain-capability` / `hybrid-capability` / `hook-only` /
@@ -47,6 +65,11 @@ pub trait Tool: Send + Sync {
 
     /// Trust tier (structural, declared at load time).
     fn trust(&self) -> Trust;
+
+    /// Reviewed static access metadata used by authority-enforcing hosts.
+    fn access_class(&self) -> ToolAccessClass {
+        ToolAccessClass::Unknown
+    }
 
     /// Extensibility short-circuit — mirrors the gateway `skip()` predicate and
     /// OpenClaw capability applicability. Returns `false` to skip this tool for

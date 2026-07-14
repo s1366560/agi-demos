@@ -24,6 +24,7 @@ use serde_json::json;
 use tokio::time::{interval, sleep};
 use uuid::Uuid;
 
+use crate::cron_tool_authority::AutomationToolHostFactory;
 use crate::cron_worker::{
     CronOperationHandler, CronOperationHandlerFailure, CronOperationHandlerOutcome, CronWorkerClock,
 };
@@ -177,15 +178,28 @@ impl AutomationHitlStore for PgHitlRequestRepository {
 pub(crate) struct ReActAutomationRunExecutor {
     engine: Arc<ReActEngine>,
     hitl: Option<Arc<dyn AutomationHitlStore>>,
+    tool_hosts: Option<Arc<dyn AutomationToolHostFactory>>,
 }
 
 impl ReActAutomationRunExecutor {
     pub(crate) fn new(engine: Arc<ReActEngine>) -> Self {
-        Self { engine, hitl: None }
+        Self {
+            engine,
+            hitl: None,
+            tool_hosts: None,
+        }
     }
 
     pub(crate) fn with_hitl_store(mut self, hitl: Arc<dyn AutomationHitlStore>) -> Self {
         self.hitl = Some(hitl);
+        self
+    }
+
+    pub(crate) fn with_tool_host_factory(
+        mut self,
+        tool_hosts: Arc<dyn AutomationToolHostFactory>,
+    ) -> Self {
+        self.tool_hosts = Some(tool_hosts);
         self
     }
 }
@@ -194,6 +208,14 @@ impl ReActAutomationRunExecutor {
 impl AutomationRunExecutor for ReActAutomationRunExecutor {
     async fn execute(&self, lease: &AutomationRunLease) -> CoreResult<AutomationExecutionResult> {
         let started = Instant::now();
+        let tools = self
+            .tool_hosts
+            .as_ref()
+            .ok_or_else(|| {
+                CoreError::Tool("automation tool authority is not configured".to_string())
+            })?
+            .for_run(lease)?;
+        let engine = self.engine.as_ref().clone().with_tool_host(tools);
         let observer = Arc::new(AutomationHitlObserver {
             store: self.hitl.clone(),
             tenant_id: lease.context.tenant_id.clone(),
@@ -203,8 +225,7 @@ impl AutomationRunExecutor for ReActAutomationRunExecutor {
             actor_user_id: lease.context.actor_user_id.clone(),
             expires_at: lease.deadline_at,
         });
-        let state = self
-            .engine
+        let state = engine
             .run_observed(
                 &lease.context.runtime_execution_id,
                 &lease.context.payload.goal(),

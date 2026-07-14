@@ -59,4 +59,4 @@ pub use native::{EchoTool, LenTool, NativeToolFactory, UpperTool};
 pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};
 pub use registry::{HotPlugRegistry, ToolRegistry};
 pub use skill::{Skill, SkillContext, SkillEngine};
-pub use tool::{PluginShape, Tool, Trust};
+pub use tool::{PluginShape, Tool, ToolAccessClass, Trust};

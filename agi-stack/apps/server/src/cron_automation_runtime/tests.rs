@@ -1,7 +1,9 @@
 use std::sync::Mutex;
 
+use agistack_adapters_mem::{InMemoryCheckpointStore, StubLlm, SystemClock};
 use agistack_adapters_postgres::{AutomationPayload, AutomationRunStatus, CronOperationStatus};
 use agistack_core::agent::HitlRequest;
+use agistack_plugin_host::HotPlugRegistry;
 use chrono::Duration as ChronoDuration;
 use serde_json::Value;
 
@@ -286,6 +288,24 @@ fn worker(
             heartbeat_interval: Duration::from_millis(2),
         },
     )
+}
+
+#[tokio::test]
+async fn react_automation_executor_fails_closed_without_scoped_tool_authority() {
+    let engine = Arc::new(ReActEngine::new(
+        Arc::new(StubLlm),
+        Arc::new(HotPlugRegistry::new()),
+        Arc::new(InMemoryCheckpointStore::new()),
+        Arc::new(SystemClock),
+    ));
+    let executor = ReActAutomationRunExecutor::new(engine);
+
+    let error = executor
+        .execute(&lease(now() + ChronoDuration::seconds(30)))
+        .await
+        .expect_err("unscoped automation tools must remain disabled");
+
+    assert!(error.to_string().contains("authority is not configured"));
 }
 
 #[tokio::test]

@@ -107,6 +107,14 @@ impl ReActEngine {
         }
     }
 
+    /// Clone this engine's runtime/checkpoint policy with a host-owned tool
+    /// boundary. The clone shares the LLM and checkpoint store, while each run
+    /// can receive an authority-scoped [`ToolHost`].
+    pub fn with_tool_host(mut self, tools: Arc<dyn ToolHost>) -> Self {
+        self.tools = tools;
+        self
+    }
+
     /// Override the default round budget (a circuit-breaker against runaway
     /// loops — a structural bound, not a semantic verdict).
     pub fn with_max_rounds(mut self, max_rounds: u64) -> Self {
