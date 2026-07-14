@@ -261,25 +261,27 @@ export function ChatPanel({
 
   return (
     <section className="pane-shell chat-shell">
-      <header className="pane-head">
-        <div>
-          <Heading as="h2" size="3">
-            {sessionTitle}
-          </Heading>
-          <Text size="1" color="gray">
-            {scopeLabel}
-          </Text>
-        </div>
-        <Button
-          size="2"
-          variant="surface"
-          aria-label="Refresh workspace messages"
-          onClick={onRefresh}
-          disabled={disabled}
-        >
-          <ReloadIcon /> Refresh
-        </Button>
-      </header>
+      {composerPresentation.showPaneHeader ? (
+        <header className="pane-head">
+          <div>
+            <Heading as="h2" size="3">
+              {sessionTitle}
+            </Heading>
+            <Text size="1" color="gray">
+              {scopeLabel}
+            </Text>
+          </div>
+          <Button
+            size="2"
+            variant="surface"
+            aria-label="Refresh workspace messages"
+            onClick={onRefresh}
+            disabled={disabled}
+          >
+            <ReloadIcon /> Refresh
+          </Button>
+        </header>
+      ) : null}
       <ScrollArea className="message-scroll" ref={scrollAreaRef}>
         <div className="message-stack">
           {timelineState ? (
@@ -373,7 +375,8 @@ export function ChatPanel({
             onSelect={onWorkflowSelect}
           />
         ) : null}
-        {runInputsLoading || runInputsError || queuedRunInputs.length ? (
+        {composerPresentation.showQueueHandoff &&
+        (runInputsLoading || runInputsError || queuedRunInputs.length) ? (
           <section className="run-input-queue" aria-label={t('session.queueHandoffRegion')}>
             <div className="run-input-queue-header">
               <span>

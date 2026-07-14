@@ -3,6 +3,8 @@ export type ChatComposerVariant = 'workspace' | 'session';
 export type ChatComposerPresentation = Readonly<{
   placeholderKey: 'session.steerComposerPlaceholder' | null;
   showCommands: boolean;
+  showPaneHeader: boolean;
+  showQueueHandoff: boolean;
   showRuntimeControls: boolean;
   showRuntimeStatus: boolean;
   showWorkflowStrip: boolean;
@@ -11,6 +13,8 @@ export type ChatComposerPresentation = Readonly<{
 const SESSION_COMPOSER_PRESENTATION: ChatComposerPresentation = Object.freeze({
   placeholderKey: 'session.steerComposerPlaceholder',
   showCommands: false,
+  showPaneHeader: false,
+  showQueueHandoff: false,
   showRuntimeControls: false,
   showRuntimeStatus: false,
   showWorkflowStrip: false,
@@ -19,6 +23,8 @@ const SESSION_COMPOSER_PRESENTATION: ChatComposerPresentation = Object.freeze({
 const WORKSPACE_COMPOSER_PRESENTATION: ChatComposerPresentation = Object.freeze({
   placeholderKey: null,
   showCommands: true,
+  showPaneHeader: true,
+  showQueueHandoff: true,
   showRuntimeControls: true,
   showRuntimeStatus: true,
   showWorkflowStrip: true,

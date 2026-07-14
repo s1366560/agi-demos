@@ -6281,7 +6281,10 @@ function WorkspaceReviewPanel({
     () => buildPullRequestSummary(dataset, workspaceEvents, artifacts, reviewDecision),
     [artifacts, dataset, reviewDecision, workspaceEvents],
   );
-  const configuredCanvasTabs = useMemo(() => sessionCanvasTabs(capabilityMode), [capabilityMode]);
+  const configuredCanvasTabs = useMemo(
+    () => sessionCanvasTabs(capabilityMode, variant),
+    [capabilityMode, variant],
+  );
   const chrome = workspaceReviewPanelChrome(variant, Boolean(sessionControls));
   const tabValue = (tab: SessionCanvasTabId): string | undefined => {
     if (variant === 'session') {

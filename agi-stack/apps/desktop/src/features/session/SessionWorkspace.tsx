@@ -21,7 +21,10 @@ import {
   SessionInspector,
   type SessionInspectorEvidence,
 } from './SessionInspector';
-import type { SessionCanvasTabId } from './sessionCanvasModel';
+import {
+  defaultSessionCanvasTab,
+  type SessionCanvasTabId,
+} from './sessionCanvasModel';
 import {
   nextSessionSurface,
   sessionSurfacePanes,
@@ -111,7 +114,7 @@ export function SessionWorkspace({
         document.activeElement.dataset.sessionCanvasTrigger ?? canvasTriggerRef.current;
     }
     setSurface((current) => nextSessionSurface(current, 'open_canvas'));
-    onOpenCanvas(tab);
+    onOpenCanvas(tab ?? defaultSessionCanvasTab(viewModel.status, viewModel.capabilityMode));
   };
 
   const closeCanvas = () => {

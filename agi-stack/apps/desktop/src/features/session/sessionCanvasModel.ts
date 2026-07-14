@@ -21,6 +21,8 @@ export type SessionCanvasTabs = {
   secondary: SessionCanvasTab[];
 };
 
+export type SessionCanvasVariant = 'workspace' | 'session';
+
 export function hasAuthoritativeChangeReview(input: {
   changedFileCount: number;
   hasPendingHitlRequest: boolean;
@@ -40,21 +42,38 @@ const tabs: Record<SessionCanvasTabId, SessionCanvasTab> = {
   verification: { id: 'verification', labelKey: 'session.canvasVerification' },
 };
 
-export function sessionCanvasTabs(mode: SessionCapabilityMode): SessionCanvasTabs {
+export function defaultSessionCanvasTab(
+  status: string,
+  mode: SessionCapabilityMode,
+): SessionCanvasTabId {
+  const normalizedStatus = status.trim().toLowerCase();
+  if (normalizedStatus === 'needs_input' || normalizedStatus === 'needs_approval') return 'plan';
+  if (mode === 'code') return 'changes';
+  if (mode === 'work') return 'artifacts';
+  return 'plan';
+}
+
+export function sessionCanvasTabs(
+  mode: SessionCapabilityMode,
+  variant: SessionCanvasVariant = 'workspace',
+): SessionCanvasTabs {
   if (mode === 'code') {
     return {
       primary: [tabs.overview, tabs.plan, tabs.changes, tabs.terminal, tabs.checks],
-      secondary: [tabs.activity, tabs.artifacts],
+      secondary: variant === 'workspace' ? [tabs.activity, tabs.artifacts] : [],
     };
   }
   if (mode === 'work') {
     return {
       primary: [tabs.overview, tabs.plan, tabs.artifacts, tabs.sources, tabs.verification],
-      secondary: [tabs.activity],
+      secondary: variant === 'workspace' ? [tabs.activity] : [],
     };
   }
   return {
-    primary: [tabs.overview, tabs.plan, tabs.activity, tabs.artifacts],
+    primary:
+      variant === 'workspace'
+        ? [tabs.overview, tabs.plan, tabs.activity, tabs.artifacts]
+        : [tabs.overview, tabs.plan, tabs.artifacts],
     secondary: [],
   };
 }

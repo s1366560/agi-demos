@@ -12,6 +12,8 @@ test('session composer keeps only conversation steering affordances', () => {
     showRuntimeControls: false,
     showRuntimeStatus: false,
     showWorkflowStrip: false,
+    showPaneHeader: false,
+    showQueueHandoff: false,
   });
 });
 
@@ -22,5 +24,7 @@ test('workspace composer retains workspace navigation and runtime affordances', 
     showRuntimeControls: true,
     showRuntimeStatus: true,
     showWorkflowStrip: true,
+    showPaneHeader: true,
+    showQueueHandoff: true,
   });
 });
