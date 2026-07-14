@@ -364,11 +364,9 @@ fn handle_run_event(app: &tauri::AppHandle, event: RunEvent) {
         RunEvent::Reopen {
             has_visible_windows,
             ..
-        } => {
-            if should_restore_main_window(has_visible_windows) {
-                if let Err(error) = ensure_main_window(app) {
-                    eprintln!("failed to restore agistack desktop window: {error}");
-                }
+        } if should_restore_main_window(has_visible_windows) => {
+            if let Err(error) = ensure_main_window(app) {
+                eprintln!("failed to restore agistack desktop window: {error}");
             }
         }
         _ => {}
