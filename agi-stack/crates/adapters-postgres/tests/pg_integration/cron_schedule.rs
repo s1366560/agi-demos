@@ -29,13 +29,15 @@ async fn cron_schedule_projection_is_scope_and_schedule_revision_fenced() {
     let now = ts(2026, 7, 14, 10, 0, 0);
     sqlx::query(
         "INSERT INTO cron_jobs ( \
-            id, project_id, tenant_id, name, enabled, revision, schedule_revision, \
+            id, project_id, tenant_id, name, enabled, delete_after_run, revision, schedule_revision, \
             schedule_type, schedule_config, payload_type, payload_config, timezone, \
-            stagger_seconds, created_by, created_at \
+            stagger_seconds, timeout_seconds, max_retries, state, delivery_type, delivery_config, \
+            conversation_mode, created_by, created_at \
          ) VALUES ( \
-            'cron_schedule_job', $1, $2, 'Schedule projection', true, 4, 1, 'every', \
+            'cron_schedule_job', $1, $2, 'Schedule projection', true, false, 4, 1, 'every', \
             '{\"interval_seconds\":60}'::json, 'agent_turn', \
-            '{\"message\":\"run\"}'::json, 'UTC', 0, $3, $4 \
+            '{\"message\":\"run\"}'::json, 'UTC', 0, 300, 3, '{}'::json, \
+            'none', '{}'::json, 'fresh', $3, $4 \
          )",
     )
     .bind(&project_id)
@@ -93,10 +95,13 @@ async fn cron_schedule_projection_is_scope_and_schedule_revision_fenced() {
         .expect("same fingerprint is idempotent");
     assert_eq!(replayed.next_fire_at, projection.next_fire_at);
 
-    sqlx::query("UPDATE cron_jobs SET schedule_revision = 2 WHERE id = 'cron_schedule_job'")
-        .execute(&pool)
-        .await
-        .expect("advance source revision");
+    sqlx::query(
+        "UPDATE cron_jobs SET schedule_config = '{\"interval_seconds\":120}'::json \
+         WHERE id = 'cron_schedule_job'",
+    )
+    .execute(&pool)
+    .await
+    .expect("advance source revision");
     assert!(repo
         .apply_projection(&operation, &projection, now)
         .await
@@ -139,13 +144,15 @@ async fn due_schedule_fire_atomically_creates_run_operation_and_advances_cursor(
     let now = ts(2026, 7, 14, 11, 0, 0);
     sqlx::query(
         "INSERT INTO cron_jobs ( \
-            id, project_id, tenant_id, name, enabled, revision, schedule_revision, \
+            id, project_id, tenant_id, name, enabled, delete_after_run, revision, schedule_revision, \
             schedule_type, schedule_config, payload_type, payload_config, timezone, \
-            stagger_seconds, timeout_seconds, max_retries, created_by, created_at \
+            stagger_seconds, timeout_seconds, max_retries, state, delivery_type, delivery_config, \
+            conversation_mode, created_by, created_at \
          ) VALUES ( \
-            'cron_schedule_fire_job', $1, $2, 'Scheduled fire', true, 5, 2, 'every', \
+            'cron_schedule_fire_job', $1, $2, 'Scheduled fire', true, false, 5, 2, 'every', \
             '{\"interval_seconds\":60}'::json, 'agent_turn', \
-            '{\"message\":\"run\"}'::json, 'UTC', 0, 300, 3, $3, $4)",
+            '{\"message\":\"run\"}'::json, 'UTC', 0, 300, 3, '{}'::json, \
+            'none', '{}'::json, 'fresh', $3, $4)",
     )
     .bind(&project_id)
     .bind(&tenant_id)

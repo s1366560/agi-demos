@@ -9,10 +9,28 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
     ensure_python_shaped_tables(&pool).await;
     clean_cron_rows(&pool).await;
 
+    let scopes = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT project.id, project.tenant_id, project.owner_id \
+         FROM projects AS project \
+         WHERE NOT EXISTS (SELECT 1 FROM cron_jobs AS job WHERE job.project_id = project.id) \
+         ORDER BY project.id LIMIT 2",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("load cron project scopes");
+    let [target_scope, other_scope, ..] = scopes.as_slice() else {
+        eprintln!("[skip] cron project scoping requires two projects");
+        return;
+    };
+    let (project_id, tenant_id, user_id) = target_scope;
+    let (other_project_id, other_tenant_id, other_user_id) = other_scope;
+
     seed_cron_job(
         &pool,
         "cron_job_old",
-        "cron_project",
+        project_id,
+        tenant_id,
+        user_id,
         true,
         ts(2026, 1, 1, 0, 0, 0),
     )
@@ -20,7 +38,9 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
     seed_cron_job(
         &pool,
         "cron_job_new",
-        "cron_project",
+        project_id,
+        tenant_id,
+        user_id,
         true,
         ts(2026, 1, 2, 0, 0, 0),
     )
@@ -28,7 +48,9 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
     seed_cron_job(
         &pool,
         "cron_job_disabled",
-        "cron_project",
+        project_id,
+        tenant_id,
+        user_id,
         false,
         ts(2026, 1, 3, 0, 0, 0),
     )
@@ -36,7 +58,9 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
     seed_cron_job(
         &pool,
         "cron_job_other",
-        "cron_other_project",
+        other_project_id,
+        other_tenant_id,
+        other_user_id,
         true,
         ts(2026, 1, 4, 0, 0, 0),
     )
@@ -45,7 +69,7 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
         &pool,
         "cron_run_old",
         "cron_job_new",
-        "cron_project",
+        project_id,
         "success",
         ts(2026, 1, 2, 1, 0, 0),
     )
@@ -54,7 +78,7 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
         &pool,
         "cron_run_new",
         "cron_job_new",
-        "cron_project",
+        project_id,
         "failed",
         ts(2026, 1, 2, 2, 0, 0),
     )
@@ -63,7 +87,7 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
         &pool,
         "cron_run_other_project",
         "cron_job_new",
-        "cron_other_project",
+        other_project_id,
         "success",
         ts(2026, 1, 2, 3, 0, 0),
     )
@@ -72,7 +96,7 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
     let repo = PgCronRepository::new(pool.clone());
     let (enabled_jobs, enabled_total) = repo
         .list_jobs(CronJobListQuery {
-            project_id: "cron_project",
+            project_id,
             include_disabled: false,
             limit: 10,
             offset: 0,
@@ -90,7 +114,7 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
 
     let (all_jobs, all_total) = repo
         .list_jobs(CronJobListQuery {
-            project_id: "cron_project",
+            project_id,
             include_disabled: true,
             limit: 2,
             offset: 0,
@@ -112,19 +136,19 @@ async fn cron_jobs_and_runs_are_project_scoped_and_python_ordered() {
     );
 
     let job = repo
-        .get_job("cron_project", "cron_job_new")
+        .get_job(project_id, "cron_job_new")
         .await
         .expect("cron job detail query succeeds")
         .expect("cron job exists");
     assert_eq!(job.name, "Cron cron_job_new");
     assert!(repo
-        .get_job("cron_project", "cron_job_other")
+        .get_job(project_id, "cron_job_other")
         .await
         .expect("wrong-project cron job detail query succeeds")
         .is_none());
 
     let (runs, total) = repo
-        .list_runs("cron_project", "cron_job_new", 10, 0)
+        .list_runs(project_id, "cron_job_new", 10, 0)
         .await
         .expect("cron run list succeeds");
     assert_eq!(total, 2);
@@ -151,6 +175,8 @@ async fn seed_cron_job(
     pool: &PgPool,
     id: &str,
     project_id: &str,
+    tenant_id: &str,
+    user_id: &str,
     enabled: bool,
     created_at: DateTime<Utc>,
 ) {
@@ -167,7 +193,7 @@ async fn seed_cron_job(
     )
     .bind(id)
     .bind(project_id)
-    .bind("cron_tenant")
+    .bind(tenant_id)
     .bind(format!("Cron {id}"))
     .bind("Cron integration job")
     .bind(enabled)
@@ -185,7 +211,7 @@ async fn seed_cron_job(
     .bind(300_i32)
     .bind(3_i32)
     .bind(json!({"last_run_status": "success"}))
-    .bind("cron_user")
+    .bind(user_id)
     .bind(created_at)
     .bind(ts(2026, 1, 5, 0, 0, 0))
     .execute(pool)

@@ -199,12 +199,31 @@ async fn cron_runtime_timeout_recovery_is_idempotent() {
         now,
     )
     .await;
+    let conversation_id = "cron_runtime_conversation_timeout";
+    sqlx::query(
+        "INSERT INTO conversations ( \
+            id, project_id, tenant_id, user_id, title, status, agent_config, meta, \
+            message_count, current_mode, merge_strategy, created_at, updated_at \
+         ) VALUES ( \
+            $1, $2, $3, $4, 'Runtime timeout test', 'active', '{}'::json, '{}'::json, \
+            0, 'build', 'result_only', $5, $5 \
+         )",
+    )
+    .bind(conversation_id)
+    .bind(&project_id)
+    .bind(&tenant_id)
+    .bind(&user_id)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .expect("insert timeout runtime conversation");
     sqlx::query(
         "UPDATE cron_job_runs SET status = 'running', deadline_at = $2, \
-         runtime_revision = 1 WHERE id = $1",
+         runtime_revision = 1, conversation_id = $3 WHERE id = $1",
     )
     .bind(run_id)
     .bind(now - Duration::from_secs(1))
+    .bind(conversation_id)
     .execute(&pool)
     .await
     .expect("expire runtime deadline");

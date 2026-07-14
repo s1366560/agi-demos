@@ -56,9 +56,24 @@ pub(super) fn ts(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32)
 }
 
 /// Create the minimal Python-shaped tables the adapter reads/writes, plus the
-/// Rust-owned auxiliary schema. Idempotent (`IF NOT EXISTS`), so tests can share a
-/// database. Uses a per-test id prefix to isolate rows.
+/// Rust-owned auxiliary schema.
+///
+/// An Alembic-managed database already owns the Python schema. Avoid issuing
+/// additive DDL against those tables because even an `IF NOT EXISTS` alteration
+/// requires an exclusive relation lock and can block a running Python backend.
+/// Empty integration databases still receive the minimal compatibility schema.
 pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
+    let python_schema_is_migration_managed =
+        sqlx::query_scalar::<_, bool>("SELECT to_regclass('public.alembic_version') IS NOT NULL")
+            .fetch_one(pool)
+            .await
+            .expect("inspect Python schema ownership");
+
+    if python_schema_is_migration_managed {
+        ensure_aux_schema(pool).await.expect("aux schema");
+        return;
+    }
+
     for ddl in [
         "CREATE TABLE IF NOT EXISTS users (id text PRIMARY KEY, email text)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser boolean DEFAULT false",
