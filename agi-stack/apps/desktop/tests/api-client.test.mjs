@@ -3,10 +3,94 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { desktopApiCredential, desktopLaunchCapability, DesktopApiClient } = require(
+const {
+  desktopApiCredential,
+  desktopLaunchCapability,
+  DesktopApiClient,
+  DesktopApiError,
+  isLegacyWorkspaceContextRouteMissing,
+} = require(
   '/tmp/agistack-desktop-test-dist/src/api/client.js'
 );
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+
+test('workspace context requests preserve the authoritative revision contract', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    const context = {
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      revision: calls.length - 1,
+      updated_at: '2026-07-14T00:00:00Z',
+    };
+    return new Response(
+      JSON.stringify(
+        calls.length === 1
+          ? { context, membership_role: 'owner' }
+          : { context, changed: true },
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+    });
+    const current = await client.getWorkspaceContext();
+    const switched = await client.switchWorkspaceContext(
+      'tenant-1',
+      'project-1',
+      current.context.revision,
+      'context-switch-1',
+    );
+
+    assert.equal(current.membership_role, 'owner');
+    assert.equal(switched.context.revision, 1);
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method ?? 'GET']),
+      [
+        ['http://127.0.0.1:8088/api/v1/workspace-context', 'GET'],
+        ['http://127.0.0.1:8088/api/v1/workspace-context/switch', 'POST'],
+      ],
+    );
+    assert.deepEqual(JSON.parse(String(calls[1].init.body)), {
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      expected_revision: 0,
+      idempotency_key: 'context-switch-1',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace context compatibility fallback accepts only the legacy missing-route envelope', () => {
+  assert.equal(
+    isLegacyWorkspaceContextRouteMissing(
+      new DesktopApiError('Not Found', 404, { detail: 'Not Found' }),
+    ),
+    true,
+  );
+  assert.equal(
+    isLegacyWorkspaceContextRouteMissing(
+      new DesktopApiError('unavailable', 404, {
+        detail: { code: 'workspace_context_unavailable' },
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    isLegacyWorkspaceContextRouteMissing(
+      new DesktopApiError('Not Found', 403, { detail: 'Not Found' }),
+    ),
+    false,
+  );
+});
 
 test('respondToHitl sends the authenticated unified HITL payload', async () => {
   const calls = [];

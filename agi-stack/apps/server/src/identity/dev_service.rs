@@ -1,5 +1,5 @@
-#[cfg(test)]
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::http::StatusCode;
@@ -7,6 +7,7 @@ use serde_json::json;
 
 use agistack_adapters_postgres::{
     normalize_email, ProjectDashboardStatsRecord, ProjectUpdatePatch, TenantUpdatePatch,
+    WorkspaceContextRepositoryError,
 };
 use agistack_adapters_redis::DeviceGrant;
 use agistack_adapters_secrets::try_generate_api_key;
@@ -19,13 +20,16 @@ use super::InMemoryDeviceGrantStore;
 use super::{
     clamp_limit_offset, clamp_pagination, default_graph_config, default_memory_rules,
     default_project_member_role, default_tenant_member_role, is_valid_agent_conversation_mode,
-    is_valid_project_member_role, is_valid_tenant_member_role, normalize_backend_store_id,
-    project_graph_config_for_write, project_memory_rules_for_write, sandbox_config, unprocessable,
+    is_valid_project_member_role, is_valid_tenant_member_role, ms_to_datetime,
+    normalize_backend_store_id, project_graph_config_for_write, project_memory_rules_for_write,
+    sandbox_config, unprocessable, validate_workspace_context_input, workspace_context_error,
     BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView,
     IdentityError, IdentityService, InvitationListView, InvitationVerifyView, InvitationView,
     LoginOutcome, ProjectCreateInput, ProjectListInput, ProjectMemberMutationView,
     ProjectMemberView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
-    SharedDeviceGrantStore, TenantMemberMutationView, TenantPage, TenantView, DEVICE_CODE_TTL_SECS,
+    SharedDeviceGrantStore, TenantMemberMutationView, TenantPage, TenantView,
+    WorkspaceContextResponseView, WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
+    WorkspaceContextView, DEVICE_CODE_TTL_SECS,
 };
 
 mod invitations;
@@ -40,6 +44,31 @@ mod tenant;
 pub struct DevIdentityService {
     dev_user_id: String,
     device_grants: SharedDeviceGrantStore,
+    workspace_context: Arc<Mutex<DevWorkspaceContextState>>,
+}
+
+struct DevWorkspaceContextState {
+    context: WorkspaceContextView,
+    events: HashMap<String, DevWorkspaceContextEvent>,
+}
+
+#[derive(Clone)]
+struct DevWorkspaceContextEvent {
+    tenant_id: String,
+    project_id: String,
+    context: WorkspaceContextView,
+}
+
+fn new_dev_workspace_context_state() -> Arc<Mutex<DevWorkspaceContextState>> {
+    Arc::new(Mutex::new(DevWorkspaceContextState {
+        context: WorkspaceContextView {
+            tenant_id: "dev-tenant".to_string(),
+            project_id: "dev-project".to_string(),
+            revision: 0,
+            updated_at: "1970-01-01T00:00:00Z".to_string(),
+        },
+        events: HashMap::new(),
+    }))
 }
 
 impl DevIdentityService {
@@ -48,6 +77,7 @@ impl DevIdentityService {
         Self {
             dev_user_id: dev_user_id.into(),
             device_grants: Arc::new(InMemoryDeviceGrantStore::new()),
+            workspace_context: new_dev_workspace_context_state(),
         }
     }
 
@@ -58,6 +88,7 @@ impl DevIdentityService {
         Self {
             dev_user_id: dev_user_id.into(),
             device_grants,
+            workspace_context: new_dev_workspace_context_state(),
         }
     }
 
@@ -148,6 +179,92 @@ impl IdentityService for DevIdentityService {
             created_at: "1970-01-01T00:00:00Z".to_string(),
             profile: json!({}),
             preferred_language: None,
+        })
+    }
+
+    async fn workspace_context(
+        &self,
+        user_id: &str,
+        _now_ms: i64,
+    ) -> Result<WorkspaceContextResponseView, IdentityError> {
+        if user_id != self.dev_user_id {
+            return Err(IdentityError::not_found("User not found"));
+        }
+        let state = self
+            .workspace_context
+            .lock()
+            .map_err(|_| IdentityError::internal("workspace context state unavailable"))?;
+        Ok(WorkspaceContextResponseView {
+            context: state.context.clone(),
+            membership_role: "owner".to_string(),
+        })
+    }
+
+    async fn switch_workspace_context(
+        &self,
+        user_id: &str,
+        _actor_api_key_id: Option<&str>,
+        input: WorkspaceContextSwitchInput,
+        now_ms: i64,
+    ) -> Result<WorkspaceContextSwitchOutcomeView, IdentityError> {
+        if user_id != self.dev_user_id {
+            return Err(IdentityError::not_found("User not found"));
+        }
+        validate_workspace_context_input(&input)?;
+        let mut state = self
+            .workspace_context
+            .lock()
+            .map_err(|_| IdentityError::internal("workspace context state unavailable"))?;
+        if let Some(existing) = state.events.get(&input.idempotency_key) {
+            if existing.tenant_id != input.tenant_id || existing.project_id != input.project_id {
+                return Err(workspace_context_error(
+                    WorkspaceContextRepositoryError::IdempotencyConflict,
+                ));
+            }
+            return Ok(WorkspaceContextSwitchOutcomeView {
+                context: existing.context.clone(),
+                changed: false,
+            });
+        }
+        if input.expected_revision != state.context.revision {
+            return Err(workspace_context_error(
+                WorkspaceContextRepositoryError::RevisionConflict {
+                    expected: input.expected_revision,
+                    actual: state.context.revision,
+                },
+            ));
+        }
+        if input.tenant_id != "dev-tenant" {
+            return Err(workspace_context_error(
+                WorkspaceContextRepositoryError::TenantMembershipRequired,
+            ));
+        }
+        if input.project_id != "dev-project" {
+            return Err(workspace_context_error(
+                WorkspaceContextRepositoryError::ProjectUnavailable,
+            ));
+        }
+        let revision = state.context.revision.checked_add(1).ok_or_else(|| {
+            workspace_context_error(WorkspaceContextRepositoryError::RevisionExhausted)
+        })?;
+        let context = WorkspaceContextView {
+            tenant_id: input.tenant_id.clone(),
+            project_id: input.project_id.clone(),
+            revision,
+            updated_at: ms_to_datetime(now_ms).to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        };
+        state.context = context.clone();
+        state.events.insert(
+            input.idempotency_key,
+            DevWorkspaceContextEvent {
+                tenant_id: input.tenant_id,
+                project_id: input.project_id,
+                context: context.clone(),
+            },
+        );
+        Ok(WorkspaceContextSwitchOutcomeView {
+            context,
+            changed: true,
         })
     }
 

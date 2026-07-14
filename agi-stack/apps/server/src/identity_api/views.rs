@@ -30,6 +30,14 @@ pub(super) struct DeviceTokenRequest {
     pub(super) device_code: String,
 }
 
+#[derive(Deserialize)]
+pub(super) struct WorkspaceContextSwitchRequest {
+    pub(super) tenant_id: String,
+    pub(super) project_id: String,
+    pub(super) expected_revision: i64,
+    pub(super) idempotency_key: String,
+}
+
 /// Pagination + search query for the tenant list. Defaults mirror Python
 /// (`page=1`, `page_size=20`).
 #[derive(Deserialize)]

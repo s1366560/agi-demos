@@ -82,6 +82,16 @@ export type SessionRunAction =
   | 'request_changes'
   | 'approve';
 
+export type SessionRecoveryPresentation = {
+  action: Extract<SessionRunAction, 'reconnect' | 'fork'>;
+  labelKey: string;
+  titleKey: string;
+  descriptionKey: string;
+  confirmationRequired: boolean;
+  primary: boolean;
+  warnings?: string[];
+};
+
 export function authoritativeRunFromSocketEvent(event: unknown): DesktopRun | null {
   const envelope = recordValue(event);
   const eventType = stringValue(envelope.type) ?? stringValue(envelope.event_type);
@@ -277,6 +287,34 @@ export function sessionRunActions(status: string): SessionRunAction[] {
     default:
       return [];
   }
+}
+
+export function sessionRecoveryPresentation(
+  action: Extract<SessionRunAction, 'reconnect' | 'fork'>,
+): SessionRecoveryPresentation {
+  if (action === 'reconnect') {
+    return {
+      action,
+      labelKey: 'session.reconnectRun',
+      titleKey: 'session.reattachTitle',
+      descriptionKey: 'session.reattachDescription',
+      confirmationRequired: false,
+      primary: true,
+    };
+  }
+  return {
+    action,
+    labelKey: 'session.forkRecovery',
+    titleKey: 'session.forkRecoveryTitle',
+    descriptionKey: 'session.forkRecoveryDescription',
+    confirmationRequired: true,
+    primary: false,
+    warnings: [
+      'session.forkRecoveryNewRun',
+      'session.forkRecoveryVerifiedHead',
+      'session.forkRecoveryLocalChanges',
+    ],
+  };
 }
 
 function recordValue(value: unknown): Record<string, unknown> {

@@ -37,9 +37,10 @@ use serde_json::{json, Map, Value};
 
 use agistack_adapters_postgres::{
     normalize_email, InvitationRecord, PgInvitationRepository, PgProjectReadRepository,
-    PgTenantRepository, PgUserStore, ProjectActivityRecord, ProjectCreateRecord,
-    ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup, ProjectStatsLookup,
-    ProjectUpdatePatch, TenantAdminStatus, TenantLookup, TenantUpdatePatch,
+    PgTenantRepository, PgUserStore, PgWorkspaceContextRepository, ProjectActivityRecord,
+    ProjectCreateRecord, ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup,
+    ProjectStatsLookup, ProjectUpdatePatch, TenantAdminStatus, TenantLookup, TenantUpdatePatch,
+    WorkspaceContextRepositoryError,
 };
 use agistack_adapters_redis::DeviceGrant;
 use agistack_adapters_secrets::{
@@ -61,12 +62,14 @@ use device_grants::{
     create_device_code_with_store, normalize_device_user_code, poll_device_token_from_store,
 };
 pub use device_grants::{DeviceGrantStore, InMemoryDeviceGrantStore, SharedDeviceGrantStore};
-pub use pg_service::PgIdentityService;
+pub use pg_service::{PgIdentityRepositories, PgIdentityService};
 pub use views::{
     BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView,
     InvitationListView, InvitationVerifyView, InvitationView, LoginOutcome, ProjectCreateInput,
     ProjectListInput, ProjectMemberMutationView, ProjectMemberView, ProjectMembersView,
     ProjectPage, ProjectStatsView, ProjectView, TenantMemberMutationView, TenantPage, TenantView,
+    WorkspaceContextResponseView, WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
+    WorkspaceContextView,
 };
 
 /// One day in milliseconds — the login key TTL (`expires_in_days=1` in Python).
@@ -184,6 +187,20 @@ pub trait IdentityService: Send + Sync {
 
     /// Fetch the authenticated user's Python `User` schema projection.
     async fn current_user(&self, user_id: &str) -> Result<CurrentUserView, IdentityError>;
+
+    async fn workspace_context(
+        &self,
+        user_id: &str,
+        now_ms: i64,
+    ) -> Result<WorkspaceContextResponseView, IdentityError>;
+
+    async fn switch_workspace_context(
+        &self,
+        user_id: &str,
+        actor_api_key_id: Option<&str>,
+        input: WorkspaceContextSwitchInput,
+        now_ms: i64,
+    ) -> Result<WorkspaceContextSwitchOutcomeView, IdentityError>;
 
     async fn create_device_code(&self) -> Result<DeviceCodeView, IdentityError>;
 
@@ -469,6 +486,70 @@ fn unprocessable(detail: impl Into<String>) -> IdentityError {
         detail: detail.into(),
         detail_value: None,
         www_authenticate: false,
+    }
+}
+
+fn workspace_context_error(error: WorkspaceContextRepositoryError) -> IdentityError {
+    let (status, detail) = match error {
+        WorkspaceContextRepositoryError::InvalidInput => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!({"code": "workspace_context_invalid_input"}),
+        ),
+        WorkspaceContextRepositoryError::NoAccessibleProject => (
+            StatusCode::NOT_FOUND,
+            json!({"code": "workspace_context_unavailable"}),
+        ),
+        WorkspaceContextRepositoryError::TenantMembershipRequired => (
+            StatusCode::FORBIDDEN,
+            json!({"code": "workspace_context_membership_required"}),
+        ),
+        WorkspaceContextRepositoryError::ProjectUnavailable => (
+            StatusCode::FORBIDDEN,
+            json!({"code": "workspace_context_project_unavailable"}),
+        ),
+        WorkspaceContextRepositoryError::RevisionConflict { expected, actual } => (
+            StatusCode::CONFLICT,
+            json!({
+                "code": "workspace_context_revision_conflict",
+                "expected_revision": expected,
+                "actual_revision": actual,
+            }),
+        ),
+        WorkspaceContextRepositoryError::IdempotencyConflict => (
+            StatusCode::CONFLICT,
+            json!({"code": "workspace_context_idempotency_conflict"}),
+        ),
+        WorkspaceContextRepositoryError::RevisionExhausted => (
+            StatusCode::CONFLICT,
+            json!({"code": "workspace_context_revision_exhausted"}),
+        ),
+        error @ WorkspaceContextRepositoryError::Storage(_) => {
+            return IdentityError::internal(error);
+        }
+    };
+    IdentityError {
+        status,
+        detail: detail.to_string(),
+        detail_value: Some(detail),
+        www_authenticate: false,
+    }
+}
+
+fn validate_workspace_context_input(
+    input: &WorkspaceContextSwitchInput,
+) -> Result<(), IdentityError> {
+    let key = input.idempotency_key.trim();
+    if input.tenant_id.trim().is_empty()
+        || input.project_id.trim().is_empty()
+        || input.expected_revision < 0
+        || key.is_empty()
+        || key.len() > 255
+    {
+        Err(workspace_context_error(
+            WorkspaceContextRepositoryError::InvalidInput,
+        ))
+    } else {
+        Ok(())
     }
 }
 

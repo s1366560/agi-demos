@@ -26,7 +26,8 @@ use crate::identity::{
     CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView, IdentityError,
     InvitationListView, InvitationVerifyView, InvitationView, ProjectCreateInput, ProjectListInput,
     ProjectMemberMutationView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
-    TenantMemberMutationView, TenantPage, TenantView,
+    TenantMemberMutationView, TenantPage, TenantView, WorkspaceContextResponseView,
+    WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
 };
 use crate::AppState;
 
@@ -90,6 +91,41 @@ async fn current_user(
     Extension(identity): Extension<Identity>,
 ) -> Result<Json<CurrentUserView>, IdentityError> {
     Ok(Json(app.identity.current_user(&identity.user_id).await?))
+}
+
+async fn workspace_context(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+) -> Result<Json<WorkspaceContextResponseView>, IdentityError> {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    Ok(Json(
+        app.identity
+            .workspace_context(&identity.user_id, now_ms)
+            .await?,
+    ))
+}
+
+async fn switch_workspace_context(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Json(body): Json<WorkspaceContextSwitchRequest>,
+) -> Result<Json<WorkspaceContextSwitchOutcomeView>, IdentityError> {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    Ok(Json(
+        app.identity
+            .switch_workspace_context(
+                &identity.user_id,
+                Some(&identity._api_key_id),
+                WorkspaceContextSwitchInput {
+                    tenant_id: body.tenant_id,
+                    project_id: body.project_id,
+                    expected_revision: body.expected_revision,
+                    idempotency_key: body.idempotency_key,
+                },
+                now_ms,
+            )
+            .await?,
+    ))
 }
 
 // ---- device-code login ----------------------------------------------------
@@ -609,6 +645,11 @@ pub fn router_authed() -> Router<AppState> {
         .route("/api/v1/auth/me/", get(current_user))
         .route("/api/v1/users/me", get(current_user))
         .route("/api/v1/users/me/", get(current_user))
+        .route("/api/v1/workspace-context", get(workspace_context))
+        .route(
+            "/api/v1/workspace-context/switch",
+            post(switch_workspace_context),
+        )
         .route("/api/v1/tenants/", get(list_tenants).post(create_tenant))
         .route("/api/v1/tenants", get(list_tenants).post(create_tenant))
         .route(

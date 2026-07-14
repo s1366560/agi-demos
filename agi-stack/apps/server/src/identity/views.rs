@@ -3,7 +3,8 @@ use serde_json::Value;
 
 use agistack_adapters_postgres::{
     CurrentUserRecord, InvitationRecord, ProjectDashboardStatsRecord, ProjectMemberRecord,
-    ProjectMembersRecord, ProjectReadRecord, TenantRecord,
+    ProjectMembersRecord, ProjectReadRecord, TenantRecord, WorkspaceContextAccessRecord,
+    WorkspaceContextSnapshotRecord, WorkspaceContextSwitchRecord,
 };
 
 use super::{
@@ -52,6 +53,63 @@ impl From<CurrentUserRecord> for CurrentUserView {
             preferred_language: record.preferred_language,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorkspaceContextView {
+    pub tenant_id: String,
+    pub project_id: String,
+    pub revision: i64,
+    pub updated_at: String,
+}
+
+impl From<WorkspaceContextSnapshotRecord> for WorkspaceContextView {
+    fn from(record: WorkspaceContextSnapshotRecord) -> Self {
+        Self {
+            tenant_id: record.tenant_id,
+            project_id: record.project_id,
+            revision: record.revision,
+            updated_at: iso8601(record.updated_at),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorkspaceContextResponseView {
+    pub context: WorkspaceContextView,
+    pub membership_role: String,
+}
+
+impl From<WorkspaceContextAccessRecord> for WorkspaceContextResponseView {
+    fn from(record: WorkspaceContextAccessRecord) -> Self {
+        Self {
+            context: record.context.into(),
+            membership_role: record.membership_role,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorkspaceContextSwitchOutcomeView {
+    pub context: WorkspaceContextView,
+    pub changed: bool,
+}
+
+impl From<WorkspaceContextSwitchRecord> for WorkspaceContextSwitchOutcomeView {
+    fn from(record: WorkspaceContextSwitchRecord) -> Self {
+        Self {
+            context: record.context.into(),
+            changed: record.changed,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceContextSwitchInput {
+    pub tenant_id: String,
+    pub project_id: String,
+    pub expected_revision: i64,
+    pub idempotency_key: String,
 }
 
 /// `POST /auth/device/code` response, byte-shaped like Python.

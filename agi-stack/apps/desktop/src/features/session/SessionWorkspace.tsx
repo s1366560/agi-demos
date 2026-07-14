@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Badge, Button } from '@radix-ui/themes';
+import { AlertDialog, Badge, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
   CheckCircledIcon,
@@ -20,6 +20,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import {
+  sessionRecoveryPresentation,
   sessionStatusPresentation,
   sessionRunActions,
   type SessionDetailViewModel,
@@ -65,8 +66,11 @@ export function SessionWorkspace({
   const [surface, setSurface] = useState<SessionSurface>('thread');
   const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('');
+  const [recoveryConfirmOpen, setRecoveryConfirmOpen] = useState(false);
   const statusPresentation = sessionStatusPresentation(viewModel.status);
   const runActions = sessionRunActions(viewModel.status);
+  const reattachPresentation = sessionRecoveryPresentation('reconnect');
+  const forkPresentation = sessionRecoveryPresentation('fork');
   const actionDisabled = runActionPending !== null || viewModel.runRevision === null;
 
   useEffect(() => {
@@ -153,29 +157,93 @@ export function SessionWorkspace({
             <Button
               size="2"
               color="green"
-              variant="surface"
+              variant="solid"
               disabled={actionDisabled}
+              title={t(reattachPresentation.descriptionKey)}
               onClick={() => onRunAction('reconnect')}
             >
               <ReloadIcon />
               {runActionPending === 'reconnect'
                 ? t('session.reconnecting')
-                : t('session.reconnectRun')}
+                : t(reattachPresentation.labelKey)}
             </Button>
           ) : null}
           {runActions.includes('fork') ? (
-            <Button
-              size="2"
-              color="amber"
-              variant="surface"
-              disabled={actionDisabled}
-              onClick={() => onRunAction('fork')}
-            >
-              <CommitIcon />
-              {runActionPending === 'fork'
-                ? t('session.forkingRecovery')
-                : t('session.forkRecovery')}
-            </Button>
+            <AlertDialog.Root open={recoveryConfirmOpen} onOpenChange={setRecoveryConfirmOpen}>
+              <AlertDialog.Trigger>
+                <Button
+                  className="session-fork-recovery-trigger"
+                  size="2"
+                  color="amber"
+                  variant="surface"
+                  disabled={actionDisabled}
+                  title={t(forkPresentation.descriptionKey)}
+                >
+                  <CommitIcon />
+                  {runActionPending === 'fork'
+                    ? t('session.forkingRecovery')
+                    : t(forkPresentation.labelKey)}
+                </Button>
+              </AlertDialog.Trigger>
+              <AlertDialog.Content className="session-recovery-dialog" maxWidth="500px">
+                <div className="session-recovery-dialog-icon" aria-hidden>
+                  <CommitIcon />
+                </div>
+                <AlertDialog.Title>{t(forkPresentation.titleKey)}</AlertDialog.Title>
+                <AlertDialog.Description>
+                  {t(forkPresentation.descriptionKey)}
+                </AlertDialog.Description>
+
+                <ul className="session-recovery-warning-list">
+                  {forkPresentation.warnings?.map((warningKey, index) => (
+                    <li className={index === 2 ? 'is-warning' : ''} key={warningKey}>
+                      {index === 2 ? <ExclamationTriangleIcon /> : <CheckCircledIcon />}
+                      <span>{t(warningKey)}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <section
+                  className="session-recovery-context"
+                  aria-label={t('session.recoveryContext')}
+                >
+                  <h3>{t('session.recoveryContext')}</h3>
+                  <dl>
+                    <div>
+                      <dt>{t('session.sourceRun')}</dt>
+                      <dd title={viewModel.runId ?? undefined}>{viewModel.runId ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('session.sourceEnvironment')}</dt>
+                      <dd title={viewModel.environmentLabel}>{viewModel.environmentLabel}</dd>
+                    </div>
+                    {viewModel.branchLabel ? (
+                      <div>
+                        <dt>{t('session.sourceBranch')}</dt>
+                        <dd title={viewModel.branchLabel}>{viewModel.branchLabel}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </section>
+
+                <div className="session-recovery-dialog-actions">
+                  <AlertDialog.Cancel>
+                    <Button size="2" variant="soft" color="gray">
+                      {t('session.cancelRecovery')}
+                    </Button>
+                  </AlertDialog.Cancel>
+                  <AlertDialog.Action>
+                    <Button
+                      size="2"
+                      color="amber"
+                      onClick={() => onRunAction('fork')}
+                    >
+                      <CommitIcon /> {t('session.confirmForkRecovery')}
+                    </Button>
+                  </AlertDialog.Action>
+                </div>
+              </AlertDialog.Content>
+            </AlertDialog.Root>
           ) : null}
           {runActions.includes('cancel') ? (
             <Button

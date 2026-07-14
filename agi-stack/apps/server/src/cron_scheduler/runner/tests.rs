@@ -95,13 +95,10 @@ impl CronSchedulerDriver for FakeDriver {
         authority: &CronSchedulerLease,
         scope: &CronControlScope,
     ) -> CoreResult<CronScopeControlReport> {
-        self.events
-            .lock()
-            .expect("events lock")
-            .push(format!(
-                "control:{}:{}",
-                authority.owner_epoch, scope.project_id
-            ));
+        self.events.lock().expect("events lock").push(format!(
+            "control:{}:{}",
+            authority.owner_epoch, scope.project_id
+        ));
         Ok(CronScopeControlReport {
             reconcile_admitted: 1,
             operations_claimed: 2,
@@ -254,3 +251,26 @@ async fn lost_renewal_stops_paging_and_reports_authority_loss() {
     assert!(events.iter().any(|event| event == "release:1"));
 }
 
+#[tokio::test]
+async fn runtime_shutdown_joins_the_poll_loop() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let scheduler = Arc::new(CronScheduler::new(
+        Arc::new(FakeOwnership {
+            events: Arc::clone(&events),
+            acquire: None,
+            renewed: None,
+            released: true,
+        }),
+        Arc::new(FakeDriver {
+            events,
+            pages: Vec::new(),
+        }),
+        Arc::new(FixedClock(observed_at())),
+        enabled_config(),
+    ));
+    let runtime = scheduler.spawn_if_enabled().expect("enabled runtime");
+
+    tokio::time::timeout(Duration::from_secs(1), runtime.shutdown())
+        .await
+        .expect("runtime shutdown must not hang");
+}

@@ -71,6 +71,7 @@ mod tenant_webhook_repo;
 mod trust_repo;
 mod user_store;
 mod vector_index;
+mod workspace_context_repo;
 mod workspace_repo;
 
 pub use admin_access_repo::PgAdminAccessRepository;
@@ -199,6 +200,10 @@ pub use trust_repo::{
 };
 pub use user_store::{CurrentUserRecord, PgUserStore, UserAuthRecord};
 pub use vector_index::PgVectorIndex;
+pub use workspace_context_repo::{
+    PgWorkspaceContextRepository, WorkspaceContextAccessRecord, WorkspaceContextRepositoryError,
+    WorkspaceContextSnapshotRecord, WorkspaceContextSwitchRecord, WorkspaceContextSwitchRequest,
+};
 pub use workspace_repo::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,

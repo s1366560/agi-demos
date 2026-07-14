@@ -30,6 +30,11 @@ impl CronSchedulerConfig {
             std::env::var("HOSTNAME").unwrap_or_else(|_| "local".to_string()),
             std::process::id()
         );
+        let runtime_lease_seconds = positive_i64_env("AGISTACK_CRON_RUNTIME_LEASE_SECONDS", 60);
+        let runtime_heartbeat = safe_runtime_heartbeat(
+            runtime_lease_seconds,
+            duration_env("AGISTACK_CRON_RUNTIME_HEARTBEAT_SECONDS", 15.0),
+        );
         Self {
             owner_id: string_env("AGISTACK_CRON_OWNER_ID", &default_owner),
             owner_lease_seconds: positive_i64_env("AGISTACK_CRON_OWNER_LEASE_SECONDS", 60),
@@ -38,13 +43,10 @@ impl CronSchedulerConfig {
             reconcile_batch_size: positive_i64_env("AGISTACK_CRON_RECONCILE_BATCH_SIZE", 25),
             fire_batch_size: positive_i64_env("AGISTACK_CRON_FIRE_BATCH_SIZE", 25),
             operation_batch_size: positive_i64_env("AGISTACK_CRON_OPERATION_BATCH_SIZE", 25),
-            operation_lease_seconds: positive_i64_env(
-                "AGISTACK_CRON_OPERATION_LEASE_SECONDS",
-                60,
-            ),
+            operation_lease_seconds: positive_i64_env("AGISTACK_CRON_OPERATION_LEASE_SECONDS", 60),
             runtime_batch_size: positive_i64_env("AGISTACK_CRON_RUNTIME_BATCH_SIZE", 1),
-            runtime_lease_seconds: positive_i64_env("AGISTACK_CRON_RUNTIME_LEASE_SECONDS", 60),
-            runtime_heartbeat: duration_env("AGISTACK_CRON_RUNTIME_HEARTBEAT_SECONDS", 15.0),
+            runtime_lease_seconds,
+            runtime_heartbeat,
             poll_interval: duration_env("AGISTACK_CRON_POLL_SECONDS", 2.0),
             autostart: bool_env("AGISTACK_CRON_AUTOSTART", false),
             production_ready: bool_env(CRON_PRODUCTION_READY_ENV, false),
@@ -125,6 +127,11 @@ fn duration_env(name: &str, default_seconds: f64) -> Duration {
     Duration::from_secs_f64(seconds)
 }
 
+fn safe_runtime_heartbeat(lease_seconds: i64, requested: Duration) -> Duration {
+    let half_lease = Duration::from_secs_f64(lease_seconds.max(1) as f64 / 2.0);
+    requested.min(half_lease)
+}
+
 fn bool_env(name: &str, default: bool) -> bool {
     std::env::var(name)
         .ok()
@@ -148,6 +155,20 @@ mod tests {
         assert!(!config.production_ready);
         assert!(config.owner_lease_seconds > 0);
         assert!(config.max_scope_pages > 0);
-        assert!(config.runtime_heartbeat < Duration::from_secs(config.runtime_lease_seconds as u64));
+        assert!(
+            config.runtime_heartbeat < Duration::from_secs(config.runtime_lease_seconds as u64)
+        );
+    }
+
+    #[test]
+    fn runtime_heartbeat_is_bounded_by_half_the_lease() {
+        assert_eq!(
+            safe_runtime_heartbeat(10, Duration::from_secs(30)),
+            Duration::from_secs(5)
+        );
+        assert_eq!(
+            safe_runtime_heartbeat(60, Duration::from_secs(15)),
+            Duration::from_secs(15)
+        );
     }
 }

@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use agistack_adapters_postgres::{
-    AutomationRuntimeScope, CronControlScope, CronSchedulerLease, PgCronAutomationRuntimeRepository,
-    PgCronControlRepository, PgCronOperationRepository, PgCronScheduleFireRepository,
-    PgCronScheduleRepository, PgCronSchedulerOwnerRepository, PgHitlRequestRepository, PgPool,
+    AutomationRuntimeScope, CronControlScope, CronSchedulerLease,
+    PgCronAutomationRuntimeRepository, PgCronControlRepository, PgCronOperationRepository,
+    PgCronScheduleFireRepository, PgCronScheduleRepository, PgCronSchedulerOwnerRepository,
+    PgHitlRequestRepository, PgPool,
 };
 use agistack_core::ports::{CoreError, CoreResult};
 use agistack_core::ReActEngine;
@@ -12,20 +13,20 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
 use super::config::CronSchedulerConfig;
-use super::runner::{CronScheduler, CronSchedulerDriver, CronScopeControlReport, SharedCronScheduler};
+use super::runner::{
+    CronScheduler, CronSchedulerDriver, CronScopeControlReport, SharedCronScheduler,
+};
 use crate::cron_automation_runtime::{
     CronAutomationRuntimeWorker, ExecuteRunDispatchHandler, ReActAutomationRunExecutor,
     UuidConversationIdFactory,
 };
 use crate::cron_schedule_fire::CronScheduleFireCoordinator;
 use crate::cron_schedule_reconcile::ReconcileScheduleHandler;
-use crate::cron_scheduler_ownership::{
-    CronSchedulerLeaseStore, CronSchedulerOwnershipStore,
-};
+use crate::cron_scheduler_ownership::{CronSchedulerLeaseStore, CronSchedulerOwnershipStore};
 use crate::cron_tool_authority::RegistryAutomationToolHostFactory;
 use crate::cron_worker::{
-    CronOperationHandler, CronOperationStore, CronOperationWorker, CronWorkerClock, CronWorkerScope,
-    UtcCronWorkerClock,
+    CronOperationHandler, CronOperationStore, CronOperationWorker, CronWorkerClock,
+    CronWorkerScope, UtcCronWorkerClock,
 };
 
 pub(crate) fn build_pg_cron_scheduler(
@@ -172,4 +173,3 @@ impl CronSchedulerDriver for PgCronSchedulerDriver {
             .map_err(|_| CoreError::Storage("cron automation runtime storage failed".to_string()))
     }
 }
-

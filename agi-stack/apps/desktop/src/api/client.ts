@@ -70,6 +70,12 @@ export class DesktopApiError extends Error {
   }
 }
 
+export function isLegacyWorkspaceContextRouteMissing(error: unknown): boolean {
+  if (!(error instanceof DesktopApiError) || error.status !== 404) return false;
+  if (typeof error.payload !== 'object' || error.payload === null) return false;
+  return (error.payload as { detail?: unknown }).detail === 'Not Found';
+}
+
 export class DesktopApiClient {
   private readonly config: DesktopRuntimeConfig;
 

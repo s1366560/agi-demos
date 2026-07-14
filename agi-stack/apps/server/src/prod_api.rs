@@ -891,6 +891,7 @@ mod unit {
             tenant_webhooks,
             project_schema,
             cron_jobs,
+            cron_scheduler: None,
             data_stats,
             deploys,
             subagent_templates,
