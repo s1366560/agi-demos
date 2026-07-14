@@ -46,6 +46,7 @@ const testFiles = [
   'session-decision-model.test.mjs',
   'session-evidence-model.test.mjs',
   'session-artifact-model.test.mjs',
+  'settings-entry-routing.test.mjs',
   'provider-management.test.mjs',
   'use-agent-socket.test.mjs',
   'use-terminal-proxy.test.mjs',

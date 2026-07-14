@@ -149,6 +149,10 @@ import {
 } from './features/session/sessionScope';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
+import {
+  settingsSectionForEntry,
+  type SettingsEntry,
+} from './features/settings/settingsEntryRouting';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
 import { StatusPanel } from './features/status/StatusPanel';
 import { NewTaskFlow, type NewTaskSession } from './features/task/NewTaskFlow';
@@ -4175,12 +4179,19 @@ export function App() {
     applySectionSideEffects(section);
   };
 
+  const openSettingsEntry = (entry: SettingsEntry) => {
+    setSettingsInitialSection(settingsSectionForEntry(entry));
+    setSettingsWindowOpen(true);
+  };
+
+  const openSidebarSettings = () => openSettingsEntry('sidebar');
+  const openWorkspaceSettings = () => openSettingsEntry('workspace_overview');
+
   const openConnectionSettings = () => {
     if (!showRuntimeConfig) {
       useApiKeyManually();
     }
-    setSettingsInitialSection('connection');
-    setSettingsWindowOpen(true);
+    openSettingsEntry('runtime_connection');
   };
 
   const applySettingsContext = async (tenantId: string, projectId: string) => {
@@ -4538,7 +4549,7 @@ export function App() {
           }
           selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
         }}
-        onOpenSettings={openConnectionSettings}
+        onOpenSettings={openWorkspaceSettings}
       />
     );
   };
@@ -5193,7 +5204,7 @@ export function App() {
             onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
             onSelectConversation={selectConversation}
             onNewTask={startNewSession}
-            onOpenSettings={openConnectionSettings}
+            onOpenSettings={openSidebarSettings}
             onSignOut={() => void logout()}
           />
           <aside className="copilot-sidebar">
