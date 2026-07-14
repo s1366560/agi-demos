@@ -47,6 +47,8 @@ import {
 import { ComposerControls } from './ComposerControls';
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
+import { chatComposerPresentation } from './chatComposerModel';
+import type { ChatComposerVariant } from './chatComposerModel';
 
 type ChatPanelProps = {
   messages: WorkspaceMessage[];
@@ -55,6 +57,7 @@ type ChatPanelProps = {
   workflowCounts?: Partial<Record<ChatWorkflowTarget, number | string>>;
   sessionTitle: string;
   scopeLabel: string;
+  composerVariant?: ChatComposerVariant;
   input: string;
   sending: boolean;
   disabledReason: string | null;
@@ -80,7 +83,6 @@ type ChatPanelProps = {
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
   onRuntimeTargetChange?: (value: string) => void;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
-  onOpenUsagePlan: () => void;
 };
 
 export type ChatWorkflowTarget = 'changes' | 'pull' | 'plan' | 'background' | 'artifacts';
@@ -107,6 +109,7 @@ export function ChatPanel({
   workflowCounts,
   sessionTitle,
   scopeLabel,
+  composerVariant = 'workspace',
   input,
   sending,
   disabledReason,
@@ -132,11 +135,11 @@ export function ChatPanel({
   onWorkflowSelect,
   onRuntimeTargetChange,
   onOpenCommands,
-  onOpenUsagePlan,
 }: ChatPanelProps) {
   const { t } = useI18n();
   const disabled = Boolean(disabledReason);
   const canSend = !disabled && !sending && Boolean(input.trim());
+  const composerPresentation = chatComposerPresentation(composerVariant);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const timelineWindowRef = useRef<{ firstId: string; lastId: string; count: number } | null>(null);
@@ -363,11 +366,13 @@ export function ChatPanel({
           handleSend();
         }}
       >
-        <ChatWorkflowStrip
-          activeTarget={activeWorkflowTarget}
-          workflowCounts={workflowCounts}
-          onSelect={onWorkflowSelect}
-        />
+        {composerPresentation.showWorkflowStrip ? (
+          <ChatWorkflowStrip
+            activeTarget={activeWorkflowTarget}
+            workflowCounts={workflowCounts}
+            onSelect={onWorkflowSelect}
+          />
+        ) : null}
         {runInputsLoading || runInputsError || queuedRunInputs.length ? (
           <section className="run-input-queue" aria-label={t('session.queueHandoffRegion')}>
             <div className="run-input-queue-header">
@@ -468,7 +473,9 @@ export function ChatPanel({
           onChange={(event) => onInputChange(event.target.value)}
           placeholder={
             disabledReason ??
-            'Describe a task to run autonomously. Type / for commands, @ for files, or # for issues...'
+            (composerPresentation.placeholderKey
+              ? t(composerPresentation.placeholderKey)
+              : 'Describe a task to run autonomously. Type / for commands, @ for files, or # for issues...')
           }
           onKeyDown={(event) => {
             if (
@@ -481,16 +488,26 @@ export function ChatPanel({
             }
           }}
         />
-        <Flex align="center" justify="between" className="chat-composer-footer">
-          <button
-            className="composer-slash-button"
-            type="button"
-            aria-label="Slash commands"
-            title="Slash commands"
-            onClick={(event) => onOpenCommands(event.currentTarget)}
-          >
-            /
-          </button>
+        <Flex
+          align="center"
+          justify={
+            composerVariant === 'session' && runInputDeliveryOptions.length === 0
+              ? 'end'
+              : 'between'
+          }
+          className="chat-composer-footer"
+        >
+          {composerPresentation.showCommands ? (
+            <button
+              className="composer-slash-button"
+              type="button"
+              aria-label="Slash commands"
+              title="Slash commands"
+              onClick={(event) => onOpenCommands(event.currentTarget)}
+            >
+              /
+            </button>
+          ) : null}
           {runInputDeliveryOptions.length ? (
             <div className="composer-delivery-switch" aria-label={t('session.deliveryMode')}>
               {runInputDeliveryOptions.map((delivery) => (
@@ -508,24 +525,28 @@ export function ChatPanel({
               ))}
             </div>
           ) : null}
-          <ComposerControls
-            disabledHint={disabledReason}
-            modelLabel={modelLabel ?? t('settings.notConfigured')}
-            runtimeTargetLabel={runtimeTargetLabel}
-            runtimeTargetOptions={runtimeTargetOptions}
-            onRuntimeTargetChange={onRuntimeTargetChange}
-          />
-          <Flex align="center" gap="2" className="composer-right-actions">
-            <button
-              className={`composer-status-button composer-status-dot ${
-                disabledReason ? 'is-blocked' : 'is-connected'
-              }`}
-              type="button"
-              aria-label={disabledReason ?? 'AI credits quota: 100% used'}
-              aria-haspopup="dialog"
-              title={disabledReason ?? 'AI credits quota: 100% used'}
-              onClick={onOpenUsagePlan}
+          {composerPresentation.showRuntimeControls &&
+          runtimeTargetLabel &&
+          runtimeTargetOptions?.length &&
+          onRuntimeTargetChange ? (
+            <ComposerControls
+              disabledHint={disabledReason}
+              modelLabel={modelLabel}
+              runtimeTargetLabel={runtimeTargetLabel}
+              runtimeTargetOptions={runtimeTargetOptions}
+              onRuntimeTargetChange={onRuntimeTargetChange}
             />
+          ) : null}
+          <Flex align="center" gap="2" className="composer-right-actions">
+            {composerPresentation.showRuntimeStatus ? (
+              <span
+                className={`composer-status-button composer-status-dot ${
+                  disabledReason ? 'is-blocked' : 'is-connected'
+                }`}
+                aria-label={disabledReason ?? t('session.runtimeAvailable')}
+                title={disabledReason ?? t('session.runtimeAvailable')}
+              />
+            ) : null}
             <Button
               size="2"
               color="green"

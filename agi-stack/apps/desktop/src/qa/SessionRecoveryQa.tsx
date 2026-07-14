@@ -77,6 +77,7 @@ function SessionRecoveryQa() {
         <main>
           <SessionWorkspace
             viewModel={viewModel}
+            evidence={{ artifacts: 1, changedFiles: 4, checks: 18 }}
             runActionPending={null}
             liveConnected={false}
             liveError="Runtime heartbeat expired"

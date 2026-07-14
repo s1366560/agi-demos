@@ -1966,6 +1966,10 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   border-radius: 7px;
 }
 
+.review-panel-session {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .review-panel.maximized {
   position: absolute;
   z-index: 8;

@@ -166,6 +166,7 @@ function SessionSteeringQa() {
               workflowCounts={{ changes: 2, plan: 'ready' }}
               sessionTitle="Conversation"
               scopeLabel="Current run narrative"
+              composerVariant="session"
               input={input}
               sending={false}
               disabledReason={null}
@@ -201,7 +202,6 @@ function SessionSteeringQa() {
               onWorkflowSelect={() => undefined}
               onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
-              onOpenUsagePlan={() => undefined}
             />
             <SessionChangesCanvas
               snapshot={snapshot}

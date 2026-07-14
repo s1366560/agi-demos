@@ -175,7 +175,6 @@ function isNewerAuthoritativeRun(candidate: DesktopRun, current: DesktopRun): bo
 
 export function buildSessionDetailViewModel({
   conversation,
-  config,
   workspace,
   timeline,
   tasks,
@@ -185,6 +184,7 @@ export function buildSessionDetailViewModel({
   const runMetadata = recordValue(metadata.run);
   const agentConfig = recordValue(conversation.agent_config);
   const explicitStage = stringValue(runMetadata.stage) ?? stringValue(metadata.stage);
+  const explicitStatus = stringValue(runMetadata.status);
   const explicitMode =
     stringValue(metadata.capability_mode) ?? stringValue(agentConfig.capability_mode);
   const executionMode = stringValue(conversation.current_mode);
@@ -201,7 +201,7 @@ export function buildSessionDetailViewModel({
     id: conversation.id,
     title: conversation.title || 'Untitled session',
     workspaceLabel: workspace?.name ?? workspace?.title ?? workspace?.id ?? 'Workspace unavailable',
-    status: conversation.status || 'unavailable',
+    status: explicitStatus && runStatuses.has(explicitStatus) ? explicitStatus : 'unavailable',
     capabilityMode: capabilityModes.has(explicitMode ?? '')
       ? (explicitMode as SessionCapabilityMode)
       : 'unavailable',
@@ -211,10 +211,9 @@ export function buildSessionDetailViewModel({
     environmentLabel:
       stringValue(environment.label) ??
       stringValue(environment.kind) ??
-      (config.mode === 'local' ? 'Local runtime' : 'Cloud runtime'),
+      'Environment unavailable',
     branchLabel: stringValue(environment.branch) ?? stringValue(metadata.branch),
-    modelLabel:
-      stringValue(agentConfig.model) ?? (config.llmModel.trim() || 'Model unavailable'),
+    modelLabel: stringValue(agentConfig.model) ?? 'Model unavailable',
     permissionLabel:
       stringValue(runMetadata.permission_profile) ??
       stringValue(runMetadata.permission_policy) ??

@@ -58,6 +58,7 @@ test('session view model reads explicit mode, stage, environment, permission, an
       agent_config: { model: 'claude-sonnet-4.5', capability_mode: 'code' },
       metadata: {
         run: {
+          status: 'running',
           stage: 'verify',
           permission_policy: 'ask',
           elapsed_seconds: 1458,
@@ -75,6 +76,7 @@ test('session view model reads explicit mode, stage, environment, permission, an
   });
 
   assert.equal(view.capabilityMode, 'code');
+  assert.equal(view.status, 'running');
   assert.equal(view.executionMode, 'build');
   assert.equal(view.stage, 'verify');
   assert.equal(view.environmentLabel, 'Worktree · agistack/environment-1');
@@ -97,8 +99,11 @@ test('session view model does not infer subjective mode or stage from the title 
   });
 
   assert.equal(view.capabilityMode, 'unavailable');
+  assert.equal(view.status, 'unavailable');
   assert.equal(view.executionMode, 'unavailable');
   assert.equal(view.stage, 'unavailable');
+  assert.equal(view.environmentLabel, 'Environment unavailable');
+  assert.equal(view.modelLabel, 'Model unavailable');
   assert.equal(view.permissionLabel, 'Permission policy unavailable');
   assert.equal(view.elapsedLabel, 'Elapsed unavailable');
   assert.equal(view.usageLabel, 'Usage unavailable');

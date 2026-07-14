@@ -1,13 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertDialog, Badge, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
   CheckCircledIcon,
   ClockIcon,
   CodeIcon,
-  ColumnsIcon,
   CommitIcon,
-  Cross1Icon,
   DesktopIcon,
   ExclamationTriangleIcon,
   PauseIcon,
@@ -19,6 +17,17 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import {
+  SessionInspector,
+  type SessionInspectorEvidence,
+} from './SessionInspector';
+import type { SessionCanvasTabId } from './sessionCanvasModel';
+import {
+  nextSessionSurface,
+  sessionSurfacePanes,
+  type SessionSurface,
+} from './sessionLayoutModel';
+import type { SessionCanvasControls } from './workspaceReviewPanelModel';
 import {
   sessionRecoveryPresentation,
   sessionStatusPresentation,
@@ -32,8 +41,9 @@ import './SessionWorkspace.css';
 type SessionWorkspaceProps = {
   viewModel: SessionDetailViewModel;
   thread: ReactNode;
-  canvas: ReactNode | null;
-  onOpenCanvas: () => void;
+  canvas: ReactNode | ((controls: SessionCanvasControls) => ReactNode) | null;
+  evidence: SessionInspectorEvidence;
+  onOpenCanvas: (tab?: SessionCanvasTabId) => void;
   onCloseCanvas: () => void;
   runActionPending: SessionRunAction | null;
   liveConnected: boolean;
@@ -48,12 +58,11 @@ const stageLabels: Array<{ id: Exclude<SessionStage, 'unavailable'>; label: stri
   { id: 'review', label: 'session.stageReview' },
 ];
 
-type SessionSurface = 'thread' | 'split' | 'canvas';
-
 export function SessionWorkspace({
   viewModel,
   thread,
   canvas,
+  evidence,
   onOpenCanvas,
   onCloseCanvas,
   runActionPending,
@@ -63,18 +72,30 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const { t } = useI18n();
   const hasCanvas = Boolean(canvas);
-  const [surface, setSurface] = useState<SessionSurface>('thread');
+  const [surface, setSurface] = useState<SessionSurface>('conversation');
   const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [recoveryConfirmOpen, setRecoveryConfirmOpen] = useState(false);
+  const canvasTriggerRef = useRef<string | null>(null);
   const statusPresentation = sessionStatusPresentation(viewModel.status);
   const runActions = sessionRunActions(viewModel.status);
   const reattachPresentation = sessionRecoveryPresentation('reconnect');
   const forkPresentation = sessionRecoveryPresentation('fork');
   const actionDisabled = runActionPending !== null || viewModel.runRevision === null;
 
+  const panes = sessionSurfacePanes(surface, hasCanvas);
+  const showStatusBanner =
+    statusPresentation !== null &&
+    (surface !== 'conversation' || statusPresentation.tone !== 'attention');
+
   useEffect(() => {
-    setSurface('thread');
+    setSurface((current) => nextSessionSurface(current, 'select_session'));
+  }, [viewModel.id]);
+
+  useEffect(() => {
+    if (!hasCanvas) {
+      setSurface((current) => nextSessionSurface(current, 'close_canvas'));
+    }
   }, [hasCanvas]);
 
   useEffect(() => {
@@ -84,9 +105,47 @@ export function SessionWorkspace({
     }
   }, [viewModel.status]);
 
+  const openCanvas = (tab?: SessionCanvasTabId) => {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      canvasTriggerRef.current =
+        document.activeElement.dataset.sessionCanvasTrigger ?? canvasTriggerRef.current;
+    }
+    setSurface((current) => nextSessionSurface(current, 'open_canvas'));
+    onOpenCanvas(tab);
+  };
+
+  const closeCanvas = () => {
+    const triggerId = canvasTriggerRef.current;
+    setSurface((current) => nextSessionSurface(current, 'close_canvas'));
+    onCloseCanvas();
+    if (triggerId && typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const triggers = document.querySelectorAll<HTMLButtonElement>(
+          '[data-session-canvas-trigger]',
+        );
+        for (const trigger of triggers) {
+          if (trigger.dataset.sessionCanvasTrigger !== triggerId) continue;
+          trigger.focus();
+          break;
+        }
+      });
+    }
+  };
+
+  const canvasControls: SessionCanvasControls = {
+    layout: surface === 'canvas' ? 'focus' : 'split',
+    onLayoutChange: (layout) => {
+      setSurface((current) =>
+        nextSessionSurface(current, layout === 'focus' ? 'focus_canvas' : 'show_split'),
+      );
+    },
+    onClose: closeCanvas,
+  };
+  const canvasContent = typeof canvas === 'function' ? canvas(canvasControls) : canvas;
+
   return (
     <section
-      className={`session-workspace-shell ${statusPresentation ? 'has-status-banner' : ''}`}
+      className={`session-workspace-shell ${showStatusBanner ? 'has-status-banner' : ''}`}
       aria-label={t('session.detail')}
     >
       <header className="session-workspace-header">
@@ -130,6 +189,23 @@ export function SessionWorkspace({
         ) : null}
 
         <div className="session-workspace-actions">
+          <div className="session-workspace-header-runtime">
+            {viewModel.environmentLabel !== 'Environment unavailable' ? (
+              <span title={viewModel.environmentLabel}>
+                <DesktopIcon /> {viewModel.environmentLabel}
+              </span>
+            ) : null}
+            {viewModel.branchLabel ? (
+              <span title={viewModel.branchLabel}>
+                <CodeIcon /> {viewModel.branchLabel}
+              </span>
+            ) : null}
+            {viewModel.elapsedLabel !== 'Elapsed unavailable' ? (
+              <span>
+                <ClockIcon /> {viewModel.elapsedLabel}
+              </span>
+            ) : null}
+          </div>
           {runActions.includes('pause') ? (
             <Button
               size="2"
@@ -257,75 +333,10 @@ export function SessionWorkspace({
               {runActionPending === 'cancel' ? t('session.stopping') : t('session.stopRun')}
             </Button>
           ) : null}
-          {!canvas ? (
-            <Button size="2" variant="surface" onClick={onOpenCanvas}>
-              <ReaderIcon /> {t('session.openCanvas')}
-            </Button>
-          ) : null}
         </div>
       </header>
 
-      <div className="session-workspace-context" aria-label={t('session.runContext')}>
-        <span title={viewModel.environmentLabel}>
-          <DesktopIcon /> {viewModel.environmentLabel}
-        </span>
-        {viewModel.branchLabel ? (
-          <span title={viewModel.branchLabel}>
-            <CodeIcon /> {viewModel.branchLabel}
-          </span>
-        ) : null}
-        {viewModel.permissionLabel !== 'Permission policy unavailable' ? (
-          <span title={viewModel.permissionLabel}>{viewModel.permissionLabel}</span>
-        ) : null}
-        {viewModel.modelLabel !== 'Model unavailable' ? (
-          <span title={viewModel.modelLabel}>{viewModel.modelLabel}</span>
-        ) : null}
-        {viewModel.elapsedLabel !== 'Elapsed unavailable' ? <span>{viewModel.elapsedLabel}</span> : null}
-        {viewModel.usageLabel !== 'Usage unavailable' ? <span>{viewModel.usageLabel}</span> : null}
-        {viewModel.taskCount ? (
-          <span>{t('session.taskCount', { count: viewModel.taskCount })}</span>
-        ) : null}
-        {viewModel.eventCount ? (
-          <span>{t('session.eventCount', { count: viewModel.eventCount })}</span>
-        ) : null}
-        <span
-          className={liveConnected ? 'session-live-connected' : 'session-live-reconnecting'}
-          title={liveError ?? undefined}
-        >
-          <i aria-hidden />
-          {liveConnected ? t('session.liveConnected') : t('session.liveReconnecting')}
-        </span>
-        {hasCanvas ? (
-          <div className="session-surface-switcher" role="group" aria-label={t('session.layout')}>
-            <button
-              type="button"
-              className={surface === 'thread' ? 'active' : ''}
-              aria-pressed={surface === 'thread'}
-              onClick={() => setSurface('thread')}
-            >
-              <ActivityLogIcon /> {t('session.conversation')}
-            </button>
-            <button
-              type="button"
-              className={surface === 'split' ? 'active' : ''}
-              aria-pressed={surface === 'split'}
-              onClick={() => setSurface('split')}
-            >
-              <ColumnsIcon /> {t('session.splitView')}
-            </button>
-            <button
-              type="button"
-              className={surface === 'canvas' ? 'active' : ''}
-              aria-pressed={surface === 'canvas'}
-              onClick={() => setSurface('canvas')}
-            >
-              <ReaderIcon /> {t('session.inspector')}
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      {statusPresentation ? (
+      {showStatusBanner && statusPresentation ? (
         <div
           className={`session-workspace-status-banner tone-${statusPresentation.tone}`}
           role={statusPresentation.tone === 'danger' ? 'alert' : 'status'}
@@ -406,29 +417,37 @@ export function SessionWorkspace({
         </div>
       ) : null}
 
-      <div className={`session-workspace-body surface-${surface} ${canvas ? '' : 'canvas-closed'}`}>
-        <section className="session-workspace-thread" aria-label={t('session.thread')}>
-          <div className="session-pane-label">
-            <span><ActivityLogIcon /> {t('session.thread')}</span>
-            <small>{t('session.threadDescription')}</small>
-          </div>
-          {thread}
-        </section>
-        {canvas ? (
-          <aside className="session-workspace-canvas" aria-label={t('session.canvas')}>
+      <div className={`session-workspace-body surface-${surface}`}>
+        {panes.thread ? (
+          <section className="session-workspace-thread" aria-label={t('session.thread')}>
             <div className="session-pane-label">
-              <span><ReaderIcon /> {t('session.inspector')}</span>
-              <small>{t('session.canvasDescription')}</small>
-              <button
-                type="button"
-                aria-label={t('session.closeInspector')}
-                title={t('session.closeInspector')}
-                onClick={onCloseCanvas}
-              >
-                <Cross1Icon />
-              </button>
+              <span>
+                <ActivityLogIcon /> {t('session.thread')}
+              </span>
+              <em title={liveError ?? undefined}>
+                {liveConnected ? t('session.live') : t('session.liveReconnecting')}
+              </em>
+              {surface === 'conversation' ? (
+                <button
+                  type="button"
+                  data-session-canvas-trigger="default"
+                  aria-label={t('session.openCanvas')}
+                  title={t('session.openCanvas')}
+                  onClick={() => openCanvas()}
+                >
+                  <ReaderIcon />
+                </button>
+              ) : null}
             </div>
-            {canvas}
+            {thread}
+          </section>
+        ) : null}
+        {panes.inspector ? (
+          <SessionInspector viewModel={viewModel} evidence={evidence} onOpenCanvas={openCanvas} />
+        ) : null}
+        {panes.canvas && canvasContent ? (
+          <aside className="session-workspace-canvas" aria-label={t('session.canvas')}>
+            {canvasContent}
           </aside>
         ) : null}
       </div>
@@ -439,6 +458,7 @@ export function SessionWorkspace({
 function statusLabel(status: string, t: (key: string) => string): string {
   const normalized = status.trim().toLowerCase();
   const labels: Record<string, string> = {
+    unavailable: 'session.notAvailable',
     active: 'session.statusActive',
     queued: 'session.statusQueued',
     running: 'session.statusRunning',

@@ -137,6 +137,12 @@ import {
   type SessionRunAction,
 } from './features/session/sessionViewModel';
 import {
+  visibleWorkspaceReviewTabs,
+  workspaceReviewPanelChrome,
+  type SessionCanvasControls,
+  type WorkspaceReviewPanelVariant,
+} from './features/session/workspaceReviewPanelModel';
+import {
   planForConversation,
   socketEventBelongsToConversation,
   taskBelongsToConversation,
@@ -2182,39 +2188,23 @@ export function App() {
       setError(null);
       try {
         await api.respondToHitl(submission);
-        setConversationTimeline((current) => ({
-          ...current,
-          items: current.items.map((item) => {
-            const payload = asRecordValue(item.payload);
-            const itemRequestId =
-              item.requestId ??
-              (typeof item.request_id === 'string' ? item.request_id : undefined) ??
-              (payload ? readStringField(payload, 'request_id') : undefined);
-            return itemRequestId === submission.requestId
-              ? { ...item, answered: true, ...submission.responseData }
-              : item;
-          }),
-          approvalRequests: current.approvalRequests.map((request) =>
-            request.id === submission.requestId
-              ? {
-                  ...request,
-                  status: 'responded',
-                  responded_at: new Date().toISOString(),
-                  response_data: submission.responseData,
-                  response_actor: 'local_user',
-                  response_revision: submission.expectedRevision,
-                  idempotency_key: submission.idempotencyKey,
-                }
-              : request,
-          ),
-        }));
+        const conversation = agentConversationSession?.conversation;
+        if (conversation) {
+          await loadConversationTimeline(conversation, config.projectId);
+        }
       } catch (caught) {
         const message = formatConnectionError(caught, config.apiBaseUrl);
         setError(message);
         throw new Error(message, { cause: caught });
       }
     },
-    [api, config.apiBaseUrl],
+    [
+      agentConversationSession?.conversation,
+      api,
+      config.apiBaseUrl,
+      config.projectId,
+      loadConversationTimeline,
+    ],
   );
 
   const openCommandPalette = useCallback((trigger?: HTMLElement | null) => {
@@ -3501,6 +3491,16 @@ export function App() {
     () => authoritativeRunFromConversation(selectedConversation),
     [selectedConversation],
   );
+  const sessionInspectorEvidence = useMemo(() => {
+    const artifactVersions = conversationTimeline.artifactVersions;
+    const artifacts = currentArtifactVersions(artifactVersions);
+    const checks = artifactEvidenceForCurrentVersions(artifactVersions, 'checks');
+    return {
+      artifacts: artifacts.length,
+      changedFiles: changeSnapshot?.status === 'ready' ? changeSnapshot.files_changed : null,
+      checks: artifacts.length && !checks.missing.length ? checks.rows.length : null,
+    };
+  }, [changeSnapshot, conversationTimeline.artifactVersions]);
   currentArtifactRunRef.current = currentArtifactRun;
   const currentTerminalRunScopeKey = terminalRunScopeKey(currentArtifactRun);
   if (terminalRunScopeKeyRef.current !== currentTerminalRunScopeKey) {
@@ -4356,10 +4356,6 @@ export function App() {
     selectWorkflowTarget('pull');
   };
 
-  const openUsagePlan = () => {
-    switchSection('settings');
-  };
-
   const openOtherApps = () => {
     openCommandPalette();
   };
@@ -4480,6 +4476,7 @@ export function App() {
           ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
           : 'Workspace conversation'
       }
+      composerVariant={selectedConversation ? 'session' : 'workspace'}
       input={chatInput}
       sending={sending}
       disabledReason={sessionChatDisabledReason}
@@ -4513,7 +4510,6 @@ export function App() {
         setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local')
       }
       onOpenCommands={openCommandPalette}
-      onOpenUsagePlan={openUsagePlan}
     />
   );
 
@@ -4658,7 +4654,11 @@ export function App() {
     />
   );
 
-  const renderWorkspaceReviewPanel = (stage = false) => (
+  const renderWorkspaceReviewPanel = (
+    stage = false,
+    variant: WorkspaceReviewPanelVariant = 'workspace',
+    sessionControls?: SessionCanvasControls,
+  ) => (
     <WorkspaceReviewPanel
       activeTab={reviewTab}
       dataset={scopedConversation ? sessionDataset : activeDataset}
@@ -4703,6 +4703,8 @@ export function App() {
           : () => setReviewPanelOpen(false)
       }
       stage={stage}
+      variant={variant}
+      sessionControls={sessionControls}
     />
   );
 
@@ -5438,8 +5440,16 @@ export function App() {
               <SessionWorkspace
                 viewModel={sessionDetailViewModel}
                 thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
-                canvas={showReviewPanel ? renderWorkspaceReviewPanel() : null}
-                onOpenCanvas={() => setReviewPanelOpen(true)}
+                canvas={
+                  showReviewPanel
+                    ? (controls) => renderWorkspaceReviewPanel(false, 'session', controls)
+                    : null
+                }
+                evidence={sessionInspectorEvidence}
+                onOpenCanvas={(tab) => {
+                  if (tab) setReviewTab(tab);
+                  setReviewPanelOpen(true);
+                }}
                 onCloseCanvas={() => setReviewPanelOpen(false)}
                 runActionPending={sessionRunActionPending}
                 liveConnected={socket.connected}
@@ -6165,6 +6175,8 @@ function WorkspaceReviewPanel({
   onTabChange,
   onClose,
   stage = false,
+  variant = 'workspace',
+  sessionControls,
 }: {
   activeTab: ReviewTab;
   dataset: RuntimeDataset;
@@ -6204,6 +6216,8 @@ function WorkspaceReviewPanel({
   onTabChange: (tab: ReviewTab) => void;
   onClose: () => void;
   stage?: boolean;
+  variant?: WorkspaceReviewPanelVariant;
+  sessionControls?: SessionCanvasControls;
 }) {
   const { t } = useI18n();
   const [showMoreTabs, setShowMoreTabs] = useState(false);
@@ -6214,6 +6228,7 @@ function WorkspaceReviewPanel({
   const moreTabsMenuRef = useRef<HTMLDivElement>(null);
   const addTabButtonRef = useRef<HTMLButtonElement>(null);
   const addTabMenuRef = useRef<HTMLDivElement>(null);
+  const sessionTabListRef = useRef<HTMLElement>(null);
   const planRows = dataset.plan ? buildPlanDisplayRows(dataset.plan) : [];
   const workspaceEvents = useMemo(() => buildWorkspaceEvents(socketEvents), [socketEvents]);
   const invocationLedger = useMemo(
@@ -6256,7 +6271,31 @@ function WorkspaceReviewPanel({
     [artifacts, dataset, reviewDecision, workspaceEvents],
   );
   const configuredCanvasTabs = useMemo(() => sessionCanvasTabs(capabilityMode), [capabilityMode]);
-  const tabValue = (tab: SessionCanvasTabId): string => {
+  const chrome = workspaceReviewPanelChrome(variant, Boolean(sessionControls));
+  const tabValue = (tab: SessionCanvasTabId): string | undefined => {
+    if (variant === 'session') {
+      if (tab === 'changes' && changeSnapshot?.status === 'ready') {
+        return `+${changeSnapshot.additions} / −${changeSnapshot.deletions}`;
+      }
+      if (tab === 'activity' && invocationSummary.total) return `${invocationSummary.total}`;
+      if (tab === 'checks' || tab === 'verification') {
+        const failed = checkEvidence.rows.filter((row) => {
+          const status = row.status?.toLowerCase();
+          return status === 'failed' || status === 'error';
+        }).length;
+        if (failed) return `${failed} ${t('session.failedShort')}`;
+        if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
+        return checkEvidence.missing.length ? t('session.evidence.missing') : undefined;
+      }
+      if (tab === 'artifacts' && artifactVersions.length) {
+        return `${currentArtifactVersions(artifactVersions).length}`;
+      }
+      if (tab === 'sources') {
+        if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
+        return sourceEvidence.missing.length ? t('session.evidence.missing') : undefined;
+      }
+      return undefined;
+    }
     if (tab === 'overview') return sessionViewModel?.status ?? 'idle';
     if (tab === 'changes') {
       return changeSnapshot?.status === 'ready'
@@ -6304,7 +6343,7 @@ function WorkspaceReviewPanel({
   const overflowReviewTabs: Array<{
     tab: ReviewTab;
     label: string;
-    value: string;
+    value?: string;
   }> = configuredCanvasTabs.secondary.map((tab) => ({
     tab: tab.id,
     label: t(tab.labelKey),
@@ -6313,7 +6352,7 @@ function WorkspaceReviewPanel({
   const moreTabs: Array<{
     tab: ReviewTab;
     label: string;
-    value: string;
+    value?: string;
   }> = overflowReviewTabs;
   const addableTabs: Array<{
     tab: ReviewTab;
@@ -6327,19 +6366,18 @@ function WorkspaceReviewPanel({
   const panelClassName = [
     'review-panel',
     stage ? 'review-panel-stage' : '',
+    variant === 'session' ? 'review-panel-session' : '',
     panelMode === 'fullscreen' ? 'full-screen' : '',
     panelMode === 'maximized' ? 'maximized' : '',
   ]
     .filter(Boolean)
     .join(' ');
-  const pinnedReviewTabs = reviewTabs.slice(0, 4);
-  const activeReviewTab = [...reviewTabs, ...overflowReviewTabs].find(
-    ({ tab }) => tab === activeTab,
+  const visibleReviewTabs = visibleWorkspaceReviewTabs(
+    variant,
+    reviewTabs,
+    overflowReviewTabs,
+    activeTab,
   );
-  const visibleReviewTabs =
-    activeReviewTab && !pinnedReviewTabs.some(({ tab }) => tab === activeReviewTab.tab)
-      ? [...reviewTabs.slice(0, 3), activeReviewTab]
-      : pinnedReviewTabs;
 
   const selectTab = (tab: ReviewTab) => {
     onTabChange(tab);
@@ -6362,6 +6400,16 @@ function WorkspaceReviewPanel({
       onTabChange(configuredCanvasTabs.primary[0]?.id ?? 'plan');
     }
   }, [activeTab, configuredCanvasTabs, onTabChange]);
+
+  useEffect(() => {
+    if (variant !== 'session') return;
+    const frame = window.requestAnimationFrame(() => {
+      sessionTabListRef.current
+        ?.querySelector<HTMLButtonElement>('.review-tab.selected')
+        ?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [variant]);
 
   useEffect(() => {
     if (!showMoreTabs) return;
@@ -6417,35 +6465,37 @@ function WorkspaceReviewPanel({
 
   return (
     <aside className={panelClassName} aria-label="Workspace review panel">
-      <header className="review-head">
-        <div>
-          <Heading as="h2" size="3">
-            Workspace
-          </Heading>
-          <Text size="1" color="gray">
-            Review changes, pull requests, plans, background agents, artifacts, and terminal output.
-          </Text>
-        </div>
-        <div className="review-head-actions">
-          <Badge color={connection === 'ready' ? 'green' : 'gray'} variant="soft">
-            {connection}
-          </Badge>
-          <Tooltip content="Close workspace panel">
-            <IconButton
-              size="1"
-              variant="ghost"
-              color="gray"
-              aria-label="Close drawer"
-              onClick={onClose}
-            >
-              <Cross2Icon />
-            </IconButton>
-          </Tooltip>
-        </div>
-      </header>
+      {chrome.showHeader ? (
+        <header className="review-head">
+          <div>
+            <Heading as="h2" size="3">
+              Workspace
+            </Heading>
+            <Text size="1" color="gray">
+              Review changes, pull requests, plans, background agents, artifacts, and terminal output.
+            </Text>
+          </div>
+          <div className="review-head-actions">
+            <Badge color={connection === 'ready' ? 'green' : 'gray'} variant="soft">
+              {connection}
+            </Badge>
+            <Tooltip content="Close workspace panel">
+              <IconButton
+                size="1"
+                variant="ghost"
+                color="gray"
+                aria-label="Close drawer"
+                onClick={onClose}
+              >
+                <Cross2Icon />
+              </IconButton>
+            </Tooltip>
+          </div>
+        </header>
+      ) : null}
 
       <div className="review-tabs" aria-label="Workspace tabs">
-        <nav className="review-tab-scroll">
+        <nav className="review-tab-scroll" ref={sessionTabListRef}>
           {visibleReviewTabs.map(({ tab, label, value }) => (
             <button
               className={`review-tab ${activeTab === tab ? 'selected' : ''}`}
@@ -6459,73 +6509,131 @@ function WorkspaceReviewPanel({
             </button>
           ))}
         </nav>
-        <div className="review-tab-actions" aria-label="Workspace tab actions">
-          <Tooltip content="More tabs">
-            <IconButton
-              ref={moreTabsButtonRef}
-              size="1"
-              variant="ghost"
-              color="gray"
-              aria-label="More tabs"
-              aria-controls={showMoreTabs ? 'workspace-more-tabs-menu' : undefined}
-              aria-expanded={showMoreTabs}
-              aria-haspopup="menu"
-              onClick={() => {
-                setShowAddTabs(false);
-                setShowMoreTabs((open) => !open);
-              }}
-            >
-              <DotsHorizontalIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="Add tab">
-            <IconButton
-              ref={addTabButtonRef}
-              size="1"
-              variant="ghost"
-              color="gray"
-              aria-label="Add workspace tab"
-              aria-controls={showAddTabs ? 'workspace-add-tabs-menu' : undefined}
-              aria-expanded={showAddTabs}
-              aria-haspopup="menu"
-              onClick={() => {
-                setShowMoreTabs(false);
-                setShowAddTabs((open) => !open);
-              }}
-            >
-              <PlusIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content={panelMode === 'fullscreen' ? 'Exit full screen' : 'Enter full screen'}>
-            <IconButton
-              size="1"
-              variant="ghost"
-              color={panelMode === 'fullscreen' ? 'cyan' : 'gray'}
-              aria-label={panelMode === 'fullscreen' ? 'Exit full screen' : 'Enter full screen'}
-              aria-pressed={panelMode === 'fullscreen'}
-              onClick={() =>
-                setPanelMode((mode) => (mode === 'fullscreen' ? 'normal' : 'fullscreen'))
-              }
-            >
-              {panelMode === 'fullscreen' ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}
-            </IconButton>
-          </Tooltip>
-          <Tooltip content={panelMode === 'maximized' ? 'Restore panel' : 'Maximize panel'}>
-            <IconButton
-              size="1"
-              variant="ghost"
-              color={panelMode === 'maximized' ? 'cyan' : 'gray'}
-              aria-label={panelMode === 'maximized' ? 'Restore panel' : 'Maximize panel'}
-              aria-pressed={panelMode === 'maximized'}
-              onClick={() =>
-                setPanelMode((mode) => (mode === 'maximized' ? 'normal' : 'maximized'))
-              }
-            >
-              <FrameIcon />
-            </IconButton>
-          </Tooltip>
-        </div>
-        {showMoreTabs ? (
+        {chrome.showOverflowMenus || chrome.showPanelModeActions || sessionControls ? (
+          <div className="review-tab-actions" aria-label="Workspace tab actions">
+            {chrome.showOverflowMenus ? (
+              <Tooltip content="More tabs">
+                <IconButton
+                  ref={moreTabsButtonRef}
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label="More tabs"
+                  aria-controls={showMoreTabs ? 'workspace-more-tabs-menu' : undefined}
+                  aria-expanded={showMoreTabs}
+                  aria-haspopup="menu"
+                  onClick={() => {
+                    setShowAddTabs(false);
+                    setShowMoreTabs((open) => !open);
+                  }}
+                >
+                  <DotsHorizontalIcon />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {chrome.showOverflowMenus ? (
+              <Tooltip content="Add tab">
+                <IconButton
+                  ref={addTabButtonRef}
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label="Add workspace tab"
+                  aria-controls={showAddTabs ? 'workspace-add-tabs-menu' : undefined}
+                  aria-expanded={showAddTabs}
+                  aria-haspopup="menu"
+                  onClick={() => {
+                    setShowMoreTabs(false);
+                    setShowAddTabs((open) => !open);
+                  }}
+                >
+                  <PlusIcon />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {chrome.showPanelModeActions ? (
+              <Tooltip
+                content={panelMode === 'fullscreen' ? 'Exit full screen' : 'Enter full screen'}
+              >
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color={panelMode === 'fullscreen' ? 'cyan' : 'gray'}
+                  aria-label={
+                    panelMode === 'fullscreen' ? 'Exit full screen' : 'Enter full screen'
+                  }
+                  aria-pressed={panelMode === 'fullscreen'}
+                  onClick={() =>
+                    setPanelMode((mode) => (mode === 'fullscreen' ? 'normal' : 'fullscreen'))
+                  }
+                >
+                  {panelMode === 'fullscreen' ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {chrome.showPanelModeActions ? (
+              <Tooltip content={panelMode === 'maximized' ? 'Restore panel' : 'Maximize panel'}>
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color={panelMode === 'maximized' ? 'cyan' : 'gray'}
+                  aria-label={panelMode === 'maximized' ? 'Restore panel' : 'Maximize panel'}
+                  aria-pressed={panelMode === 'maximized'}
+                  onClick={() =>
+                    setPanelMode((mode) => (mode === 'maximized' ? 'normal' : 'maximized'))
+                  }
+                >
+                  <FrameIcon />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {chrome.showSessionLayoutActions && sessionControls ? (
+              <Tooltip
+                content={
+                  sessionControls.layout === 'focus'
+                    ? t('session.splitView')
+                    : t('session.focusCanvas')
+                }
+              >
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label={
+                    sessionControls.layout === 'focus'
+                      ? t('session.splitView')
+                      : t('session.focusCanvas')
+                  }
+                  onClick={() =>
+                    sessionControls.onLayoutChange(
+                      sessionControls.layout === 'focus' ? 'split' : 'focus',
+                    )
+                  }
+                >
+                  {sessionControls.layout === 'focus' ? (
+                    <ColumnsIcon />
+                  ) : (
+                    <EnterFullScreenIcon />
+                  )}
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {chrome.showSessionLayoutActions && sessionControls ? (
+              <Tooltip content={t('session.closeCanvas')}>
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label={t('session.closeCanvas')}
+                  onClick={sessionControls.onClose}
+                >
+                  <Cross2Icon />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+          </div>
+        ) : null}
+        {chrome.showOverflowMenus && showMoreTabs ? (
           <div
             className="review-tab-menu"
             id="workspace-more-tabs-menu"
@@ -6538,17 +6646,17 @@ function WorkspaceReviewPanel({
                 type="button"
                 role="menuitemradio"
                 aria-checked={activeTab === tab}
-                aria-label={`Open ${label} workspace tab, ${value}`}
+                aria-label={`Open ${label} workspace tab${value ? `, ${value}` : ''}`}
                 key={tab}
                 onClick={() => selectTab(tab)}
               >
                 <span>{label}</span>
-                <em>{value}</em>
+                {value ? <em>{value}</em> : null}
               </button>
             ))}
           </div>
         ) : null}
-        {showAddTabs ? (
+        {chrome.showOverflowMenus && showAddTabs ? (
           <div
             className="review-tab-menu review-add-tab-menu"
             id="workspace-add-tabs-menu"
@@ -6688,7 +6796,7 @@ function WorkspaceReviewPanel({
           />
         ) : null}
 
-        {activeTab === 'pull' ? (
+        {variant !== 'session' && activeTab === 'pull' ? (
           <PullRequestReviewPanel
             summary={pullRequestSummary}
             onOpenChanges={() => selectTab('changes')}
