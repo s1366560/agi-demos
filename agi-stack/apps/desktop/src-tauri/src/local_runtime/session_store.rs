@@ -392,6 +392,25 @@ impl DesktopSessionStore {
             .map_err(|error| error.to_string())
     }
 
+    pub(super) fn workspace_tenant_id(&self, workspace_id: &str) -> Result<Option<String>, String> {
+        let value_json = self
+            .connection()?
+            .query_row(
+                "SELECT value_json FROM desktop_workspaces WHERE id = ?1",
+                [workspace_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        value_json
+            .map(|raw| {
+                let workspace: Value =
+                    serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+                required_string(&workspace, "tenant_id")
+            })
+            .transpose()
+    }
+
     pub(super) fn workspace_execution_snapshot(
         &self,
         workspace_id: &str,

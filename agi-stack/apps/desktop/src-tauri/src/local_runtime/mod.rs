@@ -38,7 +38,7 @@ use axum::{
 use chrono::{Duration as ChronoDuration, Utc};
 use futures_util::{SinkExt, StreamExt};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use tokio::{
     net::TcpListener,
@@ -658,13 +658,9 @@ impl LocalRuntimeState {
         let _ = self.events.send(item);
     }
 
-    fn append_workspace_message(&self, workspace_id: &str, message: Value) {
-        if let Err(error) = self
-            .session_store
+    fn append_workspace_message(&self, workspace_id: &str, message: Value) -> Result<(), String> {
+        self.session_store
             .append_workspace_message(workspace_id, &message)
-        {
-            eprintln!("failed to persist local workspace message: {error}");
-        }
     }
 
     fn publish_run_status(&self, run: &DesktopRun) {
@@ -1548,6 +1544,27 @@ fn ensure_active_workspace(
     authenticated: &AuthenticatedContext,
     workspace_id: &str,
 ) -> Result<(), (StatusCode, Json<Value>)> {
+    ensure_workspace_scope(
+        state,
+        authenticated,
+        &authenticated.workspace.tenant_id,
+        &authenticated.workspace.project_id,
+        workspace_id,
+    )
+}
+
+fn ensure_workspace_scope(
+    state: &LocalRuntimeState,
+    authenticated: &AuthenticatedContext,
+    tenant_id: &str,
+    project_id: &str,
+    workspace_id: &str,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    if tenant_id != authenticated.workspace.tenant_id {
+        return Err(active_workspace_scope_error());
+    }
+    ensure_active_project(authenticated, project_id)?;
+
     let project_id = state
         .session_store
         .workspace_project_id(workspace_id)
@@ -1558,7 +1575,22 @@ fn ensure_active_workspace(
                 Json(json!({ "detail": "workspace not found" })),
             )
         })?;
-    ensure_active_project(authenticated, &project_id)
+    let tenant_id = state
+        .session_store
+        .workspace_tenant_id(workspace_id)
+        .map_err(local_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "detail": "workspace not found" })),
+            )
+        })?;
+    if project_id != authenticated.workspace.project_id
+        || tenant_id != authenticated.workspace.tenant_id
+    {
+        return Err(active_workspace_scope_error());
+    }
+    Ok(())
 }
 
 fn execution_environment_error(error: String) -> (StatusCode, Json<Value>) {
@@ -2679,8 +2711,16 @@ async fn create_workspace(
 
 async fn list_workspace_messages(
     State(state): State<Arc<LocalRuntimeState>>,
-    Path((_tenant_id, _project_id, workspace_id)): Path<(String, String, String)>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
 ) -> LocalJsonResult {
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        &tenant_id,
+        &project_id,
+        &workspace_id,
+    )?;
     let messages = state
         .session_store
         .list_workspace_messages(&workspace_id)
@@ -2697,12 +2737,20 @@ struct WorkspaceMessageBody {
 
 async fn create_workspace_message(
     State(state): State<Arc<LocalRuntimeState>>,
-    Path((_tenant_id, _project_id, workspace_id)): Path<(String, String, String)>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
     Json(body): Json<WorkspaceMessageBody>,
-) -> Json<Value> {
+) -> LocalJsonResult {
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        &tenant_id,
+        &project_id,
+        &workspace_id,
+    )?;
     let message = json!({
         "id": format!("local-message-{}", Uuid::new_v4()),
-        "workspace_id": workspace_id,
+        "workspace_id": &workspace_id,
         "parent_message_id": body.parent_message_id,
         "sender_type": "human",
         "sender_id": "local-user",
@@ -2711,11 +2759,10 @@ async fn create_workspace_message(
         "created_at": now_iso(),
         "metadata": { "runtime": "local" },
     });
-    state.append_workspace_message(
-        message["workspace_id"].as_str().unwrap_or_default(),
-        message.clone(),
-    );
-    Json(message)
+    state
+        .append_workspace_message(&workspace_id, message.clone())
+        .map_err(local_store_error)?;
+    Ok(Json(message))
 }
 
 async fn list_tasks(
@@ -2853,9 +2900,52 @@ async fn create_conversation(
     Ok(Json(value))
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+enum WorkspaceIdPatch {
+    #[default]
+    Missing,
+    Null,
+    Value(String),
+}
+
+impl<'de> Deserialize<'de> for WorkspaceIdPatch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct WorkspaceIdPatchVisitor;
+
+        impl<'de> Visitor<'de> for WorkspaceIdPatchVisitor {
+            type Value = WorkspaceIdPatch;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a workspace ID string or null")
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E> {
+                Ok(WorkspaceIdPatch::Null)
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E> {
+                Ok(WorkspaceIdPatch::Null)
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                String::deserialize(deserializer).map(WorkspaceIdPatch::Value)
+            }
+        }
+
+        deserializer.deserialize_option(WorkspaceIdPatchVisitor)
+    }
+}
+
 #[derive(Deserialize)]
 struct ConversationModeBody {
-    workspace_id: Option<String>,
+    #[serde(default)]
+    workspace_id: WorkspaceIdPatch,
     capability_mode: Option<ConversationCapabilityMode>,
 }
 
@@ -2867,10 +2957,14 @@ async fn update_conversation_mode(
 ) -> LocalJsonResult {
     let value = {
         let mut conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-        if let Some(workspace_id) = body.workspace_id.as_deref() {
-            ensure_active_workspace(&state, &authenticated, workspace_id)?;
+        match body.workspace_id {
+            WorkspaceIdPatch::Missing => {}
+            WorkspaceIdPatch::Null => conversation.workspace_id = None,
+            WorkspaceIdPatch::Value(workspace_id) => {
+                ensure_active_workspace(&state, &authenticated, &workspace_id)?;
+                conversation.workspace_id = Some(workspace_id);
+            }
         }
-        conversation.workspace_id = body.workspace_id;
         if let Some(capability_mode) = body.capability_mode {
             conversation.capability_mode = capability_mode;
         }
@@ -6330,6 +6424,112 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workspace_message_routes_require_full_path_and_active_workspace_scope() {
+        let state = test_state("workspace-message-scope-secret");
+        state
+            .session_store
+            .insert_workspace(&json!({
+                "id": "foreign-tenant-workspace",
+                "tenant_id": "foreign-tenant",
+                "project_id": "local-project",
+                "name": "Foreign tenant workspace",
+            }))
+            .expect("insert foreign tenant workspace");
+        state
+            .session_store
+            .insert_workspace(&json!({
+                "id": "foreign-project-workspace",
+                "tenant_id": "local",
+                "project_id": "foreign-project",
+                "name": "Foreign project workspace",
+            }))
+            .expect("insert foreign project workspace");
+        let app = local_router(Arc::clone(&state));
+
+        let wrong_tenant_path = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/tenants/foreign-tenant/projects/local-project/workspaces/local-workspace/messages",
+                "workspace-message-scope-secret",
+                json!({}),
+            ))
+            .await
+            .expect("wrong tenant path response");
+        assert_eq!(wrong_tenant_path.status(), StatusCode::FORBIDDEN);
+
+        let wrong_project_path = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/foreign-project/workspaces/local-workspace/messages",
+                "workspace-message-scope-secret",
+                json!({ "content": "must be rejected" }),
+            ))
+            .await
+            .expect("wrong project path response");
+        assert_eq!(wrong_project_path.status(), StatusCode::FORBIDDEN);
+
+        let foreign_tenant_workspace = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/tenants/local/projects/local-project/workspaces/foreign-tenant-workspace/messages",
+                "workspace-message-scope-secret",
+                json!({}),
+            ))
+            .await
+            .expect("foreign tenant workspace response");
+        assert_eq!(foreign_tenant_workspace.status(), StatusCode::FORBIDDEN);
+
+        let foreign_project_workspace = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/workspaces/foreign-project-workspace/messages",
+                "workspace-message-scope-secret",
+                json!({ "content": "must not persist" }),
+            ))
+            .await
+            .expect("foreign project workspace response");
+        assert_eq!(foreign_project_workspace.status(), StatusCode::FORBIDDEN);
+        assert!(state
+            .session_store
+            .list_workspace_messages("foreign-project-workspace")
+            .expect("list rejected workspace messages")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn workspace_message_create_propagates_persistence_failure() {
+        let state = test_state("workspace-message-store-secret");
+        {
+            let connection = state
+                .session_store
+                .connection()
+                .expect("desktop session connection");
+            connection
+                .execute("DROP TABLE desktop_workspace_messages", [])
+                .expect("drop workspace message table");
+        }
+
+        let response = local_router(state)
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/workspaces/local-workspace/messages",
+                "workspace-message-store-secret",
+                json!({ "content": "cannot persist" }),
+            ))
+            .await
+            .expect("workspace message persistence response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            response_json(response).await,
+            json!({ "detail": "desktop session store unavailable" })
+        );
+    }
+
+    #[tokio::test]
     async fn plan_mode_tool_host_allows_inspection_and_rejects_workspace_mutation() {
         let root = test_root();
         std::fs::create_dir_all(&root).expect("create test root");
@@ -6966,6 +7166,65 @@ mod tests {
             .expect("stored conversation");
         assert_eq!(stored.capability_mode, ConversationCapabilityMode::Code);
         assert_eq!(stored.workspace_id.as_deref(), Some("local-workspace"));
+    }
+
+    #[tokio::test]
+    async fn conversation_mode_patch_distinguishes_missing_null_and_value_workspace_id() {
+        let state = test_state("conversation-mode-patch-secret");
+        let conversation = LocalConversation {
+            id: "conversation-mode-patch".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Patch workspace linkage".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Work,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        let app = local_router(Arc::clone(&state));
+
+        let capability_only = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                "/api/v1/agent/conversations/conversation-mode-patch/mode",
+                "conversation-mode-patch-secret",
+                json!({ "capability_mode": "code" }),
+            ))
+            .await
+            .expect("capability-only patch response");
+        assert_eq!(capability_only.status(), StatusCode::OK);
+        let capability_only_payload = response_json(capability_only).await;
+        assert_eq!(capability_only_payload["workspace_id"], "local-workspace");
+        assert_eq!(
+            capability_only_payload["agent_config"]["capability_mode"],
+            "code"
+        );
+
+        let clear_workspace = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                "/api/v1/agent/conversations/conversation-mode-patch/mode",
+                "conversation-mode-patch-secret",
+                json!({ "workspace_id": null }),
+            ))
+            .await
+            .expect("clear workspace patch response");
+        assert_eq!(clear_workspace.status(), StatusCode::OK);
+        assert!(response_json(clear_workspace).await["workspace_id"].is_null());
+
+        let stored = state
+            .session_store
+            .conversation("conversation-mode-patch")
+            .expect("load patched conversation")
+            .expect("patched conversation");
+        assert_eq!(stored.capability_mode, ConversationCapabilityMode::Code);
+        assert!(stored.workspace_id.is_none());
     }
 
     #[test]
