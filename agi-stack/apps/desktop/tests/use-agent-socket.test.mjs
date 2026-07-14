@@ -10,6 +10,7 @@ const {
   reconnectDelay,
   resetAgentSocketContextState,
   socketEventKey,
+  socketEventsSince,
 } = require('/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js');
 
 test('buildHitlSocketMessage preserves the backend WebSocket contract', () => {
@@ -63,6 +64,19 @@ test('socketEventKey and reconnectDelay support replay dedupe and bounded backof
   );
   assert.equal(reconnectDelay(0), 500);
   assert.equal(reconnectDelay(8), 15_000);
+});
+
+test('socketEventsSince returns every coalesced event once in arrival order', () => {
+  const oldest = { event_id: 'event-1' };
+  const middle = { event_id: 'event-2' };
+  const newest = { event_id: 'event-3' };
+  const events = [newest, middle, oldest];
+
+  assert.deepEqual(socketEventsSince(events, null), [oldest, middle, newest]);
+  assert.deepEqual(socketEventsSince(events, oldest), [middle, newest]);
+  assert.deepEqual(socketEventsSince(events, newest), []);
+  assert.deepEqual(socketEventsSince(events, { event_id: 'evicted' }), [oldest, middle, newest]);
+  assert.deepEqual(socketEventsSince([], newest), []);
 });
 
 test('workspace context changes clear every replay and subscription cursor', () => {

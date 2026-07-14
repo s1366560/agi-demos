@@ -3,16 +3,16 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+const clientModule = require(
+  '/tmp/agistack-desktop-test-dist/src/api/client.js'
+);
 const {
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
   DesktopApiError,
-  isLegacyConversationSessionRouteMissing,
   isLegacyWorkspaceContextRouteMissing,
-} = require(
-  '/tmp/agistack-desktop-test-dist/src/api/client.js'
-);
+} = clientModule;
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 test('workspace context requests preserve the authoritative revision contract', async () => {
@@ -93,7 +93,7 @@ test('workspace context compatibility fallback accepts only the legacy missing-r
   );
 });
 
-test('conversation session authority request preserves identity and only accepts legacy route absence', async () => {
+test('conversation session authority request preserves scoped identity without legacy fallback', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
@@ -124,32 +124,7 @@ test('conversation session authority request preserves identity and only accepts
     assert.deepEqual(calls, [
       'http://127.0.0.1:8088/api/v1/agent/conversations/conversation%2F1/session?tenant_id=tenant%2F1&project_id=project%2F1&workspace_id=workspace%2F1',
     ]);
-    assert.equal(
-      isLegacyConversationSessionRouteMissing(
-        new DesktopApiError('Not Found', 404, { detail: 'Not Found' }),
-      ),
-      true,
-    );
-    assert.equal(
-      isLegacyConversationSessionRouteMissing(
-        new DesktopApiError('conversation not found', 404, {
-          detail: 'conversation not found',
-        }),
-      ),
-      false,
-    );
-    assert.equal(
-      isLegacyConversationSessionRouteMissing(
-        new DesktopApiError('Not found', 404, { detail: 'Not found' }),
-      ),
-      true,
-    );
-    assert.equal(
-      isLegacyConversationSessionRouteMissing(
-        new DesktopApiError('Not Found', 403, { detail: 'Not Found' }),
-      ),
-      false,
-    );
+    assert.equal(clientModule.isLegacyConversationSessionRouteMissing, undefined);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -236,7 +236,6 @@ export type SessionProjectionLoadState =
       projection: ConversationSessionProjection;
       error: null;
     }
-  | { status: 'unsupported'; conversationId: string; projection: null; error: null }
   | { status: 'error'; conversationId: string; projection: null; error: string };
 
 export const emptySessionProjectionState: SessionProjectionLoadState = {

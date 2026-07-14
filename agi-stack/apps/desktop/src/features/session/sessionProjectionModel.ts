@@ -21,7 +21,10 @@ import { canonicalJsonSha256 } from './canonicalJsonDigest';
 import { decodeCloudConversationSessionProjection } from './cloudSessionProjectionModel';
 import { decodeDecisionContext } from './sessionDecisionContextDecoder';
 
-export { socketEventInvalidatesSessionProjection } from './sessionProjectionEvents';
+export {
+  socketEventInvalidatesSessionProjection,
+  socketEventInvalidatesSessionProjectionForScope,
+} from './sessionProjectionEvents';
 
 const runStatuses = new Set<DesktopRunStatus>([
   'queued',

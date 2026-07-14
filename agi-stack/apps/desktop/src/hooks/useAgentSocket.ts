@@ -409,6 +409,13 @@ export function socketEventKey(event: AgentWsEvent): string | null {
   return `cursor:${cursor.conversationId}:${cursor.timeUs}:${cursor.counter}`;
 }
 
+export function socketEventsSince<T>(events: readonly T[], previousHead: T | null): T[] {
+  if (!events.length) return [];
+  const boundaryIndex = previousHead === null ? -1 : events.indexOf(previousHead);
+  const fresh = events.slice(0, boundaryIndex < 0 ? events.length : boundaryIndex);
+  return fresh.reverse();
+}
+
 function parseEvent(data: unknown): AgentWsEvent {
   if (typeof data !== 'string') return { type: 'binary', payload: data };
   try {

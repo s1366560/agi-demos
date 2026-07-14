@@ -974,9 +974,6 @@ const enUS: Record<string, string> = {
   'session.authorityLoading': 'Loading authoritative session state…',
   'session.authorityLoadingDescription':
     'Messages remain available while run controls and review actions are verified.',
-  'session.authorityUnavailable': 'Authoritative session controls are unavailable on this runtime.',
-  'session.authorityUnavailableDescription':
-    'You can review the conversation, but this runtime cannot authorize session actions.',
   'session.authorityError': 'Session controls could not be verified.',
   'session.authorityErrorDescription':
     'Conversation history is still available. Retry before approving, steering, or delivering work.',
@@ -2274,8 +2271,6 @@ const zhCN: Record<string, string> = {
   'session.runControlUnavailable': '当前会话没有可控制的权威运行。',
   'session.authorityLoading': '正在加载会话权威状态…',
   'session.authorityLoadingDescription': '验证运行控制与审查操作期间，会话消息仍然可读。',
-  'session.authorityUnavailable': '当前运行时未提供会话权威控制。',
-  'session.authorityUnavailableDescription': '你仍可查看会话，但此运行时无法授权会话操作。',
   'session.authorityError': '无法验证会话控制状态。',
   'session.authorityErrorDescription': '会话历史仍然可读；批准、引导或交付前请重试。',
   'session.authorityRetry': '重试控制状态',

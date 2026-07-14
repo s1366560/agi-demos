@@ -9,6 +9,7 @@ const {
   filterMyWorkItems,
   myWorkConversationMatchesScope,
   myWorkItemKey,
+  myWorkRefreshScopeIsCurrent,
   socketEventInvalidatesMyWork,
 } = require('/tmp/agistack-desktop-test-dist/src/features/my-work/myWorkModel.js');
 
@@ -211,6 +212,20 @@ test('My Work refreshes only for structured run, HITL, and review state events',
   }
   assert.equal(socketEventInvalidatesMyWork({ type: 'text_delta' }), false);
   assert.equal(socketEventInvalidatesMyWork({ payload: { type: 'assistant_message' } }), false);
+});
+
+test('My Work scheduled refresh rejects a later context or request scope', () => {
+  const scheduled = { contextRevision: 4, scopeEpoch: 7 };
+
+  assert.equal(myWorkRefreshScopeIsCurrent(scheduled, scheduled), true);
+  assert.equal(
+    myWorkRefreshScopeIsCurrent(scheduled, { contextRevision: 5, scopeEpoch: 7 }),
+    false
+  );
+  assert.equal(
+    myWorkRefreshScopeIsCurrent(scheduled, { contextRevision: 4, scopeEpoch: 8 }),
+    false
+  );
 });
 
 test('My Work opens only the exact tenant, project, workspace, and conversation scope', () => {

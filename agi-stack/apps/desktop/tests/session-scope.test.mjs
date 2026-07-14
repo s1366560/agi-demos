@@ -7,6 +7,7 @@ const {
   planBelongsToConversation,
   planForConversation,
   socketEventBelongsToConversation,
+  socketEventMatchesSessionScope,
   taskBelongsToConversation,
 } = require('/tmp/agistack-desktop-test-dist/src/features/session/sessionScope.js');
 
@@ -26,6 +27,69 @@ test('session scope accepts only explicitly matching conversation events', () =>
     false,
   );
   assert.equal(socketEventBelongsToConversation({ type: 'heartbeat' }, 'conversation-1'), false);
+  assert.equal(
+    socketEventBelongsToConversation(
+      {
+        conversation_id: 'conversation-2',
+        payload: { data: { conversation_id: 'conversation-1' } },
+      },
+      'conversation-1',
+    ),
+    false,
+  );
+});
+
+test('session scope accepts workspace-only authority events only when explicitly allowed', () => {
+  const workspacePlanEvent = {
+    event_type: 'workspace_plan_updated',
+    workspace_id: 'workspace-1',
+    payload: { workspace_id: 'workspace-1' },
+  };
+
+  assert.equal(
+    socketEventMatchesSessionScope(
+      workspacePlanEvent,
+      { conversationId: 'conversation-1', workspaceId: 'workspace-1' },
+      true,
+    ),
+    true,
+  );
+  assert.equal(
+    socketEventMatchesSessionScope(
+      workspacePlanEvent,
+      { conversationId: 'conversation-1', workspaceId: 'workspace-2' },
+      true,
+    ),
+    false,
+  );
+  assert.equal(
+    socketEventMatchesSessionScope(
+      workspacePlanEvent,
+      { conversationId: 'conversation-1', workspaceId: 'workspace-1' },
+      false,
+    ),
+    false,
+  );
+  assert.equal(
+    socketEventMatchesSessionScope(
+      {
+        conversation_id: 'conversation-1',
+        workspace_id: 'workspace-1',
+        payload: { workspace_id: 'workspace-2' },
+      },
+      { conversationId: 'conversation-1', workspaceId: 'workspace-1' },
+      false,
+    ),
+    false,
+  );
+  assert.equal(
+    socketEventMatchesSessionScope(
+      { conversation_id: 'conversation-1' },
+      { conversationId: 'conversation-1', workspaceId: 'workspace-1' },
+      false,
+    ),
+    true,
+  );
 });
 
 test('session scope never attaches unscoped workspace tasks or plans', () => {

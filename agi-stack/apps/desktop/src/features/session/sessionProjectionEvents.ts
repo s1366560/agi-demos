@@ -1,3 +1,5 @@
+import { socketEventMatchesSessionScope } from './sessionScope';
+
 const sessionAuthorityEventTypes = new Set([
   'act',
   'observe',
@@ -31,24 +33,43 @@ const sessionAuthorityEventTypes = new Set([
   'task_execution_session_updated',
   'workspace_plan_updated',
 ]);
+const workspaceOnlyAuthorityEventTypes = new Set(['workspace_plan_updated']);
 
 export function socketEventInvalidatesSessionProjection(event: unknown): boolean {
+  return eventTypes(event).some((eventType) => sessionAuthorityEventTypes.has(eventType));
+}
+
+export function socketEventInvalidatesSessionProjectionForScope(
+  event: unknown,
+  scope: { conversationId: string; workspaceId: string | null },
+): boolean {
+  const types = eventTypes(event);
+  if (!types.some((eventType) => sessionAuthorityEventTypes.has(eventType))) return false;
+  return socketEventMatchesSessionScope(
+    event,
+    scope,
+    types.some((eventType) => workspaceOnlyAuthorityEventTypes.has(eventType)),
+  );
+}
+
+function eventTypes(event: unknown): string[] {
   const root = recordValue(event);
-  if (!root) return false;
+  if (!root) return [];
   const queue = [root];
   const seen = new Set<Record<string, unknown>>();
+  const types = new Set<string>();
   while (queue.length) {
     const current = queue.shift();
     if (!current || seen.has(current)) continue;
     seen.add(current);
     const eventType = nonEmptyString(current.event_type) ?? nonEmptyString(current.type);
-    if (eventType && sessionAuthorityEventTypes.has(eventType)) return true;
+    if (eventType) types.add(eventType);
     for (const key of ['payload', 'data']) {
       const nested = recordValue(current[key]);
       if (nested) queue.push(nested);
     }
   }
-  return false;
+  return [...types];
 }
 
 function recordValue(value: unknown): Record<string, unknown> | null {

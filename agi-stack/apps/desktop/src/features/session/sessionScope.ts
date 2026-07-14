@@ -11,13 +11,23 @@ export function socketEventBelongsToConversation(
   event: unknown,
   conversationId: string,
 ): boolean {
-  const record = asRecord(event);
-  if (!record) return false;
-  const payload = asRecord(record.payload) ?? asRecord(record.data);
-  const nested = payload ? asRecord(payload.data) : null;
-  return [record, payload, nested]
-    .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate))
-    .some((candidate) => conversationIdFromRecord(candidate) === conversationId);
+  return eventScopeState(event, ['conversation_id', 'conversationId'], conversationId) === 'match';
+}
+
+export function socketEventMatchesSessionScope(
+  event: unknown,
+  scope: { conversationId: string; workspaceId: string | null },
+  allowWorkspaceOnly: boolean,
+): boolean {
+  const conversation = eventScopeState(
+    event,
+    ['conversation_id', 'conversationId'],
+    scope.conversationId,
+  );
+  const workspace = eventScopeState(event, ['workspace_id', 'workspaceId'], scope.workspaceId);
+  if (conversation === 'conflict' || workspace === 'conflict') return false;
+  if (conversation === 'match') return true;
+  return allowWorkspaceOnly && workspace === 'match';
 }
 
 export function taskBelongsToConversation(
@@ -94,6 +104,43 @@ function conversationPlanRecord(
 function conversationIdFromRecord(record: Record<string, unknown>): string | null {
   const value = record.conversation_id ?? record.conversationId;
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+type EventScopeState = 'absent' | 'match' | 'conflict';
+
+function eventScopeState(
+  event: unknown,
+  keys: readonly string[],
+  expected: string | null,
+): EventScopeState {
+  const values = new Set<string>();
+  for (const record of eventRecords(event)) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) values.add(value.trim());
+    }
+  }
+  if (!values.size) return 'absent';
+  return expected !== null && values.size === 1 && values.has(expected) ? 'match' : 'conflict';
+}
+
+function eventRecords(event: unknown): Record<string, unknown>[] {
+  const root = asRecord(event);
+  if (!root) return [];
+  const records: Record<string, unknown>[] = [];
+  const queue = [root];
+  const seen = new Set<Record<string, unknown>>();
+  while (queue.length) {
+    const record = queue.shift();
+    if (!record || seen.has(record)) continue;
+    seen.add(record);
+    records.push(record);
+    for (const key of ['payload', 'data']) {
+      const nested = asRecord(record[key]);
+      if (nested) queue.push(nested);
+    }
+  }
+  return records;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

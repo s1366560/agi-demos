@@ -60,7 +60,6 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
-  isLegacyConversationSessionRouteMissing,
   isLegacyWorkspaceContextRouteMissing,
 } from './api/client';
 import {
@@ -125,7 +124,7 @@ import {
 } from './features/session/sessionInvocationLedgerModel';
 import {
   decodeConversationSessionProjection,
-  socketEventInvalidatesSessionProjection,
+  socketEventInvalidatesSessionProjectionForScope,
 } from './features/session/sessionProjectionModel';
 import {
   emptySessionProjectionState,
@@ -153,11 +152,13 @@ import {
   type SessionCanvasControls,
   type WorkspaceReviewPanelVariant,
 } from './features/session/workspaceReviewPanelModel';
-import { socketEventBelongsToConversation } from './features/session/sessionScope';
+import { socketEventMatchesSessionScope } from './features/session/sessionScope';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
 import {
   myWorkConversationMatchesScope,
+  myWorkRefreshScopeIsCurrent,
   socketEventInvalidatesMyWork,
+  type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import {
@@ -177,12 +178,13 @@ import {
 } from './features/task/newTaskPlanModel';
 import { WorkspaceDock } from './features/workspace/WorkspaceDock';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
-import { useAgentSocket } from './hooks/useAgentSocket';
+import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
 import { useI18n } from './i18n';
 import type {
   AgentConversation,
   AgentTimelineItem,
+  AgentWsEvent,
   AuthState,
   ConnectionState,
   ConversationTimelineState,
@@ -1989,9 +1991,12 @@ export function App() {
   const timelineRequestRef = useRef(0);
   const sessionProjectionRequestRef = useRef(0);
   const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
+  const agentTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const sessionEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const myWorkRequestRef = useRef(0);
   const myWorkAbortRef = useRef<AbortController | null>(null);
   const myWorkRefreshTimerRef = useRef<number | null>(null);
+  const myWorkEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const contextRevisionRef = useRef(0);
   const configRef = useRef(config);
   const configScopeEpochRef = useRef(0);
@@ -2135,15 +2140,6 @@ export function App() {
       })
       .catch((caught) => {
         if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
-        if (isLegacyConversationSessionRouteMissing(caught)) {
-          setSessionProjectionState({
-            status: 'unsupported',
-            conversationId: scopedConversationId,
-            projection: null,
-            error: null,
-          });
-          return;
-        }
         setSessionProjectionState({
           status: 'error',
           conversationId: scopedConversationId,
@@ -2263,10 +2259,18 @@ export function App() {
     () =>
       scopedConversation
         ? socket.events.filter((event) =>
-            socketEventBelongsToConversation(event, scopedConversation.id),
+            socketEventMatchesSessionScope(
+              event,
+              {
+                conversationId: scopedConversation.id,
+                workspaceId:
+                  scopedConversation.workspace_id ?? (config.workspaceId.trim() || null),
+              },
+              false,
+            ),
           )
         : socket.events,
-    [scopedConversation, socket.events],
+    [config.workspaceId, scopedConversation, socket.events],
   );
   const workspaceArtifacts = useMemo(
     () =>
@@ -2651,55 +2655,59 @@ export function App() {
   }, [commandPaletteOpen]);
 
   useEffect(() => {
-    const update = agentTaskUpdateFromSocketEvent(socket.events[0]);
-    if (!update) return;
-    if (update.status === 'acknowledged' || update.status === 'failed') {
-      for (const [key, pending] of pendingNewTaskAgentTurnsRef.current) {
-        const resolution = newTaskAgentTurnResolution(
-          update,
-          pending.conversationId,
-          pending.messageId,
-        );
-        if (!resolution) continue;
-        window.clearTimeout(pending.timeoutId);
-        pendingNewTaskAgentTurnsRef.current.delete(key);
-        if (resolution === 'acknowledged') pending.resolve();
-        else pending.reject(new Error(update.detail));
-      }
-    }
-    setAgentTaskSignals((current) => {
-      const matchesConversation = (signal: AgentTaskSignal) =>
-        signal.conversationId === update.conversationId && signal.status !== 'failed';
-      const exactIndex = update.messageId
-        ? current.findIndex(
-            (signal) => matchesConversation(signal) && signal.messageId === update.messageId,
-          )
-        : -1;
-      let targetIndex = exactIndex;
-      if (targetIndex < 0) {
-        for (let index = current.length - 1; index >= 0; index -= 1) {
-          const signal = current[index];
-          if (signal && matchesConversation(signal)) {
-            targetIndex = index;
-            break;
-          }
+    const events = socketEventsSince(socket.events, agentTaskEventsHeadRef.current);
+    agentTaskEventsHeadRef.current = socket.events[0] ?? null;
+    for (const event of events) {
+      const update = agentTaskUpdateFromSocketEvent(event);
+      if (!update) continue;
+      if (update.status === 'acknowledged' || update.status === 'failed') {
+        for (const [key, pending] of pendingNewTaskAgentTurnsRef.current) {
+          const resolution = newTaskAgentTurnResolution(
+            update,
+            pending.conversationId,
+            pending.messageId,
+          );
+          if (!resolution) continue;
+          window.clearTimeout(pending.timeoutId);
+          pendingNewTaskAgentTurnsRef.current.delete(key);
+          if (resolution === 'acknowledged') pending.resolve();
+          else pending.reject(new Error(update.detail));
         }
       }
-
-      if (targetIndex < 0) return current;
-
-      return current.map((signal, index) =>
-        index === targetIndex
-          ? {
-              ...signal,
-              messageId: update.messageId ?? signal.messageId,
-              status: update.status,
-              detail: update.detail,
-              eventType: update.eventType,
+      setAgentTaskSignals((current) => {
+        const matchesConversation = (signal: AgentTaskSignal) =>
+          signal.conversationId === update.conversationId && signal.status !== 'failed';
+        const exactIndex = update.messageId
+          ? current.findIndex(
+              (signal) => matchesConversation(signal) && signal.messageId === update.messageId,
+            )
+          : -1;
+        let targetIndex = exactIndex;
+        if (targetIndex < 0) {
+          for (let index = current.length - 1; index >= 0; index -= 1) {
+            const signal = current[index];
+            if (signal && matchesConversation(signal)) {
+              targetIndex = index;
+              break;
             }
-          : signal,
-      );
-    });
+          }
+        }
+
+        if (targetIndex < 0) return current;
+
+        return current.map((signal, index) =>
+          index === targetIndex
+            ? {
+                ...signal,
+                messageId: update.messageId ?? signal.messageId,
+                status: update.status,
+                detail: update.detail,
+                eventType: update.eventType,
+              }
+            : signal,
+        );
+      });
+    }
   }, [socket.events]);
 
   useEffect(() => {
@@ -2712,28 +2720,37 @@ export function App() {
   }, [socket.connected, t]);
 
   useEffect(() => {
-    const latest = socket.events[0];
-    if (!latest || typeof latest !== 'object') return;
+    const events = socketEventsSince(socket.events, sessionEventsHeadRef.current);
+    sessionEventsHeadRef.current = socket.events[0] ?? null;
+    if (!events.length) return;
     const activeConversation = scopedConversation;
-    if (
-      !activeConversation ||
-      !socketEventBelongsToConversation(latest, activeConversation.id)
-    ) {
-      return;
+    if (!activeConversation) return;
+    const scope = {
+      conversationId: activeConversation.id,
+      workspaceId:
+        activeConversation.workspace_id ?? (config.workspaceId.trim() || null),
+    };
+    const timelineEvents = events.filter((event) =>
+      socketEventMatchesSessionScope(event, scope, false),
+    );
+    if (timelineEvents.length) {
+      setConversationTimeline((current) => {
+        if (current.conversationId !== activeConversation.id) return current;
+        let items = current.items;
+        for (const event of timelineEvents) items = mergeLiveTimelineEvent(items, event);
+        if (items === current.items) return current;
+        return {
+          ...current,
+          items,
+          firstCursor: timelineCursorFromFirst(items),
+          lastCursor: timelineCursorFromLast(items),
+        };
+      });
     }
-    setConversationTimeline((current) => {
-      if (current.conversationId !== activeConversation.id) return current;
-      const items = mergeLiveTimelineEvent(current.items, latest);
-      if (items === current.items) return current;
-      return {
-        ...current,
-        items,
-        firstCursor: timelineCursorFromFirst(items),
-        lastCursor: timelineCursorFromLast(items),
-      };
-    });
     if (
-      socketEventInvalidatesSessionProjection(latest) &&
+      events.some((event) =>
+        socketEventInvalidatesSessionProjectionForScope(event, scope),
+      ) &&
       sessionProjectionRefreshTimerRef.current === null
     ) {
       sessionProjectionRefreshTimerRef.current = window.setTimeout(() => {
@@ -2741,7 +2758,7 @@ export function App() {
         invalidateSessionAuthority();
       }, 150);
     }
-  }, [invalidateSessionAuthority, scopedConversation, socket.events]);
+  }, [config.workspaceId, invalidateSessionAuthority, scopedConversation, socket.events]);
 
   useEffect(
     () => () => {
@@ -3054,24 +3071,31 @@ export function App() {
     [auth.projects, auth.status, commitRuntimeConfig, config, syncLocalRuntimeConfig],
   );
 
-  const refreshMyWork = useCallback(async () => {
+  const refreshMyWork = useCallback(async (scheduledScope?: MyWorkRefreshScope) => {
     const projectId = config.projectId.trim();
     if (!projectId) return;
+    const expectedScope = scheduledScope ?? {
+      contextRevision: contextRevisionRef.current,
+      scopeEpoch: configScopeEpochRef.current,
+    };
+    const scopeIsCurrent = () =>
+      myWorkRefreshScopeIsCurrent(expectedScope, {
+        contextRevision: contextRevisionRef.current,
+        scopeEpoch: configScopeEpochRef.current,
+      });
+    if (!scopeIsCurrent()) return;
     const requestId = myWorkRequestRef.current + 1;
     myWorkRequestRef.current = requestId;
     myWorkAbortRef.current?.abort();
     const controller = new AbortController();
     myWorkAbortRef.current = controller;
-    const expectedContextRevision = contextRevisionRef.current;
-    const expectedScopeEpoch = configScopeEpochRef.current;
     setMyWorkRefreshing(true);
     try {
       const response = await api.listMyWork(projectId, controller.signal);
       if (
         controller.signal.aborted ||
         myWorkRequestRef.current !== requestId ||
-        !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
-        expectedScopeEpoch !== configScopeEpochRef.current
+        !scopeIsCurrent()
       ) {
         return;
       }
@@ -3084,8 +3108,7 @@ export function App() {
       if (
         controller.signal.aborted ||
         myWorkRequestRef.current !== requestId ||
-        !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
-        expectedScopeEpoch !== configScopeEpochRef.current
+        !scopeIsCurrent()
       ) {
         return;
       }
@@ -3102,14 +3125,19 @@ export function App() {
   }, [api, config.projectId]);
 
   useEffect(() => {
-    const latest = socket.events[0];
-    if (!socketEventInvalidatesMyWork(latest)) return;
+    const events = socketEventsSince(socket.events, myWorkEventsHeadRef.current);
+    myWorkEventsHeadRef.current = socket.events[0] ?? null;
+    if (!events.some((event) => socketEventInvalidatesMyWork(event))) return;
     if (myWorkRefreshTimerRef.current !== null) {
       window.clearTimeout(myWorkRefreshTimerRef.current);
     }
+    const scheduledScope: MyWorkRefreshScope = {
+      contextRevision: contextRevisionRef.current,
+      scopeEpoch: configScopeEpochRef.current,
+    };
     myWorkRefreshTimerRef.current = window.setTimeout(() => {
       myWorkRefreshTimerRef.current = null;
-      void refreshMyWork();
+      void refreshMyWork(scheduledScope);
     }, 180);
   }, [refreshMyWork, socket.events]);
 
@@ -3118,9 +3146,10 @@ export function App() {
       myWorkAbortRef.current?.abort();
       if (myWorkRefreshTimerRef.current !== null) {
         window.clearTimeout(myWorkRefreshTimerRef.current);
+        myWorkRefreshTimerRef.current = null;
       }
     },
-    [],
+    [refreshMyWork],
   );
 
   const login = async () => {
@@ -3994,16 +4023,14 @@ export function App() {
     (selectedConversation
       ? sessionProjectionState.status === 'idle' || sessionProjectionState.status === 'loading'
         ? t('session.authorityLoading')
-        : sessionProjectionState.status === 'unsupported'
-          ? t('session.authorityUnavailable')
-          : sessionProjectionState.status === 'error'
-            ? t('session.authorityError')
-            : !(
-                  sessionProjection?.capabilities.canSendMessage &&
-                  sessionProjection.capabilities.allowedActions.includes('send_message')
-                ) && !runInputDeliveryOptions.length
-              ? t('session.composerBlockedByRunState')
-              : null
+        : sessionProjectionState.status === 'error'
+          ? t('session.authorityError')
+          : !(
+                sessionProjection?.capabilities.canSendMessage &&
+                sessionProjection.capabilities.allowedActions.includes('send_message')
+              ) && !runInputDeliveryOptions.length
+            ? t('session.composerBlockedByRunState')
+            : null
       : null);
   const sessionAuthorityNotice = useMemo(() => {
     if (!selectedConversation || sessionProjectionState.status === 'ready') return null;
@@ -4015,14 +4042,6 @@ export function App() {
         tone: 'loading' as const,
         title: t('session.authorityLoading'),
         description: t('session.authorityLoadingDescription'),
-      };
-    }
-    if (sessionProjectionState.status === 'unsupported') {
-      return {
-        tone: 'warning' as const,
-        title: t('session.authorityUnavailable'),
-        description: t('session.authorityUnavailableDescription'),
-        actionLabel: t('automations.openConnection'),
       };
     }
     return {
@@ -5031,11 +5050,7 @@ export function App() {
       respondableHitlRequestIds={respondableHitlRequestIds}
       authorityNotice={sessionAuthorityNotice}
       onAuthorityAction={
-        sessionProjectionState.status === 'unsupported'
-          ? openConnectionSettings
-          : sessionProjectionState.status === 'error'
-            ? invalidateSessionAuthority
-            : undefined
+        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
       }
       onWorkflowSelect={selectChatWorkflowTarget}
       onRuntimeTargetChange={(value) =>
@@ -5247,11 +5262,7 @@ export function App() {
       sessionDataAvailable={!scopedConversation || displaySessionProjection !== null}
       authorityNotice={scopedConversation ? sessionAuthorityNotice : null}
       onAuthorityAction={
-        sessionProjectionState.status === 'unsupported'
-          ? openConnectionSettings
-          : sessionProjectionState.status === 'error'
-            ? invalidateSessionAuthority
-            : undefined
+        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
       }
       currentRunId={sessionDetailViewModel?.runId ?? null}
       sessionViewModel={sessionDetailViewModel}

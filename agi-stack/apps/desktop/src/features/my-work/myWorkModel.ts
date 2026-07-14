@@ -14,6 +14,11 @@ export const MY_WORK_GROUPS: MyWorkGroup[] = [
 
 export type MyWorkModeFilter = 'all' | AgentCapabilityMode;
 
+export type MyWorkRefreshScope = Readonly<{
+  contextRevision: number;
+  scopeEpoch: number;
+}>;
+
 export type MyWorkAuthorityPresentation = {
   sourceKey: string;
   descriptionKey: string;
@@ -175,6 +180,16 @@ export function socketEventInvalidatesMyWork(event: unknown): boolean {
     }
   }
   return false;
+}
+
+export function myWorkRefreshScopeIsCurrent(
+  expected: MyWorkRefreshScope,
+  current: MyWorkRefreshScope,
+): boolean {
+  return (
+    expected.contextRevision === current.contextRevision &&
+    expected.scopeEpoch === current.scopeEpoch
+  );
 }
 
 export function myWorkConversationMatchesScope(

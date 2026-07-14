@@ -4,9 +4,11 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { decodeConversationSessionProjection, socketEventInvalidatesSessionProjection } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/session/sessionProjectionModel.js'
-);
+const {
+  decodeConversationSessionProjection,
+  socketEventInvalidatesSessionProjection,
+  socketEventInvalidatesSessionProjectionForScope,
+} = require('/tmp/agistack-desktop-test-dist/src/features/session/sessionProjectionModel.js');
 
 function canonicalizeJson(value) {
   if (Array.isArray(value)) return value.map(canonicalizeJson);
@@ -762,4 +764,50 @@ test('session authority invalidation reads nested envelopes and ignores narrativ
   ]) {
     assert.equal(socketEventInvalidatesSessionProjection({ event_type: eventType }), true);
   }
+});
+
+test('session authority invalidation accepts exact workspace plan events and rejects conflicts', () => {
+  const scope = {
+    conversationId: 'conversation-1',
+    workspaceId: 'workspace-1',
+  };
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      {
+        event_type: 'workspace_plan_updated',
+        workspace_id: 'workspace-1',
+        payload: { workspace_id: 'workspace-1' },
+      },
+      scope,
+    ),
+    true,
+  );
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      {
+        event_type: 'workspace_plan_updated',
+        workspace_id: 'workspace-2',
+      },
+      scope,
+    ),
+    false,
+  );
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      {
+        event_type: 'task_updated',
+        conversation_id: 'conversation-2',
+        payload: { conversation_id: 'conversation-1' },
+      },
+      scope,
+    ),
+    false,
+  );
+  assert.equal(
+    socketEventInvalidatesSessionProjectionForScope(
+      { event_type: 'task_updated', workspace_id: 'workspace-1' },
+      scope,
+    ),
+    false,
+  );
 });
