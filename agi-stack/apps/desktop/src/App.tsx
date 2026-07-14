@@ -2099,7 +2099,15 @@ export function App() {
       error: null,
     });
     void api
-      .getConversationSession(scopedConversationId, controller.signal)
+      .getConversationSession(
+        scopedConversationId,
+        {
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+          workspaceId: config.workspaceId || null,
+        },
+        controller.signal,
+      )
       .then((payload) => {
         if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
         const projection = decodeConversationSessionProjection(payload, {

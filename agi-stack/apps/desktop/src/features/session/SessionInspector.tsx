@@ -74,33 +74,62 @@ export function SessionInspector({
 
       <section className="session-inspector-section session-inspector-run">
         <header>
-          <span>{t('session.runSnapshot')}</span>
+          <span>
+            {viewModel.executionAuthorityKind === 'workspace_attempt'
+              ? t('session.attemptSnapshot')
+              : t('session.runSnapshot')}
+          </span>
           <em data-status={viewModel.status}>{sessionStatusText(viewModel.status, t)}</em>
         </header>
-        <div className="session-inspector-progress">
-          <span>
-            <i style={{ width: stageProgress === null ? '0%' : `${stageProgress}%` }} />
-          </span>
-          <b>
-            {stageIndex < 0
-              ? t('session.notAvailable')
-              : `${stageIndex + 1} / ${stageOrder.length}`}
-          </b>
-        </div>
+        {viewModel.executionAuthorityKind === 'desktop_run' ? (
+          <div className="session-inspector-progress">
+            <span>
+              <i style={{ width: stageProgress === null ? '0%' : `${stageProgress}%` }} />
+            </span>
+            <b>
+              {stageIndex < 0
+                ? t('session.notAvailable')
+                : `${stageIndex + 1} / ${stageOrder.length}`}
+            </b>
+          </div>
+        ) : null}
         <dl>
-          <InspectorFact
-            label={t('session.currentStage')}
-            value={stageLabel(viewModel.stage, t)}
-          />
-          <InspectorFact
-            icon={<DesktopIcon />}
-            label={t('session.overviewEnvironment')}
-            value={availableValue(viewModel.environmentLabel, t)}
-          />
-          <InspectorFact
-            label={t('session.overviewPermission')}
-            value={availableValue(viewModel.permissionLabel, t)}
-          />
+          {viewModel.executionAuthorityKind === 'workspace_attempt' ? (
+            <>
+              <InspectorFact
+                label={t('session.attemptNumber')}
+                value={
+                  viewModel.attemptNumber === null
+                    ? t('session.notAvailable')
+                    : `#${viewModel.attemptNumber}`
+                }
+              />
+              <InspectorFact
+                label={t('session.workerAgent')}
+                value={availableValue(viewModel.workerAgentId, t)}
+              />
+              <InspectorFact
+                label={t('session.leaderAgent')}
+                value={availableValue(viewModel.leaderAgentId, t)}
+              />
+            </>
+          ) : (
+            <>
+              <InspectorFact
+                label={t('session.currentStage')}
+                value={stageLabel(viewModel.stage, t)}
+              />
+              <InspectorFact
+                icon={<DesktopIcon />}
+                label={t('session.overviewEnvironment')}
+                value={availableValue(viewModel.environmentLabel, t)}
+              />
+              <InspectorFact
+                label={t('session.overviewPermission')}
+                value={availableValue(viewModel.permissionLabel, t)}
+              />
+            </>
+          )}
           <InspectorFact
             label={t('session.overviewModel')}
             value={availableValue(viewModel.modelLabel, t)}

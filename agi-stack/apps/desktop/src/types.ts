@@ -251,6 +251,7 @@ export type PlanSnapshot = {
 };
 
 export type AgentPlanMode = 'plan' | 'build';
+export type AgentRuntimeMode = AgentPlanMode | 'explore';
 export type AgentCapabilityMode = 'work' | 'code';
 
 export type AgentPlanModeResponse = {
@@ -582,7 +583,7 @@ export type AgentConversation = {
   agent_config?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
   conversation_mode?: string | null;
-  current_mode?: AgentPlanMode | null;
+  current_mode?: AgentRuntimeMode | null;
   workspace_id?: string | null;
   linked_workspace_task_id?: string | null;
   workspace_name?: string | null;
@@ -836,14 +837,16 @@ export type DecisionContext = {
 export type DesktopApprovalRequest = {
   id: string;
   conversation_id: string;
+  message_id?: string | null;
   run_id?: string | null;
   run_revision?: number | null;
-  round: number;
-  kind: Exclude<HitlType, 'a2ui_action'>;
+  round?: number;
+  kind: HitlType;
   prompt: string;
   decision?: DecisionContext | null;
   status: 'pending' | 'responded';
   created_at: string;
+  expires_at?: string | null;
   responded_at?: string | null;
   response_data?: Record<string, unknown> | null;
   response_actor?: string | null;

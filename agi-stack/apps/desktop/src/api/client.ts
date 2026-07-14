@@ -156,10 +156,19 @@ export class DesktopApiClient {
     return this.request<WorkspaceContextResponse>('/api/v1/workspace-context', { signal });
   }
 
-  async getConversationSession(conversationId: string, signal?: AbortSignal): Promise<unknown> {
+  async getConversationSession(
+    conversationId: string,
+    scope: { tenantId: string; projectId: string; workspaceId?: string | null },
+    signal?: AbortSignal,
+  ): Promise<unknown> {
     const resolvedConversationId = requireValue(conversationId, 'conversation id');
+    const params = new URLSearchParams({
+      tenant_id: requireValue(scope.tenantId, 'tenant id'),
+      project_id: requireValue(scope.projectId, 'project id'),
+    });
+    if (scope.workspaceId) params.set('workspace_id', scope.workspaceId);
     return this.request<unknown>(
-      `/api/v1/agent/conversations/${encodeURIComponent(resolvedConversationId)}/session`,
+      `/api/v1/agent/conversations/${encodeURIComponent(resolvedConversationId)}/session?${params.toString()}`,
       { signal },
     );
   }

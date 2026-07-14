@@ -114,11 +114,15 @@ test('conversation session authority request preserves identity and only accepts
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
     });
-    const payload = await client.getConversationSession('conversation/1');
+    const payload = await client.getConversationSession('conversation/1', {
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      workspaceId: 'workspace/1',
+    });
 
     assert.equal(payload.snapshot_revision, 'snapshot-1');
     assert.deepEqual(calls, [
-      'http://127.0.0.1:8088/api/v1/agent/conversations/conversation%2F1/session',
+      'http://127.0.0.1:8088/api/v1/agent/conversations/conversation%2F1/session?tenant_id=tenant%2F1&project_id=project%2F1&workspace_id=workspace%2F1',
     ]);
     assert.equal(
       isLegacyConversationSessionRouteMissing(

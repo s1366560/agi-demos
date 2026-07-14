@@ -18,7 +18,10 @@ import type {
   SessionRunAction,
 } from './sessionProjectionTypes';
 import { canonicalJsonSha256 } from './canonicalJsonDigest';
+import { decodeCloudConversationSessionProjection } from './cloudSessionProjectionModel';
 import { decodeDecisionContext } from './sessionDecisionContextDecoder';
+
+export { socketEventInvalidatesSessionProjection } from './sessionProjectionEvents';
 
 const runStatuses = new Set<DesktopRunStatus>([
   'queued',
@@ -63,34 +66,22 @@ const allowedActionValues = new Set<SessionAllowedAction>([
   ...runActionValues,
 ]);
 const sha256DigestPattern = /^[a-f0-9]{64}$/;
-const sessionAuthorityEventTypes = new Set([
-  'act',
-  'observe',
-  'run_status',
-  'run_input_queued',
-  'run_input_promoted',
-  'recovery_forked',
-  'review_decision',
-  'worktree_created',
-  'environment_selected',
-  'clarification_asked',
-  'decision_asked',
-  'env_var_requested',
-  'permission_asked',
-  'hitl_responded',
-  'artifact_created',
-  'artifact_ready',
-  'artifact_error',
-  'artifacts_batch',
-  'artifact_approved',
-  'artifact_changes_requested',
-  'artifact_delivered',
-  'task_list_updated',
-  'task_updated',
-  'task_execution_session_updated',
-]);
 
 export function decodeConversationSessionProjection(
+  payload: unknown,
+  expectedScope: string | SessionProjectionScope,
+): ConversationSessionProjection | null {
+  const root = recordValue(payload);
+  if (root?.schema_version === 1) {
+    return decodeDesktopConversationSessionProjection(payload, expectedScope);
+  }
+  if (root?.schema_version === 2) {
+    return decodeCloudConversationSessionProjection(root, expectedScope);
+  }
+  return null;
+}
+
+function decodeDesktopConversationSessionProjection(
   payload: unknown,
   expectedScope: string | SessionProjectionScope,
 ): ConversationSessionProjection | null {
@@ -202,6 +193,31 @@ export function decodeConversationSessionProjection(
   return {
     schemaVersion: 1,
     conversation,
+    executionAuthority: {
+      kind: 'desktop_run',
+      currentRun,
+      runHistory,
+      currentAttempt: null,
+      attemptHistory: [],
+    },
+    planAuthority: {
+      kind: 'desktop_plan_version',
+      currentPlan,
+      planHistory,
+      tasks,
+      workspacePlanContext: null,
+    },
+    hitlAuthority: { kind: 'desktop_hitl', pending: pendingHitl },
+    artifactAuthority: {
+      kind: 'desktop_artifact_versions',
+      versions: artifactVersions,
+      deliveries: artifactDeliveries,
+    },
+    activityAuthority: {
+      kind: 'desktop_tool_invocations',
+      invocations: toolInvocations,
+    },
+    cloudEvidenceSummary: null,
     currentRun,
     runHistory,
     currentPlan,
@@ -216,25 +232,6 @@ export function decodeConversationSessionProjection(
     snapshotRevision,
     updatedAt,
   };
-}
-
-export function socketEventInvalidatesSessionProjection(event: unknown): boolean {
-  const root = recordValue(event);
-  if (!root) return false;
-  const queue = [root];
-  const seen = new Set<Record<string, unknown>>();
-  while (queue.length) {
-    const current = queue.shift();
-    if (!current || seen.has(current)) continue;
-    seen.add(current);
-    const eventType = nonEmptyString(current.event_type) ?? nonEmptyString(current.type);
-    if (eventType && sessionAuthorityEventTypes.has(eventType)) return true;
-    for (const key of ['payload', 'data']) {
-      const nested = recordValue(current[key]);
-      if (nested) queue.push(nested);
-    }
-  }
-  return false;
 }
 
 function readConversation(
@@ -713,6 +710,10 @@ function sameStrings(left: readonly string[], right: readonly string[]): boolean
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function sameStringSets(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value) => right.includes(value));
+}
+
 function optionalScopedRunId(value: unknown, runsById: Map<string, DesktopRun>): boolean {
   return value === null || (nonEmptyString(value) !== null && runsById.has(value as string));
 }
@@ -754,6 +755,10 @@ function optionalString(value: unknown): boolean {
 
 function optionalNonNegativeInteger(value: unknown): boolean {
   return value === undefined || value === null || nonNegativeInteger(value);
+}
+
+function stringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => nonEmptyString(item) !== null);
 }
 
 function nonNegativeInteger(value: unknown): boolean {

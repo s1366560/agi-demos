@@ -87,6 +87,28 @@ function projection(overrides = {}) {
   return {
     schemaVersion: 1,
     conversation: authorityConversation,
+    executionAuthority: {
+      kind: 'desktop_run',
+      currentRun,
+      runHistory: [currentRun],
+      currentAttempt: null,
+      attemptHistory: [],
+    },
+    planAuthority: {
+      kind: 'desktop_plan_version',
+      currentPlan,
+      planHistory: [currentPlan],
+      tasks: currentPlan.tasks,
+      workspacePlanContext: null,
+    },
+    hitlAuthority: { kind: 'desktop_hitl', pending: [] },
+    artifactAuthority: {
+      kind: 'desktop_artifact_versions',
+      versions: [],
+      deliveries: [],
+    },
+    activityAuthority: { kind: 'desktop_tool_invocations', invocations: [] },
+    cloudEvidenceSummary: null,
     currentRun,
     runHistory: [currentRun],
     currentPlan,
@@ -152,6 +174,103 @@ test('session view model reads only the scoped authority projection', () => {
   assert.equal(view.eventCount, 1);
   assert.equal(view.hasPlan, true);
   assert.deepEqual(view.runActions, ['pause', 'cancel']);
+});
+
+test('cloud workspace attempts remain visible without fabricated desktop runtime facts', () => {
+  const cloudConversation = conversation({
+    current_mode: 'build',
+    agent_config: { capability_mode: 'work' },
+  });
+  const currentAttempt = {
+    id: 'attempt-2',
+    workspaceTaskId: 'workspace-task-1',
+    rootGoalTaskId: 'workspace-task-root',
+    workspaceId: 'workspace-1',
+    conversationId: 'conversation-1',
+    attemptNumber: 2,
+    status: 'running',
+    workerAgentId: 'agent-worker',
+    leaderAgentId: 'agent-leader',
+    candidateSummary: null,
+    candidateArtifactRefs: [],
+    candidateVerificationRefs: [],
+    leaderFeedback: null,
+    adjudicationReason: null,
+    createdAt: '2026-07-13T00:00:00Z',
+    updatedAt: '2026-07-13T00:01:00Z',
+    completedAt: null,
+  };
+  const view = build({
+    projection: {
+      ...projection(),
+      schemaVersion: 2,
+      conversation: cloudConversation,
+      executionAuthority: {
+        kind: 'workspace_attempt',
+        currentRun: null,
+        runHistory: [],
+        currentAttempt,
+        attemptHistory: [currentAttempt],
+      },
+      planAuthority: {
+        kind: 'agent_task_list',
+        currentPlan: null,
+        planHistory: [],
+        tasks: [{ id: 'task-1', conversation_id: 'conversation-1' }],
+        workspacePlanContext: {
+          id: 'workspace-plan-1',
+          workspaceId: 'workspace-1',
+          goalId: 'goal-1',
+          status: 'active',
+          createdAt: '2026-07-13T00:00:00Z',
+          updatedAt: null,
+          linkedNodes: [],
+        },
+      },
+      currentRun: null,
+      runHistory: [],
+      currentPlan: null,
+      planHistory: [],
+      tasks: [{ id: 'task-1', conversation_id: 'conversation-1' }],
+      capabilities: {
+        canSendMessage: true,
+        canApprovePlan: false,
+        canRespondToHitl: false,
+        canSteerNow: false,
+        canQueueNext: false,
+        canReviewArtifacts: false,
+        canDeliverArtifacts: false,
+        runActions: [],
+        allowedActions: ['send_message'],
+      },
+    },
+  });
+
+  assert.equal(view.executionAuthorityKind, 'workspace_attempt');
+  assert.equal(view.status, 'running');
+  assert.equal(view.attemptNumber, 2);
+  assert.equal(view.workerAgentId, 'agent-worker');
+  assert.equal(view.leaderAgentId, 'agent-leader');
+  assert.equal(view.hasPlan, true);
+  assert.equal(view.taskCount, 1);
+  assert.equal(view.runId, null);
+  assert.equal(view.runRevision, null);
+  assert.equal(view.environmentLabel, null);
+  assert.equal(view.permissionLabel, null);
+  assert.deepEqual(view.runActions, []);
+});
+
+test('cloud explore sessions keep their exact runtime mode visible', () => {
+  const view = build({
+    projection: projection({
+      conversation: conversation({
+        current_mode: 'explore',
+        agent_config: { capability_mode: 'code' },
+      }),
+    }),
+  });
+
+  assert.equal(view.executionMode, 'explore');
 });
 
 test('session view model preserves stale read-only context while revoking mutation authority', () => {

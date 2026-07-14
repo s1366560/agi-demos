@@ -14,13 +14,18 @@ export type { SessionRunAction } from './sessionProjectionTypes';
 
 export type SessionCapabilityMode = 'work' | 'code' | 'unavailable';
 export type SessionStage = 'understand' | 'implement' | 'verify' | 'review' | 'unavailable';
-export type SessionExecutionMode = 'plan' | 'build' | 'unavailable';
+export type SessionExecutionMode = 'plan' | 'build' | 'explore' | 'unavailable';
 
 export type SessionDetailViewModel = {
   id: string;
   title: string;
   workspaceLabel: string | null;
   status: string;
+  executionAuthorityKind:
+    | 'desktop_run'
+    | 'workspace_attempt'
+    | 'conversation_record'
+    | 'unavailable';
   capabilityMode: SessionCapabilityMode;
   executionMode: SessionExecutionMode;
   stage: SessionStage;
@@ -35,6 +40,9 @@ export type SessionDetailViewModel = {
   hasPlan: boolean;
   runId: string | null;
   runRevision: number | null;
+  attemptNumber: number | null;
+  workerAgentId: string | null;
+  leaderAgentId: string | null;
   error: string | null;
   lastHeartbeatAt: string | null;
   runActions: SessionRunAction[];
@@ -169,8 +177,16 @@ export function buildSessionDetailViewModel({
 }: SessionViewModelInput): SessionDetailViewModel {
   const authorityConversation = projection?.conversation ?? conversation;
   const run = projection?.currentRun ?? null;
+  const executionAuthority = projection?.executionAuthority ?? null;
+  const attempt =
+    executionAuthority?.kind === 'workspace_attempt'
+      ? executionAuthority.currentAttempt
+      : null;
   const agentConfig = projection ? recordValue(authorityConversation.agent_config) : {};
-  const explicitStatus = run?.status ?? null;
+  const explicitStatus =
+    run?.status ??
+    attempt?.status ??
+    (executionAuthority?.kind === 'conversation_record' ? authorityConversation.status : null);
   const explicitMode = stringValue(agentConfig.capability_mode);
   const executionMode = projection ? stringValue(authorityConversation.current_mode) : null;
   const elapsedSeconds = run ? elapsedSecondsForRun(run) : null;
@@ -180,12 +196,15 @@ export function buildSessionDetailViewModel({
     id: authorityConversation.id,
     title: authorityConversation.title || 'Untitled session',
     workspaceLabel: workspace?.name ?? workspace?.title ?? workspace?.id ?? null,
-    status: explicitStatus && runStatuses.has(explicitStatus) ? explicitStatus : 'unavailable',
+    status: explicitStatus ?? 'unavailable',
+    executionAuthorityKind: executionAuthority?.kind ?? 'unavailable',
     capabilityMode: capabilityModes.has(explicitMode ?? '')
       ? (explicitMode as SessionCapabilityMode)
       : 'unavailable',
     executionMode:
-      executionMode === 'plan' || executionMode === 'build' ? executionMode : 'unavailable',
+      executionMode === 'plan' || executionMode === 'build' || executionMode === 'explore'
+        ? executionMode
+        : 'unavailable',
     stage: 'unavailable',
     environmentLabel:
       stringValue(environment.label) ??
@@ -198,9 +217,15 @@ export function buildSessionDetailViewModel({
     usageLabel: null,
     taskCount: projection?.tasks.length ?? 0,
     eventCount: timeline.items.length,
-    hasPlan: projection?.currentPlan !== null && projection !== null,
+    hasPlan:
+      projection?.planAuthority.kind === 'desktop_plan_version'
+        ? projection.currentPlan !== null
+        : projection?.planAuthority.workspacePlanContext !== null && projection !== null,
     runId: run?.id ?? null,
     runRevision: run?.revision ?? null,
+    attemptNumber: attempt?.attemptNumber ?? null,
+    workerAgentId: attempt?.workerAgentId ?? null,
+    leaderAgentId: attempt?.leaderAgentId ?? null,
     error: run?.error ?? null,
     lastHeartbeatAt: run?.last_heartbeat_at ?? null,
     runActions: authorityAvailable ? (projection?.capabilities.runActions ?? []) : [],

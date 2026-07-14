@@ -166,10 +166,8 @@ export function SessionWorkspace({
               </Badge>
             ) : null}
             {viewModel.executionMode !== 'unavailable' ? (
-              <Badge color={viewModel.executionMode === 'plan' ? 'amber' : 'green'} variant="soft">
-                {viewModel.executionMode === 'plan'
-                  ? t('session.planMode')
-                  : t('session.buildMode')}
+              <Badge color={executionModeColor(viewModel.executionMode)} variant="soft">
+                {executionModeLabel(viewModel.executionMode, t)}
               </Badge>
             ) : null}
           </div>
@@ -459,6 +457,21 @@ export function SessionWorkspace({
       </div>
     </section>
   );
+}
+
+function executionModeColor(mode: Exclude<SessionDetailViewModel['executionMode'], 'unavailable'>) {
+  if (mode === 'plan') return 'amber' as const;
+  if (mode === 'explore') return 'gray' as const;
+  return 'green' as const;
+}
+
+function executionModeLabel(
+  mode: Exclude<SessionDetailViewModel['executionMode'], 'unavailable'>,
+  t: (key: string) => string,
+) {
+  if (mode === 'plan') return t('session.planMode');
+  if (mode === 'explore') return t('session.exploreMode');
+  return t('session.buildMode');
 }
 
 function statusLabel(status: string, t: (key: string) => string): string {

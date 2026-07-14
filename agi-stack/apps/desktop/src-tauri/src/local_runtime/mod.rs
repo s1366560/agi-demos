@@ -6896,7 +6896,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!(
-                        "/api/v1/agent/conversations/{}/session",
+                        "/api/v1/agent/conversations/{}/session?tenant_id=local&project_id=local-project&workspace_id=local-workspace",
                         conversation.id
                     ))
                     .header("authorization", "Bearer session-projection-secret")
@@ -6930,6 +6930,111 @@ mod tests {
         assert!(snapshot["updated_at"]
             .as_str()
             .is_some_and(|updated_at| !updated_at.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn conversation_session_projection_requires_the_exact_query_scope() {
+        let state = test_state("session-scope-secret");
+        let conversation = LocalConversation {
+            id: "conversation-session-scope".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Sensitive session title".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Work,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        let app = local_router(state);
+
+        let missing_scope = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{}/session",
+                        conversation.id
+                    ))
+                    .header("authorization", "Bearer session-scope-secret")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(missing_scope.status(), StatusCode::BAD_REQUEST);
+
+        let mismatched_scopes = [
+            "tenant_id=outside&project_id=local-project&workspace_id=local-workspace",
+            "tenant_id=local&project_id=outside-project&workspace_id=local-workspace",
+            "tenant_id=local&project_id=local-project&workspace_id=outside-workspace",
+        ];
+        for query in mismatched_scopes {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!(
+                            "/api/v1/agent/conversations/{}/session?{query}",
+                            conversation.id
+                        ))
+                        .header("authorization", "Bearer session-scope-secret")
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            let payload = response_json(response).await;
+            assert_eq!(
+                payload["detail"],
+                "resource is outside the active workspace context"
+            );
+            assert!(!payload.to_string().contains(&conversation.title));
+        }
+    }
+
+    #[tokio::test]
+    async fn conversation_session_projection_supports_standalone_scope() {
+        let state = test_state("standalone-session-secret");
+        let conversation = LocalConversation {
+            id: "conversation-session-standalone".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Standalone session".to_string(),
+            workspace_id: None,
+            capability_mode: ConversationCapabilityMode::Work,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+
+        let response = local_router(state)
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{}/session?tenant_id=local&project_id=local-project",
+                        conversation.id
+                    ))
+                    .header("authorization", "Bearer standalone-session-secret")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let snapshot = response_json(response).await;
+        assert_eq!(snapshot["conversation"]["id"], conversation.id);
+        assert_eq!(snapshot["conversation"]["workspace_id"], Value::Null);
     }
 
     #[tokio::test]

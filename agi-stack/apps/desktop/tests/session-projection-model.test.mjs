@@ -140,6 +140,150 @@ function validProjection() {
   });
 }
 
+function validCloudProjection() {
+  const attempt = {
+    id: 'attempt-2',
+    workspace_task_id: 'workspace-task-1',
+    root_goal_task_id: 'workspace-task-root',
+    workspace_id: 'workspace-1',
+    conversation_id: 'conversation-1',
+    attempt_number: 2,
+    status: 'running',
+    worker_agent_id: 'agent-worker',
+    leader_agent_id: 'agent-leader',
+    candidate_summary: null,
+    candidate_artifact_refs: ['artifact-ref-1'],
+    candidate_verification_refs: ['verification-ref-1'],
+    leader_feedback: null,
+    adjudication_reason: null,
+    created_at: '2026-07-14T00:00:00Z',
+    updated_at: '2026-07-14T00:01:00Z',
+    completed_at: null,
+  };
+  return {
+    schema_version: 2,
+    projection_kind: 'workspace_session',
+    authority_kind: 'workspace_attempt',
+    authority_id: 'attempt-2',
+    conversation: {
+      id: 'conversation-1',
+      project_id: 'project-1',
+      tenant_id: 'tenant-1',
+      user_id: 'user-1',
+      title: 'Implement cloud session projection',
+      status: 'active',
+      message_count: 2,
+      created_at: '2026-07-14T00:00:00Z',
+      updated_at: '2026-07-14T00:01:00Z',
+      summary: null,
+      capability_mode: 'work',
+      conversation_mode: 'autonomous',
+      current_mode: 'build',
+      workspace_id: 'workspace-1',
+      linked_workspace_task_id: 'workspace-task-1',
+      workspace_name: 'Desktop Client',
+      participant_agents: ['agent-worker', 'agent-leader'],
+      coordinator_agent_id: 'agent-leader',
+      focused_agent_id: 'agent-worker',
+    },
+    execution: {
+      current_attempt: attempt,
+      attempt_history: [attempt],
+    },
+    conversation_tasks: [
+      {
+        id: 'cloud-task-1',
+        conversation_id: 'conversation-1',
+        content: 'Inspect the scoped cloud session',
+        status: 'in_progress',
+        priority: 'high',
+        order_index: 0,
+        created_at: '2026-07-14T00:00:00Z',
+        updated_at: '2026-07-14T00:01:00Z',
+      },
+    ],
+    workspace_plan_context: {
+      id: 'workspace-plan-1',
+      workspace_id: 'workspace-1',
+      goal_id: 'workspace-plan-root',
+      status: 'executing',
+      created_at: '2026-07-14T00:00:00Z',
+      updated_at: '2026-07-14T00:01:00Z',
+      linked_nodes: [
+        {
+          id: 'plan-node-1',
+          plan_id: 'workspace-plan-1',
+          workspace_task_id: 'workspace-task-1',
+          kind: 'task',
+          title: 'Implement cloud projection',
+          description: 'Expose only persisted cloud authorities.',
+          intent: 'in_progress',
+          execution: 'running',
+          progress: { percent: 50, confidence: 1, note: '' },
+          assignee_agent_id: 'agent-worker',
+          current_attempt_id: 'attempt-2',
+          created_at: '2026-07-14T00:00:00Z',
+          updated_at: '2026-07-14T00:01:00Z',
+          completed_at: null,
+        },
+      ],
+    },
+    pending_hitl: [
+      {
+        id: 'cloud-hitl-1',
+        conversation_id: 'conversation-1',
+        message_id: 'message-2',
+        request_type: 'decision',
+        question: 'Continue with the scoped change?',
+        options: [{ id: 'continue', label: 'Continue' }],
+        context: { surface: 'session' },
+        metadata: { hitl_type: 'decision' },
+        status: 'pending',
+        created_at: '2026-07-14T00:00:45Z',
+        expires_at: '2026-07-14T01:00:45Z',
+      },
+    ],
+    artifact_records: [],
+    tool_execution_records: {
+      items: [
+        {
+          id: 'tool-record-1',
+          message_id: 'message-2',
+          call_id: 'call-1',
+          tool_name: 'read_file',
+          status: 'success',
+          error: null,
+          step_number: 1,
+          sequence_number: 1,
+          started_at: '2026-07-14T00:00:30Z',
+          completed_at: '2026-07-14T00:00:31Z',
+          duration_ms: 1000,
+        },
+      ],
+      total: 1,
+      truncated: false,
+    },
+    evidence_summary: {
+      candidate_artifact_ref_count: 1,
+      candidate_verification_ref_count: 1,
+      artifact_record_count: 0,
+      tool_execution_record_count: 1,
+      failed_tool_execution_count: 0,
+    },
+    capabilities: {
+      can_send_message: false,
+      can_respond_to_hitl: true,
+      can_approve_plan: false,
+      can_control_execution: false,
+      can_review_artifacts: false,
+      can_deliver_artifacts: false,
+      allowed_actions: ['respond_to_hitl'],
+    },
+    snapshot_revision: 'cloud-session-revision-2',
+    updated_at: '2026-07-14T00:01:00Z',
+  };
+}
+
 function validDecisionContext() {
   return {
     action: { name: 'write_file', label: 'Write reviewed file' },
@@ -228,6 +372,71 @@ test('session projection decoder accepts one scoped schema-v1 authority snapshot
     'cancel',
   ]);
   assert.match(projection?.snapshotRevision ?? '', /^[a-f0-9]{64}$/);
+});
+
+test('session projection decoder accepts a scoped cloud workspace authority without desktop facts', () => {
+  const projection = decodeConversationSessionProjection(validCloudProjection(), {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+  });
+
+  assert.equal(projection?.schemaVersion, 2);
+  assert.equal(projection?.executionAuthority.kind, 'workspace_attempt');
+  assert.equal(projection?.executionAuthority.currentAttempt?.attemptNumber, 2);
+  assert.equal(projection?.currentRun, null);
+  assert.equal(projection?.planAuthority.kind, 'agent_task_list');
+  assert.equal(projection?.currentPlan, null);
+  assert.equal(projection?.tasks[0]?.id, 'cloud-task-1');
+  assert.equal(projection?.pendingHitl[0]?.kind, 'decision');
+  assert.equal(projection?.pendingHitl[0]?.prompt, 'Continue with the scoped change?');
+  assert.equal(projection?.evidenceSummary.artifactVersionCount, null);
+  assert.equal(projection?.capabilities.canSendMessage, false);
+  assert.equal(projection?.toolInvocations.length, 0);
+  assert.equal(projection?.activityAuthority.kind, 'cloud_tool_records');
+});
+
+test('cloud session projection preserves the explicit explore runtime mode', () => {
+  const payload = validCloudProjection();
+  payload.conversation.current_mode = 'explore';
+
+  const projection = decodeConversationSessionProjection(payload, {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+  });
+
+  assert.equal(projection?.conversation.current_mode, 'explore');
+});
+
+test('cloud session projection rejects message capability while HITL blocks the turn', () => {
+  const payload = validCloudProjection();
+  payload.capabilities.can_send_message = true;
+  payload.capabilities.allowed_actions = ['send_message', 'respond_to_hitl'];
+
+  assert.equal(decodeConversationSessionProjection(payload, 'conversation-1'), null);
+});
+
+test('cloud session projection fails closed on scope drift and strips raw tool material', () => {
+  const wrongWorkspace = validCloudProjection();
+  assert.equal(
+    decodeConversationSessionProjection(wrongWorkspace, {
+      conversationId: 'conversation-1',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-2',
+    }),
+    null,
+  );
+
+  const withRawToolMaterial = validCloudProjection();
+  withRawToolMaterial.tool_execution_records.items[0].tool_input = { secret: 'do-not-expose' };
+  withRawToolMaterial.tool_execution_records.items[0].tool_output = 'sensitive output';
+  const decoded = decodeConversationSessionProjection(withRawToolMaterial, 'conversation-1');
+  assert.equal(Object.hasOwn(decoded?.activityAuthority.items[0] ?? {}, 'tool_input'), false);
+  assert.equal(Object.hasOwn(decoded?.activityAuthority.items[0] ?? {}, 'tool_output'), false);
 });
 
 test('session projection decoder rejects a stale canonical snapshot revision', () => {
@@ -541,4 +750,16 @@ test('session authority invalidation reads nested envelopes and ignores narrativ
     }),
     false,
   );
+  for (const eventType of [
+    'permission_replied',
+    'clarification_answered',
+    'decision_answered',
+    'env_var_provided',
+    'a2ui_action_asked',
+    'a2ui_action_answered',
+    'workspace_plan_updated',
+    'task_execution_session_updated',
+  ]) {
+    assert.equal(socketEventInvalidatesSessionProjection({ event_type: eventType }), true);
+  }
 });

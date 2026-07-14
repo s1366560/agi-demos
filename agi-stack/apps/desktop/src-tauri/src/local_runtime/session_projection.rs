@@ -1,28 +1,58 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     Json,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::{
+    active_workspace_scope_error,
     auth_context::AuthenticatedContext,
     authority_store::{DesktopArtifactStatus, DesktopPlanStatus, DesktopRun, DesktopRunStatus},
-    local_store_error, scoped_conversation,
+    ensure_workspace_scope, local_store_error, scoped_conversation,
     session_store::ConversationSessionSnapshot,
     tool_authority::{self, InvocationStatus},
     ConversationRunMode, LocalJsonResult, LocalRuntimeState,
 };
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ConversationSessionScope {
+    tenant_id: String,
+    project_id: String,
+    workspace_id: Option<String>,
+}
+
 pub(super) async fn conversation_session(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path(conversation_id): Path<String>,
+    Query(scope): Query<ConversationSessionScope>,
 ) -> LocalJsonResult {
-    scoped_conversation(&state, &authenticated, &conversation_id)?;
+    if scope.tenant_id != authenticated.workspace.tenant_id
+        || scope.project_id != authenticated.workspace.project_id
+    {
+        return Err(active_workspace_scope_error());
+    }
+    let conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
+    if conversation.tenant_id != scope.tenant_id
+        || conversation.project_id != scope.project_id
+        || conversation.workspace_id.as_deref() != scope.workspace_id.as_deref()
+    {
+        return Err(active_workspace_scope_error());
+    }
+    if let Some(workspace_id) = scope.workspace_id.as_deref() {
+        ensure_workspace_scope(
+            &state,
+            &authenticated,
+            &scope.tenant_id,
+            &scope.project_id,
+            workspace_id,
+        )?;
+    }
     let snapshot = state
         .session_store
         .conversation_session_snapshot(&conversation_id)
