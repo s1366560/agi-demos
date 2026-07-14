@@ -112,12 +112,12 @@ impl CronOperationHandler for ReconcileScheduleHandler {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ScheduleProjectionError {
+pub(crate) enum ScheduleProjectionError {
     Invalid,
     Overflow,
 }
 
-fn project_schedule(
+pub(crate) fn project_schedule(
     snapshot: &CronScheduleSnapshot,
     observed_at: DateTime<Utc>,
 ) -> Result<CronScheduleProjection, ScheduleProjectionError> {
