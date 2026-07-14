@@ -7,7 +7,7 @@ use std::sync::Arc;
 use agistack_adapters_postgres::{
     CronDueSchedule, CronOperationScope, CronScheduleFireError, CronScheduleProjection,
     CronScheduledFireResult, CronSchedulerLease, CronSchedulerOwnerError, NewCronScheduledFire,
-    PgCronScheduleFireRepository, PgCronSchedulerOwnerRepository,
+    PgCronScheduleFireRepository,
 };
 use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
@@ -15,6 +15,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use uuid::Uuid;
 
 use crate::cron_schedule_reconcile::project_schedule;
+use crate::cron_scheduler_ownership::CronSchedulerOwnershipStore;
 use crate::cron_worker::CronWorkerClock;
 
 const FIRE_ID_NAMESPACE: Uuid = Uuid::from_u128(0xc4cc_1312_862e_4f4a_9ea0_3860_e4e4_c761);
@@ -69,26 +70,6 @@ impl CronScheduleFireStore for PgCronScheduleFireRepository {
             observed_at,
         )
         .await
-    }
-}
-
-#[async_trait]
-pub(crate) trait CronSchedulerOwnershipStore: Send + Sync {
-    async fn is_current(
-        &self,
-        lease: &CronSchedulerLease,
-        now: DateTime<Utc>,
-    ) -> Result<bool, CronSchedulerOwnerError>;
-}
-
-#[async_trait]
-impl CronSchedulerOwnershipStore for PgCronSchedulerOwnerRepository {
-    async fn is_current(
-        &self,
-        lease: &CronSchedulerLease,
-        now: DateTime<Utc>,
-    ) -> Result<bool, CronSchedulerOwnerError> {
-        PgCronSchedulerOwnerRepository::is_current(self, lease, now).await
     }
 }
 

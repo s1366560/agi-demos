@@ -1,6 +1,7 @@
 use agistack_adapters_postgres::{
     CronOperationErrorCode, CronOperationFailure, CronOperationKind, CronOperationScope,
-    CronOperationStatus, NewCronOperation, PgCronOperationRepository,
+    CronOperationStatus, CronSchedulerLease, NewCronOperation, PgCronOperationRepository,
+    PgCronSchedulerOwnerRepository,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -19,6 +20,12 @@ async fn cron_operations_enforce_scope_and_fenced_lease_transitions() {
 
     let repo = PgCronOperationRepository::new(pool.clone());
     let now = ts(2026, 7, 14, 12, 0, 0);
+    let stale_authority = acquire_scheduler_authority(&pool, "scheduler-1", 60, now).await;
+    let authority = PgCronSchedulerOwnerRepository::new(pool.clone())
+        .renew(&stale_authority, 300, now)
+        .await
+        .expect("renew scheduler authority")
+        .expect("current scheduler authority renews");
     let scope = CronOperationScope {
         tenant_id: "cron_operation_tenant",
         project_id: "cron_operation_project",
@@ -54,13 +61,19 @@ async fn cron_operations_enforce_scope_and_fenced_lease_transitions() {
         project_id: "other-project",
     };
     assert!(repo
-        .claim_due(wrong_scope, 10, "worker-1", 30, now)
+        .claim_due(wrong_scope, &authority, 10, "worker-1", 30, now)
         .await
         .expect("wrong scope claim")
         .is_empty());
 
+    assert!(repo
+        .claim_due(scope, &stale_authority, 10, "worker-1", 30, now)
+        .await
+        .expect("stale authority claim is fenced")
+        .is_empty());
+
     let first_claim = repo
-        .claim_due(scope, 10, "worker-1", 30, now)
+        .claim_due(scope, &authority, 10, "worker-1", 30, now)
         .await
         .expect("first claim")
         .pop()
@@ -110,7 +123,14 @@ async fn cron_operations_enforce_scope_and_fenced_lease_transitions() {
     );
 
     let second_claim = repo
-        .claim_due(scope, 10, "worker-2", 30, now + Duration::from_secs(6))
+        .claim_due(
+            scope,
+            &authority,
+            10,
+            "worker-2",
+            30,
+            now + Duration::from_secs(6),
+        )
         .await
         .expect("retry claim")
         .pop()
@@ -157,6 +177,7 @@ async fn cron_operation_dispatch_acceptance_waits_for_runtime_under_fenced_lease
 
     let repo = PgCronOperationRepository::new(pool.clone());
     let now = ts(2026, 7, 14, 13, 0, 0);
+    let authority = acquire_scheduler_authority(&pool, "scheduler-1", 300, now).await;
     let scope = CronOperationScope {
         tenant_id: "cron_operation_tenant",
         project_id: "cron_operation_project",
@@ -184,7 +205,7 @@ async fn cron_operation_dispatch_acceptance_waits_for_runtime_under_fenced_lease
         .await
         .expect("enqueue operation");
     let claim = repo
-        .claim_due(scope, 1, "worker-1", 30, now)
+        .claim_due(scope, &authority, 1, "worker-1", 30, now)
         .await
         .expect("claim operation")
         .pop()
@@ -226,7 +247,14 @@ async fn cron_operation_dispatch_acceptance_waits_for_runtime_under_fenced_lease
         .expect("stale completion query")
         .is_none());
     assert!(repo
-        .claim_due(scope, 1, "worker-2", 30, now + Duration::from_secs(60))
+        .claim_due(
+            scope,
+            &authority,
+            1,
+            "worker-2",
+            30,
+            now + Duration::from_secs(60),
+        )
         .await
         .expect("waiting runtime is not reclaimed")
         .is_empty());
@@ -274,6 +302,7 @@ async fn cron_operation_dispatch_ack_reconciles_an_already_terminal_runtime() {
     .expect("insert cron job");
 
     let now = ts(2026, 7, 14, 14, 0, 0);
+    let authority = acquire_scheduler_authority(&pool, "scheduler-1", 300, now).await;
     sqlx::query(
         "INSERT INTO cron_job_runs ( \
             id, job_id, project_id, status, trigger_type, accepted_at, job_revision, \
@@ -319,7 +348,7 @@ async fn cron_operation_dispatch_ack_reconciles_an_already_terminal_runtime() {
         .await
         .expect("enqueue operation");
     let claim = repo
-        .claim_due(scope, 1, "worker-1", 30, now)
+        .claim_due(scope, &authority, 1, "worker-1", 30, now)
         .await
         .expect("claim operation")
         .pop()
@@ -371,6 +400,40 @@ async fn ensure_cron_operation_table(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("ensure cron operation table");
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agistack_cron_scheduler_owners ( \
+            scope_id varchar(100) PRIMARY KEY, owner_kind varchar(20) NOT NULL DEFAULT 'off', \
+            owner_id varchar(255), owner_epoch bigint NOT NULL DEFAULT 0, \
+            lease_token varchar(255), lease_expires_at timestamptz, acquired_at timestamptz, \
+            updated_at timestamptz NOT NULL DEFAULT now())",
+    )
+    .execute(pool)
+    .await
+    .expect("ensure cron scheduler owner table");
+}
+
+async fn acquire_scheduler_authority(
+    pool: &PgPool,
+    owner_id: &str,
+    lease_seconds: i64,
+    now: DateTime<Utc>,
+) -> CronSchedulerLease {
+    sqlx::query(
+        "INSERT INTO agistack_cron_scheduler_owners ( \
+            scope_id, owner_kind, owner_epoch, updated_at \
+         ) VALUES ('global', 'rust', 0, $1) \
+         ON CONFLICT (scope_id) DO UPDATE SET owner_kind = 'rust', owner_id = NULL, \
+            lease_token = NULL, lease_expires_at = NULL, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(now)
+    .execute(pool)
+    .await
+    .expect("delegate scheduler ownership to Rust");
+    PgCronSchedulerOwnerRepository::new(pool.clone())
+        .try_acquire_global(owner_id, lease_seconds, now)
+        .await
+        .expect("acquire scheduler authority")
+        .expect("Rust cutover grants scheduler authority")
 }
 
 async fn clean_rows(pool: &PgPool) {
@@ -386,4 +449,8 @@ async fn clean_rows(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("clean cron job rows");
+    sqlx::query("DELETE FROM agistack_cron_scheduler_owners WHERE scope_id = 'global'")
+        .execute(pool)
+        .await
+        .expect("clean scheduler owner");
 }

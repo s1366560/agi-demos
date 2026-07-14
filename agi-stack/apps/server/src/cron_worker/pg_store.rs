@@ -2,7 +2,7 @@
 
 use agistack_adapters_postgres::{
     CronOperationFailure, CronOperationRecord, CronOperationScope, CronOperationStatus,
-    PgCronOperationRepository,
+    CronSchedulerLease, PgCronOperationRepository,
 };
 use agistack_core::ports::CoreResult;
 use async_trait::async_trait;
@@ -25,6 +25,7 @@ impl CronOperationStore for PgCronOperationRepository {
     async fn claim_due(
         &self,
         scope: &CronWorkerScope,
+        authority: &CronSchedulerLease,
         limit: i64,
         lease_owner: &str,
         lease_seconds: i64,
@@ -33,6 +34,7 @@ impl CronOperationStore for PgCronOperationRepository {
         PgCronOperationRepository::claim_due(
             self,
             scope.as_repository_scope(),
+            authority,
             limit,
             lease_owner,
             lease_seconds,

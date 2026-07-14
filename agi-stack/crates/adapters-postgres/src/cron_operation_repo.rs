@@ -11,7 +11,7 @@ use sqlx::FromRow;
 
 use agistack_core::ports::{CoreError, CoreResult};
 
-use crate::PgPool;
+use crate::{CronSchedulerLease, PgPool};
 
 const OPERATION_COLUMNS: &str = "id, tenant_id, project_id, job_id, job_revision, \
     schedule_revision, operation_kind, run_id, trigger_type, scheduled_for, input_json, \
@@ -19,37 +19,46 @@ const OPERATION_COLUMNS: &str = "id, tenant_id, project_id, job_id, job_revision
     lease_expires_at, actor_user_id, actor_api_key_id, request_receipt_id, last_error_code, \
     last_error_redacted, result_json, created_at, updated_at, started_at, completed_at";
 
-const CLAIM_DUE_SQL: &str = "WITH expired_exhausted AS ( \
-    UPDATE agistack_cron_operations \
+const CLAIM_DUE_SQL: &str = "WITH scheduler_authority AS MATERIALIZED ( \
+    SELECT scope_id FROM agistack_cron_scheduler_owners \
+    WHERE scope_id = $7 AND owner_kind = 'rust' AND owner_id = $8 \
+      AND owner_epoch = $9 AND lease_token = $10 AND lease_expires_at = $11 \
+      AND lease_expires_at > $3 \
+    FOR UPDATE \
+), expired_exhausted AS ( \
+    UPDATE agistack_cron_operations AS operation \
     SET status = 'dead_letter', \
         lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, \
         next_attempt_at = NULL, last_error_code = 'lease_expired', \
         last_error_redacted = 'operation lease expired after max attempts', \
         completed_at = $3, updated_at = $3 \
-    WHERE tenant_id = $1 AND project_id = $2 \
-      AND attempt_count >= max_attempts \
+    FROM scheduler_authority \
+    WHERE operation.tenant_id = $1 AND operation.project_id = $2 \
+      AND operation.attempt_count >= operation.max_attempts \
       AND ( \
-        (status IN ('pending', 'failed') \
-         AND (next_attempt_at IS NULL OR next_attempt_at <= $3)) \
-        OR (status = 'processing' \
-            AND lease_expires_at IS NOT NULL \
-            AND lease_expires_at <= $3) \
+        (operation.status IN ('pending', 'failed') \
+         AND (operation.next_attempt_at IS NULL OR operation.next_attempt_at <= $3)) \
+        OR (operation.status = 'processing' \
+            AND operation.lease_expires_at IS NOT NULL \
+            AND operation.lease_expires_at <= $3) \
       ) \
-    RETURNING id \
+    RETURNING operation.id \
 ), due AS ( \
-    SELECT id FROM agistack_cron_operations \
-    WHERE tenant_id = $1 AND project_id = $2 \
-      AND attempt_count < max_attempts \
+    SELECT operation.id FROM agistack_cron_operations AS operation \
+    CROSS JOIN scheduler_authority \
+    WHERE operation.tenant_id = $1 AND operation.project_id = $2 \
+      AND operation.attempt_count < operation.max_attempts \
       AND ( \
-        (status IN ('pending', 'failed') \
-         AND (next_attempt_at IS NULL OR next_attempt_at <= $3)) \
-        OR (status = 'processing' \
-            AND lease_expires_at IS NOT NULL \
-            AND lease_expires_at <= $3) \
+        (operation.status IN ('pending', 'failed') \
+         AND (operation.next_attempt_at IS NULL OR operation.next_attempt_at <= $3)) \
+        OR (operation.status = 'processing' \
+            AND operation.lease_expires_at IS NOT NULL \
+            AND operation.lease_expires_at <= $3) \
       ) \
-    ORDER BY COALESCE(next_attempt_at, created_at), created_at, id \
+    ORDER BY COALESCE(operation.next_attempt_at, operation.created_at), \
+             operation.created_at, operation.id \
     LIMIT $4 \
-    FOR UPDATE SKIP LOCKED \
+    FOR UPDATE OF operation SKIP LOCKED \
 ) \
 UPDATE agistack_cron_operations AS operation \
 SET status = 'processing', \
@@ -497,10 +506,11 @@ impl PgCronOperationRepository {
         row.try_into()
     }
 
-    /// Claim due operations inside the supplied tenant/project boundary.
+    /// Claim due operations only while the exact global scheduler lease is current.
     pub async fn claim_due(
         &self,
         scope: CronOperationScope<'_>,
+        authority: &CronSchedulerLease,
         limit: i64,
         lease_owner: &str,
         lease_seconds: i64,
@@ -509,6 +519,11 @@ impl PgCronOperationRepository {
         if limit <= 0 {
             return Ok(Vec::new());
         }
+        if !authority.is_structurally_valid() {
+            return Err(CoreError::Storage(
+                "cron operation scheduler authority is invalid".to_string(),
+            ));
+        }
         let rows = sqlx::query_as::<_, CronOperationRow>(CLAIM_DUE_SQL)
             .bind(scope.tenant_id)
             .bind(scope.project_id)
@@ -516,6 +531,11 @@ impl PgCronOperationRepository {
             .bind(limit.clamp(1, 100))
             .bind(lease_owner)
             .bind(positive_seconds(lease_seconds))
+            .bind(&authority.scope_id)
+            .bind(&authority.owner_id)
+            .bind(authority.owner_epoch)
+            .bind(&authority.lease_token)
+            .bind(authority.lease_expires_at)
             .fetch_all(&self.pool)
             .await
             .map_err(storage)?;
@@ -685,15 +705,22 @@ mod tests {
     fn claim_sql_is_scoped_skip_locked_and_rotates_the_fencing_token() {
         let sql = compact(CLAIM_DUE_SQL);
 
-        assert!(sql.contains("tenant_id = $1 AND project_id = $2"));
-        assert!(sql.contains("FOR UPDATE SKIP LOCKED"));
+        assert!(sql.contains(
+            "scope_id = $7 AND owner_kind = 'rust' AND owner_id = $8 AND owner_epoch = $9"
+        ));
+        assert!(sql.contains("lease_token = $10 AND lease_expires_at = $11"));
+        assert!(sql.contains("lease_expires_at > $3 FOR UPDATE"));
+        assert!(sql.contains("FROM scheduler_authority"));
+        assert!(sql.contains("CROSS JOIN scheduler_authority"));
+        assert!(sql.contains("operation.tenant_id = $1 AND operation.project_id = $2"));
+        assert!(sql.contains("FOR UPDATE OF operation SKIP LOCKED"));
         assert!(sql.contains("status = 'processing'"));
         assert!(sql.contains("lease_expires_at <= $3"));
         assert!(sql.contains("attempt_count = operation.attempt_count + 1"));
         assert!(sql.contains(
             "lease_token = concat(operation.id, ':', operation.attempt_count + 1, ':', txid_current())"
         ));
-        assert!(sql.contains("attempt_count >= max_attempts"));
+        assert!(sql.contains("operation.attempt_count >= operation.max_attempts"));
         assert!(sql.contains("last_error_code = 'lease_expired'"));
     }
 

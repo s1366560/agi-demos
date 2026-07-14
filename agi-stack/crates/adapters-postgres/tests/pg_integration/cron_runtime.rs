@@ -1,6 +1,7 @@
 use agistack_adapters_postgres::{
     AutomationRuntimeScope, AutomationTerminalOutcome, CronOperationKind, CronOperationScope,
     NewCronOperation, PgCronAutomationRuntimeRepository, PgCronOperationRepository,
+    PgCronSchedulerOwnerRepository,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -27,6 +28,7 @@ async fn cron_runtime_claim_and_terminal_projection_are_fenced_and_atomic() {
     };
 
     let now = ts(2026, 7, 14, 15, 0, 0);
+    let authority = acquire_runtime_scheduler_authority(&pool, now).await;
     let job_id = "cron_runtime_job_success";
     let run_id = "cron_runtime_run_success";
     insert_job_and_run(
@@ -74,7 +76,7 @@ async fn cron_runtime_claim_and_terminal_projection_are_fenced_and_atomic() {
         project_id: &project_id,
     };
     let claim = operation_repo
-        .claim_due(operation_scope, 1, "operation-worker", 30, now)
+        .claim_due(operation_scope, &authority, 1, "operation-worker", 30, now)
         .await
         .expect("claim runtime operation")
         .pop()
@@ -342,12 +344,39 @@ async fn ensure_runtime_schema(pool: &PgPool) {
             last_error_redacted text, created_at timestamptz NOT NULL DEFAULT now(), \
             updated_at timestamptz NOT NULL DEFAULT now(), started_at timestamptz, \
             completed_at timestamptz, cancel_requested_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS agistack_cron_scheduler_owners ( \
+            scope_id varchar(100) PRIMARY KEY, owner_kind varchar(20) NOT NULL DEFAULT 'off', \
+            owner_id varchar(255), owner_epoch bigint NOT NULL DEFAULT 0, \
+            lease_token varchar(255), lease_expires_at timestamptz, acquired_at timestamptz, \
+            updated_at timestamptz NOT NULL DEFAULT now())",
     ] {
         sqlx::query(ddl)
             .execute(pool)
             .await
             .unwrap_or_else(|error| panic!("runtime ddl failed: {ddl}\n{error}"));
     }
+}
+
+async fn acquire_runtime_scheduler_authority(
+    pool: &PgPool,
+    now: DateTime<Utc>,
+) -> agistack_adapters_postgres::CronSchedulerLease {
+    sqlx::query(
+        "INSERT INTO agistack_cron_scheduler_owners ( \
+            scope_id, owner_kind, owner_epoch, updated_at \
+         ) VALUES ('global', 'rust', 0, $1) \
+         ON CONFLICT (scope_id) DO UPDATE SET owner_kind = 'rust', owner_id = NULL, \
+            lease_token = NULL, lease_expires_at = NULL, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(now)
+    .execute(pool)
+    .await
+    .expect("delegate runtime scheduler ownership to Rust");
+    PgCronSchedulerOwnerRepository::new(pool.clone())
+        .try_acquire_global("cron-runtime-operation-worker", 300, now)
+        .await
+        .expect("acquire runtime scheduler authority")
+        .expect("Rust cutover grants runtime scheduler authority")
 }
 
 async fn clean_runtime_rows(pool: &PgPool) {
@@ -367,4 +396,8 @@ async fn clean_runtime_rows(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("clean runtime jobs");
+    sqlx::query("DELETE FROM agistack_cron_scheduler_owners WHERE scope_id = 'global'")
+        .execute(pool)
+        .await
+        .expect("clean runtime scheduler owner");
 }

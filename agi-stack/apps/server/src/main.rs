@@ -47,6 +47,7 @@ mod cron_automation_runtime;
 mod cron_hitl_resume;
 mod cron_schedule_fire;
 mod cron_schedule_reconcile;
+mod cron_scheduler_ownership;
 mod cron_tool_authority;
 mod cron_worker;
 mod data_api;

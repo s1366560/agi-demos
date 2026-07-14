@@ -4,7 +4,8 @@
 //! routes, or capability reporting. It has no spawn loop and reads no environment
 //! variables. Even a direct [`CronOperationWorker::drain_once`] call must pass
 //! the autostart, production-readiness, and handler-readiness gates before the
-//! store can claim work.
+//! store can claim work. An exact, current scheduler ownership lease is also
+//! required and is rechecked atomically by the PostgreSQL claim.
 
 #![allow(dead_code)]
 
@@ -12,13 +13,17 @@ use std::sync::Arc;
 
 use agistack_adapters_postgres::{
     CronOperationErrorCode, CronOperationKind, CronOperationRecord, CronOperationStatus,
+    CronSchedulerLease,
 };
 use agistack_core::ports::{CoreError, CoreResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
+use crate::cron_scheduler_ownership::CronSchedulerOwnershipStore;
+
 mod pg_store;
+mod processor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CronWorkerScope {
@@ -56,6 +61,7 @@ pub(crate) enum CronWorkerGate {
     AutostartDisabled,
     ProductionNotReady,
     HandlersNotReady,
+    SchedulerAuthorityNotCurrent,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,6 +94,7 @@ pub(crate) trait CronOperationStore: Send + Sync {
     async fn claim_due(
         &self,
         scope: &CronWorkerScope,
+        authority: &CronSchedulerLease,
         limit: i64,
         lease_owner: &str,
         lease_seconds: i64,
@@ -152,6 +159,7 @@ pub(crate) struct CronWorkerDrainReport {
 
 pub(crate) struct CronOperationWorker {
     store: Arc<dyn CronOperationStore>,
+    ownership: Arc<dyn CronSchedulerOwnershipStore>,
     clock: Arc<dyn CronWorkerClock>,
     scope: CronWorkerScope,
     config: CronWorkerConfig,
@@ -161,6 +169,7 @@ pub(crate) struct CronOperationWorker {
 impl CronOperationWorker {
     pub(crate) fn new(
         store: Arc<dyn CronOperationStore>,
+        ownership: Arc<dyn CronSchedulerOwnershipStore>,
         clock: Arc<dyn CronWorkerClock>,
         scope: CronWorkerScope,
         config: CronWorkerConfig,
@@ -168,6 +177,7 @@ impl CronOperationWorker {
     ) -> Self {
         Self {
             store,
+            ownership,
             clock,
             scope,
             config,
@@ -189,7 +199,10 @@ impl CronOperationWorker {
     }
 
     /// Drain one bounded batch. A closed gate returns without touching the store.
-    pub(crate) async fn drain_once(&self) -> CoreResult<CronWorkerDrainReport> {
+    pub(crate) async fn drain_once(
+        &self,
+        authority: &CronSchedulerLease,
+    ) -> CoreResult<CronWorkerDrainReport> {
         let gate = self.gate();
         if gate != CronWorkerGate::Open {
             return Ok(CronWorkerDrainReport {
@@ -198,14 +211,32 @@ impl CronOperationWorker {
             });
         }
 
+        let observed_at = self.clock.now();
+        let authority_is_current = authority.is_structurally_valid()
+            && authority.lease_expires_at > observed_at
+            && self
+                .ownership
+                .is_current(authority, observed_at)
+                .await
+                .map_err(|_| {
+                    CoreError::Storage("cron scheduler ownership check failed".to_string())
+                })?;
+        if !authority_is_current {
+            return Ok(CronWorkerDrainReport {
+                gate: Some(CronWorkerGate::SchedulerAuthorityNotCurrent),
+                ..Default::default()
+            });
+        }
+
         let claimed = self
             .store
             .claim_due(
                 &self.scope,
+                authority,
                 self.config.batch_size.max(1),
                 &self.config.worker_id,
                 self.config.lease_seconds.max(1),
-                self.clock.now(),
+                observed_at,
             )
             .await?;
         let mut report = CronWorkerDrainReport {
@@ -230,121 +261,6 @@ impl CronOperationWorker {
     fn handler(&self, kind: CronOperationKind) -> Option<&Arc<dyn CronOperationHandler>> {
         self.handlers.iter().find(|handler| handler.kind() == kind)
     }
-
-    async fn process_operation(
-        &self,
-        operation: &CronOperationRecord,
-        report: &mut CronWorkerDrainReport,
-    ) -> CoreResult<()> {
-        let Some(lease_token) = valid_claim_lease(operation, &self.config.worker_id) else {
-            report.lost_lease += 1;
-            return Ok(());
-        };
-        let Some(handler) = self.handler(operation.kind) else {
-            // Coverage was checked before claim. If it changes unexpectedly, do
-            // not write an untyped failure; let the lease expire and be fenced.
-            report.handler_errors += 1;
-            return Ok(());
-        };
-
-        let outcome = match handler.handle(operation).await {
-            Ok(outcome) => outcome,
-            Err(_) => {
-                // Infrastructure errors are not classified from their text.
-                // Leaving the operation leased makes the repository's typed
-                // lease-expiry/retry policy the only recovery path.
-                report.handler_errors += 1;
-                return Ok(());
-            }
-        };
-
-        match (operation.kind, outcome) {
-            (
-                CronOperationKind::ExecuteRun,
-                CronOperationHandlerOutcome::Accepted { dispatch_json },
-            ) => {
-                let status = self
-                    .store
-                    .mark_waiting_runtime(
-                        &self.scope,
-                        &operation.id,
-                        &self.config.worker_id,
-                        lease_token,
-                        &dispatch_json,
-                        self.clock.now(),
-                    )
-                    .await?;
-                match status {
-                    Some(CronOperationStatus::WaitingRuntime) => report.waiting_runtime += 1,
-                    Some(CronOperationStatus::Completed) => report.completed += 1,
-                    None => report.lost_lease += 1,
-                    Some(other) => {
-                        return Err(CoreError::Storage(format!(
-                            "cron operation dispatch returned invalid status: {}",
-                            other.as_str()
-                        )))
-                    }
-                }
-            }
-            (
-                CronOperationKind::ReconcileSchedule,
-                CronOperationHandlerOutcome::Complete { result_json },
-            ) => {
-                let completed = self
-                    .store
-                    .complete(
-                        &self.scope,
-                        &operation.id,
-                        &self.config.worker_id,
-                        lease_token,
-                        &result_json,
-                        self.clock.now(),
-                    )
-                    .await?;
-                if completed {
-                    report.completed += 1;
-                } else {
-                    report.lost_lease += 1;
-                }
-            }
-            (_, CronOperationHandlerOutcome::RetryOrDeadLetter(failure)) => {
-                let status = self
-                    .store
-                    .fail(
-                        &self.scope,
-                        &operation.id,
-                        &self.config.worker_id,
-                        lease_token,
-                        &failure,
-                        self.clock.now(),
-                    )
-                    .await?;
-                match status {
-                    Some(CronOperationStatus::Failed) => report.retry_scheduled += 1,
-                    Some(CronOperationStatus::DeadLetter) => report.dead_lettered += 1,
-                    None => report.lost_lease += 1,
-                    Some(other) => {
-                        return Err(CoreError::Storage(format!(
-                            "cron operation fail returned invalid status: {}",
-                            other.as_str()
-                        )))
-                    }
-                }
-            }
-            (kind, invalid_outcome) => {
-                let outcome = match invalid_outcome {
-                    CronOperationHandlerOutcome::Accepted { .. } => "accepted",
-                    CronOperationHandlerOutcome::Complete { .. } => "complete",
-                    CronOperationHandlerOutcome::RetryOrDeadLetter(_) => unreachable!(),
-                };
-                return Err(CoreError::Storage(format!(
-                    "cron operation handler returned {outcome} for incompatible kind {}",
-                    kind.as_str()
-                )));
-            }
-        }
-        Ok(())
-    }
 }
 
 fn valid_claim_lease<'a>(operation: &'a CronOperationRecord, worker_id: &str) -> Option<&'a str> {
@@ -361,6 +277,7 @@ fn valid_claim_lease<'a>(operation: &'a CronOperationRecord, worker_id: &str) ->
 mod tests {
     use std::sync::Mutex;
 
+    use agistack_adapters_postgres::CronSchedulerOwnerError;
     use serde_json::json;
 
     use super::*;
@@ -371,6 +288,24 @@ mod tests {
     impl CronWorkerClock for FixedClock {
         fn now(&self) -> DateTime<Utc> {
             self.0
+        }
+    }
+
+    #[derive(Debug)]
+    struct FakeOwnership {
+        current: bool,
+        checks: Mutex<usize>,
+    }
+
+    #[async_trait]
+    impl CronSchedulerOwnershipStore for FakeOwnership {
+        async fn is_current(
+            &self,
+            _lease: &CronSchedulerLease,
+            _now: DateTime<Utc>,
+        ) -> Result<bool, CronSchedulerOwnerError> {
+            *self.checks.lock().expect("ownership checks lock") += 1;
+            Ok(self.current)
         }
     }
 
@@ -425,6 +360,7 @@ mod tests {
         async fn claim_due(
             &self,
             _scope: &CronWorkerScope,
+            _authority: &CronSchedulerLease,
             _limit: i64,
             _lease_owner: &str,
             _lease_seconds: i64,
@@ -507,6 +443,17 @@ mod tests {
             .with_timezone(&Utc)
     }
 
+    fn authority() -> CronSchedulerLease {
+        CronSchedulerLease {
+            scope_id: "global".to_string(),
+            owner_id: "scheduler-1".to_string(),
+            owner_epoch: 1,
+            lease_token: "global:1:test".to_string(),
+            lease_expires_at: now() + chrono::Duration::seconds(60),
+            acquired_at: now() - chrono::Duration::seconds(1),
+        }
+    }
+
     fn operation(kind: CronOperationKind) -> CronOperationRecord {
         CronOperationRecord {
             id: "operation-1".to_string(),
@@ -564,6 +511,23 @@ mod tests {
         config: CronWorkerConfig,
         execute_handler: Arc<dyn CronOperationHandler>,
     ) -> CronOperationWorker {
+        worker_with_ownership(
+            store,
+            Arc::new(FakeOwnership {
+                current: true,
+                checks: Mutex::new(0),
+            }),
+            config,
+            execute_handler,
+        )
+    }
+
+    fn worker_with_ownership(
+        store: Arc<FakeStore>,
+        ownership: Arc<dyn CronSchedulerOwnershipStore>,
+        config: CronWorkerConfig,
+        execute_handler: Arc<dyn CronOperationHandler>,
+    ) -> CronOperationWorker {
         let reconcile_handler = handler(
             CronOperationKind::ReconcileSchedule,
             CronOperationHandlerOutcome::Complete {
@@ -572,6 +536,7 @@ mod tests {
         );
         CronOperationWorker::new(
             store,
+            ownership,
             Arc::new(FixedClock(now())),
             CronWorkerScope {
                 tenant_id: "tenant-1".to_string(),
@@ -615,12 +580,44 @@ mod tests {
         for (config, expected_gate) in cases {
             let store = Arc::new(FakeStore::default());
             let report = worker(store.clone(), config, execute_handler.clone())
-                .drain_once()
+                .drain_once(&authority())
                 .await
                 .expect("closed gate is not an error");
             assert_eq!(report.gate, Some(expected_gate));
             assert_eq!(store.snapshot().claims, 0);
         }
+    }
+
+    #[tokio::test]
+    async fn stale_scheduler_authority_blocks_operation_claim() {
+        let store = Arc::new(FakeStore::default());
+        let ownership = Arc::new(FakeOwnership {
+            current: false,
+            checks: Mutex::new(0),
+        });
+        let execute_handler = handler(
+            CronOperationKind::ExecuteRun,
+            CronOperationHandlerOutcome::Accepted {
+                dispatch_json: json!({}),
+            },
+        );
+
+        let report = worker_with_ownership(
+            store.clone(),
+            ownership.clone(),
+            ready_config(),
+            execute_handler,
+        )
+        .drain_once(&authority())
+        .await
+        .expect("stale authority closes the worker gate");
+
+        assert_eq!(
+            report.gate,
+            Some(CronWorkerGate::SchedulerAuthorityNotCurrent)
+        );
+        assert_eq!(store.snapshot().claims, 0);
+        assert_eq!(*ownership.checks.lock().expect("ownership checks lock"), 1);
     }
 
     #[tokio::test]
@@ -634,7 +631,7 @@ mod tests {
         );
 
         let report = worker(store.clone(), ready_config(), execute_handler)
-            .drain_once()
+            .drain_once(&authority())
             .await
             .expect("drain succeeds");
 
@@ -657,7 +654,7 @@ mod tests {
         );
 
         let report = worker(store.clone(), ready_config(), execute_handler)
-            .drain_once()
+            .drain_once(&authority())
             .await
             .expect("drain succeeds");
 
@@ -685,7 +682,7 @@ mod tests {
             );
 
             let report = worker(store.clone(), ready_config(), execute_handler)
-                .drain_once()
+                .drain_once(&authority())
                 .await
                 .expect("drain succeeds");
 
@@ -712,7 +709,7 @@ mod tests {
         );
 
         let report = worker(store.clone(), ready_config(), execute_handler.clone())
-            .drain_once()
+            .drain_once(&authority())
             .await
             .expect("drain succeeds");
 
@@ -738,7 +735,7 @@ mod tests {
         );
 
         let report = worker(store.clone(), ready_config(), execute_handler)
-            .drain_once()
+            .drain_once(&authority())
             .await
             .expect("drain succeeds");
 
@@ -761,7 +758,7 @@ mod tests {
         );
 
         let error = worker(store.clone(), ready_config(), execute_handler)
-            .drain_once()
+            .drain_once(&authority())
             .await
             .expect_err("dispatch acceptance cannot complete an execute operation");
 
@@ -787,7 +784,7 @@ mod tests {
         );
 
         let report = worker(store.clone(), ready_config(), execute_handler)
-            .drain_once()
+            .drain_once(&authority())
             .await
             .expect("drain succeeds");
 
