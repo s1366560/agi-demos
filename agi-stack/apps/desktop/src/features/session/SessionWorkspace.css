@@ -390,8 +390,7 @@
 }
 .session-workspace-thread { border-right: 1px solid var(--desktop-border-soft); }
 .session-context-inspector { border-left: 1px solid var(--desktop-border-soft); }
-.session-workspace-thread .pane-head,
-.session-workspace-canvas .review-head { display: none; }
+.session-workspace-thread .pane-head { display: none; }
 .session-workspace-thread > .pane-stage {
   width: 100%;
   height: 100%;

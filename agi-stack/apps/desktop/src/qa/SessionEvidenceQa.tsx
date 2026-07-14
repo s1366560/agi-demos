@@ -118,8 +118,8 @@ function SessionEvidenceQa() {
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <main className="qa-evidence-page">
-        <aside className="review-panel review-panel-stage qa-evidence-panel">
-          <header className="review-head">
+        <aside className="review-panel qa-evidence-panel">
+          <header className="qa-evidence-head">
             <div>
               <Heading as="h2" size="3">
                 Agent desktop session design

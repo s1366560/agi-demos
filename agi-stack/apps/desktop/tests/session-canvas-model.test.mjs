@@ -30,54 +30,29 @@ test('only a selected conversation can open the Thread and Canvas split', () => 
   );
 });
 
-test('standalone Code workspace drawer keeps its complete review inventory', () => {
+test('Code conversation canvas exposes only the approved session surfaces', () => {
   assert.deepEqual(
     sessionCanvasTabs('code').primary.map((tab) => tab.id),
     ['overview', 'plan', 'changes', 'terminal', 'checks']
   );
-  assert.deepEqual(
-    sessionCanvasTabs('code').secondary.map((tab) => tab.id),
-    ['activity', 'artifacts']
-  );
+  assert.deepEqual(sessionCanvasTabs('code').secondary, []);
 });
 
-test('standalone Work workspace drawer keeps artifacts, sources, verification, and activity', () => {
+test('Work conversation canvas exposes artifact, source, and verification surfaces', () => {
   const tabs = sessionCanvasTabs('work');
   assert.deepEqual(
     tabs.primary.map((tab) => tab.id),
     ['overview', 'plan', 'artifacts', 'sources', 'verification']
   );
-  assert.deepEqual(
-    tabs.secondary.map((tab) => tab.id),
-    ['activity']
-  );
+  assert.deepEqual(tabs.secondary, []);
   assert.equal(tabs.primary.some((tab) => tab.id === 'terminal'), false);
 });
 
-test('standalone unclassified workspace drawer keeps its shared review inventory', () => {
+test('unclassified conversation canvas fails closed to common evidence surfaces', () => {
   const tabs = sessionCanvasTabs('unavailable');
   assert.deepEqual(
     tabs.primary.map((tab) => tab.id),
-    ['overview', 'plan', 'activity', 'artifacts']
-  );
-});
-
-test('session Code canvas removes production-only Activity and Artifacts tabs', () => {
-  const tabs = sessionCanvasTabs('code', 'session');
-
-  assert.deepEqual(
-    tabs.primary.map((tab) => tab.id),
-    ['overview', 'plan', 'changes', 'terminal', 'checks']
-  );
-  assert.deepEqual(tabs.secondary, []);
-});
-
-test('session Work canvas keeps Artifact but removes production-only Activity', () => {
-  const tabs = sessionCanvasTabs('work', 'session');
-
-  assert.deepEqual(
-    tabs.primary.map((tab) => tab.id),
-    ['overview', 'plan', 'artifacts', 'sources', 'verification']
+    ['overview', 'plan', 'artifacts']
   );
   assert.deepEqual(tabs.secondary, []);
 });

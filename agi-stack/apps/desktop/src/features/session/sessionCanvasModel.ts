@@ -21,8 +21,6 @@ export type SessionCanvasTabs = {
   secondary: SessionCanvasTab[];
 };
 
-export type SessionCanvasVariant = 'workspace' | 'session';
-
 export type SessionCanvasSurface = 'conversation' | 'workspace' | 'other';
 
 export function shouldShowSessionCanvas(input: {
@@ -69,27 +67,21 @@ export function defaultSessionCanvasTab(
   return 'plan';
 }
 
-export function sessionCanvasTabs(
-  mode: SessionCapabilityMode,
-  variant: SessionCanvasVariant = 'workspace',
-): SessionCanvasTabs {
+export function sessionCanvasTabs(mode: SessionCapabilityMode): SessionCanvasTabs {
   if (mode === 'code') {
     return {
       primary: [tabs.overview, tabs.plan, tabs.changes, tabs.terminal, tabs.checks],
-      secondary: variant === 'workspace' ? [tabs.activity, tabs.artifacts] : [],
+      secondary: [],
     };
   }
   if (mode === 'work') {
     return {
       primary: [tabs.overview, tabs.plan, tabs.artifacts, tabs.sources, tabs.verification],
-      secondary: variant === 'workspace' ? [tabs.activity] : [],
+      secondary: [],
     };
   }
   return {
-    primary:
-      variant === 'workspace'
-        ? [tabs.overview, tabs.plan, tabs.activity, tabs.artifacts]
-        : [tabs.overview, tabs.plan, tabs.artifacts],
+    primary: [tabs.overview, tabs.plan, tabs.artifacts],
     secondary: [],
   };
 }

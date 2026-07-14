@@ -14,10 +14,30 @@
   width: min(1040px, 100%);
   min-height: 680px;
   margin: auto;
+  border: 1px solid var(--desktop-border);
+  border-radius: 7px;
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28);
 }
 
-.qa-evidence-panel .review-head span {
+.qa-evidence-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+  background: #0d131d;
+}
+
+.qa-evidence-head > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.qa-evidence-head span {
   color: var(--desktop-muted);
   font-size: 11px;
 }

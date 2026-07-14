@@ -38,7 +38,6 @@ import {
   DotsHorizontalIcon,
   DesktopIcon,
   EnterFullScreenIcon,
-  ExitFullScreenIcon,
   FileTextIcon,
   FrameIcon,
   GearIcon,
@@ -47,7 +46,6 @@ import {
   MixerHorizontalIcon,
   PauseIcon,
   PlayIcon,
-  PlusIcon,
   ReaderIcon,
   ReloadIcon,
   RocketIcon,
@@ -148,10 +146,8 @@ import {
   type SessionRunAction,
 } from './features/session/sessionViewModel';
 import {
-  visibleWorkspaceReviewTabs,
   workspaceReviewPanelChrome,
   type SessionCanvasControls,
-  type WorkspaceReviewPanelVariant,
 } from './features/session/workspaceReviewPanelModel';
 import { socketEventMatchesSessionScope } from './features/session/sessionScope';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
@@ -303,8 +299,6 @@ const runControlLabels: Record<RunControlState, string> = {
 };
 const RUN_CONTROL_UNAVAILABLE =
   'Run pause, resume, and stop are unavailable until every configured backend provides the same control contract.';
-const REVIEW_ACTION_UNAVAILABLE =
-  'Workspace packet review is read-only. Respond to an explicit Agent HITL request in Chat.';
 const runControlStates = new Set<RunControlState>(['planning', 'running', 'paused', 'stopped']);
 function isRunControlState(value: string): value is RunControlState {
   return runControlStates.has(value as RunControlState);
@@ -466,8 +460,6 @@ type WorkspaceArtifact = {
   raw: unknown;
   searchableText: string;
 };
-type ReviewDecisionStatus = 'pending' | 'approved' | 'changes';
-type ReviewDecisionRecordStatus = Exclude<ReviewDecisionStatus, 'pending'> | 'snoozed';
 type ReviewDecisionArtifact = {
   id: string;
   name: string;
@@ -486,29 +478,6 @@ type ReviewDecisionSummary = {
   checks: Array<{ label: string; value: string }>;
   canAct: boolean;
 };
-type ReviewDecisionRecord = {
-  id: string;
-  status: ReviewDecisionRecordStatus;
-  label: string;
-  detail: string;
-  time: string;
-};
-type ReviewPullRequestCheckStatus = 'passed' | 'pending' | 'failed';
-type ReviewPullRequestSummary = {
-  title: string;
-  summary: string;
-  status: string;
-  branch: string;
-  base: string;
-  risk: ReviewDecisionSummary['risk'];
-  diff: string;
-  filesChanged: number;
-  canAct: boolean;
-  checks: Array<{ label: string; value: string; status: ReviewPullRequestCheckStatus }>;
-  files: ReviewDecisionArtifact[];
-  activity: Array<{ id: string; time: string; label: string; detail: string; status: string }>;
-};
-
 type AgentConversationSession = {
   scopeKey: string;
   conversation: AgentConversation;
@@ -988,18 +957,7 @@ function buildWorkspaceEvents(socketEvents: unknown[]): WorkspaceEventRecord[] {
     });
 }
 
-function reviewFileArtifacts(artifacts: WorkspaceArtifact[]): WorkspaceArtifact[] {
-  const fileArtifacts = artifacts.filter((artifact) => artifact.kind === 'Files');
-  return fileArtifacts.length
-    ? fileArtifacts
-    : artifacts.filter((artifact) => artifact.kind === 'Patches');
-}
-
 function buildReviewDecisionSummary(
-  dataset: RuntimeDataset,
-  workspaceEvents: WorkspaceEventRecord[],
-  artifacts: WorkspaceArtifact[],
-  selectedTask: WorkspaceTask | null,
   approvalRequest: DesktopApprovalRequest | null,
 ): ReviewDecisionSummary {
   const decision = approvalRequest?.decision ?? null;
@@ -1046,193 +1004,6 @@ function buildReviewDecisionSummary(
       hasPendingHitlRequest: Boolean(approvalRequest),
     }),
   };
-}
-
-function buildPullRequestSummary(
-  dataset: RuntimeDataset,
-  workspaceEvents: WorkspaceEventRecord[],
-  artifacts: WorkspaceArtifact[],
-  decision: ReviewDecisionSummary,
-): ReviewPullRequestSummary {
-  const fileArtifacts = reviewFileArtifacts(artifacts);
-  const displayedFiles = (fileArtifacts.length ? fileArtifacts : artifacts).slice(0, 5);
-  const errorCount = workspaceEvents.filter((event) => event.kind === 'Errors').length;
-  const blockedCount = dataset.tasks.filter((task) => taskStatus(task).includes('blocked')).length;
-  const runningCount = dataset.tasks.filter((task) =>
-    ['running', 'active', 'in_progress', 'executing'].some((status) =>
-      taskStatus(task).includes(status),
-    ),
-  ).length;
-  const workspaceId =
-    dataset.messages.find((message) => message.workspace_id)?.workspace_id ??
-    dataset.tasks.find((task) => task.workspace_id)?.workspace_id ??
-    dataset.workspaces[0]?.id ??
-    'workspace';
-  const branchName = `workspace/${workspaceId.slice(0, 8)}`;
-  const canAct = decision.canAct || Boolean(displayedFiles.length || workspaceEvents.length);
-  const status =
-    errorCount || blockedCount
-      ? 'needs review'
-      : canAct
-        ? runningCount
-          ? 'checks running'
-          : 'ready to review'
-        : 'idle';
-
-  return {
-    title: decision.title === 'No review packet loaded' ? 'Draft workspace pull request' : decision.title,
-    summary: decision.summary,
-    status,
-    branch: branchName,
-    base: 'main',
-    risk: decision.risk,
-    diff: decision.changeValue,
-    filesChanged: Math.max(decision.filesChanged, displayedFiles.length),
-    canAct,
-    checks: [
-      {
-        label: 'Agent events',
-        value: errorCount ? `${errorCount} errors` : `${workspaceEvents.length} events`,
-        status: errorCount ? 'failed' : workspaceEvents.length ? 'passed' : 'pending',
-      },
-      {
-        label: 'Workspace tasks',
-        value: blockedCount
-          ? `${blockedCount} blocked`
-          : runningCount
-            ? `${runningCount} running`
-            : `${dataset.tasks.length} loaded`,
-        status: blockedCount ? 'failed' : dataset.tasks.length ? 'passed' : 'pending',
-      },
-      {
-        label: 'Plan snapshot',
-        value: dataset.plan ? `${Object.keys(dataset.plan).length} fields` : 'not loaded',
-        status: dataset.plan ? 'passed' : 'pending',
-      },
-      {
-        label: 'Artifacts',
-        value: displayedFiles.length ? `${displayedFiles.length} files` : `${artifacts.length} items`,
-        status: displayedFiles.length || artifacts.length ? 'passed' : 'pending',
-      },
-    ],
-    files: displayedFiles.map((artifact) => ({
-      id: artifact.id,
-      name: artifact.name,
-      path: artifact.path || artifact.source,
-      meta: [artifact.kind, artifact.diff, artifact.status].filter(Boolean).join(' · '),
-      diff: artifact.diff,
-    })),
-    activity: workspaceEvents.slice(0, 4).map((event) => ({
-      id: event.id,
-      time: event.time,
-      label: event.eventType,
-      detail: event.detail,
-      status: event.status,
-    })),
-  };
-}
-
-function taskStatus(task: WorkspaceTask): string {
-  return (task.status ?? '').toLowerCase();
-}
-
-function taskTitle(task: WorkspaceTask | null): string | undefined {
-  if (!task) return undefined;
-  return task.title ?? task.id;
-}
-
-function taskSummary(task: WorkspaceTask | null): string | undefined {
-  if (!task) return undefined;
-  return task.summary ?? task.description ?? undefined;
-}
-
-function reviewIssueValue(task: WorkspaceTask | null): string {
-  const metadata = asRecordValue(task?.metadata);
-  const issue =
-    metadata &&
-    (readStringField(metadata, 'related_issue') ??
-      readStringField(metadata, 'issue') ??
-      readStringField(metadata, 'issue_id') ??
-      readStringField(metadata, 'issueId'));
-  if (issue) return issue;
-  const issueNumber =
-    metadata &&
-    (numberField(metadata, 'issue_number') ??
-      numberField(metadata, 'issueNumber') ??
-      numberField(metadata, 'issue_id'));
-  if (typeof issueNumber === 'number') return `#${issueNumber}`;
-  return task?.id ?? 'workspace';
-}
-
-function reviewTestsValue(dataset: RuntimeDataset, task: WorkspaceTask | null): string {
-  const metadata = asRecordValue(task?.metadata);
-  const plan = asRecordValue(dataset.plan);
-  const passed =
-    (metadata &&
-      (numberField(metadata, 'tests_passed') ??
-        numberField(metadata, 'testsPassed') ??
-        numberField(metadata, 'test_passed_count'))) ??
-    (plan &&
-      (numberField(plan, 'tests_passed') ??
-        numberField(plan, 'testsPassed') ??
-        numberField(plan, 'test_passed_count')));
-  const total =
-    (metadata &&
-      (numberField(metadata, 'tests_total') ??
-        numberField(metadata, 'testsTotal') ??
-        numberField(metadata, 'test_count'))) ??
-    (plan &&
-      (numberField(plan, 'tests_total') ??
-        numberField(plan, 'testsTotal') ??
-        numberField(plan, 'test_count')));
-  if (typeof passed === 'number') {
-    return typeof total === 'number' ? `${passed} / ${total} passed` : `${passed} passed`;
-  }
-  return 'pending';
-}
-
-function reviewChecksValue(input: {
-  errorCount: number;
-  artifacts: WorkspaceArtifact[];
-  dataset: RuntimeDataset;
-  workspaceEvents: WorkspaceEventRecord[];
-}): string {
-  const plan = asRecordValue(input.dataset.plan);
-  const passed =
-    plan &&
-    (numberField(plan, 'checks_passed') ??
-      numberField(plan, 'checksPassed') ??
-      numberField(plan, 'passed_checks'));
-  const total =
-    plan &&
-    (numberField(plan, 'checks_total') ??
-      numberField(plan, 'checksTotal') ??
-      numberField(plan, 'check_count'));
-  if (typeof passed === 'number') {
-    return typeof total === 'number' ? `${passed} / ${total} passed` : `${passed} passed`;
-  }
-  if (input.errorCount) return `${input.errorCount} failing`;
-  const availableSignals =
-    input.artifacts.length + input.workspaceEvents.length + (input.dataset.plan ? 1 : 0);
-  return availableSignals ? `${availableSignals} ready` : 'pending';
-}
-
-function summarizeArtifactDiff(artifacts: WorkspaceArtifact[]): string {
-  let additions = 0;
-  let deletions = 0;
-  let hasDiff = false;
-  artifacts.forEach((artifact) => {
-    const matches = artifact.diff.match(/[+-]\d+/g) ?? [];
-    matches.forEach((match) => {
-      const value = Number(match);
-      if (!Number.isFinite(value)) return;
-      hasDiff = true;
-      if (value > 0) additions += value;
-      if (value < 0) deletions += Math.abs(value);
-    });
-  });
-  if (!hasDiff) return `+0 / -0`;
-  return `+${additions} / -${deletions}`;
 }
 
 function workspaceEventFromSocketEvent(event: unknown, index: number): WorkspaceEventRecord {
@@ -2248,13 +2019,6 @@ export function App() {
       activeDataset.tasks[0] ??
       null,
     [activeDataset.tasks, selectedTaskId],
-  );
-  const reviewSelectedTask = useMemo(
-    () =>
-      sessionDataset.tasks.find((task) => task.id === selectedTaskId) ??
-      sessionDataset.tasks[0] ??
-      null,
-    [selectedTaskId, sessionDataset.tasks],
   );
   const workspaceEventInputs = useMemo(
     () =>
@@ -4584,8 +4348,7 @@ export function App() {
     if (item.settingsSection) return settingsWindowOpen && settingsInitialSection === item.settingsSection;
     if (item.target === 'background' || item.target === 'artifacts') {
       return (
-        (activeSection === 'workspace' || activeSection === 'review') &&
-        reviewTab === item.target
+        activeSection === 'workspace' && reviewTab === item.target
       );
     }
     return activeSection === item.section;
@@ -4610,7 +4373,7 @@ export function App() {
     if (item.target === 'background' || item.target === 'artifacts') {
       setReviewPanelOpen(true);
       setReviewTab(item.target);
-      switchSection('review');
+      switchSection('workspace');
       setMobileSectionMenuOpen(false);
       return;
     }
@@ -5212,62 +4975,33 @@ export function App() {
     />
   );
 
-  const renderWorkspaceReviewPanel = (
-    stage = false,
-    variant: WorkspaceReviewPanelVariant = 'workspace',
-    sessionControls?: SessionCanvasControls,
-  ) => (
+  const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
     <WorkspaceReviewPanel
       activeTab={reviewTab}
-      dataset={scopedConversation ? sessionDataset : activeDataset}
-      connection={connection}
-      socketConnected={socket.connected}
+      dataset={sessionDataset}
       socketEvents={workspaceEventInputs}
       timelineItems={conversationTimeline.items}
       artifacts={workspaceArtifacts}
-      artifactVersions={
-        scopedConversation
-          ? (displaySessionProjection?.artifactVersions ?? [])
-          : conversationTimeline.artifactVersions
-      }
-      artifactDeliveries={
-        scopedConversation
-          ? (displaySessionProjection?.artifactDeliveries ?? [])
-          : conversationTimeline.artifactDeliveries
-      }
-      toolInvocations={
-        scopedConversation
-          ? (displaySessionProjection?.toolInvocations ?? [])
-          : conversationTimeline.toolInvocations
-      }
+      artifactVersions={displaySessionProjection?.artifactVersions ?? []}
+      artifactDeliveries={displaySessionProjection?.artifactDeliveries ?? []}
+      toolInvocations={displaySessionProjection?.toolInvocations ?? []}
       currentRun={currentArtifactRun}
       changeSnapshot={changeSnapshot}
       changeSnapshotLoading={changeSnapshotLoading}
       changeSnapshotError={changeSnapshotError}
       changeReferences={runInputReferences}
       artifactActionPending={artifactActionPending}
-      selectedTask={scopedConversation ? reviewSelectedTask : selectedTask}
       terminal={terminal}
       terminalBinding={terminalBinding}
       terminalError={terminalProxy.error}
       terminalLines={terminalProxy.lines}
       terminalBusy={sandboxBusy}
       capabilityMode={sessionDetailViewModel?.capabilityMode ?? 'unavailable'}
-      approvalRequests={
-        scopedConversation
-          ? (displaySessionProjection?.pendingHitl ?? [])
-          : conversationTimeline.approvalRequests
-      }
-      sessionCapabilities={scopedConversation ? (sessionProjection?.capabilities ?? null) : null}
-      respondableHitlRequestIds={
-        scopedConversation
-          ? respondableHitlRequestIds
-          : conversationTimeline.approvalRequests
-              .filter((request) => request.status === 'pending')
-              .map((request) => request.id)
-      }
-      sessionDataAvailable={!scopedConversation || displaySessionProjection !== null}
-      authorityNotice={scopedConversation ? sessionAuthorityNotice : null}
+      approvalRequests={displaySessionProjection?.pendingHitl ?? []}
+      sessionCapabilities={sessionProjection?.capabilities ?? null}
+      respondableHitlRequestIds={respondableHitlRequestIds}
+      sessionDataAvailable={displaySessionProjection !== null}
+      authorityNotice={sessionAuthorityNotice}
       onAuthorityAction={
         sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
       }
@@ -5281,16 +5015,6 @@ export function App() {
         setRunInputReferences((current) => toggleRunInputReference(current, reference))
       }
       onTabChange={setReviewTab}
-      onClose={
-        stage
-          ? () => {
-              setReviewPanelOpen(false);
-              switchSection('workspace');
-            }
-          : () => setReviewPanelOpen(false)
-      }
-      stage={stage}
-      variant={variant}
       sessionControls={sessionControls}
     />
   );
@@ -5308,7 +5032,6 @@ export function App() {
         />
       );
     }
-    if (activeSection === 'review') return renderWorkspaceReviewPanel(true);
     if (activeSection === 'workspace') return renderWorkspaceOverview();
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
@@ -5360,9 +5083,7 @@ export function App() {
                 ? 'my-work'
                 : activeSection === 'automations'
                   ? 'automations'
-                  : activeSection === 'review'
-                    ? 'notifications'
-                    : null
+                  : null
             }
             mode={preferredTaskMode}
             taskCount={dataset.myWork.length}
@@ -5385,7 +5106,6 @@ export function App() {
               if (section === 'my-work') switchSection('board');
               if (section === 'automations') switchSection('automations');
               if (section === 'search') openCommandPalette();
-              if (section === 'notifications') switchSection('review');
             }}
             onToggleWorkspace={toggleWorkspace}
             onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
@@ -5407,7 +5127,7 @@ export function App() {
                 thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
                 canvas={
                   showReviewPanel
-                    ? (controls) => renderWorkspaceReviewPanel(false, 'session', controls)
+                    ? (controls) => renderWorkspaceReviewPanel(controls)
                     : null
                 }
                 evidence={sessionInspectorEvidence}
@@ -5424,11 +5144,8 @@ export function App() {
                 }
               />
             ) : (
-              <section
-                className={`workbench-layout ${showReviewPanel ? '' : 'review-panel-collapsed'}`}
-              >
+              <section className="workbench-layout">
                 <section className={paneStageClassName}>{renderWorkbench()}</section>
-                {showReviewPanel ? renderWorkspaceReviewPanel() : null}
               </section>
             )}
           </main>
@@ -6109,8 +5826,6 @@ function WorkflowStrip({
 function WorkspaceReviewPanel({
   activeTab,
   dataset,
-  connection,
-  socketConnected,
   socketEvents,
   timelineItems,
   artifacts,
@@ -6123,7 +5838,6 @@ function WorkspaceReviewPanel({
   changeSnapshotError,
   changeReferences,
   artifactActionPending,
-  selectedTask,
   terminal,
   terminalBinding,
   terminalError,
@@ -6144,15 +5858,10 @@ function WorkspaceReviewPanel({
   onRefreshChanges,
   onToggleChangeReference,
   onTabChange,
-  onClose,
-  stage = false,
-  variant = 'workspace',
   sessionControls,
 }: {
   activeTab: ReviewTab;
   dataset: RuntimeDataset;
-  connection: ConnectionState;
-  socketConnected: boolean;
   socketEvents: unknown[];
   timelineItems: AgentTimelineItem[];
   artifacts: WorkspaceArtifact[];
@@ -6165,7 +5874,6 @@ function WorkspaceReviewPanel({
   changeSnapshotError: string | null;
   changeReferences: CodeRangeReference[];
   artifactActionPending: { versionId: string; action: ArtifactVersionAction } | null;
-  selectedTask: WorkspaceTask | null;
   terminal: TerminalServiceResponse | null;
   terminalBinding: TerminalBindingState;
   terminalError: string | null;
@@ -6195,20 +5903,10 @@ function WorkspaceReviewPanel({
   onRefreshChanges: () => void;
   onToggleChangeReference: (reference: CodeRangeReference) => void;
   onTabChange: (tab: ReviewTab) => void;
-  onClose: () => void;
-  stage?: boolean;
-  variant?: WorkspaceReviewPanelVariant;
   sessionControls?: SessionCanvasControls;
 }) {
   const { t } = useI18n();
-  const [showMoreTabs, setShowMoreTabs] = useState(false);
-  const [showAddTabs, setShowAddTabs] = useState(false);
-  const [panelMode, setPanelMode] = useState<'normal' | 'maximized' | 'fullscreen'>('normal');
   const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<string | null>(null);
-  const moreTabsButtonRef = useRef<HTMLButtonElement>(null);
-  const moreTabsMenuRef = useRef<HTMLDivElement>(null);
-  const addTabButtonRef = useRef<HTMLButtonElement>(null);
-  const addTabMenuRef = useRef<HTMLDivElement>(null);
   const sessionTabListRef = useRef<HTMLElement>(null);
   const planRows = dataset.plan ? buildPlanDisplayRows(dataset.plan) : [];
   const workspaceEvents = useMemo(() => buildWorkspaceEvents(socketEvents), [socketEvents]);
@@ -6240,83 +5938,33 @@ function WorkspaceReviewPanel({
     approvalRequest && respondableHitlRequestIds.includes(approvalRequest.id),
   );
   const reviewDecision = useMemo(
-    () =>
-      buildReviewDecisionSummary(
-        dataset,
-        workspaceEvents,
-        artifacts,
-        selectedTask,
-        approvalRequest,
-      ),
-    [approvalRequest, artifacts, dataset, selectedTask, workspaceEvents],
+    () => buildReviewDecisionSummary(approvalRequest),
+    [approvalRequest],
   );
-  const pullRequestSummary = useMemo(
-    () => buildPullRequestSummary(dataset, workspaceEvents, artifacts, reviewDecision),
-    [artifacts, dataset, reviewDecision, workspaceEvents],
-  );
-  const configuredCanvasTabs = useMemo(
-    () => sessionCanvasTabs(capabilityMode, variant),
-    [capabilityMode, variant],
-  );
-  const chrome = workspaceReviewPanelChrome(variant, Boolean(sessionControls));
+  const configuredCanvasTabs = useMemo(() => sessionCanvasTabs(capabilityMode), [capabilityMode]);
+  const chrome = workspaceReviewPanelChrome(Boolean(sessionControls));
   const tabValue = (tab: SessionCanvasTabId): string | undefined => {
-    if (variant === 'session') {
-      if (tab === 'changes' && changeSnapshot?.status === 'ready') {
-        return `+${changeSnapshot.additions} / −${changeSnapshot.deletions}`;
-      }
-      if (tab === 'activity' && invocationSummary.total) return `${invocationSummary.total}`;
-      if (tab === 'checks' || tab === 'verification') {
-        const failed = checkEvidence.rows.filter((row) => {
-          const status = row.status?.toLowerCase();
-          return status === 'failed' || status === 'error';
-        }).length;
-        if (failed) return `${failed} ${t('session.failedShort')}`;
-        if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
-        return checkEvidence.missing.length ? t('session.evidence.missing') : undefined;
-      }
-      if (tab === 'artifacts' && artifactVersions.length) {
-        return `${currentArtifactVersions(artifactVersions).length}`;
-      }
-      if (tab === 'sources') {
-        if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
-        return sourceEvidence.missing.length ? t('session.evidence.missing') : undefined;
-      }
-      return undefined;
+    if (tab === 'changes' && changeSnapshot?.status === 'ready') {
+      return `+${changeSnapshot.additions} / −${changeSnapshot.deletions}`;
     }
-    if (tab === 'overview') return sessionViewModel?.status ?? 'idle';
-    if (tab === 'changes') {
-      return changeSnapshot?.status === 'ready'
-        ? `+${changeSnapshot.additions} / −${changeSnapshot.deletions}`
-        : reviewDecision.changeValue;
-    }
-    if (tab === 'plan') return dataset.plan ? 'ready' : 'idle';
-    if (tab === 'terminal') return terminalBinding;
-    if (tab === 'activity') return invocationSummary.total ? `${invocationSummary.total}` : 'idle';
-    if (tab === 'checks') {
+    if (tab === 'activity' && invocationSummary.total) return `${invocationSummary.total}`;
+    if (tab === 'checks' || tab === 'verification') {
       const failed = checkEvidence.rows.filter((row) => {
         const status = row.status?.toLowerCase();
         return status === 'failed' || status === 'error';
       }).length;
       if (failed) return `${failed} ${t('session.failedShort')}`;
       if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
-      return checkEvidence.missing.length ? t('session.evidence.missing') : 'idle';
+      return checkEvidence.missing.length ? t('session.evidence.missing') : undefined;
     }
-    if (tab === 'artifacts') {
-      return artifactVersions.length
-        ? `${currentArtifactVersions(artifactVersions).length}`
-        : socketConnected
-          ? 'subscribed'
-          : 'idle';
+    if (tab === 'artifacts' && artifactVersions.length) {
+      return `${currentArtifactVersions(artifactVersions).length}`;
     }
     if (tab === 'sources') {
       if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
-      return sourceEvidence.missing.length ? t('session.evidence.missing') : 'idle';
+      return sourceEvidence.missing.length ? t('session.evidence.missing') : undefined;
     }
-    if (tab === 'verification') {
-      if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
-      return checkEvidence.missing.length ? t('session.evidence.missing') : 'idle';
-    }
-    return 'idle';
+    return undefined;
   };
   const reviewTabs: Array<{
     tab: ReviewTab;
@@ -6327,49 +5975,10 @@ function WorkspaceReviewPanel({
     label: t(tab.labelKey),
     value: tabValue(tab.id),
   }));
-  const overflowReviewTabs: Array<{
-    tab: ReviewTab;
-    label: string;
-    value?: string;
-  }> = configuredCanvasTabs.secondary.map((tab) => ({
-    tab: tab.id,
-    label: t(tab.labelKey),
-    value: tabValue(tab.id),
-  }));
-  const moreTabs: Array<{
-    tab: ReviewTab;
-    label: string;
-    value?: string;
-  }> = overflowReviewTabs;
-  const addableTabs: Array<{
-    tab: ReviewTab;
-    label: string;
-    value: string;
-  }> = [...reviewTabs, ...overflowReviewTabs].map(({ tab, label, value }) => ({
-    tab,
-    label,
-    value: value ?? 'tab',
-  }));
-  const panelClassName = [
-    'review-panel',
-    stage ? 'review-panel-stage' : '',
-    variant === 'session' ? 'review-panel-session' : '',
-    panelMode === 'fullscreen' ? 'full-screen' : '',
-    panelMode === 'maximized' ? 'maximized' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  const visibleReviewTabs = visibleWorkspaceReviewTabs(
-    variant,
-    reviewTabs,
-    overflowReviewTabs,
-    activeTab,
-  );
+  const panelClassName = 'review-panel review-panel-session';
 
   const selectTab = (tab: ReviewTab) => {
     onTabChange(tab);
-    setShowMoreTabs(false);
-    setShowAddTabs(false);
   };
   useEffect(() => {
     const availableTabs = new Set(
@@ -6389,101 +5998,19 @@ function WorkspaceReviewPanel({
   }, [activeTab, configuredCanvasTabs, onTabChange]);
 
   useEffect(() => {
-    if (variant !== 'session') return;
     const frame = window.requestAnimationFrame(() => {
       sessionTabListRef.current
         ?.querySelector<HTMLButtonElement>('.review-tab.selected')
         ?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [variant]);
-
-  useEffect(() => {
-    if (!showMoreTabs) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setShowMoreTabs(false);
-      moreTabsButtonRef.current?.focus();
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (moreTabsMenuRef.current?.contains(target)) return;
-      if (moreTabsButtonRef.current?.contains(target)) return;
-      setShowMoreTabs(false);
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [showMoreTabs]);
-
-  useEffect(() => {
-    if (!showAddTabs) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setShowAddTabs(false);
-      addTabButtonRef.current?.focus();
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (addTabMenuRef.current?.contains(target)) return;
-      if (addTabButtonRef.current?.contains(target)) return;
-      setShowAddTabs(false);
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [showAddTabs]);
+  }, []);
 
   return (
-    <aside className={panelClassName} aria-label="Workspace review panel">
-      {chrome.showHeader ? (
-        <header className="review-head">
-          <div>
-            <Heading as="h2" size="3">
-              Workspace
-            </Heading>
-            <Text size="1" color="gray">
-              Review changes, pull requests, plans, background agents, artifacts, and terminal output.
-            </Text>
-          </div>
-          <div className="review-head-actions">
-            <Badge color={connection === 'ready' ? 'green' : 'gray'} variant="soft">
-              {connection}
-            </Badge>
-            <Tooltip content="Close workspace panel">
-              <IconButton
-                size="1"
-                variant="ghost"
-                color="gray"
-                aria-label="Close drawer"
-                onClick={onClose}
-              >
-                <Cross2Icon />
-              </IconButton>
-            </Tooltip>
-          </div>
-        </header>
-      ) : null}
-
-      <div className="review-tabs" aria-label="Workspace tabs">
+    <aside className={panelClassName} aria-label={t('session.canvas')}>
+      <div className="review-tabs" aria-label={t('session.canvas')}>
         <nav className="review-tab-scroll" ref={sessionTabListRef}>
-          {visibleReviewTabs.map(({ tab, label, value }) => (
+          {reviewTabs.map(({ tab, label, value }) => (
             <button
               className={`review-tab ${activeTab === tab ? 'selected' : ''}`}
               type="button"
@@ -6496,174 +6023,44 @@ function WorkspaceReviewPanel({
             </button>
           ))}
         </nav>
-        {chrome.showOverflowMenus || chrome.showPanelModeActions || sessionControls ? (
-          <div className="review-tab-actions" aria-label="Workspace tab actions">
-            {chrome.showOverflowMenus ? (
-              <Tooltip content="More tabs">
-                <IconButton
-                  ref={moreTabsButtonRef}
-                  size="1"
-                  variant="ghost"
-                  color="gray"
-                  aria-label="More tabs"
-                  aria-controls={showMoreTabs ? 'workspace-more-tabs-menu' : undefined}
-                  aria-expanded={showMoreTabs}
-                  aria-haspopup="menu"
-                  onClick={() => {
-                    setShowAddTabs(false);
-                    setShowMoreTabs((open) => !open);
-                  }}
-                >
-                  <DotsHorizontalIcon />
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {chrome.showOverflowMenus ? (
-              <Tooltip content="Add tab">
-                <IconButton
-                  ref={addTabButtonRef}
-                  size="1"
-                  variant="ghost"
-                  color="gray"
-                  aria-label="Add workspace tab"
-                  aria-controls={showAddTabs ? 'workspace-add-tabs-menu' : undefined}
-                  aria-expanded={showAddTabs}
-                  aria-haspopup="menu"
-                  onClick={() => {
-                    setShowMoreTabs(false);
-                    setShowAddTabs((open) => !open);
-                  }}
-                >
-                  <PlusIcon />
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {chrome.showPanelModeActions ? (
-              <Tooltip
-                content={panelMode === 'fullscreen' ? 'Exit full screen' : 'Enter full screen'}
-              >
-                <IconButton
-                  size="1"
-                  variant="ghost"
-                  color={panelMode === 'fullscreen' ? 'cyan' : 'gray'}
-                  aria-label={
-                    panelMode === 'fullscreen' ? 'Exit full screen' : 'Enter full screen'
-                  }
-                  aria-pressed={panelMode === 'fullscreen'}
-                  onClick={() =>
-                    setPanelMode((mode) => (mode === 'fullscreen' ? 'normal' : 'fullscreen'))
-                  }
-                >
-                  {panelMode === 'fullscreen' ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {chrome.showPanelModeActions ? (
-              <Tooltip content={panelMode === 'maximized' ? 'Restore panel' : 'Maximize panel'}>
-                <IconButton
-                  size="1"
-                  variant="ghost"
-                  color={panelMode === 'maximized' ? 'cyan' : 'gray'}
-                  aria-label={panelMode === 'maximized' ? 'Restore panel' : 'Maximize panel'}
-                  aria-pressed={panelMode === 'maximized'}
-                  onClick={() =>
-                    setPanelMode((mode) => (mode === 'maximized' ? 'normal' : 'maximized'))
-                  }
-                >
-                  <FrameIcon />
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {chrome.showSessionLayoutActions && sessionControls ? (
-              <Tooltip
-                content={
+        {chrome.showSessionLayoutActions && sessionControls ? (
+          <div className="review-tab-actions" aria-label={t('session.canvas')}>
+            <Tooltip
+              content={
+                sessionControls.layout === 'focus'
+                  ? t('session.splitView')
+                  : t('session.focusCanvas')
+              }
+            >
+              <IconButton
+                size="1"
+                variant="ghost"
+                color="gray"
+                aria-label={
                   sessionControls.layout === 'focus'
                     ? t('session.splitView')
                     : t('session.focusCanvas')
                 }
+                onClick={() =>
+                  sessionControls.onLayoutChange(
+                    sessionControls.layout === 'focus' ? 'split' : 'focus',
+                  )
+                }
               >
-                <IconButton
-                  size="1"
-                  variant="ghost"
-                  color="gray"
-                  aria-label={
-                    sessionControls.layout === 'focus'
-                      ? t('session.splitView')
-                      : t('session.focusCanvas')
-                  }
-                  onClick={() =>
-                    sessionControls.onLayoutChange(
-                      sessionControls.layout === 'focus' ? 'split' : 'focus',
-                    )
-                  }
-                >
-                  {sessionControls.layout === 'focus' ? (
-                    <ColumnsIcon />
-                  ) : (
-                    <EnterFullScreenIcon />
-                  )}
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {chrome.showSessionLayoutActions && sessionControls ? (
-              <Tooltip content={t('session.closeCanvas')}>
-                <IconButton
-                  size="1"
-                  variant="ghost"
-                  color="gray"
-                  aria-label={t('session.closeCanvas')}
-                  onClick={sessionControls.onClose}
-                >
-                  <Cross2Icon />
-                </IconButton>
-              </Tooltip>
-            ) : null}
-          </div>
-        ) : null}
-        {chrome.showOverflowMenus && showMoreTabs ? (
-          <div
-            className="review-tab-menu"
-            id="workspace-more-tabs-menu"
-            ref={moreTabsMenuRef}
-            role="menu"
-            aria-label="More workspace tabs"
-          >
-            {moreTabs.map(({ tab, label, value }) => (
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={activeTab === tab}
-                aria-label={`Open ${label} workspace tab${value ? `, ${value}` : ''}`}
-                key={tab}
-                onClick={() => selectTab(tab)}
+                {sessionControls.layout === 'focus' ? <ColumnsIcon /> : <EnterFullScreenIcon />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip content={t('session.closeCanvas')}>
+              <IconButton
+                size="1"
+                variant="ghost"
+                color="gray"
+                aria-label={t('session.closeCanvas')}
+                onClick={sessionControls.onClose}
               >
-                <span>{label}</span>
-                {value ? <em>{value}</em> : null}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {chrome.showOverflowMenus && showAddTabs ? (
-          <div
-            className="review-tab-menu review-add-tab-menu"
-            id="workspace-add-tabs-menu"
-            ref={addTabMenuRef}
-            role="menu"
-            aria-label="Add workspace tab"
-          >
-            {addableTabs.map(({ tab, label, value }) => (
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={activeTab === tab}
-                aria-label={`Add ${label} workspace tab, ${value}`}
-                key={tab}
-                onClick={() => selectTab(tab)}
-              >
-                <span>{label}</span>
-                <em>{value}</em>
-              </button>
-            ))}
+                <Cross2Icon />
+              </IconButton>
+            </Tooltip>
           </div>
         ) : null}
       </div>
@@ -6814,14 +6211,6 @@ function WorkspaceReviewPanel({
           />
         ) : null}
 
-        {variant !== 'session' && activeTab === 'pull' ? (
-          <PullRequestReviewPanel
-            summary={pullRequestSummary}
-            onOpenChanges={() => selectTab('changes')}
-            onOpenArtifacts={() => selectTab('artifacts')}
-          />
-        ) : null}
-
         {activeTab === 'plan' ? (
           <div className="review-plan">
             {dataset.plan ? (
@@ -6882,8 +6271,8 @@ function WorkspaceReviewPanel({
             versions={artifactVersions}
             deliveries={artifactDeliveries}
             currentRun={currentRun}
-            capabilities={variant === 'session' ? sessionCapabilities : null}
-            enforceCapabilities={variant === 'session'}
+            capabilities={sessionCapabilities}
+            enforceCapabilities
             available={sessionDataAvailable}
             focusVersionId={focusedArtifactVersionId}
             unversionedEvidenceCount={artifacts.length}
@@ -6944,172 +6333,6 @@ function WorkspaceReviewPanel({
         ) : null}
       </div>
     </aside>
-  );
-}
-
-function PullRequestReviewPanel({
-  summary,
-  onOpenChanges,
-  onOpenArtifacts,
-}: {
-  summary: ReviewPullRequestSummary;
-  onOpenChanges: () => void;
-  onOpenArtifacts: () => void;
-}) {
-  const statusColor =
-    summary.status === 'needs review' ? 'red' : summary.status === 'idle' ? 'gray' : 'green';
-  const riskClassName = `risk-${summary.risk.toLowerCase()}`;
-
-  return (
-    <div className="review-pr">
-      <section className="pr-summary-panel">
-        <div className="pr-summary-head">
-          <div>
-            <span className="pr-kicker">
-              <ReaderIcon />
-              Pull request packet
-            </span>
-            <Heading as="h3" size="3">
-              {summary.title}
-            </Heading>
-            <p>{summary.summary}</p>
-          </div>
-          <Badge color={statusColor} variant="soft">
-            {summary.status}
-          </Badge>
-        </div>
-
-        <div className="pr-branch-strip" aria-label="Pull request branch summary">
-          <div>
-            <span>Branch</span>
-            <strong>{summary.branch}</strong>
-          </div>
-          <ChevronRightIcon aria-hidden />
-          <div>
-            <span>Base</span>
-            <strong>{summary.base}</strong>
-          </div>
-          <div>
-            <span>Diff</span>
-            <strong>{summary.diff}</strong>
-          </div>
-        </div>
-
-        <div className="pr-metric-grid" aria-label="Pull request review metrics">
-          <div>
-            <CommitIcon />
-            <span>Files changed</span>
-            <strong>{summary.filesChanged}</strong>
-          </div>
-          <div>
-            <ExclamationTriangleIcon />
-            <span>Estimated risk</span>
-            <strong className={riskClassName}>{summary.risk}</strong>
-          </div>
-          <div>
-            <ActivityLogIcon />
-            <span>Checks</span>
-            <strong>{summary.checks.filter((check) => check.status === 'passed').length} passed</strong>
-          </div>
-        </div>
-
-        <section className="pr-section">
-          <div className="pr-section-head">
-            <strong>Checks</strong>
-            <button type="button" onClick={onOpenChanges}>
-              Open review
-              <ChevronRightIcon />
-            </button>
-          </div>
-          <div className="pr-check-list">
-            {summary.checks.map((check) => (
-              <div className={`pr-check-row ${check.status}`} key={check.label}>
-                <CheckCircledIcon />
-                <span>{check.label}</span>
-                <strong>{check.value}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="pr-section">
-          <div className="pr-section-head">
-            <strong>Files</strong>
-            <button type="button" onClick={onOpenArtifacts}>
-              Open artifacts
-              <ChevronRightIcon />
-            </button>
-          </div>
-          {summary.files.length ? (
-            <div className="pr-file-list">
-              {summary.files.map((file) => (
-                <div className="pr-file-row" key={file.id}>
-                  <FileTextIcon />
-                  <span>
-                    <strong>{file.name}</strong>
-                    <small title={file.path}>{file.path}</small>
-                  </span>
-                  <em>{file.meta || 'tracked'}</em>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="pr-empty-copy">No file artifacts are attached to this workspace yet.</p>
-          )}
-        </section>
-      </section>
-
-      <section className="pr-actions-panel">
-        <div>
-          <Heading as="h3" size="2">
-            Review actions
-          </Heading>
-          <Text size="1" color="gray">
-            Read-only packet — no backend PR review contract
-          </Text>
-        </div>
-        <button
-          className="decision-approve-button"
-          type="button"
-          title={REVIEW_ACTION_UNAVAILABLE}
-          disabled
-        >
-          <CheckCircledIcon />
-          <span>
-            <strong>Approve</strong>
-            <small>{REVIEW_ACTION_UNAVAILABLE}</small>
-          </span>
-        </button>
-        <button
-          className="decision-request-button"
-          type="button"
-          title={REVIEW_ACTION_UNAVAILABLE}
-          disabled
-        >
-          <MixerHorizontalIcon />
-          <span>
-            <strong>Request changes</strong>
-            <small>{REVIEW_ACTION_UNAVAILABLE}</small>
-          </span>
-        </button>
-
-        <div className="pr-activity-list" aria-label="Recent pull request activity">
-          <strong>Recent activity</strong>
-          {summary.activity.length ? (
-            summary.activity.map((event) => (
-              <div className="pr-activity-row" key={event.id}>
-                <span>{event.time}</span>
-                <em>{event.status}</em>
-                <strong>{event.label}</strong>
-                <small title={event.detail}>{event.detail}</small>
-              </div>
-            ))
-          ) : (
-            <p>No background activity loaded.</p>
-          )}
-        </div>
-      </section>
-    </div>
   );
 }
 
