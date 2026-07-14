@@ -56,6 +56,7 @@ mod authorized_tool_host;
 mod changes;
 mod resource_registry;
 mod run_control;
+mod session_projection;
 mod session_store;
 mod steering;
 mod tool_authority;
@@ -1351,6 +1352,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/agent/conversations/:conversation_id/mode",
             patch(update_conversation_mode),
+        )
+        .route(
+            "/api/v1/agent/conversations/:conversation_id/session",
+            get(session_projection::conversation_session),
         )
         .route(
             "/api/v1/agent/conversations/:conversation_id/messages",
@@ -6492,6 +6497,92 @@ mod tests {
         assert_eq!(plan["pending_hitl"], json!([]));
         assert_eq!(plan["delivery"], json!([]));
         assert_eq!(plan["artifact_index"], json!([]));
+    }
+
+    #[tokio::test]
+    async fn conversation_session_projection_returns_one_authoritative_snapshot() {
+        let state = test_state("session-projection-secret");
+        let conversation = LocalConversation {
+            id: "conversation-session-projection".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Project the complete session".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        state
+            .session_store
+            .replace_agent_plan_tasks(
+                &conversation.id,
+                &[json!({
+                    "id": "session-projection-task",
+                    "conversation_id": conversation.id,
+                    "content": "Expose authoritative session state",
+                    "status": "in_progress",
+                    "priority": "high",
+                    "order_index": 0,
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                })],
+            )
+            .expect("store plan");
+        let approved = state
+            .session_store
+            .approve_plan_and_start(
+                &conversation.id,
+                "local-project",
+                "session-projection-approval",
+                "session-projection-message",
+                "Execute the reviewed plan",
+                &now_iso(),
+            )
+            .expect("approve plan");
+
+        let response = local_router(state)
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{}/session",
+                        conversation.id
+                    ))
+                    .header("authorization", "Bearer session-projection-secret")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let snapshot = response_json(response).await;
+
+        assert_eq!(snapshot["schema_version"], 1);
+        assert_eq!(snapshot["conversation"]["id"], conversation.id);
+        assert_eq!(snapshot["current_run"]["id"], approved.run.id);
+        assert_eq!(snapshot["run_history"].as_array().map(Vec::len), Some(1));
+        assert_eq!(snapshot["current_plan"]["id"], approved.plan_version.id);
+        assert_eq!(snapshot["current_plan"]["status"], "approved");
+        assert_eq!(snapshot["plan_history"].as_array().map(Vec::len), Some(1));
+        assert_eq!(snapshot["tasks"][0]["id"], "session-projection-task");
+        assert_eq!(snapshot["pending_hitl"], json!([]));
+        assert_eq!(snapshot["artifact_versions"], json!([]));
+        assert_eq!(snapshot["artifact_deliveries"], json!([]));
+        assert_eq!(snapshot["tool_invocations"], json!([]));
+        assert_eq!(snapshot["evidence_summary"]["checks"], Value::Null);
+        assert_eq!(snapshot["capabilities"]["can_send_message"], false);
+        assert_eq!(snapshot["capabilities"]["can_approve_plan"], false);
+        assert_eq!(snapshot["capabilities"]["run_actions"], json!([]));
+        assert!(snapshot["snapshot_revision"]
+            .as_str()
+            .is_some_and(|revision| !revision.is_empty()));
+        assert!(snapshot["updated_at"]
+            .as_str()
+            .is_some_and(|updated_at| !updated_at.is_empty()));
     }
 
     #[tokio::test]

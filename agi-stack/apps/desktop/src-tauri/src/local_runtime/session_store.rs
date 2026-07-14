@@ -108,6 +108,20 @@ pub(super) struct WorkspaceExecutionSnapshot {
     pub(super) artifact_index: Vec<DesktopArtifactVersion>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub(super) struct ConversationSessionSnapshot {
+    pub(super) conversation: LocalConversation,
+    pub(super) current_run: Option<DesktopRun>,
+    pub(super) run_history: Vec<DesktopRun>,
+    pub(super) current_plan: Option<DesktopPlanVersion>,
+    pub(super) plan_history: Vec<DesktopPlanVersion>,
+    pub(super) tasks: Vec<Value>,
+    pub(super) pending_hitl: Vec<DesktopHitlRequest>,
+    pub(super) artifact_versions: Vec<DesktopArtifactVersion>,
+    pub(super) artifact_deliveries: Vec<DesktopArtifactDelivery>,
+    pub(super) tool_invocations: Vec<ToolInvocation>,
+}
+
 impl DesktopSessionStore {
     pub(super) fn open(path: &Path) -> Result<Self, String> {
         let connection = Connection::open(path).map_err(|error| error.to_string())?;
@@ -558,6 +572,101 @@ impl DesktopSessionStore {
             delivery,
             artifact_index,
         })
+    }
+
+    pub(super) fn conversation_session_snapshot(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<ConversationSessionSnapshot>, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let Some(conversation) =
+            query_conversation(&transaction, conversation_id).map_err(|error| error.to_string())?
+        else {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(None);
+        };
+
+        let run_history: Vec<DesktopRun> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT value_json FROM desktop_runs
+                     WHERE conversation_id = ?1 ORDER BY created_at DESC, id DESC",
+                )
+                .map_err(|error| error.to_string())?;
+            typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?
+        };
+        let plan_history: Vec<DesktopPlanVersion> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT value_json FROM desktop_plan_versions
+                     WHERE conversation_id = ?1 ORDER BY version DESC, id DESC",
+                )
+                .map_err(|error| error.to_string())?;
+            typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?
+        };
+        let pending_hitl: Vec<DesktopHitlRequest> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT value_json FROM desktop_hitl_requests
+                     WHERE conversation_id = ?1 AND status = 'pending'
+                     ORDER BY created_at DESC, id DESC",
+                )
+                .map_err(|error| error.to_string())?;
+            typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?
+        };
+        let artifact_versions: Vec<DesktopArtifactVersion> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT value_json FROM desktop_artifact_versions
+                     WHERE conversation_id = ?1 ORDER BY created_at DESC, version DESC",
+                )
+                .map_err(|error| error.to_string())?;
+            typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?
+        };
+        let artifact_deliveries: Vec<DesktopArtifactDelivery> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT value_json FROM desktop_artifact_deliveries
+                     WHERE conversation_id = ?1 ORDER BY created_at DESC, id DESC",
+                )
+                .map_err(|error| error.to_string())?;
+            typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?
+        };
+        let tool_invocations: Vec<ToolInvocation> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT invocation.value_json
+                     FROM desktop_tool_invocations invocation
+                     JOIN desktop_runs run ON run.id = invocation.run_id
+                     WHERE run.conversation_id = ?1
+                     ORDER BY invocation.prepared_at_ms ASC, invocation.id ASC",
+                )
+                .map_err(|error| error.to_string())?;
+            typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))?
+        };
+
+        let current_run = run_history.first().cloned();
+        let current_plan = plan_history.first().cloned();
+        let tasks = current_plan
+            .as_ref()
+            .map(|plan| plan.tasks.clone())
+            .unwrap_or_default();
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(Some(ConversationSessionSnapshot {
+            conversation,
+            current_run,
+            run_history,
+            current_plan,
+            plan_history,
+            tasks,
+            pending_hitl,
+            artifact_versions,
+            artifact_deliveries,
+            tool_invocations,
+        }))
     }
 
     pub(super) fn append_workspace_message(
