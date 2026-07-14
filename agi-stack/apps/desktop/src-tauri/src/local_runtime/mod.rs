@@ -2953,6 +2953,10 @@ async fn list_agent_plan_tasks(
         "total_count": tasks.len(),
         "tasks": tasks,
         "plan_version": plan_version,
+        "approval": {
+            "kind": "versioned_atomic",
+            "plan_version": plan_version,
+        },
     })))
 }
 
@@ -6424,6 +6428,9 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("json");
         assert_eq!(payload["total_count"], 1);
         assert_eq!(payload["tasks"][0]["content"], "Inspect the session UI");
+        assert_eq!(payload["approval"]["kind"], "versioned_atomic");
+        assert_eq!(payload["approval"]["plan_version"]["status"], "draft");
+        assert_eq!(payload["approval"]["plan_version"], payload["plan_version"]);
     }
 
     #[tokio::test]

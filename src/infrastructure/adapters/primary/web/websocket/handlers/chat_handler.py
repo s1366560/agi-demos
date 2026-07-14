@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast, override
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 
 from src.domain.model.agent.execution_backend import execution_backend_from_metadata
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
@@ -23,11 +23,15 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler imp
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.models import UserTenant
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project,
+    UserProject,
+    UserTenant,
+)
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
-    from src.domain.model.agent import Agent, AgentExecutionEvent
+    from src.domain.model.agent import Agent, AgentExecutionEvent, Conversation
     from src.domain.model.agent.execution.event_time import EventTimeGenerator
     from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
         SqlAgentExecutionEventRepository,
@@ -183,6 +187,7 @@ class SendMessageHandler(WebSocketMessageHandler):
         """Handle send_message: Start agent execution."""
         conversation_id = message.get("conversation_id")
         user_message = message.get("message")
+        message_id = message.get("message_id")
         project_id = message.get("project_id")
         preferred_language = message.get("preferred_language")
         attachment_ids = message.get("attachment_ids")
@@ -227,7 +232,11 @@ class SendMessageHandler(WebSocketMessageHandler):
                 await context.send_error("Conversation not found", conversation_id=conversation_id)
                 return
 
-            if conversation.user_id != context.user_id:
+            if not await _conversation_scope_is_active(
+                context,
+                conversation=conversation,
+                project_id=project_id,
+            ):
                 await context.send_error(
                     "You do not have permission to access this conversation",
                     conversation_id=conversation_id,
@@ -276,7 +285,10 @@ class SendMessageHandler(WebSocketMessageHandler):
             await context.connection_manager.subscribe(context.session_id, conversation_id)
 
             # Send acknowledgment
-            await context.send_ack("send_message", conversation_id=conversation_id)
+            ack_fields = {"conversation_id": conversation_id}
+            if message_id is not None:
+                ack_fields["message_id"] = message_id
+            await context.send_ack("send_message", **ack_fields)
 
             task = asyncio.create_task(
                 stream_agent_to_websocket_with_fresh_session(
@@ -388,6 +400,40 @@ class StopSessionHandler(WebSocketMessageHandler):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+async def _conversation_scope_is_active(
+    context: MessageContext,
+    *,
+    conversation: Conversation,
+    project_id: str,
+) -> bool:
+    """Validate the complete persisted scope for one conversation turn."""
+    if (
+        conversation.user_id != context.user_id
+        or conversation.tenant_id != context.tenant_id
+        or conversation.project_id != project_id
+    ):
+        return False
+
+    statement = select(Project.id).where(
+        Project.id == project_id,
+        Project.tenant_id == context.tenant_id,
+        exists(
+            select(UserProject.id).where(
+                UserProject.user_id == context.user_id,
+                UserProject.project_id == project_id,
+            )
+        ),
+        exists(
+            select(UserTenant.id).where(
+                UserTenant.user_id == context.user_id,
+                UserTenant.tenant_id == context.tenant_id,
+            )
+        ),
+    )
+    result = await context.db.execute(refresh_select_statement(statement))
+    return result.scalar_one_or_none() is not None
 
 
 async def _resolve_user_preferred_language(context: MessageContext) -> str | None:
@@ -515,7 +561,9 @@ def _text_from_external_acp_content(content: object) -> str:
     return text
 
 
-def _compact_external_acp_text(text: str, max_chars: int = _EXTERNAL_ACP_TOOL_OUTPUT_MAX_CHARS) -> str:
+def _compact_external_acp_text(
+    text: str, max_chars: int = _EXTERNAL_ACP_TOOL_OUTPUT_MAX_CHARS
+) -> str:
     value = text.strip()
     if len(value) <= max_chars:
         return value

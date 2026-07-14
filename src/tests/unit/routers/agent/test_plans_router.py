@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.routers.agent.plans import (
@@ -99,6 +100,63 @@ async def test_get_mode_sanitizes_internal_errors() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("operation", "revoked_membership"),
+    [
+        ("switch", "project"),
+        ("switch", "tenant"),
+        ("get", "project"),
+        ("get", "tenant"),
+    ],
+)
+async def test_plan_mode_rejects_owned_conversation_after_scope_membership_revoked(
+    test_db: AsyncSession,
+    test_user: User,
+    test_project_db: Project,
+    operation: str,
+    revoked_membership: str,
+) -> None:
+    conversation_id = f"conversation-{operation}-{revoked_membership}-revoked"
+    await _add_conversation_task(
+        test_db,
+        conversation_id=conversation_id,
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+    )
+
+    if revoked_membership == "project":
+        statement = delete(UserProject).where(
+            UserProject.user_id == test_user.id,
+            UserProject.project_id == test_project_db.id,
+        )
+    else:
+        statement = delete(UserTenant).where(
+            UserTenant.user_id == test_user.id,
+            UserTenant.tenant_id == test_project_db.tenant_id,
+        )
+    await test_db.execute(statement)
+    await test_db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        if operation == "switch":
+            await switch_mode(
+                request_body=SwitchModeRequest(conversation_id=conversation_id, mode="build"),
+                current_user=test_user,
+                db=test_db,
+            )
+        else:
+            await get_mode(
+                conversation_id=conversation_id,
+                current_user=test_user,
+                db=test_db,
+            )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Conversation not found"
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_get_tasks_sanitizes_internal_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     class FailingTaskRepository:
@@ -147,6 +205,9 @@ async def test_get_tasks_returns_tasks_for_owned_tenant_project_conversation(
     assert response.conversation_id == "conversation-owned"
     assert response.total_count == 1
     assert response.tasks[0].id == "task-conversation-owned"
+    payload = response.model_dump()
+    assert payload["approval"] == {"kind": "legacy_mode_switch"}
+    assert "plan_version" not in payload
 
 
 @pytest.mark.unit

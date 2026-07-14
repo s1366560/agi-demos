@@ -20,6 +20,10 @@ copyFileSync(
   join(desktopRoot, 'src', 'features', 'task', 'NewTaskFlow.css'),
   join(compiledTaskDirectory, 'NewTaskFlow.css'),
 );
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'task', 'NewTaskPlanReview.css'),
+  join(compiledTaskDirectory, 'NewTaskPlanReview.css'),
+);
 
 const testFiles = [
   'a2ui-action.test.mjs',

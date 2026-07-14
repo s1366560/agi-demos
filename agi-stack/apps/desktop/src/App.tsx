@@ -162,7 +162,15 @@ import {
 } from './features/settings/settingsEntryRouting';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
 import { StatusPanel } from './features/status/StatusPanel';
-import { NewTaskFlow, type NewTaskSession } from './features/task/NewTaskFlow';
+import {
+  NewTaskFlow,
+  type NewTaskAgentTurnInput,
+  type NewTaskSession,
+} from './features/task/NewTaskFlow';
+import {
+  newTaskAgentTurnResolution,
+  newTaskAgentTurnTransport,
+} from './features/task/newTaskPlanModel';
 import { WorkspaceDock } from './features/workspace/WorkspaceDock';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { useAgentSocket } from './hooks/useAgentSocket';
@@ -1964,6 +1972,18 @@ export function App() {
   const [conversationTimeline, setConversationTimeline] =
     useState<ConversationTimelineState>(emptyConversationTimeline);
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
+  const pendingNewTaskAgentTurnsRef = useRef(
+    new Map<
+      string,
+      {
+        conversationId: string;
+        messageId: string;
+        timeoutId: number;
+        resolve: () => void;
+        reject: (error: Error) => void;
+      }
+    >(),
+  );
   const timelineRequestRef = useRef(0);
   const sessionProjectionRequestRef = useRef(0);
   const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
@@ -2610,6 +2630,20 @@ export function App() {
   useEffect(() => {
     const update = agentTaskUpdateFromSocketEvent(socket.events[0]);
     if (!update) return;
+    if (update.status === 'acknowledged' || update.status === 'failed') {
+      for (const [key, pending] of pendingNewTaskAgentTurnsRef.current) {
+        const resolution = newTaskAgentTurnResolution(
+          update,
+          pending.conversationId,
+          pending.messageId,
+        );
+        if (!resolution) continue;
+        window.clearTimeout(pending.timeoutId);
+        pendingNewTaskAgentTurnsRef.current.delete(key);
+        if (resolution === 'acknowledged') pending.resolve();
+        else pending.reject(new Error(update.detail));
+      }
+    }
     setAgentTaskSignals((current) => {
       const matchesConversation = (signal: AgentTaskSignal) =>
         signal.conversationId === update.conversationId && signal.status !== 'failed';
@@ -2644,6 +2678,15 @@ export function App() {
       );
     });
   }, [socket.events]);
+
+  useEffect(() => {
+    if (socket.connected) return;
+    for (const [key, pending] of pendingNewTaskAgentTurnsRef.current) {
+      window.clearTimeout(pending.timeoutId);
+      pending.reject(new Error(t('task.liveConnectionRequired')));
+      pendingNewTaskAgentTurnsRef.current.delete(key);
+    }
+  }, [socket.connected, t]);
 
   useEffect(() => {
     const latest = socket.events[0];
@@ -2738,6 +2781,15 @@ export function App() {
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before loading workspaces.'
         : null;
+  const newTaskDisabledReason = !showRuntimeConfig
+    ? t('task.disabledSignIn')
+    : !config.apiKey.trim()
+      ? t('task.disabledAuthRequired')
+      : !config.tenantId.trim() || !config.projectId.trim()
+        ? t('task.disabledProjectRequired')
+        : newTaskAgentTurnTransport(config.mode, socket.connected) === 'live_socket_required'
+          ? t('task.liveConnectionRequired')
+          : null;
   const sandboxDisabledReason = !showRuntimeConfig
     ? t('sandbox.disabled.signIn')
     : !config.apiKey.trim()
@@ -3380,6 +3432,43 @@ export function App() {
     applySectionSideEffects('chat');
     void loadConversationTimeline(conversation, sessionConfig.projectId);
     void refreshRuntime(sessionConfig);
+  };
+
+  const runNewTaskAgentTurn = async (input: NewTaskAgentTurnInput) => {
+    const queued = socket.sendAgentMessage({
+      conversationId: input.conversationId,
+      projectId: input.projectId,
+      message: input.message,
+      messageId: input.messageId,
+    });
+    const transport = newTaskAgentTurnTransport(input.config.mode, queued);
+    if (transport === 'socket') {
+      await new Promise<void>((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => {
+          pendingNewTaskAgentTurnsRef.current.delete(input.messageId);
+          reject(new Error(t('task.agentTurnAckTimeout')));
+        }, 10_000);
+        pendingNewTaskAgentTurnsRef.current.set(input.messageId, {
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          timeoutId,
+          resolve,
+          reject,
+        });
+      });
+      return;
+    }
+    if (transport === 'local_http') {
+      const client = new DesktopApiClient(input.config);
+      await client.runAgentMessage(
+        input.conversationId,
+        input.message,
+        input.messageId,
+        input.projectId,
+      );
+      return;
+    }
+    throw new Error(t('task.liveConnectionRequired'));
   };
 
   const ensureAgentConversation = async (firstMessage: string): Promise<AgentConversation> => {
@@ -5855,9 +5944,10 @@ export function App() {
           workspaces={dataset.workspacesByProject[config.projectId] ?? []}
           preferredWorkspaceId={newTaskPreferredWorkspaceId}
           preferredKind={preferredTaskMode === 'code' ? 'programming' : 'general'}
-          disabledReason={workspaceDisabledReason}
+          disabledReason={newTaskDisabledReason}
           onClose={() => setNewTaskOpen(false)}
           onSessionReady={adoptNewTaskSession}
+          onRunAgentTurn={runNewTaskAgentTurn}
           onError={setError}
         />
         <SettingsWindow

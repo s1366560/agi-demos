@@ -63,6 +63,11 @@ async def switch_mode(
 ) -> ModeResponse:
     """Switch conversation between Plan Mode (read-only) and Build Mode (full)."""
     try:
+        await _require_owned_task_conversation(
+            db,
+            conversation_id=request_body.conversation_id,
+            user_id=current_user.id,
+        )
         stmt = (
             update(ConversationModel)
             .where(ConversationModel.id == request_body.conversation_id)
@@ -105,6 +110,11 @@ async def get_mode(
 ) -> ConversationModeResponse:
     """Get the current mode for a conversation."""
     try:
+        await _require_owned_task_conversation(
+            db,
+            conversation_id=conversation_id,
+            user_id=current_user.id,
+        )
         stmt = (
             select(ConversationModel.current_mode)
             .where(ConversationModel.id == conversation_id)
@@ -142,10 +152,15 @@ class TaskItemResponse(BaseModel):
     updated_at: str
 
 
+class LegacyPlanApprovalCapability(BaseModel):
+    kind: Literal["legacy_mode_switch"] = "legacy_mode_switch"
+
+
 class TaskListResponse(BaseModel):
     conversation_id: str
     tasks: list[TaskItemResponse]
     total_count: int
+    approval: LegacyPlanApprovalCapability
 
 
 # === Task List Endpoints ===
@@ -226,6 +241,7 @@ async def get_tasks(
                 for t in tasks
             ],
             total_count=len(tasks),
+            approval=LegacyPlanApprovalCapability(),
         )
 
     except HTTPException:

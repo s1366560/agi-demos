@@ -1,0 +1,568 @@
+.new-task-review {
+  display: grid;
+  min-height: 100%;
+  grid-template-columns: minmax(0, 1fr) 350px;
+}
+.new-task-plan-column {
+  min-width: 0;
+  padding: 32px clamp(28px, 4.5vw, 64px) 44px;
+}
+
+.new-task-review-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.new-task-plan-ready {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #245d45;
+  border-radius: 5px;
+  background: #0e2019;
+  color: #53c98f;
+  font-size: 8px;
+}
+
+.new-task-plan-objective {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 12px;
+  border: 1px solid #202c3a;
+  border-radius: 6px;
+  background: #0a1017;
+}
+
+.new-task-plan-objective > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #25536a;
+  border-radius: 6px;
+  background: #10202a;
+  color: #55d8f7;
+}
+
+.new-task-plan-objective > div {
+  display: grid;
+  gap: 3px;
+}
+
+.new-task-plan-objective small {
+  color: #5e7187;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.new-task-plan-objective strong {
+  color: #d9e3ed;
+  font-size: 10px;
+}
+
+.new-task-plan-objective p {
+  overflow: hidden;
+  margin: 0;
+  color: #627185;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-task-plan-refresh {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #6b5427;
+  border-radius: 6px;
+  background: #1c170e;
+  color: #d9a84c;
+}
+
+.new-task-plan-refresh > span {
+  display: grid;
+  gap: 2px;
+}
+
+.new-task-plan-refresh strong {
+  font-size: 9px;
+}
+
+.new-task-plan-refresh small {
+  font-size: 8px;
+}
+
+.new-task-plan-refresh button {
+  padding: 6px 8px;
+  border: 1px solid #6b5427;
+  border-radius: 5px;
+  background: #251e11;
+  color: #e8bd6e;
+  font-size: 8px;
+}
+
+.new-task-review-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.new-task-plan-step {
+  display: grid;
+  min-height: 78px;
+  grid-template-columns: 18px 24px minmax(0, 1fr) 54px 30px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #202c3a;
+  border-radius: 6px;
+  background: #0a1017;
+}
+
+.new-task-plan-step.disabled {
+  opacity: 0.45;
+}
+
+.new-task-step-toggle,
+.new-task-step-edit {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #49c788;
+}
+
+.new-task-step-toggle span {
+  width: 13px;
+  height: 13px;
+  border: 1px solid #465568;
+  border-radius: 50%;
+}
+
+.new-task-step-index {
+  color: #506074;
+  font: 8px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.new-task-step-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.new-task-step-copy strong {
+  color: #d4dfe9;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.new-task-step-copy small,
+.new-task-step-copy span {
+  color: #59697c;
+  font-size: 7px;
+}
+
+.new-task-step-copy span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.new-task-plan-step time {
+  color: #59697c;
+  font-size: 8px;
+  text-align: right;
+}
+
+.new-task-step-edit {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #273444;
+  border-radius: 5px;
+  background: #101720;
+  color: #77879a;
+}
+
+.new-task-plan-step.editing {
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+}
+
+.new-task-step-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 10px;
+}
+
+.new-task-step-editor label {
+  display: grid;
+  gap: 6px;
+  color: #8494a7;
+  font-size: 8px;
+}
+
+.new-task-step-editor > div {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.new-task-step-editor button,
+.new-task-add-step,
+.new-task-revision-composer button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #273444;
+  border-radius: 5px;
+  background: #101720;
+  color: #98a8ba;
+  font-size: 8px;
+}
+
+.new-task-step-editor button.primary {
+  border-color: #28738c;
+  background: #176b84;
+  color: #eefaff;
+}
+
+.new-task-add-step {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-style: dashed;
+  background: transparent;
+}
+
+.new-task-run-preview {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 20px;
+  padding: 34px 28px 42px;
+  border-left: 1px solid #1b2531;
+  background: #080d14;
+}
+
+.new-task-preview-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.new-task-preview-stats > div {
+  display: grid;
+  gap: 5px;
+  padding: 11px;
+  border: 1px solid #202c3a;
+  border-radius: 6px;
+  background: #0b1018;
+}
+
+.new-task-preview-stats small {
+  color: #536174;
+  font-size: 7px;
+}
+
+.new-task-preview-stats strong {
+  color: #d6e0ea;
+  font-size: 11px;
+}
+
+.new-task-run-preview section h3 {
+  margin: 0 0 9px;
+  color: #b9c6d3;
+  font-size: 9px;
+}
+
+.new-task-boundary-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.new-task-boundary-list li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #718195;
+  font-size: 8px;
+}
+
+.new-task-boundary-list svg {
+  color: #49c788;
+}
+
+.new-task-context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.new-task-context-chips span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 7px;
+  border: 1px solid #273444;
+  border-radius: 5px;
+  background: #0b1018;
+  color: #718195;
+  font-size: 7px;
+}
+
+.new-task-permission-profile > div {
+  display: grid;
+  gap: 6px;
+}
+
+.new-task-permission-profile button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #202c3a;
+  border-radius: 6px;
+  background: #0b1018;
+  color: #718195;
+  text-align: left;
+}
+
+.new-task-permission-profile button > span {
+  display: grid;
+  gap: 3px;
+}
+
+.new-task-permission-profile strong {
+  color: #bdcad7;
+  font-size: 8px;
+}
+
+.new-task-permission-profile small {
+  color: #5a697c;
+  font-size: 7px;
+  line-height: 1.35;
+}
+
+.new-task-permission-profile button i {
+  width: 10px;
+  height: 10px;
+  border: 1px solid #445366;
+  border-radius: 50%;
+}
+
+.new-task-permission-profile button.selected {
+  border-color: #275c71;
+  background: #101923;
+}
+
+.new-task-permission-profile button.selected i {
+  border-color: #4dcbe8;
+  background: #4dcbe8;
+  box-shadow: inset 0 0 0 2px #101923;
+}
+
+.new-task-legacy-note {
+  color: #d8a14f;
+  border-color: #574629;
+  background: #17140e;
+}
+
+.new-task-revision-composer {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.new-task-revision-composer label {
+  display: grid;
+  gap: 7px;
+  color: #8b9bad;
+  font-size: 8px;
+}
+
+.new-task-revision-composer button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.new-task-error {
+  position: fixed;
+  right: 20px;
+  bottom: 82px;
+  z-index: 3;
+  max-width: min(520px, calc(100vw - 40px));
+  padding: 10px 12px;
+  border: 1px solid #6b343c;
+  border-radius: 6px;
+  background: #211217;
+  color: #f3aab4;
+  font-size: 9px;
+}
+
+.new-task-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 24px;
+  border-top: 1px solid #1b2531;
+  background: #0b0f17;
+}
+
+.new-task-footer > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #5c6b7d;
+  font-size: 8px;
+}
+
+.new-task-footer button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #273444;
+  border-radius: 6px;
+  background: #101720;
+  color: #98a8ba;
+  font-size: 9px;
+}
+
+.new-task-footer button.primary {
+  min-width: 140px;
+  border-color: #27738c;
+  background: #176b84;
+  color: #effbff;
+  font-weight: 700;
+}
+
+.new-task-review-footer-summary,
+.new-task-review-footer-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.new-task-review-footer-summary > span {
+  color: #5c6b7d;
+  font-size: 8px;
+}
+
+@media (max-width: 1180px) {
+  .new-task-header {
+    grid-template-columns: 190px minmax(0, 1fr) 36px;
+    padding: 0 18px;
+  }
+
+  .new-task-primary-column {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+
+  .new-task-define {
+    grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
+  }
+
+  .new-task-review {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .new-task-plan-column {
+    padding-right: 28px;
+    padding-left: 28px;
+  }
+
+  .new-task-run-preview {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+}
+
+@media (max-width: 820px) {
+  .new-task-window {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .new-task-header {
+    grid-template-columns: minmax(0, 1fr) 36px;
+    min-height: 64px;
+  }
+
+  .new-task-steps {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 8px 0 12px;
+  }
+
+  .new-task-close {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .new-task-define,
+  .new-task-planning,
+  .new-task-review {
+    display: block;
+  }
+
+  .new-task-primary-column,
+  .new-task-context-column,
+  .new-task-plan-column,
+  .new-task-run-preview {
+    padding: 28px 22px;
+  }
+
+  .new-task-context-column,
+  .new-task-run-preview {
+    border-top: 1px solid #1b2531;
+    border-left: 0;
+  }
+
+  .new-task-planning {
+    width: auto;
+    padding: 32px 22px;
+  }
+
+  .new-task-brief-card {
+    margin-top: 24px;
+  }
+
+  .new-task-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .new-task-footer {
+    flex-wrap: wrap;
+    padding: 12px 18px;
+  }
+
+  .new-task-review-footer-summary,
+  .new-task-review-footer-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

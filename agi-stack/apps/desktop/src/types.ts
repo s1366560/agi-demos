@@ -276,6 +276,7 @@ export type AgentPlanTaskListResponse = {
   conversation_id: string;
   tasks: AgentPlanTask[];
   total_count: number;
+  approval?: AgentPlanApprovalCapability;
   plan_version?: DesktopPlanVersion | null;
 };
 
@@ -288,6 +289,15 @@ export type DesktopPlanVersion = {
   created_at: string;
   approved_at?: string | null;
 };
+
+export type AgentPlanApprovalCapability =
+  | {
+      kind: 'versioned_atomic';
+      plan_version: DesktopPlanVersion | null;
+    }
+  | {
+      kind: 'legacy_mode_switch';
+    };
 
 export type DesktopRunStatus =
   | 'queued'
