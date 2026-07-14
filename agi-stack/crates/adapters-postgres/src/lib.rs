@@ -43,6 +43,7 @@ mod cron_repo;
 mod cron_runtime_projection_support;
 mod cron_runtime_repo;
 mod cron_runtime_types;
+mod cron_schedule_repo;
 mod data_stats_repo;
 mod deploy_repo;
 mod event_log_repo;
@@ -113,6 +114,10 @@ pub use cron_runtime_types::{
     AutomationPayload, AutomationRunContext, AutomationRunLease, AutomationRunStatus,
     AutomationRuntimeRepositoryError, AutomationRuntimeScope, AutomationTerminalOutcome,
     AutomationTerminalProjection,
+};
+pub use cron_schedule_repo::{
+    CronScheduleMaterializedState, CronScheduleProjection, CronScheduleRepositoryError,
+    CronScheduleSnapshot, CronScheduleStatus, PgCronScheduleRepository,
 };
 pub use data_stats_repo::{
     DataStatsAccess, DataStatsScopeError, DataStatsScopeRecord, PgDataStatsRepository,

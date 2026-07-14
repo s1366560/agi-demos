@@ -35,6 +35,8 @@ mod cron;
 mod cron_operations;
 #[path = "pg_integration/cron_runtime.rs"]
 mod cron_runtime;
+#[path = "pg_integration/cron_schedule.rs"]
+mod cron_schedule;
 #[path = "pg_integration/data_stats.rs"]
 mod data_stats;
 #[path = "pg_integration/deploy.rs"]
