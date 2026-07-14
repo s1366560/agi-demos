@@ -24,7 +24,12 @@ import type {
   HitlResponseOutcome,
   HitlResponseSubmission,
   LoginOutcome,
+  LlmProviderCreateInput,
+  LlmProviderModelCatalog,
   LlmProviderMutationInput,
+  LlmProviderTypeDescriptor,
+  LlmProviderUsage,
+  LlmProviderUsageStatistic,
   LlmProviderValidationOutcome,
   ManagedAgentDefinition,
   ManagedLlmProvider,
@@ -657,6 +662,112 @@ export class DesktopApiClient {
     });
   }
 
+  async createLlmProvider(input: LlmProviderCreateInput): Promise<ManagedLlmProvider> {
+    const apiKey = input.apiKey?.trim();
+    const commonBody = {
+      name: input.name,
+      provider_type: input.providerType,
+      base_url: input.baseUrl,
+      llm_model: input.primaryModel,
+      allowed_models: input.allowedModels,
+      is_active: input.active,
+    };
+    return this.request<ManagedLlmProvider>('/api/v1/llm-providers/', {
+      method: 'POST',
+      body:
+        this.config.mode === 'local'
+          ? {
+              ...commonBody,
+              auth_method: input.authMethod,
+              ...(input.authMethod === 'api_key' && apiKey ? { api_key: apiKey } : {}),
+            }
+          : { ...commonBody, ...(apiKey ? { api_key: apiKey } : {}) },
+    });
+  }
+
+  async listLlmProviderTypes(signal?: AbortSignal): Promise<LlmProviderTypeDescriptor[]> {
+    if (this.config.mode === 'local') {
+      return ['openai', 'openai_compatible', 'anthropic'].map((providerType) => ({
+        providerType,
+        authMethods: ['api_key', 'none'],
+        source: 'local_runtime',
+      }));
+    }
+    const payload = await this.request<unknown>('/api/v1/llm-providers/types', { signal });
+    return readArray<string>(payload, ['types', 'items', 'data'])
+      .filter((providerType): providerType is string => typeof providerType === 'string')
+      .map((providerType) => ({
+        providerType,
+        authMethods: [],
+        source: 'cloud_api',
+      }));
+  }
+
+  async listLlmProviderModels(
+    providerType: string,
+    signal?: AbortSignal,
+  ): Promise<LlmProviderModelCatalog> {
+    const normalizedProviderType = requireValue(providerType, 'provider type');
+    if (this.config.mode === 'local') {
+      return unavailableProviderCatalog(normalizedProviderType);
+    }
+    const payload = await this.request<unknown>(
+      `/api/v1/llm-providers/models/${encodeURIComponent(normalizedProviderType)}`,
+      { signal },
+    );
+    return normalizeProviderCatalog(payload, normalizedProviderType);
+  }
+
+  async getLlmProviderUsage(
+    providerId: string,
+    signal?: AbortSignal,
+  ): Promise<LlmProviderUsage> {
+    const normalizedProviderId = requireValue(providerId, 'provider id');
+    if (this.config.mode === 'local') {
+      return unavailableProviderUsage(normalizedProviderId);
+    }
+    const payload = await this.request<unknown>(
+      `/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}/usage`,
+      { signal },
+    );
+    return normalizeProviderUsage(payload, normalizedProviderId);
+  }
+
+  async testLlmProviderDraft(
+    input: LlmProviderCreateInput,
+  ): Promise<LlmProviderValidationOutcome> {
+    if (this.config.mode === 'local') {
+      return validateLocalProviderDraft(input);
+    }
+    const apiKey = input.apiKey?.trim();
+    const health = await this.request<{
+      status: string;
+      last_check?: string | null;
+      response_time_ms?: number | null;
+      error_message?: string | null;
+    }>('/api/v1/llm-providers/test-connection', {
+      method: 'POST',
+      body: {
+        name: input.name,
+        provider_type: input.providerType,
+        base_url: input.baseUrl,
+        llm_model: input.primaryModel,
+        allowed_models: input.allowedModels,
+        is_active: input.active,
+        ...(apiKey ? { api_key: apiKey } : {}),
+      },
+    });
+    return {
+      provider: null,
+      status: health.status,
+      probed: true,
+      detail: null,
+      lastChecked: health.last_check ?? null,
+      responseTimeMs: health.response_time_ms ?? null,
+      errorMessage: health.error_message ?? null,
+    };
+  }
+
   async updateLlmProvider(
     providerId: string,
     input: LlmProviderMutationInput,
@@ -1006,4 +1117,130 @@ function requireValue(value: string, label: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new Error(`Missing ${label}`);
   return trimmed;
+}
+
+function unavailableProviderCatalog(providerType: string): LlmProviderModelCatalog {
+  return {
+    providerType,
+    availability: 'unavailable',
+    source: null,
+    models: [],
+  };
+}
+
+function normalizeProviderCatalog(
+  payload: unknown,
+  providerType: string,
+): LlmProviderModelCatalog {
+  if (!payload || typeof payload !== 'object') return unavailableProviderCatalog(providerType);
+  const record = payload as Record<string, unknown>;
+  if (!record.models || typeof record.models !== 'object' || Array.isArray(record.models)) {
+    return unavailableProviderCatalog(providerType);
+  }
+  const categorized = record.models as Record<string, unknown>;
+  const models: LlmProviderModelCatalog['models'] = [];
+  for (const capability of ['chat', 'embedding', 'rerank'] as const) {
+    const candidates = categorized[capability];
+    if (!Array.isArray(candidates)) continue;
+    const seen = new Set<string>();
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') continue;
+      const id = candidate.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      models.push({ id, capability });
+    }
+  }
+  return {
+    providerType,
+    availability: 'available',
+    source: typeof record.source === 'string' ? record.source : null,
+    models,
+  };
+}
+
+function unavailableProviderUsage(providerId: string): LlmProviderUsage {
+  return {
+    provider_id: providerId,
+    tenant_id: null,
+    availability: 'unavailable',
+    statistics: [],
+  };
+}
+
+function normalizeProviderUsage(payload: unknown, providerId: string): LlmProviderUsage {
+  if (!payload || typeof payload !== 'object') return unavailableProviderUsage(providerId);
+  const record = payload as Record<string, unknown>;
+  if (
+    typeof record.provider_id !== 'string' ||
+    !Array.isArray(record.statistics) ||
+    (record.tenant_id !== null && typeof record.tenant_id !== 'string')
+  ) {
+    return unavailableProviderUsage(providerId);
+  }
+  const statistics = record.statistics.filter(isLlmProviderUsageStatistic);
+  if (statistics.length !== record.statistics.length) return unavailableProviderUsage(providerId);
+  return {
+    provider_id: record.provider_id,
+    tenant_id: record.tenant_id,
+    availability: 'available',
+    statistics,
+  };
+}
+
+function isLlmProviderUsageStatistic(value: unknown): value is LlmProviderUsageStatistic {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.provider_id === 'string' &&
+    (record.tenant_id === null || typeof record.tenant_id === 'string') &&
+    (record.operation_type === null || typeof record.operation_type === 'string') &&
+    typeof record.total_requests === 'number' &&
+    typeof record.total_prompt_tokens === 'number' &&
+    typeof record.total_completion_tokens === 'number' &&
+    typeof record.total_tokens === 'number' &&
+    (record.total_cost_usd === null || typeof record.total_cost_usd === 'number') &&
+    (record.avg_response_time_ms === null || typeof record.avg_response_time_ms === 'number') &&
+    (record.first_request_at === null || typeof record.first_request_at === 'string') &&
+    (record.last_request_at === null || typeof record.last_request_at === 'string')
+  );
+}
+
+function validateLocalProviderDraft(
+  input: LlmProviderCreateInput,
+): LlmProviderValidationOutcome {
+  const supportedProviderTypes = new Set(['openai', 'openai_compatible', 'anthropic']);
+  if (!supportedProviderTypes.has(input.providerType.trim())) {
+    return localDraftValidationFailure('unsupported_provider_type');
+  }
+  if (!input.name.trim() || !input.primaryModel.trim()) {
+    return localDraftValidationFailure('missing_required_fields');
+  }
+  try {
+    const url = new URL(input.baseUrl.trim());
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return localDraftValidationFailure('invalid_base_url');
+    }
+  } catch {
+    return localDraftValidationFailure('invalid_base_url');
+  }
+  if (input.authMethod === 'api_key' && !input.apiKey?.trim()) {
+    return localDraftValidationFailure('missing_api_key');
+  }
+  return {
+    provider: null,
+    status: 'configuration_valid',
+    probed: false,
+    detail: 'configuration_only',
+  };
+}
+
+function localDraftValidationFailure(errorMessage: string): LlmProviderValidationOutcome {
+  return {
+    provider: null,
+    status: 'configuration_invalid',
+    probed: false,
+    detail: 'configuration_only',
+    errorMessage,
+  };
 }

@@ -4,31 +4,32 @@
   z-index: 130;
   display: grid;
   place-items: center;
-  padding: 28px;
-  background: rgb(2 7 12 / 78%);
-  backdrop-filter: blur(14px);
+  padding: 26px;
+  background: rgb(3 7 11 / 76%);
+  backdrop-filter: blur(3px);
 }
 
 .settings-window-dialog {
   display: grid;
-  width: min(1260px, 100%);
-  height: min(820px, calc(100vh - 56px));
-  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1180px, calc(100vw - 52px));
+  height: min(820px, calc(100vh - 52px));
+  grid-template-rows: 48px minmax(0, 1fr);
   overflow: hidden;
-  color: var(--gray-12);
-  background: var(--color-panel-solid);
-  border: 1px solid var(--gray-6);
-  border-radius: 18px;
-  box-shadow: 0 28px 90px rgb(0 0 0 / 52%);
+  color: var(--desktop-text);
+  background: #090e15;
+  border: 1px solid #384657;
+  border-radius: 11px;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 55%);
 }
 
 .settings-window-titlebar {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(280px, 430px) minmax(240px, 1fr);
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 380px) minmax(220px, 1fr);
   align-items: center;
-  gap: 18px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--gray-5);
+  gap: 14px;
+  padding: 0 10px 0 13px;
+  background: #111821;
+  border-bottom: 1px solid #293442;
 }
 
 .settings-window-brand,
@@ -40,7 +41,6 @@
   gap: 11px;
 }
 
-.settings-window-brand > span,
 .settings-profile-avatar,
 .settings-resource-icon {
   display: grid;
@@ -52,9 +52,11 @@
   border-radius: 10px;
 }
 
-.settings-window-brand > span {
-  width: 34px;
-  height: 34px;
+.settings-window-brand > img {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 6px;
 }
 
 .settings-window-brand div,
@@ -67,13 +69,17 @@
   gap: 3px;
 }
 
+.settings-window-brand strong {
+  font-size: 10px;
+}
+
 .settings-window-brand small,
 .settings-window-scope small,
 .settings-profile-card small,
 .settings-resource-callout small {
   overflow: hidden;
   color: var(--gray-9);
-  font-size: 10px;
+  font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -81,18 +87,20 @@
 .settings-window-search {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 0 11px;
-  color: var(--gray-9);
-  background: var(--gray-2);
-  border: 1px solid var(--gray-6);
-  border-radius: 9px;
+  height: 29px;
+  gap: 6px;
+  padding: 0 8px;
+  color: #647386;
+  background: #0a0f15;
+  border: 1px solid #2f3b49;
+  border-radius: 6px;
 }
 
 .settings-window-search input {
   width: 100%;
-  height: 36px;
-  color: var(--gray-12);
+  height: 27px;
+  color: #dce5ee;
+  font-size: 8px;
   background: transparent;
   border: 0;
   outline: 0;
@@ -100,64 +108,74 @@
 
 .settings-window-titlebar > button {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 29px;
+  height: 29px;
   place-items: center;
   justify-self: end;
-  color: var(--gray-10);
+  color: #8391a3;
   background: transparent;
-  border: 1px solid var(--gray-6);
-  border-radius: 9px;
+  border: 1px solid #334154;
+  border-radius: 5px;
 }
 
 .settings-window-body {
   display: grid;
   min-height: 0;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 176px minmax(0, 1fr);
 }
 
 .settings-window-rail {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  gap: 18px;
-  padding: 18px 14px;
+  gap: 0;
+  padding: 9px 9px 12px;
   overflow: auto;
-  background: var(--gray-2);
-  border-right: 1px solid var(--gray-5);
+  background: #0b1017;
+  border-right: 1px solid #242d3a;
 }
 
 .settings-rail-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .settings-rail-group > span {
-  padding: 0 10px 5px;
-  color: var(--gray-8);
-  font-size: 9px;
-  font-weight: 750;
+  padding: 12px 9px 6px;
+  color: #526174;
+  font-size: 7px;
+  font-weight: 800;
   letter-spacing: 0.13em;
 }
 
 .settings-rail-group button {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-height: 43px;
+  gap: 8px;
   align-items: center;
-  padding: 10px;
-  color: var(--gray-10);
+  padding: 7px 8px;
+  color: #708094;
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 7px;
 }
 
 .settings-rail-group button.active {
-  color: var(--gray-12);
-  background: var(--gray-4);
-  border-color: var(--gray-6);
+  color: var(--desktop-cyan);
+  background: #13232d;
+  border-color: #285467;
+  box-shadow: inset 2px 0 var(--desktop-cyan);
+}
+
+.settings-rail-group button.active strong {
+  color: #eef7fa;
+}
+
+.settings-rail-group button.active small {
+  color: #7e96a3;
 }
 
 .settings-rail-group button > span {
@@ -168,24 +186,28 @@
 }
 
 .settings-rail-group strong {
-  font-size: 12px;
+  color: #aeb9c6;
+  font-size: 9px;
 }
 
 .settings-rail-group small {
   overflow: hidden;
-  color: var(--gray-8);
-  font-size: 9px;
+  color: #556477;
+  font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .settings-window-scope {
-  padding: 11px;
-  margin-top: auto;
-  color: var(--gray-10);
-  background: var(--gray-3);
-  border: 1px solid var(--gray-5);
-  border-radius: 10px;
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr);
+  gap: 7px;
+  padding: 8px;
+  margin: auto 4px 4px;
+  color: #647487;
+  background: #0f161f;
+  border: 1px solid #2b3744;
+  border-radius: 6px;
 }
 
 .settings-window-scope > svg {
@@ -193,10 +215,22 @@
   color: var(--cyan-10);
 }
 
+.settings-window-scope strong {
+  overflow: hidden;
+  color: #9fb0be;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-window-content {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+
+.settings-window-content.provider-mode {
+  overflow: hidden;
 }
 
 .settings-page {
@@ -601,6 +635,25 @@
 
 .settings-resource-state small {
   max-width: 600px;
+}
+
+@media (max-width: 1180px) {
+  .settings-window-backdrop {
+    padding: 14px;
+  }
+
+  .settings-window-dialog {
+    width: calc(100vw - 28px);
+    height: calc(100vh - 28px);
+  }
+
+  .settings-window-titlebar {
+    grid-template-columns: minmax(200px, 1fr) 300px minmax(70px, 0.4fr);
+  }
+
+  .settings-window-body {
+    grid-template-columns: 148px minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 850px) {

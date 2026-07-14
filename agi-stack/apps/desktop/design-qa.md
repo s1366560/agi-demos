@@ -81,3 +81,104 @@ No actionable P0, P1, or P2 findings remain.
 - [P3] None required for this approved desktop range.
 
 final result: passed
+
+---
+
+# Provider settings design QA
+
+## Comparison target
+
+- Popup shell source: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/settings-popup-models-1100.png`
+- Provider overview source: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/model-provider-overview-final.png`
+- Connection source: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/model-provider-connection.png`
+- Wizard source: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/model-provider-add-wizard.png`
+- Compact routing source: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/model-provider-routing-1100.png`
+- Production overview captures: `qa/provider-settings-overview-1440.png` and `qa/provider-settings-overview-1100.png`
+- Same-canvas compact comparison: `qa/provider-settings-comparison-1100.jpg`
+- Interaction captures: `qa/provider-settings-connection-1440.png`, `qa/provider-settings-routing-1440.png`, and `qa/provider-settings-wizard-1440.png`
+- Viewports: `1440 × 1024` and `1100 × 782`, device scale factor `1`
+- State: Simplified Chinese, cloud administrator, tenant and project selected, five realistic Provider records, OpenAI selected
+- Render method: the production `SettingsWindow` and `ModelProviderWorkspace` were rendered by the Vite QA entry and exercised through Chrome DevTools Protocol. The in-app Browser control was unavailable to this session, so Chrome for Testing was used without Playwright.
+
+## Same-canvas comparison evidence
+
+The approved compact source and the production `1100 × 782` capture were placed in one horizontal image before the final judgment. Five visible comparison points were checked:
+
+1. The independent popup keeps the same dark backdrop, title bar, search field, close action, border, radius, and compact outer margin.
+2. The information architecture remains a three-column hierarchy: settings rail, Provider catalog, and selected Provider detail.
+3. The Provider catalog retains the same title, search, status filters, count row, selected-row treatment, icons, model counts, status copy, and attention colors.
+4. The detail header preserves the breadcrumb, scope, copy action, add action, Provider identity, endpoint summary, credential badge, and five-tab navigation.
+5. The compact overview keeps the same stacked health, model, and routing cards, including visible action affordances and the lower-card crop at the native viewport boundary.
+
+The source capture is softer and records an earlier popup width. Production follows the latest source CSS contract: `min(1180px, 100vw - 52px)`, switching to `100vw - 28px` at the compact breakpoint. This accounts for the wider production shell at `1100` while preserving the source hierarchy and density.
+
+## Required fidelity surfaces
+
+- Typography and density: the Provider source sizes, weights, uppercase eyebrows, compact control heights, and tight list rhythm are retained.
+- Layout: the `176 / 282 / flexible` desktop columns and `148 / 244 / flexible` compact columns match the source implementation. The detail body scrolls independently and no horizontal overflow is present.
+- Color and state: cyan selection, green connected, amber attention, and red unhealthy or disabled states always include text and never rely on color alone.
+- Assets and icons: the existing MemStack raster mark and Radix icon family are used. No CSS-art, emoji, inline SVG, or placeholder asset was introduced.
+- Copy: English and Simplified Chinese strings come from the desktop i18n layer. Provider names, exact model IDs, endpoint hosts, and measured usage remain untranslated structured data.
+- Responsiveness: both native viewports pass. The compact tenant card was adjusted to keep the tenant name on one truncated line instead of wrapping.
+- Accessibility: the popup and wizard use modal dialog semantics; tabs, switches, checkboxes, form labels, status regions, disabled states, accessible names, focus outlines, Escape dismissal, and backdrop dismissal remain available.
+
+## Real contract and fail-closed behavior
+
+- Local Rust supports Provider list, create, revision-protected update, and configuration-only validation. The UI labels local validation as configuration validation and never claims that an outbound probe occurred.
+- Cloud mode uses the real Provider type catalog, static model catalog, connection test, health check, update, create, and usage endpoints.
+- Local model discovery and usage return explicit unavailable states without making a network request.
+- Fast, coding, vision, fallback, and cloud routing mutations remain read-only because the current service contract does not expose those writes.
+- A newly connected Provider is created inactive and is not silently made the runtime default.
+- API keys are accepted only in write requests, cleared after use, and never hydrated from Provider responses. QA responses deliberately strip submitted secrets.
+- OAuth, environment-secret references, live `/models` discovery, invented success rates, and synthetic activity feeds were not implemented because the current backend cannot support them truthfully.
+
+## Interaction verification
+
+- Provider search, All/Connected/Attention filters, selection, and tab reset: passed.
+- Existing connection health check: passed; the verified result remains visible after the Provider health record refreshes.
+- Connection edit boundary: passed; entering edit clears an earlier verification, draft changes clear verification, and Save remains disabled until the edited draft is validated.
+- Model catalog load, search, enable switch, manual exact-ID entry, and explicit save: passed. Saving updates the Provider model count.
+- Routing: passed; cloud-only unavailable mutations are visibly disabled, while the existing assignments remain inspectable.
+- Usage: passed with authoritative request, token, latency, cost, and per-operation aggregates.
+- Add Provider wizard: passed from Provider choice through credentials, connection test, discovered-model selection, inactive creation, selection of the new Provider, and success toast.
+- Secret handling: passed; the dummy QA credential never appears in a response or screenshot.
+- Browser console after a clean reload and core flow: no remaining runtime exception.
+- Automated desktop tests: 116 passed.
+- Production TypeScript and Vite build: passed; only the existing large-chunk advisory remains.
+
+## Comparison history
+
+### Iteration 1 — blocked
+
+- [P1] Models were presented as generic resources with one flat editor rather than Provider-first connection, catalog, routing, and usage layers.
+- [P1] Settings did not consistently use the approved independent popup shell.
+- [P1] Unsupported OAuth, live discovery, routing roles, and metrics risked becoming simulated product claims.
+- [P2] Provider statuses and connection validation did not distinguish local configuration checks from real cloud probes.
+- [P2] The previous Provider editor duplicated functionality and exceeded the repository file-size guidance.
+
+Fixes: replaced the generic model resource path with the production Provider workspace, extracted focused components, removed the obsolete editor, connected only authoritative APIs, and added explicit unavailable/read-only states.
+
+### Iteration 2 — passed
+
+Browser QA found and fixed five implementation defects: a health refresh cleared the visible validation result; edit mode could reuse a stale verification; the initially selected wizard Provider did not load its model catalog; rate-limited Providers were labeled “Not checked”; and the compact tenant name wrapped across lines.
+
+Post-fix overview, connection, routing, usage, model-save, and wizard checks show no actionable P0, P1, or P2 difference in the approved desktop range.
+
+## Copy differences from the visual prototype
+
+- “Connection verified” becomes “Configuration valid” in local mode because no outbound request is made.
+- Unsupported routing writes say that the current server contract is read-only instead of presenting working Save controls.
+- Usage cards show available raw server aggregates rather than prototype-only success-rate and recent-signal values.
+- Provider creation confirms the inactive state instead of implying immediate runtime activation.
+
+These differences are deliberate truthfulness constraints, not visual omissions.
+
+## Findings
+
+No actionable P0, P1, or P2 findings remain.
+
+## Follow-up polish
+
+- [P3] Code-split the existing desktop bundle in a later performance iteration; this does not affect Provider workflow correctness or visual fidelity.
+
+provider settings final result: passed

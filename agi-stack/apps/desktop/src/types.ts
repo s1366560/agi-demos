@@ -611,6 +611,47 @@ export type LlmProviderMutationInput = {
   apiKey?: string;
 };
 
+export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
+
+export type LlmProviderTypeDescriptor = {
+  providerType: string;
+  authMethods: Array<'api_key' | 'none'>;
+  source: 'local_runtime' | 'cloud_api';
+};
+
+export type LlmProviderCatalogModel = {
+  id: string;
+  capability: 'chat' | 'embedding' | 'rerank';
+};
+
+export type LlmProviderModelCatalog = {
+  providerType: string;
+  availability: 'available' | 'unavailable';
+  source: string | null;
+  models: LlmProviderCatalogModel[];
+};
+
+export type LlmProviderUsageStatistic = {
+  provider_id: string;
+  tenant_id: string | null;
+  operation_type: string | null;
+  total_requests: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_tokens: number;
+  total_cost_usd: number | null;
+  avg_response_time_ms: number | null;
+  first_request_at: string | null;
+  last_request_at: string | null;
+};
+
+export type LlmProviderUsage = {
+  provider_id: string;
+  tenant_id: string | null;
+  availability: 'available' | 'unavailable';
+  statistics: LlmProviderUsageStatistic[];
+};
+
 export type LlmProviderValidationOutcome = {
   provider: ManagedLlmProvider | null;
   status: string;

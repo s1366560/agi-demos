@@ -22,15 +22,20 @@ import type {
   AuthState,
   ConnectionState,
   DesktopRuntimeConfig,
-  LlmProviderMutationInput,
-  LlmProviderValidationOutcome,
   ManagedAgentDefinition,
-  ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
 } from '../../types';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
-import { ProviderDetailEditor } from './ProviderDetailEditor';
+import {
+  ResourceDetail,
+  ResourceRow,
+  SettingsState,
+  resourceIsActive,
+  type ManagedResource,
+  type ResourceSection,
+} from './ManagedResourceViews';
+import { ModelProviderWorkspace } from './ModelProviderWorkspace';
 import { providerManagementAllowed } from './providerManagementModel';
 import './SettingsWindow.css';
 
@@ -43,9 +48,6 @@ export type SettingsSection =
   | 'skills'
   | 'plugins'
   | 'agents';
-
-type ResourceSection = Extract<SettingsSection, 'models' | 'skills' | 'plugins' | 'agents'>;
-type ManagedResource = ManagedLlmProvider | ManagedSkill | ManagedPlugin | ManagedAgentDefinition;
 
 type SettingsWindowProps = {
   open: boolean;
@@ -192,13 +194,11 @@ export function SettingsWindow({
       try {
         const client = new DesktopApiClient(config);
         const items =
-          resourceSection === 'models'
-            ? await client.listLlmProviders(signal)
-            : resourceSection === 'skills'
-              ? await client.listManagedSkills(signal)
-              : resourceSection === 'plugins'
-                ? await client.listManagedPlugins(signal)
-                : await client.listManagedAgents(signal);
+          resourceSection === 'skills'
+            ? await client.listManagedSkills(signal)
+            : resourceSection === 'plugins'
+              ? await client.listManagedPlugins(signal)
+              : await client.listManagedAgents(signal);
         setResourceItems(items);
         setSelectedResourceId((current) =>
           current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
@@ -225,7 +225,7 @@ export function SettingsWindow({
     return resourceItems.filter((item) => {
       const matchesQuery =
         !normalizedQuery || JSON.stringify(item).toLowerCase().includes(normalizedQuery);
-      const active = resourceView(isResourceSection ? section : 'models', item).active;
+      const active = resourceIsActive(isResourceSection ? section : 'skills', item);
       const matchesFilter =
         resourceFilter === 'all' ||
         (resourceFilter === 'active' ? active : !active);
@@ -260,7 +260,7 @@ export function SettingsWindow({
   };
 
   const toggleResource = async (item: ManagedResource) => {
-    if (!isResourceSection || section === 'models') return;
+    if (!isResourceSection) return;
     setActionBusyId(item.id);
     setResourceError(null);
     try {
@@ -283,38 +283,6 @@ export function SettingsWindow({
     }
   };
 
-  const saveProvider = async (
-    provider: ManagedLlmProvider,
-    mutation: LlmProviderMutationInput,
-  ): Promise<ManagedLlmProvider> => {
-    const client = new DesktopApiClient(config);
-    const updated = await client.updateLlmProvider(provider.id, mutation);
-    setResourceItems((current) =>
-      current.map((item) => (item.id === updated.id ? updated : item)),
-    );
-    setSelectedResourceId(updated.id);
-    if (config.mode === 'local') {
-      onConfigChange({
-        ...config,
-        llmProvider: updated.is_active === false ? 'unconfigured' : updated.provider_type,
-        llmBaseUrl: updated.base_url ?? '',
-        llmModel: updated.is_active === false ? '' : updated.llm_model ?? '',
-        llmApiKey: '',
-      });
-    }
-    return updated;
-  };
-
-  const validateProvider = async (providerId: string): Promise<LlmProviderValidationOutcome> => {
-    const outcome = await new DesktopApiClient(config).checkLlmProvider(providerId);
-    if (outcome.provider) {
-      setResourceItems((current) =>
-        current.map((item) => (item.id === outcome.provider?.id ? outcome.provider : item)),
-      );
-    }
-    return outcome;
-  };
-
   const windowContent = (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="settings-window-backdrop" onMouseDown={onClose}>
@@ -327,7 +295,7 @@ export function SettingsWindow({
         >
           <header className="settings-window-titlebar">
             <div className="settings-window-brand">
-              <span><GearIcon /></span>
+              <img src="/icon-192.png" alt="" />
               <div>
                 <strong>{t('settings.title')}</strong>
                 <small>{t('settings.subtitle')}</small>
@@ -375,7 +343,9 @@ export function SettingsWindow({
               </div>
             </aside>
 
-            <main className="settings-window-content">
+            <main
+              className={`settings-window-content ${section === 'models' ? 'provider-mode' : ''}`}
+            >
               {section === 'account' ? (
                 <SettingsPage
                   eyebrow={t('settings.account')}
@@ -526,6 +496,14 @@ export function SettingsWindow({
                 </SettingsPage>
               ) : null}
 
+              {section === 'models' ? (
+                <ModelProviderWorkspace
+                  config={config}
+                  canManage={canManageProviders}
+                  onConfigChange={onConfigChange}
+                />
+              ) : null}
+
               {isResourceSection ? (
                 <SettingsPage
                   eyebrow={t(sectionMeta[section].label)}
@@ -555,15 +533,6 @@ export function SettingsWindow({
                     </div>
                   }
                 >
-                  {section === 'models' && config.mode === 'local' ? (
-                    <div className="settings-resource-callout">
-                      <CubeIcon />
-                      <span>
-                        <strong>{t('settings.localProvider')}</strong>
-                        <small>{t('settings.localProviderDescription')}</small>
-                      </span>
-                    </div>
-                  ) : null}
                   {resourceLoading ? <SettingsState text={t('settings.loading')} /> : null}
                   {!resourceLoading && resourceError ? (
                     <SettingsState error text={t('settings.unavailable')} detail={resourceError} />
@@ -590,10 +559,6 @@ export function SettingsWindow({
                         <ResourceDetail
                           section={section}
                           item={selectedResource}
-                          mode={config.mode}
-                          canManageProviders={canManageProviders}
-                          onSaveProvider={saveProvider}
-                          onValidateProvider={validateProvider}
                         />
                       ) : null}
                     </div>
@@ -706,246 +671,6 @@ function ContextPicker({
   );
 }
 
-function ResourceRow({
-  section,
-  item,
-  selected,
-  busy,
-  onSelect,
-  onAction,
-}: {
-  section: ResourceSection;
-  item: ManagedResource;
-  selected: boolean;
-  busy: boolean;
-  onSelect: () => void;
-  onAction: () => void;
-}) {
-  const { t } = useI18n();
-  const view = resourceView(section, item);
-  const canAct = section !== 'models';
-  return (
-    <article className={`settings-resource-row ${selected ? 'selected' : ''}`}>
-      <button type="button" className="settings-resource-main" onClick={onSelect}>
-        <span className="settings-resource-icon"><view.Icon /></span>
-        <div>
-          <strong>{view.name}</strong>
-          <p>{view.description}</p>
-          <div className="settings-resource-meta">
-            {view.meta.map((value) => <span key={value}>{value}</span>)}
-          </div>
-        </div>
-      </button>
-      <aside>
-        <Badge color={view.active ? 'green' : 'gray'} variant="soft">{view.status}</Badge>
-        {canAct ? (
-          <Button size="1" variant="soft" loading={busy} onClick={onAction}>
-            {view.active ? t('settings.disable') : t('settings.enable')}
-          </Button>
-        ) : null}
-      </aside>
-    </article>
-  );
-}
-
-function ResourceDetail({
-  section,
-  item,
-  mode,
-  canManageProviders,
-  onSaveProvider,
-  onValidateProvider,
-}: {
-  section: ResourceSection;
-  item: ManagedResource;
-  mode: DesktopRuntimeConfig['mode'];
-  canManageProviders: boolean;
-  onSaveProvider: (
-    provider: ManagedLlmProvider,
-    mutation: LlmProviderMutationInput,
-  ) => Promise<ManagedLlmProvider>;
-  onValidateProvider: (providerId: string) => Promise<LlmProviderValidationOutcome>;
-}) {
-  const { t } = useI18n();
-  if (section === 'models') {
-    return (
-      <ProviderDetailEditor
-        provider={item as ManagedLlmProvider}
-        mode={mode}
-        canManage={canManageProviders}
-        onSave={onSaveProvider}
-        onValidate={onValidateProvider}
-      />
-    );
-  }
-  const view = resourceView(section, item);
-  const facts = resourceFacts(section, item, t);
-  const capabilities = resourceCapabilities(section, item);
-  return (
-    <aside className="settings-resource-detail">
-      <header>
-        <span className="settings-resource-icon"><view.Icon /></span>
-        <div>
-          <Text size="1" color="gray">{t(sectionMeta[section].label).toUpperCase()}</Text>
-          <h2>{view.name}</h2>
-          <p>{view.description}</p>
-        </div>
-        <Badge color={view.active ? 'green' : 'gray'} variant="soft">{view.status}</Badge>
-      </header>
-      <dl>
-        {facts.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <section>
-        <Text size="1" color="gray">{t('settings.capabilitiesRelationships').toUpperCase()}</Text>
-        {capabilities.length > 0 ? (
-          <div className="settings-detail-chips">
-            {capabilities.map((capability, index) => (
-              <span key={`${capability}-${index}`}>{capability}</span>
-            ))}
-          </div>
-        ) : (
-          <p className="settings-detail-empty">{t('settings.noCapabilities')}</p>
-        )}
-      </section>
-    </aside>
-  );
-}
-
-function resourceFacts(
-  section: ResourceSection,
-  item: ManagedResource,
-  t: (key: string) => string,
-): Array<[string, string]> {
-  if (section === 'models') {
-    const provider = item as ManagedLlmProvider;
-    return [
-      [t('settings.providerType'), provider.provider_type],
-      [t('settings.model'), provider.llm_model || t('settings.notConfigured')],
-      [t('settings.endpoint'), provider.base_url || t('settings.providerDefault')],
-      [t('settings.health'), provider.health_status || t('settings.notChecked')],
-    ];
-  }
-  if (section === 'skills') {
-    const skill = item as ManagedSkill;
-    return [
-      [t('settings.scope'), skill.scope],
-      [t('settings.version'), `v${skill.current_version ?? 0}`],
-      [t('settings.status'), skill.status],
-      [t('settings.source'), skill.is_system_skill ? t('settings.system') : t('settings.managed')],
-    ];
-  }
-  if (section === 'plugins') {
-    const plugin = item as ManagedPlugin;
-    return [
-      [t('settings.source'), plugin.source],
-      [t('settings.package'), plugin.package || t('settings.builtIn')],
-      [t('settings.version'), plugin.version || t('settings.unversioned')],
-      [
-        t('settings.discovery'),
-        plugin.discovered ? t('settings.discovered') : t('settings.unavailable'),
-      ],
-    ];
-  }
-  const agent = item as ManagedAgentDefinition;
-  return [
-    [t('settings.model'), agent.model_name || t('settings.tenantDefault')],
-    [
-      t('settings.status'),
-      agent.enabled === false ? t('settings.disabled') : agent.status || t('settings.active'),
-    ],
-    [t('settings.tools'), String(agent.allowed_tools?.length ?? 0)],
-    [t('settings.skills'), String(agent.allowed_skills?.length ?? 0)],
-  ];
-}
-
-function resourceCapabilities(section: ResourceSection, item: ManagedResource): string[] {
-  if (section === 'models') {
-    const provider = item as ManagedLlmProvider;
-    return [...(provider.allowed_models ?? []), ...(provider.secondary_models ?? [])].slice(0, 20);
-  }
-  if (section === 'skills') return (item as ManagedSkill).tools.slice(0, 20);
-  if (section === 'plugins') {
-    const plugin = item as ManagedPlugin;
-    return [
-      ...(plugin.providers ?? []),
-      ...(plugin.skills ?? []),
-      ...(plugin.channel_types ?? []),
-      ...(plugin.tool_definitions ?? []).map((tool) => String(tool.name ?? 'tool')),
-    ].slice(0, 20);
-  }
-  const agent = item as ManagedAgentDefinition;
-  return [
-    ...(agent.allowed_tools ?? []),
-    ...(agent.allowed_skills ?? []),
-    ...(agent.allowed_mcp_servers ?? []),
-  ].slice(0, 20);
-}
-
-function resourceView(section: ResourceSection, item: ManagedResource) {
-  if (section === 'models') {
-    const provider = item as ManagedLlmProvider;
-    return {
-      name: provider.name || provider.provider_type,
-      description: provider.base_url || provider.llm_model || provider.provider_type,
-      status: provider.health_status || (provider.is_active === false ? 'disabled' : 'active'),
-      active: provider.is_active !== false,
-      meta: [provider.provider_type, provider.llm_model].filter(Boolean) as string[],
-      Icon: CubeIcon,
-    };
-  }
-  if (section === 'skills') {
-    const skill = item as ManagedSkill;
-    return {
-      name: skill.name,
-      description: skill.description,
-      status: skill.status,
-      active: skill.status === 'active',
-      meta: [skill.scope, `${skill.tools.length} tools`, `v${skill.current_version ?? 0}`],
-      Icon: MagicWandIcon,
-    };
-  }
-  if (section === 'plugins') {
-    const plugin = item as ManagedPlugin;
-    return {
-      name: plugin.name,
-      description: plugin.package || plugin.kind || plugin.source,
-      status: plugin.enabled ? 'active' : 'disabled',
-      active: plugin.enabled,
-      meta: [plugin.source, plugin.version, `${plugin.tool_definitions?.length ?? 0} tools`].filter(
-        Boolean,
-      ) as string[],
-      Icon: ComponentInstanceIcon,
-    };
-  }
-  const agent = item as ManagedAgentDefinition;
-  return {
-    name: agent.name,
-    description: agent.display_name || agent.system_prompt || agent.model_name || agent.id,
-    status: agent.enabled === false ? 'disabled' : agent.status || 'active',
-    active: agent.enabled !== false,
-    meta: [
-      agent.model_name,
-      `${agent.allowed_tools?.length ?? 0} tools`,
-      `${agent.allowed_skills?.length ?? 0} skills`,
-    ].filter(Boolean) as string[],
-    Icon: PersonIcon,
-  };
-}
-
-function SettingsState({ text, detail, error = false }: { text: string; detail?: string; error?: boolean }) {
-  return (
-    <div className={`settings-resource-state ${error ? 'error' : ''}`}>
-      <strong>{text}</strong>
-      {detail ? <small>{detail}</small> : null}
-    </div>
-  );
-}
-
 function isResource(section: SettingsSection): section is ResourceSection {
-  return section === 'models' || section === 'skills' || section === 'plugins' || section === 'agents';
+  return section === 'skills' || section === 'plugins' || section === 'agents';
 }
