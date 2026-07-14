@@ -2,7 +2,8 @@
 //!
 //! Rust owns only project-scoped cron job list/detail/run history reads. Cron
 //! creation, update, deletion, toggle, manual run, and scheduler registration
-//! remain Python-owned.
+//! remain Python-owned. The capability endpoint makes that boundary explicit so
+//! clients stay fail-closed instead of inferring mutation support from routes.
 
 use std::sync::Arc;
 
@@ -184,6 +185,10 @@ pub(crate) fn router() -> Router<AppState> {
             get(list_cron_jobs),
         )
         .route(
+            "/api/v1/projects/:project_id/cron-jobs/capabilities",
+            get(get_cron_job_capabilities),
+        )
+        .route(
             "/api/v1/projects/:project_id/cron-jobs/:job_id",
             get(get_cron_job),
         )
@@ -213,6 +218,20 @@ async fn get_cron_job(
     ensure_project_access(&app, &identity, &project_id).await?;
     let response = app.cron_jobs.get_job(&project_id, &job_id).await?;
     Ok(Json(response))
+}
+
+async fn get_cron_job_capabilities(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(project_id): Path<String>,
+) -> Result<Json<CronJobCapabilitiesView>, CronApiError> {
+    ensure_project_access(&app, &identity, &project_id).await?;
+    let can_write = app
+        .auth
+        .can_write_project(&identity.user_id, &project_id)
+        .await
+        .map_err(CronApiError::internal)?;
+    Ok(Json(CronJobCapabilitiesView::read_only(can_write)))
 }
 
 async fn list_cron_job_runs(
@@ -306,6 +325,62 @@ struct CronConfigView {
     config: Value,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct CronActionCapabilityView {
+    allowed: bool,
+    reason_code: String,
+}
+
+impl CronActionCapabilityView {
+    fn unavailable(can_write: bool) -> Self {
+        Self {
+            allowed: false,
+            reason_code: if can_write {
+                "durable_automation_runtime_unavailable"
+            } else {
+                "project_write_required"
+            }
+            .to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct CronJobCapabilitiesView {
+    schema_version: u8,
+    read: bool,
+    revision_guarded: bool,
+    idempotency_guarded: bool,
+    durable_execution: bool,
+    supported_read_trigger_kinds: Vec<String>,
+    create: CronActionCapabilityView,
+    edit: CronActionCapabilityView,
+    toggle: CronActionCapabilityView,
+    run_now: CronActionCapabilityView,
+    delete: CronActionCapabilityView,
+}
+
+impl CronJobCapabilitiesView {
+    fn read_only(can_write: bool) -> Self {
+        Self {
+            schema_version: 1,
+            read: true,
+            revision_guarded: false,
+            idempotency_guarded: false,
+            durable_execution: false,
+            supported_read_trigger_kinds: ["manual", "schedule", "event"]
+                .into_iter()
+                .map(ToString::to_string)
+                .collect(),
+            create: CronActionCapabilityView::unavailable(can_write),
+            edit: CronActionCapabilityView::unavailable(can_write),
+            toggle: CronActionCapabilityView::unavailable(can_write),
+            run_now: CronActionCapabilityView::unavailable(can_write),
+            delete: CronActionCapabilityView::unavailable(can_write),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub(crate) struct CronJobView {
     id: String,
@@ -315,6 +390,8 @@ pub(crate) struct CronJobView {
     description: Option<String>,
     enabled: bool,
     delete_after_run: bool,
+    revision: i64,
+    schedule_revision: i64,
     schedule: CronConfigView,
     payload: CronConfigView,
     delivery: CronConfigView,
@@ -340,6 +417,8 @@ impl From<CronJobRecord> for CronJobView {
             description: record.description,
             enabled: record.enabled,
             delete_after_run: record.delete_after_run,
+            revision: record.revision,
+            schedule_revision: record.schedule_revision,
             schedule: CronConfigView {
                 kind: record.schedule_type,
                 config: record.schedule_config,
@@ -350,7 +429,7 @@ impl From<CronJobRecord> for CronJobView {
             },
             delivery: CronConfigView {
                 kind: record.delivery_type,
-                config: record.delivery_config,
+                config: redact_delivery_config(record.delivery_config),
             },
             conversation_mode: record.conversation_mode,
             conversation_id: record.conversation_id,
@@ -358,7 +437,7 @@ impl From<CronJobRecord> for CronJobView {
             stagger_seconds: record.stagger_seconds,
             timeout_seconds: record.timeout_seconds,
             max_retries: record.max_retries,
-            state: record.state,
+            state: redact_sensitive_config(record.state),
             created_by: record.created_by,
             created_at: iso8601(record.created_at),
             updated_at: record.updated_at.map(iso8601),
@@ -408,7 +487,7 @@ impl From<CronJobRunRecord> for CronJobRunView {
             finished_at: record.finished_at.map(iso8601),
             duration_ms: record.duration_ms,
             error_message: record.error_message,
-            result_summary: record.result_summary,
+            result_summary: redact_sensitive_config(record.result_summary),
             conversation_id: record.conversation_id,
         }
     }
@@ -457,6 +536,65 @@ fn page<T>(records: Vec<T>, limit: i64, offset: i64) -> Vec<T> {
 
 fn iso8601(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+fn redact_sensitive_config(value: Value) -> Value {
+    redact_config(value, false)
+}
+
+fn redact_delivery_config(value: Value) -> Value {
+    redact_config(value, true)
+}
+
+fn redact_config(value: Value, redact_delivery_location: bool) -> Value {
+    match value {
+        Value::Object(entries) => Value::Object(
+            entries
+                .into_iter()
+                .map(|(key, value)| {
+                    let value = if is_sensitive_config_key(&key)
+                        || (redact_delivery_location && is_delivery_location_key(&key))
+                    {
+                        Value::String("[REDACTED]".to_string())
+                    } else {
+                        redact_config(value, redact_delivery_location)
+                    };
+                    (key, value)
+                })
+                .collect(),
+        ),
+        Value::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(|value| redact_config(value, redact_delivery_location))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
+fn is_sensitive_config_key(key: &str) -> bool {
+    matches!(
+        key.to_ascii_lowercase().replace('-', "_").as_str(),
+        "secret"
+            | "token"
+            | "api_key"
+            | "apikey"
+            | "password"
+            | "authorization"
+            | "cookie"
+            | "set_cookie"
+            | "client_secret"
+            | "access_token"
+            | "refresh_token"
+    )
+}
+
+fn is_delivery_location_key(key: &str) -> bool {
+    matches!(
+        key.to_ascii_lowercase().replace('-', "_").as_str(),
+        "headers" | "url" | "endpoint" | "webhook_url" | "target_url"
+    )
 }
 
 #[derive(Debug)]
@@ -511,6 +649,8 @@ mod tests {
             description: Some("Nightly maintenance".to_string()),
             enabled,
             delete_after_run: false,
+            revision: 7,
+            schedule_revision: 3,
             schedule_type: "cron".to_string(),
             schedule_config: json!({"expr": "0 * * * *", "timezone": "UTC"}),
             payload_type: "agent_turn".to_string(),
@@ -582,6 +722,59 @@ mod tests {
         let value = serde_json::to_value(response).expect("response serializes");
 
         agistack_parity::assert_parity(&golden, &value);
+    }
+
+    #[test]
+    fn cron_response_redacts_nested_credentials_without_hiding_safe_references() {
+        let mut record = cron_job(
+            "job-secret",
+            true,
+            Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        );
+        record.delivery_config = json!({
+            "url": "https://example.invalid/hook?token=should-not-leak",
+            "credential_ref": "vault://delivery/42",
+            "headers": {
+                "Authorization": "Bearer should-not-leak",
+                "X-Api-Key": "should-not-leak",
+                "Content-Type": "application/json"
+            },
+            "secret": "should-not-leak"
+        });
+        record.state = json!({
+            "last_run_status": "failed",
+            "diagnostics": {"access_token": "should-not-leak"}
+        });
+
+        let view = CronJobView::from(record);
+        let value = serde_json::to_value(view).expect("cron job view serializes");
+
+        assert_eq!(
+            value["delivery"]["config"]["credential_ref"],
+            "vault://delivery/42"
+        );
+        assert_eq!(value["delivery"]["config"]["url"], "[REDACTED]");
+        assert_eq!(value["delivery"]["config"]["headers"], "[REDACTED]");
+        assert_eq!(value["delivery"]["config"]["secret"], "[REDACTED]");
+        assert_eq!(value["state"]["diagnostics"]["access_token"], "[REDACTED]");
+        assert!(!value.to_string().contains("should-not-leak"));
+    }
+
+    #[test]
+    fn cron_capabilities_keep_mutations_fail_closed_with_stable_reasons() {
+        let writer = CronJobCapabilitiesView::read_only(true);
+        assert!(writer.read);
+        assert!(!writer.revision_guarded);
+        assert!(!writer.durable_execution);
+        assert!(!writer.run_now.allowed);
+        assert_eq!(
+            writer.run_now.reason_code,
+            "durable_automation_runtime_unavailable"
+        );
+
+        let reader = CronJobCapabilitiesView::read_only(false);
+        assert!(!reader.create.allowed);
+        assert_eq!(reader.create.reason_code, "project_write_required");
     }
 
     #[test]

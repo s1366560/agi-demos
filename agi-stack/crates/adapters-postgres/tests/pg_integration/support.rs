@@ -319,7 +319,8 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "CREATE TABLE IF NOT EXISTS cron_jobs (\
             id text PRIMARY KEY, project_id text NOT NULL, tenant_id text NOT NULL, \
             name varchar(255) NOT NULL, description text, enabled boolean DEFAULT true, \
-            delete_after_run boolean DEFAULT false, schedule_type varchar(50) NOT NULL, \
+            delete_after_run boolean DEFAULT false, revision bigint DEFAULT 1 NOT NULL, \
+            schedule_revision bigint DEFAULT 1 NOT NULL, schedule_type varchar(50) NOT NULL, \
             schedule_config json DEFAULT '{}'::json, payload_type varchar(50) NOT NULL, \
             payload_config json DEFAULT '{}'::json, delivery_type varchar(50) DEFAULT 'none', \
             delivery_config json DEFAULT '{}'::json, conversation_mode varchar(50) DEFAULT 'reuse', \

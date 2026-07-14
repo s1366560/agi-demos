@@ -8,6 +8,8 @@
       "description": "Nightly maintenance",
       "enabled": true,
       "delete_after_run": false,
+      "revision": 7,
+      "schedule_revision": 3,
       "schedule": {
         "kind": "cron",
         "config": {

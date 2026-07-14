@@ -302,10 +302,14 @@ class ConversationMode(str, Enum):
 class CronRunStatus(str, Enum):
     """Outcome of a single cron run."""
 
+    QUEUED = "queued"
+    RUNNING = "running"
+    WAITING_HUMAN = "waiting_human"
     SUCCESS = "success"
     FAILED = "failed"
     TIMEOUT = "timeout"
     SKIPPED = "skipped"
+    CANCELLED = "cancelled"
 
 
 # ---------------------------------------------------------------------------

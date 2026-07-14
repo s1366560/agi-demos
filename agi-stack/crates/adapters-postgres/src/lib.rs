@@ -38,7 +38,11 @@ mod channel_repo;
 mod checkpoint;
 mod conversation_events_repo;
 mod conversation_repo;
+mod cron_operation_repo;
 mod cron_repo;
+mod cron_runtime_projection_support;
+mod cron_runtime_repo;
+mod cron_runtime_types;
 mod data_stats_repo;
 mod deploy_repo;
 mod event_log_repo;
@@ -99,7 +103,17 @@ pub use conversation_repo::{
     AgentConversationRecord, ConversationCreateRecord, ConversationListQuery,
     ConversationModePatch, ConversationMutationAccess, PgAgentConversationRepository,
 };
+pub use cron_operation_repo::{
+    CronOperationErrorCode, CronOperationFailure, CronOperationKind, CronOperationRecord,
+    CronOperationScope, CronOperationStatus, NewCronOperation, PgCronOperationRepository,
+};
 pub use cron_repo::{CronJobListQuery, CronJobRecord, CronJobRunRecord, PgCronRepository};
+pub use cron_runtime_repo::PgCronAutomationRuntimeRepository;
+pub use cron_runtime_types::{
+    AutomationPayload, AutomationRunContext, AutomationRunLease, AutomationRunStatus,
+    AutomationRuntimeRepositoryError, AutomationRuntimeScope, AutomationTerminalOutcome,
+    AutomationTerminalProjection,
+};
 pub use data_stats_repo::{
     DataStatsAccess, DataStatsScopeError, DataStatsScopeRecord, PgDataStatsRepository,
 };

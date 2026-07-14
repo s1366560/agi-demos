@@ -31,6 +31,10 @@ mod channel;
 mod conversation_events;
 #[path = "pg_integration/cron.rs"]
 mod cron;
+#[path = "pg_integration/cron_operations.rs"]
+mod cron_operations;
+#[path = "pg_integration/cron_runtime.rs"]
+mod cron_runtime;
 #[path = "pg_integration/data_stats.rs"]
 mod data_stats;
 #[path = "pg_integration/deploy.rs"]

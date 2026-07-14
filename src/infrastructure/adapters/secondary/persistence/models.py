@@ -2245,6 +2245,12 @@ class CronJobModel(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     delete_after_run: Mapped[bool] = mapped_column(Boolean, default=False)
+    revision: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default=text("1")
+    )
+    schedule_revision: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default=text("1")
+    )
 
     schedule_type: Mapped[str] = mapped_column(String(50), nullable=False)
     schedule_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
@@ -2287,6 +2293,29 @@ class CronJobRunModel(Base):
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     trigger_type: Mapped[str] = mapped_column(String(50), default="scheduled")
+    accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    job_revision: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default=text("1")
+    )
+    schedule_revision: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    runtime_execution_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    request_receipt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    runtime_revision: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    runtime_lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    runtime_lease_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    runtime_lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -2297,8 +2326,223 @@ class CronJobRunModel(Base):
     job: Mapped["CronJobModel"] = relationship(back_populates="runs")
 
     __table_args__ = (
+        Index(
+            "uq_cron_job_runs_runtime_execution",
+            "runtime_execution_id",
+            unique=True,
+            postgresql_where=text("runtime_execution_id IS NOT NULL"),
+        ),
         Index("ix_cron_job_runs_job_status", "job_id", "status"),
         Index("ix_cron_job_runs_project_started", "project_id", "started_at"),
+        Index(
+            "ix_cron_job_runs_runtime_dispatch",
+            "status",
+            "runtime_lease_expires_at",
+            "accepted_at",
+        ),
+        Index(
+            "ix_cron_job_runs_runtime_deadline",
+            "deadline_at",
+            postgresql_where=text("status IN ('running', 'waiting_human')"),
+        ),
+    )
+
+
+class CronOperationModel(Base):
+    """Durable, fenced queue row for schedule reconciliation and Agent execution."""
+
+    __tablename__ = "agistack_cron_operations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    project_id: Mapped[str] = mapped_column(String, nullable=False)
+    job_id: Mapped[str] = mapped_column(String, nullable=False)
+    job_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    schedule_revision: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    operation_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    trigger_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    input_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending", server_default="pending"
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=5, server_default=text("5")
+    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, server_default=func.now()
+    )
+    lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    actor_api_key_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    request_receipt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    result_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    last_error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_agistack_cron_operations_run",
+            "run_id",
+            unique=True,
+            postgresql_where=text("run_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_agistack_cron_operations_reconcile",
+            "job_id",
+            "operation_kind",
+            "schedule_revision",
+            unique=True,
+            postgresql_where=text("operation_kind = 'reconcile_schedule'"),
+        ),
+        Index(
+            "uq_agistack_cron_operations_scheduled_fire",
+            "job_id",
+            "scheduled_for",
+            unique=True,
+            postgresql_where=text(
+                "operation_kind = 'execute_run' AND trigger_type = 'scheduled'"
+            ),
+        ),
+        Index(
+            "ix_agistack_cron_operations_claim",
+            "status",
+            "next_attempt_at",
+            "created_at",
+        ),
+        Index(
+            "ix_agistack_cron_operations_lease",
+            "status",
+            "lease_expires_at",
+        ),
+        Index(
+            "ix_agistack_cron_operations_project_job",
+            "project_id",
+            "job_id",
+        ),
+    )
+
+
+class CronScheduleStateModel(Base):
+    """Materialized next-fire cursor owned by the durable scheduler."""
+
+    __tablename__ = "agistack_cron_schedule_state"
+
+    job_id: Mapped[str] = mapped_column(
+        String, ForeignKey("cron_jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    project_id: Mapped[str] = mapped_column(String, nullable=False)
+    schedule_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active", server_default="active"
+    )
+    schedule_fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    next_fire_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_fire_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_agistack_cron_schedule_state_due",
+            "status",
+            "next_fire_at",
+        ),
+        Index(
+            "ix_agistack_cron_schedule_state_project",
+            "project_id",
+            "status",
+        ),
+    )
+
+
+class CronRequestReceiptModel(Base):
+    """Replay-safe receipt for one project-scoped automation mutation intent."""
+
+    __tablename__ = "agistack_cron_request_receipts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    project_id: Mapped[str] = mapped_column(String, nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    actor_api_key_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    operation: Mapped[str] = mapped_column(String(40), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    resource_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    operation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_json_redacted: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_agistack_cron_request_receipts_intent",
+            "project_id",
+            "actor_user_id",
+            "operation",
+            "idempotency_key",
+            unique=True,
+        ),
+        Index(
+            "ix_agistack_cron_request_receipts_expiry",
+            "expires_at",
+        ),
+    )
+
+
+class CronSchedulerOwnerModel(Base):
+    """Fenced owner lease used only during Python-to-Rust scheduler cutover."""
+
+    __tablename__ = "agistack_cron_scheduler_owners"
+
+    scope_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    owner_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="off", server_default="off"
+    )
+    owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_epoch: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    lease_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acquired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
 

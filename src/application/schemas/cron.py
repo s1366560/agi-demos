@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,24 @@ from src.domain.model.cron.value_objects import (
     PayloadType,
     ScheduleType,
 )
+
+_REDACTED = "[REDACTED]"
+_SENSITIVE_CONFIG_KEYS = frozenset(
+    {
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "password",
+        "authorization",
+        "cookie",
+        "set_cookie",
+        "client_secret",
+        "access_token",
+        "refresh_token",
+    }
+)
+_DELIVERY_LOCATION_KEYS = frozenset({"headers", "url", "endpoint", "webhook_url", "target_url"})
 
 # ---------------------------------------------------------------------------
 # Nested config schemas
@@ -139,6 +157,8 @@ class CronJobResponse(BaseModel):
     description: str | None = Field(default=None, description="Description")
     enabled: bool = Field(..., description="Whether enabled")
     delete_after_run: bool = Field(..., description="Delete after run flag")
+    revision: int = Field(..., ge=1, description="Monotonic job revision")
+    schedule_revision: int = Field(..., ge=1, description="Schedule configuration revision")
     schedule: ScheduleConfig = Field(..., description="Schedule configuration")
     payload: PayloadConfig = Field(..., description="Payload configuration")
     delivery: DeliveryConfig = Field(..., description="Delivery configuration")
@@ -204,6 +224,38 @@ def delivery_config_to_domain(cfg: DeliveryConfig) -> CronDelivery:
     return CronDelivery(kind=cfg.kind, config=cfg.config)
 
 
+def _redact_config(
+    value: dict[str, Any], *, redact_delivery_location: bool = False
+) -> dict[str, Any]:
+    redacted: dict[str, Any] = {}
+    for key, nested in value.items():
+        normalized_key = key.lower().replace("-", "_")
+        if normalized_key in _SENSITIVE_CONFIG_KEYS or (
+            redact_delivery_location and normalized_key in _DELIVERY_LOCATION_KEYS
+        ):
+            redacted[key] = _REDACTED
+        else:
+            redacted[key] = _redact_config_value(
+                nested,
+                redact_delivery_location=redact_delivery_location,
+            )
+    return redacted
+
+
+def _redact_config_value(value: object, *, redact_delivery_location: bool) -> object:
+    if isinstance(value, dict):
+        return _redact_config(
+            cast(dict[str, Any], value),
+            redact_delivery_location=redact_delivery_location,
+        )
+    if isinstance(value, list):
+        return [
+            _redact_config_value(item, redact_delivery_location=redact_delivery_location)
+            for item in value
+        ]
+    return value
+
+
 def cron_job_to_response(job: CronJob) -> CronJobResponse:
     """Convert a CronJob domain entity to a CronJobResponse."""
     return CronJobResponse(
@@ -214,16 +266,21 @@ def cron_job_to_response(job: CronJob) -> CronJobResponse:
         description=job.description,
         enabled=job.enabled,
         delete_after_run=job.delete_after_run,
+        revision=job.revision,
+        schedule_revision=job.schedule_revision,
         schedule=ScheduleConfig(kind=job.schedule.kind, config=job.schedule.config),
         payload=PayloadConfig(kind=job.payload.kind, config=job.payload.config),
-        delivery=DeliveryConfig(kind=job.delivery.kind, config=job.delivery.config),
+        delivery=DeliveryConfig(
+            kind=job.delivery.kind,
+            config=_redact_config(job.delivery.config, redact_delivery_location=True),
+        ),
         conversation_mode=job.conversation_mode,
         conversation_id=job.conversation_id,
         timezone=job.timezone,
         stagger_seconds=job.stagger_seconds,
         timeout_seconds=job.timeout_seconds,
         max_retries=job.max_retries,
-        state=job.state,
+        state=_redact_config(job.state),
         created_by=job.created_by,
         created_at=job.created_at,
         updated_at=job.updated_at,
@@ -242,6 +299,6 @@ def cron_job_run_to_response(run: CronJobRun) -> CronJobRunResponse:
         finished_at=run.finished_at,
         duration_ms=run.duration_ms,
         error_message=run.error_message,
-        result_summary=run.result_summary,
+        result_summary=_redact_config(run.result_summary),
         conversation_id=run.conversation_id,
     )

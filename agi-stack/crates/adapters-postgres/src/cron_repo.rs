@@ -13,7 +13,8 @@ use agistack_core::ports::{CoreError, CoreResult};
 use crate::PgPool;
 
 const JOB_COLS: &str = "id, project_id, tenant_id, name, description, enabled, \
-    delete_after_run, schedule_type, schedule_config, payload_type, payload_config, \
+    delete_after_run, revision, schedule_revision, schedule_type, schedule_config, \
+    payload_type, payload_config, \
     delivery_type, delivery_config, conversation_mode, conversation_id, timezone, \
     stagger_seconds, timeout_seconds, max_retries, state, created_by, created_at, updated_at";
 const RUN_COLS: &str = "id, job_id, project_id, status, trigger_type, started_at, finished_at, \
@@ -36,6 +37,8 @@ pub struct CronJobRecord {
     pub description: Option<String>,
     pub enabled: bool,
     pub delete_after_run: bool,
+    pub revision: i64,
+    pub schedule_revision: i64,
     pub schedule_type: String,
     pub schedule_config: Value,
     pub payload_type: String,
@@ -201,6 +204,8 @@ fn cron_job_from_row(row: PgRow) -> Result<CronJobRecord, sqlx::Error> {
         delete_after_run: row
             .try_get::<Option<bool>, _>("delete_after_run")?
             .unwrap_or(false),
+        revision: row.try_get("revision")?,
+        schedule_revision: row.try_get("schedule_revision")?,
         schedule_type: row.try_get("schedule_type")?,
         schedule_config: json_or_default(&row, "schedule_config")?,
         payload_type: row.try_get("payload_type")?,
