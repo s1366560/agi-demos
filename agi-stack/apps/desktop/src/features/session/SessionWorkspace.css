@@ -268,6 +268,98 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyan-8) 20%, transparent);
 }
 
+.session-recovery-dialog {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  color: var(--desktop-text);
+  background: #0b1118;
+  border: 1px solid var(--desktop-border);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+}
+
+.session-recovery-dialog-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: var(--amber-9);
+  background: color-mix(in srgb, var(--amber-9) 10%, #0b1118);
+  border: 1px solid color-mix(in srgb, var(--amber-9) 32%, var(--desktop-border));
+  border-radius: 8px;
+}
+
+.session-recovery-dialog-icon svg { width: 18px; height: 18px; }
+.session-recovery-dialog .rt-AlertDialogTitle { margin: 0; font-size: 17px; }
+.session-recovery-dialog .rt-AlertDialogDescription {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.session-recovery-warning-list {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  margin: 0;
+  list-style: none;
+  background: #080d13;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 8px;
+}
+
+.session-recovery-warning-list li {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.session-recovery-warning-list li svg { margin-top: 1px; color: var(--green-9); }
+.session-recovery-warning-list li.is-warning svg { color: var(--amber-9); }
+
+.session-recovery-context {
+  display: grid;
+  gap: 7px;
+}
+
+.session-recovery-context h3 {
+  margin: 0;
+  color: var(--desktop-faint);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.session-recovery-context dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.session-recovery-context dl > div { min-width: 0; }
+.session-recovery-context dt { color: var(--desktop-faint); font-size: 9px; }
+.session-recovery-context dd {
+  overflow: hidden;
+  margin: 3px 0 0;
+  color: var(--desktop-text);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-recovery-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 3px;
+}
+
 .session-pane-label {
   display: flex;
   min-width: 0;

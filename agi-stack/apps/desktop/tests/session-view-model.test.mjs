@@ -8,6 +8,7 @@ const {
   authoritativeRunsFromSocketEvents,
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
+  sessionRecoveryPresentation,
   sessionRunActions,
   sessionStatusPresentation,
 } = require(
@@ -251,4 +252,28 @@ test('session run actions expose only valid authoritative transitions', () => {
   assert.deepEqual(sessionRunActions('ready_review'), ['request_changes', 'approve']);
   assert.deepEqual(sessionRunActions('completed'), []);
   assert.deepEqual(sessionRunActions('needs_approval'), []);
+});
+
+test('session recovery choices distinguish reattach authority from a lossy fork', () => {
+  assert.deepEqual(sessionRecoveryPresentation('reconnect'), {
+    action: 'reconnect',
+    labelKey: 'session.reconnectRun',
+    titleKey: 'session.reattachTitle',
+    descriptionKey: 'session.reattachDescription',
+    confirmationRequired: false,
+    primary: true,
+  });
+  assert.deepEqual(sessionRecoveryPresentation('fork'), {
+    action: 'fork',
+    labelKey: 'session.forkRecovery',
+    titleKey: 'session.forkRecoveryTitle',
+    descriptionKey: 'session.forkRecoveryDescription',
+    confirmationRequired: true,
+    primary: false,
+    warnings: [
+      'session.forkRecoveryNewRun',
+      'session.forkRecoveryVerifiedHead',
+      'session.forkRecoveryLocalChanges',
+    ],
+  });
 });
