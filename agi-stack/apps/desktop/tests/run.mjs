@@ -47,6 +47,7 @@ const testFiles = [
   'use-agent-socket.test.mjs',
   'use-terminal-proxy.test.mjs',
   'workspace-tree-model.test.mjs',
+  'workspace-overview-model.test.mjs',
   'workspace-execution-model.test.mjs',
 ].map((filename) => join(testsDirectory, filename));
 const run = spawnSync(process.execPath, ['--test', ...testFiles], {

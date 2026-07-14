@@ -19,7 +19,6 @@ import type {
   DesktopArtifactVersion,
   DesktopRun,
   PlanSnapshot,
-  WorkspaceTask,
 } from '../types';
 import '../styles.css';
 import './workspaceExecutionQa.css';
@@ -59,6 +58,9 @@ const conversations: AgentConversation[] = [
     created_at: now,
     updated_at: now,
     conversation_mode: 'code',
+    agent_config: { capability_mode: 'code' },
+    participant_agents: ['planner', 'coder'],
+    metadata: { run: { status: 'running' } },
   },
   {
     id: 'conversation-2',
@@ -71,6 +73,9 @@ const conversations: AgentConversation[] = [
     created_at: now,
     updated_at: '2026-07-13T10:10:00Z',
     conversation_mode: 'work',
+    agent_config: { capability_mode: 'work' },
+    participant_agents: ['researcher', 'reviewer'],
+    metadata: { run: { status: 'needs_approval' } },
   },
   {
     id: 'conversation-3',
@@ -83,55 +88,9 @@ const conversations: AgentConversation[] = [
     created_at: now,
     updated_at: '2026-07-13T09:58:00Z',
     conversation_mode: 'code',
-  },
-];
-
-const tasks: WorkspaceTask[] = [
-  {
-    id: 'task-1',
-    workspace_id: 'desktop-client',
-    conversation_id: 'conversation-1',
-    title: 'Project workspace execution state',
-    status: 'in_progress',
-    priority: 'high',
-    plan_version: 3,
-    plan_status: 'approved',
-    run_id: 'run-1',
-    run_status: 'running',
-    source: 'agent_plan_task',
-  },
-  {
-    id: 'task-2',
-    workspace_id: 'desktop-client',
-    conversation_id: 'conversation-1',
-    title: 'Verify 1325 and 1100 layouts',
-    status: 'pending',
-    priority: 'high',
-    plan_version: 3,
-    plan_status: 'approved',
-    source: 'agent_plan_task',
-  },
-  {
-    id: 'task-3',
-    workspace_id: 'desktop-client',
-    conversation_id: 'conversation-2',
-    title: 'Review Provider authority boundary',
-    status: 'blocked',
-    priority: 'medium',
-    plan_version: 2,
-    plan_status: 'approved',
-    source: 'agent_plan_task',
-  },
-  {
-    id: 'task-4',
-    workspace_id: 'desktop-client',
-    conversation_id: 'conversation-3',
-    title: 'Publish evidence artifacts',
-    status: 'completed',
-    priority: 'medium',
-    plan_version: 1,
-    plan_status: 'approved',
-    source: 'agent_plan_task',
+    agent_config: { capability_mode: 'code' },
+    participant_agents: ['planner', 'coder'],
+    metadata: { run: { status: 'ready_review' } },
   },
 ];
 
@@ -303,22 +262,41 @@ function WorkspaceExecutionQa() {
               project_id: 'northstar-project',
               name: 'Desktop Client',
               description: '应用体验、前端与 Rust 运行时交付。',
-              status: 'open',
+              office_status: 'online',
+              updated_at: now,
+              metadata: {
+                collaboration_mode: 'multi_agent_shared',
+                member_count: 8,
+              },
             }}
-            project={{ id: 'northstar-project', tenant_id: 'northstar', name: 'Northstar Labs' }}
+            project={{
+              id: 'northstar-project',
+              tenant_id: 'northstar',
+              name: 'Northstar Labs',
+              stats: {
+                memory_count: 248,
+                node_count: 1842,
+                storage_used: 641728512,
+                member_count: 8,
+                recent_activity: [
+                  { title: '定向测试套件已通过', detail: 'Code agent · 2 分钟前' },
+                  { title: '桌面导航原型已更新', detail: 'Design agent · 11 分钟前' },
+                  { title: 'Rust 运行时决策已记录', detail: 'Memory service · 24 分钟前' },
+                ],
+              },
+            }}
             tenantName="Northstar"
             conversations={conversations}
-            tasks={tasks}
-            plan={plan}
-            messageCount={44}
+            plan={{
+              ...plan,
+              root_goal: {
+                title: '交付覆盖通用与编程场景的可靠桌面智能体工作空间。',
+              },
+            }}
             sandboxStatus="connected"
             connection="ready"
-            refreshDisabledReason={null}
-            onRefresh={() => undefined}
             onNewTask={() => undefined}
             onOpenConversation={() => undefined}
-            onOpenBoard={() => undefined}
-            onOpenReview={() => undefined}
             onOpenSettings={() => undefined}
           />
         </main>

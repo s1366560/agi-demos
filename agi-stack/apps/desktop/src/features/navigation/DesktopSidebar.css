@@ -1,0 +1,303 @@
+.desktop-design-sidebar {
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  gap: 14px;
+  padding: 16px 12px 12px;
+  overflow: hidden;
+  border-right: 1px solid var(--desktop-border-soft);
+  background: #080e16;
+  color: var(--desktop-muted);
+}
+
+.desktop-design-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 6px;
+}
+
+.desktop-design-brand img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.desktop-design-brand > div {
+  display: grid;
+  gap: 2px;
+}
+
+.desktop-design-brand strong {
+  color: var(--desktop-text);
+  font-size: 13px;
+}
+
+.desktop-design-brand span {
+  color: var(--desktop-faint);
+  font-size: 8px;
+}
+
+.desktop-design-sidebar button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.desktop-design-new-task {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid rgba(56, 214, 255, 0.56) !important;
+  border-radius: 7px;
+  background: rgba(56, 214, 255, 0.1) !important;
+  color: var(--desktop-text) !important;
+  font-size: 10px !important;
+  font-weight: 650 !important;
+}
+
+.desktop-design-new-task:hover {
+  background: rgba(56, 214, 255, 0.16) !important;
+}
+
+.desktop-design-primary-nav,
+.desktop-design-footer-nav {
+  display: grid;
+  gap: 3px;
+}
+
+.desktop-design-primary-nav button,
+.desktop-design-footer-nav button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 31px;
+  padding: 0 8px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.desktop-design-primary-nav button:hover,
+.desktop-design-primary-nav button.active,
+.desktop-design-footer-nav button:hover,
+.desktop-design-footer-nav button.active {
+  background: rgba(148, 163, 184, 0.07);
+  color: var(--desktop-text);
+}
+
+.desktop-design-primary-nav svg,
+.desktop-design-footer-nav svg {
+  width: 13px;
+  height: 13px;
+}
+
+.desktop-design-primary-nav span,
+.desktop-design-footer-nav span {
+  font-size: 10px;
+}
+
+.desktop-design-primary-nav small {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(56, 214, 255, 0.12);
+  color: var(--desktop-cyan);
+  font-size: 8px;
+}
+
+.desktop-design-workspaces {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.desktop-design-workspaces > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px 8px;
+}
+
+.desktop-design-workspaces > header strong,
+.desktop-design-workspaces > header span {
+  overflow: hidden;
+  color: var(--desktop-faint);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.desktop-design-workspaces > header strong {
+  max-width: 120px;
+}
+
+.desktop-design-sidebar-bottom {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid var(--desktop-border-soft);
+  padding-top: 10px;
+}
+
+.desktop-design-mode-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 7px;
+  background: #0b1119;
+}
+
+.desktop-design-mode-switcher button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+
+.desktop-design-mode-switcher button.active {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--desktop-text);
+  box-shadow: inset 0 0 0 1px var(--desktop-border);
+}
+
+.desktop-design-footer-nav {
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.desktop-design-footer-nav i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--desktop-cyan);
+}
+
+.desktop-design-profile-wrap {
+  position: relative;
+}
+
+.desktop-design-profile {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+  text-align: left;
+}
+
+.desktop-design-profile-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--desktop-border);
+  border-radius: 50%;
+  background: #192535;
+  color: var(--desktop-cyan);
+}
+
+.desktop-design-profile > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.desktop-design-profile strong,
+.desktop-design-profile small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-design-profile strong {
+  color: var(--desktop-text);
+  font-size: 9px;
+}
+
+.desktop-design-profile small {
+  color: var(--desktop-faint);
+  font-size: 7px;
+}
+
+.desktop-design-profile > svg {
+  width: 10px;
+  height: 10px;
+}
+
+.desktop-design-profile-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 8px;
+  background: #111923;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+}
+
+.desktop-design-profile-menu button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 7px;
+  border-radius: 5px;
+  color: var(--desktop-muted);
+  font-size: 9px;
+  text-align: left;
+}
+
+.desktop-design-profile-menu button:hover {
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--desktop-text);
+}
+
+.app-shell.hierarchy-shell,
+.app-shell.tauri-window.hierarchy-shell {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
+}
+
+.app-shell.hierarchy-shell .titlebar,
+.app-shell.hierarchy-shell .copilot-sidebar {
+  display: none;
+}
+
+.app-shell.hierarchy-shell .workbench {
+  grid-row: 1;
+}
+
+@media (max-width: 1180px) {
+  html:root {
+    --desktop-sidebar-width: 200px;
+  }
+
+  .desktop-design-sidebar {
+    padding-inline: 9px;
+  }
+}

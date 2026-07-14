@@ -47,6 +47,7 @@ type NewTaskFlowProps = {
   config: DesktopRuntimeConfig;
   workspaces: WorkspaceSummary[];
   preferredWorkspaceId?: string;
+  preferredKind?: NewTaskKind;
   disabledReason?: string | null;
   onClose: () => void;
   onSessionReady: (session: NewTaskSession) => void;
@@ -110,6 +111,7 @@ export function NewTaskFlow({
   config,
   workspaces,
   preferredWorkspaceId,
+  preferredKind,
   disabledReason,
   onClose,
   onSessionReady,
@@ -119,7 +121,7 @@ export function NewTaskFlow({
   const [phase, setPhase] = useState<NewTaskFlowPhase>('define');
   const [title, setTitle] = useState('');
   const [objective, setObjective] = useState('');
-  const [kind, setKind] = useState<NewTaskKind>('general');
+  const [kind, setKind] = useState<NewTaskKind>(preferredKind ?? 'general');
   const [environmentKind, setEnvironmentKind] =
     useState<DesktopExecutionEnvironmentKind>('local');
   const [permissionProfile, setPermissionProfile] =
@@ -157,9 +159,9 @@ export function NewTaskFlow({
     setPhase('define');
     setTitle('');
     setObjective('');
-    setKind('general');
+    setKind(preferredKind ?? 'general');
     setEnvironmentKind('local');
-    setPermissionProfile('read_only');
+    setPermissionProfile(defaultPermissionProfile(preferredKind ?? 'general'));
     setWorkspaceRoot(config.workspaceRoot);
     setWorkspaceSelection(preferredWorkspaceId || config.workspaceId || NEW_WORKSPACE_VALUE);
     setPlanTasks([]);
@@ -173,7 +175,7 @@ export function NewTaskFlow({
     displayedPlanVersionRef.current = null;
     approvalAttemptRef.current = null;
     window.setTimeout(() => titleInputRef.current?.focus(), 0);
-  }, [config.workspaceId, config.workspaceRoot, open, preferredWorkspaceId]);
+  }, [config.workspaceId, config.workspaceRoot, open, preferredKind, preferredWorkspaceId]);
 
   useEffect(() => {
     if (!open || (phase !== 'planning' && phase !== 'review') || !session) return;

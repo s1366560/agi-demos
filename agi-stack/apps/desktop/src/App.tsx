@@ -142,6 +142,7 @@ import {
   taskBelongsToConversation,
 } from './features/session/sessionScope';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
+import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
 import { StatusPanel } from './features/status/StatusPanel';
 import { NewTaskFlow, type NewTaskSession } from './features/task/NewTaskFlow';
@@ -1863,6 +1864,7 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskPreferredWorkspaceId, setNewTaskPreferredWorkspaceId] = useState('');
+  const [preferredTaskMode, setPreferredTaskMode] = useState<'work' | 'code'>('work');
   const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('account');
   const [commandQuery, setCommandQuery] = useState('');
@@ -2736,9 +2738,7 @@ export function App() {
           myWork: myWorkResult.items,
           myWorkError: myWorkResult.error,
         });
-        if (workspaceId) {
-          setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
-        }
+        setExpandedWorkspaceIds(new Set(projectWorkspaces.map((workspace) => workspace.id)));
         setConnection('ready');
         setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         return true;
@@ -2977,6 +2977,7 @@ export function App() {
     setAgentTaskSignals([]);
     setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    applySectionSideEffects('workspace');
     void refreshRuntime(nextConfig);
   };
 
@@ -4527,13 +4528,9 @@ export function App() {
           t('overview.none')
         }
         conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
-        tasks={activeDataset.tasks}
         plan={activeDataset.plan}
-        messageCount={dataset.messages.length}
-        sandboxStatus={dataset.sandbox?.status ?? 'idle'}
+        sandboxStatus={dataset.sandbox?.status ?? null}
         connection={connection}
-        refreshDisabledReason={runtimeDisabledReason}
-        onRefresh={() => void refreshRuntime()}
         onNewTask={() => openNewTask(config.workspaceId)}
         onOpenConversation={(conversationId) => {
           const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
@@ -4545,8 +4542,6 @@ export function App() {
           }
           selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
         }}
-        onOpenBoard={() => switchSection('board')}
-        onOpenReview={() => switchSection('review')}
         onOpenSettings={openConnectionSettings}
       />
     );
@@ -4762,7 +4757,7 @@ export function App() {
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div
         ref={appShellRef}
-        className={`app-shell ${runsInTauri ? 'tauri-window' : 'browser-window'} ${
+        className={`app-shell hierarchy-shell ${runsInTauri ? 'tauri-window' : 'browser-window'} ${
           showRuntimeConfig ? 'runtime-mode' : 'signed-out-mode'
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
           activeSection === 'board' ? 'my-work-mode' : ''
@@ -5154,6 +5149,51 @@ export function App() {
         </header>
 
         <section className="desktop-body">
+          <DesktopSidebar
+            activeSection={
+              activeSection === 'board'
+                ? 'my-work'
+                : activeSection === 'automations'
+                  ? 'automations'
+                  : activeSection === 'review'
+                    ? 'notifications'
+                    : 'home'
+            }
+            mode={
+              sessionDetailViewModel?.capabilityMode === 'code' ||
+              sessionDetailViewModel?.capabilityMode === 'work'
+                ? sessionDetailViewModel.capabilityMode
+                : preferredTaskMode
+            }
+            taskCount={dataset.myWork.length}
+            tenantName={
+              auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ??
+              config.tenantId
+            }
+            projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
+            user={auth.user}
+            workspaces={dataset.workspacesByProject[config.projectId] ?? []}
+            conversationsByWorkspace={dataset.conversationsByWorkspace}
+            nodeState={dataset.nodeState}
+            currentProjectId={config.projectId}
+            currentWorkspaceId={config.workspaceId}
+            currentConversationId={selectedConversation?.id ?? null}
+            expandedWorkspaceIds={expandedWorkspaceIds}
+            onModeChange={setPreferredTaskMode}
+            onNavigate={(section) => {
+              if (section === 'home') switchSection('workspace');
+              if (section === 'my-work') switchSection('board');
+              if (section === 'automations') switchSection('automations');
+              if (section === 'search') openCommandPalette();
+              if (section === 'notifications') switchSection('review');
+            }}
+            onToggleWorkspace={toggleWorkspace}
+            onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
+            onSelectConversation={selectConversation}
+            onNewTask={startNewSession}
+            onOpenSettings={openConnectionSettings}
+            onSignOut={() => void logout()}
+          />
           <aside className="copilot-sidebar">
             <div className="sidebar-chrome" data-tauri-drag-region>
               <div className="sidebar-nav-controls">
@@ -5335,76 +5375,11 @@ export function App() {
               <section className="sidebar-sessions">
                 <div className="sidebar-heading">
                   <Text size="1" weight="bold" color="gray">
-                    Workspaces & sessions
+                    {selectedProject?.name ?? t('overview.none')}
                   </Text>
-                  <span className="sidebar-heading-actions">
-                    <span className="session-grouping-control">
-                      <IconButton
-                        size="1"
-                        variant="ghost"
-                        color={sessionMenuOpen ? 'cyan' : 'gray'}
-                        aria-label={`Session grouping, ${sessionGroupLabel}`}
-                        aria-haspopup="menu"
-                        aria-expanded={sessionMenuOpen}
-                        onClick={() => {
-                          const nextOpen = !sessionMenuOpen;
-                          if (nextOpen) {
-                            closeCommandPalette();
-                            setRunActionsMenuOpen(false);
-                            setMobileSectionMenuOpen(false);
-                            setActiveMobileMenuItemId(null);
-                          }
-                          setSessionMenuOpen(nextOpen);
-                        }}
-                      >
-                        <MixerHorizontalIcon />
-                      </IconButton>
-                      {sessionMenuOpen ? (
-                        <div className="session-group-menu" role="menu" aria-label="Session grouping">
-                          <button
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={sessionGroupMode === 'project'}
-                            className={sessionGroupMode === 'project' ? 'selected' : ''}
-                            onClick={() => changeSessionGroupMode('project')}
-                          >
-                            <CheckCircledIcon />
-                            <span>
-                              <strong>Workspace tree</strong>
-                              <em>Group sessions under the current project&apos;s workspaces.</em>
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={sessionGroupMode === 'recent'}
-                            className={sessionGroupMode === 'recent' ? 'selected' : ''}
-                            onClick={() => changeSessionGroupMode('recent')}
-                          >
-                            <CheckCircledIcon />
-                            <span>
-                              <strong>Recent first</strong>
-                              <em>Show the active session first.</em>
-                            </span>
-                          </button>
-                        </div>
-                      ) : null}
-                    </span>
-                    <IconButton
-                      size="1"
-                      variant="ghost"
-                      color="gray"
-                      aria-label={
-                        showRuntimeConfig && !workspaceDisabledReason
-                          ? 'Create task with an Agent plan'
-                          : 'New task'
-                      }
-                      disabled={creatingWorkspace}
-                      onClick={startNewSession}
-                    >
-                      <PlusIcon />
-                    </IconButton>
-                  </span>
+                  <Text size="1" color="gray">
+                    {t('workspaceTree.workspaces')}
+                  </Text>
                 </div>
                 {showRuntimeConfig ? (
                   <WorkspaceDock
@@ -5414,19 +5389,12 @@ export function App() {
                     currentProjectId={config.projectId}
                     currentWorkspaceId={config.workspaceId}
                     currentConversationId={selectedConversation?.id ?? null}
-                    groupMode={sessionGroupMode}
                     expandedWorkspaceIds={expandedWorkspaceIds}
                     onToggleWorkspace={toggleWorkspace}
                     onSelectWorkspace={(projectId, workspaceId) =>
                       selectWorkspace(workspaceId, projectId)
                     }
                     onSelectConversation={selectConversation}
-                    onRefresh={() => void refreshRuntime()}
-                    actionDisabledReason={workspaceDisabledReason}
-                    creatingWorkspace={creatingWorkspace}
-                    creatingSessionWorkspaceId={creatingSessionWorkspaceId}
-                    onCreateWorkspace={(projectId) => void createWorkspace(projectId)}
-                    onCreateSession={(_projectId, workspaceId) => openNewTask(workspaceId)}
                   />
                 ) : (
                   <SignedOutSessionTree
@@ -5508,6 +5476,7 @@ export function App() {
           config={config}
           workspaces={dataset.workspacesByProject[config.projectId] ?? []}
           preferredWorkspaceId={newTaskPreferredWorkspaceId}
+          preferredKind={preferredTaskMode === 'code' ? 'programming' : 'general'}
           disabledReason={workspaceDisabledReason}
           onClose={() => setNewTaskOpen(false)}
           onSessionReady={adoptNewTaskSession}

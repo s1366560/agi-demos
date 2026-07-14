@@ -1,0 +1,198 @@
+.workspace-session-tree {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  color: var(--desktop-muted);
+}
+
+.workspace-session-tree .dock-list,
+.workspace-session-tree .dock-list > div {
+  height: 100%;
+}
+
+.workspace-session-tree .dock-list > div > div {
+  display: grid;
+  gap: 7px;
+  padding: 0 8px 12px;
+}
+
+.workspace-tree-root-node {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.workspace-tree-workspace-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.workspace-tree-workspace-row:hover,
+.workspace-tree-workspace-row.selected {
+  border-color: rgba(56, 214, 255, 0.22);
+  background: rgba(56, 214, 255, 0.06);
+}
+
+.workspace-tree-workspace-row.selected {
+  box-shadow: inset 2px 0 0 var(--desktop-cyan);
+}
+
+.workspace-tree-toggle,
+.workspace-tree-workspace-action,
+.workspace-tree-session-row {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workspace-tree-toggle {
+  display: grid;
+  width: 18px;
+  height: 100%;
+  padding: 0;
+  place-items: center;
+  color: var(--desktop-faint);
+}
+
+.workspace-tree-toggle svg {
+  width: 11px;
+  height: 11px;
+}
+
+.workspace-tree-workspace-action {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) 8px;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 7px 8px 7px 2px;
+  text-align: left;
+}
+
+.workspace-tree-workspace-action > svg {
+  color: var(--desktop-cyan);
+}
+
+.workspace-tree-workspace-action > span,
+.workspace-tree-session-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.workspace-tree-workspace-action strong,
+.workspace-tree-session-row strong {
+  overflow: hidden;
+  color: var(--desktop-text);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tree-workspace-action small,
+.workspace-tree-session-row small {
+  overflow: hidden;
+  color: var(--desktop-faint);
+  font-size: 8px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tree-workspace-action > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--desktop-faint);
+}
+
+.workspace-tree-workspace-action > i[data-status='online'] {
+  background: #54d68b;
+  box-shadow: 0 0 8px rgba(84, 214, 139, 0.55);
+}
+
+.workspace-tree-session-children {
+  display: grid;
+  gap: 2px;
+  margin-left: 25px;
+  padding-left: 8px;
+  border-left: 1px solid var(--desktop-border-soft);
+}
+
+.workspace-tree-session-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 7px 6px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.workspace-tree-session-row:hover,
+.workspace-tree-session-row.selected {
+  background: rgba(148, 163, 184, 0.07);
+}
+
+.workspace-tree-session-row.selected {
+  outline: 1px solid rgba(56, 214, 255, 0.24);
+  color: var(--desktop-cyan);
+}
+
+.workspace-tree-session-row > svg:first-child {
+  width: 12px;
+  height: 12px;
+  color: var(--desktop-faint);
+}
+
+.workspace-tree-session-row > svg:last-child {
+  width: 10px;
+  height: 10px;
+  color: var(--desktop-faint);
+}
+
+.workspace-tree-session-row > svg:last-child[data-status='running'] {
+  color: var(--desktop-cyan);
+}
+
+.workspace-tree-session-row > svg:last-child[data-status='needs_input'],
+.workspace-tree-session-row > svg:last-child[data-status='needs_approval'] {
+  color: var(--desktop-amber);
+}
+
+.workspace-tree-session-row > svg:last-child[data-status='ready_review'],
+.workspace-tree-session-row > svg:last-child[data-status='completed'] {
+  color: #54d68b;
+}
+
+.workspace-tree-state {
+  display: grid;
+  gap: 4px;
+  margin: 4px 8px;
+  padding: 10px;
+  border: 1px dashed var(--desktop-border-soft);
+  border-radius: 7px;
+}
+
+.workspace-tree-state.compact {
+  margin: 2px 0;
+  padding: 7px;
+}
+
+.workspace-tree-state strong {
+  color: var(--desktop-muted);
+  font-size: 9px;
+}
+
+.workspace-tree-state small {
+  color: var(--desktop-faint);
+  font-size: 8px;
+  line-height: 1.4;
+}

@@ -21,7 +21,7 @@ function conversation(id, title, updatedAt) {
   };
 }
 
-test('workspace tree represents only the current project workspace input', () => {
+test('workspace tree preserves the authoritative server order within the current project', () => {
   const workspaces = [
     { id: 'workspace-b', name: 'Beta', project_id: 'project-1' },
     { id: 'workspace-a', name: 'Alpha', project_id: 'project-1' },
@@ -37,11 +37,11 @@ test('workspace tree represents only the current project workspace input', () =>
 
   assert.deepEqual(
     tree.map((node) => node.workspace.id),
-    ['workspace-a', 'workspace-b']
+    ['workspace-b', 'workspace-a']
   );
   assert.deepEqual(
-    tree[0].conversations.map((item) => item.id),
-    ['conversation-a', 'conversation-z']
+    tree[1].conversations.map((item) => item.id),
+    ['conversation-z', 'conversation-a']
   );
   assert.equal(tree.some((node) => 'project' in node), false);
 });

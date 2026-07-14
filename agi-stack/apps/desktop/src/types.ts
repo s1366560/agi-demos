@@ -177,10 +177,14 @@ export type WorkspaceSummary = {
   project_id?: string;
   name?: string;
   title?: string;
+  created_by?: string;
   description?: string | null;
   status?: string;
+  is_archived?: boolean;
+  office_status?: string;
+  hex_layout_config?: Record<string, unknown> | null;
   created_at?: string;
-  updated_at?: string;
+  updated_at?: string | null;
   metadata?: Record<string, unknown> | null;
 };
 

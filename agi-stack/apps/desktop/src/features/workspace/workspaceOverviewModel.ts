@@ -1,0 +1,164 @@
+import type {
+  AgentCapabilityMode,
+  AgentConversation,
+  ConnectionState,
+  PlanSnapshot,
+  ProjectSummary,
+  WorkspaceSummary,
+} from '../../types';
+
+export type WorkspaceSessionSummary = {
+  id: string;
+  title: string;
+  status: string;
+  capabilityMode: AgentCapabilityMode | null;
+  updatedAt: string | null;
+};
+
+export type WorkspaceActivitySummary = {
+  title: string;
+  detail: string | null;
+};
+
+export type WorkspaceOverviewModel = {
+  workspaceName: string | null;
+  workspaceDescription: string | null;
+  officeStatus: string | null;
+  collaborationMode: string | null;
+  updatedAt: string | null;
+  rootGoal: string | null;
+  sessionCounts: {
+    total: number;
+    running: number;
+    attention: number;
+    ready: number;
+  };
+  memberCount: number | null;
+  activeAgentCount: number | null;
+  knowledge: {
+    memories: number | null;
+    graphNodes: number | null;
+    storageBytes: number | null;
+  };
+  environment: {
+    sandboxStatus: string | null;
+    connection: ConnectionState;
+  };
+  recentSessions: WorkspaceSessionSummary[];
+  recentActivity: WorkspaceActivitySummary[];
+};
+
+type BuildWorkspaceOverviewModelInput = {
+  workspace: WorkspaceSummary | null;
+  project: ProjectSummary | null;
+  conversations: AgentConversation[];
+  plan: PlanSnapshot | null;
+  sandboxStatus: string | null;
+  connection: ConnectionState;
+};
+
+const ATTENTION_STATUSES = new Set(['needs_input', 'needs_approval']);
+const READY_STATUSES = new Set(['ready_review', 'completed']);
+
+export function buildWorkspaceOverviewModel({
+  workspace,
+  project,
+  conversations,
+  plan,
+  sandboxStatus,
+  connection,
+}: BuildWorkspaceOverviewModelInput): WorkspaceOverviewModel {
+  const sessions = conversations.map(projectConversation);
+  const metadata = workspace?.metadata ?? null;
+  const stats = project?.stats ?? null;
+  const participantAgents = new Set(
+    conversations.flatMap((conversation) => conversation.participant_agents ?? []),
+  );
+
+  return {
+    workspaceName: workspace ? workspace.name ?? workspace.title ?? workspace.id : null,
+    workspaceDescription: workspace?.description ?? null,
+    officeStatus: stringValue(workspace?.office_status),
+    collaborationMode: stringValue(metadata?.collaboration_mode),
+    updatedAt: workspace?.updated_at ?? workspace?.created_at ?? null,
+    rootGoal: readRootGoal(plan) ?? stringValue(metadata?.root_goal),
+    sessionCounts: {
+      total: sessions.length,
+      running: sessions.filter((session) => session.status === 'running').length,
+      attention: sessions.filter((session) => ATTENTION_STATUSES.has(session.status)).length,
+      ready: sessions.filter((session) => READY_STATUSES.has(session.status)).length,
+    },
+    memberCount: numberValue(metadata?.member_count) ?? numberValue(stats?.member_count),
+    activeAgentCount:
+      numberValue(metadata?.active_agent_count) ??
+      (participantAgents.size > 0 ? participantAgents.size : null),
+    knowledge: {
+      memories: numberValue(stats?.memory_count),
+      graphNodes: numberValue(stats?.node_count),
+      storageBytes: numberValue(stats?.storage_used),
+    },
+    environment: { sandboxStatus, connection },
+    recentSessions: sessions.slice(0, 5),
+    recentActivity: readRecentActivity(stats?.recent_activity),
+  };
+}
+
+function projectConversation(conversation: AgentConversation): WorkspaceSessionSummary {
+  return {
+    id: conversation.id,
+    title: conversation.title || conversation.id,
+    status: conversationRunStatus(conversation) ?? conversation.status,
+    capabilityMode: conversationCapabilityMode(conversation),
+    updatedAt: conversation.updated_at ?? conversation.created_at ?? null,
+  };
+}
+
+function conversationRunStatus(conversation: AgentConversation): string | null {
+  const metadata = conversation.metadata;
+  if (!metadata || typeof metadata !== 'object') return null;
+  const run = metadata.run;
+  if (!run || typeof run !== 'object' || Array.isArray(run)) return null;
+  return stringValue((run as Record<string, unknown>).status);
+}
+
+function conversationCapabilityMode(
+  conversation: AgentConversation,
+): AgentCapabilityMode | null {
+  const value = conversation.agent_config?.capability_mode;
+  return value === 'work' || value === 'code' ? value : null;
+}
+
+function readRootGoal(plan: PlanSnapshot | null): string | null {
+  const value = plan?.root_goal;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return stringValue(record.title) ?? stringValue(record.content) ?? stringValue(record.goal);
+}
+
+function readRecentActivity(value: unknown): WorkspaceActivitySummary[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const title = stringValue(record.title) ?? stringValue(record.label);
+    if (!title) return [];
+    return [
+      {
+        title,
+        detail:
+          stringValue(record.detail) ??
+          stringValue(record.meta) ??
+          stringValue(record.timestamp),
+      },
+    ];
+  });
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}

@@ -34,6 +34,7 @@
     "src/features/task/NewTaskFlow.tsx",
     "src/features/task/newTaskPlanModel.ts",
     "src/features/workspace/workspaceTreeModel.ts",
+    "src/features/workspace/workspaceOverviewModel.ts",
     "src/features/workspace/workspaceExecutionModel.ts",
     "src/types.ts"
   ]

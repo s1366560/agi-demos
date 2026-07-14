@@ -13,7 +13,8 @@
   min-height: 0;
 }
 
-.workspace-execution-qa-shell .workspace-overview-shell {
+.workspace-execution-qa-shell .workspace-overview-shell,
+.workspace-execution-qa-shell .workspace-design-overview {
   height: 100%;
 }
 
