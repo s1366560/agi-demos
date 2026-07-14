@@ -35,6 +35,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     WorkspaceMemberModel,
     WorkspaceModel,
+    WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
@@ -268,6 +269,74 @@ async def _ensure_workspace_access(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Workspace access required"),
         )
+
+
+async def _ensure_workspace_task_linkage(
+    db: AsyncSession,
+    *,
+    linked_workspace_task_id: str,
+    workspace_id: str,
+    project_id: str,
+    tenant_id: str,
+) -> None:
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspaceTaskModel.id)
+            .join(WorkspaceModel, WorkspaceTaskModel.workspace_id == WorkspaceModel.id)
+            .where(
+                WorkspaceTaskModel.id == linked_workspace_task_id,
+                WorkspaceTaskModel.workspace_id == workspace_id,
+                WorkspaceModel.project_id == project_id,
+                WorkspaceModel.tenant_id == tenant_id,
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=_("Invalid workspace task linkage"),
+        )
+
+
+async def _ensure_workspace_linkage_access(
+    db: AsyncSession,
+    *,
+    conversation: "Conversation",
+    data: UpdateConversationModeRequest,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    fields = data.model_fields_set
+    workspace_id = data.workspace_id if "workspace_id" in fields else conversation.workspace_id
+    linked_workspace_task_id = (
+        data.linked_workspace_task_id
+        if "linked_workspace_task_id" in fields
+        else conversation.linked_workspace_task_id
+    )
+
+    if workspace_id:
+        await _ensure_workspace_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+    if not linked_workspace_task_id:
+        return
+    if not workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=_("Invalid workspace task linkage"),
+        )
+    await _ensure_workspace_task_linkage(
+        db,
+        linked_workspace_task_id=linked_workspace_task_id,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        tenant_id=tenant_id,
+    )
 
 
 async def _accessible_workspace_ids(
@@ -899,7 +968,9 @@ async def update_conversation_config(
         config_patch: dict[str, Any] = {}
         if data.selected_agent_id is not None:
             selected_agent_id = data.selected_agent_id.strip()
-            selected_agent_config = {"selected_agent_id": selected_agent_id} if selected_agent_id else {}
+            selected_agent_config = (
+                {"selected_agent_id": selected_agent_id} if selected_agent_id else {}
+            )
             await _ensure_selected_agent_access(
                 selected_agent_config,
                 container=container,
@@ -969,6 +1040,14 @@ async def update_conversation_mode(
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         fields = data.model_fields_set
+        await _ensure_workspace_linkage_access(
+            db,
+            conversation=conversation,
+            data=data,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
         if "conversation_mode" in fields:
             raw_mode = data.conversation_mode

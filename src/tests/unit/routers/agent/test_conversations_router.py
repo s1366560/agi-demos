@@ -31,6 +31,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     WorkspaceMemberModel,
     WorkspaceModel,
+    WorkspaceTaskModel,
 )
 
 
@@ -1149,6 +1150,184 @@ async def test_workspace_roster_invariant_errors_are_sanitized(
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "Invalid workspace roster"
     assert "secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_conversation_mode_requires_workspace_membership(
+    db_session: AsyncSession,
+    test_project_db: Project,
+    test_user: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = WorkspaceModel(
+        id="workspace-mode-private",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        name="Private mode workspace",
+        created_by=test_user.id,
+    )
+    db_session.add(workspace)
+    await db_session.flush()
+
+    conversation = Conversation(
+        id="conversation-mode-private",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Private workspace patch",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    conversation_repo = SimpleNamespace(save=AsyncMock())
+    agent_service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        _conversation_repo=conversation_repo,
+    )
+    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        lambda _request, _db: container,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.update_conversation_mode(
+            conversation_id=conversation.id,
+            data=UpdateConversationModeRequest(workspace_id=workspace.id),
+            request=MagicMock(),
+            project_id=test_project_db.id,
+            current_user=test_user,
+            tenant_id=test_project_db.tenant_id,
+            db=db_session,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Workspace access required"
+    conversation_repo.save.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_workspace_task_linkage_requires_matching_workspace_project_and_tenant(
+    db_session: AsyncSession,
+    test_project_db: Project,
+    test_user: object,
+) -> None:
+    workspace = WorkspaceModel(
+        id="workspace-task-linkage",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        name="Task linkage workspace",
+        created_by=test_user.id,
+    )
+    task = WorkspaceTaskModel(
+        id="workspace-task-linkage-task",
+        workspace_id=workspace.id,
+        title="Linked task",
+        created_by=test_user.id,
+    )
+    db_session.add_all([workspace, task])
+    await db_session.flush()
+
+    invalid_scopes = [
+        {
+            "workspace_id": "workspace-other",
+            "project_id": test_project_db.id,
+            "tenant_id": test_project_db.tenant_id,
+        },
+        {
+            "workspace_id": workspace.id,
+            "project_id": "project-other",
+            "tenant_id": test_project_db.tenant_id,
+        },
+        {
+            "workspace_id": workspace.id,
+            "project_id": test_project_db.id,
+            "tenant_id": "tenant-other",
+        },
+    ]
+
+    for scope in invalid_scopes:
+        with pytest.raises(HTTPException) as exc_info:
+            await conversations_router._ensure_workspace_task_linkage(
+                db_session,
+                linked_workspace_task_id=task.id,
+                **scope,
+            )
+
+        assert exc_info.value.status_code == 422
+        assert exc_info.value.detail == "Invalid workspace task linkage"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_conversation_mode_accepts_accessible_workspace_task_linkage(
+    db_session: AsyncSession,
+    test_project_db: Project,
+    test_user: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = WorkspaceModel(
+        id="workspace-mode-linkage",
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        name="Mode linkage workspace",
+        created_by=test_user.id,
+    )
+    membership = WorkspaceMemberModel(
+        id="workspace-mode-linkage-member",
+        workspace_id=workspace.id,
+        user_id=test_user.id,
+        role="member",
+        invited_by=test_user.id,
+    )
+    task = WorkspaceTaskModel(
+        id="workspace-mode-linkage-task",
+        workspace_id=workspace.id,
+        title="Mode linked task",
+        created_by=test_user.id,
+    )
+    db_session.add_all([workspace, membership, task])
+    await db_session.flush()
+
+    conversation = Conversation(
+        id="conversation-mode-linkage",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Workspace task patch",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    conversation_repo = SimpleNamespace(save=AsyncMock())
+    agent_service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        _conversation_repo=conversation_repo,
+    )
+    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        lambda _request, _db: container,
+    )
+
+    response = await conversations_router.update_conversation_mode(
+        conversation_id=conversation.id,
+        data=UpdateConversationModeRequest(
+            workspace_id=workspace.id,
+            linked_workspace_task_id=task.id,
+        ),
+        request=MagicMock(),
+        project_id=test_project_db.id,
+        current_user=test_user,
+        tenant_id=test_project_db.tenant_id,
+        db=db_session,
+    )
+
+    assert response.workspace_id == workspace.id
+    assert response.linked_workspace_task_id == task.id
+    conversation_repo.save.assert_awaited_once_with(conversation)
 
 
 @pytest.mark.unit

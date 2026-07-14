@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
@@ -29,7 +29,10 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as DBConversation,
     Message as DBMessage,
+    Project,
     User,
+    UserProject,
+    UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -110,21 +113,40 @@ async def _verify_conversation_access(
     tenant_id: str,
     project_id: str | None = None,
 ) -> None:
-    query = (
-        select(DBConversation.user_id, DBConversation.tenant_id, DBConversation.project_id)
-        .where(DBConversation.id == conversation_id)
-        .limit(1)
-    )
+    query = select(DBConversation).where(DBConversation.id == conversation_id).limit(1)
     result = await db.execute(refresh_select_statement(query))
-    row = result.one_or_none()
-    if row is None:
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
         raise HTTPException(status_code=404, detail=_("Conversation not found"))
-    owner_id, conversation_tenant_id, conversation_project_id = row
-    if conversation_tenant_id != tenant_id:
-        raise HTTPException(status_code=404, detail=_("Conversation not found"))
-    if owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
-    if project_id is not None and conversation_project_id != project_id:
+    effective_project_id = conversation.project_id if project_id is None else project_id
+    _assert_conversation_scope(
+        conversation,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        project_id=effective_project_id,
+    )
+
+    scope_result = await db.execute(
+        refresh_select_statement(
+            select(Project.id).where(
+                Project.id == conversation.project_id,
+                Project.tenant_id == conversation.tenant_id,
+                exists(
+                    select(UserProject.id).where(
+                        UserProject.user_id == current_user.id,
+                        UserProject.project_id == conversation.project_id,
+                    )
+                ),
+                exists(
+                    select(UserTenant.id).where(
+                        UserTenant.user_id == current_user.id,
+                        UserTenant.tenant_id == conversation.tenant_id,
+                    )
+                ),
+            )
+        )
+    )
+    if scope_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=403, detail=_("Access denied"))
 
 
@@ -1251,18 +1273,14 @@ async def get_conversation_messages(
     """
     try:
         assert request is not None
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
-            conversation_id=conversation_id,
+        await _verify_conversation_access(
+            conversation_id,
+            current_user,
+            db,
+            tenant_id=tenant_id,
             project_id=project_id,
-            user_id=current_user.id,
         )
-
-        if not conversation:
-            raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        container = get_container_with_db(request, db)
 
         event_repo = container.agent_execution_event_repository()
         tool_exec_repo = container.tool_execution_record_repository()
@@ -1377,6 +1395,13 @@ async def get_conversation_execution(
     """Get the agent execution history for a conversation."""
     try:
         assert request is not None
+        await _verify_conversation_access(
+            conversation_id,
+            current_user,
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -1399,6 +1424,8 @@ async def get_conversation_execution(
             "total": len(executions),
         }
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=_("Conversation not found")) from e
     except Exception as exc:
@@ -1420,20 +1447,14 @@ async def get_conversation_tool_executions(
     """Get the tool execution history for a conversation."""
     try:
         assert request is not None
-        container = get_container_with_db(request, db)
-
-        conversation_repo = container.conversation_repository()
-        conversation = await conversation_repo.find_by_id(conversation_id)
-
-        if not conversation:
-            raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        _assert_conversation_scope(
-            conversation,
-            current_user=current_user,
+        await _verify_conversation_access(
+            conversation_id,
+            current_user,
+            db,
             tenant_id=tenant_id,
             project_id=project_id,
         )
+        container = get_container_with_db(request, db)
 
         tool_execution_repo = container.tool_execution_record_repository()
 
@@ -1479,20 +1500,14 @@ async def get_conversation_execution_status(
     """Get the current execution status of a conversation with optional recovery info."""
     try:
         assert request is not None
-        container = get_container_with_db(request, db)
-
-        conversation_repo = container.conversation_repository()
-        conversation = await conversation_repo.find_by_id(conversation_id)
-
-        if not conversation:
-            raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        _assert_conversation_scope(
-            conversation,
-            current_user=current_user,
+        await _verify_conversation_access(
+            conversation_id,
+            current_user,
+            db,
             tenant_id=tenant_id,
             project_id=project_id,
         )
+        container = get_container_with_db(request, db)
 
         redis_client = container.redis_client
         is_running = False
@@ -1711,6 +1726,13 @@ async def get_execution_stats(
     """Get execution statistics for a conversation."""
     try:
         assert request is not None
+        await _verify_conversation_access(
+            conversation_id,
+            current_user,
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -1734,6 +1756,8 @@ async def get_execution_stats(
             timeline_data=_compute_timeline_data(executions),
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=_("Conversation not found")) from e
     except Exception as exc:
