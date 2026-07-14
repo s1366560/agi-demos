@@ -12,6 +12,7 @@
     "tests/css.d.ts",
     "src/api/client.ts",
     "src/features/auth/authContextModel.ts",
+    "src/features/auth/loginScreenModel.ts",
     "src/features/auth/trustedLocalSessionReference.ts",
     "src/features/automations/automationModel.ts",
     "src/features/chat/a2uiAction.ts",

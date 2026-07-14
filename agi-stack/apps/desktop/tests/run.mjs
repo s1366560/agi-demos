@@ -26,6 +26,7 @@ const testFiles = [
   'api-client.test.mjs',
   'automation-model.test.mjs',
   'auth-context-model.test.mjs',
+  'login-screen-model.test.mjs',
   'trusted-local-session-reference.test.mjs',
   'local-runtime-status.test.mjs',
   'my-work-model.test.mjs',

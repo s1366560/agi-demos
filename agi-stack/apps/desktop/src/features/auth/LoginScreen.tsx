@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Button } from '@radix-ui/themes';
 import {
   ArrowRightIcon,
   CheckCircledIcon,
@@ -12,6 +11,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { AuthState, RuntimeMode } from '../../types';
+import { resolveWorkspaceSsoAction } from './loginScreenModel';
 import './LoginScreen.css';
 
 type LoginScreenProps = {
@@ -39,17 +39,27 @@ export function LoginScreen({
 }: LoginScreenProps) {
   const { t } = useI18n();
   const [showPassword, setShowPassword] = useState(false);
-  const [trustedDevice, setTrustedDevice] = useState(false);
+  const [trustedDevice, setTrustedDevice] = useState(true);
+  const [interactionError, setInteractionError] = useState<string | null>(null);
   const busy = auth.status === 'signing_in';
-  const localDesktop = mode === 'local' && localReady;
+
+  const continueWithWorkspaceSso = () => {
+    setInteractionError(null);
+    const action = resolveWorkspaceSsoAction(mode, localReady, trustedDevice);
+    if (action.kind === 'local_session') {
+      onLocalSession(action.trustedDevice);
+      return;
+    }
+    setInteractionError(t('login.workspaceSsoUnavailable'));
+  };
+
+  const visibleError = interactionError ?? auth.error;
 
   return (
     <main className="desktop-login-screen">
       <section className="desktop-login-story">
         <header className="desktop-login-brand">
-          <span className="desktop-login-mark" aria-hidden>
-            M
-          </span>
+          <img src="/icon-192.png" alt="MemStack" />
           <div>
             <strong>MemStack</strong>
             <span>{t('login.agentWorkspace')}</span>
@@ -93,67 +103,71 @@ export function LoginScreen({
           className="desktop-login-card"
           onSubmit={(event) => {
             event.preventDefault();
-            if (localDesktop) {
-              onLocalSession(trustedDevice);
-            } else {
-              onEmailLogin();
-            }
+            setInteractionError(null);
+            onEmailLogin();
           }}
         >
           <header>
             <span>{t('login.welcome')}</span>
             <h2>{t('login.signInTitle')}</h2>
-            <p>{
-              localDesktop
-                ? t('login.localDescription')
-                : t('login.organizationDescription')
-            }</p>
+            <p>{t('login.organizationDescription')}</p>
           </header>
 
-          {localDesktop ? (
-            <button className="desktop-login-sso" type="submit" disabled={busy}>
-              <span className="desktop-login-sso-mark" aria-hidden>
-                M
-              </span>
-              {t('login.continueLocal')}
-              <ArrowRightIcon />
-            </button>
-          ) : (
-            <>
-              <label>
-                <span>{t('login.workEmail')}</span>
-                <input
-                  autoFocus
-                  type="email"
-                  value={email}
-                  onChange={(event) => onEmailChange(event.target.value)}
-                  autoComplete="username"
-                />
-              </label>
-              <label>
-                <span>{t('login.password')}</span>
-                <div className="desktop-login-password">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(event) => onPasswordChange(event.target.value)}
-                    autoComplete="current-password"
-                    placeholder={t('login.passwordPlaceholder')}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((value) => !value)}
-                    aria-label={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
-                  >
-                    {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-                  </button>
-                </div>
-              </label>
-            </>
-          )}
+          <button
+            className="desktop-login-sso"
+            type="button"
+            onClick={continueWithWorkspaceSso}
+            disabled={busy}
+          >
+            <img src="/icon-192.png" alt="" />
+            {t('login.workspaceSso')}
+            <ArrowRightIcon />
+          </button>
 
-          {localDesktop ? (
-            <label className="desktop-login-trusted">
+          <div className="desktop-login-divider">
+            <span>{t('login.emailDivider')}</span>
+          </div>
+
+          <label>
+            <span>{t('login.workEmail')}</span>
+            <input
+              autoFocus
+              required
+              type="email"
+              value={email}
+              onChange={(event) => {
+                setInteractionError(null);
+                onEmailChange(event.target.value);
+              }}
+              autoComplete="username"
+            />
+          </label>
+          <label>
+            <span>{t('login.password')}</span>
+            <div className="desktop-login-password">
+              <input
+                required
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => {
+                  setInteractionError(null);
+                  onPasswordChange(event.target.value);
+                }}
+                autoComplete="current-password"
+                placeholder={t('login.passwordPlaceholder')}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                aria-label={t(showPassword ? 'login.hidePassword' : 'login.showPassword')}
+              >
+                {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+              </button>
+            </div>
+          </label>
+
+          <div className="desktop-login-options">
+            <label>
               <input
                 type="checkbox"
                 checked={trustedDevice}
@@ -164,22 +178,25 @@ export function LoginScreen({
                 {t('login.keepSignedIn')}
               </span>
             </label>
-          ) : null}
+            <button type="button">{t('login.forgotPassword')}</button>
+          </div>
 
-          {auth.error ? (
+          {visibleError ? (
             <div className="desktop-login-error" role="alert">
-              {auth.error}
+              {visibleError}
             </div>
           ) : null}
 
-          {!localDesktop ? (
-            <Button className="desktop-login-submit" type="submit" loading={busy}>
-              {busy ? t('login.signingIn') : t('login.signIn')}
-              <ArrowRightIcon />
-            </Button>
-          ) : null}
+          <button className="desktop-login-submit" type="submit" disabled={busy}>
+            {busy ? t('login.signingIn') : t('login.signIn')}
+            <ArrowRightIcon />
+          </button>
           <p className="desktop-login-legal">{t('login.legal')}</p>
         </form>
+        <div className="desktop-login-help">
+          <span>{t('login.newToMemStack')}</span>
+          <button type="button">{t('login.requestWorkspaceAccess')}</button>
+        </div>
       </section>
     </main>
   );
