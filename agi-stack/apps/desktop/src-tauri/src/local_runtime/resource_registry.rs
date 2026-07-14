@@ -28,7 +28,14 @@ impl ManagedResourceKind {
 #[derive(Debug)]
 pub(super) enum ResourceRegistryError {
     NotFound,
-    RevisionConflict { expected: u64, actual: u64 },
+    Immutable {
+        kind: ManagedResourceKind,
+        id: String,
+    },
+    RevisionConflict {
+        expected: u64,
+        actual: u64,
+    },
     Storage(String),
 }
 
@@ -36,6 +43,9 @@ impl fmt::Display for ResourceRegistryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound => formatter.write_str("managed resource not found"),
+            Self::Immutable { kind, id } => {
+                write!(formatter, "managed {} {id} is immutable", kind.as_str())
+            }
             Self::RevisionConflict { expected, actual } => write!(
                 formatter,
                 "managed resource revision conflict: expected {expected}, found {actual}"
@@ -133,15 +143,21 @@ impl DesktopSessionStore {
         let transaction = connection
             .transaction()
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
-        let current_revision = transaction
+        let current = transaction
             .query_row(
-                "SELECT revision FROM desktop_managed_resources
+                "SELECT revision, value_json FROM desktop_managed_resources
                  WHERE kind = ?1 AND scope_kind = ?2 AND scope_id = ?3 AND id = ?4",
                 params![kind.as_str(), scope_kind, scope_id, id],
-                |row| row.get::<_, u64>(0),
+                |row| Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?)),
             )
             .optional()
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        if let Some((_, current_json)) = current.as_ref() {
+            let current_value = serde_json::from_str(current_json)
+                .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+            ensure_managed_resource_mutable(kind, id, &current_value)?;
+        }
+        let current_revision = current.as_ref().map(|(revision, _)| *revision);
         let actual_revision = current_revision.unwrap_or(0);
         if let Some(expected) = expected_revision {
             if expected != actual_revision {
@@ -236,6 +252,35 @@ impl DesktopSessionStore {
             now_ms,
         )
     }
+}
+
+fn ensure_managed_resource_mutable(
+    kind: ManagedResourceKind,
+    id: &str,
+    value: &Value,
+) -> Result<(), ResourceRegistryError> {
+    let field_is = |field: &str, expected: &str| {
+        value
+            .get(field)
+            .and_then(Value::as_str)
+            .is_some_and(|actual| actual.trim().eq_ignore_ascii_case(expected))
+    };
+    let immutable = match kind {
+        ManagedResourceKind::Provider => false,
+        ManagedResourceKind::Skill => {
+            value.get("is_system_skill").and_then(Value::as_bool) == Some(true)
+                || field_is("scope", "system")
+        }
+        ManagedResourceKind::Plugin => field_is("source", "builtin"),
+        ManagedResourceKind::Agent => field_is("source", "builtin") || id.starts_with("builtin:"),
+    };
+    if immutable {
+        return Err(ResourceRegistryError::Immutable {
+            kind,
+            id: id.to_string(),
+        });
+    }
+    Ok(())
 }
 
 fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
@@ -333,6 +378,14 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
                 &skill,
                 now_ms,
             )?;
+            reconcile_immutable_seed(
+                connection,
+                ManagedResourceKind::Skill,
+                "tenant",
+                &tenant_id,
+                id,
+                now_ms,
+            )?;
         }
         for (id, name, package, tools) in [
             (
@@ -360,6 +413,7 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
                 "version": env!("CARGO_PKG_VERSION"),
                 "kind": "runtime",
                 "enabled": true,
+                "status": "active",
                 "discovered": true,
                 "providers": ["local"],
                 "skills": [],
@@ -378,6 +432,14 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
                 &plugin,
                 now_ms,
             )?;
+            reconcile_immutable_seed(
+                connection,
+                ManagedResourceKind::Plugin,
+                "tenant",
+                &tenant_id,
+                id,
+                now_ms,
+            )?;
         }
     }
 
@@ -390,6 +452,7 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
             "id": "builtin:all-access",
             "name": "Local Agent",
             "display_name": "General and coding Agent",
+            "source": "builtin",
             "system_prompt": null,
             "enabled": true,
             "status": "active",
@@ -409,6 +472,14 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
             "builtin:all-access",
             "active",
             &agent,
+            now_ms,
+        )?;
+        reconcile_immutable_seed(
+            connection,
+            ManagedResourceKind::Agent,
+            "project",
+            &project_id,
+            "builtin:all-access",
             now_ms,
         )?;
     }
@@ -458,6 +529,94 @@ fn insert_seed(
         .map_err(|error| error.to_string())
 }
 
+fn reconcile_immutable_seed(
+    connection: &Connection,
+    kind: ManagedResourceKind,
+    scope_kind: &str,
+    scope_id: &str,
+    id: &str,
+    now_ms: i64,
+) -> Result<(), String> {
+    let existing = connection
+        .query_row(
+            "SELECT status, revision, value_json FROM desktop_managed_resources
+             WHERE kind = ?1 AND scope_kind = ?2 AND scope_id = ?3 AND id = ?4",
+            params![kind.as_str(), scope_kind, scope_id, id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, u64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let Some((stored_status, revision, value_json)) = existing else {
+        return Ok(());
+    };
+    let mut value: Value = serde_json::from_str(&value_json).map_err(|error| error.to_string())?;
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "managed resource must be an object".to_string())?;
+    let mut changed = stored_status != "active";
+    changed |= replace_if_different(object, "id", json!(id));
+    match kind {
+        ManagedResourceKind::Skill => {
+            changed |= replace_if_different(object, "status", json!("active"));
+            changed |= replace_if_different(object, "is_system_skill", json!(true));
+        }
+        ManagedResourceKind::Plugin => {
+            changed |= replace_if_different(object, "source", json!("builtin"));
+            changed |= replace_if_different(object, "enabled", json!(true));
+            changed |= replace_if_different(object, "status", json!("active"));
+            changed |= replace_if_different(object, "discovered", json!(true));
+        }
+        ManagedResourceKind::Agent => {
+            changed |= replace_if_different(object, "source", json!("builtin"));
+            changed |= replace_if_different(object, "enabled", json!(true));
+            changed |= replace_if_different(object, "status", json!("active"));
+        }
+        ManagedResourceKind::Provider => return Ok(()),
+    }
+    if !changed {
+        return Ok(());
+    }
+    let next_revision = revision.saturating_add(1);
+    object.insert("revision".to_string(), json!(next_revision));
+    object.insert("updated_at".to_string(), json!(iso_from_millis(now_ms)));
+    let value_json = serde_json::to_string(&value).map_err(|error| error.to_string())?;
+    connection
+        .execute(
+            "UPDATE desktop_managed_resources
+             SET status = 'active', revision = ?1, updated_at_ms = ?2, value_json = ?3
+             WHERE kind = ?4 AND scope_kind = ?5 AND scope_id = ?6 AND id = ?7",
+            params![
+                next_revision,
+                now_ms,
+                value_json,
+                kind.as_str(),
+                scope_kind,
+                scope_id,
+                id,
+            ],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn replace_if_different(
+    object: &mut serde_json::Map<String, Value>,
+    key: &str,
+    expected: Value,
+) -> bool {
+    if object.get(key) == Some(&expected) {
+        return false;
+    }
+    object.insert(key.to_string(), expected);
+    true
+}
+
 fn iso_from_millis(timestamp_ms: i64) -> String {
     DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
         .unwrap_or_else(Utc::now)
@@ -465,51 +624,5 @@ fn iso_from_millis(timestamp_ms: i64) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn seeded_resources_are_scope_isolated_and_revision_guarded() {
-        let store = DesktopSessionStore::in_memory().expect("store");
-        let local_skills = store
-            .list_managed_resources(ManagedResourceKind::Skill, "tenant", "local")
-            .expect("local skills");
-        let orbital_skills = store
-            .list_managed_resources(ManagedResourceKind::Skill, "tenant", "orbital")
-            .expect("orbital skills");
-        assert_eq!(local_skills.len(), 3);
-        assert_eq!(orbital_skills.len(), 3);
-
-        let disabled = store
-            .set_managed_resource_enabled(
-                ManagedResourceKind::Skill,
-                "tenant",
-                "local",
-                "implementation",
-                false,
-                1_752_384_000_000,
-            )
-            .expect("disable skill");
-        assert_eq!(disabled["status"], "disabled");
-        assert_eq!(disabled["revision"], 1);
-        assert_eq!(orbital_skills[1]["status"], "active");
-
-        let conflict = store.put_managed_resource(
-            ManagedResourceKind::Skill,
-            "tenant",
-            "local",
-            "implementation",
-            "active",
-            Some(0),
-            disabled,
-            1_752_384_001_000,
-        );
-        assert!(matches!(
-            conflict,
-            Err(ResourceRegistryError::RevisionConflict {
-                expected: 0,
-                actual: 1
-            })
-        ));
-    }
-}
+#[path = "resource_registry_tests.rs"]
+mod tests;

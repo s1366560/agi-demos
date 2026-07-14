@@ -54,6 +54,8 @@ mod auth_context;
 mod authority_store;
 mod authorized_tool_host;
 mod changes;
+#[cfg(test)]
+mod managed_resource_tests;
 mod resource_registry;
 mod run_control;
 mod session_projection;
@@ -1595,12 +1597,26 @@ fn auth_context_error(error: AuthContextError) -> (StatusCode, Json<Value>) {
 }
 
 fn resource_registry_error(error: ResourceRegistryError) -> (StatusCode, Json<Value>) {
-    let status = match error {
-        ResourceRegistryError::NotFound => StatusCode::NOT_FOUND,
-        ResourceRegistryError::RevisionConflict { .. } => StatusCode::CONFLICT,
-        ResourceRegistryError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
-    };
-    (status, Json(json!({ "detail": error.to_string() })))
+    let detail = error.to_string();
+    match error {
+        ResourceRegistryError::NotFound => {
+            (StatusCode::NOT_FOUND, Json(json!({ "detail": detail })))
+        }
+        ResourceRegistryError::Immutable { .. } => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "code": "immutable_resource",
+                "detail": detail,
+            })),
+        ),
+        ResourceRegistryError::RevisionConflict { .. } => {
+            (StatusCode::CONFLICT, Json(json!({ "detail": detail })))
+        }
+        ResourceRegistryError::Storage(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": detail })),
+        ),
+    }
 }
 
 async fn require_launch_capability(
@@ -2244,6 +2260,7 @@ async fn set_managed_skill_status(
     Query(query): Query<ManagedSkillStatusQuery>,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
+    ensure_managed_resource_manager(&authenticated)?;
     if !matches!(query.status.as_str(), "active" | "disabled" | "deprecated") {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -2317,6 +2334,7 @@ fn set_plugin_enabled(
     enabled: bool,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, Some(&tenant_id))?;
+    ensure_managed_resource_manager(&authenticated)?;
     state
         .session_store
         .set_managed_resource_enabled(
@@ -2357,6 +2375,8 @@ async fn set_managed_agent_enabled(
     Json(request): Json<ManagedAgentEnabledBody>,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
+    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
+    ensure_managed_resource_manager(&authenticated)?;
     state
         .session_store
         .set_managed_resource_enabled(
@@ -2449,6 +2469,21 @@ fn ensure_provider_manager(
     Err((
         StatusCode::FORBIDDEN,
         Json(json!({ "detail": "provider management requires tenant owner access" })),
+    ))
+}
+
+fn ensure_managed_resource_manager(
+    authenticated: &AuthenticatedContext,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    if matches!(authenticated.membership_role.as_str(), "owner" | "admin") {
+        return Ok(());
+    }
+    Err((
+        StatusCode::FORBIDDEN,
+        Json(json!({
+            "code": "resource_manager_required",
+            "detail": "managed resource mutation requires tenant owner access",
+        })),
     ))
 }
 
