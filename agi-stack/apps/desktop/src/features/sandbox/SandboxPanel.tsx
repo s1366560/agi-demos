@@ -1,18 +1,23 @@
 import { Badge, Button, Flex, Text, TextField } from '@radix-ui/themes';
 import { DesktopIcon, LightningBoltIcon, ReloadIcon } from '@radix-ui/react-icons';
 
+import { useI18n } from '../../i18n';
 import type {
   DesktopServiceResponse,
   ProjectSandbox,
   TerminalServiceResponse,
 } from '../../types';
+import {
+  terminalOutputText,
+  type TerminalBindingState,
+} from '../session/sessionTerminalModel';
 
 type SandboxPanelProps = {
   sandbox: ProjectSandbox | null;
   desktop: DesktopServiceResponse | null;
   desktopFrameUrl: string | null;
   terminal: TerminalServiceResponse | null;
-  terminalConnected: boolean;
+  terminalBinding: TerminalBindingState;
   terminalError: string | null;
   terminalLines: string[];
   terminalInput: string;
@@ -31,7 +36,7 @@ export function SandboxPanel({
   desktop,
   desktopFrameUrl,
   terminal,
-  terminalConnected,
+  terminalBinding,
   terminalError,
   terminalLines,
   terminalInput,
@@ -44,29 +49,57 @@ export function SandboxPanel({
   onSendTerminalInput,
   onClearTerminal,
 }: SandboxPanelProps) {
+  const { t } = useI18n();
   const disabled = Boolean(disabledReason);
+  const terminalConnected = terminalBinding === 'connected';
   const desktopUnavailable = desktop?.success === false;
   const terminalUnavailable = terminal?.success === false;
-  const desktopStatus = desktop ? (desktop.success ? (desktop.resolution ?? 'ready') : 'unavailable') : '-';
-  const terminalStatus = terminal
-    ? terminal.success && terminal.session_id
-      ? 'ready'
-      : 'unavailable'
-    : '-';
+  const desktopStatus = desktop
+    ? desktop.success
+      ? (desktop.resolution ?? t('sandbox.ready'))
+      : t('sandbox.unavailable')
+    : '—';
+  const terminalStatus =
+    terminalBinding === 'connected'
+      ? t('session.terminalConnected')
+      : terminalBinding === 'connecting'
+        ? t('session.terminalConnecting')
+        : terminalBinding === 'closed'
+          ? t('session.terminalClosed')
+          : terminalBinding === 'stale'
+            ? t('session.terminalStale')
+            : terminalBinding === 'error'
+              ? t('session.terminalError')
+              : terminalUnavailable
+                ? t('sandbox.unavailable')
+                : t('session.terminalIdle');
+  const terminalStatusColor =
+    terminalBinding === 'connected'
+      ? 'green'
+      : terminalBinding === 'connecting'
+        ? 'cyan'
+        : terminalBinding === 'stale' || terminalBinding === 'error'
+          ? 'red'
+          : 'gray';
   const terminalLogText = terminalLines.length
-    ? terminalLines.join('')
+    ? terminalOutputText(terminalLines)
     : terminalUnavailable
-      ? 'Terminal service responded without an attachable proxy. Start a production sandbox runtime to open an interactive shell.'
-      : 'Terminal output appears here.';
+      ? t('sandbox.terminalUnavailableDescription')
+      : t('session.terminalEmpty');
 
   return (
     <section className="sandbox-panel">
       <Flex align="center" justify="between">
         <Text size="1" color="gray" weight="bold">
-          SANDBOX
+          {t('sandbox.title')}
         </Text>
-        <Badge color={sandbox?.is_healthy ? 'green' : sandbox ? 'amber' : 'gray'} variant="soft">
-          {sandbox?.status ?? 'not loaded'}
+        <Badge
+          color={sandbox?.is_healthy ? 'green' : sandbox ? 'amber' : 'gray'}
+          variant="soft"
+          role="status"
+          aria-live="polite"
+        >
+          {sandbox?.status ?? t('status.notLoaded')}
         </Badge>
       </Flex>
 
@@ -74,31 +107,31 @@ export function SandboxPanel({
         <Button
           size="2"
           variant="surface"
-          aria-label="Ensure sandbox runtime"
+          aria-label={t('sandbox.ensureRuntime')}
           onClick={onEnsureSandbox}
           loading={busy}
           disabled={disabled}
         >
-          <ReloadIcon /> Ensure
+          <ReloadIcon /> {t('sandbox.ensure')}
         </Button>
         <Button
           size="2"
-          aria-label="Start sandbox desktop"
+          aria-label={t('sandbox.startDesktop')}
           onClick={onStartDesktop}
           loading={busy}
           disabled={disabled}
         >
-          <DesktopIcon /> Desktop
+          <DesktopIcon /> {t('sandbox.desktop')}
         </Button>
         <Button
           size="2"
           variant="surface"
-          aria-label="Start sandbox terminal"
+          aria-label={t('sandbox.startTerminal')}
           onClick={onStartTerminal}
           loading={busy}
           disabled={disabled}
         >
-          <LightningBoltIcon /> Terminal
+          <LightningBoltIcon /> {t('status.terminal')}
         </Button>
       </div>
       {disabledReason ? (
@@ -108,19 +141,23 @@ export function SandboxPanel({
       ) : null}
 
       <div className="metric-grid">
-        <Metric label="Sandbox" value={sandbox?.sandbox_id ?? '-'} />
-        <Metric label="Desktop" value={desktopStatus} />
-        <Metric label="Terminal" value={terminalStatus} />
-        <Metric
-          label="Live shell"
-          value={terminalConnected ? 'connected' : terminalError ?? 'idle'}
-        />
+        <Metric label={t('status.sandbox')} value={sandbox?.sandbox_id ?? '—'} />
+        <Metric label={t('sandbox.desktop')} value={desktopStatus} />
+        <Metric label={t('status.terminal')} value={terminalStatus} />
+        <div className="metric" role="status" aria-live="polite">
+          <Text size="1" color="gray">
+            {t('sandbox.liveShell')}
+          </Text>
+          <Badge color={terminalStatusColor} variant="soft">
+            {terminalStatus}
+          </Badge>
+        </div>
       </div>
 
       {desktopFrameUrl && desktop?.success ? (
         <iframe
           className="desktop-frame"
-          title="Sandbox desktop"
+          title={t('sandbox.desktopFrameTitle')}
           src={desktopFrameUrl}
           allow="clipboard-read; clipboard-write"
         />
@@ -128,8 +165,8 @@ export function SandboxPanel({
         <div className="desktop-placeholder">
           <Text size="2" color="gray">
             {desktopUnavailable
-              ? 'Desktop service responded without an attachable proxy. Start a production sandbox runtime to view the remote desktop here.'
-              : 'Start the sandbox desktop to view the workspace environment here.'}
+              ? t('sandbox.desktopUnavailableDescription')
+              : t('sandbox.desktopEmptyDescription')}
           </Text>
         </div>
       )}
@@ -137,21 +174,45 @@ export function SandboxPanel({
       <div className="terminal-console">
         <Flex align="center" justify="between" mb="2">
           <Text size="1" color="gray" weight="bold">
-            TERMINAL
+            {t('session.terminalTitle')}
           </Text>
           <Button
             size="2"
             variant="ghost"
-            aria-label="Clear terminal output"
+            aria-label={t('sandbox.clearTerminalOutput')}
             onClick={onClearTerminal}
           >
-            Clear
+            {t('sandbox.clear')}
           </Button>
         </Flex>
-        <pre className="terminal-log">{terminalLogText}</pre>
+        {terminalBinding === 'error' ? (
+          <div className="terminal-authority-alert" role="alert">
+            <strong>{t('session.terminalError')}</strong>
+            <span>{t('session.terminalErrorBody')}</span>
+            {terminalError ? <code>{terminalError}</code> : null}
+          </div>
+        ) : null}
+        {terminalBinding === 'stale' ? (
+          <div className="terminal-authority-alert" role="alert">
+            <strong>{t('session.terminalStale')}</strong>
+            <span>{t('session.terminalStaleBody')}</span>
+          </div>
+        ) : null}
+        <pre
+          className="terminal-log"
+          role="log"
+          tabIndex={0}
+          aria-label={t('session.terminalOutput')}
+        >
+          {terminalLogText}
+        </pre>
+        <label className="terminal-input-label" htmlFor="sandbox-terminal-input">
+          {t('sandbox.terminalInput')}
+        </label>
         <Flex gap="2" mt="2">
           <TextField.Root
-            aria-label="Terminal input"
+            id="sandbox-terminal-input"
+            aria-label={t('sandbox.terminalInput')}
             value={terminalInput}
             disabled={disabled || !terminalConnected}
             onChange={(event) => onTerminalInputChange(event.target.value)}
@@ -165,11 +226,11 @@ export function SandboxPanel({
           />
           <Button
             size="2"
-            aria-label="Send terminal input"
+            aria-label={t('sandbox.sendTerminalInput')}
             onClick={onSendTerminalInput}
             disabled={disabled || !terminalConnected}
           >
-            Send
+            {t('sandbox.send')}
           </Button>
         </Flex>
       </div>

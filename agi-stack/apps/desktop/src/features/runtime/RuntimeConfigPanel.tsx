@@ -3,6 +3,7 @@ import { Badge, Button, Flex, Grid, Select, Text, TextField } from '@radix-ui/th
 
 import { LOCAL_DEV_SERVER_PRESETS } from '../../types';
 import type { ConnectionState, DesktopRuntimeConfig, RuntimeMode } from '../../types';
+import { useI18n } from '../../i18n';
 
 type RuntimeConfigPanelProps = {
   config: DesktopRuntimeConfig;
@@ -25,6 +26,7 @@ export function RuntimeConfigPanel({
   onChange,
   onRefresh,
 }: RuntimeConfigPanelProps) {
+  const { t } = useI18n();
   const apiKeyInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export function RuntimeConfigPanel({
     <section className="runtime-panel">
       <Flex align="center" justify="between">
         <Text size="1" weight="bold" color="gray">
-          CONNECTION
+          {t('runtime.connection')}
         </Text>
         <Badge color={connectionColor(connection)} variant="soft">
           {connection}
@@ -51,7 +53,7 @@ export function RuntimeConfigPanel({
 
       <Grid columns="1" gap="2">
         <label className="field-label">
-          <span>Server URL</span>
+          <span>{t('runtime.serverUrl')}</span>
           <TextField.Root
             aria-label="Server URL"
             value={config.apiBaseUrl}
@@ -77,7 +79,7 @@ export function RuntimeConfigPanel({
         {config.mode === 'local' ? (
           <>
             <label className="field-label">
-              <span>LLM provider</span>
+              <span>{t('runtime.llmProvider')}</span>
               <Select.Root
                 value={config.llmProvider}
                 onValueChange={(value) => update('llmProvider', value)}
@@ -91,7 +93,7 @@ export function RuntimeConfigPanel({
               </Select.Root>
             </label>
             <label className="field-label">
-              <span>LLM base URL</span>
+              <span>{t('runtime.llmBaseUrl')}</span>
               <TextField.Root
                 aria-label="Local LLM base URL"
                 value={config.llmBaseUrl}
@@ -100,7 +102,7 @@ export function RuntimeConfigPanel({
               />
             </label>
             <label className="field-label">
-              <span>LLM model</span>
+              <span>{t('runtime.llmModel')}</span>
               <TextField.Root
                 aria-label="Local LLM model"
                 value={config.llmModel}
@@ -109,7 +111,7 @@ export function RuntimeConfigPanel({
               />
             </label>
             <label className="field-label">
-              <span>LLM API key</span>
+              <span>{t('runtime.llmApiKey')}</span>
               <TextField.Root
                 aria-label="Local LLM API key"
                 type="password"
@@ -119,7 +121,7 @@ export function RuntimeConfigPanel({
               />
             </label>
             <label className="field-label">
-              <span>Workspace root</span>
+              <span>{t('runtime.workspaceRoot')}</span>
               <TextField.Root
                 aria-label="Local workspace root"
                 value={config.workspaceRoot}
@@ -130,7 +132,7 @@ export function RuntimeConfigPanel({
           </>
         ) : null}
         <label className="field-label">
-          <span>API key</span>
+          <span>{t('runtime.apiKey')}</span>
           <TextField.Root
             aria-label="API key"
             ref={apiKeyInputRef}
@@ -141,7 +143,7 @@ export function RuntimeConfigPanel({
           />
         </label>
         <label className="field-label">
-          <span>Tenant ID</span>
+          <span>{t('runtime.tenantId')}</span>
           <TextField.Root
             aria-label="Tenant ID"
             value={config.tenantId}
@@ -150,7 +152,7 @@ export function RuntimeConfigPanel({
           />
         </label>
         <label className="field-label">
-          <span>Project ID</span>
+          <span>{t('runtime.projectId')}</span>
           <TextField.Root
             aria-label="Project ID"
             value={config.projectId}
@@ -159,7 +161,7 @@ export function RuntimeConfigPanel({
           />
         </label>
         <label className="field-label">
-          <span>Workspace ID</span>
+          <span>{t('runtime.workspaceId')}</span>
           <TextField.Root
             aria-label="Workspace ID"
             value={config.workspaceId}
@@ -187,7 +189,7 @@ export function RuntimeConfigPanel({
           loading={connection === 'loading'}
           disabled={Boolean(disabledReason)}
         >
-          Connect
+          {t('runtime.connect')}
         </Button>
       </Flex>
       {disabledReason ? (
@@ -198,10 +200,10 @@ export function RuntimeConfigPanel({
 
       <Flex align="center" justify="between">
         <Text size="1" color="gray">
-          Live updates
+          {t('runtime.liveUpdates')}
         </Text>
         <Badge color={wsConnected ? 'green' : wsError ? 'red' : 'gray'} variant="soft">
-          {wsConnected ? 'connected' : wsError ? 'error' : 'idle'}
+          {wsConnected ? t('runtime.connected') : wsError ? t('runtime.error') : t('runtime.idle')}
         </Badge>
       </Flex>
     </section>

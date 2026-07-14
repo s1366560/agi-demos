@@ -8,6 +8,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CodeIcon,
+  Cross2Icon,
   DotsHorizontalIcon,
   ReaderIcon,
   ReloadIcon,
@@ -16,15 +17,33 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { useI18n } from '../../i18n';
+import {
+  approvalResponseSubmission,
+  validateApprovalRequest,
+} from '../session/sessionDecisionModel';
+import {
+  buildSessionNarrative,
+  sessionActivitySummary,
+} from '../session/sessionNarrativeModel';
 import type {
   AgentTimelineItem,
   ConversationTimelineState,
+  DesktopApprovalRequest,
   HitlResponseSubmission,
   HitlType,
   ToolDisplayData,
   ToolFileMetadata,
+  CodeRangeReference,
+  DesktopRunInput,
+  RunInputDelivery,
   WorkspaceMessage,
 } from '../../types';
+import { runInputReferenceLabel } from '../session/sessionChangesModel';
+import {
+  queuedRunInputHandoffState,
+  visibleQueuedRunInputs,
+} from '../session/sessionRunInputModel';
 import { ComposerControls } from './ComposerControls';
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
@@ -40,9 +59,20 @@ type ChatPanelProps = {
   sending: boolean;
   disabledReason: string | null;
   activeWorkflowTarget: ChatWorkflowTarget;
+  modelLabel?: string;
   runtimeTargetLabel?: string;
   runtimeTargetOptions?: string[];
+  runInputDelivery: RunInputDelivery | null;
+  runInputDeliveryOptions: RunInputDelivery[];
+  runInputs: DesktopRunInput[];
+  runInputsLoading: boolean;
+  runInputsError: string | null;
+  promotingRunInputId: string | null;
+  references: CodeRangeReference[];
   onInputChange: (value: string) => void;
+  onRunInputDeliveryChange: (delivery: RunInputDelivery) => void;
+  onPromoteRunInput: (input: DesktopRunInput) => void;
+  onRemoveReference: (reference: CodeRangeReference) => void;
   onSend: () => void;
   onRefresh: () => void;
   onLoadEarlier: () => void;
@@ -81,9 +111,20 @@ export function ChatPanel({
   sending,
   disabledReason,
   activeWorkflowTarget,
+  modelLabel,
   runtimeTargetLabel,
   runtimeTargetOptions,
+  runInputDelivery,
+  runInputDeliveryOptions,
+  runInputs,
+  runInputsLoading,
+  runInputsError,
+  promotingRunInputId,
+  references,
   onInputChange,
+  onRunInputDeliveryChange,
+  onPromoteRunInput,
+  onRemoveReference,
   onSend,
   onRefresh,
   onLoadEarlier,
@@ -93,6 +134,7 @@ export function ChatPanel({
   onOpenCommands,
   onOpenUsagePlan,
 }: ChatPanelProps) {
+  const { t } = useI18n();
   const disabled = Boolean(disabledReason);
   const canSend = !disabled && !sending && Boolean(input.trim());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -100,6 +142,7 @@ export function ChatPanel({
   const timelineWindowRef = useRef<{ firstId: string; lastId: string; count: number } | null>(null);
   const earlierScrollRef = useRef<{ height: number; top: number } | null>(null);
   const [expandedTimelineItems, setExpandedTimelineItems] = useState<Record<string, boolean>>({});
+  const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
   const signalStateKey = useMemo(
     () => agentTaskSignals.map((signal) => `${signal.id}:${signal.status}`).join('|'),
     [agentTaskSignals],
@@ -107,6 +150,16 @@ export function ChatPanel({
   const timelineItemCount = timelineState?.items.length ?? 0;
   const timelineFirstId = timelineState?.items[0]?.id ?? '';
   const timelineLastId = timelineState?.items[timelineItemCount - 1]?.id ?? '';
+  const activitySummary = useMemo(() => {
+    if (!timelineState?.items.length) return null;
+    return sessionActivitySummary({
+      items: timelineState.items,
+      artifactCount: timelineState.items.filter((item) => item.type.startsWith('artifact_')).length,
+      taskCount:
+        timelineState.items.filter((item) => item.type.startsWith('task_')).length +
+        agentTaskSignals.length,
+    });
+  }, [agentTaskSignals.length, timelineState]);
   const scrollToLatest = useCallback(() => {
     scrollAnchorRef.current?.scrollIntoView({ block: 'end' });
   }, []);
@@ -227,14 +280,42 @@ export function ChatPanel({
       <ScrollArea className="message-scroll" ref={scrollAreaRef}>
         <div className="message-stack">
           {timelineState ? (
-            <AgentTimeline
-              state={timelineState}
-              expandedItems={expandedTimelineItems}
-              onToggleItem={toggleTimelineItem}
-              onRespondToHitl={onRespondToHitl}
-            />
+            <>
+              {activitySummary ? (
+                <section className="session-current-activity" aria-label={t('session.currentActivity')}>
+                  <div className="session-current-activity-head">
+                    <span>{t('session.currentActivity')}</span>
+                    <Badge color="cyan" variant="soft">
+                      {t('session.live')}
+                    </Badge>
+                  </div>
+                  <strong>
+                    {activitySummary.titleKey
+                      ? t(activitySummary.titleKey)
+                      : activitySummary.title || t('session.waitingForActivity')}
+                  </strong>
+                  {activitySummary.detail ? <p>{activitySummary.detail}</p> : null}
+                  <dl>
+                    <div>
+                      <dt>{t('session.latestCheckpoint')}</dt>
+                      <dd>{activitySummary.checkpoint || t('session.notAvailable')}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('session.sessionEvidence')}</dt>
+                      <dd>{activitySummary.evidence}</dd>
+                    </div>
+                  </dl>
+                </section>
+              ) : null}
+              <AgentTimeline
+                state={timelineState}
+                expandedItems={expandedTimelineItems}
+                onToggleItem={toggleTimelineItem}
+                onRespondToHitl={onRespondToHitl}
+              />
+            </>
           ) : messages.length === 0 ? (
-            <div className="chat-empty-state" role="status" aria-label="Ready for a new task" />
+            <SessionEmptyState />
           ) : (
             messages.map((message) => <WorkspaceTranscriptMessage message={message} key={message.id} />)
           )}
@@ -287,6 +368,99 @@ export function ChatPanel({
           workflowCounts={workflowCounts}
           onSelect={onWorkflowSelect}
         />
+        {runInputsLoading || runInputsError || queuedRunInputs.length ? (
+          <section className="run-input-queue" aria-label={t('session.queueHandoffRegion')}>
+            <div className="run-input-queue-header">
+              <span>
+                <strong>{t('session.queueHandoffTitle')}</strong>
+                {queuedRunInputs.length ? (
+                  <small>
+                    {t('session.queueHandoffCount', { count: queuedRunInputs.length })}
+                  </small>
+                ) : null}
+              </span>
+              {runInputsLoading ? <small>{t('session.queueLoading')}</small> : null}
+            </div>
+            {runInputsError ? (
+              <p className="run-input-queue-error">{t('session.queueLoadError')}</p>
+            ) : null}
+            {queuedRunInputs.map((queuedInput) => {
+              const handoffState = queuedRunInputHandoffState(queuedInput);
+              if (!handoffState) return null;
+              const statusLabel =
+                handoffState === 'waiting'
+                  ? t('session.queueHandoffWaiting')
+                  : handoffState === 'ready'
+                    ? t('session.queueHandoffReady')
+                    : handoffState === 'blocked'
+                      ? t('session.queueHandoffBlocked')
+                      : t('session.queueHandoffPromoted');
+              const statusBody =
+                handoffState === 'waiting'
+                  ? t('session.queueHandoffWaitingBody')
+                  : handoffState === 'ready'
+                    ? t('session.queueHandoffReadyBody')
+                    : handoffState === 'blocked'
+                      ? t('session.queueHandoffBlockedBody')
+                      : t('session.queueHandoffPromotedBody');
+              return (
+                <article
+                  className={`run-input-queue-item is-${handoffState}`}
+                  key={queuedInput.id}
+                >
+                  <div className="run-input-queue-copy">
+                    <div>
+                      <Badge color={handoffState === 'ready' ? 'cyan' : 'gray'}>
+                        {statusLabel}
+                      </Badge>
+                      <small>
+                        {t('session.queuePosition', {
+                          position: queuedInput.queue_position ?? '—',
+                        })}
+                      </small>
+                    </div>
+                    <strong>{queuedInput.content}</strong>
+                    <p>{statusBody}</p>
+                  </div>
+                  {handoffState === 'ready' ? (
+                    <Button
+                      type="button"
+                      size="1"
+                      color="cyan"
+                      loading={promotingRunInputId === queuedInput.id}
+                      disabled={Boolean(promotingRunInputId)}
+                      onClick={() => onPromoteRunInput(queuedInput)}
+                    >
+                      <RocketIcon />
+                      {promotingRunInputId === queuedInput.id
+                        ? t('session.startingPlanTurn')
+                        : t('session.startPlanTurn')}
+                    </Button>
+                  ) : null}
+                </article>
+              );
+            })}
+          </section>
+        ) : null}
+        {references.length ? (
+          <div className="composer-reference-chips" aria-label={t('session.attachedReferences')}>
+            {references.map((reference) => (
+              <span key={`${reference.snapshot_id}:${runInputReferenceLabel(reference)}`}>
+                <CodeIcon aria-hidden="true" />
+                <strong>{runInputReferenceLabel(reference)}</strong>
+                <button
+                  type="button"
+                  aria-label={t('session.removeReference', {
+                    reference: runInputReferenceLabel(reference),
+                  })}
+                  onClick={() => onRemoveReference(reference)}
+                >
+                  <Cross2Icon />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
         <TextArea
           className="chat-composer-input"
           value={input}
@@ -297,7 +471,11 @@ export function ChatPanel({
             'Describe a task to run autonomously. Type / for commands, @ for files, or # for issues...'
           }
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              (runInputDeliveryOptions.length === 0 || event.metaKey || event.ctrlKey)
+            ) {
               event.preventDefault();
               handleSend();
             }
@@ -313,9 +491,26 @@ export function ChatPanel({
           >
             /
           </button>
+          {runInputDeliveryOptions.length ? (
+            <div className="composer-delivery-switch" aria-label={t('session.deliveryMode')}>
+              {runInputDeliveryOptions.map((delivery) => (
+                <button
+                  type="button"
+                  className={runInputDelivery === delivery ? 'is-active' : ''}
+                  aria-pressed={runInputDelivery === delivery}
+                  onClick={() => onRunInputDeliveryChange(delivery)}
+                  key={delivery}
+                >
+                  {delivery === 'steer_now'
+                    ? t('session.steerNow')
+                    : t('session.queueNext')}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <ComposerControls
             disabledHint={disabledReason}
-            modelLabel="Claude Fable 5 · 1M"
+            modelLabel={modelLabel ?? t('settings.notConfigured')}
             runtimeTargetLabel={runtimeTargetLabel}
             runtimeTargetOptions={runtimeTargetOptions}
             onRuntimeTargetChange={onRuntimeTargetChange}
@@ -336,7 +531,14 @@ export function ChatPanel({
               color="green"
               className="send-pill"
               type="submit"
-              aria-label="Send workspace message"
+              aria-label={
+                runInputDelivery === 'steer_now'
+                  ? t('session.sendSteering')
+                  : runInputDelivery === 'queue_next'
+                    ? t('session.sendQueuedInput')
+                    : t('session.sendMessage')
+              }
+              title={runInputDeliveryOptions.length ? t('session.sendShortcut') : undefined}
               loading={sending}
               disabled={!canSend}
             >
@@ -360,6 +562,7 @@ function AgentTimeline({
   onToggleItem: (item: AgentTimelineItem) => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const a2uiActionViews = useMemo(
     () =>
       new Map(
@@ -369,19 +572,20 @@ function AgentTimeline({
       ),
     [state.items],
   );
+  const narrative = useMemo(() => buildSessionNarrative(state.items), [state.items]);
 
   if (state.loading) {
     return (
-      <div className="chat-empty-state timeline-loading" role="status" aria-label="Loading session history">
+      <div className="chat-empty-state timeline-loading" role="status" aria-label={t('session.loadingHistory')}>
         <Text size="2" color="gray">
-          Loading session history...
+          {t('session.loadingHistory')}
         </Text>
       </div>
     );
   }
 
   return (
-    <div className="agent-timeline" aria-label="Agent conversation timeline">
+    <div className="agent-timeline" aria-label={t('session.conversationTimeline')}>
       {state.error ? (
         <div className="timeline-error" role="status">
           <Text size="2" color="red">
@@ -395,19 +599,74 @@ function AgentTimeline({
         </div>
       ) : null}
       {state.items.length === 0 && !state.error ? (
-        <div className="chat-empty-state" role="status" aria-label="No session history yet" />
+        <SessionEmptyState />
       ) : (
-        state.items.map((item) => (
-          <TimelineItemView
-            item={item}
-            expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
-            onToggle={() => onToggleItem(item)}
-            onRespondToHitl={onRespondToHitl}
-            a2uiActionView={a2uiActionViews.get(item.id)}
-            key={item.id}
-          />
-        ))
+        narrative.map((node) => {
+          if (node.kind === 'tool_group') {
+            return (
+              <details
+                className={`timeline-tool-group status-${node.status}`}
+                open={node.status !== 'complete' ? true : undefined}
+                key={node.id}
+              >
+                <summary>
+                  <span className="timeline-tool-group-icon" aria-hidden>
+                    <CodeIcon />
+                  </span>
+                  <span>
+                    <strong>{t('session.toolActivity')}</strong>
+                    <small>{t('session.toolActivityCount', { count: node.toolCount })}</small>
+                  </span>
+                  <em>{t(`session.toolStatus.${node.status}`)}</em>
+                  <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden />
+                </summary>
+                <div className="timeline-tool-group-items">
+                  {node.items.map((item) => (
+                    <TimelineItemView
+                      item={item}
+                      expanded={expandedItems[item.id] ?? false}
+                      onToggle={() => onToggleItem(item)}
+                      onRespondToHitl={onRespondToHitl}
+                      a2uiActionView={a2uiActionViews.get(item.id)}
+                      approvalRequest={state.approvalRequests.find(
+                        (request) => request.id === timelineHitlRequestId(item),
+                      )}
+                      key={item.id}
+                    />
+                  ))}
+                </div>
+              </details>
+            );
+          }
+          const item = node.item;
+          return (
+            <TimelineItemView
+              item={item}
+              expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
+              onToggle={() => onToggleItem(item)}
+              onRespondToHitl={onRespondToHitl}
+              a2uiActionView={a2uiActionViews.get(item.id)}
+              approvalRequest={state.approvalRequests.find(
+                (request) => request.id === timelineHitlRequestId(item),
+              )}
+              key={node.id}
+            />
+          );
+        })
       )}
+    </div>
+  );
+}
+
+function SessionEmptyState() {
+  const { t } = useI18n();
+  return (
+    <div className="chat-empty-state session-conversation-empty" role="status">
+      <span aria-hidden="true">
+        <ActivityLogIcon />
+      </span>
+      <strong>{t('session.emptyTitle')}</strong>
+      <p>{t('session.emptyDescription')}</p>
     </div>
   );
 }
@@ -442,12 +701,14 @@ function TimelineItemView({
   onToggle,
   onRespondToHitl,
   a2uiActionView,
+  approvalRequest,
 }: {
   item: AgentTimelineItem;
   expanded: boolean;
   onToggle: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   a2uiActionView?: A2UIActionView;
+  approvalRequest?: DesktopApprovalRequest;
 }) {
   const kind = timelineKind(item);
   if (kind === 'user' || kind === 'agent') {
@@ -466,6 +727,7 @@ function TimelineItemView({
           kind={kind}
           onRespondToHitl={onRespondToHitl}
           a2uiActionView={a2uiActionView}
+          approvalRequest={approvalRequest}
         />
       </article>
     );
@@ -475,7 +737,11 @@ function TimelineItemView({
   const status = timelineStatus(item);
   const lineCount = timelineDetailLineCount(item, kind);
   return (
-    <article className={`message timeline-row timeline-item ${kind} ${expanded ? 'is-expanded' : ''}`}>
+    <article
+      className={`message timeline-row timeline-item ${kind} ${expanded ? 'is-expanded' : ''} ${
+        approvalRequest ? 'has-approval-evidence' : ''
+      }`}
+    >
       {hasDetails ? (
         <button
           type="button"
@@ -503,6 +769,7 @@ function TimelineItemView({
             kind={kind}
             onRespondToHitl={onRespondToHitl}
             a2uiActionView={a2uiActionView}
+            approvalRequest={approvalRequest}
           />
         ) : null}
       </div>
@@ -520,11 +787,13 @@ function TimelineItemBody({
   kind,
   onRespondToHitl,
   a2uiActionView,
+  approvalRequest,
 }: {
   item: AgentTimelineItem;
   kind: TimelineKind;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   a2uiActionView?: A2UIActionView;
+  approvalRequest?: DesktopApprovalRequest;
 }) {
   const hitlType = timelineHitlType(item);
   if (hitlType) {
@@ -534,6 +803,7 @@ function TimelineItemBody({
         hitlType={hitlType}
         onRespond={onRespondToHitl}
         a2uiActionView={a2uiActionView}
+        approvalRequest={approvalRequest}
       />
     );
   }
@@ -649,12 +919,15 @@ function HitlResponseCard({
   hitlType,
   onRespond,
   a2uiActionView,
+  approvalRequest,
 }: {
   item: AgentTimelineItem;
   hitlType: HitlType;
   onRespond: (submission: HitlResponseSubmission) => Promise<void>;
   a2uiActionView?: A2UIActionView;
+  approvalRequest?: DesktopApprovalRequest;
 }) {
+  const { t } = useI18n();
   const [answer, setAnswer] = useState('');
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -667,6 +940,9 @@ function HitlResponseCard({
   const allowCustom =
     item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
   const question = timelineHitlQuestion(item);
+  const approvalValidation = approvalRequest
+    ? validateApprovalRequest(approvalRequest)
+    : null;
 
   const submit = async (responseData: Record<string, unknown>) => {
     if (!requestId || answered || busy) return;
@@ -674,6 +950,20 @@ function HitlResponseCard({
     setSubmitError(null);
     try {
       await onRespond({ requestId, hitlType, responseData });
+      setSubmitted(true);
+    } catch (caught) {
+      setSubmitError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitApproval = async (action: 'approve' | 'request_changes') => {
+    if (!approvalRequest || answered || busy) return;
+    setBusy(true);
+    setSubmitError(null);
+    try {
+      await onRespond(approvalResponseSubmission(approvalRequest, action));
       setSubmitted(true);
     } catch (caught) {
       setSubmitError(caught instanceof Error ? caught.message : String(caught));
@@ -692,14 +982,53 @@ function HitlResponseCard({
         {requestId ? <span>{requestId}</span> : <span>Missing request id</span>}
       </div>
 
+      {approvalRequest?.decision ? (
+        <div className="timeline-approval-evidence">
+          <div>
+            <span>{t('approval.action')}</span>
+            <strong>{approvalRequest.decision.action.label}</strong>
+          </div>
+          <div>
+            <span>{t('approval.target')}</span>
+            <strong>
+              {approvalRequest.decision.target.kind} · {approvalRequest.decision.target.id}
+            </strong>
+          </div>
+          <div>
+            <span>{t('approval.agentRisk')}</span>
+            <strong>{approvalRequest.decision.risk.level}</strong>
+          </div>
+          <div>
+            <span>{t('approval.scope')}</span>
+            <strong>
+              {approvalRequest.decision.scope.kind} ·{' '}
+              {approvalRequest.decision.scope.ids.join(', ')}
+            </strong>
+          </div>
+          <p>{approvalRequest.decision.reason}</p>
+          <small>
+            {t('approval.requestIdentity', {
+              requestId: approvalRequest.id,
+              revision: approvalRequest.run_revision ?? '—',
+            })}
+          </small>
+        </div>
+      ) : !answered && (hitlType === 'permission' || hitlType === 'decision') ? (
+        <Text size="1" color="red">
+          {t('approval.incomplete', {
+            fields: 'action, target, data, reason, risk, reversibility, scope, evidence',
+          })}
+        </Text>
+      ) : null}
+
       {!answered && hitlType === 'permission' ? (
         <Flex gap="2" wrap="wrap">
           <Button
             size="1"
             color="green"
-            disabled={!requestId || busy}
+            disabled={!requestId || busy || !approvalValidation?.canApprove}
             loading={busy}
-            onClick={() => void submit({ granted: true, action: 'allow' })}
+            onClick={() => void submitApproval('approve')}
           >
             Allow once
           </Button>
@@ -708,7 +1037,11 @@ function HitlResponseCard({
             color="red"
             variant="soft"
             disabled={!requestId || busy}
-            onClick={() => void submit({ granted: false, action: 'deny' })}
+            onClick={() =>
+              void (approvalRequest
+                ? submitApproval('request_changes')
+                : submit({ granted: false, action: 'deny' }))
+            }
           >
             Deny
           </Button>
@@ -1007,7 +1340,7 @@ function ChatWorkflowStrip({
   const items: Array<[ChatWorkflowTarget, string, string, ReactNode]> = [
     ['changes', 'Changes', '+0 -0', <CodeIcon key="changes" />],
     ['pull', 'PR', 'idle', <ReaderIcon key="pull" />],
-    ['plan', 'Plan', 'active', <ActivityLogIcon key="plan" />],
+    ['plan', 'Plan', 'idle', <ActivityLogIcon key="plan" />],
     ['background', 'Background', '0', <DotsHorizontalIcon key="background" />],
     ['artifacts', 'Artifacts', '0', <ArchiveIcon key="artifacts" />],
   ];

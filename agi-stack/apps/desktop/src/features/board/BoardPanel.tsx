@@ -33,7 +33,6 @@ type BoardPanelProps = {
 const lanes = ['planning', 'running', 'review', 'blocked', 'done'] as const;
 const taskFilters = ['all', ...lanes] as const;
 const runTimeTicks = ['00:00', '00:05', '00:10', '00:15', 'Now', '00:25', '00:30'];
-const prototypeAgentOrder = ['Planner', 'Researcher', 'Executor', 'Verifier'];
 type TaskFilter = (typeof taskFilters)[number];
 type AgentLayout = 'lanes' | 'folders' | 'grid';
 type BoardView = 'Timeline' | 'Swimlane' | 'Compact';
@@ -81,7 +80,6 @@ export function BoardPanel({
   const [showLaneCounts, setShowLaneCounts] = useState(true);
   const [showTaskProgress, setShowTaskProgress] = useState(true);
   const [command, setCommand] = useState('');
-  const [model, setModel] = useState('OpenAI gpt-4o-mini');
   const usesTimelineTrack = boardView !== 'Compact';
   const useAgentLaneRows = usesTimelineTrack && agentLayout === 'lanes';
   const commandDisabled = Boolean(commandDisabledReason) || commandSending;
@@ -99,7 +97,6 @@ export function BoardPanel({
   const zoomValue = zoom / 100;
   const laneGridStyle = { '--board-zoom': String(zoomValue) } as CSSProperties;
   const boardTrackView = useAgentLaneRows ? 'swimlane' : boardView.toLowerCase();
-  const modelOptions = ['OpenAI gpt-4o-mini', 'Local qwen-coder'];
   const runtimeOptions = Array.from(new Set([runtimeTargetLabel, ...runtimeTargetOptions]));
   const isolatedRunScopeLabel = `${activeRunLabel} (isolated)`;
   const currentTimeTickLabel = boardTimeTickLabel(activeRunTimeLabel);
@@ -418,16 +415,6 @@ export function BoardPanel({
         />
         <div className="board-command-selects">
           <select
-            aria-label="Model"
-            value={model}
-            disabled={commandSending}
-            onChange={(event) => setModel(event.currentTarget.value)}
-          >
-            {modelOptions.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
-          </select>
-          <select
             aria-label="Runtime target"
             value={runtimeTargetLabel}
             disabled={commandSending}
@@ -591,15 +578,10 @@ function buildAgentLaneRows(tasks: WorkspaceTask[]): BoardLaneRow[] {
     const owner = taskOwner(task);
     grouped.set(owner, [...(grouped.get(owner) ?? []), task]);
   });
-  const owners = [
-    ...prototypeAgentOrder.filter((owner) => grouped.has(owner)),
-    ...Array.from(grouped.keys())
-      .filter((owner) => !prototypeAgentOrder.includes(owner))
-      .sort((left, right) => left.localeCompare(right)),
-  ];
+  const owners = Array.from(grouped.keys()).sort((left, right) => left.localeCompare(right));
   return owners.map((owner) => {
     const laneTasks = grouped.get(owner) ?? [];
-    const state = agentLaneState(owner, laneTasks);
+    const state = agentLaneState(laneTasks);
     return {
       id: `agent:${owner}`,
       label: owner,
@@ -614,24 +596,22 @@ function taskOwner(task: WorkspaceTask): string {
   return stringMetadata(task, 'agent_lane') ?? task.owner ?? task.assignee_user_id ?? 'Agent';
 }
 
-function agentLaneState(owner: string, tasks: WorkspaceTask[]): string {
+function agentLaneState(tasks: WorkspaceTask[]): string {
   const metadataState = tasks.map((task) => stringMetadata(task, 'agent_state')).find(Boolean);
   if (metadataState) return metadataState;
   if (!tasks.length) return 'Idle';
   if (tasks.some((task) => taskLane(task) === 'blocked')) return 'Blocked';
-  if (tasks.some((task) => taskLane(task) === 'running')) {
-    return owner === 'Executor' ? 'Working' : 'Active';
-  }
+  if (tasks.some((task) => taskLane(task) === 'running')) return 'Running';
   if (tasks.some((task) => taskLane(task) === 'review')) return 'Reviewing';
-  if (tasks.some((task) => taskLane(task) === 'planning')) return 'Active';
-  return 'Idle';
+  if (tasks.some((task) => taskLane(task) === 'planning')) return 'Planning';
+  return 'Complete';
 }
 
 function agentLaneTone(state: string): LaneTone {
   const normalized = state.toLowerCase();
   if (normalized.includes('blocked') || normalized.includes('failed')) return 'blocked';
-  if (normalized.includes('working') || normalized.includes('review')) return 'review';
-  if (normalized.includes('active')) return 'running';
+  if (normalized.includes('review')) return 'review';
+  if (normalized.includes('running')) return 'running';
   if (normalized.includes('complete')) return 'done';
   return 'planning';
 }

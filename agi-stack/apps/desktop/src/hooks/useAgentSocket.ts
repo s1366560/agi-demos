@@ -19,6 +19,13 @@ type AgentEventCursor = {
   counter: number;
 };
 
+export type AgentSocketContextState = {
+  conversationCursors: Map<string, AgentEventCursor>;
+  subscribedConversations: Set<string>;
+  workspaceEventId: string | null;
+  seenEventKeys: Set<string>;
+};
+
 type AgentSocketState = {
   connected: boolean;
   error: string | null;
@@ -38,15 +45,13 @@ type AgentRunMessage = {
 export function useAgentSocket(
   config: DesktopRuntimeConfig,
   enabled: boolean,
+  contextRevision: number | null,
 ): AgentSocketState {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentWsEvent[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
-  const conversationCursorsRef = useRef(new Map<string, AgentEventCursor>());
-  const subscribedConversationsRef = useRef(new Set<string>());
-  const workspaceEventIdRef = useRef<string | null>(null);
-  const seenEventKeysRef = useRef(new Set<string>());
+  const contextStateRef = useRef(createAgentSocketContextState());
 
   const client = useMemo(() => new DesktopApiClient(config), [config]);
 
@@ -61,8 +66,8 @@ export function useAgentSocket(
     (conversationId: string) => {
       const normalizedConversationId = conversationId.trim();
       if (!normalizedConversationId) return false;
-      subscribedConversationsRef.current.add(normalizedConversationId);
-      const cursor = conversationCursorsRef.current.get(
+      contextStateRef.current.subscribedConversations.add(normalizedConversationId);
+      const cursor = contextStateRef.current.conversationCursors.get(
         normalizedConversationId,
       );
       return sendSocketMessage({
@@ -78,7 +83,7 @@ export function useAgentSocket(
 
   const sendAgentMessage = useCallback(
     (message: AgentRunMessage) => {
-      subscribedConversationsRef.current.add(message.conversationId);
+      contextStateRef.current.subscribedConversations.add(message.conversationId);
       return sendSocketMessage({
         type: 'send_message',
         conversation_id: message.conversationId,
@@ -89,6 +94,18 @@ export function useAgentSocket(
     },
     [sendSocketMessage],
   );
+
+  useEffect(() => {
+    resetAgentSocketContextState(contextStateRef.current);
+    setEvents([]);
+  }, [
+    config.apiKey,
+    config.mode,
+    config.projectId,
+    config.tenantId,
+    config.workspaceId,
+    contextRevision,
+  ]);
 
   const respondToHitl = useCallback(
     (submission: HitlResponseSubmission) =>
@@ -148,12 +165,12 @@ export function useAgentSocket(
             project_id: config.projectId,
             workspace_id: config.workspaceId,
             tenant_id: config.tenantId || undefined,
-            last_event_id: workspaceEventIdRef.current || undefined,
+            last_event_id: contextStateRef.current.workspaceEventId || undefined,
           }),
         );
       }
-      subscribedConversationsRef.current.forEach((conversationId) => {
-        const cursor = conversationCursorsRef.current.get(conversationId);
+      contextStateRef.current.subscribedConversations.forEach((conversationId) => {
+        const cursor = contextStateRef.current.conversationCursors.get(conversationId);
         socket.send(
           JSON.stringify({
             type: 'subscribe',
@@ -228,6 +245,7 @@ export function useAgentSocket(
       };
 
       socket.onmessage = (message) => {
+        if (disposed || socketRef.current !== socket) return;
         lastMessageAt = Date.now();
         const event = parseEvent(message.data);
         const type =
@@ -236,7 +254,7 @@ export function useAgentSocket(
 
         const cursor = eventCursor(event);
         if (cursor) {
-          const previous = conversationCursorsRef.current.get(
+          const previous = contextStateRef.current.conversationCursors.get(
             cursor.conversationId,
           );
           if (
@@ -245,21 +263,21 @@ export function useAgentSocket(
             (cursor.timeUs === previous.timeUs &&
               cursor.counter > previous.counter)
           ) {
-            conversationCursorsRef.current.set(cursor.conversationId, cursor);
+            contextStateRef.current.conversationCursors.set(cursor.conversationId, cursor);
           }
         }
         const workspaceId = stringField(event, 'workspace_id');
         const eventId = stringField(event, 'event_id');
-        if (workspaceId && eventId) workspaceEventIdRef.current = eventId;
+        if (workspaceId && eventId) contextStateRef.current.workspaceEventId = eventId;
 
         const key = socketEventKey(event);
-        if (key && seenEventKeysRef.current.has(key)) return;
+        if (key && contextStateRef.current.seenEventKeys.has(key)) return;
         if (key) {
-          seenEventKeysRef.current.add(key);
-          if (seenEventKeysRef.current.size > MAX_EVENT_KEYS) {
-            const oldestKey = seenEventKeysRef.current.values().next().value;
+          contextStateRef.current.seenEventKeys.add(key);
+          if (contextStateRef.current.seenEventKeys.size > MAX_EVENT_KEYS) {
+            const oldestKey = contextStateRef.current.seenEventKeys.values().next().value;
             if (typeof oldestKey === 'string')
-              seenEventKeysRef.current.delete(oldestKey);
+              contextStateRef.current.seenEventKeys.delete(oldestKey);
           }
         }
         setEvents((current) => [event, ...current].slice(0, MAX_SOCKET_EVENTS));
@@ -287,6 +305,7 @@ export function useAgentSocket(
     config.projectId,
     config.tenantId,
     config.workspaceId,
+    contextRevision,
     enabled,
   ]);
 
@@ -298,6 +317,22 @@ export function useAgentSocket(
     sendAgentMessage,
     respondToHitl,
   };
+}
+
+export function createAgentSocketContextState(): AgentSocketContextState {
+  return {
+    conversationCursors: new Map(),
+    subscribedConversations: new Set(),
+    workspaceEventId: null,
+    seenEventKeys: new Set(),
+  };
+}
+
+export function resetAgentSocketContextState(state: AgentSocketContextState): void {
+  state.conversationCursors.clear();
+  state.subscribedConversations.clear();
+  state.workspaceEventId = null;
+  state.seenEventKeys.clear();
 }
 
 export function buildHitlSocketMessage(

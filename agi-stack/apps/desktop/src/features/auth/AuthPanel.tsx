@@ -30,8 +30,8 @@ type AuthPanelProps = {
   getLoginRestoreTarget?: () => HTMLElement | null;
 };
 
-const LOCAL_DEV_ADMIN_EMAIL = 'admin@memstack.ai';
-const LOCAL_DEV_ADMIN_PASSWORD = 'adminpassword';
+const LOCAL_DEV_ADMIN_EMAIL = import.meta.env.DEV ? 'admin@memstack.ai' : '';
+const LOCAL_DEV_ADMIN_PASSWORD = import.meta.env.DEV ? 'adminpassword' : '';
 
 export function AuthPanel({
   auth,
@@ -52,7 +52,7 @@ export function AuthPanel({
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId);
   const selectedProject = auth.projects.find((project) => project.id === config.projectId);
   const signingIn = auth.status === 'signing_in';
-  const localDevBase = isLocalDevBase(config.apiBaseUrl);
+  const localDevBase = import.meta.env.DEV && isLocalDevBase(config.apiBaseUrl);
   const [internalLoginOpen, setInternalLoginOpen] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
   const loginOpen = controlledLoginOpen ?? internalLoginOpen;

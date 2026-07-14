@@ -3,9 +3,14 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { buildHitlSocketMessage, eventCursor, reconnectDelay, socketEventKey } = require(
-  '/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js'
-);
+const {
+  buildHitlSocketMessage,
+  createAgentSocketContextState,
+  eventCursor,
+  reconnectDelay,
+  resetAgentSocketContextState,
+  socketEventKey,
+} = require('/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js');
 
 test('buildHitlSocketMessage preserves the backend WebSocket contract', () => {
   assert.deepEqual(
@@ -58,4 +63,23 @@ test('socketEventKey and reconnectDelay support replay dedupe and bounded backof
   );
   assert.equal(reconnectDelay(0), 500);
   assert.equal(reconnectDelay(8), 15_000);
+});
+
+test('workspace context changes clear every replay and subscription cursor', () => {
+  const state = createAgentSocketContextState();
+  state.conversationCursors.set('conversation-1', {
+    conversationId: 'conversation-1',
+    timeUs: 41,
+    counter: 2,
+  });
+  state.subscribedConversations.add('conversation-1');
+  state.workspaceEventId = 'workspace-event-9';
+  state.seenEventKeys.add('event:workspace-event-9');
+
+  resetAgentSocketContextState(state);
+
+  assert.equal(state.conversationCursors.size, 0);
+  assert.equal(state.subscribedConversations.size, 0);
+  assert.equal(state.workspaceEventId, null);
+  assert.equal(state.seenEventKeys.size, 0);
 });

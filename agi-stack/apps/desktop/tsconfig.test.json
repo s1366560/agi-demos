@@ -9,10 +9,31 @@
     "rootDir": "."
   },
   "include": [
+    "tests/css.d.ts",
     "src/api/client.ts",
+    "src/features/auth/authContextModel.ts",
+    "src/features/auth/trustedLocalSessionReference.ts",
+    "src/features/automations/automationModel.ts",
     "src/features/chat/a2uiAction.ts",
     "src/hooks/useAgentSocket.ts",
     "src/hooks/useTerminalProxy.ts",
+    "src/features/session/sessionViewModel.ts",
+    "src/features/session/sessionScope.ts",
+    "src/features/session/sessionCanvasModel.ts",
+    "src/features/session/sessionChangesModel.ts",
+    "src/features/session/sessionRunInputModel.ts",
+    "src/features/session/sessionTerminalModel.ts",
+    "src/features/session/sessionInvocationLedgerModel.ts",
+    "src/features/session/sessionNarrativeModel.ts",
+    "src/features/session/sessionDecisionModel.ts",
+    "src/features/session/sessionEvidenceModel.ts",
+    "src/features/session/sessionArtifactModel.ts",
+    "src/features/settings/providerManagementModel.ts",
+    "src/features/my-work/myWorkModel.ts",
+    "src/features/task/NewTaskFlow.tsx",
+    "src/features/task/newTaskPlanModel.ts",
+    "src/features/workspace/workspaceTreeModel.ts",
+    "src/features/workspace/workspaceExecutionModel.ts",
     "src/types.ts"
   ]
 }

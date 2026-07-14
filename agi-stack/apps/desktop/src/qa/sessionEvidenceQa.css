@@ -1,0 +1,34 @@
+.qa-evidence-page {
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  min-height: 100%;
+  padding: 28px;
+  place-items: stretch;
+  background:
+    radial-gradient(circle at 50% -20%, rgba(27, 111, 148, 0.18), transparent 42%),
+    #080c12;
+}
+
+.qa-evidence-panel {
+  width: min(1040px, 100%);
+  min-height: 680px;
+  margin: auto;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28);
+}
+
+.qa-evidence-panel .review-head span {
+  color: var(--desktop-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .qa-evidence-page {
+    padding: 0;
+  }
+
+  .qa-evidence-panel {
+    min-height: 100vh;
+    border-radius: 0;
+  }
+}
