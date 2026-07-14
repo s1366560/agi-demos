@@ -346,3 +346,33 @@ class TestContainerManager:
         result = await manager.container_exists("sandbox-123")
 
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_create_container_binds_services_to_loopback(self):
+        """Legacy manager must not reintroduce externally published service ports."""
+        from src.infrastructure.adapters.secondary.sandbox.container_manager import (
+            ContainerManager,
+        )
+
+        mock_docker = MagicMock()
+        container = MagicMock()
+        container.id = "container-id"
+        mock_docker.containers.create.return_value = container
+        manager = ContainerManager(mock_docker)
+
+        with (
+            patch.object(manager, "_ensure_image_exists", new=AsyncMock()),
+            patch(
+                "src.infrastructure.adapters.secondary.sandbox.container_manager.get_settings"
+            ) as settings,
+        ):
+            settings.return_value.sandbox_pip_cache_enabled = False
+            result = await manager.create_container(
+                sandbox_id="sandbox-123",
+                project_path="/tmp/project",
+                ports=SandboxPorts(mcp_port=18765, desktop_port=16080, terminal_port=17681),
+            )
+
+        assert result is container
+        port_bindings = mock_docker.containers.create.call_args.kwargs["ports"]
+        assert all(binding[0] == "127.0.0.1" for binding in port_bindings.values())

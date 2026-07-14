@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import ANY, AsyncMock
 
+import pytest
 from starlette.datastructures import Headers
 from starlette.websockets import WebSocket
 
+from src.infrastructure.adapters.primary.web.websocket import auth as auth_module
 from src.infrastructure.adapters.primary.web.websocket.auth import (
+    authenticate_websocket_or_close,
     extract_websocket_api_key,
     select_websocket_auth_subprotocol,
 )
@@ -61,3 +65,58 @@ def test_extract_websocket_api_key_rejects_missing_token() -> None:
     websocket = _websocket_with_headers([(b"sec-websocket-protocol", b"memstack.auth")])
 
     assert extract_websocket_api_key(websocket) is None
+
+
+@pytest.mark.unit
+async def test_authenticate_websocket_or_close_rejects_missing_token_before_accept() -> None:
+    websocket = SimpleNamespace(
+        headers=Headers(raw=[]),
+        close=AsyncMock(),
+        accept=AsyncMock(),
+    )
+
+    result = await authenticate_websocket_or_close(websocket, SimpleNamespace())
+
+    assert result is None
+    websocket.close.assert_awaited_once_with(code=4003, reason="Authentication failed")
+    websocket.accept.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_authenticate_websocket_or_close_preserves_valid_principal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = SimpleNamespace(
+        headers=Headers(raw=[(b"authorization", b"Bearer ms_sk_valid")]),
+        close=AsyncMock(),
+    )
+    authenticate = AsyncMock(return_value=("user-1", "tenant-1"))
+    monkeypatch.setattr(auth_module, "authenticate_websocket", authenticate)
+
+    result = await authenticate_websocket_or_close(websocket, SimpleNamespace())
+
+    assert result == ("user-1", "tenant-1")
+    authenticate.assert_awaited_once_with("ms_sk_valid", ANY)
+    websocket.close.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_authenticate_websocket_or_close_rejects_invalid_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = SimpleNamespace(
+        headers=Headers(raw=[(b"authorization", b"Bearer ms_sk_invalid")]),
+        close=AsyncMock(),
+        accept=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        auth_module,
+        "authenticate_websocket",
+        AsyncMock(return_value=None),
+    )
+
+    result = await authenticate_websocket_or_close(websocket, SimpleNamespace())
+
+    assert result is None
+    websocket.close.assert_awaited_once_with(code=4003, reason="Authentication failed")
+    websocket.accept.assert_not_awaited()

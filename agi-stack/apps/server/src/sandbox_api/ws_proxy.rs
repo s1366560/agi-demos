@@ -91,14 +91,21 @@ fn desktop_ws_tls_connector() -> Connector {
     Connector::Rustls(Arc::new(config))
 }
 
-pub(super) async fn proxy_mcp_ws_session(socket: WebSocket, ws_target: String) {
-    let request = match ws_target.into_client_request() {
+pub(super) async fn proxy_mcp_ws_session(
+    socket: WebSocket,
+    ws_target: String,
+    auth_header: Option<HeaderValue>,
+) {
+    let mut request = match ws_target.into_client_request() {
         Ok(request) => request,
         Err(_) => {
             close_mcp_ws_with_internal_error(socket).await;
             return;
         }
     };
+    if let Some(auth_header) = auth_header {
+        request.headers_mut().insert(AUTHORIZATION, auth_header);
+    }
 
     let upstream = match tokio::time::timeout(Duration::from_secs(10), connect_async(request)).await
     {
@@ -218,6 +225,7 @@ pub(super) async fn proxy_terminal_ws_session(
     session_id: String,
     initial_size: TerminalSize,
     recorder: TerminalSessionRecorder,
+    auth_header: HeaderValue,
 ) {
     let mut request = match ws_target.into_client_request() {
         Ok(request) => request,
@@ -234,6 +242,7 @@ pub(super) async fn proxy_terminal_ws_session(
         }
     };
     request.headers_mut().insert("origin", origin);
+    request.headers_mut().insert(AUTHORIZATION, auth_header);
 
     let upstream = match tokio::time::timeout(Duration::from_secs(10), connect_async(request)).await
     {
@@ -447,7 +456,12 @@ pub(super) async fn proxy_terminal_ws_session(
     let _ = recorder.store(terminal_size, false).await;
 }
 
-pub(super) async fn proxy_desktop_ws_session(socket: WebSocket, ws_target: String, origin: String) {
+pub(super) async fn proxy_desktop_ws_session(
+    socket: WebSocket,
+    ws_target: String,
+    origin: String,
+    auth_header: HeaderValue,
+) {
     let is_tls_target = match url::Url::parse(&ws_target) {
         Ok(url) => url.scheme() == "wss",
         Err(_) => {
@@ -470,6 +484,7 @@ pub(super) async fn proxy_desktop_ws_session(socket: WebSocket, ws_target: Strin
         }
     };
     request.headers_mut().insert("origin", origin);
+    request.headers_mut().insert(AUTHORIZATION, auth_header);
     request.headers_mut().insert(
         "sec-websocket-protocol",
         HeaderValue::from_static(DESKTOP_WEBSOCKET_SUBPROTOCOL),

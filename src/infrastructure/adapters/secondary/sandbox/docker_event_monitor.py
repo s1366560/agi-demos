@@ -7,10 +7,10 @@ to the event bus for real-time frontend updates.
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from typing import Any
 
-import docker
+from docker.client import DockerClient, from_env
 from docker.errors import DockerException
 
 logger = logging.getLogger(__name__)
@@ -47,8 +47,8 @@ class DockerEventMonitor:
 
     def __init__(
         self,
-        on_status_change: Callable[[str, str, str, str], Awaitable[bool]] | None = None,
-        docker_client: docker.DockerClient | None = None,
+        on_status_change: Callable[[str, str, str, str], Coroutine[Any, Any, bool]] | None = None,
+        docker_client: DockerClient | None = None,
     ) -> None:
         """Initialize the monitor.
 
@@ -75,7 +75,7 @@ class DockerEventMonitor:
         # Initialize Docker client
         if not self._docker:
             try:
-                self._docker = docker.from_env()
+                self._docker = from_env()
                 logger.info("[DockerEventMonitor] Docker client initialized")
             except DockerException as e:
                 logger.error(f"[DockerEventMonitor] Failed to connect to Docker: {e}")
@@ -167,7 +167,8 @@ class DockerEventMonitor:
         if self._on_status_change and project_id and self._loop:
             try:
                 asyncio.run_coroutine_threadsafe(
-                    self._on_status_change(project_id, sandbox_id, new_status, action), self._loop  # type: ignore[arg-type]
+                    self._on_status_change(project_id, sandbox_id, new_status, action),
+                    self._loop,
                 )
             except Exception as e:
                 logger.error(f"[DockerEventMonitor] Callback error: {e}")
@@ -222,7 +223,7 @@ def get_docker_event_monitor() -> DockerEventMonitor | None:
 
 
 async def start_docker_event_monitor(
-    on_status_change: Callable[[str, str, str, str], Awaitable[bool]],
+    on_status_change: Callable[[str, str, str, str], Coroutine[Any, Any, bool]],
 ) -> DockerEventMonitor:
     """Start the global Docker event monitor.
 

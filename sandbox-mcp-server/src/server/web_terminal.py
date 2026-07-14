@@ -8,6 +8,8 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+from src.server.runtime_auth import get_runtime_service_credentials
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,16 +75,16 @@ class WebTerminalManager:
         # Method 1: Check if port is in use via /proc/net/tcp (no root needed)
         try:
             # Convert port to hex for /proc/net/tcp lookup
-            port_hex = f'{self.port:04X}'
-            with open('/proc/net/tcp', 'r') as f:
+            port_hex = f"{self.port:04X}"
+            with open("/proc/net/tcp", "r") as f:
                 for line in f:
                     # Format: sl local_address remote_address st ...
                     parts = line.strip().split()
                     if len(parts) >= 2:
                         local_addr = parts[1]
                         # local_address format: IP:PORT in hex
-                        if ':' in local_addr:
-                            addr_port = local_addr.split(':')[1]
+                        if ":" in local_addr:
+                            addr_port = local_addr.split(":")[1]
                             if addr_port == port_hex:
                                 return True
         except (FileNotFoundError, PermissionError, Exception):
@@ -91,9 +93,10 @@ class WebTerminalManager:
         # Method 2: Try to connect to the port to see if it's accepting connections
         try:
             import socket
+
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(1)
-            result = sock.connect_ex(('127.0.0.1', self.port))
+            result = sock.connect_ex(("127.0.0.1", self.port))
             sock.close()
             if result == 0:
                 return True
@@ -116,9 +119,13 @@ class WebTerminalManager:
         logger.info(f"Starting ttyd on port {self.port}, workspace: {self.workspace_dir}")
 
         try:
+            username, token = get_runtime_service_credentials()
             self.process = await asyncio.create_subprocess_exec(
                 "ttyd",
-                "-p", str(self.port),  # Port
+                "-c",
+                f"{username}:{token}",
+                "-p",
+                str(self.port),  # Port
                 "-W",  # Enable Werkzeug-like path prefix handling
                 "/bin/bash",
                 cwd=self.workspace_dir,
@@ -195,20 +202,16 @@ class WebTerminalManager:
     def _get_system_ttyd_pid(self) -> Optional[int]:
         """Get PID of system-wide ttyd process on our port."""
         import subprocess
+
         try:
-            result = subprocess.run(
-                ["netstat", "-tlnp"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            for line in result.stdout.split('\n'):
-                if f":{self.port}" in line and 'ttyd' in line:
+            result = subprocess.run(["netstat", "-tlnp"], capture_output=True, text=True, timeout=5)
+            for line in result.stdout.split("\n"):
+                if f":{self.port}" in line and "ttyd" in line:
                     # Extract PID from the line (format: ... PID/ttyd)
                     parts = line.split()
                     for part in parts:
-                        if '/ttyd' in part:
-                            pid_str = part.split('/')[0]
+                        if "/ttyd" in part:
+                            pid_str = part.split("/")[0]
                             if pid_str.isdigit():
                                 return int(pid_str)
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):

@@ -61,6 +61,7 @@ async def test_gene_review_repository_filters_and_deletes_by_tenant(
 
     assert total == 1
     assert [review.id for review in reviews] == ["tenant-review"]
+    assert await repo.find_by_id("tenant-review") is None
     assert await repo.find_by_id("legacy-global-review", tenant_id) is None
 
     await repo.soft_delete("legacy-global-review", test_user.id, tenant_id)

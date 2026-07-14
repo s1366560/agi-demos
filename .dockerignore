@@ -1,0 +1,81 @@
+# Version-control and local agent state
+.git
+.github
+.gitnexus
+.omx
+.copilot
+.auto-claude
+
+# Credentials and developer-specific configuration
+.env
+.env.*
+!.env.example
+.ssh
+.aws
+.netrc
+.npmrc
+.pypirc
+*.pem
+*.key
+*.p12
+*.pfx
+secrets
+*.secret.yaml
+*.tfvars
+
+# Python environments, caches, and reports
+.venv
+venv
+env
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+.tox
+.nox
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+dist
+build
+*.egg-info
+
+# JavaScript and browser artifacts
+**/node_modules
+web/dist
+web/build
+web/playwright-report
+web/test-results
+web/coverage*
+playwright-report
+test-results
+
+# Rust build artifacts
+**/target
+
+# Runtime data and local workspaces
+logs
+*.log
+*.pid
+*.db
+*.sqlite
+*.sqlite3
+.cache
+.reports
+.volumes
+.memstack/workspace
+.memstack/worktrees
+.memstack/git-remotes
+.memstack/plugins/mutation_ledger.json
+.memstack/plugins/mutation_ledger.json.lock
+
+# IDE and OS metadata
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

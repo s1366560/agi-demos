@@ -111,3 +111,24 @@ async def authenticate_websocket(token: str, db: AsyncSession) -> tuple[str, str
     except Exception as e:
         logger.warning(f"[WS] Authentication failed: {e}")
         return None
+
+
+async def authenticate_websocket_or_close(
+    websocket: WebSocket,
+    db: AsyncSession,
+    token: str | None = None,
+    *,
+    close_code: int = 4003,
+) -> tuple[str, str] | None:
+    """Authenticate a WebSocket before acceptance and close rejected peers."""
+    api_key = extract_websocket_api_key(websocket, token)
+    if api_key is None:
+        await websocket.close(code=close_code, reason="Authentication failed")
+        return None
+
+    principal = await authenticate_websocket(api_key, db)
+    if principal is None:
+        await websocket.close(code=close_code, reason="Authentication failed")
+        return None
+
+    return principal

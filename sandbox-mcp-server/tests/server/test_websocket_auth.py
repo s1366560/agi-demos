@@ -1,9 +1,53 @@
 """Tests for sandbox MCP WebSocket platform authentication."""
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 
 from src.server.websocket_server import AuthConfig, MCPWebSocketServer
+
+
+def test_auth_config_defaults_fail_closed() -> None:
+    config = AuthConfig()
+
+    assert config.enabled is True
+    assert config.allow_localhost is False
+
+
+def test_static_token_is_required_for_remote_clients() -> None:
+    asyncio.run(_assert_static_token_is_required_for_remote_clients())
+
+
+async def _assert_static_token_is_required_for_remote_clients() -> None:
+    server = MCPWebSocketServer(
+        auth_config=AuthConfig(static_token="sandbox-capability"),
+    )
+
+    missing = SimpleNamespace(remote="10.0.0.8", query_string="", headers={})
+    accepted, auth_info, error = await server._authenticate_request(missing)
+    assert accepted is False
+    assert auth_info is None
+    assert error == "Authentication required: no token provided"
+
+    valid = SimpleNamespace(
+        remote="10.0.0.8",
+        query_string="",
+        headers={"Authorization": "Bearer sandbox-capability"},
+    )
+    accepted, auth_info, error = await server._authenticate_request(valid)
+    assert accepted is True
+    assert auth_info == {"mode": "static_token"}
+    assert error is None
+
+    query_only = SimpleNamespace(
+        remote="10.0.0.8",
+        query_string="token=sandbox-capability",
+        headers={},
+    )
+    accepted, auth_info, error = await server._authenticate_request(query_only)
+    assert accepted is False
+    assert auth_info is None
+    assert error == "Authentication required: no token provided"
 
 
 class _FakeValidationResponse:

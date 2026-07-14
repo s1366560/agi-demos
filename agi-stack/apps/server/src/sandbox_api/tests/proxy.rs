@@ -253,6 +253,16 @@ fn desktop_proxy_helpers_match_python_path_contract() {
     assert!(!filtered.contains_key("cookie"));
     assert!(!filtered.contains_key("x-trace-id"));
 
+    let runtime_token = SandboxRuntimeToken::from_exposed("private-capability");
+    let upstream_headers = desktop_upstream_headers(&headers, &runtime_token).unwrap();
+    assert_eq!(
+        upstream_headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok()),
+        Some("Basic c2FuZGJveDpwcml2YXRlLWNhcGFiaWxpdHk=")
+    );
+    assert!(!upstream_headers.contains_key("cookie"));
+
     let cookie = desktop_proxy_token_cookie("p1", "ms_sk_secret").unwrap();
     assert_eq!(
         cookie.to_str().unwrap(),

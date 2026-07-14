@@ -56,6 +56,8 @@ class ProjectChatRequest:
     preferred_language: str | None = None
     # Authenticated MemStack API key for current-user internal API calls.
     api_auth_token: str | None = field(default=None, repr=False)
+    # Server-owned durable automation run correlation. Never sourced from message text.
+    automation_run_id: str | None = None
 
 
 @dataclass(frozen=True)

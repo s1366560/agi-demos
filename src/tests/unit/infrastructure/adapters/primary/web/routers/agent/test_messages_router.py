@@ -559,6 +559,16 @@ def test_build_timeline_includes_a2ui_action_asked() -> None:
                     "block_id": "block-1",
                     "title": "Review",
                     "timeout_seconds": 300,
+                    "surface_data": {
+                        "allowed_actions": [
+                            {
+                                "source_component_id": "button-1",
+                                "action_name": "approve",
+                            }
+                        ],
+                        "context": {"must_not_leak": True},
+                        "components": "sensitive surface body",
+                    },
                 },
             )
         ],
@@ -583,6 +593,7 @@ def test_build_timeline_includes_a2ui_action_asked() -> None:
             "timeout_seconds": 300,
             "status": "completed",
             "answered": True,
+            "allowed_actions": [{"source_component_id": "button-1", "action_name": "approve"}],
         }
     ]
 

@@ -425,18 +425,23 @@ class StructuredLLMLogger:
         self,
         *,
         tenant_id: str | None,
-        tier: str,
+        tier: str | None,
         require_vision: bool,
         require_tools: bool,
-        category: str,
+        category: str | None,
         source: str,
         rationale_length: int,
+        agent_id: str,
+        input_payload: dict[str, bool],
+        output_summary: str,
+        rationale_sha256: str,
+        latency_ms: int,
     ) -> None:
         """Log an :class:`AutoBroker` verdict.
 
         The full ``rationale`` text is intentionally NOT logged (it may
-        contain user-quoted PII). Only its length is emitted so audits
-        can confirm a rationale was produced.
+        contain user-quoted PII). Its length and digest preserve an auditable
+        correlation without placing the text in application logs.
         """
         self._logger.info(
             "AutoBroker verdict: tier=%s vision=%s tools=%s category=%s source=%s",
@@ -454,6 +459,12 @@ class StructuredLLMLogger:
                 "broker_category": category,
                 "broker_source": source,
                 "broker_rationale_length": rationale_length,
+                "agent_id": agent_id,
+                "tool_name": "route_request",
+                "input_payload": input_payload,
+                "output_summary": output_summary,
+                "rationale_sha256": rationale_sha256,
+                "latency_ms": latency_ms,
             },
         )
 

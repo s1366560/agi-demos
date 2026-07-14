@@ -69,6 +69,45 @@ pub trait ReActObserver: Send + Sync {
     }
 }
 
+/// A structural host command sampled only at durable ReAct round boundaries.
+///
+/// The core deliberately does not abort an in-flight tool call: a pause or
+/// cancellation becomes authoritative only after the current boundary is
+/// checkpointed, preserving the no-repeat guarantee for completed side effects.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunDirective {
+    Continue,
+    Pause,
+    Cancel,
+    Steer(SteeringInstruction),
+}
+
+/// A durable human instruction supplied by the host for the current run.
+///
+/// `id` is persisted in [`SessionState::applied_steering_ids`] before the host
+/// acknowledges the instruction, providing crash-safe at-most-once transcript
+/// projection without interrupting an in-flight tool call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SteeringInstruction {
+    pub id: String,
+    pub content: String,
+}
+
+/// Host-owned control channel for a running ReAct session.
+#[async_trait]
+pub trait ReActControl: Send + Sync {
+    async fn directive(&self, session_id: &str, round: u64) -> CoreResult<RunDirective>;
+
+    async fn acknowledge_steering(
+        &self,
+        _session_id: &str,
+        _instruction_id: &str,
+        _round: u64,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+}
+
 /// Drives a single agent session to completion (or until the round budget is
 /// exhausted), persisting a checkpoint at every step.
 #[derive(Clone)]
@@ -105,6 +144,14 @@ impl ReActEngine {
             cost_budget: None,
             supervisor: None,
         }
+    }
+
+    /// Clone this engine's runtime/checkpoint policy with a host-owned tool
+    /// boundary. The clone shares the LLM and checkpoint store, while each run
+    /// can receive an authority-scoped [`ToolHost`].
+    pub fn with_tool_host(mut self, tools: Arc<dyn ToolHost>) -> Self {
+        self.tools = tools;
+        self
     }
 
     /// Override the default round budget (a circuit-breaker against runaway
@@ -147,7 +194,8 @@ impl ReActEngine {
         goal: &str,
         project_id: Option<&str>,
     ) -> CoreResult<SessionState> {
-        self.run_inner(session_id, goal, project_id, None).await
+        self.run_inner(session_id, goal, project_id, None, None)
+            .await
     }
 
     /// Run the session while reporting action/observation/final-answer
@@ -160,7 +208,32 @@ impl ReActEngine {
         project_id: Option<&str>,
         observer: Arc<dyn ReActObserver>,
     ) -> CoreResult<SessionState> {
-        self.run_inner(session_id, goal, project_id, Some(observer))
+        self.run_inner(session_id, goal, project_id, Some(observer), None)
+            .await
+    }
+
+    /// Run with a host control channel sampled at checkpoint-safe boundaries.
+    pub async fn run_controlled(
+        &self,
+        session_id: &str,
+        goal: &str,
+        project_id: Option<&str>,
+        control: Arc<dyn ReActControl>,
+    ) -> CoreResult<SessionState> {
+        self.run_inner(session_id, goal, project_id, None, Some(control))
+            .await
+    }
+
+    /// Run with both host observation and round-boundary control.
+    pub async fn run_observed_controlled(
+        &self,
+        session_id: &str,
+        goal: &str,
+        project_id: Option<&str>,
+        observer: Arc<dyn ReActObserver>,
+        control: Arc<dyn ReActControl>,
+    ) -> CoreResult<SessionState> {
+        self.run_inner(session_id, goal, project_id, Some(observer), Some(control))
             .await
     }
 
@@ -170,6 +243,7 @@ impl ReActEngine {
         goal: &str,
         project_id: Option<&str>,
         observer: Option<Arc<dyn ReActObserver>>,
+        control: Option<Arc<dyn ReActControl>>,
     ) -> CoreResult<SessionState> {
         let mut state = match self.checkpoints.load(session_id).await? {
             Some(existing) => existing,
@@ -190,6 +264,40 @@ impl ReActEngine {
         });
 
         while state.status == SessionStatus::Running {
+            if let Some(control) = control.as_deref() {
+                match control.directive(session_id, state.round).await? {
+                    RunDirective::Continue => {}
+                    RunDirective::Pause => {
+                        state.status = SessionStatus::Paused;
+                        self.checkpoints.save(&state).await?;
+                        break;
+                    }
+                    RunDirective::Cancel => {
+                        state.status = SessionStatus::Cancelled;
+                        self.checkpoints.save(&state).await?;
+                        break;
+                    }
+                    RunDirective::Steer(instruction) => {
+                        let already_applied = state
+                            .applied_steering_ids
+                            .iter()
+                            .any(|id| id == &instruction.id);
+                        if !already_applied {
+                            state.push_unique(TranscriptEntry::new(
+                                state.round,
+                                Role::Human,
+                                instruction.content,
+                            ));
+                            state.applied_steering_ids.push(instruction.id.clone());
+                            self.checkpoints.save(&state).await?;
+                        }
+                        control
+                            .acknowledge_steering(session_id, &instruction.id, state.round)
+                            .await?;
+                    }
+                }
+            }
+
             // Crash-safe HITL replay: if this round suspended on a human request that
             // has since been answered (resume, or recovery after a crash), feed the
             // recorded answer as this round's observation and advance without
@@ -372,6 +480,81 @@ impl ReActEngine {
         Ok(state)
     }
 
+    /// Move a paused checkpoint back to Running without driving the loop.
+    ///
+    /// A Running checkpoint is accepted idempotently because a desktop runtime
+    /// restart can disconnect after this write but before the host task is
+    /// reattached. Terminal and HITL checkpoints are rejected.
+    pub async fn accept_controlled_resume(&self, session_id: &str) -> CoreResult<SessionState> {
+        let mut state = self
+            .checkpoints
+            .load(session_id)
+            .await?
+            .ok_or(CoreError::NotFound)?;
+        match state.status {
+            SessionStatus::Paused => {
+                state.status = SessionStatus::Running;
+                self.checkpoints.save(&state).await?;
+                Ok(state)
+            }
+            SessionStatus::Running => Ok(state),
+            status => Err(CoreError::Tool(format!(
+                "session cannot resume from {status:?}"
+            ))),
+        }
+    }
+
+    /// Persist cancellation for a paused or disconnected (still Running in the
+    /// core checkpoint) session without executing another agent round.
+    pub async fn accept_controlled_cancel(&self, session_id: &str) -> CoreResult<SessionState> {
+        let mut state = self
+            .checkpoints
+            .load(session_id)
+            .await?
+            .ok_or(CoreError::NotFound)?;
+        match state.status {
+            SessionStatus::Paused | SessionStatus::Running => {
+                state.status = SessionStatus::Cancelled;
+                self.checkpoints.save(&state).await?;
+                Ok(state)
+            }
+            SessionStatus::Cancelled => Ok(state),
+            status => Err(CoreError::Tool(format!(
+                "session cannot cancel from {status:?}"
+            ))),
+        }
+    }
+
+    /// Re-open a finished checkpoint after a human review requests changes.
+    /// The feedback is an explicit human transcript entry and the original goal
+    /// remains the stable task identity.
+    pub async fn accept_review_changes(
+        &self,
+        session_id: &str,
+        feedback: &str,
+    ) -> CoreResult<SessionState> {
+        let mut state = self
+            .checkpoints
+            .load(session_id)
+            .await?
+            .ok_or(CoreError::NotFound)?;
+        if state.status != SessionStatus::Finished {
+            return Err(CoreError::Tool(format!(
+                "session is not ready for review changes: {:?}",
+                state.status
+            )));
+        }
+        let feedback = feedback.trim();
+        if feedback.is_empty() {
+            return Err(CoreError::Tool("review feedback is required".into()));
+        }
+        state.push_unique(TranscriptEntry::new(state.round, Role::Human, feedback));
+        state.answer = None;
+        state.status = SessionStatus::Running;
+        self.checkpoints.save(&state).await?;
+        Ok(state)
+    }
+
     /// React to a fired structural trigger. **Agent First:** the engine does not
     /// decide the outcome — it consults the injected [`SupervisorPort`] and then
     /// acts on the returned verdict deterministically. The verdict is written to
@@ -435,21 +618,19 @@ impl ReActEngine {
         }
     }
 
-    /// Resume a session that is [`AwaitingInput`] by supplying the human answer
-    /// to its pending HITL request, then drive the loop to completion.
+    /// Accept and persist the human answer for a session that is
+    /// [`AwaitingInput`] without driving the loop beyond the Running boundary.
     ///
     /// The answer is persisted before the loop restarts while the pending request
     /// remains durable, so this is **idempotent and crash-safe**: a fresh engine
-    /// (new process) replays the persisted pending request plus recorded answer
-    /// directly, without relying on the planner to re-emit the same request, then
-    /// continues — reusing any already-completed tool calls exactly as ordinary
-    /// recovery does (ADR-0005).
+    /// can replay the persisted pending request plus recorded answer directly,
+    /// without relying on the planner to re-emit the same request (ADR-0005).
     ///
     /// Errors if the session is not awaiting input or if `request_id` does not
     /// match the pending request (a structural guard, not a semantic judgment).
     ///
     /// [`AwaitingInput`]: SessionStatus::AwaitingInput
-    pub async fn resume(
+    pub async fn accept_human_response(
         &self,
         session_id: &str,
         request_id: &str,
@@ -486,6 +667,26 @@ impl ReActEngine {
         state.record_hitl_answer(request_id, answer);
         state.status = SessionStatus::Running;
         self.checkpoints.save(&state).await?;
+
+        Ok(state)
+    }
+
+    /// Persist a human answer, then drive the resumed session to its next
+    /// boundary. Hosts that need their own observer and status projection can
+    /// call [`Self::accept_human_response`] followed by [`Self::run_observed`].
+    pub async fn resume(
+        &self,
+        session_id: &str,
+        request_id: &str,
+        answer: &str,
+    ) -> CoreResult<SessionState> {
+        let state = self
+            .accept_human_response(session_id, request_id, answer)
+            .await?;
+
+        if state.status != SessionStatus::Running {
+            return Ok(state);
+        }
 
         let goal = state.goal.clone();
         let project_id = state.project_id.clone();

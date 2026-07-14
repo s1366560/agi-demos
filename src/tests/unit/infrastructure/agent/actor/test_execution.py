@@ -32,6 +32,14 @@ class _FailingAgent(_FakeAgent):
         raise RuntimeError("boom")
 
 
+class _CancelledAgent(_FakeAgent):
+    async def execute_chat(self, **kwargs):
+        self.execute_chat_kwargs = kwargs
+        if False:  # pragma: no cover - keeps this as an async generator for the caller
+            yield {"type": "complete", "data": {"content": ""}}
+        raise asyncio.CancelledError
+
+
 class _TerminalWorkspaceStatusAgent(_FakeAgent):
     async def execute_chat(self, **kwargs):
         self.execute_chat_kwargs = kwargs
@@ -220,6 +228,7 @@ async def test_execute_project_chat_passes_abort_signal() -> None:
         patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
         patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
         patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
         patch.object(execution.agent_metrics, "increment"),
         patch.object(execution.agent_metrics, "observe"),
     ):
@@ -233,6 +242,111 @@ async def test_execute_project_chat_passes_abort_signal() -> None:
     assert agent.execute_chat_kwargs is not None
     assert agent.execute_chat_kwargs["abort_signal"] is abort_signal
     assert agent.execute_chat_kwargs["preferred_language"] == "zh-CN"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_projects_trusted_automation_success() -> None:
+    agent = _FakeAgent()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="run-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+        automation_run_id="run-1",
+    )
+    project_running = AsyncMock()
+    project_terminal = AsyncMock()
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution, "_project_automation_runtime_running", new=project_running),
+        patch.object(execution, "_project_automation_runtime_terminal", new=project_terminal),
+        patch.object(execution, "_run_session_lifecycle", new=AsyncMock()),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent=agent, request=request)
+
+    assert result.is_error is False
+    identity = project_running.await_args.args[0]
+    assert identity.runtime_execution_id == "run-1"
+    assert identity.tenant_id == "tenant-1"
+    assert identity.project_id == "proj-1"
+    project_terminal.assert_awaited_once()
+    assert project_terminal.await_args.args[0] == identity
+    assert project_terminal.await_args.kwargs["outcome"] == "success"
+    assert project_terminal.await_args.kwargs["event_count"] == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_projects_failure_without_parsing_error_text() -> None:
+    agent = _FailingAgent()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="run-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+        automation_run_id="run-1",
+    )
+    project_terminal = AsyncMock()
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_error_event", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution, "_project_automation_runtime_running", new=AsyncMock()),
+        patch.object(execution, "_project_automation_runtime_terminal", new=project_terminal),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent=agent, request=request)
+
+    assert result.is_error is True
+    assert project_terminal.await_args.kwargs["outcome"] == "failed"
+    assert "boom" not in project_terminal.await_args.kwargs
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_persists_cancelled_then_reraises() -> None:
+    agent = _CancelledAgent()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="run-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+        automation_run_id="run-1",
+    )
+    project_terminal = AsyncMock()
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution, "_project_automation_runtime_running", new=AsyncMock()),
+        patch.object(execution, "_project_automation_runtime_terminal", new=project_terminal),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await execution.execute_project_chat(agent=agent, request=request)
+
+    assert project_terminal.await_args.kwargs["outcome"] == "cancelled"
 
 
 @pytest.mark.unit
@@ -257,6 +371,7 @@ async def test_execute_project_chat_flushes_terminal_workspace_status_immediatel
         patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
         patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
         patch.object(execution, "_persist_events", new=persist_events),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
         patch.object(execution.agent_metrics, "increment"),
         patch.object(execution.agent_metrics, "observe"),
     ):

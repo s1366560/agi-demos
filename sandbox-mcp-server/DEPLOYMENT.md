@@ -4,7 +4,7 @@
 **Environment**: Production
 **Last Updated**: 2026-06-22
 
-This guide covers production deployment of the Sandbox MCP Server with KDE Plasma 6 desktop environment.
+This guide covers production deployment of the Sandbox MCP Server with the supported Ubuntu 24.04 LTS and KDE Plasma 5.27 desktop stack.
 
 ---
 
@@ -387,8 +387,8 @@ docker inspect sandbox-mcp-prod | grep -A 10 Health
 # Service health
 curl http://localhost:8765/health
 
-# Desktop status
-curl http://localhost:6080
+# Desktop status (self-signed TLS; use the injected runtime capability)
+curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
 ```
 
 ### Metrics to Monitor
@@ -454,7 +454,10 @@ ufw allow 6080/tcp  # KasmVNC web client
 
 ### VNC Security
 
-**Note**: KasmVNC is started with `-SecurityTypes None -disableBasicAuth`, so VNC-level authentication is disabled (container-safe; authentication is expected to be handled by the API proxy in front of the container).
+**Note**: KasmVNC HTTP Basic Auth is mandatory. The entrypoint generates
+`/home/sandbox/.kasmpasswd` from `SANDBOX_SERVICE_AUTH_TOKEN` or the per-sandbox
+`MCP_STATIC_TOKEN`; startup fails closed when interactive services have no
+capability. The API proxy supplies the credential without placing it in a URL.
 
 For production, consider:
 - Reverse proxy with authentication (nginx, traefik)
@@ -549,7 +552,7 @@ docker exec sandbox-mcp-prod cat /tmp/kasmvnc.log
 docker exec sandbox-mcp-prod netstat -tlnp
 
 # Test KasmVNC web client
-curl http://localhost:6080
+curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
 ```
 
 ### Performance Issues

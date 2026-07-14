@@ -54,6 +54,8 @@ def _cron_job_model(job_id: str, schedule_config: dict[str, Any]) -> CronJobMode
         description=None,
         enabled=True,
         delete_after_run=False,
+        revision=7,
+        schedule_revision=3,
         schedule_type="every",
         schedule_config=schedule_config,
         payload_type="system_event",
@@ -71,6 +73,18 @@ def _cron_job_model(job_id: str, schedule_config: dict[str, Any]) -> CronJobMode
         created_at=NOW,
         updated_at=None,
     )
+
+
+def test_cron_job_repository_preserves_revision_fences() -> None:
+    repo = SqlCronJobRepository(FakeSession([]))
+
+    job = repo._to_domain(
+        _cron_job_model("revisioned-job", {"hours": 0, "minutes": 5, "seconds": 0})
+    )
+
+    assert job is not None
+    assert job.revision == 7
+    assert job.schedule_revision == 3
 
 
 async def test_find_due_jobs_skips_invalid_persisted_schedule(

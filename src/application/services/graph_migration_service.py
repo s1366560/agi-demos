@@ -30,6 +30,7 @@ from typing import Any
 
 from src.domain.model.graph.dtos import GraphExportDTO
 from src.domain.model.retrieval_store import RetrievalChunk
+from src.domain.ports.services.graph_store_port import GraphStorePort
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class GraphMigrationService:
 
     async def export_project_graph(
         self,
-        source: Any,  # noqa: ANN401
+        source: GraphStorePort,
         *,
         project_id: str,
     ) -> GraphExportDTO:

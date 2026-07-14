@@ -41,6 +41,8 @@ class CronJob(Entity):
         description: Optional longer description.
         enabled: Whether the scheduler should fire this job.
         delete_after_run: If True the job is deleted after its first successful run.
+        revision: Monotonic database-owned configuration revision.
+        schedule_revision: Revision of schedule-affecting fields only.
         schedule: When the job fires (at | every | cron).
         payload: What the job does (system_event | agent_turn).
         delivery: How the result is delivered (none | announce | webhook).
@@ -64,6 +66,8 @@ class CronJob(Entity):
     description: str | None = None
     enabled: bool = True
     delete_after_run: bool = False
+    revision: int = 1
+    schedule_revision: int = 1
 
     # -- Schedule / payload / delivery (value objects) ----------------------
     schedule: CronSchedule = field(default_factory=lambda: CronSchedule.cron(expr="0 * * * *"))

@@ -9,7 +9,13 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
+
+from src.server.runtime_auth import (
+    get_runtime_service_credentials,
+    write_kasm_password_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,13 +147,10 @@ class DesktopManager:
             vnc_dir = os.path.expanduser("~/.vnc")
             os.makedirs(vnc_dir, exist_ok=True)
 
-            # Ensure KasmVNC user exists with write permissions
-            # KasmVNC reads $HOME/.kasmpasswd (NOT .vnc/kasmpasswd)
-            kasmpasswd_path = os.path.expanduser("~/.kasmpasswd")
-            if not os.path.exists(kasmpasswd_path):
-                with open(kasmpasswd_path, "w") as f:
-                    f.write("root:kasmvnc:ow\n")
-                os.chmod(kasmpasswd_path, 0o600)
+            # KasmVNC reads $HOME/.kasmpasswd (NOT .vnc/kasmpasswd).
+            username, token = get_runtime_service_credentials()
+            kasmpasswd_path = Path(os.path.expanduser("~/.kasmpasswd"))
+            write_kasm_password_file(kasmpasswd_path, username, token)
 
             # Copy xstartup from template if needed
             xstartup_path = os.path.join(vnc_dir, "xstartup")
@@ -161,8 +164,7 @@ class DesktopManager:
             # Mark DE as selected to skip interactive select-de.sh
             de_marker = os.path.join(vnc_dir, ".de-was-selected")
             if not os.path.exists(de_marker):
-                with open(de_marker, "w") as f:
-                    pass
+                Path(de_marker).touch()
 
             env = os.environ.copy()
             env["DISPLAY"] = self.display
@@ -179,7 +181,8 @@ class DesktopManager:
                 str(self.port),
                 "-interface",
                 "0.0.0.0",
-                "-disableBasicAuth",
+                "-SecurityTypes",
+                "None",
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -195,7 +198,7 @@ class DesktopManager:
                 raise RuntimeError("KasmVNC failed to start within timeout")
 
             self._kasmvnc_started = True
-            logger.info(f"KasmVNC started: {self.display} -> http://{self.host}:{self.port}")
+            logger.info(f"KasmVNC started: {self.display} -> https://{self.host}:{self.port}")
 
         except FileNotFoundError:
             raise RuntimeError("KasmVNC not installed. Install with: apt-get install kasmvncserver")
@@ -307,7 +310,7 @@ class DesktopManager:
 
     def get_web_url(self) -> str:
         """Get the KasmVNC web client URL."""
-        return f"http://{self.host}:{self.port}"
+        return f"https://{self.host}:{self.port}"
 
     def get_novnc_url(self) -> str:
         """Backward-compatible alias for callers still using the old noVNC name."""

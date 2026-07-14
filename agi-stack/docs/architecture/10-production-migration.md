@@ -1,12 +1,18 @@
 # 10 · 生产迁移:Python 后端绞杀替换为 Rust 新架构
 
+> **历史基线:** 本文保留 P1/P2 迁移决策与共享数据库原则，但其中 LOC、端点数和
+> “当前状态”是早期快照。当前未完成能力、所有权和执行顺序以
+> [11-i1-i7-execution-plan.md](11-i1-i7-execution-plan.md) 与根目录
+> [CROSS_RUNTIME_REMEDIATION_PLAN.md](../../../docs/architecture/CROSS_RUNTIME_REMEDIATION_PLAN.md)
+> 为准。
+
 > 用户需求:「完成现有 Python 后端替换为 Rust 新架构」。本篇是**权威的分波次生产迁移设计**——从已证伪的 Spike/Phase 1 基座,到逐能力替换 ~595 个 Python 端点的落地路径。核心策略:**共享数据库之上的绞杀者(strangler-fig on a shared DB)**,新旧后端并行、逐能力灰度切换、任何阶段都可上线、可回滚。**本波(P1 记忆/情节/召回)已端到端落地并验证**(见 [§4](#4-本波已落地p1--记忆情节召回)、[04 证据 #25](04-spike-evidence.md));**P2–P8 余下波次已展开为代码级可执行计划**(端点/表/适配器/parity 风险/子任务,见 §6),含依赖序(§7)与 4 项已定决策 + 工作量(§8)。
 
 > 最新 P5 增量(#296):Rust 端 skill evolution LLM-backed stage engine foundation 已落地在 server-only 层,在 #295 pipeline executor 上接入 HTTP LLM 驱动的 summarize/judge/evolve 主观阶段。该增量保持 strangler 边界:不新增 gateway 前缀、不改 Python-owned schema、不把 subjective evolution verdict 硬编码为确定性逻辑,且仍通过 `AGISTACK_SKILL_EVOLUTION_ENGINE_READY` + LLM base URL gate 控制生产消费;current SKILL.md 加载、auto-apply 与 gateway flip 仍是 remaining gate。验证见 [04 #296](04-spike-evidence.md)。
 
 前置阅读:[00 选型](00-overview.md)、[01 可移植核心](01-portable-core.md)、[05 路线图](05-roadmap.md) §1 绞杀迁移、[08 控制流/数据流分离](08-control-data-plane-separation.md)(网关=数据面边缘)。
 
-## 0. 现实:差距是数量级的
+## 0. 现实:差距是数量级的（历史快照）
 
 | | Python(现网) | Rust(`agi-stack/`) |
 |---|---|---|

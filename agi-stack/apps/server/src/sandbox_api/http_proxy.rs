@@ -2,6 +2,18 @@ use std::time::Duration;
 
 use super::*;
 
+pub(super) fn desktop_upstream_headers(
+    request_headers: &HeaderMap,
+    runtime_auth_token: &SandboxRuntimeToken,
+) -> SandboxApiResult<HeaderMap> {
+    let mut headers = filter_desktop_proxy_headers(request_headers);
+    headers.insert(
+        AUTHORIZATION,
+        sandbox_basic_auth_header(runtime_auth_token)?,
+    );
+    Ok(headers)
+}
+
 pub(super) async fn proxy_project_desktop_response(
     project_id: &str,
     info: &ProjectSandboxInfo,
@@ -13,6 +25,9 @@ pub(super) async fn proxy_project_desktop_response(
     let desktop_url = info.desktop_url.as_deref().ok_or_else(|| {
         SandboxApiError::new(StatusCode::SERVICE_UNAVAILABLE, DESKTOP_SERVICE_NOT_RUNNING)
     })?;
+    let runtime_auth_token = info.runtime_auth_token.as_ref().ok_or_else(|| {
+        SandboxApiError::service_unavailable("Sandbox runtime authentication is unavailable")
+    })?;
     let target_url = build_upstream_desktop_http_url(desktop_url, path, raw_query)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
@@ -21,9 +36,10 @@ pub(super) async fn proxy_project_desktop_response(
         .no_proxy()
         .build()
         .map_err(|_| SandboxApiError::bad_gateway("Failed to connect to desktop service"))?;
+    let upstream_headers = desktop_upstream_headers(&request_headers, runtime_auth_token)?;
     let upstream = client
         .get(target_url)
-        .headers(filter_desktop_proxy_headers(&request_headers))
+        .headers(upstream_headers)
         .send()
         .await
         .map_err(|_| SandboxApiError::bad_gateway("Failed to connect to desktop service"))?;

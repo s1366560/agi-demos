@@ -175,6 +175,7 @@ async def test_start_chat_actor_local_mode_uses_local_only(
             user_message="hello",
             conversation_context=[],
             preferred_language="zh-CN",
+            automation_run_id="msg-1",
         )
 
     assert actor_id == "agent:tenant-1:proj-1:default"
@@ -182,6 +183,7 @@ async def test_start_chat_actor_local_mode_uses_local_only(
     local_run_mock.assert_not_awaited()
     queued = AgentRuntimeBootstrapper._local_chat_queues["conv-1"].get_nowait()
     assert queued.request.preferred_language == "zh-CN"
+    assert queued.request.automation_run_id == queued.request.message_id == "msg-1"
     create_task_mock.assert_called_once()
     assert len(created_tasks) == 1
 

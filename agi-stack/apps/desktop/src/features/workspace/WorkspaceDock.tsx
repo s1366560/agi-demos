@@ -8,16 +8,16 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons';
 
+import { useI18n } from '../../i18n';
 import type {
   AgentConversation,
-  ProjectSummary,
   RuntimeNodeLoadState,
   WorkspaceSummary,
 } from '../../types';
+import { buildWorkspaceTree } from './workspaceTreeModel';
 
 type WorkspaceDockProps = {
-  projects: ProjectSummary[];
-  workspacesByProject: Record<string, WorkspaceSummary[]>;
+  workspaces: WorkspaceSummary[];
   conversationsByWorkspace: Record<string, AgentConversation[]>;
   nodeState: RuntimeNodeLoadState;
   currentProjectId: string;
@@ -27,11 +27,8 @@ type WorkspaceDockProps = {
   actionDisabledReason: string | null;
   creatingWorkspace: boolean;
   creatingSessionWorkspaceId: string | null;
-  expandedProjectIds: Set<string>;
   expandedWorkspaceIds: Set<string>;
-  onToggleProject: (projectId: string) => void;
   onToggleWorkspace: (workspaceId: string) => void;
-  onSelectProject: (projectId: string) => void;
   onSelectWorkspace: (projectId: string, workspaceId: string) => void;
   onSelectConversation: (
     projectId: string,
@@ -44,8 +41,7 @@ type WorkspaceDockProps = {
 };
 
 export function WorkspaceDock({
-  projects,
-  workspacesByProject,
+  workspaces,
   conversationsByWorkspace,
   nodeState,
   currentProjectId,
@@ -55,77 +51,87 @@ export function WorkspaceDock({
   actionDisabledReason,
   creatingWorkspace,
   creatingSessionWorkspaceId,
-  expandedProjectIds,
   expandedWorkspaceIds,
-  onToggleProject,
   onToggleWorkspace,
-  onSelectProject,
   onSelectWorkspace,
   onSelectConversation,
   onRefresh,
   onCreateWorkspace,
   onCreateSession,
 }: WorkspaceDockProps) {
+  const { t } = useI18n();
   const createDisabled = Boolean(actionDisabledReason) || creatingWorkspace;
-  const orderedProjects = sortProjects(projects, workspacesByProject, conversationsByWorkspace, groupMode);
+  const projectState = nodeState.projects[currentProjectId];
+  const tree = buildWorkspaceTree(workspaces, conversationsByWorkspace, groupMode);
 
   return (
     <aside className="workspace-dock workspace-session-tree">
       <ScrollArea className="dock-list">
         <div>
-          {orderedProjects.length === 0 ? (
-            <div className="empty-state workspace-empty">
-              <Text size="2" color="gray">
-                No projects are available.
-              </Text>
-              <Text size="1" color="gray" className="action-hint">
-                Connect an account or configure a project id first.
-              </Text>
-            </div>
+          <button
+            className="dock-row workspace-child-row new-workspace-row workspace-tree-create-root"
+            type="button"
+            onClick={() => onCreateWorkspace(currentProjectId)}
+            disabled={createDisabled}
+            title={actionDisabledReason ?? undefined}
+          >
+            <span className="dock-leading">
+              <PlusIcon aria-hidden />
+              <span>
+                <strong>{creatingWorkspace ? 'Creating workspace...' : 'New workspace'}</strong>
+              </span>
+            </span>
+          </button>
+
+          {projectState?.loading ? (
+            <WorkspaceTreeState title="Loading workspaces..." detail="Reading the current project scope." />
+          ) : projectState?.error ? (
+            <WorkspaceTreeState title="Workspaces are unavailable." detail={projectState.error} />
+          ) : tree.length === 0 ? (
+            <WorkspaceTreeState
+              title="No workspaces in this project."
+              detail="Create a workspace to start an isolated conversation tree."
+            />
           ) : (
-            orderedProjects.map((project) => {
-              const projectId = project.id;
-              const projectState = nodeState.projects[projectId];
-              const workspaces = sortWorkspaces(
-                workspacesByProject[projectId] ?? [],
-                conversationsByWorkspace,
-                groupMode,
-              );
-              const expanded = expandedProjectIds.has(projectId);
-              const selected = currentProjectId === projectId;
-              const sessionCount = workspaces.reduce(
-                (count, workspace) => count + (conversationsByWorkspace[workspace.id]?.length ?? 0),
-                0,
-              );
+            tree.map(({ workspace, conversations }) => {
+              const workspaceId = workspace.id;
+              const workspaceExpanded = expandedWorkspaceIds.has(workspaceId);
+              const workspaceSelected = currentWorkspaceId === workspaceId;
+              const workspaceState = nodeState.workspaces[workspaceId];
+              const creatingSession = creatingSessionWorkspaceId === workspaceId;
 
               return (
-                <section className="tree-project" key={projectId} aria-label={projectLabel(project)}>
-                  <div className={`dock-row project-root-row ${selected ? 'selected' : ''}`}>
+                <section
+                  className="tree-workspace workspace-tree-root-node"
+                  key={workspaceId}
+                  aria-label={workspaceLabel(workspace)}
+                >
+                  <div className={`dock-row workspace-row ${workspaceSelected ? 'selected' : ''}`}>
                     <button
                       type="button"
                       className="dock-expander"
-                      aria-label={`${expanded ? 'Collapse' : 'Expand'} project ${projectLabel(project)}`}
-                      aria-expanded={expanded}
-                      onClick={() => onToggleProject(projectId)}
+                      aria-label={`${workspaceExpanded ? 'Collapse' : 'Expand'} workspace ${workspaceLabel(workspace)}`}
+                      aria-expanded={workspaceExpanded}
+                      onClick={() => onToggleWorkspace(workspaceId)}
                     >
-                      {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                      {workspaceExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                     </button>
                     <button
                       type="button"
                       className="dock-main-action"
-                      aria-label={`Select project ${projectLabel(project)}`}
-                      onClick={() => onSelectProject(projectId)}
+                      aria-label={`Select workspace ${workspaceLabel(workspace)}`}
+                      onClick={() => onSelectWorkspace(currentProjectId, workspaceId)}
                     >
                       <span className="dock-leading">
-                        <FileTextIcon aria-hidden />
+                        <ChatBubbleIcon aria-hidden />
                         <span>
-                          <strong>{projectLabel(project)}</strong>
+                          <strong>{workspaceLabel(workspace)}</strong>
                           <Text size="1" color="gray">
-                            {projectState?.loading
-                              ? 'Loading workspaces...'
-                              : projectState?.error
-                                ? projectState.error
-                                : `${workspaces.length} workspaces / ${sessionCount} sessions`}
+                            {workspaceState?.loading
+                              ? 'Loading sessions...'
+                              : workspaceState?.error
+                                ? workspaceState.error
+                                : `${conversations.length} sessions`}
                           </Text>
                         </span>
                       </span>
@@ -133,176 +139,77 @@ export function WorkspaceDock({
                     <Button
                       size="1"
                       variant="ghost"
-                      aria-label={`New workspace in ${projectLabel(project)}`}
-                      disabled={createDisabled}
+                      aria-label={`New task in ${workspaceLabel(workspace)}`}
+                      disabled={Boolean(actionDisabledReason) || creatingSession}
                       title={actionDisabledReason ?? undefined}
-                      onClick={() => onCreateWorkspace(projectId)}
+                      onClick={() => onCreateSession(currentProjectId, workspaceId)}
                     >
                       <PlusIcon />
                     </Button>
                   </div>
 
-                  {expanded ? (
-                    <div className="tree-children" role="group">
+                  {workspaceExpanded ? (
+                    <div
+                      className="tree-children session-children"
+                      role="group"
+                      aria-label={`${workspaceLabel(workspace)} sessions`}
+                    >
                       <button
-                        className="dock-row workspace-child-row new-workspace-row"
+                        className="dock-row session-row new-session-row"
                         type="button"
-                        onClick={() => onCreateWorkspace(projectId)}
-                        disabled={createDisabled}
+                        onClick={() => onCreateSession(currentProjectId, workspaceId)}
+                        disabled={Boolean(actionDisabledReason) || creatingSession}
                         title={actionDisabledReason ?? undefined}
                       >
                         <span className="dock-leading">
                           <PlusIcon aria-hidden />
                           <span>
-                            <strong>{creatingWorkspace ? 'Creating workspace...' : 'New workspace'}</strong>
+                            <strong>
+                              {creatingSession ? 'Creating task...' : 'New task'}
+                            </strong>
                           </span>
                         </span>
                       </button>
 
-                      {workspaces.length === 0 ? (
-                        <div className="empty-state workspace-empty workspace-child-empty">
-                          <Text size="2" color="gray">
-                            No workspaces in this project.
-                          </Text>
-                        </div>
+                      {conversations.length === 0 ? (
+                        <WorkspaceTreeState
+                          compact
+                          title={
+                            workspaceState?.error
+                              ? 'Sessions are unavailable.'
+                              : 'No sessions in this workspace.'
+                          }
+                          detail={workspaceState?.error ?? 'Start a session from this workspace.'}
+                        />
                       ) : (
-                        workspaces.map((workspace) => {
-                          const workspaceId = workspace.id;
-                          const workspaceExpanded = expandedWorkspaceIds.has(workspaceId);
-                          const workspaceSelected = currentWorkspaceId === workspaceId;
-                          const conversations = sortConversations(
-                            conversationsByWorkspace[workspaceId] ?? [],
-                            groupMode,
-                          );
-                          const workspaceState = nodeState.workspaces[workspaceId];
-                          const creatingSession = creatingSessionWorkspaceId === workspaceId;
-
-                          return (
-                            <section
-                              className="tree-workspace"
-                              key={workspaceId}
-                              aria-label={workspaceLabel(workspace)}
-                            >
-                              <div
-                                className={`dock-row workspace-row ${
-                                  workspaceSelected ? 'selected' : ''
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  className="dock-expander"
-                                  aria-label={`${workspaceExpanded ? 'Collapse' : 'Expand'} workspace ${workspaceLabel(workspace)}`}
-                                  aria-expanded={workspaceExpanded}
-                                  onClick={() => onToggleWorkspace(workspaceId)}
-                                >
-                                  {workspaceExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="dock-main-action"
-                                  aria-label={`Select workspace ${workspaceLabel(workspace)}`}
-                                  onClick={() => onSelectWorkspace(projectId, workspaceId)}
-                                >
-                                  <span className="dock-leading">
-                                    <ChatBubbleIcon aria-hidden />
-                                    <span>
-                                      <strong>{workspaceLabel(workspace)}</strong>
-                                      <Text size="1" color="gray">
-                                        {workspaceState?.loading
-                                          ? 'Loading sessions...'
-                                          : workspaceState?.error
-                                            ? workspaceState.error
-                                            : `${conversations.length} sessions`}
-                                      </Text>
-                                    </span>
-                                  </span>
-                                </button>
-                                <Button
-                                  size="1"
-                                  variant="ghost"
-                                  aria-label={`New session in ${workspaceLabel(workspace)}`}
-                                  disabled={Boolean(actionDisabledReason) || creatingSession}
-                                  title={actionDisabledReason ?? undefined}
-                                  onClick={() => onCreateSession(projectId, workspaceId)}
-                                >
-                                  <PlusIcon />
-                                </Button>
-                              </div>
-
-                              {workspaceExpanded ? (
-                                <div className="tree-children session-children" role="group">
-                                  <button
-                                    className="dock-row session-row new-session-row"
-                                    type="button"
-                                    onClick={() => onCreateSession(projectId, workspaceId)}
-                                    disabled={Boolean(actionDisabledReason) || creatingSession}
-                                    title={actionDisabledReason ?? undefined}
-                                  >
-                                    <span className="dock-leading">
-                                      <PlusIcon aria-hidden />
-                                      <span>
-                                        <strong>
-                                          {creatingSession ? 'Creating session...' : 'New session'}
-                                        </strong>
-                                      </span>
-                                    </span>
-                                  </button>
-
-                                  {conversations.length === 0 ? (
-                                    <div className="empty-state workspace-empty session-child-empty">
-                                      <Text size="2" color="gray">
-                                        {workspaceState?.error
-                                          ? 'Sessions are unavailable.'
-                                          : 'No sessions in this workspace.'}
-                                      </Text>
-                                      {workspaceState?.error ? (
-                                        <Text
-                                          size="1"
-                                          color="gray"
-                                          className="action-hint"
-                                          title={workspaceState.error}
-                                        >
-                                          Conversation list endpoint did not return active sessions.
-                                        </Text>
-                                      ) : null}
-                                    </div>
-                                  ) : (
-                                    conversations.map((conversation) => (
-                                      <button
-                                        className={`dock-row session-row ${
-                                          conversation.id === currentConversationId ? 'selected' : ''
-                                        }`}
-                                        type="button"
-                                        key={conversation.id}
-                                        aria-current={
-                                          conversation.id === currentConversationId
-                                            ? 'page'
-                                            : undefined
-                                        }
-                                        onClick={() =>
-                                          onSelectConversation(projectId, workspaceId, conversation)
-                                        }
-                                      >
-                                        <span className="dock-leading">
-                                          <FileTextIcon aria-hidden />
-                                          <span>
-                                            <strong>{conversation.title || conversation.id}</strong>
-                                            <Text size="1" color="gray">
-                                              {conversationSubtitle(conversation)}
-                                            </Text>
-                                          </span>
-                                        </span>
-                                        <span className="tree-meta">
-                                          {conversationStatusLabel(conversation)}
-                                        </span>
-                                      </button>
-                                    ))
-                                  )}
-                                </div>
-                              ) : null}
-                            </section>
-                          );
-                        })
+                        conversations.map((conversation) => (
+                          <button
+                            className={`dock-row session-row ${
+                              conversation.id === currentConversationId ? 'selected' : ''
+                            }`}
+                            type="button"
+                            key={conversation.id}
+                            aria-current={
+                              conversation.id === currentConversationId ? 'page' : undefined
+                            }
+                            onClick={() =>
+                              onSelectConversation(currentProjectId, workspaceId, conversation)
+                            }
+                          >
+                            <span className="dock-leading">
+                              <FileTextIcon aria-hidden />
+                              <span>
+                                <strong>{conversation.title || conversation.id}</strong>
+                                <Text size="1" color="gray">
+                                  {conversationSubtitle(conversation)}
+                                </Text>
+                              </span>
+                            </span>
+                            <span className="tree-meta">
+                              {conversationStatusLabel(conversation.status, t)}
+                            </span>
+                          </button>
+                        ))
                       )}
                     </div>
                   ) : null}
@@ -316,7 +223,7 @@ export function WorkspaceDock({
         <Button
           size="1"
           variant="ghost"
-          aria-label="Refresh projects, workspaces, and sessions"
+          aria-label="Refresh workspaces and sessions"
           onClick={onRefresh}
           disabled={Boolean(actionDisabledReason)}
         >
@@ -327,8 +234,50 @@ export function WorkspaceDock({
   );
 }
 
-function projectLabel(project: ProjectSummary): string {
-  return project.name || project.id || 'Project';
+function conversationStatusLabel(
+  status: string | undefined,
+  translate: (key: string) => string,
+): string {
+  const normalized = status?.trim().toLowerCase() || 'active';
+  const labels: Record<string, string> = {
+    active: 'session.statusActive',
+    queued: 'session.statusQueued',
+    running: 'session.statusRunning',
+    needs_input: 'session.statusNeedsInput',
+    needs_approval: 'session.statusNeedsApproval',
+    paused: 'session.statusPaused',
+    ready_review: 'session.statusReadyReview',
+    completed: 'session.statusCompleted',
+    failed: 'session.statusFailed',
+    interrupted: 'session.statusInterrupted',
+    disconnected: 'session.statusDisconnected',
+    cancelled: 'session.statusCancelled',
+  };
+  return labels[normalized] ? translate(labels[normalized]) : status || 'active';
+}
+
+function WorkspaceTreeState({
+  title,
+  detail,
+  compact = false,
+}: {
+  title: string;
+  detail: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`empty-state workspace-empty ${compact ? 'session-child-empty' : ''}`}
+      role="status"
+    >
+      <Text size="2" color="gray">
+        {title}
+      </Text>
+      <Text size="1" color="gray" className="action-hint" title={detail}>
+        {detail}
+      </Text>
+    </div>
+  );
 }
 
 function workspaceLabel(workspace: WorkspaceSummary | undefined): string {
@@ -341,89 +290,9 @@ function conversationSubtitle(conversation: AgentConversation): string {
   return updated ? `${count} / ${updated}` : count;
 }
 
-function conversationStatusLabel(conversation: AgentConversation): string {
-  return conversation.status || 'active';
-}
-
 function formatDate(value: string | null | undefined): string {
   if (!value) return '';
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return '';
   return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
-
-function sortProjects(
-  projects: ProjectSummary[],
-  workspacesByProject: Record<string, WorkspaceSummary[]>,
-  conversationsByWorkspace: Record<string, AgentConversation[]>,
-  groupMode: 'project' | 'recent',
-): ProjectSummary[] {
-  const copy = [...projects];
-  if (groupMode === 'recent') {
-    return copy.sort(
-      (left, right) =>
-        latestProjectTimestamp(right, workspacesByProject, conversationsByWorkspace) -
-        latestProjectTimestamp(left, workspacesByProject, conversationsByWorkspace),
-    );
-  }
-  return copy.sort((left, right) => projectLabel(left).localeCompare(projectLabel(right)));
-}
-
-function sortWorkspaces(
-  workspaces: WorkspaceSummary[],
-  conversationsByWorkspace: Record<string, AgentConversation[]>,
-  groupMode: 'project' | 'recent',
-): WorkspaceSummary[] {
-  const copy = [...workspaces];
-  if (groupMode === 'recent') {
-    return copy.sort(
-      (left, right) =>
-        latestWorkspaceTimestamp(right, conversationsByWorkspace) -
-        latestWorkspaceTimestamp(left, conversationsByWorkspace),
-    );
-  }
-  return copy.sort((left, right) => workspaceLabel(left).localeCompare(workspaceLabel(right)));
-}
-
-function sortConversations(
-  conversations: AgentConversation[],
-  groupMode: 'project' | 'recent',
-): AgentConversation[] {
-  const copy = [...conversations];
-  if (groupMode === 'project') {
-    return copy.sort((left, right) => (left.title || left.id).localeCompare(right.title || right.id));
-  }
-  return copy.sort((left, right) => timestamp(right.updated_at) - timestamp(left.updated_at));
-}
-
-function latestProjectTimestamp(
-  project: ProjectSummary,
-  workspacesByProject: Record<string, WorkspaceSummary[]>,
-  conversationsByWorkspace: Record<string, AgentConversation[]>,
-): number {
-  return Math.max(
-    timestamp(project.updated_at),
-    0,
-    ...(workspacesByProject[project.id] ?? []).map((workspace) =>
-      latestWorkspaceTimestamp(workspace, conversationsByWorkspace),
-    ),
-  );
-}
-
-function latestWorkspaceTimestamp(
-  workspace: WorkspaceSummary,
-  conversationsByWorkspace: Record<string, AgentConversation[]>,
-): number {
-  return Math.max(
-    timestamp(workspace.updated_at),
-    timestamp(workspace.created_at),
-    0,
-    ...(conversationsByWorkspace[workspace.id] ?? []).map((conversation) =>
-      timestamp(conversation.updated_at ?? conversation.created_at),
-    ),
-  );
-}
-
-function timestamp(value: string | null | undefined): number {
-  return value ? Date.parse(value) || 0 : 0;
 }

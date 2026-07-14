@@ -1,8 +1,8 @@
 """Sandbox Profile - Sandbox 配置模板.
 
 定义不同类型的 Sandbox 配置模板，用于控制资源使用和功能启用:
-- lite: 轻量级，无桌面，仅 MCP + Terminal
-- standard: 标准配置，包含 XFCE 桌面
+- lite: 轻量级，仅 MCP
+- standard: 标准配置，包含 KDE Plasma 桌面和终端
 - full: 完整开发环境，预装所有工具
 """
 
@@ -33,6 +33,7 @@ class SandboxProfile:
     memory_limit: str
     cpu_limit: str
     timeout_seconds: int
+    terminal_enabled: bool = True
     preinstalled_tools: list[str] = field(default_factory=list)
     max_instances: int = 5
     image_name: str | None = None
@@ -48,6 +49,7 @@ class SandboxProfile:
             "cpu_limit": self.cpu_limit,
             "timeout_seconds": self.timeout_seconds,
             "desktop_enabled": self.desktop_enabled,
+            "terminal_enabled": self.terminal_enabled,
         }
 
 
@@ -55,9 +57,10 @@ class SandboxProfile:
 SANDBOX_PROFILES: dict[SandboxProfileType, SandboxProfile] = {
     SandboxProfileType.LITE: SandboxProfile(
         name="Lite",
-        description="轻量级 sandbox，无桌面，仅 MCP + Terminal",
+        description="轻量级 sandbox，无桌面和终端，仅 MCP",
         profile_type=SandboxProfileType.LITE,
         desktop_enabled=False,
+        terminal_enabled=False,
         memory_limit="512m",
         cpu_limit="0.5",
         timeout_seconds=1800,
@@ -67,9 +70,10 @@ SANDBOX_PROFILES: dict[SandboxProfileType, SandboxProfile] = {
     ),
     SandboxProfileType.STANDARD: SandboxProfile(
         name="Standard",
-        description="标准 sandbox，包含 XFCE 桌面",
+        description="标准 sandbox，包含 KDE Plasma 桌面和终端",
         profile_type=SandboxProfileType.STANDARD,
         desktop_enabled=True,
+        terminal_enabled=True,
         memory_limit="8g",
         cpu_limit="2",
         timeout_seconds=3600,
@@ -82,6 +86,7 @@ SANDBOX_PROFILES: dict[SandboxProfileType, SandboxProfile] = {
         description="完整开发环境，预装所有工具",
         profile_type=SandboxProfileType.FULL,
         desktop_enabled=True,
+        terminal_enabled=True,
         memory_limit="4g",
         cpu_limit="4",
         timeout_seconds=7200,

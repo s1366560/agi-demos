@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import threading
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -72,12 +72,25 @@ def _load_pricing_from_file() -> tuple[CostDict, ModelCost]:
     model_costs: CostDict = {}
     for model_name, cost_data in models_data.items():
         if not isinstance(cost_data, dict):
-            raise ValueError(
-                f"Model '{model_name}' cost data must be a dictionary"
-            )
+            raise ValueError(f"Model '{model_name}' cost data must be a dictionary")
         model_costs[model_name] = _parse_model_cost(cost_data)
 
     return model_costs, default_cost
+
+
+def _parse_cost_value(value: object, field: str) -> Decimal:
+    """Parse and validate a finite, non-negative pricing value."""
+    error_field = "Decimal" if field in {"input", "output"} else field
+    try:
+        result = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError(f"Invalid {error_field} value: {exc}") from exc
+
+    if not result.is_finite() or result < 0:
+        raise ValueError(f"Invalid {error_field} value: expected a finite non-negative number")
+
+    return result
+
 
 def _parse_model_cost(data: dict[str, object]) -> ModelCost:
     """
@@ -98,37 +111,25 @@ def _parse_model_cost(data: dict[str, object]) -> ModelCost:
     input_str = data.get("input")
     output_str = data.get("output")
 
-    if not input_str or not output_str:
+    if input_str is None or output_str is None:
         msg = "Model cost must have 'input' and 'output' fields"
         raise ValueError(msg)
 
-    try:
-        input_cost = Decimal(str(input_str))
-        output_cost = Decimal(str(output_str))
-    except (ValueError, TypeError) as e:
-        raise ValueError(f"Invalid Decimal value: {e}") from e
+    input_cost = _parse_cost_value(input_str, "input")
+    output_cost = _parse_cost_value(output_str, "output")
 
     # Parse optional fields
     cache_read = None
     if "cache_read" in data and data["cache_read"] is not None:
-        try:
-            cache_read = Decimal(str(data["cache_read"]))
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid cache_read value: {e}") from e
+        cache_read = _parse_cost_value(data["cache_read"], "cache_read")
 
     cache_write = None
     if "cache_write" in data and data["cache_write"] is not None:
-        try:
-            cache_write = Decimal(str(data["cache_write"]))
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid cache_write value: {e}") from e
+        cache_write = _parse_cost_value(data["cache_write"], "cache_write")
 
     reasoning = None
     if "reasoning" in data and data["reasoning"] is not None:
-        try:
-            reasoning = Decimal(str(data["reasoning"]))
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid reasoning value: {e}") from e
+        reasoning = _parse_cost_value(data["reasoning"], "reasoning")
 
     return ModelCost(
         input=input_cost,
@@ -178,8 +179,6 @@ def get_model_costs() -> CostDict:
                 _file_mtime = current_mtime
 
     return _pricing_cache
-
-
 
 
 def get_default_cost() -> ModelCost:

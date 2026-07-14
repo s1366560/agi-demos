@@ -223,7 +223,18 @@ describe('agentService - WebSocket Token Handling', () => {
   describe('chat()', () => {
     it('should include preferred_language in send_message payload', async () => {
       const isConnectedSpy = vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
-      const sendSpy = vi.spyOn(agentService as any, 'send').mockReturnValue(true);
+      const sendSpy = vi
+        .spyOn(agentService as any, 'send')
+        .mockImplementation((payload: Record<string, unknown>) => {
+          queueMicrotask(() => {
+            (agentService as any).resolveSendAck({
+              type: 'ack',
+              action: 'send_message',
+              conversation_id: payload.conversation_id,
+            });
+          });
+          return true;
+        });
 
       try {
         await agentService.chat(

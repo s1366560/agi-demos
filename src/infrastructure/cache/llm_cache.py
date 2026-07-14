@@ -17,6 +17,7 @@ This provides:
 import hashlib
 import json
 import logging
+from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -49,7 +50,7 @@ class LLMCache:
             l2_ttl: Time-to-live for L2 cache entries (seconds)
             enabled: Whether caching is enabled
         """
-        self._l1_cache: dict[str, tuple[Any, datetime]] = {}
+        self._l1_cache: OrderedDict[str, tuple[Any, datetime]] = OrderedDict()
         self._l1_size = l1_size
         self._l1_ttl = l1_ttl
         self._l2_ttl = l2_ttl
@@ -114,15 +115,10 @@ class LLMCache:
     def _evict_l1_if_needed(self) -> None:
         """Evict oldest entries from L1 cache if size limit reached."""
         if len(self._l1_cache) > self._l1_size:
-            # Sort by timestamp and remove oldest entries
-            sorted_keys = sorted(
-                self._l1_cache.keys(),
-                key=lambda k: self._l1_cache[k][1],
-            )
             # Remove 10% of entries
-            to_remove = max(1, len(sorted_keys) // 10)
-            for key in sorted_keys[:to_remove]:
-                del self._l1_cache[key]
+            to_remove = max(1, len(self._l1_cache) // 10)
+            for _ in range(to_remove):
+                self._l1_cache.popitem(last=False)
             logger.debug(f"Evicted {to_remove} entries from L1 cache")
 
     async def get(
@@ -151,6 +147,7 @@ class LLMCache:
         if cache_key in self._l1_cache:
             response, timestamp = self._l1_cache[cache_key]
             if not self._is_expired(timestamp, self._l1_ttl):
+                self._l1_cache.move_to_end(cache_key)
                 logger.debug(f"L1 cache hit: {cache_key}")
                 return cast(str | None, response)
             else:
@@ -161,10 +158,11 @@ class LLMCache:
         if self._redis_client:
             try:
                 cached = await self._redis_client.get(cache_key)
-                if cached:
+                if cached is not None:
                     logger.debug(f"L2 cache hit: {cache_key}")
                     # Populate L1 cache
                     self._l1_cache[cache_key] = (cached, datetime.now(UTC))
+                    self._l1_cache.move_to_end(cache_key)
                     self._evict_l1_if_needed()
                     return cast(str | None, cached)
             except Exception as e:
@@ -196,6 +194,7 @@ class LLMCache:
 
         # Store in L1 cache
         self._l1_cache[cache_key] = (response, now)
+        self._l1_cache.move_to_end(cache_key)
         self._evict_l1_if_needed()
 
         # Store in L2 cache (Redis)

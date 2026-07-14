@@ -27,6 +27,14 @@ def create_mock_process(pid: int = 12345, returncode: int = None) -> MagicMock:
 class TestSessionManager:
     """Test suite for SessionManager."""
 
+    @pytest.fixture(autouse=True)
+    def runtime_auth(self, monkeypatch):
+        monkeypatch.setenv("MCP_STATIC_TOKEN", "sandbox-runtime-secret")
+        monkeypatch.setattr(
+            "src.server.desktop_manager.write_kasm_password_file",
+            lambda *_args: None,
+        )
+
     @pytest.fixture
     def workspace_dir(self, tmp_path):
         """Provide a temporary workspace directory."""
@@ -257,7 +265,7 @@ class TestSessionManager:
         assert "port" in info
         assert info["port"] == 6080
         assert "url" in info
-        assert info["url"] == "http://localhost:6080"
+        assert info["url"] == "https://localhost:6080"
         assert "display" in info
         assert info["display"] == ":1"
 

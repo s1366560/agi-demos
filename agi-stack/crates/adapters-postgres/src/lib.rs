@@ -38,7 +38,15 @@ mod channel_repo;
 mod checkpoint;
 mod conversation_events_repo;
 mod conversation_repo;
+mod cron_control_repo;
+mod cron_operation_repo;
 mod cron_repo;
+mod cron_runtime_projection_support;
+mod cron_runtime_repo;
+mod cron_runtime_types;
+mod cron_schedule_fire_repo;
+mod cron_schedule_repo;
+mod cron_scheduler_owner_repo;
 mod data_stats_repo;
 mod deploy_repo;
 mod event_log_repo;
@@ -99,7 +107,32 @@ pub use conversation_repo::{
     AgentConversationRecord, ConversationCreateRecord, ConversationListQuery,
     ConversationModePatch, ConversationMutationAccess, PgAgentConversationRepository,
 };
+pub use cron_control_repo::{
+    CronControlRepositoryError, CronControlScope, CronReconcileAdmission, PgCronControlRepository,
+};
+pub use cron_operation_repo::{
+    CronOperationErrorCode, CronOperationFailure, CronOperationKind, CronOperationRecord,
+    CronOperationScope, CronOperationStatus, NewCronOperation, PgCronOperationRepository,
+};
 pub use cron_repo::{CronJobListQuery, CronJobRecord, CronJobRunRecord, PgCronRepository};
+pub use cron_runtime_repo::PgCronAutomationRuntimeRepository;
+pub use cron_runtime_types::{
+    AutomationPayload, AutomationRunContext, AutomationRunLease, AutomationRunStatus,
+    AutomationRuntimeRepositoryError, AutomationRuntimeScope, AutomationTerminalOutcome,
+    AutomationTerminalProjection,
+};
+pub use cron_schedule_fire_repo::{
+    CronDueSchedule, CronScheduleFireError, CronScheduledFireResult, NewCronScheduledFire,
+    PgCronScheduleFireRepository,
+};
+pub use cron_schedule_repo::{
+    CronScheduleMaterializedState, CronScheduleProjection, CronScheduleRepositoryError,
+    CronScheduleSnapshot, CronScheduleStatus, PgCronScheduleRepository,
+};
+pub use cron_scheduler_owner_repo::{
+    CronSchedulerLease, CronSchedulerOwnerError, PgCronSchedulerOwnerRepository,
+    GLOBAL_CRON_SCHEDULER_SCOPE,
+};
 pub use data_stats_repo::{
     DataStatsAccess, DataStatsScopeError, DataStatsScopeRecord, PgDataStatsRepository,
 };
@@ -108,7 +141,9 @@ pub use event_log_repo::{PgEventLogRepository, TenantEventLogListQuery, TenantEv
 pub use gene_repo::{
     GeneListQuery, GeneRecord, GeneTenantAccess, GenomeListQuery, GenomeRecord, PgGeneRepository,
 };
-pub use hitl_repo::{HitlRequestRecord, PgHitlRequestRepository};
+pub use hitl_repo::{
+    AutomationHitlResumeCandidate, HitlRequestRecord, NewHitlRequestRecord, PgHitlRequestRepository,
+};
 pub use instance_repo::{
     InstanceChannelRecord, InstanceListQuery, InstanceMemberListQuery, InstanceMemberRecord,
     InstanceRecord, InstanceUserSearchRecord, PgInstanceRepository,

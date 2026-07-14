@@ -117,6 +117,25 @@ class TestGraphStoreServiceCRUD:
 @pytest.mark.unit
 class TestGraphStoreServiceConnectionTest:
     @pytest.mark.asyncio
+    async def test_test_connection_probes_and_closes_backend(self) -> None:
+        repo, registry, factory = _mocks()
+        backend = Mock()
+        backend.health_probe = AsyncMock(return_value=True)
+        backend.close = AsyncMock()
+        backend.detected_version = "5.26"
+        factory.build.return_value = backend
+        svc = GraphStoreService(repo, registry, factory)
+
+        version = await svc.test_connection(
+            engine_type="neo4j",
+            connection_config={"uri": "bolt://8.8.8.8:7687"},
+        )
+
+        assert version == "5.26"
+        backend.health_probe.assert_awaited_once_with()
+        backend.close.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
     async def test_test_connection_rejects_private_host(self) -> None:
         repo, registry, factory = _mocks()
         svc = GraphStoreService(repo, registry, factory)

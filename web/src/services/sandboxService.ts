@@ -21,11 +21,7 @@
 import { logger } from '../utils/logger';
 
 import { httpClient } from './client/httpClient';
-import {
-  buildTerminalWebSocketUrl,
-  buildDirectDesktopUrl,
-  getApiHost,
-} from './sandboxWebSocketUtils';
+import { buildDesktopUrl, buildTerminalWebSocketUrl } from './sandboxWebSocketUtils';
 
 /**
  * Sandbox container status
@@ -382,7 +378,7 @@ class SandboxServiceImpl implements SandboxService {
 
     return {
       running: response.running,
-      url: response.url ?? null,
+      url: response.running ? buildDesktopUrl(sandboxId, 'vnc.html') : null,
       display: response.display,
       resolution: response.resolution,
       port: response.port,
@@ -452,16 +448,9 @@ class SandboxServiceImpl implements SandboxService {
     // Backend uses GET /sandbox/{sandbox_id}/desktop
     const response = await this.api.get<BackendDesktopResponse>(`/sandbox/${sandboxId}/desktop`);
 
-    // Build direct URL if we have port info
-    let desktopUrl: string | null = response.url ?? null;
-    if (response.port && !desktopUrl) {
-      const host = getApiHost().split(':')[0] ?? getApiHost();
-      desktopUrl = buildDirectDesktopUrl(host, response.port);
-    }
-
     return {
       running: response.running,
-      url: desktopUrl,
+      url: response.running ? buildDesktopUrl(sandboxId, 'vnc.html') : null,
       display: response.display,
       resolution: response.resolution,
       port: response.port,

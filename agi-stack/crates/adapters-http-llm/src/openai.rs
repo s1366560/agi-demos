@@ -65,8 +65,10 @@ No prose, no code fences.";
 const DECIDE_SYSTEM: &str = "You are a ReAct agent. Choose the next action and respond with ONLY a JSON object, one of: \
 {\"kind\":\"call_tool\",\"tool\":string,\"input_json\":string} | \
 {\"kind\":\"finish\",\"answer\":string} | \
-{\"kind\":\"request_human\",\"request\":{\"id\":string,\"kind\":\"clarification\"|\"decision\"|\"env_var\"|\"permission\",\"prompt\":string}}. \
-input_json must be a JSON string. No prose, no code fences.";
+{\"kind\":\"request_human\",\"request\":{\"id\":string,\"kind\":\"clarification\"|\"decision\"|\"env_var\"|\"permission\",\"prompt\":string,\"decision\":{\"action\":{\"name\":string,\"label\":string},\"target\":{\"kind\":string,\"id\":string,\"version_id\":string|null,\"path\":string|null},\"data\":{\"summary\":string,\"redacted_fields\":string[]},\"reason\":string,\"risk\":{\"level\":\"low\"|\"medium\"|\"high\",\"rationale\":string},\"reversibility\":{\"mode\":\"reversible\"|\"partial\"|\"irreversible\",\"recovery\":string|null},\"scope\":{\"kind\":string,\"ids\":string[]},\"evidence\":[{\"kind\":string,\"id\":string,\"label\":string,\"uri\":string|null,\"digest\":string|null}]}}}. \
+decision is required and must be complete for decision or permission; omit it for clarification or env_var. \
+Risk, rationale, reversibility, scope, and evidence are your structured judgment and must not be delegated to prompt parsing. \
+Redact secrets from data.summary and name them in redacted_fields. input_json must be a JSON string. No prose, no code fences.";
 
 const RELATIONSHIP_SYSTEM: &str = "You extract semantic relationships between the provided entities. \
 Respond with ONLY a JSON object: {\"relationships\":[{\"source\":string,\"target\":string,\"relation_type\":string,\"fact\":string,\"score\":number}]}. \

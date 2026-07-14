@@ -1,5 +1,10 @@
 # HITL 系统架构
 
+> **历史说明:** 本文的 exception/Ray handler 图描述旧实现。当前主路径使用
+> `src/infrastructure/agent/hitl/coordinator.py` 的 cooperative Future 协调模型，
+> 请求通过持久化 HITL repository 与当前 REST/WebSocket handler 响应。排障时以源码、
+> `docs/architecture/ARCHITECTURE.md` 和运行时 OpenAPI 为准；下文仅保留历史背景。
+
 ## 系统架构图
 
 ```

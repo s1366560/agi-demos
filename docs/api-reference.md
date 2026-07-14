@@ -6,7 +6,7 @@ dump. Use the runtime OpenAPI schema for request/response details:
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
-Last checked against code: 2026-06-23.
+Last checked against code: 2026-07-10.
 
 ## Runtime Registration
 
@@ -66,7 +66,7 @@ registered by the current router set.
 | Search | `/api/v1/memory/search`, `/api/v1/search-enhanced/*` |
 | Graph | `/api/v1/graph/*` |
 | Schema | `/api/v1/projects/{project_id}/schema/entities`, `/edges`, `/mappings` |
-| Recall/reflection | `/api/v1/recall/*`, `/api/v1/reflection/*` |
+| Recall/reflection | `/api/v1/recall/*`, `/api/v1/projects/{project_id}/playbooks`, `/api/v1/projects/{project_id}/reflection-verdicts` |
 
 ## Workspace
 
@@ -96,7 +96,7 @@ registered by the current router set.
 | Skills | `/api/v1/skills/*`, `/api/v1/tenant/skills/config` |
 | Channels and webhooks | `/api/v1/channels/*`, `/api/v1/webhooks/*`, `/api/v1/tenant-webhooks/*` |
 | Instances/deploy/gene market | `/api/v1/instances/*`, `/api/v1/deploys/*`, `/api/v1/genes/*`, `/api/v1/instance-templates/*` |
-| Audit/trust | `/api/v1/audit/*`, `/api/v1/trust/*` |
+| Audit/trust | `/api/v1/tenants/{tenant_id}/audit-logs*`, `/api/v1/tenants/{tenant_id}/trust/*` |
 | Observability/admin | `/api/v1/observability/*`, `/api/v1/admin/dlq/*`, `/api/v1/system/*` |
 | Support/billing/notifications | `/api/v1/support/*`, `/api/v1/billing/*`, `/api/v1/notifications/*` |
 

@@ -32,7 +32,7 @@ use wasmtime::{Config, Engine, Module, Store, Trap};
 
 use agistack_core::ports::{CoreError, CoreResult};
 use agistack_plugin_host::manifest::ToolDecl;
-use agistack_plugin_host::tool::{Tool, Trust};
+use agistack_plugin_host::tool::{Tool, ToolAccessClass, Trust};
 use agistack_plugin_host::ToolFactory;
 
 /// Default per-call fuel budget. The sample scorers execute a handful of
@@ -155,6 +155,11 @@ impl Tool for WasmtimeTool {
     fn trust(&self) -> Trust {
         // Structural fact: wasm-hosted tools are the untrusted tier (ADR-0002).
         Trust::SandboxedWasm
+    }
+    fn access_class(&self) -> ToolAccessClass {
+        // This adapter exposes no WASI or host imports. The module can only
+        // transform its supplied bytes within fuel/epoch/memory quotas.
+        ToolAccessClass::Pure
     }
     async fn invoke(&self, input_json: &str) -> CoreResult<String> {
         let v: serde_json::Value =

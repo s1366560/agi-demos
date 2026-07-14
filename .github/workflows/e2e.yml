@@ -1,14 +1,4 @@
-name: E2E Tests (Docker)
-
-# E2E tests are currently disabled as they require:
-# 1. Proper LLM API keys configured
-# 2. Full Docker environment with all services
-# 3. Frontend build and Playwright setup
-#
-# To re-enable:
-# 1. Set up required secrets (LLM API keys)
-# 2. Uncomment the job below
-# 3. Configure docker-compose.yml with proper environment variables
+name: E2E Browser Gates
 
 on:
   push:
@@ -17,17 +7,340 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  e2e-placeholder:
-    name: E2E Tests (Skipped)
+  web-smoke:
+    name: Web Playwright Smoke
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
-      - name: E2E tests skipped
-        run: |
-          echo "E2E tests are currently disabled"
-          echo "Main CI/CD pipeline runs unit tests"
-          echo "To run E2E tests locally: make dev && cd web && pnpm run test:e2e"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # Uncomment below when E2E infrastructure is ready
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run backend-independent smoke tests
+        env:
+          CI: true
+        run: pnpm exec playwright test e2e/smoke.spec.ts
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-report
+          path: web/playwright-report
+          if-no-files-found: ignore
+
+  backend-e2e:
+    name: Backend-dependent Playwright Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: memstack
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d memstack"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      neo4j:
+        image: neo4j:5.26-community
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+        ports:
+          - 7474:7474
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p testpassword 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: memstack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpassword
+      REDIS_URL: redis://localhost:6379
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NEO4J_URI: bolt://localhost:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+      SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      LLM_PROVIDER: openai
+      OPENAI_API_KEY: memstack-e2e-fixture
+      OPENAI_MODEL: openai/memstack-e2e
+      OPENAI_SMALL_MODEL: openai/memstack-e2e
+      OPENAI_BASE_URL: http://localhost:8010/v1
+      LLM_CACHE_ENABLED: false
+      LLM_MAX_RETRIES: 0
+      AGENT_RUNTIME_MODE: local
+      AGENT_MEMORY_RUNTIME_MODE: disabled
+      AGENT_MAX_STEPS: 4
+      AGENT_MAX_TOKENS: 512
+      AGENT_SESSION_PREWARM_ENABLED: false
+      RUN_BACKGROUND_WORKERS: false
+      SANDBOX_DOCKER_SERVICES_ENABLED: true
+      SANDBOX_DOCKER_SOCKET_ENABLED: false
+      SANDBOX_PIP_CACHE_ENABLED: false
+      SANDBOX_HOST_MEMSTACK_PATH: /tmp/memstack-e2e-meta
+      SANDBOX_DEFAULT_IMAGE: sandbox-mcp-server:lite
+      SANDBOX_PROFILE_TYPE: lite
+      SANDBOX_MEMORY_LIMIT: 512m
+      SANDBOX_CPU_LIMIT: '1'
+      WORKSPACE_SYNC_ENABLED: false
+      WORKSPACE_SUPERVISOR_ENABLED: false
+      SKILL_EVOLUTION_ENABLED: false
+      WORKSPACE_PLAN_OUTBOX_ENABLED: false
+      BLACKBOARD_OUTBOX_ENABLED: false
+      WORKSPACE_ATTEMPT_RECOVERY_ENABLED: false
+      WORKSPACE_TASK_EXECUTION_SESSION_RECOVERY_ENABLED: false
+      WORKSPACE_AUTONOMY_IDLE_WAKE_ENABLED: false
+      ENABLE_TELEMETRY: false
+      LANGFUSE_ENABLED: false
+      MCP_ENABLED: false
+      RAY_ENABLE_UV_RUN_RUNTIME_ENV: '0'
+      CI: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install backend dependencies
+        run: uv sync --extra dev --dev --frozen
+
+      - name: Build lightweight authenticated Sandbox fixture
+        run: |
+          docker build \
+            --file sandbox-mcp-server/Dockerfile.e2e \
+            --tag sandbox-mcp-server:lite \
+            sandbox-mcp-server
+          mkdir -p /tmp/memstack-e2e-meta
+          chmod 0777 /tmp/memstack-e2e-meta
+
+      - name: Initialize schema and verify migration head
+        run: |
+          PYTHONPATH=. uv run python -c \
+            "import asyncio; from src.infrastructure.adapters.secondary.persistence.database import initialize_database; asyncio.run(initialize_database())"
+          PYTHONPATH=. uv run alembic upgrade head
+
+      - name: Start deterministic OpenAI-compatible fixture
+        run: |
+          mkdir -p backend-e2e-logs
+          nohup uv run uvicorn scripts.fake_openai_server:app \
+            --host 127.0.0.1 --port 8010 > backend-e2e-logs/fake-openai.log 2>&1 &
+          echo $! > backend-e2e-logs/fake-openai.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8010/v1/models; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -200 backend-e2e-logs/fake-openai.log
+          exit 1
+
+      - name: Start API and wait for health
+        run: |
+          mkdir -p backend-e2e-logs
+          nohup uv run uvicorn src.infrastructure.adapters.primary.web.main:app \
+            --host 0.0.0.0 --port 8000 > backend-e2e-logs/api.log 2>&1 &
+          echo $! > backend-e2e-logs/api.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          tail -200 backend-e2e-logs/api.log
+          exit 1
+
+      - name: Verify backend bootstrap
+        run: uv run python scripts/verify_e2e_backend.py
+
+      - name: Verify authenticated MCP-only Sandbox lifecycle
+        run: uv run python -m scripts.verify_e2e_sandbox
+
+      - name: Verify deterministic local Agent and LLM turn
+        run: uv run python -m scripts.verify_e2e_agent
+
+      - name: Verify deterministic Graph mutation and queries
+        run: uv run python -m scripts.verify_e2e_graph
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install Web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        working-directory: web
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run backend-dependent smoke
+        working-directory: web
+        run: pnpm exec playwright test e2e/backend-smoke.spec.ts
+
+      - name: Stop local-runtime API
+        run: |
+          kill "$(cat backend-e2e-logs/api.pid)"
+          for attempt in $(seq 1 30); do
+            if ! kill -0 "$(cat backend-e2e-logs/api.pid)" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Local-runtime API did not stop"
+          exit 1
+
+      - name: Start Ray head and Agent Actor worker
+        run: |
+          env AGENT_RUNTIME_MODE=ray RAY_ADDRESS=127.0.0.1:6380 \
+            RAY_NAMESPACE=memstack \
+            uv run ray start --head \
+            --node-ip-address=127.0.0.1 \
+            --port=6380 \
+            --min-worker-port=20000 \
+            --max-worker-port=29999 \
+            --num-cpus=2 \
+            --object-store-memory=268435456 \
+            --include-dashboard=false \
+            --disable-usage-stats
+          nohup env AGENT_RUNTIME_MODE=ray \
+            RAY_ADDRESS=127.0.0.1:6380 \
+            RAY_NAMESPACE=memstack \
+            uv run python -m src.agent_actor_worker \
+            > backend-e2e-logs/agent-actor.log 2>&1 &
+          echo $! > backend-e2e-logs/agent-actor.pid
+          for attempt in $(seq 1 60); do
+            if uv run python -c \
+              "import ray; ray.init(address='127.0.0.1:6380', namespace='memstack'); ray.get_actor('hitl-router', namespace='memstack'); ray.shutdown()"; then
+              grep -F "router actor is ready" backend-e2e-logs/agent-actor.log
+              exit 0
+            fi
+            sleep 2
+          done
+          tail -200 backend-e2e-logs/agent-actor.log
+          exit 1
+
+      - name: Start Ray-runtime API and wait for health
+        run: |
+          nohup env AGENT_RUNTIME_MODE=ray \
+            RAY_ADDRESS=127.0.0.1:6380 \
+            RAY_NAMESPACE=memstack \
+            uv run uvicorn src.infrastructure.adapters.primary.web.main:app \
+            --host 0.0.0.0 --port 8000 > backend-e2e-logs/api-ray.log 2>&1 &
+          echo $! > backend-e2e-logs/api.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          tail -200 backend-e2e-logs/api-ray.log
+          exit 1
+
+      - name: Verify deterministic Ray Agent and LLM turn
+        run: |
+          uv run python -m scripts.verify_e2e_agent
+          for attempt in $(seq 1 20); do
+            if grep -F "Using Ray Actor (AGENT_RUNTIME_MODE=ray)" \
+              backend-e2e-logs/api-ray.log; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -200 backend-e2e-logs/api-ray.log
+          exit 1
+
+      - name: Stop backend E2E processes
+        if: always()
+        run: |
+          for pid_file in \
+            backend-e2e-logs/api.pid \
+            backend-e2e-logs/agent-actor.pid \
+            backend-e2e-logs/fake-openai.pid; do
+            if [ -f "$pid_file" ]; then
+              kill "$(cat "$pid_file")" 2>/dev/null || true
+            fi
+          done
+          for container_id in $(docker ps -aq --filter label=memstack.sandbox=true); do
+            docker rm --force "$container_id" || true
+          done
+          rm -rf /tmp/memstack-e2e-meta /tmp/memstack_*
+          uv run ray stop --force || true
+
+      - name: Upload backend and browser reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-e2e-reports
+          path: |
+            backend-e2e-logs
+            web/playwright-report
+            web/test-results
+          if-no-files-found: ignore
+
+  # The complete product E2E suite remains opt-in because Graph, Memory, and
+  # full Desktop/Terminal Sandbox scenarios still require deterministic
+  # fixtures. The
+  # backend-e2e job above covers real DB migrations, bootstrap auth,
+  # tenant/project persistence, FastAPI/browser integration, and a real local
+  # plus Ray Agent turn through an isolated OpenAI-compatible fixture, along
+  # with an authenticated MCP-only Sandbox lifecycle.
   # e2e:
   #   runs-on: ubuntu-latest
   #

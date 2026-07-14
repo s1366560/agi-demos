@@ -1,5 +1,10 @@
 # Ray Actor HITL Integration
 
+> **历史实现:** 当前 SessionProcessor 不再以 `HITLPendingException` +
+> `continue_chat` 作为主恢复模型；请从
+> `src/infrastructure/agent/hitl/coordinator.py`、当前 HITL repository 和
+> WebSocket/REST handlers 追踪 cooperative Future 流程。本文用于理解旧 Ray 恢复设计。
+
 本页取代旧的 Temporal 集成说明。HITL 全链路基于 Ray Actors + Redis Streams。
 
 ## 关键组件

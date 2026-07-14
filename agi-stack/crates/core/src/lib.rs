@@ -25,11 +25,14 @@ pub mod util;
 
 pub use agent::{
     derive_event_id, pending_request, AgentAction, AgentEventType, CostBudget, CostTracker,
+    DecisionAction, DecisionContext, DecisionData, DecisionEvidence, DecisionReversibility,
+    DecisionReversibilityMode, DecisionRisk, DecisionRiskLevel, DecisionScope, DecisionTarget,
     DoomLoopDetector, EmbeddedHarness, EventCategory, EventEnvelope, HarnessCtx, HarnessPolicy,
     HarnessRegistry, Health, HitlKind, HitlRequest, HitlResponse, MiniOrchestrator, NextAction,
-    OutcomeKind, Plan, PlanStep, PlanStore, PreparedAttempt, ReActEngine, Role, RuntimeHarness,
-    RuntimePlan, SelectionReason, SessionState, SessionStatus, StepOutcome, StepRunner, StepStatus,
-    SupervisorPort, SupervisorVerdict, TranscriptEntry, TriggerReason, TurnOutcome,
+    OutcomeKind, Plan, PlanStep, PlanStore, PreparedAttempt, ReActControl, ReActEngine, Role,
+    RunDirective, RuntimeHarness, RuntimePlan, SelectionReason, SessionState, SessionStatus,
+    SteeringInstruction, StepOutcome, StepRunner, StepStatus, SupervisorPort, SupervisorVerdict,
+    TranscriptEntry, TriggerReason, TurnOutcome,
 };
 pub use community::{
     detect_communities, modularity, Community, CommunityEdge, DEFAULT_MIN_COMMUNITY_SIZE,

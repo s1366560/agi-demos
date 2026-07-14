@@ -20,6 +20,10 @@ PROFILE      ?= release
 ADDR         ?= 127.0.0.1:8088
 DEV_ENV      ?= ../.env
 RUN_SERVER_DEV_STUB ?= 0
+DESKTOP_APP_DIR ?= apps/desktop
+DESKTOP_ICON_PNG ?= $(DESKTOP_APP_DIR)/src-tauri/icons/icon.png
+DESKTOP_ICON_ICNS ?= $(DESKTOP_APP_DIR)/src-tauri/icons/icon.icns
+PNPM_INSTALL_ARGS ?= --frozen-lockfile
 # Android NDK(本机默认;生产建议 cargo-ndk)。覆盖:make android NDK=/path/to/ndk
 NDK          ?= $(HOME)/Library/Android/sdk/ndk/30.0.14904198
 ANDROID_TARGET ?= aarch64-linux-android
@@ -30,7 +34,7 @@ WASM_BROWSER_OUT ?= pkg-web
 BENCH_REPORT ?= target/bench/scorecard.json
 BENCH_BASELINE ?=
 BENCH_REGRESSION_TOLERANCE_PCT ?= 20
-TAURI_CLI ?= $(PNPM) dlx @tauri-apps/cli
+TAURI_CLI ?= $(PNPM) dlx @tauri-apps/cli@2
 TAURI_BUILD_ARGS ?=
 
 UNAME_S := $(shell uname -s)
@@ -45,7 +49,7 @@ endif
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop run-desktop desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
+.PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-deps desktop-frontend desktop-icons run-desktop desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -55,7 +59,7 @@ help: ## 列出全部 target
 	@echo "矩阵详见 docs/architecture/09-shipping-matrix.md"
 
 # ---- 跨平台门禁 ----
-test: ## 整工作区测试(cargo test --workspace,582 测试绿)
+test: ## 整工作区测试(cargo test --workspace)
 	$(CARGO) test --workspace
 
 ensure-wasm-target: ## 安装核心 wasm 门禁所需 Rust target(幂等)
@@ -94,7 +98,10 @@ run-server: ## 启动服务器(默认读取 ../.env 拼接 DATABASE_URL; RUN_SER
 	else \
 		echo "==> DATABASE_URL unset; using in-memory dev stub"; \
 	fi; \
-	AGISTACK_ADDR=$(ADDR) DATABASE_URL="$$DATABASE_URL" $(CARGO) run -p agistack-server
+	AGISTACK_ADDR=$(ADDR) \
+	AGISTACK_DEV_MODE="$(RUN_SERVER_DEV_STUB)" \
+	AGISTACK_ENABLE_LEGACY_ROUTES="$(RUN_SERVER_DEV_STUB)" \
+	DATABASE_URL="$$DATABASE_URL" $(CARGO) run -p agistack-server
 
 # ---- Web(浏览器 WASM) ----
 wasm-web: ## Web:wasm-bindgen 浏览器包 + node 冒烟(core-as-guest,~124 KB)
@@ -107,16 +114,28 @@ wasm-web: ## Web:wasm-bindgen 浏览器包 + node 冒烟(core-as-guest,~124 KB)
 	@echo "==> 产物:crates/bindings-wasm/$(WASM_OUT)/*.wasm + crates/bindings-wasm/$(WASM_BROWSER_OUT)/*.wasm"
 
 # ---- PC 桌面(Tauri) ----
-desktop: ## 桌面:Tauri 外壳全树编译 + 无头命令单测(故意排除出 workspace)
-	cd apps/desktop/src-tauri && $(CARGO) build && $(CARGO) test
-	@echo "==> 桌面外壳编译链接通过(完整 bundle 用 tauri-cli)"
+desktop: desktop-check desktop-bundle desktop-bundle-smoke ## 桌面:构建可安装 Tauri 客户端 bundle 并冒烟验证
+	@echo "==> 桌面可安装客户端构建完成:$(DESKTOP_APP_DIR)/src-tauri/target/release/bundle/"
+
+desktop-check: ## 桌面:Tauri 外壳全树编译 + 无头命令单测(故意排除出 workspace)
+	cd $(DESKTOP_APP_DIR)/src-tauri && $(CARGO) build && $(CARGO) test
+	@echo "==> 桌面外壳编译链接通过"
+
+desktop-deps: ## 桌面:安装/校验前端依赖
+	cd $(DESKTOP_APP_DIR) && CI=true $(PNPM) install $(PNPM_INSTALL_ARGS)
+
+desktop-frontend: desktop-deps ## 桌面:构建 Tauri bundle 使用的前端 dist
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run build
+
+desktop-icons: ## 桌面:生成 macOS bundle 所需 .icns 图标
+	./scripts/build-desktop-icons.sh "$(DESKTOP_ICON_PNG)" "$(DESKTOP_ICON_ICNS)"
 
 run-desktop: ## 启动桌面 App(Tauri dev 会拉起 Vite 并创建原生窗口)
-	cd apps/desktop && $(TAURI_CLI) dev
+	cd $(DESKTOP_APP_DIR) && $(TAURI_CLI) dev
 
-desktop-bundle: ## 桌面:完整 Tauri bundle(需 tauri-cli;CI macOS job 上传产物)
-	cd apps/desktop && $(TAURI_CLI) build $(TAURI_BUILD_ARGS)
-	@echo "==> 桌面 bundle:apps/desktop/src-tauri/target/release/bundle/"
+desktop-bundle: desktop-frontend desktop-icons ## 桌面:完整 Tauri bundle(可安装客户端;CI macOS job 上传产物)
+	cd $(DESKTOP_APP_DIR) && $(TAURI_CLI) build $(TAURI_BUILD_ARGS)
+	@echo "==> 桌面 bundle:$(DESKTOP_APP_DIR)/src-tauri/target/release/bundle/"
 
 desktop-bundle-smoke: ## 桌面:检查 Tauri bundle 产物目录、macOS .app 主二进制与标识
 	./scripts/check-desktop-bundle.sh

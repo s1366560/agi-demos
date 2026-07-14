@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -73,6 +73,7 @@ class SandboxInfo:
     last_accessed_at: datetime | None = None
     is_healthy: bool = False
     error_message: str | None = None
+    runtime_auth_token: str | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -1362,6 +1363,7 @@ class ProjectSandboxLifecycleService:
             last_accessed_at=association.last_accessed_at,
             is_healthy=is_healthy,
             error_message=association.error_message,
+            runtime_auth_token=getattr(instance, "mcp_auth_token", None) if instance else None,
         )
 
     def _resolve_config(  # noqa: C901, PLR0912
@@ -1386,6 +1388,7 @@ class ProjectSandboxLifecycleService:
             cpu_limit=cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,
             desktop_enabled=sandbox_profile.desktop_enabled,
+            terminal_enabled=sandbox_profile.terminal_enabled,
             environment=cast(dict[str, str], config_override.get("environment", {}))
             if config_override
             else {},
@@ -1403,6 +1406,8 @@ class ProjectSandboxLifecycleService:
                 config.timeout_seconds = config_override["timeout_seconds"]
             if "desktop_enabled" in config_override:
                 config.desktop_enabled = config_override["desktop_enabled"]
+            if "terminal_enabled" in config_override:
+                config.terminal_enabled = config_override["terminal_enabled"]
             if "volumes" in config_override:
                 config.volumes.update(config_override["volumes"])
             if "rw_volumes" in config_override:

@@ -12,6 +12,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from src.application.services.automation_runtime_projection_service import (
+        AutomationRuntimeIdentity,
+    )
     from src.domain.model.agent.hitl.hitl_types import HITLPendingException
 
 import redis.asyncio as aioredis
@@ -206,6 +209,14 @@ _SKIP_PERSIST_EVENT_TYPES = {
     "text_start",
 }
 _MESSAGE_EVENT_TYPES = {"user_message", "assistant_message"}
+_HITL_REQUEST_EVENT_TYPES = frozenset(
+    {
+        "clarification_asked",
+        "decision_asked",
+        "env_var_requested",
+        "permission_asked",
+    }
+)
 _TERMINAL_WORKSPACE_STATUS_MESSAGES = {
     "goal_achieved:workspace_contract_submitted": "Workspace contract submitted.",
     "goal_achieved:workspace_terminal_report": "Workspace terminal report submitted.",
@@ -494,6 +505,148 @@ def _record_chat_metrics(
             "project_agent.chat_errors",
             labels={"project_id": project_id},
         )
+
+
+def _automation_runtime_identity(
+    *,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    message_id: str,
+    automation_run_id: str | None,
+) -> AutomationRuntimeIdentity | None:
+    """Build trusted runtime correlation only when run ID and message ID agree."""
+    if automation_run_id is None:
+        return None
+    if automation_run_id != message_id:
+        logger.warning(
+            "[AutomationRuntime] Ignoring mismatched run/message correlation: project=%s",
+            project_id,
+        )
+        return None
+    from src.application.services.automation_runtime_projection_service import (
+        AutomationRuntimeIdentity,
+    )
+
+    return AutomationRuntimeIdentity(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        runtime_execution_id=automation_run_id,
+        conversation_id=conversation_id,
+    )
+
+
+async def _project_automation_runtime_running(
+    identity: AutomationRuntimeIdentity | None,
+) -> None:
+    """Best-effort CAS projection; unmatched ordinary chats are a no-op."""
+    if identity is None:
+        return
+    try:
+        from src.application.services.automation_runtime_projection_service import (
+            AutomationRuntimeProjectionService,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_automation_runtime_projection_repository import (
+            SqlAutomationRuntimeProjectionRepository,
+        )
+
+        async with async_session_factory() as session:
+            service = AutomationRuntimeProjectionService(
+                SqlAutomationRuntimeProjectionRepository(session)
+            )
+            _ = await service.mark_running(identity=identity, observed_at=datetime.now(UTC))
+            await session.commit()
+    except Exception:
+        logger.exception(
+            "[AutomationRuntime] Failed to project running state: runtime_execution_id=%s",
+            identity.runtime_execution_id,
+        )
+
+
+async def _project_automation_runtime_waiting_human(
+    identity: AutomationRuntimeIdentity | None,
+) -> None:
+    """Persist structured HITL waiting state without holding the Agent transaction."""
+    if identity is None:
+        return
+    try:
+        from src.application.services.automation_runtime_projection_service import (
+            AutomationRuntimeProjectionService,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_automation_runtime_projection_repository import (
+            SqlAutomationRuntimeProjectionRepository,
+        )
+
+        async with async_session_factory() as session:
+            service = AutomationRuntimeProjectionService(
+                SqlAutomationRuntimeProjectionRepository(session)
+            )
+            _ = await service.mark_waiting_human(identity=identity, observed_at=datetime.now(UTC))
+            await session.commit()
+    except Exception:
+        logger.exception(
+            "[AutomationRuntime] Failed to project HITL wait: runtime_execution_id=%s",
+            identity.runtime_execution_id,
+        )
+
+
+async def _project_automation_runtime_terminal(
+    identity: AutomationRuntimeIdentity | None,
+    *,
+    outcome: str,
+    execution_time_ms: float,
+    event_count: int,
+) -> None:
+    """Persist one closed terminal outcome and reconcile the delivery operation."""
+    if identity is None:
+        return
+    try:
+        from src.application.services.automation_runtime_projection_service import (
+            AutomationRuntimeOutcome,
+            AutomationRuntimeProjectionService,
+            AutomationRuntimeTerminal,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_automation_runtime_projection_repository import (
+            SqlAutomationRuntimeProjectionRepository,
+        )
+
+        terminal = AutomationRuntimeTerminal(
+            outcome=AutomationRuntimeOutcome(outcome),
+            observed_at=datetime.now(UTC),
+            execution_time_ms=max(0.0, execution_time_ms),
+            event_count=max(0, event_count),
+        )
+        async with async_session_factory() as session:
+            service = AutomationRuntimeProjectionService(
+                SqlAutomationRuntimeProjectionRepository(session)
+            )
+            projection = await service.project_terminal(identity=identity, terminal=terminal)
+            await session.commit()
+        if projection.delivery_ack_pending:
+            logger.info(
+                "[AutomationRuntime] Terminal run awaits delivery acknowledgement: runtime=%s",
+                identity.runtime_execution_id,
+            )
+    except Exception:
+        logger.exception(
+            "[AutomationRuntime] Failed to project terminal state: runtime_execution_id=%s",
+            identity.runtime_execution_id,
+        )
+
+
+async def _project_automation_stream_terminal(
+    identity: AutomationRuntimeIdentity | None,
+    *,
+    outcome: str,
+    state: _StreamState,
+    start_time: float,
+) -> None:
+    await _project_automation_runtime_terminal(
+        identity,
+        outcome=outcome,
+        execution_time_ms=(time_module.time() - start_time) * 1000,
+        event_count=len(state.events),
+    )
 
 
 async def _handle_chat_error(
@@ -787,7 +940,16 @@ async def execute_project_chat(
     start_time = time_module.time()
     ss = _StreamState(last_refresh=time_module.time(), last_persist=time_module.time())
 
+    automation_identity = _automation_runtime_identity(
+        tenant_id=agent.config.tenant_id,
+        project_id=agent.config.project_id,
+        conversation_id=request.conversation_id,
+        message_id=request.message_id,
+        automation_run_id=request.automation_run_id,
+    )
+
     await set_agent_running(request.conversation_id, request.message_id)
+    await _project_automation_runtime_running(automation_identity)
 
     last_time_us, last_counter = await _get_last_db_event_time(request.conversation_id)
     time_gen = EventTimeGenerator(last_time_us, last_counter)
@@ -843,6 +1005,8 @@ async def execute_project_chat(
 
             side_effects = _extract_event_side_effects(event)
             ss.apply_side_effects(side_effects)
+            if event.get("type") in _HITL_REQUEST_EVENT_TYPES:
+                await _project_automation_runtime_waiting_human(automation_identity)
 
             now = time_module.time()
             ss.last_refresh = await _maybe_refresh_ttl(
@@ -904,6 +1068,13 @@ async def execute_project_chat(
                 error_message=ss.error_message,
             )
 
+        await _project_automation_stream_terminal(
+            automation_identity,
+            outcome="failed" if ss.is_error else "success",
+            state=ss,
+            start_time=start_time,
+        )
+
         return ProjectChatResult(
             conversation_id=request.conversation_id,
             message_id=request.message_id,
@@ -916,7 +1087,21 @@ async def execute_project_chat(
             event_count=len(ss.events),
         )
 
+    except asyncio.CancelledError:
+        await _project_automation_stream_terminal(
+            automation_identity,
+            outcome="cancelled",
+            state=ss,
+            start_time=start_time,
+        )
+        raise
     except Exception as e:
+        await _project_automation_stream_terminal(
+            automation_identity,
+            outcome="timeout" if isinstance(e, TimeoutError) else "failed",
+            state=ss,
+            start_time=start_time,
+        )
         return await _handle_chat_error(
             e,
             ss.events,
@@ -969,6 +1154,7 @@ async def handle_hitl_pending(
         user_message=request.user_message,
         user_id=request.user_id,
         correlation_id=request.correlation_id,
+        automation_run_id=request.automation_run_id,
         agent_id=request.agent_id,
         parent_session_id=request.parent_session_id,
         step_count=getattr(agent, "_step_count", 0),
@@ -980,6 +1166,15 @@ async def handle_hitl_pending(
 
     await state_store.save_state(state)
     await save_hitl_snapshot(state, agent.config.agent_mode)
+    await _project_automation_runtime_waiting_human(
+        _automation_runtime_identity(
+            tenant_id=agent.config.tenant_id,
+            project_id=agent.config.project_id,
+            conversation_id=request.conversation_id,
+            message_id=request.message_id,
+            automation_run_id=request.automation_run_id,
+        )
+    )
 
     logger.info(
         f"[ActorExecution] HITL state saved: request_id={hitl_exception.request_id}, "
@@ -1001,7 +1196,7 @@ async def handle_hitl_pending(
     )
 
 
-async def continue_project_chat(
+async def continue_project_chat(  # noqa: PLR0915
     agent: ProjectReActAgent,
     request_id: str,
     response_data: object,
@@ -1063,7 +1258,15 @@ async def continue_project_chat(
 
     db_event_time = await _get_last_db_event_time(state.conversation_id)
     time_gen = _init_continue_time_gen(state, db_event_time)
+    automation_identity = _automation_runtime_identity(
+        tenant_id=state.tenant_id,
+        project_id=state.project_id,
+        conversation_id=state.conversation_id,
+        message_id=state.message_id,
+        automation_run_id=state.automation_run_id,
+    )
     await set_agent_running(state.conversation_id, state.message_id)
+    await _project_automation_runtime_running(automation_identity)
 
     try:
         conversation_context = _build_hitl_context(state, response_data)
@@ -1093,6 +1296,8 @@ async def continue_project_chat(
 
             side_effects = _extract_event_side_effects(event)
             ss.apply_side_effects(side_effects)
+            if event.get("type") in _HITL_REQUEST_EVENT_TYPES:
+                await _project_automation_runtime_waiting_human(automation_identity)
 
             now = time_module.time()
             ss.last_refresh = await _maybe_refresh_ttl(
@@ -1161,6 +1366,13 @@ async def continue_project_chat(
                 error_message=ss.error_message,
             )
 
+        await _project_automation_stream_terminal(
+            automation_identity,
+            outcome="failed" if ss.is_error else "success",
+            state=ss,
+            start_time=start_time,
+        )
+
         return ProjectChatResult(
             conversation_id=state.conversation_id,
             message_id=state.message_id,
@@ -1173,7 +1385,21 @@ async def continue_project_chat(
             event_count=len(ss.events),
         )
 
+    except asyncio.CancelledError:
+        await _project_automation_stream_terminal(
+            automation_identity,
+            outcome="cancelled",
+            state=ss,
+            start_time=start_time,
+        )
+        raise
     except Exception as e:
+        await _project_automation_stream_terminal(
+            automation_identity,
+            outcome="timeout" if isinstance(e, TimeoutError) else "failed",
+            state=ss,
+            start_time=start_time,
+        )
         return await _handle_chat_error(
             e,
             ss.events,

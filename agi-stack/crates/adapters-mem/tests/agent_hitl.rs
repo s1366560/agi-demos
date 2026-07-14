@@ -226,3 +226,35 @@ fn resume_replays_answer_without_redeciding_suspended_round() {
     );
     assert!(done.pending_hitl.is_none());
 }
+
+#[test]
+fn accepting_human_response_persists_running_checkpoint_without_driving_the_loop() {
+    let checkpoints = Arc::new(InMemoryCheckpointStore::new());
+    let tools = Arc::new(CountingToolHost {
+        calls: AtomicUsize::new(0),
+    });
+    let decide_calls = Arc::new(AtomicUsize::new(0));
+    let engine = ReActEngine::new(
+        Arc::new(NonReemittingHitlLlm {
+            calls: decide_calls.clone(),
+        }),
+        tools,
+        checkpoints.clone(),
+        Arc::new(FixedClock(0)),
+    );
+
+    let suspended = block_on(engine.run("s-hitl-accept", "decide", Some("p1"))).unwrap();
+    assert_eq!(suspended.status, SessionStatus::AwaitingInput);
+
+    let accepted =
+        block_on(engine.accept_human_response("s-hitl-accept", "approve-nonrepeat", "approved"))
+            .unwrap();
+
+    assert_eq!(accepted.status, SessionStatus::Running);
+    assert_eq!(accepted.hitl_answer("approve-nonrepeat"), Some("approved"));
+    assert_eq!(decide_calls.load(Ordering::SeqCst), 1);
+    let saved = block_on(checkpoints.load("s-hitl-accept"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved, accepted);
+}

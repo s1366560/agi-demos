@@ -1,66 +1,46 @@
-**Findings**
-- No actionable P0/P1/P2 fidelity or interaction issues remain.
+# Desktop Session Detail Design QA
 
-**Comparison Setup**
-- Source visual truth path: `/Users/tiejunsun/.codex/generated_images/019f36bb-4e1e-74f1-87f6-d49dab9939a7/ig_01e4ef984caa5f10016a4b7e096ff08196ba560353d07a7dee.png`
-- Source system references: `https://www.radix-ui.com/themes/docs/overview/getting-started` and `https://github.com/dip/cmdk`
-- Implementation screenshot path: `/Users/tiejunsun/github/agi-demos/.omx/artifacts/agi-stack-desktop-radix/radix-1440x1024.png`
-- Command palette screenshot path: `/Users/tiejunsun/github/agi-demos/.omx/artifacts/agi-stack-desktop-radix/radix-cmdk-1440x1024.png`
-- Interaction screenshot path: `/Users/tiejunsun/github/agi-demos/.omx/artifacts/agi-stack-desktop-radix/radix-interactions-1440x1024.png`
-- Small desktop screenshot path: `/Users/tiejunsun/github/agi-demos/.omx/artifacts/agi-stack-desktop-radix/radix-1120x760.png`
-- Side-by-side comparison path: `/Users/tiejunsun/github/agi-demos/.omx/artifacts/agi-stack-desktop-radix/radix-compare-source-implementation.png`
-- Local URL: `http://127.0.0.1:4175/`
-- Viewport: 1440 x 1024, with 1120 x 760 compact desktop check.
-- State: dark Radix desktop workbench, Chat / Board / Status visible; interaction state covers cmdk, Compact preset, restore, drag resize, Board List mode, approval, terminal, composer, and local memory smoke.
+## Findings
 
-**Full-View Comparison Evidence**
-- The implementation preserves the accepted desktop workbench model: native titlebar, activity rail, workspace dock, three central panes, status inspector, and bottom runtime rail.
-- The visual system now uses Radix Themes structure and tokens for buttons, badges, tabs, selects, text fields, text area, progress, tooltips, scroll areas, and theme root.
-- The command surface now uses cmdk with a real Command Dialog, searchable grouped commands, keyboard opening through Cmd/Ctrl+K, and command actions that mutate actual workspace state.
-- The result is denser and more componentized than the image target, but the key product hierarchy remains intact and better matches the requested Radix/cmdk direction.
+- P0 — Visual comparison is blocked for the production desktop implementation. The approved in-app browser rejected navigation to `http://127.0.0.1:5173/` under its browser security policy, so no current implementation screenshot can be captured through the permitted surface.
+- No fidelity verdict is issued without a source-to-implementation comparison. Build, unit, Rust, and static checks are implementation evidence, not visual evidence.
 
-**Focused Region Comparison Evidence**
-- Command palette: `radix-cmdk-1440x1024.png` shows a centered cmdk palette with grouped Layout, Panes, Workflow, and References commands. Keyboard and click actions were verified.
-- Three-pane layout: `radix-1440x1024.png` shows Chat, Board, and Status present at the target viewport. `radix-1120x760.png` confirms the compact desktop size still keeps all three panes visible with no key-container overflow.
-- Board List state: `radix-interactions-1440x1024.png` shows styled list rows at stable 38px height after switching to List mode and approving the selected task.
+## Comparison setup
 
-**Required Fidelity Surfaces**
-- Fonts and typography: Radix/system stack is used with compact workbench text sizes, clear pane headings, block-separated brand copy, and non-heading metric values. No viewport-scaled type or negative letter spacing is used.
-- Spacing and layout rhythm: rails, dock, toolbar, panes, lanes, rows, tabs, and status metrics use stable dimensions. Drag splitters change pane widths without collapsing layout.
-- Colors and visual tokens: Radix dark appearance with cyan accent, slate gray, green/amber/blue semantic badges, and restrained borders aligns with the accepted dark desktop direction.
-- Image quality and asset fidelity: this is a UI prototype without product imagery. Icons are from `@radix-ui/react-icons`; no inline SVG art, emoji, or placeholder image assets were introduced.
-- Copy and content: copy now explicitly reflects the Radix/cmdk redesign while preserving agi-stack desktop concepts: local sandbox, SQLite device store, MCP tools, Ray actors, approval gate, terminal, and local memory smoke.
+- Source visual truth:
+  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/session-detail-conversation-1565-final.png`
+  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/session-detail-redesign-1565-final.png`
+  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/session-detail-redesign-1100-final.png`
+- Competitive visual references:
+  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/reference-codex-session-canvas-focus.png`
+  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/reference-copilot-session-canvas-focus.png`
+- Implementation URL: `http://127.0.0.1:5173/`
+- Required viewports: 1280 × 800 and 1100 × 800.
+- Required states: Code split view, Work split view, Canvas focus, Canvas collapsed, Needs input, Ready review, Artifact Ready, Artifact Approved, Artifact Delivered.
+- Implementation screenshot: unavailable because the permitted browser surface blocked the URL.
 
-**Interaction Evidence**
-- `pnpm install cmdk` completed and installed `cmdk 1.1.1`.
-- `pnpm build` passed: TypeScript no-emit plus Vite build.
-- Browser snapshot confirmed the rendered app is nonblank and exposes the expected controls.
-- Playwright verified page identity, Radix theme mount, cmdk open/items, Compact status collapse, status restore, pane resize, Board List mode, approval progress update to 100%, terminal tab content, composer submit, memory mock ingest/search, 1120 x 760 compact desktop layout, and console health.
-- Final assertions: all true; console events: none.
-- Tauri shell validation: `cargo test desktop_core_round_trip_headless` passed from `agi-stack/apps/desktop/src-tauri`.
-- Config validation: `tauri.conf.json` parsed successfully.
+## Verified implementation evidence
 
-**Patches Made Since QA**
-- Added standalone pnpm/Vite/React frontend under `agi-stack/apps/desktop`.
-- Installed `cmdk`, `@radix-ui/themes`, `@radix-ui/react-icons`, React, Vite, and TypeScript with pnpm.
-- Rebuilt the desktop UI with Radix Themes components and Radix icons.
-- Added cmdk command palette for layout, pane, workflow, terminal, approval, and reference actions.
-- Rebuilt `dist` for Tauri consumption.
-- Updated Tauri product/window naming and desktop `.gitignore` for generated bundle assets.
+- Session structure is implemented as Session Header + Narrative Thread + mode-aware Work Canvas.
+- Code and Work expose distinct authoritative Canvas tabs through `sessionCanvasModel`.
+- Run controls are revision-bound and separate Run approval from Artifact approval and delivery.
+- Artifact versions are immutable, reviewable, revision-guarded, and delivered only after approval with a persisted receipt.
+- Requesting Artifact changes updates the Artifact and its Run atomically in one SQLite transaction.
+- Code task approval now persists the selected Local/Worktree execution environment; Worktrees are materialized only after approval.
+- Reattach keeps the authoritative Run and environment; Fork recovery creates a traceable child Run and isolated Worktree while preserving the source Run.
+- Agent tools and the task-scoped Terminal resolve their working directory from the authoritative Run environment.
+- Frontend tests: 54 passed.
+- Desktop Rust tests: 43 passed.
+- Local tool tests: 10 passed.
+- Desktop and local-tool Clippy checks passed with `-D warnings`.
+- Production frontend build passed; Vite reports only the existing large-chunk warning.
 
-**Open Questions**
-- None blocking. A future product pass can decide whether command actions should be backed by persisted workspace profiles or remain local-only in the prototype.
+## Remaining visual checks
 
-**Implementation Checklist**
-- Complete: Radix Themes CSS imported at the app root and wrapped in `Theme`.
-- Complete: cmdk installed via pnpm and wired as a functional Command Dialog.
-- Complete: Chat, Board, and Status remain independently visible, collapsible, restorable, preset-driven, and resizable.
-- Complete: Board/List, selected task, approval, inspector tabs, terminal, composer, and memory smoke are interactive.
-- Complete: local preview runs at `http://127.0.0.1:4175/`.
+- Compare layout proportions, clipping, scroll ownership, and primary-action visibility at both required viewports.
+- Confirm Thread/Canvas focus switching preserves context and gives a visible restore affordance.
+- Confirm Artifact lifecycle, Source/Check empty states, and delivery receipt remain readable without a static third rail.
+- Confirm English and Simplified Chinese do not overflow the header, status banner, Canvas tabs, or Artifact actions.
+- Run the visual-verdict loop after an allowed implementation screenshot becomes available.
 
-**Follow-up Polish**
-- P3: persist custom layouts in local storage or the future desktop settings model.
-- P3: add nested cmdk pages for agent actions, memory sources, and terminal commands.
-- P3: tune narrow-width layout once the actual minimum desktop window policy is finalized.
-
-final result: passed
+final result: blocked

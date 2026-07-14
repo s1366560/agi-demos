@@ -1,4 +1,5 @@
 use super::*;
+use agistack_core::ports::ContainerSpec;
 
 pub(super) fn datetime_from_ms(ms: i64) -> chrono::DateTime<chrono::Utc> {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
@@ -265,6 +266,48 @@ pub(super) fn sandbox_internal_service_host(info: &ProjectSandboxInfo) -> String
         .map(|host| host.trim().to_string())
         .filter(|host| !host.is_empty())
         .unwrap_or_else(|| "127.0.0.1".to_string())
+}
+
+pub(super) fn sandbox_container_spec(
+    image: &str,
+    project_id: &str,
+    tenant_id: &str,
+    profile: SandboxProfile,
+    runtime_auth_token: &SandboxRuntimeToken,
+) -> ContainerSpec {
+    let interactive_enabled = !matches!(profile, SandboxProfile::Lite);
+    ContainerSpec {
+        image: image.to_string(),
+        cmd: None,
+        env: vec![
+            ("AGISTACK_PROJECT_ID".to_string(), project_id.to_string()),
+            ("AGISTACK_TENANT_ID".to_string(), tenant_id.to_string()),
+            (
+                "AGISTACK_SANDBOX_PROFILE".to_string(),
+                profile.as_str().to_string(),
+            ),
+            ("MCP_AUTH_ENABLED".to_string(), "true".to_string()),
+            ("MCP_ALLOW_LOCALHOST".to_string(), "false".to_string()),
+            (
+                "MCP_STATIC_TOKEN".to_string(),
+                runtime_auth_token.expose().to_string(),
+            ),
+            (
+                "DESKTOP_ENABLED".to_string(),
+                interactive_enabled.to_string(),
+            ),
+            (
+                "TERMINAL_ENABLED".to_string(),
+                interactive_enabled.to_string(),
+            ),
+        ],
+        labels: vec![
+            (PROJECT_LABEL.to_string(), project_id.to_string()),
+            (TENANT_LABEL.to_string(), tenant_id.to_string()),
+            (KIND_LABEL.to_string(), KIND_PROJECT.to_string()),
+        ],
+        ports: sandbox_port_bindings(profile),
+    }
 }
 
 pub(super) fn python_utc_offset_string(ms: i64) -> String {

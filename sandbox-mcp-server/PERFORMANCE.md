@@ -37,7 +37,7 @@ Optimization guide for Sandbox MCP Server with KDE Plasma desktop served over Ka
 
 ```bash
 # Startup time
-time curl http://localhost:6080/vnc.html
+time curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080/
 
 # Frame rate (via browser DevTools)
 # Chrome: DevTools > Rendering > Frame Rendering Stats
@@ -192,8 +192,8 @@ docker exec <container> ps aux --sort=-%mem | head -10
 ```
 
 **Reduce memory usage**:
-- The desktop ships KDE Plasma 6; prefer the minimal image (already configured)
-- Disable KDE Plasma effects / widgets you don't need
+- The desktop ships KDE Plasma 5.27 from Ubuntu 24.04 LTS; prefer the minimal package set
+- Disable KDE Plasma effects or widgets you do not need
 - Lower resolution (1280x720 via `change_resolution`)
 - Limit concurrent sessions:
   ```bash
@@ -286,7 +286,7 @@ websockify to tune.
 
 ### KDE Plasma Configuration
 
-The desktop environment is KDE Plasma 6 (the image no longer ships XFCE).
+The desktop environment is KDE Plasma 5.27 from Ubuntu 24.04 LTS (the image no longer ships XFCE).
 Plasma configs are baked into the image under `/etc/xdg/` (`kdeglobals`,
 `kwinrc`, `katerc`, `dolphinrc`, `konsolerc`) and per-user under `~/.config/`.
 

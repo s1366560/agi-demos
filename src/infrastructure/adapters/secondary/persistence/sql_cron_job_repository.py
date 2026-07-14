@@ -133,6 +133,8 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
             description=db_model.description,
             enabled=db_model.enabled,
             delete_after_run=db_model.delete_after_run,
+            revision=db_model.revision,
+            schedule_revision=db_model.schedule_revision,
             schedule=CronSchedule(
                 kind=ScheduleType(db_model.schedule_type),
                 config=db_model.schedule_config or {},
@@ -167,6 +169,8 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
             description=domain_entity.description,
             enabled=domain_entity.enabled,
             delete_after_run=domain_entity.delete_after_run,
+            revision=domain_entity.revision,
+            schedule_revision=domain_entity.schedule_revision,
             schedule_type=domain_entity.schedule.kind.value,
             schedule_config=domain_entity.schedule.config,
             payload_type=domain_entity.payload.kind.value,

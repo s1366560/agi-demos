@@ -244,6 +244,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
       };
 
       act(() => {
+        result.current.setProjectId('project-1');
         result.current.handleSSEEvent({
           type: 'desktop_started',
           data: eventData,
@@ -251,7 +252,10 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
       });
 
       expect(result.current.desktopStatus?.running).toBe(true);
-      expect(result.current.desktopStatus?.url).toBe(eventData.url);
+      expect(result.current.desktopStatus?.url).toBe(
+        '/api/v1/projects/project-1/sandbox/desktop/proxy/vnc.html'
+      );
+      expect(result.current.desktopStatus?.url).not.toBe(eventData.url);
     });
 
     it('should update desktop status on desktop_stopped event', () => {
@@ -294,6 +298,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
       };
 
       act(() => {
+        result.current.setProjectId('project-1');
         result.current.handleSSEEvent({
           type: 'terminal_started',
           data: eventData,
@@ -301,7 +306,10 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
       });
 
       expect(result.current.terminalStatus?.running).toBe(true);
-      expect(result.current.terminalStatus?.url).toBe(eventData.url);
+      expect(result.current.terminalStatus?.url).toContain(
+        '/api/v1/projects/project-1/sandbox/terminal/proxy/ws'
+      );
+      expect(result.current.terminalStatus?.url).not.toBe(eventData.url);
     });
 
     it('should update terminal status on terminal_stopped event', () => {
@@ -368,7 +376,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
 
       expect(result.current.desktopStatus).toMatchObject({
         running: true,
-        url: 'http://localhost:6080/vnc.html',
+        url: '/api/v1/projects/project-1/sandbox/desktop/proxy/vnc.html',
         display: ':1',
         resolution: '1920x1080',
         port: 6080,
@@ -382,6 +390,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       act(() => {
+        result.current.setProjectId('project-1');
         result.current.handleSSEEvent({
           type: 'terminal_status',
           data: {
@@ -397,7 +406,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
 
       expect(result.current.terminalStatus).toMatchObject({
         running: true,
-        url: 'ws://localhost:7681',
+        url: 'ws://localhost:8000/api/v1/projects/project-1/sandbox/terminal/proxy/ws?session_id=session-123',
         port: 7681,
         sessionId: 'session-123',
         pid: 42,

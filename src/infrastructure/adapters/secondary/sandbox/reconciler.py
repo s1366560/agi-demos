@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
-from docker import DockerClient
+from docker.client import DockerClient
 from docker.models.containers import Container
 
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter

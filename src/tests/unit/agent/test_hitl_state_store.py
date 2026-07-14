@@ -128,6 +128,7 @@ class TestHITLAgentState:
             ],
             user_message="Hello",
             user_id="user-round",
+            automation_run_id="msg-round",
             step_count=10,
             timeout_seconds=180.0,
         )
@@ -139,6 +140,7 @@ class TestHITLAgentState:
         assert restored.hitl_request_id == original.hitl_request_id
         assert restored.step_count == original.step_count
         assert restored.messages == original.messages
+        assert restored.automation_run_id == "msg-round"
 
     def test_state_with_pending_tool_call_id(self):
         """Test state with pending_tool_call_id field."""

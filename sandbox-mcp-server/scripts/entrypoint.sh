@@ -34,21 +34,24 @@ DESKTOP_ENABLED="${DESKTOP_ENABLED:-true}"
 DESKTOP_RESOLUTION="${DESKTOP_RESOLUTION:-1920x1080}"
 DESKTOP_PORT="${DESKTOP_PORT:-6080}"
 TERMINAL_PORT="${TERMINAL_PORT:-7681}"
+TERMINAL_ENABLED="${TERMINAL_ENABLED:-true}"
 SKIP_MCP_SERVER="${SKIP_MCP_SERVER:-false}"
-CONTAINER_HOSTNAME="${HOSTNAME:-mcp-sandbox}"
+SERVICE_AUTH_USERNAME="sandbox"
+SERVICE_AUTH_TOKEN="${SANDBOX_SERVICE_AUTH_TOKEN:-${MCP_STATIC_TOKEN:-}}"
+CONTAINER_HOSTNAME="${SANDBOX_ID:-$(cat /etc/hostname)}"
 VNC_DISPLAY=":1"
 
 # Configure hostname in /etc/hosts at runtime
 configure_hostname() {
     log_info "Configuring hostname: $CONTAINER_HOSTNAME"
-    
+
+    # Docker supplies --hostname and --add-host. The runtime user is deliberately
+    # not allowed to mutate /etc/hosts or the kernel hostname.
     if ! grep -q "$CONTAINER_HOSTNAME" /etc/hosts 2>/dev/null; then
-        echo "127.0.0.1 $CONTAINER_HOSTNAME" >> /etc/hosts
-        echo "::1 $CONTAINER_HOSTNAME" >> /etc/hosts
+        log_error "Container hostname is not present in /etc/hosts"
+        return 1
     fi
-    
-    hostname "$CONTAINER_HOSTNAME" 2>/dev/null || true
-    
+
     log_success "Hostname configured: $CONTAINER_HOSTNAME"
 }
 
@@ -77,55 +80,72 @@ cleanup() {
 # Trap signals
 trap cleanup EXIT TERM INT
 
+wait_for_port() {
+    local port="$1"
+    local timeout="$2"
+    local elapsed=0
+
+    while [ "$elapsed" -lt "$timeout" ]; do
+        if netstat -tln 2>/dev/null | grep -q ":$port "; then
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    return 1
+}
+
 # Start KasmVNC (Remote Desktop with built-in web client)
 start_kasmvnc() {
     log_info "Starting KasmVNC on display $VNC_DISPLAY..."
 
     # Set up runtime directory
-    mkdir -p /run/user/0
-    chmod 700 /run/user/0
+    local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    mkdir -p "$runtime_dir"
+    chmod 700 "$runtime_dir"
 
     # Set up KasmVNC user config
-    mkdir -p /root/.vnc
-    chmod 700 /root/.vnc
+    mkdir -p "$HOME/.vnc"
+    chmod 700 "$HOME/.vnc"
 
-    # Ensure KasmVNC user exists with write permissions (non-interactive)
-    # KasmVNC reads $HOME/.kasmpasswd (NOT .vnc/kasmpasswd)
-    if [ ! -f /root/.kasmpasswd ]; then
-        echo "root:kasmvnc:ow" > /root/.kasmpasswd
-        chmod 600 /root/.kasmpasswd
-    fi
+    # KasmVNC reads $HOME/.kasmpasswd (NOT .vnc/kasmpasswd). Generate the
+    # credential at runtime so every sandbox has a distinct capability.
+    printf '%s\n%s\n' "$SERVICE_AUTH_TOKEN" "$SERVICE_AUTH_TOKEN" \
+        | vncpasswd -u "$SERVICE_AUTH_USERNAME" -w "$HOME/.kasmpasswd" >/dev/null
+    chmod 600 "$HOME/.kasmpasswd"
 
     # Copy xstartup from template (BEFORE KasmVNC starts)
-    cp /etc/kasmvnc/xstartup.template /root/.vnc/xstartup
-    chmod +x /root/.vnc/xstartup
+    cp /etc/kasmvnc/xstartup.template "$HOME/.vnc/xstartup"
+    chmod +x "$HOME/.vnc/xstartup"
 
     # Mark DE as selected to skip interactive select-de.sh
-    touch /root/.vnc/.de-was-selected
+    touch "$HOME/.vnc/.de-was-selected"
 
     # Copy KasmVNC config to user dir (vncserver reads ~/.vnc/kasmvnc.yaml)
-    cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
+    cp /etc/kasmvnc/kasmvnc.yaml "$HOME/.vnc/kasmvnc.yaml"
 
     # Set up KDE Plasma configs
     export DISPLAY="$VNC_DISPLAY"
-    export XDG_RUNTIME_DIR=/run/user/0
+    export XDG_RUNTIME_DIR="$runtime_dir"
 
-    mkdir -p /root/.config
+    mkdir -p "$HOME/.config"
 
-    [ -f /root/.config/kdeglobals ] || \
-        cp /etc/xdg/kdeglobals /root/.config/ 2>/dev/null || true
-    [ -f /root/.config/kwinrc ] || \
-        cp /etc/xdg/kwinrc /root/.config/ 2>/dev/null || true
+    # Container restarts may leave stale X11 locks after an unclean exit.
+    rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
+
+    [ -f "$HOME/.config/kdeglobals" ] || \
+        cp /etc/xdg/kdeglobals "$HOME/.config/" 2>/dev/null || true
+    [ -f "$HOME/.config/kwinrc" ] || \
+        cp /etc/xdg/kwinrc "$HOME/.config/" 2>/dev/null || true
 
     # Start KasmVNC server
     # KasmVNC provides: X server + VNC + WebSocket + Web client (all-in-one)
-    # -SecurityTypes None: skip VNC auth (API proxy handles authentication)
+    # HTTP Basic authentication gates both the web client and WebSocket upgrade.
     vncserver "$VNC_DISPLAY" \
         -geometry "${DESKTOP_RESOLUTION}" \
         -depth 24 \
         -websocketPort "$DESKTOP_PORT" \
         -interface 0.0.0.0 \
-        -disableBasicAuth \
         -SecurityTypes None \
         2>&1 | tee /tmp/kasmvnc.log &
 
@@ -145,19 +165,19 @@ start_kasmvnc() {
     return 1
 }
 
-# Start ttyd (Web Terminal) as root
+# Start ttyd (Web Terminal) as the unprivileged runtime user
 start_ttyd() {
     log_info "Starting ttyd (Web Terminal) on port $TERMINAL_PORT..."
 
-    ttyd -p "$TERMINAL_PORT" -- /bin/bash &
+    ttyd -W -c "$SERVICE_AUTH_USERNAME:$SERVICE_AUTH_TOKEN" -p "$TERMINAL_PORT" -- /bin/bash &
     PIDS+=($!)
 
-    sleep 1
-
-    if netstat -tln 2>/dev/null | grep -q ":$TERMINAL_PORT "; then
+    if wait_for_port "$TERMINAL_PORT" 10; then
         log_success "ttyd started on ws://localhost:$TERMINAL_PORT"
+        return 0
     else
-        log_warn "ttyd may not be running properly on port $TERMINAL_PORT"
+        log_error "ttyd failed to start on port $TERMINAL_PORT"
+        return 1
     fi
 }
 
@@ -174,12 +194,12 @@ start_mcp_server() {
     python -m src.server.main &
     MCP_PID=$!
 
-    sleep 2
-
-    if netstat -tln 2>/dev/null | grep -q ":$MCP_PORT "; then
+    if wait_for_port "$MCP_PORT" 30; then
         log_success "MCP Server started on http://$MCP_HOST:$MCP_PORT"
+        return 0
     else
-        log_warn "MCP Server may not be running properly on port $MCP_PORT"
+        log_error "MCP Server failed to start on port $MCP_PORT"
+        return 1
     fi
 }
 
@@ -192,18 +212,38 @@ main() {
     echo ""
 
     # Configure hostname first
-    configure_hostname
+    if ! configure_hostname; then
+        exit 1
+    fi
+
+    if [ "$DESKTOP_ENABLED" = "true" ] || [ "$TERMINAL_ENABLED" = "true" ]; then
+        if [ -z "$SERVICE_AUTH_TOKEN" ]; then
+            log_error "Interactive services require a runtime authentication capability"
+            exit 1
+        fi
+    fi
 
     # Start MCP Server first (always required)
-    start_mcp_server
+    if ! start_mcp_server; then
+        log_error "Required MCP service is unavailable"
+        exit 1
+    fi
 
     # Start Desktop if enabled (KasmVNC = single process for VNC + Web)
     if [ "$DESKTOP_ENABLED" = "true" ]; then
-        start_kasmvnc || log_warn "Desktop will not be available"
+        if ! start_kasmvnc; then
+            log_error "Required desktop service is unavailable"
+            exit 1
+        fi
     fi
 
-    # Start Terminal
-    start_ttyd
+    # Start Terminal when provided by the selected runtime profile.
+    if [ "$TERMINAL_ENABLED" = "true" ]; then
+        if ! start_ttyd; then
+            log_error "Required terminal service is unavailable"
+            exit 1
+        fi
+    fi
 
     echo ""
     echo "========================================================"
@@ -214,11 +254,13 @@ main() {
     echo "  * MCP Server:     http://localhost:$MCP_PORT"
     echo "  * Health Check:   http://localhost:$MCP_PORT/health"
     if [ "$DESKTOP_ENABLED" = "true" ]; then
-        echo "  * Remote Desktop: http://localhost:$DESKTOP_PORT"
+        echo "  * Remote Desktop: https://localhost:$DESKTOP_PORT"
         echo ""
         log_info "Desktop: KasmVNC (WebP + dynamic resize + clipboard + audio)"
     fi
-    echo "  * Web Terminal:   ws://localhost:$TERMINAL_PORT"
+    if [ "$TERMINAL_ENABLED" = "true" ]; then
+        echo "  * Web Terminal:   http://localhost:$TERMINAL_PORT"
+    fi
     echo ""
     log_info "Container ready. Waiting for signals..."
 
@@ -228,10 +270,8 @@ main() {
         exit_code=$?
         log_info "MCP server exited with code $exit_code"
     else
-        log_warn "MCP server not running, entering standby mode"
-        while true; do
-            sleep 60
-        done
+        log_error "MCP server is not running"
+        exit 1
     fi
 }
 

@@ -1,0 +1,18 @@
+[package]
+name = "agistack-adapters-local-tools"
+description = "Native local MCP-compatible tool host for the desktop runtime."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+glob = "0.3"
+regex = "1"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
+uuid = { version = "1", features = ["v4"] }
+walkdir = "2"

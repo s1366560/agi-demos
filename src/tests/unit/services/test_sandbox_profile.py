@@ -32,6 +32,7 @@ class TestSandboxProfile:
 
         assert profile.name == "Lite"
         assert profile.desktop_enabled is False
+        assert profile.terminal_enabled is True
         assert profile.memory_limit == "512m"
         assert profile.cpu_limit == "0.5"
         assert profile.timeout_seconds == 1800
@@ -53,6 +54,7 @@ class TestSandboxProfile:
         )
 
         assert profile.desktop_enabled is True
+        assert profile.terminal_enabled is True
         assert profile.memory_limit == "8g"
         assert profile.cpu_limit == "2"
         assert profile.max_instances == 5
@@ -72,6 +74,7 @@ class TestSandboxProfile:
         )
 
         assert profile.desktop_enabled is True
+        assert profile.terminal_enabled is True
         assert profile.memory_limit == "4g"
         assert profile.cpu_limit == "4"
         assert profile.max_instances == 2
@@ -94,6 +97,7 @@ class TestSandboxProfile:
 
         assert result["name"] == "Test"
         assert result["desktop_enabled"] is False
+        assert result["terminal_enabled"] is True
         assert result["memory_limit"] == "1g"
         assert result["preinstalled_tools"] == ["python"]
 
@@ -114,6 +118,7 @@ class TestSandboxProfile:
         assert config["memory_limit"] == "1g"
         assert config["cpu_limit"] == "1"
         assert config["timeout_seconds"] == 1800
+        assert config["terminal_enabled"] is True
 
 
 class TestSandboxProfileFunctions:
@@ -125,6 +130,7 @@ class TestSandboxProfileFunctions:
 
         assert profile.profile_type == SandboxProfileType.LITE
         assert profile.desktop_enabled is False
+        assert profile.terminal_enabled is False
         assert profile.memory_limit == "512m"
 
     def test_get_profile_standard(self) -> None:
@@ -133,6 +139,7 @@ class TestSandboxProfileFunctions:
 
         assert profile.profile_type == SandboxProfileType.STANDARD
         assert profile.desktop_enabled is True
+        assert profile.terminal_enabled is True
         assert profile.memory_limit == "8g"
 
     def test_get_profile_full(self) -> None:
@@ -141,6 +148,7 @@ class TestSandboxProfileFunctions:
 
         assert profile.profile_type == SandboxProfileType.FULL
         assert profile.desktop_enabled is True
+        assert profile.terminal_enabled is True
         assert profile.memory_limit == "4g"
 
     def test_get_profile_invalid(self) -> None:

@@ -145,7 +145,7 @@ docker exec <container> top
 
 **Symptoms**:
 - Browser shows "Connection refused"
-- `curl http://localhost:6080` fails
+- `curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080` fails
 - Port not accessible
 
 **Diagnosis**:
@@ -187,24 +187,24 @@ docker exec <container> ps aux | grep Xkasmvnc
 **Diagnosis**:
 ```bash
 # Check KasmVNC security settings (started by entrypoint.sh / desktop_manager.py)
-docker exec <container> ps aux | grep "[X]kasmvnc" | grep -oE "\-SecurityTypes [^ ]+|\-disableBasicAuth"
+docker exec <container> ps aux | grep -E "[X]vnc|[X]kasmvnc" | grep -oE "\-SecurityTypes [^ ]+|\-disableBasicAuth"
 
 # Check the KasmVNC user credentials file
-docker exec <container> ls -l /root/.kasmpasswd 2>/dev/null && echo "found"
+docker exec <container> test -s /home/sandbox/.kasmpasswd && echo "found"
 ```
 
 **Solutions**:
 
-1. **Verify no authentication** (default):
+1. **Verify authentication is enabled** (default):
    ```bash
-   # Should show: -SecurityTypes None -disableBasicAuth
-   # The API proxy handles auth; KasmVNC itself runs open.
+   # The process may show -SecurityTypes None, but must never show -disableBasicAuth.
+   # HTTP Basic Auth gates the web client and WebSocket upgrade.
    ```
 
 2. **If a credential prompt still appears**:
    - KasmVNC reads `$HOME/.kasmpasswd` (NOT `~/.vnc/passwd`)
-   - Format is `username:password:permissions` (e.g. `root:kasmvnc:ow`)
-   - Ensure `chmod 600 /root/.kasmpasswd` and that root is in the `ssl-cert` group
+   - The file is generated with `vncpasswd`; do not write a plaintext password entry
+   - Ensure `chmod 600 /home/sandbox/.kasmpasswd` and that `sandbox` is in the `ssl-cert` group
 
 ### Slow VNC Performance
 
@@ -625,7 +625,7 @@ netstat -tlnp | grep -E "8765|7681|6080"
 | "Cannot allocate memory" | OOM | Increase memory limit |
 | "No space left on device" | Disk full | Clean workspace |
 | "Tool not found" | Server restart needed | Restart container |
-| "VNC authentication failed" | Misconfigured credentials | Verify `/root/.kasmpasswd` (format `user:pass:ow`, chmod 600) and `ssl-cert` membership |
+| "VNC authentication failed" | Misconfigured credentials | Verify `/home/sandbox/.kasmpasswd` exists with mode 600 and `sandbox` has `ssl-cert` membership; regenerate it with `vncpasswd` rather than writing plaintext |
 
 ---
 
@@ -649,7 +649,7 @@ docker exec <container> vncserver -kill :1
 
 # Test connection
 curl http://localhost:8765/health
-curl http://localhost:6080/vnc.html
+curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080/
 ```
 
 ---

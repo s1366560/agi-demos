@@ -24,6 +24,8 @@ _NBSP_RE = re.compile(r"&nbsp;", re.IGNORECASE)
 _MD_LEADING_RE = re.compile(r"^[*`~_]+")
 # Regex for trailing markdown wrappers
 _MD_TRAILING_RE = re.compile(r"[*`~_]+$")
+# Regex for complete HTML comment blocks, including multi-line blocks.
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def is_heartbeat_content_effectively_empty(content: str | None) -> bool:
@@ -52,18 +54,15 @@ def is_heartbeat_content_effectively_empty(content: str | None) -> bool:
     header_re = re.compile(r"^#+(\s|$)")
     # Empty list items: "- [ ]", "* [ ]", "- ", etc.
     empty_list_re = re.compile(r"^[-*+]\s*(\[[\sXx]?\]\s*)?$")
-    # HTML comment blocks
-    html_comment_re = re.compile(r"^<!--.*?-->$", re.DOTALL)
+    content_without_comments = _HTML_COMMENT_RE.sub("", content)
 
-    for line in content.split("\n"):
+    for line in content_without_comments.split("\n"):
         trimmed = line.strip()
         if not trimmed:
             continue
         if header_re.match(trimmed):
             continue
         if empty_list_re.match(trimmed):
-            continue
-        if html_comment_re.match(trimmed):
             continue
         # Found a non-empty, non-comment line — actionable content exists
         return False
@@ -97,8 +96,8 @@ def _strip_token_at_edges(raw: str) -> tuple[str, bool]:
     if token not in text:
         return (text, False)
 
-    # Regex to match token at end with up to 4 trailing non-word chars
-    token_at_end_re = re.compile(re.escape(token) + r"[^\w]{0,4}$")
+    token_at_start_re = re.compile(re.escape(token) + r"[^\w\s]{0,4}(?=\s|$)")
+    token_at_end_re = re.compile(re.escape(token) + r"[^\w\s]{0,4}$")
 
     did_strip = False
     changed = True
@@ -107,9 +106,9 @@ def _strip_token_at_edges(raw: str) -> tuple[str, bool]:
         text = text.strip()
 
         # Strip token at start
-        if text.startswith(token):
-            after = text[len(token) :].lstrip()
-            text = after
+        start_match = token_at_start_re.match(text)
+        if start_match:
+            text = text[start_match.end() :].lstrip()
             did_strip = True
             changed = True
             continue
@@ -117,13 +116,7 @@ def _strip_token_at_edges(raw: str) -> tuple[str, bool]:
         # Strip token at end (with up to 4 trailing non-word chars)
         match = token_at_end_re.search(text)
         if match:
-            idx = text.rfind(token)
-            before = text[:idx].rstrip()
-            if not before:
-                text = ""
-            else:
-                after = text[idx + len(token) :].lstrip()
-                text = f"{before}{after}".rstrip()
+            text = text[: match.start()].rstrip()
             did_strip = True
             changed = True
 
@@ -174,7 +167,9 @@ def strip_heartbeat_token(
     # Pick whichever actually stripped and has content
     picked_text: str
     picked_did: bool
-    if stripped_original_did and stripped_original_text:
+    if stripped_normalized_did and not stripped_normalized_text:
+        picked_text, picked_did = stripped_normalized_text, stripped_normalized_did
+    elif stripped_original_did and stripped_original_text:
         picked_text, picked_did = stripped_original_text, stripped_original_did
     else:
         picked_text, picked_did = stripped_normalized_text, stripped_normalized_did

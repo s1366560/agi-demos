@@ -5,12 +5,18 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.websocket._limits import (
     InboundMessageTooLarge,
     receive_json_with_limit,
 )
+from src.infrastructure.adapters.primary.web.websocket.auth import (
+    authenticate_websocket_or_close,
+    select_websocket_auth_subprotocol,
+)
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +108,11 @@ def _parse_exec_result(data: dict[str, Any]) -> ExecutionResult:
 
 
 @router.websocket("/api/v1/security/ws")
-async def security_ws(websocket: WebSocket) -> None:
+async def security_ws(
+    websocket: WebSocket,
+    token: str | None = Query(None, description="Legacy API key query parameter"),
+    db: AsyncSession = Depends(get_db),
+) -> None:
     """Real-time security evaluation over WebSocket.
 
     Clients send JSON messages with ``type`` = ``evaluate_before`` or
@@ -119,7 +129,10 @@ async def security_ws(websocket: WebSocket) -> None:
     Response:
         {"id": "req-1", "result": {"allowed": true, "reason": "...", ...}}
     """
-    await websocket.accept()
+    if await authenticate_websocket_or_close(websocket, db, token) is None:
+        return
+
+    await websocket.accept(subprotocol=select_websocket_auth_subprotocol(websocket))
     pipeline = get_pipeline()
 
     try:

@@ -76,7 +76,7 @@ docker run -p 8765:8765 -p 7681:7681 -p 6080:6080 \
 **No code changes needed!** The noVNC URL is the same:
 
 ```
-http://localhost:6080/vnc.html
+https://localhost:6080/
 ```
 
 ---
@@ -169,7 +169,7 @@ vncserver :1 \
 2. [ ] Stop old container: `docker stop <container-name>`
 3. [ ] Remove old container (optional): `docker rm <container-name>`
 4. [ ] Start new container with same configuration
-5. [ ] Verify desktop starts: `open http://localhost:6080/vnc.html`
+5. [ ] Verify desktop starts: `open https://localhost:6080/` and authenticate with the per-sandbox runtime credential
 6. [ ] Test MCP tools: Call `start_desktop` tool
 7. [ ] Verify session persistence: Restart container and check desktop state
 
@@ -322,7 +322,7 @@ open http://localhost:7681
 docker restart <container>
 
 # Desktop state is preserved!
-open http://localhost:6080/vnc.html
+open https://localhost:6080/
 ```
 
 ### 3. Multiple Resolutions

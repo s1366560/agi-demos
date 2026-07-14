@@ -13,7 +13,11 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { projectSandboxService } from '../services/projectSandboxService';
 import { sandboxSSEService } from '../services/sandboxSSEService';
-import { buildDesktopWebSocketUrl } from '../services/sandboxWebSocketUtils';
+import {
+  buildDesktopWebSocketUrl,
+  buildProjectDesktopProxyPath,
+  buildProjectTerminalWebSocketUrl,
+} from '../services/sandboxWebSocketUtils';
 import { logger } from '../utils/logger';
 
 import { useCanvasStore } from './canvasStore';
@@ -386,15 +390,14 @@ export const useSandboxStore = create<SandboxState>()(
 
           // Browser iframe and WebSocket proxy requests authenticate with a scoped cookie.
           const proxyDesktopUrl = sandbox.desktop_url
-            ? `/api/v1/projects/${targetProjectId}/sandbox/desktop/proxy/vnc.html`
+            ? buildProjectDesktopProxyPath(targetProjectId, 'vnc.html')
             : null;
           const desktopWsUrl = sandbox.desktop_url
             ? buildDesktopWebSocketUrl(targetProjectId)
             : null;
-          // Terminal uses the existing WebSocket endpoint
-          // The TerminalImpl component will build the correct WebSocket URL
+          // Terminal connections stay on the authenticated project-scoped proxy.
           const terminalWsUrl = sandbox.terminal_url
-            ? `/api/v1/terminal/${sandbox.sandbox_id}/ws`
+            ? buildProjectTerminalWebSocketUrl(targetProjectId)
             : null;
 
           set({
@@ -636,6 +639,14 @@ export const useSandboxStore = create<SandboxState>()(
           if (!activeProjectId) return null;
           return buildDesktopWebSocketUrl(activeProjectId);
         };
+        const buildDesktopUrl = () => {
+          if (!activeProjectId) return null;
+          return buildProjectDesktopProxyPath(activeProjectId, 'vnc.html');
+        };
+        const buildTerminalUrl = (sessionId?: string) => {
+          if (!activeProjectId) return null;
+          return buildProjectTerminalWebSocketUrl(activeProjectId, sessionId);
+        };
 
         switch (type) {
           case 'sandbox_created':
@@ -673,7 +684,7 @@ export const useSandboxStore = create<SandboxState>()(
           case 'desktop_started': {
             const status: DesktopStatus = {
               running: true,
-              url: getStringField(data, 'url', 'desktopUrl', 'desktop_url') ?? null,
+              url: buildDesktopUrl(),
               wsUrl: buildWsUrl(),
               display: getStringField(data, 'display') ?? ':0',
               resolution: getStringField(data, 'resolution') ?? '1280x720',
@@ -704,9 +715,7 @@ export const useSandboxStore = create<SandboxState>()(
             const running = getServiceRunning(data, type);
             const status: DesktopStatus = {
               running,
-              url: running
-                ? (getStringField(data, 'url', 'desktopUrl', 'desktop_url') ?? null)
-                : null,
+              url: running ? buildDesktopUrl() : null,
               wsUrl: running ? buildWsUrl() : null,
               display: getStringField(data, 'display') ?? '',
               resolution: getStringField(data, 'resolution') ?? '',
@@ -720,11 +729,12 @@ export const useSandboxStore = create<SandboxState>()(
           }
 
           case 'terminal_started': {
+            const sessionId = getStringField(data, 'session_id', 'sessionId');
             const status: TerminalStatus = {
               running: true,
-              url: getStringField(data, 'url', 'terminalUrl', 'terminal_url') ?? null,
+              url: buildTerminalUrl(sessionId),
               port: getNumberField(data, 'port', 'terminalPort', 'terminal_port') ?? 7681,
-              sessionId: getStringField(data, 'session_id', 'sessionId') ?? null,
+              sessionId: sessionId ?? null,
               pid: getNumberField(data, 'pid') ?? null,
             };
             set({ terminalStatus: status });
@@ -746,13 +756,12 @@ export const useSandboxStore = create<SandboxState>()(
 
           case 'terminal_status': {
             const running = getServiceRunning(data, type);
+            const sessionId = getStringField(data, 'session_id', 'sessionId');
             const status: TerminalStatus = {
               running,
-              url: running
-                ? (getStringField(data, 'url', 'terminalUrl', 'terminal_url') ?? null)
-                : null,
+              url: running ? buildTerminalUrl(sessionId) : null,
               port: getNumberField(data, 'port', 'terminalPort', 'terminal_port') ?? 0,
-              sessionId: getStringField(data, 'session_id', 'sessionId') ?? null,
+              sessionId: sessionId ?? null,
               pid: getNumberField(data, 'pid') ?? null,
             };
             set({ terminalStatus: status });

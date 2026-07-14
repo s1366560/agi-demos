@@ -1,0 +1,233 @@
+import '@radix-ui/themes/styles.css';
+import React, { useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { Theme } from '@radix-ui/themes';
+import {
+  ChatBubbleIcon,
+  CodeIcon,
+  CubeIcon,
+  GearIcon,
+  GridIcon,
+  HomeIcon,
+  PlusIcon,
+} from '@radix-ui/react-icons';
+
+import { ChatPanel } from '../features/chat/ChatPanel';
+import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
+import { toggleRunInputReference } from '../features/session/sessionChangesModel';
+import { I18nProvider } from '../i18n';
+import type {
+  ChangeSnapshot,
+  CodeRangeReference,
+  DesktopRunInput,
+  RunInputDelivery,
+  WorkspaceMessage,
+} from '../types';
+import '../styles.css';
+import './sessionSteeringQa.css';
+
+declare global {
+  var __sessionSteeringQaRoot: Root | undefined;
+}
+
+const snapshot: ChangeSnapshot = {
+  id: 'change-snapshot-72e3a5b9',
+  run_id: 'run-desktop-session-42',
+  conversation_id: 'conversation-desktop-session',
+  run_revision: 7,
+  environment_id: 'environment-worktree-42',
+  repository_root: '/workspace/memstack',
+  workspace_path: '/workspace/.agistack-worktrees/desktop-session-42',
+  branch: 'agistack/desktop-session-42',
+  base_revision: '8f19c6e',
+  head_revision: '8f19c6e',
+  status: 'ready',
+  additions: 8,
+  deletions: 3,
+  files_changed: 2,
+  truncated: false,
+  captured_at: '2026-07-13T12:30:00Z',
+  files: [
+    {
+      path: 'src/session/steering.ts',
+      status: 'modified',
+      additions: 6,
+      deletions: 3,
+      binary: false,
+      untracked: false,
+      patch_digest: '0ac29be318f42861',
+      hunks: [
+        {
+          header: '@@ -41,7 +41,10 @@ export function deliverInput',
+          old_start: 41,
+          new_start: 41,
+          lines: [
+            { kind: 'context', old_line: 41, new_line: 41, text: '  const run = authority.run;' },
+            { kind: 'deletion', old_line: 42, new_line: null, text: '  return send(message);' },
+            { kind: 'addition', old_line: null, new_line: 42, text: '  const input = bindToRevision(message, run.revision);' },
+            { kind: 'addition', old_line: null, new_line: 43, text: '  await ledger.persist(input);' },
+            { kind: 'addition', old_line: null, new_line: 44, text: '  return run.control.deliver(input);' },
+            { kind: 'context', old_line: 43, new_line: 45, text: '}' },
+          ],
+        },
+      ],
+    },
+    {
+      path: 'src/session/changes.ts',
+      status: 'added',
+      additions: 2,
+      deletions: 0,
+      binary: false,
+      untracked: true,
+      patch_digest: 'af62d78a822cf890',
+      hunks: [
+        {
+          header: '@@ -0,0 +1,2 @@',
+          old_start: 0,
+          new_start: 1,
+          lines: [
+            { kind: 'addition', old_line: null, new_line: 1, text: "export const scope = 'run';" },
+            { kind: 'addition', old_line: null, new_line: 2, text: 'export const revision = 7;' },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const queuedInput: DesktopRunInput = {
+  id: 'run-input-next-1',
+  conversation_id: 'conversation-desktop-session',
+  run_id: 'run-desktop-session-42',
+  expected_run_revision: 7,
+  message_id: 'message-next-1',
+  idempotency_key: 'queue-next-1',
+  delivery: 'queue_next',
+  status: 'ready',
+  sequence: 1,
+  queue_position: 1,
+  content: 'Run the compatibility matrix and prepare a migration plan.',
+  references: [],
+  created_at: '2026-07-13T10:10:00Z',
+  updated_at: '2026-07-13T10:18:00Z',
+};
+
+const messages: WorkspaceMessage[] = [
+  {
+    id: 'message-1',
+    sender_type: 'user',
+    content: 'Implement the authoritative steering path and keep revision conflicts explicit.',
+    created_at: '2026-07-13T12:20:00Z',
+  },
+  {
+    id: 'message-2',
+    sender_type: 'agent',
+    content: 'The run is active in an isolated worktree. I am applying the reviewed plan.',
+    created_at: '2026-07-13T12:21:00Z',
+  },
+];
+
+function SessionSteeringQa() {
+  const [input, setInput] = useState('Keep the public API stable and add the missing revision test.');
+  const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
+  const [references, setReferences] = useState<CodeRangeReference[]>([]);
+  const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
+  return (
+    <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+      <div className="session-steering-qa-shell">
+        <aside className="session-steering-qa-rail">
+          <div className="session-steering-qa-brand"><CubeIcon /><strong>MemStack</strong></div>
+          <button type="button"><PlusIcon /> New task</button>
+          <nav>
+            <button type="button"><HomeIcon /> Home</button>
+            <button type="button"><GridIcon /> My work</button>
+          </nav>
+          <section>
+            <span>WORKSPACE</span>
+            <button type="button"><CubeIcon /> Desktop Client</button>
+            <button type="button" className="selected"><ChatBubbleIcon /> Session interaction redesign</button>
+          </section>
+          <button type="button"><GearIcon /> Settings</button>
+        </aside>
+        <main>
+          <header className="session-steering-qa-titlebar">
+            <div><CodeIcon /><span><strong>Session interaction redesign</strong><small>Code · Build · Running</small></span></div>
+            <dl>
+              <div><dt>Environment</dt><dd>Worktree</dd></div>
+              <div><dt>Branch</dt><dd>agistack/desktop-session-42</dd></div>
+              <div><dt>Run</dt><dd>run-desk · r7</dd></div>
+            </dl>
+          </header>
+          <div className="session-steering-qa-content">
+            <ChatPanel
+              messages={messages}
+              timelineState={null}
+              agentTaskSignals={[]}
+              workflowCounts={{ changes: 2, plan: 'ready' }}
+              sessionTitle="Conversation"
+              scopeLabel="Current run narrative"
+              input={input}
+              sending={false}
+              disabledReason={null}
+              activeWorkflowTarget="changes"
+              modelLabel="GPT-5.5"
+              runtimeTargetLabel="Local Rust Core"
+              runtimeTargetOptions={['Local Rust Core']}
+              runInputDelivery={delivery}
+              runInputDeliveryOptions={['steer_now', 'queue_next']}
+              runInputs={runInputs}
+              runInputsLoading={false}
+              runInputsError={null}
+              promotingRunInputId={null}
+              references={references}
+              onInputChange={setInput}
+              onRunInputDeliveryChange={setDelivery}
+              onPromoteRunInput={(input) =>
+                setRunInputs((current) =>
+                  current.map((candidate) =>
+                    candidate.id === input.id
+                      ? { ...candidate, status: 'promoted_to_plan' }
+                      : candidate,
+                  ),
+                )
+              }
+              onRemoveReference={(reference) =>
+                setReferences((current) => toggleRunInputReference(current, reference))
+              }
+              onSend={() => undefined}
+              onRefresh={() => undefined}
+              onLoadEarlier={() => undefined}
+              onRespondToHitl={async () => undefined}
+              onWorkflowSelect={() => undefined}
+              onRuntimeTargetChange={() => undefined}
+              onOpenCommands={() => undefined}
+              onOpenUsagePlan={() => undefined}
+            />
+            <SessionChangesCanvas
+              snapshot={snapshot}
+              loading={false}
+              error={null}
+              references={references}
+              onRefresh={() => undefined}
+              onToggleReference={(reference) =>
+                setReferences((current) => toggleRunInputReference(current, reference))
+              }
+            />
+          </div>
+        </main>
+      </div>
+    </Theme>
+  );
+}
+
+const root = document.getElementById('root');
+if (!root) throw new Error('Missing #root container');
+const qaRoot = globalThis.__sessionSteeringQaRoot ?? createRoot(root);
+globalThis.__sessionSteeringQaRoot = qaRoot;
+qaRoot.render(
+  <React.StrictMode>
+    <I18nProvider>
+      <SessionSteeringQa />
+    </I18nProvider>
+  </React.StrictMode>,
+);

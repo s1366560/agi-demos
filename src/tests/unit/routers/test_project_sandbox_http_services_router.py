@@ -111,6 +111,7 @@ class _FakeWebSocket:
 
 class _SandboxService:
     def __init__(self, **sandbox_info: object) -> None:
+        sandbox_info.setdefault("runtime_auth_token", "sandbox-runtime-secret")
         self._sandbox_info = SimpleNamespace(sandbox_id="sandbox-1", **sandbox_info)
 
     async def get_project_sandbox(self, _project_id: str) -> SimpleNamespace:
@@ -168,6 +169,23 @@ def _sandbox_info(project_id: str = "proj-1") -> router_mod.SandboxInfo:
         project_id=project_id,
         tenant_id="tenant-project",
         status="running",
+    )
+
+
+@pytest.mark.unit
+def test_raw_http_proxy_transport_is_excluded_from_openapi() -> None:
+    app = FastAPI()
+    app.include_router(router_mod.router)
+
+    schema = app.openapi()
+
+    assert (
+        "/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy"
+        not in schema["paths"]
+    )
+    assert (
+        "/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy/{path}"
+        not in schema["paths"]
     )
 
 
@@ -513,7 +531,9 @@ def test_stop_http_service_broadcast_error_log_omits_exception_text(
 
     monkeypatch.setattr(
         "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
-        lambda: _FailingSandboxStateBroadcastManager("http service broadcast secret for svc-secret"),
+        lambda: _FailingSandboxStateBroadcastManager(
+            "http service broadcast secret for svc-secret"
+        ),
     )
     caplog.set_level(
         logging.WARNING,
@@ -1072,9 +1092,7 @@ def test_start_project_desktop_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
@@ -1106,9 +1124,7 @@ def test_stop_project_desktop_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
@@ -1157,9 +1173,7 @@ def test_start_project_terminal_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
@@ -1191,9 +1205,7 @@ def test_stop_project_terminal_error_log_omits_ids_and_exception_text(
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = (
-        lambda: orchestrator
-    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     caplog.set_level(
         logging.ERROR,
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
@@ -1272,6 +1284,73 @@ def test_desktop_http_proxy_requires_project_access(
 
 
 @pytest.mark.unit
+def test_desktop_http_proxy_authenticates_to_kasmvnc(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock(
+        return_value=SimpleNamespace(
+            desktop_url="http://127.0.0.1:6080",
+            runtime_auth_token="sandbox-runtime-secret",
+        )
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    captured: dict[str, object] = {}
+
+    class _CapturingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, *, headers: dict[str, str]):
+            captured["url"] = url
+            captured["headers"] = headers
+            return httpx.Response(
+                200, content=b"desktop-ready", headers={"content-type": "text/plain"}
+            )
+
+    monkeypatch.setattr("httpx.AsyncClient", _CapturingAsyncClient)
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/desktop/proxy/")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.text == "desktop-ready"
+    headers = captured["headers"]
+    assert isinstance(headers, dict)
+    assert headers["Authorization"] == ("Basic c2FuZGJveDpzYW5kYm94LXJ1bnRpbWUtc2VjcmV0")
+    assert "sandbox-runtime-secret" not in str(captured["url"])
+
+
+@pytest.mark.unit
+def test_desktop_http_proxy_fails_closed_without_runtime_auth_token(
+    sandbox_http_client: TestClient,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock(
+        return_value=SimpleNamespace(
+            desktop_url="http://127.0.0.1:6080",
+            runtime_auth_token=None,
+        )
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/desktop/proxy/")
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert response.json()["detail"] == "Desktop service is not running"
+
+
+@pytest.mark.unit
 def test_desktop_http_proxy_sanitizes_upstream_connection_errors(
     sandbox_http_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -1280,7 +1359,10 @@ def test_desktop_http_proxy_sanitizes_upstream_connection_errors(
     """Desktop HTTP proxy should not log upstream URLs or connection details."""
     lifecycle_service = AsyncMock()
     lifecycle_service.get_project_sandbox = AsyncMock(
-        return_value=SimpleNamespace(desktop_url="http://127.0.0.1:6080")
+        return_value=SimpleNamespace(
+            desktop_url="http://127.0.0.1:6080",
+            runtime_auth_token="sandbox-runtime-secret",
+        )
     )
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
@@ -1443,9 +1525,10 @@ async def test_desktop_websocket_proxy_upgrades_stale_http_url(
     upstream = SimpleNamespace(close=AsyncMock())
     captured: dict[str, str] = {}
 
-    async def fake_connect(ws_target: str, desktop_url: str) -> object:
+    async def fake_connect(ws_target: str, desktop_url: str, runtime_auth_token: str) -> object:
         captured["ws_target"] = ws_target
         captured["desktop_url"] = desktop_url
+        captured["runtime_auth_token"] = runtime_auth_token
         return upstream
 
     async def fake_relay_pair(*_args, **_kwargs) -> None:
@@ -1469,6 +1552,7 @@ async def test_desktop_websocket_proxy_upgrades_stale_http_url(
     assert captured == {
         "ws_target": "wss://desktop.local:16080/websockify",
         "desktop_url": "http://desktop.local:16080",
+        "runtime_auth_token": "sandbox-runtime-secret",
     }
     upstream.close.assert_awaited_once()
     assert websocket.closed is True
@@ -1496,11 +1580,15 @@ async def test_connect_desktop_upstream_uses_plain_ws_without_ssl(
     await router_mod._connect_desktop_upstream(
         "ws://desktop.local/",
         "http://desktop.local",
+        "sandbox-runtime-secret",
     )
 
     assert captured["uri"] == "ws://desktop.local/"
     assert captured["ssl"] is None
-    assert captured["additional_headers"] == {"Origin": "http://desktop.local"}
+    assert captured["additional_headers"] == {
+        "Origin": "http://desktop.local",
+        "Authorization": "Basic c2FuZGJveDpzYW5kYm94LXJ1bnRpbWUtc2VjcmV0",
+    }
 
 
 @pytest.mark.unit
@@ -1519,11 +1607,15 @@ async def test_connect_desktop_upstream_uses_ssl_for_wss(
     await router_mod._connect_desktop_upstream(
         "wss://desktop.local/",
         "http://desktop.local",
+        "sandbox-runtime-secret",
     )
 
     assert captured["uri"] == "wss://desktop.local/"
     assert captured["ssl"] is not None
-    assert captured["additional_headers"] == {"Origin": "https://desktop.local"}
+    assert captured["additional_headers"] == {
+        "Origin": "https://desktop.local",
+        "Authorization": "Basic c2FuZGJveDpzYW5kYm94LXJ1bnRpbWUtc2VjcmV0",
+    }
 
 
 @pytest.mark.unit

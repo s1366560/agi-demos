@@ -1,6 +1,8 @@
 # Architecture Docs
 
-Use [ARCHITECTURE.md](ARCHITECTURE.md) as the maintained architecture map.
+Use [ARCHITECTURE.md](ARCHITECTURE.md) as the maintained architecture map. The
+cross-runtime ownership boundary and repair sequence are tracked in
+[CROSS_RUNTIME_REMEDIATION_PLAN.md](CROSS_RUNTIME_REMEDIATION_PLAN.md).
 
 The other files in this directory are useful design history. Many are proposals, migration
 plans, or implementation timelines and should be read as point-in-time records unless they
@@ -9,6 +11,7 @@ are explicitly linked from the maintained map.
 ## Current Maintained Map
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - current backend/frontend/runtime architecture.
+- [CROSS_RUNTIME_REMEDIATION_PLAN.md](CROSS_RUNTIME_REMEDIATION_PLAN.md) - current Desktop/Rust/Python/Web repair and parity plan.
 
 ## Route Source Map
 

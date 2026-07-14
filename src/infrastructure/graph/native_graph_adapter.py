@@ -1463,9 +1463,10 @@ class NativeGraphAdapter(GraphStorePort):
 
     async def search_memories(
         self,
-        project_id: str,
         query: str,
+        project_id: str | None = None,
         limit: int = 10,
+        **_kwargs: Any,  # noqa: ANN401
     ) -> list[dict[str, Any]]:
         """
         Search memories in the knowledge graph.
@@ -1474,8 +1475,8 @@ class NativeGraphAdapter(GraphStorePort):
         with agent tools that expect this method signature.
 
         Args:
-            project_id: Project ID to search within
             query: Search query string
+            project_id: Optional project ID to search within
             limit: Maximum number of results
 
         Returns:
@@ -1557,11 +1558,17 @@ class NativeGraphAdapter(GraphStorePort):
             if node is None:
                 continue
             props = dict(node)
+            raw_entity_type = props.get("entity_type", props.get("type"))
+            entity_type = (
+                raw_entity_type
+                if isinstance(raw_entity_type, str) and raw_entity_type
+                else "Entity"
+            )
             out.append(
                 GraphEntityDTO(
                     uuid=props.get("uuid", ""),
                     name=props.get("name", ""),
-                    entity_type=props.get("entity_type", props.get("type", "Entity")),
+                    entity_type=entity_type,
                     summary=props.get("summary", "") or "",
                     project_id=props.get("project_id"),
                     extra={k: v for k, v in props.items()
@@ -1761,7 +1768,9 @@ class NativeGraphAdapter(GraphStorePort):
     ) -> int:
         """Count nodes, optionally filtered by label and project/tenant scope."""
         # label is structural (a Cypher identifier); validate it to stay safe.
-        label_clause = f":{_validate_identifier(label)}" if label else ""
+        if label:
+            _validate_identifier(label)
+        label_clause = f":{label}" if label else ""
         scope = ""
         if project_id:
             scope = "WHERE n.project_id = $project_id"
@@ -1907,7 +1916,8 @@ class NativeGraphAdapter(GraphStorePort):
         where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
         # sort field is structural (validated by caller against allowlist);
         # validate defensively to keep Cypher identifier-safe.
-        sort_field = _validate_identifier(sort_by)
+        _validate_identifier(sort_by)
+        sort_field = sort_by
         order = "DESC" if sort_desc else "ASC"
 
         count_q = f"MATCH (e:Episodic) {where_clause} RETURN count(e) AS total"
@@ -2392,13 +2402,13 @@ class NativeGraphAdapter(GraphStorePort):
             return (
                 f"({var}.project_id = $project_id OR EXISTS {{ "
                 f"MATCH ({var})<-[:MENTIONS]-(ep:Episodic) "
-                "WHERE ep.project_id = $project_id }})"
+                "WHERE ep.project_id = $project_id })"
             )
         if project_ids is not None:
             return (
                 f"({var}.project_id IN $project_ids OR EXISTS {{ "
                 f"MATCH ({var})<-[:MENTIONS]-(ep:Episodic) "
-                "WHERE ep.project_id IN $project_ids }})"
+                "WHERE ep.project_id IN $project_ids })"
             )
         return ""
 
@@ -2922,7 +2932,8 @@ class NativeGraphAdapter(GraphStorePort):
         allowed_project_ids: list[str] | None = None,
     ) -> int:
         """Count nodes of a label within the maintenance project scope."""
-        safe_label = _validate_identifier(label)
+        _validate_identifier(label)
+        safe_label = label
         cond, params = self._maintenance_node_scope(
             project_id, is_superuser, allowed_project_ids or []
         )

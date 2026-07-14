@@ -1,5 +1,6 @@
 import { Badge, Flex, Heading, ScrollArea, Tabs, Text } from '@radix-ui/themes';
 
+import { useI18n } from '../../i18n';
 import type {
   AgentWsEvent,
   DesktopServiceResponse,
@@ -12,6 +13,7 @@ import type {
 } from '../../types';
 import { MemoryPanel } from '../memory/MemoryPanel';
 import { SandboxPanel } from '../sandbox/SandboxPanel';
+import type { TerminalBindingState } from '../session/sessionTerminalModel';
 
 type StatusPanelProps = {
   selectedTask: WorkspaceTask | null;
@@ -23,7 +25,7 @@ type StatusPanelProps = {
   desktop: DesktopServiceResponse | null;
   desktopFrameUrl: string | null;
   terminal: TerminalServiceResponse | null;
-  terminalConnected: boolean;
+  terminalBinding: TerminalBindingState;
   terminalError: string | null;
   terminalLines: string[];
   terminalInput: string;
@@ -50,46 +52,67 @@ type StatusPanelProps = {
 };
 
 export function StatusPanel(props: StatusPanelProps) {
+  const { t } = useI18n();
+  const terminalStatus =
+    props.terminalBinding === 'connected'
+      ? t('session.terminalConnected')
+      : props.terminalBinding === 'connecting'
+        ? t('session.terminalConnecting')
+        : props.terminalBinding === 'closed'
+          ? t('session.terminalClosed')
+          : props.terminalBinding === 'stale'
+            ? t('session.terminalStale')
+            : props.terminalBinding === 'error'
+              ? t('session.terminalError')
+              : t('session.terminalIdle');
   return (
     <section className="pane-shell status-shell">
       <header className="pane-head">
         <div>
           <Heading as="h2" size="3">
-            Status
+            {t('status.title')}
           </Heading>
           <Text size="1" color="gray">
-            Plan, sandbox, local memory, and progress updates.
+            {t('status.description')}
           </Text>
         </div>
-        <Badge color={props.wsConnected ? 'green' : 'gray'} variant="soft">
-          {props.wsConnected ? 'Live' : 'Idle'}
+        <Badge
+          color={props.wsConnected ? 'green' : 'gray'}
+          variant="soft"
+          role="status"
+          aria-live="polite"
+        >
+          {props.wsConnected ? t('status.live') : t('status.idle')}
         </Badge>
       </header>
 
       <Tabs.Root value={props.tab} onValueChange={(value) => props.onTabChange(value as StatusTab)}>
         <Tabs.List className="status-tab-list">
-          <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-          <Tabs.Trigger value="plan">Plan</Tabs.Trigger>
-          <Tabs.Trigger value="sandbox">Sandbox</Tabs.Trigger>
-          <Tabs.Trigger value="memory">Memory</Tabs.Trigger>
-          <Tabs.Trigger value="events">Events</Tabs.Trigger>
+          <Tabs.Trigger value="overview">{t('status.overview')}</Tabs.Trigger>
+          <Tabs.Trigger value="plan">{t('status.plan')}</Tabs.Trigger>
+          <Tabs.Trigger value="sandbox">{t('status.sandbox')}</Tabs.Trigger>
+          <Tabs.Trigger value="memory">{t('status.memory')}</Tabs.Trigger>
+          <Tabs.Trigger value="events">{t('status.events')}</Tabs.Trigger>
         </Tabs.List>
         <ScrollArea className="status-scroll">
           <Tabs.Content value="overview">
             <div className="inspector-stack">
               <TaskSummary task={props.selectedTask} />
               <div className="metric-grid">
-                <Metric label="Plan keys" value={String(Object.keys(props.plan ?? {}).length)} />
-                <Metric label="Events" value={String(props.events.length)} />
-                <Metric label="Sandbox" value={props.sandbox?.status ?? 'not loaded'} />
-                <Metric label="Terminal" value={props.terminalConnected ? 'connected' : 'idle'} />
+                <Metric label={t('status.planKeys')} value={String(Object.keys(props.plan ?? {}).length)} />
+                <Metric label={t('status.events')} value={String(props.events.length)} />
+                <Metric
+                  label={t('status.sandbox')}
+                  value={props.sandbox?.status ?? t('status.notLoaded')}
+                />
+                <Metric label={t('status.terminal')} value={terminalStatus} />
               </div>
             </div>
           </Tabs.Content>
           <Tabs.Content value="plan">
             <div className="inspector-stack">
               <pre className="json-output">
-                {props.plan ? JSON.stringify(props.plan, null, 2) : 'No plan snapshot loaded.'}
+                {props.plan ? JSON.stringify(props.plan, null, 2) : t('status.noPlanSnapshot')}
               </pre>
             </div>
           </Tabs.Content>
@@ -100,7 +123,7 @@ export function StatusPanel(props: StatusPanelProps) {
                 desktop={props.desktop}
                 desktopFrameUrl={props.desktopFrameUrl}
                 terminal={props.terminal}
-                terminalConnected={props.terminalConnected}
+                terminalBinding={props.terminalBinding}
                 terminalError={props.terminalError}
                 terminalLines={props.terminalLines}
                 terminalInput={props.terminalInput}
@@ -136,7 +159,7 @@ export function StatusPanel(props: StatusPanelProps) {
             <div className="event-list">
               {props.events.length === 0 ? (
                 <Text size="2" color="gray">
-                  No live updates yet.
+                  {t('status.noLiveUpdates')}
                 </Text>
               ) : (
                 props.events.map((event, index) => (
@@ -162,11 +185,12 @@ export function StatusPanel(props: StatusPanelProps) {
 }
 
 function TaskSummary({ task }: { task: WorkspaceTask | null }) {
+  const { t } = useI18n();
   if (!task) {
     return (
       <div className="approval-callout">
         <Text size="2" color="gray">
-          Select a task to inspect status and metadata.
+          {t('status.selectTask')}
         </Text>
       </div>
     );
@@ -179,11 +203,11 @@ function TaskSummary({ task }: { task: WorkspaceTask | null }) {
           {task.title ?? task.id}
         </Text>
         <Badge color={task.status === 'blocked' ? 'red' : 'amber'} variant="soft">
-          {task.status ?? 'open'}
+          {task.status ?? t('status.open')}
         </Badge>
       </Flex>
       <Text as="p" size="2" color="gray">
-        {task.summary ?? task.description ?? 'No task summary.'}
+        {task.summary ?? task.description ?? t('status.noTaskSummary')}
       </Text>
     </div>
   );

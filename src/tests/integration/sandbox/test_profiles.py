@@ -46,6 +46,7 @@ class TestListProfiles:
             assert "description" in profile
             assert "profile_type" in profile
             assert "desktop_enabled" in profile
+            assert "terminal_enabled" in profile
             assert "memory_limit" in profile
             assert "cpu_limit" in profile
             assert "timeout_seconds" in profile
@@ -63,6 +64,7 @@ class TestListProfiles:
 
         assert lite is not None
         assert lite["desktop_enabled"] is False
+        assert lite["terminal_enabled"] is False
         assert lite["memory_limit"] == "512m"
         assert lite["cpu_limit"] == "0.5"
 
@@ -77,6 +79,7 @@ class TestListProfiles:
 
         assert standard is not None
         assert standard["desktop_enabled"] is True
+        assert standard["terminal_enabled"] is True
         assert standard["memory_limit"] == "8g"
         assert standard["cpu_limit"] == "2"
 
@@ -91,6 +94,7 @@ class TestListProfiles:
 
         assert full is not None
         assert full["desktop_enabled"] is True
+        assert full["terminal_enabled"] is True
         assert full["memory_limit"] == "4g"
         assert full["cpu_limit"] == "4"
         assert len(full["preinstalled_tools"]) >= 5  # python, node, java, go, rust

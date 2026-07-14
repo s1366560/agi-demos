@@ -47,7 +47,9 @@ fn sandbox_profiles_match_python_wire_shape() {
 
 #[test]
 fn response_keeps_python_wire_fields_and_null_proxy_urls() {
-    let response = ProjectSandboxResponse::from(sample_info());
+    let mut info = sample_info();
+    info.runtime_auth_token = Some(SandboxRuntimeToken::from_exposed("private-capability"));
+    let response = ProjectSandboxResponse::from(info);
     assert_eq!(response.status, "running");
     assert!(response.is_healthy);
     assert_eq!(response.created_at.as_deref(), Some("1970-01-01T00:00:00Z"));
@@ -62,6 +64,8 @@ fn response_keeps_python_wire_fields_and_null_proxy_urls() {
     ))
     .unwrap();
     let actual = serde_json::to_value(&response).unwrap();
+    assert!(!actual.to_string().contains("private-capability"));
+    assert!(actual.get("runtime_auth_token").is_none());
     agistack_parity::assert_parity(&golden, &actual);
 }
 #[test]

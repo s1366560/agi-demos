@@ -728,13 +728,16 @@ describe('TenantLayout', () => {
     });
     expect(mockProjectState.projects).toEqual([]);
     expect(mockProjectState.currentProject).toBeNull();
-    expect(mockAgentV3SetState).toHaveBeenCalledWith({
+    const agentStateUpdater = mockAgentV3SetState.mock.calls[0]?.[0];
+    expect(agentStateUpdater).toEqual(expect.any(Function));
+    expect(agentStateUpdater({ conversationScopeGeneration: 7 })).toEqual({
       conversations: [],
       activeConversationId: null,
       isCreatingConversation: false,
       hasMoreConversations: false,
       conversationsTotal: 0,
       conversationStates: expect.any(Map),
+      conversationScopeGeneration: 8,
     });
     expect(mockConversationReset).toHaveBeenCalledTimes(1);
     expect(mockTimelineReset).toHaveBeenCalledTimes(1);

@@ -695,6 +695,10 @@ def _build_a2ui_action_asked(
     request_id = data.get("request_id", "")
     status_info = hitl_status_map.get(request_id, {})
     status = status_info.get("status")
+    surface_data = data.get("surface_data")
+    allowed_actions = _safe_a2ui_allowed_actions(
+        surface_data.get("allowed_actions") if isinstance(surface_data, dict) else None
+    )
     return {
         "request_id": request_id,
         "block_id": data.get("block_id", ""),
@@ -702,7 +706,25 @@ def _build_a2ui_action_asked(
         "timeout_seconds": data.get("timeout_seconds"),
         "status": status,
         "answered": status in ("answered", "completed"),
+        "allowed_actions": allowed_actions,
     }
+
+
+def _safe_a2ui_allowed_actions(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list) or len(value) > 32:
+        return []
+    actions: list[dict[str, str]] = []
+    for candidate in value:
+        if not isinstance(candidate, dict):
+            return []
+        source_component_id = candidate.get("source_component_id")
+        action_name = candidate.get("action_name")
+        if not isinstance(source_component_id, str) or not source_component_id:
+            return []
+        if not isinstance(action_name, str) or not action_name:
+            return []
+        actions.append({"source_component_id": source_component_id, "action_name": action_name})
+    return actions
 
 
 def _build_permission_asked(

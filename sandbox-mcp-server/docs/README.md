@@ -26,7 +26,7 @@ kept for audit history and should not override the root README or current code.
 
 > **Note on TigerVNC → KasmVNC**: The TigerVNC + noVNC + websockify stack documented in the
 > historical files above has since been replaced by a KasmVNC-centric runtime path
-> (built-in web client on port 6080, KDE Plasma 6 desktop). Some orchestration still accepts
+> (built-in web client on port 6080, KDE Plasma 5.27 on Ubuntu 24.04 LTS). Some orchestration still accepts
 > a `VNC_SERVER_TYPE`/`VNC` compatibility flag for older commands, but current behavior should
 > be verified against KasmVNC. The above phase records are retained only for
 > audit history; for the current remote-desktop behavior, see the "Remote Desktop" / "VNC Server"

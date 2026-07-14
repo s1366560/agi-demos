@@ -37,6 +37,18 @@ router = APIRouter(prefix="/api/v1/episodes", tags=["episodes"])
 EPISODE_SORT_FIELDS = frozenset({"created_at", "valid_at", "name"})
 
 
+def _serialize_datetime(value: Any) -> str | None:
+    """Normalize Python and Neo4j temporal values at the HTTP boundary."""
+    if value is None or isinstance(value, str):
+        return value
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        serialized = isoformat()
+        if isinstance(serialized, str):
+            return serialized
+    return str(value) if value else None
+
+
 # --- Schemas ---
 
 
@@ -361,8 +373,8 @@ async def get_episode(
             name=props.get("name", ""),
             content=props.get("content", ""),
             source_description=props.get("source_description"),
-            created_at=props.get("created_at"),
-            valid_at=props.get("valid_at"),
+            created_at=_serialize_datetime(props.get("created_at")),
+            valid_at=_serialize_datetime(props.get("valid_at")),
             tenant_id=props.get("tenant_id"),
             project_id=props.get("project_id"),
             user_id=props.get("user_id"),
@@ -450,8 +462,8 @@ async def list_episodes(
                 "name": props.get("name", ""),
                 "content": props.get("content", ""),
                 "source_description": props.get("source_description"),
-                "created_at": props.get("created_at"),
-                "valid_at": props.get("valid_at"),
+                "created_at": _serialize_datetime(props.get("created_at")),
+                "valid_at": _serialize_datetime(props.get("valid_at")),
                 "tenant_id": props.get("tenant_id"),
                 "project_id": props.get("project_id"),
                 "user_id": props.get("user_id"),

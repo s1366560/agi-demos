@@ -1,7 +1,5 @@
 use std::time::{Duration, Instant};
 
-use agistack_core::ports::ContainerSpec;
-
 use super::*;
 
 impl ProjectSandboxService {
@@ -30,7 +28,16 @@ impl ProjectSandboxService {
             registry,
             http_registry: in_memory_http_service_registry(),
             config_source: None,
+            runtime_auth: None,
         }
+    }
+
+    pub(crate) fn with_runtime_auth_secret(
+        mut self,
+        secret: impl AsRef<str>,
+    ) -> Result<Self, &'static str> {
+        self.runtime_auth = Some(SandboxRuntimeAuth::try_new(secret)?);
+        Ok(self)
     }
 
     pub(crate) fn with_http_service_registry(
@@ -80,7 +87,8 @@ impl ProjectSandboxService {
                 };
                 let mut touched = record;
                 touched.last_accessed_at_ms = now_ms();
-                let info = ProjectSandboxInfo::from_record(touched, status);
+                let info =
+                    self.attach_runtime_auth(ProjectSandboxInfo::from_record(touched, status));
                 let status = info.status_str();
                 let error_message = info.error_message();
                 let record = info.to_record();
@@ -107,7 +115,7 @@ impl ProjectSandboxService {
                 self.registry.delete(&project_id).await?;
                 continue;
             };
-            let info = ProjectSandboxInfo::from_record(record, status);
+            let info = self.attach_runtime_auth(ProjectSandboxInfo::from_record(record, status));
             let computed_status = info.status_str();
             let error_message = info.error_message();
             let record = info.to_record();
@@ -154,24 +162,14 @@ impl ProjectSandboxService {
         }
 
         let now = now_ms();
-        let spec = ContainerSpec {
-            image: self.image.clone(),
-            cmd: None,
-            env: vec![
-                ("AGISTACK_PROJECT_ID".to_string(), project_id.to_string()),
-                ("AGISTACK_TENANT_ID".to_string(), tenant_id.to_string()),
-                (
-                    "AGISTACK_SANDBOX_PROFILE".to_string(),
-                    profile.as_str().to_string(),
-                ),
-            ],
-            labels: vec![
-                (PROJECT_LABEL.to_string(), project_id.to_string()),
-                (TENANT_LABEL.to_string(), tenant_id.to_string()),
-                (KIND_LABEL.to_string(), KIND_PROJECT.to_string()),
-            ],
-            ports: sandbox_port_bindings(),
-        };
+        let runtime_auth_token = self.runtime_auth_token(project_id, tenant_id)?;
+        let spec = sandbox_container_spec(
+            &self.image,
+            project_id,
+            tenant_id,
+            profile,
+            &runtime_auth_token,
+        );
         let sandbox_id = self
             .runtime
             .create(&spec)
@@ -205,6 +203,31 @@ impl ProjectSandboxService {
             .get_project_sandbox_config(project_id)
             .await?
             .unwrap_or_else(ProjectSandboxConfig::cloud))
+    }
+
+    fn runtime_auth_token(
+        &self,
+        project_id: &str,
+        tenant_id: &str,
+    ) -> SandboxApiResult<SandboxRuntimeToken> {
+        self.runtime_auth
+            .as_ref()
+            .map(|auth| auth.token_for(project_id, tenant_id))
+            .ok_or_else(|| {
+                SandboxApiError::service_unavailable(
+                    "Sandbox runtime authentication is not configured",
+                )
+            })
+    }
+
+    fn attach_runtime_auth(&self, mut info: ProjectSandboxInfo) -> ProjectSandboxInfo {
+        if !info.is_local() {
+            if let Some(runtime_auth) = self.runtime_auth.as_ref() {
+                info.runtime_auth_token =
+                    Some(runtime_auth.token_for(&info.project_id, &info.tenant_id));
+            }
+        }
+        info
     }
 
     async fn ensure_local(

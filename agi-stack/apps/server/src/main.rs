@@ -28,6 +28,8 @@ use std::{
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
 
+const DEFAULT_SANDBOX_IMAGE: &str = "sandbox-mcp-server:latest";
+
 mod admin_access;
 mod admin_dlq_api;
 mod agent_commands_api;
@@ -41,6 +43,13 @@ mod auth;
 mod billing_api;
 mod channel_api;
 mod cron_api;
+mod cron_automation_runtime;
+mod cron_hitl_resume;
+mod cron_schedule_fire;
+mod cron_schedule_reconcile;
+mod cron_scheduler_ownership;
+mod cron_tool_authority;
+mod cron_worker;
 mod data_api;
 mod demo_api;
 mod deploy_api;
@@ -321,6 +330,32 @@ pub(crate) struct AppState {
 
 type ServerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+#[derive(Debug, Eq, PartialEq)]
+enum PersistenceMode {
+    Postgres(String),
+    InMemoryDev,
+}
+
+pub(crate) fn env_flag_enabled(value: Option<&str>) -> bool {
+    value.is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true"))
+}
+
+fn select_persistence_mode(
+    database_url: Option<String>,
+    explicit_dev_mode: bool,
+) -> ServerResult<PersistenceMode> {
+    if let Some(url) = database_url.filter(|url| !url.trim().is_empty()) {
+        return Ok(PersistenceMode::Postgres(url));
+    }
+    if explicit_dev_mode {
+        return Ok(PersistenceMode::InMemoryDev);
+    }
+    Err(std::io::Error::other(
+        "DATABASE_URL is required; set AGISTACK_DEV_MODE=1 only for an explicit local in-memory runtime",
+    )
+    .into())
+}
+
 type MemoryAndAuth = (
     Arc<MemoryService>,
     Arc<dyn CheckpointStore>,
@@ -490,9 +525,10 @@ async fn build_object_store() -> Arc<dyn ObjectStore> {
 /// Persistence + auth selection at the composition root — the strangler switch
 /// (plan.md Section 14). When `DATABASE_URL` is set, bind the production Postgres
 /// tier (**the same schema Python owns**, ADR-0001) and the SHA256 `api_keys`
-/// authenticator; otherwise use the zero-dependency in-memory adapters and a dev
-/// authenticator so `cargo run`/tests need no database. The heavy `sqlx`/`tokio`
-/// deps stay inside `adapters-postgres`; the core only ever sees `Arc<dyn _>`.
+/// authenticator. The zero-dependency in-memory adapters and dev authenticator
+/// require the explicit `AGISTACK_DEV_MODE=1` capability; an accidental missing
+/// database configuration fails closed. The heavy `sqlx`/`tokio` deps stay
+/// inside `adapters-postgres`; the core only ever sees `Arc<dyn _>`.
 async fn build_memory_and_auth(
     llm: Arc<dyn LlmPort>,
     embedding: Arc<dyn EmbeddingPort>,
@@ -503,8 +539,12 @@ async fn build_memory_and_auth(
     let device_grants = build_device_grant_store().await;
     let invitation_base_url = std::env::var("AGISTACK_INVITATION_BASE_URL")
         .unwrap_or_else(|_| "http://localhost:8000".into());
-    match std::env::var("DATABASE_URL") {
-        Ok(url) if !url.is_empty() => {
+    let mode = select_persistence_mode(
+        std::env::var("DATABASE_URL").ok(),
+        env_flag_enabled(std::env::var("AGISTACK_DEV_MODE").ok().as_deref()),
+    )?;
+    match mode {
+        PersistenceMode::Postgres(url) => {
             let pool = connect(&url).await?;
             // Additive-only: create the Rust-owned aux tables; never alters a
             // Python-owned table (shared-DB invariant).
@@ -571,7 +611,7 @@ async fn build_memory_and_auth(
                 project_sandbox_config_repo,
             ))
         }
-        _ => {
+        PersistenceMode::InMemoryDev => {
             let memory = Arc::new(
                 MemoryService::new(
                     Arc::new(InMemoryMemoryRepository::new()),
@@ -776,6 +816,15 @@ async fn build_container_runtime() -> Arc<dyn ContainerRuntime> {
     }
 }
 
+fn select_sandbox_auth_secret(
+    dedicated: Option<String>,
+    fallback: Option<String>,
+) -> Option<String> {
+    dedicated
+        .filter(|secret| !secret.trim().is_empty())
+        .or_else(|| fallback.filter(|secret| !secret.trim().is_empty()))
+}
+
 async fn build_state() -> ServerResult<AppState> {
     // Cloud↔local DI switch at the composition root (Phase 3, 03 §2): when
     // `AGISTACK_LLM_BASE_URL` is set, route the LLM/embedding ports to a real
@@ -974,13 +1023,26 @@ async fn build_state() -> ServerResult<AppState> {
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
     let worker_launch_runtime_state = build_worker_launch_runtime_state_store().await;
     let workspace_mention_runtime = workspace_agent_mention_runtime_from_env(Arc::clone(&llm));
-    let sandbox_image =
-        std::env::var("AGISTACK_SANDBOX_IMAGE").unwrap_or_else(|_| "redis:7-alpine".to_string());
+    let sandbox_image = std::env::var("AGISTACK_SANDBOX_IMAGE")
+        .unwrap_or_else(|_| DEFAULT_SANDBOX_IMAGE.to_string());
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
     let mut sandbox_service = match sandbox_repo {
         Some(repo) => ProjectSandboxService::with_postgres(sandbox_runtime, sandbox_image, repo),
         None => ProjectSandboxService::new(sandbox_runtime, sandbox_image),
     };
+    let sandbox_auth_secret = select_sandbox_auth_secret(
+        std::env::var("AGISTACK_SANDBOX_AUTH_SECRET").ok(),
+        std::env::var("SECRET_KEY").ok(),
+    );
+    if let Some(secret) = sandbox_auth_secret {
+        sandbox_service = sandbox_service
+            .with_runtime_auth_secret(secret)
+            .map_err(std::io::Error::other)?;
+    } else {
+        eprintln!(
+            "[agistack] sandbox runtime auth: not configured; cloud sandbox creation will fail closed"
+        );
+    }
     if let Some(repo) = project_config_repo {
         sandbox_service = sandbox_service
             .with_project_config_source(Arc::new(PgProjectSandboxConfigSource::new(repo)));
@@ -1106,4 +1168,47 @@ async fn main() -> ServerResult<()> {
     println!("agistack-server listening on http://{addr}");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod runtime_mode_tests {
+    use super::*;
+
+    #[test]
+    fn missing_database_requires_explicit_dev_mode() {
+        let error = select_persistence_mode(None, false).expect_err("must fail closed");
+        assert!(error.to_string().contains("DATABASE_URL"));
+    }
+
+    #[test]
+    fn explicit_dev_mode_preserves_offline_runtime() {
+        assert_eq!(
+            select_persistence_mode(None, true).expect("explicit dev mode"),
+            PersistenceMode::InMemoryDev
+        );
+    }
+
+    #[test]
+    fn configured_database_always_selects_postgres() {
+        assert_eq!(
+            select_persistence_mode(Some("postgresql://db/memstack".into()), false)
+                .expect("database mode"),
+            PersistenceMode::Postgres("postgresql://db/memstack".into())
+        );
+    }
+
+    #[test]
+    fn default_sandbox_image_provides_the_sandbox_runtime() {
+        assert_eq!(DEFAULT_SANDBOX_IMAGE, "sandbox-mcp-server:latest");
+        assert_ne!(DEFAULT_SANDBOX_IMAGE, "redis:7-alpine");
+    }
+
+    #[test]
+    fn blank_dedicated_sandbox_secret_uses_server_secret() {
+        assert_eq!(
+            select_sandbox_auth_secret(Some("  ".into()), Some("server-secret".into())),
+            Some("server-secret".into())
+        );
+        assert_eq!(select_sandbox_auth_secret(Some("  ".into()), None), None);
+    }
 }

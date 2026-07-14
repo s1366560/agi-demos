@@ -1,6 +1,11 @@
 # 架构文档
 
-`agi-stack` 新架构的权威设计文档。按从「为什么」到「怎么落地」的顺序阅读。
+本目录保存 `agi-stack` 的 Rust 迁移设计与执行证据。跨产品当前架构和修复权威入口是
+[`../../../docs/architecture/ARCHITECTURE.md`](../../../docs/architecture/ARCHITECTURE.md)
+与
+[`../../../docs/architecture/CROSS_RUNTIME_REMEDIATION_PLAN.md`](../../../docs/architecture/CROSS_RUNTIME_REMEDIATION_PLAN.md)。
+本目录的 shipping matrix 证明产物可构建，不代表与 Python/Web 产品功能对等。
+按从「为什么」到「怎么落地」的顺序阅读。
 
 ## 阅读顺序
 

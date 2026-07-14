@@ -62,6 +62,7 @@ class HITLAgentState:
     user_message: str = ""
     user_id: str = ""
     correlation_id: str | None = None
+    automation_run_id: str | None = None
     agent_id: str | None = None
     parent_session_id: str | None = None
 

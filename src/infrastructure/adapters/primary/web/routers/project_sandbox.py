@@ -2465,7 +2465,17 @@ def _build_desktop_websocket_target(desktop_url: str) -> str:
     )
 
 
-async def _connect_desktop_upstream(ws_target: str, desktop_url: str) -> Any:
+def _sandbox_service_auth_header(runtime_auth_token: str) -> str:
+    """Build the internal Basic-auth header without exposing the capability in a URL."""
+    credentials = f"sandbox:{runtime_auth_token}".encode()
+    return f"Basic {base64.b64encode(credentials).decode('ascii')}"
+
+
+async def _connect_desktop_upstream(
+    ws_target: str,
+    desktop_url: str,
+    runtime_auth_token: str,
+) -> Any:
     """Connect to KasmVNC upstream WebSocket with binary subprotocol.
 
     Pings are disabled because KasmVNC (websockify) does not reliably respond to
@@ -2481,7 +2491,10 @@ async def _connect_desktop_upstream(ws_target: str, desktop_url: str) -> Any:
     return await websockets.connect(
         ws_target,
         subprotocols=["binary"],  # type: ignore[list-item]  # websockets expects Subprotocol
-        additional_headers={"Origin": origin},
+        additional_headers={
+            "Origin": origin,
+            "Authorization": _sandbox_service_auth_header(runtime_auth_token),
+        },
         max_size=2**23,  # 8MB max frame for desktop data
         open_timeout=10,
         ping_interval=None,  # KasmVNC does not respond to WS pings
@@ -2647,10 +2660,12 @@ async def _relay_mcp_upstream_to_browser(websocket: WebSocket, upstream_ws: Any)
 @router.api_route(
     "/{project_id}/sandbox/http-services/{service_id}/proxy",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
 )
 @router.api_route(
     "/{project_id}/sandbox/http-services/{service_id}/proxy/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
 )
 async def proxy_project_http_service(
     project_id: str,
@@ -3110,6 +3125,11 @@ async def proxy_project_desktop(
             status_code=503,
             detail=_DESKTOP_SERVICE_NOT_RUNNING_DETAIL,
         )
+    if not info.runtime_auth_token:
+        raise HTTPException(
+            status_code=503,
+            detail=_DESKTOP_SERVICE_NOT_RUNNING_DETAIL,
+        )
 
     # Build target URL from the desktop service URL
 
@@ -3130,7 +3150,9 @@ async def proxy_project_desktop(
     try:
         # verify=False: KasmVNC uses self-signed TLS on localhost container ports
         async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
-            headers = {}
+            headers = {
+                "Authorization": _sandbox_service_auth_header(info.runtime_auth_token),
+            }
             for header in ["accept", "accept-encoding", "accept-language", "cache-control"]:
                 if header in request.headers:
                     headers[header] = request.headers[header]
@@ -3207,6 +3229,12 @@ async def proxy_project_desktop_websocket(
             reason=_DESKTOP_SERVICE_NOT_RUNNING_DETAIL,
         )
         return
+    if not info.runtime_auth_token:
+        await websocket.close(
+            code=1008,
+            reason=_DESKTOP_SERVICE_NOT_RUNNING_DETAIL,
+        )
+        return
 
     ws_target = _build_desktop_websocket_target(info.desktop_url)
 
@@ -3221,7 +3249,11 @@ async def proxy_project_desktop_websocket(
 
     upstream_ws = None
     try:
-        upstream_ws = await _connect_desktop_upstream(ws_target, info.desktop_url)
+        upstream_ws = await _connect_desktop_upstream(
+            ws_target,
+            info.desktop_url,
+            info.runtime_auth_token,
+        )
 
         logger.info("Desktop WS proxy: upstream connected: has_ws_target=%s", bool(ws_target))
 

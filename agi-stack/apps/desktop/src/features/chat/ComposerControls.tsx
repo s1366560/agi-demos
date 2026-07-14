@@ -2,25 +2,39 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { PlusIcon } from '@radix-ui/react-icons';
 
-type ComposerMenu = 'files' | 'mode' | 'model' | 'effort';
+type ComposerMenu = 'files' | 'mode' | 'model' | 'effort' | 'runtime';
 
 type ComposerControlsProps = {
   disabledHint?: string | null;
   effortLabel?: string;
   modeLabel?: string;
   modelLabel?: string;
+  runtimeTargetLabel?: string;
+  runtimeTargetOptions?: string[];
+  onAddFiles?: () => void;
+  onModeChange?: (value: string) => void;
+  onModelChange?: (value: string) => void;
+  onEffortChange?: (value: string) => void;
+  onRuntimeTargetChange?: (value: string) => void;
 };
 
 export function ComposerControls({
-  disabledHint,
   effortLabel = 'Medium',
   modeLabel = 'Autopilot',
   modelLabel = 'Local model',
+  runtimeTargetLabel = 'Local Rust Core',
+  runtimeTargetOptions = ['Local Rust Core', 'Staging Runtime'],
+  onAddFiles,
+  onModeChange,
+  onModelChange,
+  onEffortChange,
+  onRuntimeTargetChange,
 }: ComposerControlsProps) {
   const [openMenu, setOpenMenu] = useState<ComposerMenu | null>(null);
   const [mode, setMode] = useState(modeLabel);
   const [model, setModel] = useState(modelLabel);
   const [effort, setEffort] = useState(effortLabel);
+  const [runtimeTarget, setRuntimeTarget] = useState(runtimeTargetLabel);
   const trayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +48,10 @@ export function ComposerControls({
   useEffect(() => {
     setEffort(effortLabel);
   }, [effortLabel]);
+
+  useEffect(() => {
+    setRuntimeTarget(runtimeTargetLabel);
+  }, [runtimeTargetLabel]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -72,76 +90,99 @@ export function ComposerControls({
       role="toolbar"
       aria-label="Message composer tools"
     >
-      <div className="composer-control">
-        <button
-          className="composer-add-button"
-          type="button"
-          aria-label="Add files or folders"
-          aria-haspopup="menu"
-          aria-expanded={openMenu === 'files'}
-          onClick={() => toggleMenu('files')}
-        >
-          <PlusIcon />
-        </button>
-        {openMenu === 'files' ? (
-          <ComposerPopover title="Add files or folders">
-            <button type="button" role="menuitem" disabled={Boolean(disabledHint)}>
-              Add files...
-            </button>
-            <button type="button" role="menuitem" disabled={Boolean(disabledHint)}>
-              Add folder...
-            </button>
-            {disabledHint ? <p>{disabledHint}</p> : null}
-          </ComposerPopover>
-        ) : null}
-      </div>
+      {onAddFiles ? (
+        <div className="composer-control">
+          <button
+            className="composer-add-button"
+            type="button"
+            aria-label="Add files or folders"
+            onClick={onAddFiles}
+          >
+            <PlusIcon />
+          </button>
+        </div>
+      ) : null}
 
-      <ComposerSelectControl
-        compactLabel="Mode"
-        label={mode}
-        open={openMenu === 'mode'}
-        title="Mode"
-        controlLabel={`Mode: ${mode}, Command + Shift + M`}
-        options={Array.from(new Set([modeLabel, 'Ask', 'Plan']))}
-        selected={mode}
-        onToggle={() => toggleMenu('mode')}
-        onSelect={(value) => {
-          setMode(value);
-          setOpenMenu(null);
-        }}
-      />
-      <ComposerModelCombobox
-        compactLabel={compactComposerLabel(model)}
-        open={openMenu === 'model'}
-        controlLabel={`Select model, ${model}`}
-        options={Array.from(new Set([modelLabel, 'Workspace model', 'Cloud model']))}
-        selected={model}
-        onToggle={() => toggleMenu('model')}
-        onInput={setModel}
-        onSelect={(value) => {
-          setModel(value);
-          setOpenMenu(null);
-        }}
-      />
-      <ComposerSelectControl
-        compactLabel={compactComposerLabel(effort)}
-        label={effort}
-        open={openMenu === 'effort'}
-        title="Effort"
-        controlLabel={`Reasoning effort: ${effort}`}
-        options={Array.from(new Set(['Low', 'Medium', 'High', effortLabel]))}
-        selected={effort}
-        onToggle={() => toggleMenu('effort')}
-        onSelect={(value) => {
-          setEffort(value);
-          setOpenMenu(null);
-        }}
-      />
+      {onModeChange ? (
+        <ComposerSelectControl
+          disabled={false}
+          compactLabel="Mode"
+          label={mode}
+          open={openMenu === 'mode'}
+          title="Mode"
+          controlLabel={`Mode: ${mode}, Command + Shift + M`}
+          options={Array.from(new Set([modeLabel, 'Ask', 'Plan']))}
+          selected={mode}
+          onToggle={() => toggleMenu('mode')}
+          onSelect={(value) => {
+            setMode(value);
+            onModeChange(value);
+            setOpenMenu(null);
+          }}
+        />
+      ) : null}
+      {onModelChange ? (
+        <ComposerModelCombobox
+          disabled={false}
+          compactLabel={compactComposerLabel(model)}
+          open={openMenu === 'model'}
+          controlLabel={`Select model, ${model}`}
+          options={Array.from(new Set([modelLabel, 'Workspace model', 'Cloud model']))}
+          selected={model}
+          onToggle={() => toggleMenu('model')}
+          onInput={(value) => {
+            setModel(value);
+            onModelChange(value);
+          }}
+          onSelect={(value) => {
+            setModel(value);
+            onModelChange(value);
+            setOpenMenu(null);
+          }}
+        />
+      ) : null}
+      {onEffortChange ? (
+        <ComposerSelectControl
+          disabled={false}
+          compactLabel={compactComposerLabel(effort)}
+          label={effort}
+          open={openMenu === 'effort'}
+          title="Effort"
+          controlLabel={`Reasoning effort: ${effort}`}
+          options={Array.from(new Set(['Low', 'Medium', 'High', effortLabel]))}
+          selected={effort}
+          onToggle={() => toggleMenu('effort')}
+          onSelect={(value) => {
+            setEffort(value);
+            onEffortChange(value);
+            setOpenMenu(null);
+          }}
+        />
+      ) : null}
+      {onRuntimeTargetChange ? (
+        <ComposerSelectControl
+          disabled={false}
+          compactLabel={compactComposerLabel(runtimeTarget)}
+          label={runtimeTarget}
+          open={openMenu === 'runtime'}
+          title="Runtime target"
+          controlLabel={`Runtime target: ${runtimeTarget}`}
+          options={Array.from(new Set([runtimeTarget, ...runtimeTargetOptions]))}
+          selected={runtimeTarget}
+          onToggle={() => toggleMenu('runtime')}
+          onSelect={(value) => {
+            setRuntimeTarget(value);
+            onRuntimeTargetChange(value);
+            setOpenMenu(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
 function ComposerModelCombobox({
+  disabled,
   compactLabel,
   open,
   controlLabel,
@@ -151,6 +192,7 @@ function ComposerModelCombobox({
   onInput,
   onSelect,
 }: {
+  disabled: boolean;
   compactLabel: string;
   open: boolean;
   controlLabel: string;
@@ -185,9 +227,13 @@ function ComposerModelCombobox({
         aria-controls={listboxId}
         aria-expanded={open}
         aria-haspopup="listbox"
+        disabled={disabled}
+        title={disabled ? 'Model selection is managed by the active runtime.' : undefined}
         value={selected}
         onChange={(event) => onInput(event.target.value)}
-        onClick={onToggle}
+        onClick={() => {
+          if (!disabled) onToggle();
+        }}
         onKeyDown={handleKeyDown}
       />
       {open ? (
@@ -211,6 +257,7 @@ function ComposerModelCombobox({
 }
 
 function ComposerSelectControl({
+  disabled,
   compactLabel,
   label,
   open,
@@ -221,6 +268,7 @@ function ComposerSelectControl({
   onToggle,
   onSelect,
 }: {
+  disabled: boolean;
   compactLabel: string;
   label: string;
   open: boolean;
@@ -240,7 +288,11 @@ function ComposerSelectControl({
         aria-label={controlLabel}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={onToggle}
+        disabled={disabled}
+        title={disabled ? `${title} is managed by the active runtime.` : undefined}
+        onClick={() => {
+          if (!disabled) onToggle();
+        }}
       >
         {label}
       </button>
@@ -285,6 +337,12 @@ function ComposerPopover({
 
 function compactComposerLabel(label: string): string {
   const withoutSuffix = label.replace(/\s+model$/i, '');
+  if (withoutSuffix === 'Local Rust Core') {
+    return 'Local';
+  }
+  if (withoutSuffix === 'Staging Runtime') {
+    return 'Staging';
+  }
   if (withoutSuffix.toLowerCase() === 'medium') {
     return 'Med';
   }

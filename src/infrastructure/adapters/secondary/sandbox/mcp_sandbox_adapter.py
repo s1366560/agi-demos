@@ -7,10 +7,12 @@ enabling file system operations via the MCP protocol over WebSocket.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import posixpath
+import secrets
 import socket
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -18,10 +20,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, Any, Protocol, cast, override
+
+from docker.client import DockerClient
+from docker.errors import ImageNotFound, NotFound
 
 import docker
-from docker.errors import ImageNotFound, NotFound
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +49,7 @@ from src.domain.ports.services.sandbox_port import (
 from src.infrastructure.adapters.secondary.sandbox.constants import (
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
+    ISOLATED_NETWORK_OPTIONS,
     MCP_WEBSOCKET_PORT,
     TERMINAL_PORT,
 )
@@ -56,6 +61,15 @@ from src.infrastructure.agent.workspace.manifest import WorkspaceManifest
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
 logger = logging.getLogger(__name__)
+
+
+class _DockerClientFactory(Protocol):
+    """Typed view of the Docker module factory used by test and runtime wiring."""
+
+    def from_env(self) -> DockerClient: ...
+
+
+_DOCKER_CLIENT_FACTORY = cast(_DockerClientFactory, docker)
 
 _PATH_ARG_NAMES = frozenset(
     {
@@ -114,6 +128,7 @@ class MCPSandboxInstance(SandboxInstance):
     """Extended sandbox instance with MCP client and service ports."""
 
     mcp_client: MCPWebSocketClient | None = None
+    mcp_auth_token: str | None = field(default=None, repr=False, compare=False)
     websocket_url: str | None = None
     # Service ports on host
     mcp_port: int | None = None
@@ -291,7 +306,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         # Initialize Docker client
         try:
-            self._docker = docker.from_env()
+            self._docker = _DOCKER_CLIENT_FACTORY.from_env()
             logger.info("MCPSandboxAdapter initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Docker client: {e}")
@@ -511,8 +526,13 @@ class MCPSandboxAdapter(SandboxPort):
         desktop_port: int | None,
         terminal_port: int | None,
         config: SandboxConfig | None = None,
+        mcp_auth_token: str | None = None,
     ) -> MCPSandboxInstance:
         """Build an MCPSandboxInstance from container metadata."""
+        if config is not None and not config.desktop_enabled:
+            desktop_port = None
+        if config is not None and not config.terminal_enabled:
+            terminal_port = None
         websocket_url, desktop_url, terminal_url = self._build_urls_from_ports(
             sandbox_id,
             mcp_port,
@@ -530,6 +550,7 @@ class MCPSandboxAdapter(SandboxPort):
             last_activity_at=now,
             websocket_url=websocket_url,
             mcp_client=None,
+            mcp_auth_token=mcp_auth_token,
             mcp_port=mcp_port,
             desktop_port=desktop_port,
             terminal_port=terminal_port,
@@ -538,9 +559,57 @@ class MCPSandboxAdapter(SandboxPort):
             labels=labels,
         )
 
+    @staticmethod
+    def _generate_mcp_auth_token() -> str:
+        """Generate an unguessable per-sandbox capability token."""
+        return secrets.token_urlsafe(32)
+
+    @staticmethod
+    def _extract_mcp_auth_token(container: Any) -> str | None:
+        """Read a sandbox capability from Docker metadata without logging it."""
+        environment = container.attrs.get("Config", {}).get("Env", [])
+        for entry in environment:
+            if not isinstance(entry, str):
+                continue
+            name, separator, value = entry.partition("=")
+            if name == "MCP_STATIC_TOKEN" and separator and value:
+                return value
+        return None
+
+    @staticmethod
+    def _enforce_mcp_auth_environment(
+        environment: dict[str, str],
+        auth_token: str,
+    ) -> None:
+        """Apply adapter-owned authentication settings after caller overrides."""
+        environment.update(
+            {
+                "MCP_AUTH_ENABLED": "true",
+                "MCP_ALLOW_LOCALHOST": "false",
+                "MCP_STATIC_TOKEN": auth_token,
+            }
+        )
+
     def _extract_config_from_mounts(self, container: Any) -> SandboxConfig:
         """Reconstruct sandbox mount metadata from a Docker container."""
-        config = SandboxConfig(image=self._mcp_image)
+        container_config = container.attrs.get("Config", {})
+        image = container_config.get("Image") or self._mcp_image
+        desktop_enabled = True
+        terminal_enabled = True
+        for entry in container_config.get("Env", []):
+            if not isinstance(entry, str):
+                continue
+            name, separator, value = entry.partition("=")
+            if name == "DESKTOP_ENABLED" and separator:
+                desktop_enabled = value.strip().lower() in {"1", "true", "yes", "on"}
+            elif name == "TERMINAL_ENABLED" and separator:
+                terminal_enabled = value.strip().lower() in {"1", "true", "yes", "on"}
+
+        config = SandboxConfig(
+            image=image,
+            desktop_enabled=desktop_enabled,
+            terminal_enabled=terminal_enabled,
+        )
         for mount in container.attrs.get("Mounts", []):
             source = mount.get("Source", "")
             destination = mount.get("Destination", "")
@@ -939,13 +1008,9 @@ class MCPSandboxAdapter(SandboxPort):
             if p is not None:
                 self._used_ports.add(p)
 
-    def _get_instance_ports(self, instance: MCPSandboxInstance) -> list[int]:
-        """Get list of non-None ports from an instance."""
-        return [
-            p
-            for p in [instance.mcp_port, instance.desktop_port, instance.terminal_port]
-            if p is not None
-        ]
+    def _get_instance_ports(self, instance: MCPSandboxInstance) -> list[int | None]:
+        """Get service ports in stable MCP, desktop, terminal order."""
+        return [instance.mcp_port, instance.desktop_port, instance.terminal_port]
 
     async def _ensure_mcp_connected(
         self,
@@ -1010,7 +1075,7 @@ class MCPSandboxAdapter(SandboxPort):
             await loop.run_in_executor(
                 None, cast(Callable[[], None], lambda c=container: c.remove(force=True))
             )
-            return True
+            return await self._remove_isolated_network(container_name)
         except Exception as e:
             logger.warning(f"Failed to stop/remove container {container_name}: {e}")
             return False
@@ -1024,6 +1089,7 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
         except NotFound:
+            await self._remove_isolated_network(sandbox_id)
             return
         except Exception as e:
             logger.warning(
@@ -1040,6 +1106,61 @@ class MCPSandboxAdapter(SandboxPort):
         )
         if removed:
             logger.info("Removed partial sandbox container %s after %s", container_name, reason)
+
+    @staticmethod
+    def _isolated_network_name(sandbox_id: str) -> str:
+        """Return a stable Docker network name without exposing tenant identifiers."""
+        digest = hashlib.sha256(sandbox_id.encode("utf-8")).hexdigest()[:20]
+        return f"memstack-sandbox-{digest}"
+
+    async def _create_isolated_network(self, sandbox_id: str) -> str:
+        """Create the one-container bridge used to block cross-sandbox traffic."""
+        network_name = self._isolated_network_name(sandbox_id)
+        labels = {
+            "memstack.sandbox.network": "true",
+            "memstack.sandbox.id": sandbox_id,
+        }
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: self._docker.networks.create(
+                network_name,
+                driver="bridge",
+                options=ISOLATED_NETWORK_OPTIONS,
+                labels=labels,
+            ),
+        )
+        return network_name
+
+    async def _remove_isolated_network(self, sandbox_id: str) -> bool:
+        """Remove only the dedicated network owned by the requested sandbox."""
+        network_name = self._isolated_network_name(sandbox_id)
+        loop = asyncio.get_event_loop()
+        try:
+            network = await loop.run_in_executor(
+                None,
+                lambda: self._docker.networks.get(network_name),
+            )
+        except NotFound:
+            return True
+        except Exception as exc:
+            logger.warning("Failed to inspect sandbox network %s: %s", network_name, exc)
+            return False
+
+        labels = network.attrs.get("Labels", {}) or {}
+        if (
+            labels.get("memstack.sandbox.network") != "true"
+            or labels.get("memstack.sandbox.id") != sandbox_id
+        ):
+            logger.warning("Refusing to remove unowned Docker network %s", network_name)
+            return False
+
+        try:
+            await loop.run_in_executor(None, network.remove)
+        except Exception as exc:
+            logger.warning("Failed to remove sandbox network %s: %s", network_name, exc)
+            return False
+        return True
 
     @override
     async def create_sandbox(  # noqa: PLR0915, C901, PLR0912
@@ -1074,6 +1195,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         # Use provided sandbox_id or generate a new one
         sandbox_id = sandbox_id or f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
+        mcp_auth_token = self._generate_mcp_auth_token()
 
         # Note: We don't cleanup project containers here anymore.
         # The get_or_create_sandbox method already checks for existing sandboxes
@@ -1083,8 +1205,12 @@ class MCPSandboxAdapter(SandboxPort):
         # Allocate ports for all services with lock protection
         async with self._port_allocation_lock:
             host_mcp_port = self._get_next_port_unsafe()
-            host_desktop_port = self._get_next_desktop_port_unsafe()
-            host_terminal_port = self._get_next_terminal_port_unsafe()
+            host_desktop_port = (
+                self._get_next_desktop_port_unsafe() if config.desktop_enabled else None
+            )
+            host_terminal_port = (
+                self._get_next_terminal_port_unsafe() if config.terminal_enabled else None
+            )
 
         try:
             # Build sandbox environment variables
@@ -1097,6 +1223,9 @@ class MCPSandboxAdapter(SandboxPort):
                 "TERMINAL_PORT": str(TERMINAL_PORT),
                 **config.environment,
             }
+            sandbox_env["DESKTOP_ENABLED"] = str(config.desktop_enabled).lower()
+            sandbox_env["TERMINAL_ENABLED"] = str(config.terminal_enabled).lower()
+            self._enforce_mcp_auth_environment(sandbox_env, mcp_auth_token)
             settings = get_settings()
             if settings.sandbox_platform_url:
                 sandbox_env.setdefault("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url)
@@ -1109,9 +1238,41 @@ class MCPSandboxAdapter(SandboxPort):
                 if container_path:
                     sandbox_env["MCP_HOST_SOURCE"] = container_path
                     break  # Use first ro volume as host source path
-            # Container configuration with all service ports
+            published_ports: dict[str, tuple[str, int]] = {
+                f"{MCP_WEBSOCKET_PORT}/tcp": ("127.0.0.1", host_mcp_port),
+            }
+            if host_terminal_port is not None:
+                published_ports[f"{TERMINAL_PORT}/tcp"] = (
+                    "127.0.0.1",
+                    host_terminal_port,
+                )
+            if host_desktop_port is not None:
+                published_ports[f"{DESKTOP_PORT}/tcp"] = (
+                    "127.0.0.1",
+                    host_desktop_port,
+                )
+
+            container_labels = {
+                "memstack.sandbox": "true",
+                "memstack.sandbox.id": sandbox_id,
+                "memstack.sandbox.mcp_port": str(host_mcp_port),
+                **(
+                    {"memstack.sandbox.terminal_port": str(host_terminal_port)}
+                    if host_terminal_port is not None
+                    else {}
+                ),
+                **(
+                    {"memstack.sandbox.desktop_port": str(host_desktop_port)}
+                    if host_desktop_port is not None
+                    else {}
+                ),
+                **({"memstack.project_id": project_id} if project_id else {}),
+                **({"memstack.tenant_id": tenant_id} if tenant_id else {}),
+            }
+
+            # Container configuration with enabled service ports
             container_config = {
-                "image": self._mcp_image,
+                "image": config.image,
                 "name": sandbox_id,
                 "hostname": sandbox_id,  # Set hostname to sandbox_id for VNC hostname resolution
                 "detach": True,
@@ -1120,36 +1281,12 @@ class MCPSandboxAdapter(SandboxPort):
                 "restart_policy": {"Name": "on-failure", "MaximumRetryCount": 3},
                 # Add extra hosts to resolve the container hostname (required for VNC)
                 "extra_hosts": {sandbox_id: "127.0.0.1"},
-                "ports": {
-                    f"{MCP_WEBSOCKET_PORT}/tcp": host_mcp_port,
-                    f"{DESKTOP_PORT}/tcp": host_desktop_port,
-                    f"{TERMINAL_PORT}/tcp": host_terminal_port,
-                },
+                "ports": published_ports,
                 "environment": sandbox_env,
                 "mem_limit": config.memory_limit or self._default_memory_limit,
                 "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
                 # Labels for identification
-                "labels": {
-                    "memstack.sandbox": "true",
-                    "memstack.sandbox.id": sandbox_id,
-                    "memstack.sandbox.mcp_port": str(host_mcp_port),
-                    "memstack.sandbox.desktop_port": str(host_desktop_port),
-                    "memstack.sandbox.terminal_port": str(host_terminal_port),
-                    **(
-                        {
-                            "memstack.project_id": project_id,
-                        }
-                        if project_id
-                        else {}
-                    ),
-                    **(
-                        {
-                            "memstack.tenant_id": tenant_id,
-                        }
-                        if tenant_id
-                        else {}
-                    ),
-                },
+                "labels": container_labels,
             }
 
             # Volume mounts
@@ -1169,17 +1306,17 @@ class MCPSandboxAdapter(SandboxPort):
             if settings.sandbox_pip_cache_enabled:
                 os.makedirs(settings.sandbox_pip_cache_path, exist_ok=True)
                 volumes[settings.sandbox_pip_cache_path] = {
-                    "bind": "/root/.cache/pip",
+                    "bind": "/home/sandbox/.cache/pip",
                     "mode": "rw",
                 }
             if volumes:
                 container_config["volumes"] = cast("dict[str, Any]", volumes)
 
-            # Network mode - need network for WebSocket
-            # Don't use "none" as we need to connect via host port
+            # Give each sandbox its own bridge as defense in depth. Published
+            # ports can still be routed by Docker, so service auth remains the
+            # tenant boundary.
             if config.network_isolated:
-                # Create isolated network for sandbox
-                container_config["network_mode"] = "bridge"
+                container_config["network"] = await self._create_isolated_network(sandbox_id)
 
             # Run in thread pool
             loop = asyncio.get_event_loop()
@@ -1196,29 +1333,19 @@ class MCPSandboxAdapter(SandboxPort):
             # Build service URLs using SandboxUrlService
             instance_info = SandboxInstanceInfo(
                 mcp_port=host_mcp_port,
-                desktop_port=host_desktop_port,
-                terminal_port=host_terminal_port,
+                desktop_port=host_desktop_port or 0,
+                terminal_port=host_terminal_port or 0,
                 sandbox_id=sandbox_id,
                 host="localhost",
             )
             urls = self._url_service.build_all_urls(instance_info)
 
             websocket_url = urls.mcp_url
-            desktop_url = urls.desktop_url
-            terminal_url = urls.terminal_url
+            desktop_url = urls.desktop_url if host_desktop_port is not None else None
+            terminal_url = urls.terminal_url if host_terminal_port is not None else None
 
             # Build labels dict for instance
-            instance_labels = {
-                "memstack.sandbox": "true",
-                "memstack.sandbox.id": sandbox_id,
-                "memstack.sandbox.mcp_port": str(host_mcp_port),
-                "memstack.sandbox.desktop_port": str(host_desktop_port),
-                "memstack.sandbox.terminal_port": str(host_terminal_port),
-            }
-            if project_id:
-                instance_labels["memstack.project_id"] = project_id
-            if tenant_id:
-                instance_labels["memstack.tenant_id"] = tenant_id
+            instance_labels = container_labels.copy()
 
             # Create instance record with port information
             now = datetime.now()
@@ -1232,6 +1359,7 @@ class MCPSandboxAdapter(SandboxPort):
                 last_activity_at=now,  # Initialize activity time
                 websocket_url=websocket_url,
                 mcp_client=None,
+                mcp_auth_token=mcp_auth_token,
                 mcp_port=host_mcp_port,
                 desktop_port=host_desktop_port,
                 terminal_port=host_terminal_port,
@@ -1255,18 +1383,31 @@ class MCPSandboxAdapter(SandboxPort):
         except ImageNotFound:
             # Release allocated ports on failure
             async with self._port_allocation_lock:
-                self._release_ports_unsafe([host_mcp_port, host_desktop_port, host_terminal_port])
-            logger.error(f"MCP sandbox image not found: {self._mcp_image}")
+                self._release_ports_unsafe(
+                    [
+                        port
+                        for port in [host_mcp_port, host_desktop_port, host_terminal_port]
+                        if port is not None
+                    ]
+                )
+            logger.error(f"MCP sandbox image not found: {config.image}")
+            await self._remove_partial_container(sandbox_id, "image not found")
             raise SandboxConnectionError(
-                message=f"Docker image not found: {self._mcp_image}. "
-                f"Build with: cd sandbox-mcp-server && docker build -t {self._mcp_image} .",
+                message=f"Docker image not found: {config.image}. "
+                f"Build with: cd sandbox-mcp-server && docker build -t {config.image} .",
                 sandbox_id=sandbox_id,
                 operation="create",
             ) from None
         except Exception as e:
             # Release allocated ports on failure
             async with self._port_allocation_lock:
-                self._release_ports_unsafe([host_mcp_port, host_desktop_port, host_terminal_port])
+                self._release_ports_unsafe(
+                    [
+                        port
+                        for port in [host_mcp_port, host_desktop_port, host_terminal_port]
+                        if port is not None
+                    ]
+                )
             await self._remove_partial_container(sandbox_id, "create_sandbox failure")
             logger.error(f"Failed to create MCP sandbox: {e}")
             raise SandboxConnectionError(
@@ -1323,7 +1464,10 @@ class MCPSandboxAdapter(SandboxPort):
                 operation="connect_mcp",
             )
 
-        if instance.mcp_client and instance.mcp_client.is_connected:
+        if not instance.mcp_auth_token:
+            logger.error("MCP authentication capability missing for sandbox %s", sandbox_id)
+
+        elif instance.mcp_client and instance.mcp_client.is_connected:
             logger.debug(f"MCP client already connected: {sandbox_id}")
             return True
 
@@ -1331,7 +1475,7 @@ class MCPSandboxAdapter(SandboxPort):
         # This method only attempts connection; rebuild logic is in:
         # - _ensure_sandbox_healthy (called by call_tool)
         # - _rebuild_sandbox (for explicit rebuild requests)
-        if not await self._verify_container_running(sandbox_id):
+        if not instance.mcp_auth_token or not await self._verify_container_running(sandbox_id):
             return False
 
         # Refresh instance reference
@@ -1343,6 +1487,7 @@ class MCPSandboxAdapter(SandboxPort):
         # Create MCP client (heartbeat=None to avoid PONG timeout killing long tool calls)
         client = MCPWebSocketClient(
             url=instance.websocket_url or "",
+            headers={"Authorization": f"Bearer {instance.mcp_auth_token}"},
             timeout=timeout,
             heartbeat_interval=None,
         )
@@ -1514,6 +1659,7 @@ class MCPSandboxAdapter(SandboxPort):
             mcp_port, desktop_port, terminal_port = self._extract_ports_from_labels(labels)
             project_path = self._extract_project_path_from_mounts(container)
             recovered_config = self._extract_config_from_mounts(container)
+            mcp_auth_token = self._extract_mcp_auth_token(container)
 
             instance = self._build_instance_from_container(
                 sandbox_id,
@@ -1523,13 +1669,18 @@ class MCPSandboxAdapter(SandboxPort):
                 desktop_port,
                 terminal_port,
                 recovered_config,
+                mcp_auth_token,
             )
 
             # Use separate locks for instance and port tracking
             async with self._instance_lock:
                 self._active_sandboxes[sandbox_id] = instance
             async with self._port_allocation_lock:
-                self._track_ports(mcp_port, desktop_port, terminal_port)
+                self._track_ports(
+                    instance.mcp_port,
+                    instance.desktop_port,
+                    instance.terminal_port,
+                )
 
             logger.info(
                 f"Successfully recovered sandbox {sandbox_id} "
@@ -2153,6 +2304,7 @@ class MCPSandboxAdapter(SandboxPort):
                 return None
 
             labels = container.labels or {}
+            mcp_auth_token = self._extract_mcp_auth_token(container)
 
             # Verify it's a memstack sandbox
             if labels.get("memstack.sandbox") != "true":
@@ -2176,53 +2328,27 @@ class MCPSandboxAdapter(SandboxPort):
                     project_path = mount.get("Source", "")
                     break
 
-            # Build URLs if ports are available
-            websocket_url = None
-            desktop_url = None
-            terminal_url = None
-            if mcp_port:
-                instance_info = SandboxInstanceInfo(
-                    mcp_port=mcp_port,
-                    desktop_port=desktop_port or 0,
-                    terminal_port=terminal_port or 0,
-                    sandbox_id=sandbox_id,
-                    host="localhost",
-                )
-                urls = self._url_service.build_all_urls(instance_info)
-                websocket_url = urls.mcp_url
-                desktop_url = urls.desktop_url if desktop_port else None
-                terminal_url = urls.terminal_url if terminal_port else None
-
-            # Create instance record
-            now = datetime.now()
-            instance = MCPSandboxInstance(
-                id=sandbox_id,
-                status=SandboxStatus.RUNNING,
-                config=SandboxConfig(image=self._mcp_image),
-                project_path=project_path,
-                endpoint=websocket_url,
-                created_at=now,
-                last_activity_at=now,
-                websocket_url=websocket_url,
-                mcp_client=None,  # Will connect on first use
-                mcp_port=mcp_port,
-                desktop_port=desktop_port,
-                terminal_port=terminal_port,
-                desktop_url=desktop_url,
-                terminal_url=terminal_url,
-                labels=labels,
+            recovered_config = self._extract_config_from_mounts(container)
+            instance = self._build_instance_from_container(
+                sandbox_id,
+                labels,
+                project_path,
+                mcp_port,
+                desktop_port,
+                terminal_port,
+                recovered_config,
+                mcp_auth_token,
             )
 
             async with self._instance_lock:
                 self._active_sandboxes[sandbox_id] = instance
             # Track used ports under the port allocation lock
             async with self._port_allocation_lock:
-                if mcp_port:
-                    self._used_ports.add(mcp_port)
-                if desktop_port:
-                    self._used_ports.add(desktop_port)
-                if terminal_port:
-                    self._used_ports.add(terminal_port)
+                self._track_ports(
+                    instance.mcp_port,
+                    instance.desktop_port,
+                    instance.terminal_port,
+                )
             logger.info(
                 f"Synced sandbox {sandbox_id} from Docker "
                 f"(project_id={labels.get('memstack.project_id', 'unknown')}, "
@@ -2270,6 +2396,7 @@ class MCPSandboxAdapter(SandboxPort):
         mcp_port, desktop_port, terminal_port = self._extract_ports_from_labels(labels)
         project_path = self._extract_project_path_from_mounts(container)
         recovered_config = self._extract_config_from_mounts(container)
+        mcp_auth_token = self._extract_mcp_auth_token(container)
 
         instance = self._build_instance_from_container(
             sandbox_id,
@@ -2279,9 +2406,14 @@ class MCPSandboxAdapter(SandboxPort):
             desktop_port,
             terminal_port,
             recovered_config,
+            mcp_auth_token,
         )
         self._active_sandboxes[sandbox_id] = instance
-        self._track_ports(mcp_port, desktop_port, terminal_port)
+        self._track_ports(
+            instance.mcp_port,
+            instance.desktop_port,
+            instance.terminal_port,
+        )
 
         logger.info(
             f"Discovered existing sandbox: {sandbox_id} "
@@ -2952,13 +3084,12 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
             logger.info(f"Removing old container {sandbox_id} before rebuild")
-            try:
-                await loop.run_in_executor(None, lambda: old_container.remove(force=True))
+            removed = await self._safe_stop_and_remove_container(old_container, sandbox_id)
+            if removed:
                 logger.info(f"Successfully removed old container {sandbox_id}")
-            except Exception as remove_err:
-                logger.warning(f"Failed to remove old container: {remove_err}")
         except Exception:
             logger.debug(f"Old container {sandbox_id} not found, proceeding with rebuild")
+            await self._remove_isolated_network(sandbox_id)
 
     async def _find_running_project_sandbox(
         self,
@@ -3001,23 +3132,35 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         sandbox_id: str,
         config: SandboxConfig,
-        old_ports: list[int],
+        old_ports: list[int | None],
         project_path: str,
         labels: dict[str, str],
+        auth_token: str | None = None,
     ) -> dict[str, Any]:
         """Build the Docker container.run() kwargs for a rebuild."""
+        auth_token = auth_token or self._generate_mcp_auth_token()
+        published_ports: dict[str, tuple[str, int]] = {}
+        if len(old_ports) > 0 and old_ports[0] is not None:
+            published_ports[f"{MCP_WEBSOCKET_PORT}/tcp"] = ("127.0.0.1", old_ports[0])
+        if config.desktop_enabled and len(old_ports) > 1 and old_ports[1] is not None:
+            published_ports[f"{DESKTOP_PORT}/tcp"] = ("127.0.0.1", old_ports[1])
+        if config.terminal_enabled and len(old_ports) > 2 and old_ports[2] is not None:
+            published_ports[f"{TERMINAL_PORT}/tcp"] = ("127.0.0.1", old_ports[2])
+
+        labels = labels.copy()
+        if not config.desktop_enabled:
+            _ = labels.pop("memstack.sandbox.desktop_port", None)
+        if not config.terminal_enabled:
+            _ = labels.pop("memstack.sandbox.terminal_port", None)
+
         container_config: dict[str, Any] = {
-            "image": self._mcp_image,
+            "image": config.image,
             "name": sandbox_id,
             "hostname": sandbox_id,
             "detach": True,
             "restart_policy": {"Name": "on-failure", "MaximumRetryCount": 3},
             "extra_hosts": {sandbox_id: "127.0.0.1"},
-            "ports": {
-                f"{MCP_WEBSOCKET_PORT}/tcp": old_ports[0] if len(old_ports) > 0 else None,
-                f"{DESKTOP_PORT}/tcp": old_ports[1] if len(old_ports) > 1 else None,
-                f"{TERMINAL_PORT}/tcp": old_ports[2] if len(old_ports) > 2 else None,
-            },
+            "ports": published_ports,
             "environment": {
                 "SANDBOX_ID": sandbox_id,
                 "MCP_HOST": "0.0.0.0",
@@ -3031,8 +3174,14 @@ class MCPSandboxAdapter(SandboxPort):
             "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
             "labels": labels,
         }
+        self._enforce_mcp_auth_environment(
+            cast("dict[str, str]", container_config["environment"]),
+            auth_token,
+        )
         settings = get_settings()
         environment = cast("dict[str, str]", container_config["environment"])
+        environment["DESKTOP_ENABLED"] = str(config.desktop_enabled).lower()
+        environment["TERMINAL_ENABLED"] = str(config.terminal_enabled).lower()
         if settings.sandbox_platform_url:
             environment.setdefault("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url)
         if settings.sandbox_service_token:
@@ -3049,12 +3198,12 @@ class MCPSandboxAdapter(SandboxPort):
                 container_config.get("volumes", {}),
             )
             volumes[settings.sandbox_pip_cache_path] = {
-                "bind": "/root/.cache/pip",
+                "bind": "/home/sandbox/.cache/pip",
                 "mode": "rw",
             }
             container_config["volumes"] = cast("dict[str, Any]", volumes)
         if config.network_isolated:
-            container_config["network_mode"] = "bridge"
+            container_config["network"] = self._isolated_network_name(sandbox_id)
         return container_config
 
     async def _wait_for_container_running(
@@ -3145,6 +3294,7 @@ class MCPSandboxAdapter(SandboxPort):
         original_labels = old_instance.labels
         original_project_id = old_instance.project_id
         old_ports = self._get_instance_ports(old_instance)
+        mcp_auth_token = old_instance.mcp_auth_token or self._generate_mcp_auth_token()
 
         replacement_id = await self._find_running_project_sandbox(
             original_project_id,
@@ -3163,24 +3313,27 @@ class MCPSandboxAdapter(SandboxPort):
             async with self._instance_lock:
                 self._active_sandboxes.pop(original_sandbox_id, None)
             async with self._port_allocation_lock:
-                self._release_ports_unsafe(old_ports)
+                self._release_ports_unsafe([port for port in old_ports if port is not None])
             await self._last_healthy_at.delete(original_sandbox_id)
             return None
 
         # Release old ports before rebuild
         async with self._port_allocation_lock:
-            self._release_ports_unsafe(old_ports)
+            self._release_ports_unsafe([port for port in old_ports if port is not None])
 
         await self.disconnect_mcp(original_sandbox_id)
         await self._remove_old_container(original_sandbox_id)
 
         try:
+            if original_config.network_isolated:
+                await self._create_isolated_network(original_sandbox_id)
             container_config = self._build_rebuild_container_config(
                 original_sandbox_id,
                 original_config,
                 old_ports,
                 original_project_path,
                 original_labels,
+                mcp_auth_token,
             )
 
             loop = asyncio.get_event_loop()
@@ -3198,6 +3351,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
 
             now = datetime.now()
+            rebuilt_labels = cast("dict[str, str]", container_config["labels"])
             new_instance = MCPSandboxInstance(
                 id=original_sandbox_id,
                 status=SandboxStatus.RUNNING,
@@ -3208,12 +3362,13 @@ class MCPSandboxAdapter(SandboxPort):
                 last_activity_at=now,
                 websocket_url=websocket_url,
                 mcp_client=None,
+                mcp_auth_token=mcp_auth_token,
                 mcp_port=actual_mcp,
                 desktop_port=actual_desktop,
                 terminal_port=actual_terminal,
                 desktop_url=desktop_url,
                 terminal_url=terminal_url,
-                labels=original_labels,
+                labels=rebuilt_labels,
             )
 
             logger.info(

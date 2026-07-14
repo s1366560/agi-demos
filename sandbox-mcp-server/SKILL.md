@@ -207,7 +207,7 @@ Sandbox 是一个功能完备的隔离执行环境，通过 MCP (Model Context P
 
 **预装环境**:
 ```
-Python 3.13 (及 /opt/skills-venv 虚拟环境)
+Python 3.12 (及 /opt/skills-venv 虚拟环境)
 Node.js 22 (npm, pnpm, yarn, bun)
 Java 21 (maven, gradle)
 Git, ffmpeg, pandoc, LibreOffice
@@ -590,7 +590,7 @@ remotion, puppeteer, sharp, tailwindcss
 }
 ```
 
-访问: `http://localhost:6080/vnc.html`（KasmVNC 内置 Web 客户端）
+访问: `https://localhost:6080/`（KasmVNC 内置 Web 客户端；使用 `sandbox` 和每沙箱运行时凭据认证）
 
 **支持分辨率**: 1280x720, 1600x900, 1920x1080（默认）, 2560x1440
 
@@ -732,4 +732,4 @@ bash command="pandoc input.docx -o output.md"
 |------|------|-----|
 | MCP Server | 8765 | `ws://localhost:8765` |
 | Web Terminal | 7681 | `http://localhost:7681` |
-| Remote Desktop | 6080 | `http://localhost:6080/vnc.html` |
+| Remote Desktop | 6080 | `https://localhost:6080/`（需要每沙箱运行时凭据） |

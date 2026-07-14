@@ -1,0 +1,515 @@
+use std::fmt;
+
+use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Value};
+
+use super::session_store::DesktopSessionStore;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ManagedResourceKind {
+    Provider,
+    Skill,
+    Plugin,
+    Agent,
+}
+
+impl ManagedResourceKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Provider => "provider",
+            Self::Skill => "skill",
+            Self::Plugin => "plugin",
+            Self::Agent => "agent",
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum ResourceRegistryError {
+    NotFound,
+    RevisionConflict { expected: u64, actual: u64 },
+    Storage(String),
+}
+
+impl fmt::Display for ResourceRegistryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFound => formatter.write_str("managed resource not found"),
+            Self::RevisionConflict { expected, actual } => write!(
+                formatter,
+                "managed resource revision conflict: expected {expected}, found {actual}"
+            ),
+            Self::Storage(error) => formatter.write_str(error),
+        }
+    }
+}
+
+pub(super) fn initialize_resource_registry(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS desktop_managed_resources (
+               kind TEXT NOT NULL CHECK(kind IN ('provider', 'skill', 'plugin', 'agent')),
+               scope_kind TEXT NOT NULL CHECK(scope_kind IN ('tenant', 'project')),
+               scope_id TEXT NOT NULL,
+               id TEXT NOT NULL,
+               status TEXT NOT NULL,
+               revision INTEGER NOT NULL CHECK(revision >= 0),
+               created_at_ms INTEGER NOT NULL,
+               updated_at_ms INTEGER NOT NULL,
+               value_json TEXT NOT NULL,
+               PRIMARY KEY(kind, scope_kind, scope_id, id)
+             );
+             CREATE INDEX IF NOT EXISTS idx_desktop_managed_resources_scope
+               ON desktop_managed_resources(kind, scope_kind, scope_id, status);",
+        )
+        .map_err(|error| error.to_string())?;
+    seed_resource_registry(connection)
+}
+
+impl DesktopSessionStore {
+    pub(super) fn list_managed_resources(
+        &self,
+        kind: ManagedResourceKind,
+        scope_kind: &str,
+        scope_id: &str,
+    ) -> Result<Vec<Value>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT value_json FROM desktop_managed_resources
+                 WHERE kind = ?1 AND scope_kind = ?2 AND scope_id = ?3
+                 ORDER BY id ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let resources = statement
+            .query_map(params![kind.as_str(), scope_kind, scope_id], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|error| error.to_string())?
+            .map(|row| {
+                let value_json = row.map_err(|error| error.to_string())?;
+                serde_json::from_str(&value_json).map_err(|error| error.to_string())
+            })
+            .collect();
+        resources
+    }
+
+    pub(super) fn managed_resource(
+        &self,
+        kind: ManagedResourceKind,
+        scope_kind: &str,
+        scope_id: &str,
+        id: &str,
+    ) -> Result<Option<Value>, String> {
+        let connection = self.connection()?;
+        let value_json = connection
+            .query_row(
+                "SELECT value_json FROM desktop_managed_resources
+                 WHERE kind = ?1 AND scope_kind = ?2 AND scope_id = ?3 AND id = ?4",
+                params![kind.as_str(), scope_kind, scope_id, id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        value_json
+            .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+            .transpose()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn put_managed_resource(
+        &self,
+        kind: ManagedResourceKind,
+        scope_kind: &str,
+        scope_id: &str,
+        id: &str,
+        status: &str,
+        expected_revision: Option<u64>,
+        mut value: Value,
+        now_ms: i64,
+    ) -> Result<Value, ResourceRegistryError> {
+        let mut connection = self.connection().map_err(ResourceRegistryError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        let current_revision = transaction
+            .query_row(
+                "SELECT revision FROM desktop_managed_resources
+                 WHERE kind = ?1 AND scope_kind = ?2 AND scope_id = ?3 AND id = ?4",
+                params![kind.as_str(), scope_kind, scope_id, id],
+                |row| row.get::<_, u64>(0),
+            )
+            .optional()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        let actual_revision = current_revision.unwrap_or(0);
+        if let Some(expected) = expected_revision {
+            if expected != actual_revision {
+                return Err(ResourceRegistryError::RevisionConflict {
+                    expected,
+                    actual: actual_revision,
+                });
+            }
+        }
+        let next_revision = current_revision.map_or(0, |revision| revision.saturating_add(1));
+        let updated_at = iso_from_millis(now_ms);
+        let object = value.as_object_mut().ok_or_else(|| {
+            ResourceRegistryError::Storage("managed resource must be an object".to_string())
+        })?;
+        object.insert("id".to_string(), json!(id));
+        object.insert("revision".to_string(), json!(next_revision));
+        object.insert("updated_at".to_string(), json!(updated_at));
+        let value_json = serde_json::to_string(&value)
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_managed_resources(
+                   kind, scope_kind, scope_id, id, status, revision,
+                   created_at_ms, updated_at_ms, value_json
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8)
+                 ON CONFLICT(kind, scope_kind, scope_id, id) DO UPDATE SET
+                   status = excluded.status,
+                   revision = excluded.revision,
+                   updated_at_ms = excluded.updated_at_ms,
+                   value_json = excluded.value_json",
+                params![
+                    kind.as_str(),
+                    scope_kind,
+                    scope_id,
+                    id,
+                    status,
+                    next_revision,
+                    now_ms,
+                    value_json,
+                ],
+            )
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        Ok(value)
+    }
+
+    pub(super) fn set_managed_resource_enabled(
+        &self,
+        kind: ManagedResourceKind,
+        scope_kind: &str,
+        scope_id: &str,
+        id: &str,
+        enabled: bool,
+        now_ms: i64,
+    ) -> Result<Value, ResourceRegistryError> {
+        let mut value = self
+            .managed_resource(kind, scope_kind, scope_id, id)
+            .map_err(ResourceRegistryError::Storage)?
+            .ok_or(ResourceRegistryError::NotFound)?;
+        let revision = value.get("revision").and_then(Value::as_u64).unwrap_or(0);
+        let object = value.as_object_mut().ok_or_else(|| {
+            ResourceRegistryError::Storage("managed resource must be an object".to_string())
+        })?;
+        match kind {
+            ManagedResourceKind::Skill => {
+                object.insert(
+                    "status".to_string(),
+                    json!(if enabled { "active" } else { "disabled" }),
+                );
+            }
+            ManagedResourceKind::Plugin | ManagedResourceKind::Agent => {
+                object.insert("enabled".to_string(), json!(enabled));
+                object.insert(
+                    "status".to_string(),
+                    json!(if enabled { "active" } else { "disabled" }),
+                );
+            }
+            ManagedResourceKind::Provider => {
+                object.insert("is_active".to_string(), json!(enabled));
+            }
+        }
+        self.put_managed_resource(
+            kind,
+            scope_kind,
+            scope_id,
+            id,
+            if enabled { "active" } else { "disabled" },
+            Some(revision),
+            value,
+            now_ms,
+        )
+    }
+}
+
+fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
+    let now_ms = Utc::now().timestamp_millis();
+    let tenants = query_ids(
+        connection,
+        "SELECT id FROM desktop_tenants WHERE status = 'active'",
+    )?;
+    for tenant_id in tenants {
+        let provider = json!({
+            "id": "local-runtime",
+            "name": "Local runtime",
+            "provider_type": "openai_compatible",
+            "tenant_id": tenant_id,
+            "is_active": false,
+            "base_url": "http://127.0.0.1:11434/v1",
+            "auth_method": "none",
+            "credential_source": "runtime_memory",
+            "credential_configured": false,
+            "llm_model": null,
+            "allowed_models": [],
+            "secondary_models": [],
+            "health_status": "not_configured",
+            "revision": 0,
+            "updated_at": iso_from_millis(now_ms),
+        });
+        insert_seed(
+            connection,
+            ManagedResourceKind::Provider,
+            "tenant",
+            &tenant_id,
+            "local-runtime",
+            "disabled",
+            &provider,
+            now_ms,
+        )?;
+        for (id, name, description, tools) in [
+            (
+                "code-exploration",
+                "Code exploration",
+                "Inspect symbols, references, and repository structure before implementation.",
+                vec![
+                    "read",
+                    "glob",
+                    "grep",
+                    "find_definition",
+                    "find_references",
+                    "call_graph",
+                ],
+            ),
+            (
+                "implementation",
+                "Implementation",
+                "Apply approved workspace changes inside the active run authority boundary.",
+                vec![
+                    "read",
+                    "write",
+                    "edit",
+                    "apply_patch",
+                    "run_tests",
+                    "git_diff",
+                ],
+            ),
+            (
+                "verification",
+                "Verification",
+                "Run tests and collect structured evidence for human review.",
+                vec![
+                    "run_tests",
+                    "analyze_coverage",
+                    "git_diff",
+                    "list_artifacts",
+                ],
+            ),
+        ] {
+            let skill = json!({
+                "id": id,
+                "name": name,
+                "description": description,
+                "status": "active",
+                "scope": "tenant",
+                "tools": tools,
+                "current_version": 1,
+                "is_system_skill": true,
+                "revision": 0,
+                "updated_at": iso_from_millis(now_ms),
+            });
+            insert_seed(
+                connection,
+                ManagedResourceKind::Skill,
+                "tenant",
+                &tenant_id,
+                id,
+                "active",
+                &skill,
+                now_ms,
+            )?;
+        }
+        for (id, name, package, tools) in [
+            (
+                "local-workspace",
+                "Local workspace tools",
+                "builtin:local-tools",
+                vec!["read", "write", "edit", "glob", "grep", "terminal"],
+            ),
+            (
+                "model-context-protocol",
+                "Model Context Protocol",
+                "builtin:mcp-runtime",
+                vec!["mcp_tools_list", "mcp_tools_call"],
+            ),
+        ] {
+            let tool_definitions = tools
+                .into_iter()
+                .map(|name| json!({ "name": name }))
+                .collect::<Vec<_>>();
+            let plugin = json!({
+                "id": id,
+                "name": name,
+                "source": "builtin",
+                "package": package,
+                "version": env!("CARGO_PKG_VERSION"),
+                "kind": "runtime",
+                "enabled": true,
+                "discovered": true,
+                "providers": ["local"],
+                "skills": [],
+                "channel_types": [],
+                "tool_definitions": tool_definitions,
+                "revision": 0,
+                "updated_at": iso_from_millis(now_ms),
+            });
+            insert_seed(
+                connection,
+                ManagedResourceKind::Plugin,
+                "tenant",
+                &tenant_id,
+                id,
+                "active",
+                &plugin,
+                now_ms,
+            )?;
+        }
+    }
+
+    let projects = query_ids(
+        connection,
+        "SELECT id FROM desktop_projects WHERE status = 'active'",
+    )?;
+    for project_id in projects {
+        let agent = json!({
+            "id": "builtin:all-access",
+            "name": "Local Agent",
+            "display_name": "General and coding Agent",
+            "system_prompt": null,
+            "enabled": true,
+            "status": "active",
+            "model_name": null,
+            "allowed_tools": ["read", "write", "edit", "glob", "grep", "terminal"],
+            "allowed_skills": ["code-exploration", "implementation", "verification"],
+            "allowed_mcp_servers": ["local-runtime"],
+            "project_id": project_id,
+            "revision": 0,
+            "updated_at": iso_from_millis(now_ms),
+        });
+        insert_seed(
+            connection,
+            ManagedResourceKind::Agent,
+            "project",
+            &project_id,
+            "builtin:all-access",
+            "active",
+            &agent,
+            now_ms,
+        )?;
+    }
+    Ok(())
+}
+
+fn query_ids(connection: &Connection, query: &str) -> Result<Vec<String>, String> {
+    let mut statement = connection
+        .prepare(query)
+        .map_err(|error| error.to_string())?;
+    let ids = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?
+        .map(|row| row.map_err(|error| error.to_string()))
+        .collect();
+    ids
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_seed(
+    connection: &Connection,
+    kind: ManagedResourceKind,
+    scope_kind: &str,
+    scope_id: &str,
+    id: &str,
+    status: &str,
+    value: &Value,
+    now_ms: i64,
+) -> Result<(), String> {
+    connection
+        .execute(
+            "INSERT OR IGNORE INTO desktop_managed_resources(
+               kind, scope_kind, scope_id, id, status, revision,
+               created_at_ms, updated_at_ms, value_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6, ?7)",
+            params![
+                kind.as_str(),
+                scope_kind,
+                scope_id,
+                id,
+                status,
+                now_ms,
+                serde_json::to_string(value).map_err(|error| error.to_string())?,
+            ],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn iso_from_millis(timestamp_ms: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
+        .unwrap_or_else(Utc::now)
+        .to_rfc3339()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn seeded_resources_are_scope_isolated_and_revision_guarded() {
+        let store = DesktopSessionStore::in_memory().expect("store");
+        let local_skills = store
+            .list_managed_resources(ManagedResourceKind::Skill, "tenant", "local")
+            .expect("local skills");
+        let orbital_skills = store
+            .list_managed_resources(ManagedResourceKind::Skill, "tenant", "orbital")
+            .expect("orbital skills");
+        assert_eq!(local_skills.len(), 3);
+        assert_eq!(orbital_skills.len(), 3);
+
+        let disabled = store
+            .set_managed_resource_enabled(
+                ManagedResourceKind::Skill,
+                "tenant",
+                "local",
+                "implementation",
+                false,
+                1_752_384_000_000,
+            )
+            .expect("disable skill");
+        assert_eq!(disabled["status"], "disabled");
+        assert_eq!(disabled["revision"], 1);
+        assert_eq!(orbital_skills[1]["status"], "active");
+
+        let conflict = store.put_managed_resource(
+            ManagedResourceKind::Skill,
+            "tenant",
+            "local",
+            "implementation",
+            "active",
+            Some(0),
+            disabled,
+            1_752_384_001_000,
+        );
+        assert!(matches!(
+            conflict,
+            Err(ResourceRegistryError::RevisionConflict {
+                expected: 0,
+                actual: 1
+            })
+        ));
+    }
+}

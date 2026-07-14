@@ -23,7 +23,11 @@ from src.application.schemas.cron import (
     payload_config_to_domain,
     schedule_config_to_domain,
 )
-from src.application.services.cron_service import CronJobService
+from src.application.services.cron_service import (
+    CronExecutionUnavailableError,
+    CronJobService,
+    CronMutationUnavailableError,
+)
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
 from src.domain.model.cron.value_objects import ConversationMode
@@ -257,7 +261,7 @@ async def _handle_list(
     )
 
 
-async def _handle_add(  # noqa: PLR0911
+async def _handle_add(  # noqa: C901, PLR0911
     ctx: ToolContext,
     *,
     job: dict[str, Any] | None,
@@ -364,24 +368,30 @@ async def _handle_add(  # noqa: PLR0911
                 is_error=True,
             )
 
-        created = await svc.create_job(
-            project_id=project_id,
-            tenant_id=tenant_id,
-            name=name,
-            schedule=schedule,
-            payload=payload,
-            description=job.get("description"),
-            enabled=job.get("enabled", True),
-            delete_after_run=job.get("delete_after_run", False),
-            delivery=delivery,
-            conversation_mode=conv_mode,
-            conversation_id=job.get("conversation_id"),
-            timezone=job.get("timezone", "UTC"),
-            stagger_seconds=job.get("stagger_seconds", 0),
-            timeout_seconds=job.get("timeout_seconds", 300),
-            max_retries=job.get("max_retries", 3),
-            created_by=ctx.user_id,
-        )
+        try:
+            created = await svc.create_job(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                name=name,
+                schedule=schedule,
+                payload=payload,
+                description=job.get("description"),
+                enabled=job.get("enabled", True),
+                delete_after_run=job.get("delete_after_run", False),
+                delivery=delivery,
+                conversation_mode=conv_mode,
+                conversation_id=job.get("conversation_id"),
+                timezone=job.get("timezone", "UTC"),
+                stagger_seconds=job.get("stagger_seconds", 0),
+                timeout_seconds=job.get("timeout_seconds", 300),
+                max_retries=job.get("max_retries", 3),
+                created_by=ctx.user_id,
+            )
+        except CronMutationUnavailableError as exc:
+            return ToolResult(
+                output=_json({"error": str(exc)}),
+                is_error=True,
+            )
         await session.commit()
 
     # Register with APScheduler (after commit, outside session context)
@@ -398,7 +408,7 @@ async def _handle_add(  # noqa: PLR0911
     )
 
 
-async def _handle_update(
+async def _handle_update(  # noqa: PLR0912
     ctx: ToolContext,
     *,
     job_id: str | None,
@@ -452,6 +462,11 @@ async def _handle_update(
                 output=_json({"error": str(exc)}),
                 is_error=True,
             )
+        except CronMutationUnavailableError as exc:
+            return ToolResult(
+                output=_json({"error": str(exc)}),
+                is_error=True,
+            )
         await session.commit()
 
     # Re-register with APScheduler to pick up new schedule/enabled state
@@ -486,7 +501,13 @@ async def _handle_remove(
     factory = _get_session_factory()
     async with factory() as session:
         svc = _build_service(session)
-        deleted = await svc.delete_job(job_id)
+        try:
+            deleted = await svc.delete_job(job_id)
+        except CronMutationUnavailableError as exc:
+            return ToolResult(
+                output=_json({"error": str(exc)}),
+                is_error=True,
+            )
         if not deleted:
             return ToolResult(
                 output=_json({"error": f"CronJob {job_id} not found"}),
@@ -510,6 +531,12 @@ async def _handle_run(
     conversation_id: str | None,
 ) -> ToolResult:
     """Manually trigger a cron job."""
+    project_id = ctx.project_id
+    if not project_id:
+        return ToolResult(
+            output=_json({"error": "No project_id in context"}),
+            is_error=True,
+        )
     if not job_id:
         return ToolResult(
             output=_json({"error": "Missing 'job_id' for run action"}),
@@ -519,12 +546,23 @@ async def _handle_run(
     factory = _get_session_factory()
     async with factory() as session:
         svc = _build_service(session)
+        job = await svc.get_job(job_id)
+        if job is None or job.project_id != project_id:
+            return ToolResult(
+                output=_json({"error": f"CronJob {job_id} not found"}),
+                is_error=True,
+            )
         try:
             run = await svc.trigger_manual_run(
                 job_id,
                 conversation_id=conversation_id,
             )
         except ValueError as exc:
+            return ToolResult(
+                output=_json({"error": str(exc)}),
+                is_error=True,
+            )
+        except CronExecutionUnavailableError as exc:
             return ToolResult(
                 output=_json({"error": str(exc)}),
                 is_error=True,
@@ -548,6 +586,12 @@ async def _handle_runs(
     job_id: str | None,
 ) -> ToolResult:
     """List recent runs for a cron job."""
+    project_id = ctx.project_id
+    if not project_id:
+        return ToolResult(
+            output=_json({"error": "No project_id in context"}),
+            is_error=True,
+        )
     if not job_id:
         return ToolResult(
             output=_json({"error": "Missing 'job_id' for runs action"}),
@@ -557,6 +601,12 @@ async def _handle_runs(
     factory = _get_session_factory()
     async with factory() as session:
         svc = _build_service(session)
+        job = await svc.get_job(job_id)
+        if job is None or job.project_id != project_id:
+            return ToolResult(
+                output=_json({"error": f"CronJob {job_id} not found"}),
+                is_error=True,
+            )
         runs = await svc.list_runs(job_id, limit=20)
         total = await svc.count_runs(job_id)
 

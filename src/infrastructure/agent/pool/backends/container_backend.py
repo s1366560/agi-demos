@@ -113,9 +113,9 @@ class ContainerBackend(Backend):
 
         # Initialize Docker client
         try:
-            import docker
+            from docker.client import from_env
 
-            self._docker_client = docker.from_env()
+            self._docker_client = from_env()
             # Test connection
             self._docker_client.ping()
             logger.info(f"Docker client connected: {self._config.docker_host}")
@@ -549,7 +549,9 @@ class ContainerBackend(Backend):
                 for instance_id in list(self._containers.keys()):
                     result = await self.health_check(instance_id)
                     if result.status == HealthStatus.UNHEALTHY:
-                        logger.warning(f"Container unhealthy: {instance_id}, {result.error_message}")
+                        logger.warning(
+                            f"Container unhealthy: {instance_id}, {result.error_message}"
+                        )
                         # Update container status
                         if instance_id in self._containers:
                             self._containers[instance_id].status = "error"

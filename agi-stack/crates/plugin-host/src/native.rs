@@ -10,7 +10,7 @@ use async_trait::async_trait;
 
 use crate::host::ToolFactory;
 use crate::manifest::ToolDecl;
-use crate::tool::{Tool, Trust};
+use crate::tool::{Tool, ToolAccessClass, Trust};
 
 fn input_text(input_json: &str) -> CoreResult<String> {
     let v: serde_json::Value =
@@ -35,6 +35,9 @@ impl Tool for LenTool {
     fn trust(&self) -> Trust {
         Trust::Builtin
     }
+    fn access_class(&self) -> ToolAccessClass {
+        ToolAccessClass::Pure
+    }
     async fn invoke(&self, input_json: &str) -> CoreResult<String> {
         let text = input_text(input_json)?;
         Ok(serde_json::json!({ "tool": "len", "len": text.chars().count() }).to_string())
@@ -54,6 +57,9 @@ impl Tool for UpperTool {
     }
     fn trust(&self) -> Trust {
         Trust::Builtin
+    }
+    fn access_class(&self) -> ToolAccessClass {
+        ToolAccessClass::Pure
     }
     async fn invoke(&self, input_json: &str) -> CoreResult<String> {
         let text = input_text(input_json)?;
@@ -87,6 +93,9 @@ impl Tool for EchoTool {
     }
     fn trust(&self) -> Trust {
         Trust::Builtin
+    }
+    fn access_class(&self) -> ToolAccessClass {
+        ToolAccessClass::Pure
     }
     async fn invoke(&self, input_json: &str) -> CoreResult<String> {
         Ok(serde_json::json!({ "tool": self.name, "echo": input_json }).to_string())

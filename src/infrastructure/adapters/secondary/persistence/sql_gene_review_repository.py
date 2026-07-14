@@ -93,7 +93,9 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
         return items, total
 
     @override
-    async def find_by_id(self, entity_id: str, tenant_id: str) -> GeneReview | None:
+    async def find_by_id(self, entity_id: str, tenant_id: str | None = None) -> GeneReview | None:
+        if tenant_id is None:
+            return None
         query = (
             select(GeneReviewModel)
             .where(GeneReviewModel.id == entity_id)
@@ -133,5 +135,5 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
             .where(GeneReviewModel.deleted_at.is_(None))
             .values(deleted_at=datetime.now(UTC))
         )
-        await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
+        _ = await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
         await self._session.flush()

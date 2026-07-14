@@ -210,6 +210,7 @@ class ProfileInfo(BaseModel):
     profile_type: str = Field(..., description="Profile type identifier (lite, standard, full)")
     description: str = Field(..., description="Profile description")
     desktop_enabled: bool = Field(..., description="Whether desktop environment is enabled")
+    terminal_enabled: bool = Field(..., description="Whether web terminal is enabled")
     memory_limit: str = Field(..., description="Memory limit (e.g., '512m', '2g', '4g')")
     cpu_limit: str = Field(..., description="CPU limit (e.g., '0.5', '2', '4')")
     timeout_seconds: int = Field(..., description="Maximum sandbox lifetime in seconds")

@@ -5,13 +5,13 @@
 # Build: docker build -t sandbox-mcp-server .
 # Run:   docker run -p 8765:8765 -v $(pwd)/workspace:/workspace sandbox-mcp-server
 
-ARG DOCKER_CLI_IMAGE=docker:cli
+ARG DOCKER_CLI_IMAGE=docker:cli@sha256:862099ada15c669000bef53aa4cb9d821262829f45b0dda2159ccb276443043b
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli
 
-FROM ubuntu:25.04
+FROM ubuntu:24.04
 
 LABEL maintainer="MemStack Team"
-LABEL description="Sandbox MCP Server with KDE Plasma 6, Python, Java, Node.js"
+LABEL description="Sandbox MCP Server with KDE Plasma, Python, Java, Node.js"
 
 # ====================
 # Environment Variables
@@ -23,15 +23,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANGUAGE=zh_CN:en
 
 # Development versions
-ENV PYTHON_VERSION=3.13 \
+ENV PYTHON_VERSION=3.12 \
     NODE_VERSION=22 \
     JAVA_VERSION=21
 
 # MCP Server configuration
 ENV MCP_HOST=0.0.0.0 \
     MCP_PORT=8765 \
-    MCP_WORKSPACE=/workspace \
-    HOSTNAME=mcp-sandbox
+    MCP_WORKSPACE=/workspace
 
 # Desktop configuration
 ENV DESKTOP_ENABLED=true \
@@ -46,12 +45,12 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y ca-certificates; \
     ARCH=$(dpkg --print-architecture); \
-    if [ "$ARCH" = "amd64" ]; then MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu"; \
-    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"; \
-    else MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"; \
+    if [ "$ARCH" = "amd64" ]; then MIRROR="http://archive.ubuntu.com/ubuntu"; \
+    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then MIRROR="http://ports.ubuntu.com/ubuntu-ports"; \
+    else MIRROR="http://ports.ubuntu.com/ubuntu-ports"; \
     fi; \
     echo "Using mirror: $MIRROR for $ARCH"; \
-    printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky plucky-updates plucky-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources; \
+    printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble noble-updates noble-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources; \
     apt-get update; \
     apt-get upgrade -y
 
@@ -95,6 +94,11 @@ RUN set -eux; \
     fc-cache -fv; \
     rm -rf /var/lib/apt/lists/*
 
+# Run untrusted tools and interactive services as an unprivileged user.
+RUN set -eux; \
+    groupadd --gid 10001 sandbox; \
+    useradd --uid 10001 --gid 10001 --create-home --shell /bin/bash sandbox
+
 # ====================
 # Install Node.js via NodeSource (cached layer)
 # ====================
@@ -113,8 +117,8 @@ RUN --mount=type=cache,target=/root/.npm npm install -g pnpm yarn
 # ====================
 RUN set -eux; \
     curl -fsSL https://bun.sh/install | bash; \
-    ln -sf /root/.bun/bin/bun /usr/local/bin/bun; \
-    ln -sf /root/.bun/bin/bunx /usr/local/bin/bunx
+    install -m 0755 /root/.bun/bin/bun /usr/local/bin/bun; \
+    ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 
 # ====================
 # Install Skills Dependencies - Global Node Packages
@@ -150,60 +154,37 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1
 
 # ====================
-# Install Python Tools (with cache mount for pip)
+# Setup Python Virtual Environment for MCP and Skills
 # ====================
+# Keep one Python dependency environment. Installing the same scientific and
+# browser stacks globally and in a venv nearly doubled the complete image.
+ENV SKILLS_VENV=/opt/skills-venv
+ENV PATH="${SKILLS_VENV}/bin:${PATH}"
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages pipx uv && \
-    pipx ensurepath
-
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
+    python -m venv ${SKILLS_VENV} && \
+    python -m pip install --upgrade pip && \
+    python -m pip install --no-cache-dir \
+    pipx uv \
     "aiohttp>=3.9.0" "aiofiles>=24.1.0" "pydantic>=2.5.0" "watchfiles>=0.21.0" \
     virtualenv pipenv poetry ipython black ruff mypy pytest pytest-asyncio
 
-# ====================
-# Install Skills Dependencies - Python Packages
-# ====================
-# PDF Processing (pdf skill)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
-    pypdf pdfplumber reportlab pdf2image
-
-# Image/GIF Processing (slack-gif-creator, canvas-design skills)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
-    "pillow>=10.0.0" "imageio>=2.31.0" "imageio-ffmpeg>=0.4.9" "numpy>=1.24.0"
-
-# Excel/Spreadsheet Processing (xlsx skill)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
-    openpyxl pandas xlrd xlwt
-
-# Word/OOXML Processing (docx skill)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
-    python-docx defusedxml lxml
-
-# Web Automation (webapp-testing skill)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
-    playwright
-
-# Document Conversion (pptx, docx skills)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
-    markitdown
-
-# Data Visualization & Science
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages \
-    matplotlib seaborn scipy
+    python -m pip install --no-cache-dir \
+    pypdf pdfplumber reportlab pdf2image \
+    "pillow>=10.0.0" "imageio>=2.31.0" "imageio-ffmpeg>=0.4.9" "numpy>=1.24.0" \
+    openpyxl pandas xlrd xlwt \
+    python-docx defusedxml lxml \
+    playwright markitdown \
+    matplotlib seaborn scipy \
+    requests httpx \
+    typing-extensions jinja2 pyyaml toml
 
 # ====================
 # Install Playwright Browsers (webapp-testing skill)
 # ====================
-RUN playwright install chromium --with-deps && \
-    playwright install firefox --with-deps
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN playwright install --with-deps chromium firefox && \
+    chmod -R a+rX /opt/ms-playwright
 
 # ====================
 # Install Google Chrome / Chromium (chrome-devtools-mcp and puppeteer)
@@ -219,7 +200,7 @@ RUN set -eux; \
         rm -f /tmp/chrome.deb; \
         rm -rf /var/lib/apt/lists/*; \
     else \
-        PW_CHROME=$(find /root/.cache/ms-playwright -name "chrome" -path "*/chrome-linux/*" 2>/dev/null | head -1); \
+        PW_CHROME=$(find /opt/ms-playwright -name "chrome" -path "*/chrome-linux/*" 2>/dev/null | head -1); \
         if [ -n "$PW_CHROME" ]; then \
             ln -sf "$PW_CHROME" /opt/google/chrome/chrome; \
         else \
@@ -233,39 +214,23 @@ ENV CHROME_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
 ENV PUPPETEER_ARGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
 
 # ====================
-# Install Firefox (use Playwright's Firefox — Ubuntu 25.04 only ships snap stubs)
+# Install Firefox (use Playwright's Firefox — Ubuntu apt ships snap stubs)
 # ====================
 # Playwright already installed Firefox with deps; just symlink and create .desktop entry
 RUN set -eux; \
-    FF_BIN=$(find /root/.cache/ms-playwright -path '*/firefox/firefox' -type f | head -1); \
+    FF_BIN=$(find /opt/ms-playwright -path '*/firefox/firefox' -type f | head -1); \
     FF_DIR=$(dirname "$FF_BIN"); \
     ln -sf "$FF_BIN" /usr/local/bin/firefox; \
     printf '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Firefox\nGenericName=Web Browser\nComment=Mozilla Firefox Web Browser\nExec=%s %%U\nIcon=firefox\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;\nStartupNotify=true\n' \
       "$FF_BIN" > /usr/share/applications/firefox.desktop
 
 # ====================
-# Setup Python Virtual Environment for Skills
+# Full-profile compiled language toolchains
 # ====================
-# Create a pre-configured virtual environment for sandbox operations
-ENV SKILLS_VENV=/opt/skills-venv
-ENV PATH="${SKILLS_VENV}/bin:${PATH}"
-RUN python -m venv ${SKILLS_VENV} && \
-    ${SKILLS_VENV}/bin/pip install --upgrade pip && \
-    ${SKILLS_VENV}/bin/pip install \
-    # Core dependencies for skills
-    pypdf pdfplumber reportlab pdf2image \
-    "pillow>=10.0.0" "imageio>=2.31.0" "numpy>=1.24.0" \
-    openpyxl pandas xlrd xlwt \
-    python-docx defusedxml lxml \
-    playwright markitdown \
-    matplotlib seaborn scipy \
-    # Additional common packages
-    requests httpx aiohttp \
-    pydantic typing-extensions \
-    jinja2 pyyaml toml
-
-# Install Playwright browsers in venv
-RUN ${SKILLS_VENV}/bin/playwright install chromium
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends golang-go rustc cargo; \
+    rm -rf /var/lib/apt/lists/*
 
 # ====================
 # Install ttyd for Web Terminal
@@ -273,94 +238,82 @@ RUN ${SKILLS_VENV}/bin/playwright install chromium
 ENV TTYD_VERSION=1.7.7
 RUN set -eux; \
     ARCH=$(dpkg --print-architecture); \
-    TTYD_ARCH=$([ "$ARCH" = "x86_64" ] && echo "x86_64" || \
-    [ "$ARCH" = "aarch64" ] && echo "aarch64" || \
-    [ "$ARCH" = "arm64" ] && echo "aarch64" || \
-    echo "$ARCH"); \
+    case "$ARCH" in \
+        amd64) TTYD_ARCH=x86_64; TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55 ;; \
+        arm64) TTYD_ARCH=aarch64; TTYD_SHA256=b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165 ;; \
+        *) echo "Unsupported ttyd architecture: $ARCH"; exit 1 ;; \
+    esac; \
     curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
     -o /usr/local/bin/ttyd; \
+    echo "${TTYD_SHA256}  /usr/local/bin/ttyd" | sha256sum -c -; \
     chmod +x /usr/local/bin/ttyd
 
 # ====================
-# Install KDE Plasma 6 Desktop Environment
+# Install KDE Plasma Desktop Environment
 # ====================
-# Ubuntu 25.04 includes KDE Plasma 6 natively.
+# Ubuntu 24.04 LTS supplies a supported KDE Plasma desktop stack.
 # KDE Plasma provides a modern, feature-rich desktop closest to
 # real desktop experience with Dolphin file manager, Konsole terminal,
 # and extensive customization options.
+# The desktop package set is intentionally split into two cached layers. A
+# transient mirror failure must not discard every already-downloaded package.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    sed -i \
+        -e 's#http://ports.ubuntu.com#https://ports.ubuntu.com#g' \
+        -e 's#http://archive.ubuntu.com#https://archive.ubuntu.com#g' \
+        -e 's#Types: deb deb-src#Types: deb#g' \
+        /etc/apt/sources.list.d/ubuntu.sources; \
+    apt-get -o Acquire::Retries=10 -o Acquire::https::Timeout=30 update; \
+    DEBIAN_FRONTEND=noninteractive apt-get \
+        -o Acquire::Retries=10 -o Acquire::https::Timeout=30 \
+        install -y --no-install-recommends \
+        xorg \
+        kde-plasma-desktop \
+        breeze breeze-icon-theme breeze-cursor-theme \
+        plasma-workspace-wallpapers \
+        pulseaudio pulseaudio-utils pavucontrol-qt \
+        openbox obconf \
+        xdg-utils xdg-user-dirs desktop-file-utils shared-mime-info \
+        dbus-x11 ssl-cert \
+        fonts-freefont-ttf fonts-noto-color-emoji fonts-liberation fonts-dejavu-core \
+        fonts-firacode \
+        ibus ibus-libpinyin \
+        htop xclip xsel
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    apt-get -o Acquire::Retries=10 -o Acquire::https::Timeout=30 update; \
+    DEBIAN_FRONTEND=noninteractive apt-get \
+        -o Acquire::Retries=10 -o Acquire::https::Timeout=30 \
+        install -y --no-install-recommends \
+        dolphin konsole \
+        kate gwenview \
+        okular okular-extra-backends \
+        ark kcalc kolourpaint filelight plasma-systemmonitor \
+        kcolorchooser kcharselect systemsettings \
+        kde-spectacle ksystemlog \
+        vlc \
+        p7zip-full unrar-free lhasa \
+        baobab gnome-disk-utility
+
 RUN set -eux; \
-    apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    # X11 and display
-    xorg \
-    # KDE Plasma 6 desktop core (minimal install)
-    kde-plasma-desktop \
-    # KDE core applications
-    dolphin konsole \
-    # KDE productivity applications
-    kate \
-    gwenview \
-    okular okular-extra-backends \
-    ark \
-    kcalc \
-    kolourpaint \
-    filelight \
-    plasma-systemmonitor \
-    kcolorchooser \
-    kcharselect \
-    systemsettings \
-    # KDE system utilities
-    kde-spectacle ksystemlog \
-    # KDE themes and visual polish
-    breeze breeze-icon-theme breeze-cursor-theme \
-    plasma-workspace-wallpapers \
-    # Sound (PulseAudio for KasmVNC audio streaming)
-    pulseaudio pulseaudio-utils pavucontrol-qt \
-    # Media player
-    vlc \
-    # X11 window manager (kwin-x11 removed in Ubuntu 25.04, openbox as fallback)
-    openbox obconf \
-    # Archive format support
-    p7zip-full unrar-free lhasa \
-    # XDG integration
-    xdg-utils xdg-user-dirs desktop-file-utils shared-mime-info \
-    # Utilities
-    dbus-x11 \
-    # SSL certificates (required by KasmVNC)
-    ssl-cert \
-    # Fonts (including CJK support for Asian languages)
-    fonts-freefont-ttf fonts-noto-color-emoji \
-    fonts-liberation fonts-dejavu-core \
-    fonts-firacode \
-    # Chinese fonts already installed in base layer, add input method
-    ibus ibus-libpinyin \
-    # System monitor
-    htop \
-    # Clipboard tools
-    xclip xsel \
-    # Misc desktop utilities
-    baobab \
-    gnome-disk-utility \
-    ; \
-    # Create XDG user directories
     xdg-user-dirs-update --force 2>/dev/null || true; \
-    # Refresh font cache for desktop
     fc-cache -fv; \
-    # Update MIME database
     update-mime-database /usr/share/mime 2>/dev/null || true; \
-    # Update desktop database
     update-desktop-database /usr/share/applications 2>/dev/null || true; \
-    # Disable SDDM (not needed for VNC sessions)
-    systemctl disable sddm 2>/dev/null || true; \
-    rm -rf /var/lib/apt/lists/*
+    systemctl disable sddm 2>/dev/null || true
 
 # ====================
 # Install KasmVNC (replaces TigerVNC + noVNC + websockify)
 # ====================
 # KasmVNC is an all-in-one VNC server with built-in web client,
 # WebP/QOI encoding, dynamic resize, clipboard, file transfer, and audio.
-# Note: KasmVNC v1.4.0 doesn't publish Ubuntu 25.04 (plucky) packages.
-# The noble (24.04) package is ABI-compatible and works on plucky.
+# KasmVNC v1.4.0 publishes a native Ubuntu 24.04 (noble) package.
 ENV KASMVNC_VERSION=1.4.0
 RUN set -eux; \
     ARCH=$(dpkg --print-architecture); \
@@ -377,25 +330,23 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends /tmp/kasmvnc.deb; \
     rm -f /tmp/kasmvnc.deb; \
     rm -rf /var/lib/apt/lists/*; \
-    # Add root to ssl-cert group (required by KasmVNC)
-    adduser root ssl-cert 2>/dev/null || true; \
-    # Pre-create KasmVNC user with write permissions (non-interactive)
-    # KasmVNC reads $HOME/.kasmpasswd (NOT .vnc/kasmpasswd)
-    # Format: username:password:permissions (r=read, w=write, o=owner)
-    # Password is irrelevant since -disableBasicAuth is used
-    mkdir -p /root/.vnc; \
-    echo "root:kasmvnc:ow" > /root/.kasmpasswd; \
-    chmod 600 /root/.kasmpasswd; \
+    # Add the runtime user to ssl-cert group (required by KasmVNC)
+    adduser sandbox ssl-cert 2>/dev/null || true; \
+    # Pre-create the KasmVNC runtime directory. The entrypoint writes a unique
+    # per-sandbox credential to $HOME/.kasmpasswd when the container starts.
+    mkdir -p /home/sandbox/.vnc; \
     # Mark DE as already selected to skip interactive select-de.sh prompt
-    # (KasmVNC's select-de.sh detects KDE via 'startkde' which is KDE 5;
-    #  KDE Plasma 6 uses 'startplasma-x11', so we bypass detection entirely
-    #  and rely on our own xstartup)
-    touch /root/.vnc/.de-was-selected
+    # KasmVNC's select-de.sh relies on legacy entrypoints, so bypass detection
+    # and rely on our own xstartup.
+    touch /home/sandbox/.vnc/.de-was-selected; \
+    chown -R sandbox:sandbox /home/sandbox
 
 # ====================
 # Workspace Setup (runs as root)
 # ====================
-RUN mkdir -p /workspace
+RUN mkdir -p /workspace /run/user/10001 && \
+    chown -R sandbox:sandbox /workspace /run/user/10001 && \
+    chmod 700 /run/user/10001
 
 # ====================
 # Java Environment Setup
@@ -419,7 +370,7 @@ COPY . /app/
 
 # Install MCP server (with cache mount)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir --break-system-packages -e .
+    python -m pip install --no-cache-dir -e .
 
 # ====================
 # Configuration Files
@@ -461,8 +412,16 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr
 
 WORKDIR /workspace
 
+ENV HOME=/home/sandbox \
+    USER=sandbox \
+    XDG_RUNTIME_DIR=/run/user/10001
+
+USER sandbox
+
 HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:${MCP_PORT}/health || exit 1
+    CMD curl -f http://localhost:${MCP_PORT}/health && \
+        { [ "$DESKTOP_ENABLED" != "true" ] || timeout 2 bash -c "</dev/tcp/127.0.0.1/${DESKTOP_PORT}"; } && \
+        { [ "${TERMINAL_ENABLED:-true}" != "true" ] || timeout 2 bash -c "</dev/tcp/127.0.0.1/${TERMINAL_PORT:-7681}"; } || exit 1
 
 EXPOSE 8765 7681 6080
 CMD ["/usr/local/bin/sandbox-entrypoint.sh"]

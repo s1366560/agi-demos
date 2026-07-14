@@ -26,6 +26,7 @@ import {
   ArrowUpIcon,
   ChatBubbleIcon,
   CheckCircledIcon,
+  ClockIcon,
   CodeIcon,
   CommitIcon,
   ChevronDownIcon,
@@ -44,21 +45,39 @@ import {
   GridIcon,
   MagnifyingGlassIcon,
   MixerHorizontalIcon,
+  PauseIcon,
   PlayIcon,
   PlusIcon,
   ReaderIcon,
   RocketIcon,
   ExclamationTriangleIcon,
+  StopIcon,
   ViewVerticalIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from './api/client';
+import {
+  desktopApiCredential,
+  desktopLaunchCapability,
+  DesktopApiClient,
+} from './api/client';
 import {
   ingestLocalMemory,
   searchLocalMemory,
   semanticSearchLocalMemory,
 } from './api/localMemory';
 import { AuthPanel } from './features/auth/AuthPanel';
+import { AutomationsPage } from './features/automations/AutomationsPage';
+import {
+  isCurrentContextRevision,
+  isWorkspaceAuthenticated,
+  nextRemoteWorkspaceContext,
+} from './features/auth/authContextModel';
+import { LoginScreen } from './features/auth/LoginScreen';
+import {
+  clearTrustedLocalSessionReference,
+  readTrustedLocalSessionReference,
+  writeTrustedLocalSessionReference,
+} from './features/auth/trustedLocalSessionReference';
 import { BoardPanel } from './features/board/BoardPanel';
 import {
   ChatPanel,
@@ -67,11 +86,69 @@ import {
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
 import { ComposerControls } from './features/chat/ComposerControls';
-import { RuntimeConfigPanel } from './features/runtime/RuntimeConfigPanel';
+import { markA2UIActionAnswered } from './features/chat/a2uiAction';
+import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
+import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
+import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
+import { SessionTerminalCanvas } from './features/session/SessionTerminalCanvas';
+import { SessionWorkspace } from './features/session/SessionWorkspace';
+import {
+  artifactDeliveryRequest,
+  artifactReviewRequest,
+  artifactVersionActions,
+  currentArtifactVersions,
+  deliveryForArtifactVersion,
+  type ArtifactVersionAction,
+} from './features/session/sessionArtifactModel';
+import {
+  hasAuthoritativeChangeReview,
+  sessionCanvasTabs,
+  type SessionCanvasTabId,
+} from './features/session/sessionCanvasModel';
+import {
+  allowedRunInputDeliveries,
+  snapshotMatchesRun,
+  toggleRunInputReference,
+} from './features/session/sessionChangesModel';
+import {
+  approvalResponseSubmission,
+  latestPendingApproval,
+  validateApprovalRequest,
+} from './features/session/sessionDecisionModel';
+import { artifactEvidenceForCurrentVersions } from './features/session/sessionEvidenceModel';
+import {
+  buildSessionInvocationLedger,
+  sessionInvocationLedgerSummary,
+} from './features/session/sessionInvocationLedgerModel';
+import {
+  terminalBindingState,
+  terminalRunScopeKey,
+  terminalSessionMatchesRun,
+  type TerminalBindingState,
+} from './features/session/sessionTerminalModel';
+import {
+  authoritativeRunsFromSocketEvents,
+  authoritativeRunFromConversation,
+  buildSessionDetailViewModel,
+  conversationWithAuthoritativeRun,
+  type SessionCapabilityMode,
+  type SessionDetailViewModel,
+  type SessionRunAction,
+} from './features/session/sessionViewModel';
+import {
+  planForConversation,
+  socketEventBelongsToConversation,
+  taskBelongsToConversation,
+} from './features/session/sessionScope';
+import { MyWorkQueue } from './features/my-work/MyWorkQueue';
+import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
 import { StatusPanel } from './features/status/StatusPanel';
+import { NewTaskFlow, type NewTaskSession } from './features/task/NewTaskFlow';
 import { WorkspaceDock } from './features/workspace/WorkspaceDock';
+import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
+import { useI18n } from './i18n';
 import type {
   AgentConversation,
   AgentTimelineItem,
@@ -79,21 +156,34 @@ import type {
   BoardMode,
   ConnectionState,
   ConversationTimelineState,
+  ChangeSnapshot,
+  CodeRangeReference,
+  DesktopApprovalRequest,
+  DesktopArtifactDelivery,
+  DesktopArtifactVersion,
+  DesktopRun,
+  DesktopRunInput,
   DesktopRuntimeConfig,
   DesktopServiceResponse,
+  DesktopToolInvocation,
+  HitlResponseSubmission,
+  LoginOutcome,
+  LocalRuntimeStatus,
   LocalMemoryResult,
   PlanSnapshot,
   ProjectSummary,
   ProjectSandbox,
+  ProjectWorkItem,
   RuntimeNodeLoadState,
   RuntimeDataset,
+  RunInputDelivery,
   StatusTab,
   TerminalServiceResponse,
   WorkbenchSection,
   WorkspaceSummary,
   WorkspaceTask,
 } from './types';
-import { DEFAULT_CONFIG } from './types';
+import { DEFAULT_CONFIG, mergeLocalRuntimeStatus } from './types';
 
 const emptyDataset: RuntimeDataset = {
   workspaces: [],
@@ -104,10 +194,15 @@ const emptyDataset: RuntimeDataset = {
   tasks: [],
   plan: null,
   sandbox: null,
+  myWork: [],
+  myWorkError: null,
 };
 
 const emptyAuthState: AuthState = {
   status: 'signed_out',
+  credentialKind: null,
+  session: null,
+  context: null,
   user: null,
   tenants: [],
   projects: [],
@@ -118,6 +213,10 @@ const emptyAuthState: AuthState = {
 const emptyConversationTimeline: ConversationTimelineState = {
   conversationId: null,
   items: [],
+  approvalRequests: [],
+  artifactVersions: [],
+  artifactDeliveries: [],
+  toolInvocations: [],
   loading: false,
   loadingEarlier: false,
   error: null,
@@ -160,6 +259,138 @@ type WorkflowTarget =
   | 'artifacts'
   | 'runtime';
 type SessionGroupMode = 'recent' | 'project';
+type RunControlState = 'planning' | 'running' | 'paused' | 'stopped';
+type RunDotTone = RunControlState | 'completed' | 'failed' | 'idle';
+const runControlLabels: Record<RunControlState, string> = {
+  planning: 'Planning',
+  running: 'Running',
+  paused: 'Paused',
+  stopped: 'Stopped',
+};
+const RUN_CONTROL_UNAVAILABLE =
+  'Run pause, resume, and stop are unavailable until every configured backend provides the same control contract.';
+const REVIEW_ACTION_UNAVAILABLE =
+  'Workspace packet review is read-only. Respond to an explicit Agent HITL request in Chat.';
+const runControlStates = new Set<RunControlState>(['planning', 'running', 'paused', 'stopped']);
+function isRunControlState(value: string): value is RunControlState {
+  return runControlStates.has(value as RunControlState);
+}
+
+function runToneFromStatus(status: string): RunDotTone {
+  const normalized = status.trim().toLowerCase();
+  if (isRunControlState(normalized)) return normalized;
+  if (normalized === 'completed' || normalized === 'complete' || normalized === 'done') {
+    return 'completed';
+  }
+  if (normalized === 'failed' || normalized === 'error') return 'failed';
+  if (normalized === 'active') return 'running';
+  return 'idle';
+}
+
+function runLabelFromStatus(status: string): string {
+  const normalized = status.trim().toLowerCase();
+  if (isRunControlState(normalized)) return runControlLabels[normalized];
+  if (normalized === 'active') return 'Running';
+  if (normalized === 'completed' || normalized === 'complete' || normalized === 'done') {
+    return 'Completed';
+  }
+  if (normalized === 'failed' || normalized === 'error') return 'Failed';
+  return status;
+}
+
+function runStatusLabel(state: RunControlState | undefined, fallback: string): string {
+  return state ? runControlLabels[state] : runLabelFromStatus(fallback);
+}
+
+function titlebarRunStateFromStatus(status: string): RunControlState {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === 'queued') return 'planning';
+  if (normalized === 'running' || normalized === 'active') return 'running';
+  if (
+    normalized === 'needs_input' ||
+    normalized === 'needs_approval' ||
+    normalized === 'paused' ||
+    normalized === 'interrupted'
+  ) {
+    return 'paused';
+  }
+  if (normalized === 'ready_review' || normalized === 'completed') return 'running';
+  if (
+    normalized === 'failed' ||
+    normalized === 'disconnected' ||
+    normalized === 'cancelled'
+  ) {
+    return 'stopped';
+  }
+  return 'stopped';
+}
+
+function titlebarRunLabelFromStatus(
+  status: string,
+  translate: (key: string) => string,
+): string {
+  const normalized = status.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    active: 'session.statusActive',
+    queued: 'session.statusQueued',
+    running: 'session.statusRunning',
+    needs_input: 'session.statusNeedsInput',
+    needs_approval: 'session.statusNeedsApproval',
+    paused: 'session.statusPaused',
+    ready_review: 'session.statusReadyReview',
+    completed: 'session.statusCompleted',
+    failed: 'session.statusFailed',
+    interrupted: 'session.statusInterrupted',
+    disconnected: 'session.statusDisconnected',
+    cancelled: 'session.statusCancelled',
+  };
+  return labels[normalized] ? translate(labels[normalized]) : runLabelFromStatus(status);
+}
+
+type RuntimeTarget = 'local' | 'staging';
+const runtimeTargetLabels: Record<RuntimeTarget, string> = {
+  local: 'Local Rust Core',
+  staging: 'Staging Runtime',
+};
+const titlebarRuntimeTargetLabels: Record<RuntimeTarget, string> = {
+  local: 'Local Rust Core',
+  staging: 'Remote staging',
+};
+const runtimeTargetComposerOptions = Object.values(runtimeTargetLabels);
+type RuntimeHealthState = 'healthy' | 'starting' | 'waiting' | 'offline' | 'error';
+const runtimeHealthLabels: Record<RuntimeHealthState, string> = {
+  healthy: 'Healthy',
+  starting: 'Starting',
+  waiting: 'Waiting',
+  offline: 'Offline',
+  error: 'Error',
+};
+const runtimeHealthBadgeColors: Record<RuntimeHealthState, 'gray' | 'blue' | 'green' | 'red'> = {
+  healthy: 'green',
+  starting: 'blue',
+  waiting: 'gray',
+  offline: 'gray',
+  error: 'red',
+};
+type QuickLinkItem = {
+  id: string;
+  section: WorkbenchSection;
+  target?: WorkflowTarget;
+  settingsSection?: SettingsSection;
+  label: string;
+  icon: ReactNode;
+};
+type SidebarRunItem = {
+  id: string;
+  label: string;
+  status: string;
+  meta: string;
+  time: string;
+  sortTime: number;
+  projectId: string;
+  workspaceId?: string;
+  conversation?: AgentConversation;
+};
 type SessionScopeKind = 'project' | 'worktree' | 'branch';
 type ComposerReferenceKind = 'files' | 'issues';
 type MobileTitlebarMenuItem = {
@@ -170,13 +401,79 @@ type MobileTitlebarMenuItem = {
   disabled?: boolean;
   onSelect: () => void;
 };
-type ReviewTab =
-  | 'changes'
-  | 'pull'
-  | 'plan'
-  | 'background'
-  | 'artifacts'
-  | 'terminal';
+type ReviewTab = SessionCanvasTabId | 'pull' | 'background';
+type WorkspaceEventKind = 'Tools' | 'Reasoning' | 'Messages' | 'System' | 'Errors';
+type WorkspaceEventRecord = {
+  id: string;
+  kind: WorkspaceEventKind;
+  eventType: string;
+  source: string;
+  status: string;
+  detail: string;
+  time: string;
+  latency: string;
+  sortTime: number;
+  raw: unknown;
+  searchableText: string;
+};
+type WorkspaceArtifactKind = 'Files' | 'Patches' | 'Reports' | 'Logs' | 'Events';
+type WorkspaceArtifact = {
+  id: string;
+  name: string;
+  path: string;
+  kind: WorkspaceArtifactKind;
+  source: string;
+  status: string;
+  time: string;
+  sortTime: number;
+  size: string;
+  diff: string;
+  preview: string;
+  raw: unknown;
+  searchableText: string;
+};
+type ReviewDecisionStatus = 'pending' | 'approved' | 'changes';
+type ReviewDecisionRecordStatus = Exclude<ReviewDecisionStatus, 'pending'> | 'snoozed';
+type ReviewDecisionArtifact = {
+  id: string;
+  name: string;
+  path: string;
+  meta: string;
+  diff: string;
+};
+type ReviewDecisionSummary = {
+  title: string;
+  summary: string;
+  reasoning: string;
+  risk: 'Low' | 'Medium' | 'High' | 'Unassessed';
+  changeValue: string;
+  filesChanged: number;
+  artifacts: ReviewDecisionArtifact[];
+  checks: Array<{ label: string; value: string }>;
+  canAct: boolean;
+};
+type ReviewDecisionRecord = {
+  id: string;
+  status: ReviewDecisionRecordStatus;
+  label: string;
+  detail: string;
+  time: string;
+};
+type ReviewPullRequestCheckStatus = 'passed' | 'pending' | 'failed';
+type ReviewPullRequestSummary = {
+  title: string;
+  summary: string;
+  status: string;
+  branch: string;
+  base: string;
+  risk: ReviewDecisionSummary['risk'];
+  diff: string;
+  filesChanged: number;
+  canAct: boolean;
+  checks: Array<{ label: string; value: string; status: ReviewPullRequestCheckStatus }>;
+  files: ReviewDecisionArtifact[];
+  activity: Array<{ id: string; time: string; label: string; detail: string; status: string }>;
+};
 
 type AgentConversationSession = {
   scopeKey: string;
@@ -194,6 +491,16 @@ function detectTauriShell(): boolean {
       window.__TAURI_INTERNALS__ ||
       document.documentElement.hasAttribute('data-tauri-window'),
   );
+}
+
+function localRuntimeTauriConfig(config: DesktopRuntimeConfig) {
+  return {
+    provider: config.llmProvider || 'mock',
+    base_url: config.llmBaseUrl,
+    model: config.llmModel,
+    api_key: config.llmApiKey,
+    workspace_root: config.workspaceRoot,
+  };
 }
 
 const composerReferenceOptions: Record<
@@ -468,9 +775,15 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
   const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
   const nowMs = Date.now();
   const eventTimeUs =
-    numberField(payload, 'time_us') ?? numberField(payload, 'event_time_us') ?? nowMs * 1000;
+    numberField(payload, 'time_us') ??
+    numberField(payload, 'event_time_us') ??
+    numberField(payload, 'eventTimeUs') ??
+    nowMs * 1000;
   const eventCounter =
-    numberField(payload, 'counter') ?? numberField(payload, 'event_counter') ?? 0;
+    numberField(payload, 'counter') ??
+    numberField(payload, 'event_counter') ??
+    numberField(payload, 'eventCounter') ??
+    0;
   const messageId =
     socketMessageId(payload) ??
     readStringField(data, 'message_id') ??
@@ -550,8 +863,10 @@ function mergeLiveTimelineEvent(
   if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
     return mergeStreamingTextEvent(existing, payload, type);
   }
+  const timeline =
+    type === 'a2ui_action_answered' ? markA2UIActionAnswered(existing, event) : existing;
   const item = timelineItemFromSocketEvent(event);
-  return item ? mergeTimelineItems(existing, [item]) : existing;
+  return item ? mergeTimelineItems(timeline, [item]) : timeline;
 }
 
 function mergeStreamingTextEvent(
@@ -563,9 +878,15 @@ function mergeStreamingTextEvent(
   const messageId = socketMessageId(payload) ?? `stream-${readStringField(payload, 'conversation_id') ?? 'agent'}`;
   const nowMs = Date.now();
   const eventTimeUs =
-    numberField(payload, 'time_us') ?? numberField(payload, 'event_time_us') ?? nowMs * 1000;
+    numberField(payload, 'time_us') ??
+    numberField(payload, 'event_time_us') ??
+    numberField(payload, 'eventTimeUs') ??
+    nowMs * 1000;
   const eventCounter =
-    numberField(payload, 'counter') ?? numberField(payload, 'event_counter') ?? 0;
+    numberField(payload, 'counter') ??
+    numberField(payload, 'event_counter') ??
+    numberField(payload, 'eventCounter') ??
+    0;
   const delta =
     readStringField(data, 'delta') ??
     readStringField(data, 'text') ??
@@ -624,13 +945,924 @@ function numberField(payload: Record<string, unknown>, key: string): number | nu
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function buildWorkspaceEvents(socketEvents: unknown[]): WorkspaceEventRecord[] {
+  return socketEvents
+    .map((event, index) => workspaceEventFromSocketEvent(event, index))
+    .sort((left, right) => {
+      if (left.sortTime !== right.sortTime) return right.sortTime - left.sortTime;
+      return left.id.localeCompare(right.id);
+    });
+}
+
+function reviewFileArtifacts(artifacts: WorkspaceArtifact[]): WorkspaceArtifact[] {
+  const fileArtifacts = artifacts.filter((artifact) => artifact.kind === 'Files');
+  return fileArtifacts.length
+    ? fileArtifacts
+    : artifacts.filter((artifact) => artifact.kind === 'Patches');
+}
+
+function buildReviewDecisionSummary(
+  dataset: RuntimeDataset,
+  workspaceEvents: WorkspaceEventRecord[],
+  artifacts: WorkspaceArtifact[],
+  selectedTask: WorkspaceTask | null,
+  approvalRequest: DesktopApprovalRequest | null,
+): ReviewDecisionSummary {
+  const decision = approvalRequest?.decision ?? null;
+  const fileIds = decision?.scope.kind === 'files' ? decision.scope.ids : [];
+  const risk =
+    decision?.risk.level === 'high'
+      ? 'High'
+      : decision?.risk.level === 'medium'
+        ? 'Medium'
+        : decision?.risk.level === 'low'
+          ? 'Low'
+          : 'Unassessed';
+
+  return {
+    title: decision?.action.label ?? 'No review packet loaded',
+    summary:
+      decision?.data.summary ??
+      'The backend has not supplied a complete structured approval packet.',
+    reasoning:
+      decision?.reason ??
+      'No agent-authored rationale is available for this approval request.',
+    risk,
+    changeValue: '+0 / -0',
+    filesChanged: fileIds.length,
+    artifacts: (decision?.evidence ?? []).map((evidence) => ({
+      id: evidence.id,
+      name: evidence.label,
+      path: evidence.uri ?? evidence.id,
+      meta: [evidence.kind, evidence.digest].filter(Boolean).join(' · '),
+      diff: '',
+    })),
+    checks: decision
+      ? [
+          { label: 'Target', value: `${decision.target.kind} · ${decision.target.id}` },
+          { label: 'Scope', value: `${decision.scope.kind} · ${decision.scope.ids.length}` },
+          {
+            label: 'Reversibility',
+            value: decision.reversibility.mode,
+          },
+        ]
+      : [],
+    canAct: hasAuthoritativeChangeReview({
+      changedFileCount: 0,
+      hasPendingHitlRequest: Boolean(approvalRequest),
+    }),
+  };
+}
+
+function buildPullRequestSummary(
+  dataset: RuntimeDataset,
+  workspaceEvents: WorkspaceEventRecord[],
+  artifacts: WorkspaceArtifact[],
+  decision: ReviewDecisionSummary,
+): ReviewPullRequestSummary {
+  const fileArtifacts = reviewFileArtifacts(artifacts);
+  const displayedFiles = (fileArtifacts.length ? fileArtifacts : artifacts).slice(0, 5);
+  const errorCount = workspaceEvents.filter((event) => event.kind === 'Errors').length;
+  const blockedCount = dataset.tasks.filter((task) => taskStatus(task).includes('blocked')).length;
+  const runningCount = dataset.tasks.filter((task) =>
+    ['running', 'active', 'in_progress', 'executing'].some((status) =>
+      taskStatus(task).includes(status),
+    ),
+  ).length;
+  const workspaceId =
+    dataset.messages.find((message) => message.workspace_id)?.workspace_id ??
+    dataset.tasks.find((task) => task.workspace_id)?.workspace_id ??
+    dataset.workspaces[0]?.id ??
+    'workspace';
+  const branchName = `workspace/${workspaceId.slice(0, 8)}`;
+  const canAct = decision.canAct || Boolean(displayedFiles.length || workspaceEvents.length);
+  const status =
+    errorCount || blockedCount
+      ? 'needs review'
+      : canAct
+        ? runningCount
+          ? 'checks running'
+          : 'ready to review'
+        : 'idle';
+
+  return {
+    title: decision.title === 'No review packet loaded' ? 'Draft workspace pull request' : decision.title,
+    summary: decision.summary,
+    status,
+    branch: branchName,
+    base: 'main',
+    risk: decision.risk,
+    diff: decision.changeValue,
+    filesChanged: Math.max(decision.filesChanged, displayedFiles.length),
+    canAct,
+    checks: [
+      {
+        label: 'Agent events',
+        value: errorCount ? `${errorCount} errors` : `${workspaceEvents.length} events`,
+        status: errorCount ? 'failed' : workspaceEvents.length ? 'passed' : 'pending',
+      },
+      {
+        label: 'Workspace tasks',
+        value: blockedCount
+          ? `${blockedCount} blocked`
+          : runningCount
+            ? `${runningCount} running`
+            : `${dataset.tasks.length} loaded`,
+        status: blockedCount ? 'failed' : dataset.tasks.length ? 'passed' : 'pending',
+      },
+      {
+        label: 'Plan snapshot',
+        value: dataset.plan ? `${Object.keys(dataset.plan).length} fields` : 'not loaded',
+        status: dataset.plan ? 'passed' : 'pending',
+      },
+      {
+        label: 'Artifacts',
+        value: displayedFiles.length ? `${displayedFiles.length} files` : `${artifacts.length} items`,
+        status: displayedFiles.length || artifacts.length ? 'passed' : 'pending',
+      },
+    ],
+    files: displayedFiles.map((artifact) => ({
+      id: artifact.id,
+      name: artifact.name,
+      path: artifact.path || artifact.source,
+      meta: [artifact.kind, artifact.diff, artifact.status].filter(Boolean).join(' · '),
+      diff: artifact.diff,
+    })),
+    activity: workspaceEvents.slice(0, 4).map((event) => ({
+      id: event.id,
+      time: event.time,
+      label: event.eventType,
+      detail: event.detail,
+      status: event.status,
+    })),
+  };
+}
+
+function taskStatus(task: WorkspaceTask): string {
+  return (task.status ?? '').toLowerCase();
+}
+
+function taskTitle(task: WorkspaceTask | null): string | undefined {
+  if (!task) return undefined;
+  return task.title ?? task.id;
+}
+
+function taskSummary(task: WorkspaceTask | null): string | undefined {
+  if (!task) return undefined;
+  return task.summary ?? task.description ?? undefined;
+}
+
+function reviewIssueValue(task: WorkspaceTask | null): string {
+  const metadata = asRecordValue(task?.metadata);
+  const issue =
+    metadata &&
+    (readStringField(metadata, 'related_issue') ??
+      readStringField(metadata, 'issue') ??
+      readStringField(metadata, 'issue_id') ??
+      readStringField(metadata, 'issueId'));
+  if (issue) return issue;
+  const issueNumber =
+    metadata &&
+    (numberField(metadata, 'issue_number') ??
+      numberField(metadata, 'issueNumber') ??
+      numberField(metadata, 'issue_id'));
+  if (typeof issueNumber === 'number') return `#${issueNumber}`;
+  return task?.id ?? 'workspace';
+}
+
+function reviewTestsValue(dataset: RuntimeDataset, task: WorkspaceTask | null): string {
+  const metadata = asRecordValue(task?.metadata);
+  const plan = asRecordValue(dataset.plan);
+  const passed =
+    (metadata &&
+      (numberField(metadata, 'tests_passed') ??
+        numberField(metadata, 'testsPassed') ??
+        numberField(metadata, 'test_passed_count'))) ??
+    (plan &&
+      (numberField(plan, 'tests_passed') ??
+        numberField(plan, 'testsPassed') ??
+        numberField(plan, 'test_passed_count')));
+  const total =
+    (metadata &&
+      (numberField(metadata, 'tests_total') ??
+        numberField(metadata, 'testsTotal') ??
+        numberField(metadata, 'test_count'))) ??
+    (plan &&
+      (numberField(plan, 'tests_total') ??
+        numberField(plan, 'testsTotal') ??
+        numberField(plan, 'test_count')));
+  if (typeof passed === 'number') {
+    return typeof total === 'number' ? `${passed} / ${total} passed` : `${passed} passed`;
+  }
+  return 'pending';
+}
+
+function reviewChecksValue(input: {
+  errorCount: number;
+  artifacts: WorkspaceArtifact[];
+  dataset: RuntimeDataset;
+  workspaceEvents: WorkspaceEventRecord[];
+}): string {
+  const plan = asRecordValue(input.dataset.plan);
+  const passed =
+    plan &&
+    (numberField(plan, 'checks_passed') ??
+      numberField(plan, 'checksPassed') ??
+      numberField(plan, 'passed_checks'));
+  const total =
+    plan &&
+    (numberField(plan, 'checks_total') ??
+      numberField(plan, 'checksTotal') ??
+      numberField(plan, 'check_count'));
+  if (typeof passed === 'number') {
+    return typeof total === 'number' ? `${passed} / ${total} passed` : `${passed} passed`;
+  }
+  if (input.errorCount) return `${input.errorCount} failing`;
+  const availableSignals =
+    input.artifacts.length + input.workspaceEvents.length + (input.dataset.plan ? 1 : 0);
+  return availableSignals ? `${availableSignals} ready` : 'pending';
+}
+
+function summarizeArtifactDiff(artifacts: WorkspaceArtifact[]): string {
+  let additions = 0;
+  let deletions = 0;
+  let hasDiff = false;
+  artifacts.forEach((artifact) => {
+    const matches = artifact.diff.match(/[+-]\d+/g) ?? [];
+    matches.forEach((match) => {
+      const value = Number(match);
+      if (!Number.isFinite(value)) return;
+      hasDiff = true;
+      if (value > 0) additions += value;
+      if (value < 0) deletions += Math.abs(value);
+    });
+  });
+  if (!hasDiff) return `+0 / -0`;
+  return `+${additions} / -${deletions}`;
+}
+
+function workspaceEventFromSocketEvent(event: unknown, index: number): WorkspaceEventRecord {
+  const record = asRecordValue(event);
+  const payload = record ? objectField(record, 'payload') ?? objectField(record, 'data') ?? record : {};
+  const eventType =
+    (record && (readStringField(record, 'type') ?? readStringField(record, 'event_type'))) ??
+    'event';
+  const action = record ? readStringField(record, 'action') : undefined;
+  const source = workspaceEventSource(eventType, payload, record);
+  const detail = workspaceEventDetail(eventType, payload, record, event);
+  const eventTimeUs = record ? numberField(record, 'time_us') ?? numberField(record, 'event_time_us') : null;
+  const timestamp = record
+    ? numberField(record, 'timestamp') ??
+      numberField(payload, 'timestamp') ??
+      readStringField(payload, 'timestamp')
+    : null;
+  const sortTime =
+    typeof eventTimeUs === 'number' ? Math.floor(eventTimeUs / 1000) : normalizeTimestamp(timestamp);
+  const status = workspaceEventStatus(eventType, payload, record);
+  const kind = workspaceEventKind(eventType, status, payload);
+  const latency = workspaceEventLatency(payload, record);
+  return makeWorkspaceEventRecord({
+    id: `${eventType}-${action ?? 'event'}-${index}-${sortTime}`,
+    kind,
+    eventType: action ? `${eventType}:${action}` : eventType,
+    source,
+    status,
+    detail,
+    time: formatArtifactTime(sortTime),
+    latency,
+    sortTime,
+    raw: event,
+  });
+}
+
+function makeWorkspaceEventRecord(
+  input: Omit<WorkspaceEventRecord, 'searchableText'>,
+): WorkspaceEventRecord {
+  return {
+    ...input,
+    searchableText: [
+      input.kind,
+      input.eventType,
+      input.source,
+      input.status,
+      input.detail,
+      input.time,
+      input.latency,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase(),
+  };
+}
+
+function workspaceEventKind(
+  eventType: string,
+  status: string,
+  payload: Record<string, unknown>,
+): WorkspaceEventKind {
+  const value = `${eventType} ${status}`.toLowerCase();
+  if (value.includes('error') || status.toLowerCase() === 'failed') return 'Errors';
+  if (['act', 'observe', 'tool.call', 'tool_call', 'sandbox_event'].some((type) => value.includes(type))) {
+    return 'Tools';
+  }
+  if (
+    ['thought', 'reasoning', 'work_plan', 'chain_', 'subagent_'].some((type) => value.includes(type))
+  ) {
+    return 'Reasoning';
+  }
+  if (
+    ['message', 'ack', 'text_', 'user_message', 'assistant_message', 'decision', 'selection'].some((type) =>
+      value.includes(type),
+    ) ||
+    readStringField(payload, 'content')
+  ) {
+    return 'Messages';
+  }
+  return 'System';
+}
+
+function workspaceEventStatus(
+  eventType: string,
+  payload: Record<string, unknown>,
+  record: Record<string, unknown> | null,
+): string {
+  if (eventType.toLowerCase().includes('error')) return 'error';
+  const direct =
+    readStringField(payload, 'status') ??
+    readStringField(payload, 'state') ??
+    (record ? readStringField(record, 'status') ?? readStringField(record, 'state') : undefined);
+  if (direct) return direct;
+  if (payload.is_error === true || payload.isError === true) return 'error';
+  const action = record ? readStringField(record, 'action') : undefined;
+  if (action) return action;
+  return 'received';
+}
+
+function workspaceEventLatency(
+  payload: Record<string, unknown>,
+  record: Record<string, unknown> | null,
+): string {
+  const direct =
+    readStringField(payload, 'latency') ??
+    readStringField(payload, 'duration') ??
+    (record ? readStringField(record, 'latency') ?? readStringField(record, 'duration') : undefined);
+  if (direct) return direct;
+  const milliseconds =
+    numberField(payload, 'latency_ms') ??
+    numberField(payload, 'duration_ms') ??
+    numberField(payload, 'elapsed_ms') ??
+    (record
+      ? numberField(record, 'latency_ms') ??
+        numberField(record, 'duration_ms') ??
+        numberField(record, 'elapsed_ms')
+      : null);
+  if (typeof milliseconds === 'number') return `${Math.round(milliseconds)} ms`;
+  const seconds =
+    numberField(payload, 'latency_s') ??
+    numberField(payload, 'duration_s') ??
+    (record ? numberField(record, 'latency_s') ?? numberField(record, 'duration_s') : null);
+  if (typeof seconds === 'number') return `${Math.round(seconds * 1000)} ms`;
+  return '-';
+}
+
+function workspaceEventSource(
+  eventType: string,
+  payload: Record<string, unknown>,
+  record: Record<string, unknown> | null,
+): string {
+  const payloadType = readStringField(payload, 'type');
+  const nested = objectField(payload, 'data');
+  const nestedType = nested ? readStringField(nested, 'type') : undefined;
+  return (
+    readStringField(payload, 'source') ??
+    readStringField(payload, 'agent') ??
+    readStringField(payload, 'agent_id') ??
+    readStringField(payload, 'tool_name') ??
+    readStringField(payload, 'toolName') ??
+    payloadType ??
+    nestedType ??
+    (record ? readStringField(record, 'source') : undefined) ??
+    eventType
+  );
+}
+
+function workspaceEventDirectDetail(
+  payload: Record<string, unknown>,
+  record: Record<string, unknown> | null,
+): string | undefined {
+  return (
+    readStringField(payload, 'detail') ??
+    readStringField(payload, 'summary') ??
+    readStringField(payload, 'message') ??
+    readStringField(payload, 'content') ??
+    readStringField(payload, 'delta') ??
+    readStringField(payload, 'text') ??
+    readStringField(payload, 'answer') ??
+    (record ? readStringField(record, 'message') : undefined)
+  );
+}
+
+function workspaceEventDetail(
+  eventType: string,
+  payload: Record<string, unknown>,
+  record: Record<string, unknown> | null,
+  raw: unknown,
+): string {
+  const error = record ? socketErrorDetail(record) : undefined;
+  if (error) return error;
+  const direct = workspaceEventDirectDetail(payload, record);
+  if (['message', 'decision', 'selection'].includes(eventType.toLowerCase()) && direct) {
+    return direct;
+  }
+  const payloadType = readStringField(payload, 'type');
+  if (payloadType) {
+    const payloadData = objectField(payload, 'data') ?? payload;
+    const payloadName =
+      readStringField(payloadData, 'filename') ??
+      readStringField(payloadData, 'artifact_id') ??
+      readStringField(payloadData, 'tool_execution_id') ??
+      readStringField(payloadData, 'sandbox_id');
+    return payloadName ? `${payloadType}: ${payloadName}` : payloadType;
+  }
+  const nested = objectField(payload, 'data');
+  if (nested) {
+    const nestedType = readStringField(nested, 'type');
+    const nestedData = objectField(nested, 'data') ?? nested;
+    const nestedName =
+      readStringField(nestedData, 'filename') ??
+      readStringField(nestedData, 'artifact_id') ??
+      readStringField(nestedData, 'tool_execution_id') ??
+      readStringField(nestedData, 'sandbox_id');
+    if (nestedType) return nestedName ? `${nestedType}: ${nestedName}` : nestedType;
+  }
+  if (direct) return direct;
+  const toolName = readStringField(payload, 'tool_name') ?? readStringField(payload, 'toolName');
+  if (toolName) return `Tool ${toolName}`;
+  const conversationId = record ? readStringField(record, 'conversation_id') : undefined;
+  if (conversationId) return `Conversation ${conversationId.slice(0, 8)}`;
+  return compactArtifactValue(raw);
+}
+
+function buildWorkspaceArtifacts(
+  timelineItems: AgentTimelineItem[],
+  socketEvents: unknown[],
+  plan: PlanSnapshot | null,
+): WorkspaceArtifact[] {
+  const artifacts = [
+    ...timelineItems.flatMap((item) => artifactsFromTimelineItem(item)),
+    ...socketEvents.flatMap((event, index) => artifactsFromSocketEvent(event, index)),
+    ...artifactsFromPlan(plan),
+  ];
+  const byKey = new Map<string, WorkspaceArtifact>();
+
+  artifacts.forEach((artifact) => {
+    const key = workspaceArtifactIdentity(artifact);
+    const existing = byKey.get(key);
+    if (!existing || shouldReplaceWorkspaceArtifact(existing, artifact)) {
+      byKey.set(key, artifact);
+    }
+  });
+
+  return [...byKey.values()].sort((left, right) => {
+    if (left.sortTime !== right.sortTime) return right.sortTime - left.sortTime;
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function shouldReplaceWorkspaceArtifact(
+  existing: WorkspaceArtifact,
+  candidate: WorkspaceArtifact,
+): boolean {
+  const statusDelta = artifactStatusRank(candidate.status) - artifactStatusRank(existing.status);
+  if (statusDelta !== 0) return statusDelta > 0;
+  return candidate.sortTime >= existing.sortTime;
+}
+
+function artifactStatusRank(status: string): number {
+  const normalized = status.toLowerCase();
+  if (normalized === 'error' || normalized === 'failed') return 5;
+  if (normalized === 'ready' || normalized === 'indexed') return 4;
+  if (normalized === 'observed') return 3;
+  if (normalized === 'created') return 2;
+  if (normalized === 'running') return 1;
+  return 0;
+}
+
+function workspaceArtifactIdentity(artifact: WorkspaceArtifact): string {
+  const artifactId = artifactIdFromRaw(artifact.raw);
+  if (artifactId) return `${artifact.kind}:id:${artifactId}`;
+  if (artifact.source.startsWith('artifact_')) return `${artifact.kind}:name:${artifact.name}`;
+  return `${artifact.kind}:${artifact.path || artifact.name || artifact.id}`;
+}
+
+function artifactIdFromRaw(value: unknown, depth = 0): string | undefined {
+  if (depth > 4) return undefined;
+  const record = asRecordValue(value);
+  if (!record) return undefined;
+  const direct = readStringField(record, 'artifact_id') ?? readStringField(record, 'artifactId');
+  if (direct) return direct;
+  for (const key of ['payload', 'data', 'artifact']) {
+    const nested = artifactIdFromRaw(record[key], depth + 1);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function artifactsFromTimelineItem(item: AgentTimelineItem): WorkspaceArtifact[] {
+  const metadata = artifactFileMetadata(item);
+  const operation = readStringField(metadata ?? {}, 'operation') ?? item.toolName ?? item.type;
+  const paths = arrayField(metadata ?? {}, 'paths').filter(isRecordValue);
+  const isArtifactEvent = item.type.startsWith('artifact_') || Boolean(item.filename || item.artifactId);
+  const writesFiles = ['write', 'edit', 'patch', 'export_artifact'].includes(operation);
+
+  if (paths.length && (isArtifactEvent || writesFiles || item.toolName)) {
+    return paths.map((path, index) =>
+      artifactFromPathMetadata(path, {
+        id: `${item.id}:path:${index}`,
+        source: item.toolName || item.type,
+        status: artifactStatus(item),
+        sortTime: artifactSortTime(item),
+        raw: item,
+        fallbackPreview: timelineArtifactPreview(item),
+        diff: diffStatLabel(metadata),
+      }),
+    );
+  }
+
+  if (!isArtifactEvent && !writesFiles) return [];
+
+  const filename = item.filename ?? readStringField(asRecordValue(item.payload) ?? {}, 'filename');
+  const artifactId = item.artifactId ?? readStringField(asRecordValue(item.payload) ?? {}, 'artifact_id');
+  const name = filename || artifactId || item.toolName || item.type;
+  const path = artifactPathFromRecord(asRecordValue(item.payload)) || filename || artifactId || '';
+  return [
+    makeWorkspaceArtifact({
+      id: item.id,
+      name,
+      path,
+      kind: artifactKind(name, operation),
+      source: item.toolName || item.type,
+      status: artifactStatus(item),
+      sortTime: artifactSortTime(item),
+      size: artifactSize(asRecordValue(item.payload)),
+      diff: diffStatLabel(metadata),
+      preview: timelineArtifactPreview(item),
+      raw: item,
+    }),
+  ];
+}
+
+function artifactsFromSocketEvent(event: unknown, index: number): WorkspaceArtifact[] {
+  const item = timelineItemFromSocketEvent(event);
+  if (item) {
+    const timelineArtifacts = artifactsFromTimelineItem(item);
+    if (timelineArtifacts.length) return timelineArtifacts;
+  }
+  const record = asRecordValue(event);
+  if (!record) return [];
+  const candidate = socketArtifactCandidate(record);
+  if (!candidate) return [];
+  const { type, payload } = candidate;
+  const name =
+    readStringField(payload, 'filename') ??
+    readStringField(payload, 'name') ??
+    readStringField(payload, 'artifact_id') ??
+    type;
+  const eventTimeUs = numberField(record, 'time_us') ?? numberField(record, 'event_time_us');
+  const timestamp = numberField(record, 'timestamp');
+  const path = artifactPathFromRecord(payload);
+  return [
+    makeWorkspaceArtifact({
+      id: `socket-artifact-${index}-${type}-${path || name}`,
+      name,
+      path,
+      kind: artifactKind(name, type),
+      source: type,
+      status: socketArtifactStatus(type, payload),
+      sortTime:
+        typeof eventTimeUs === 'number'
+          ? Math.floor(eventTimeUs / 1000)
+          : normalizeTimestamp(timestamp),
+      size: artifactSize(payload),
+      diff: '',
+      preview: compactArtifactValue(payload),
+      raw: event,
+    }),
+  ];
+}
+
+function socketArtifactCandidate(
+  record: Record<string, unknown>,
+): { type: string; payload: Record<string, unknown> } | null {
+  const topType = readStringField(record, 'type') ?? readStringField(record, 'event_type') ?? 'event';
+  const topPayload = objectField(record, 'payload') ?? objectField(record, 'data') ?? record;
+  const candidates: Array<{ type: string; payload: Record<string, unknown> }> = [
+    { type: topType, payload: topPayload },
+  ];
+  const payloadType = readStringField(topPayload, 'type');
+  if (payloadType) {
+    candidates.push({
+      type: payloadType,
+      payload: objectField(topPayload, 'data') ?? topPayload,
+    });
+  }
+  const nestedData = objectField(topPayload, 'data');
+  const nestedDataType = nestedData ? readStringField(nestedData, 'type') : undefined;
+  if (nestedData && nestedDataType) {
+    candidates.push({
+      type: nestedDataType,
+      payload: objectField(nestedData, 'data') ?? nestedData,
+    });
+  }
+  const nestedPayload = objectField(topPayload, 'payload');
+  const nestedPayloadType = nestedPayload ? readStringField(nestedPayload, 'type') : undefined;
+  if (nestedPayload && nestedPayloadType) {
+    candidates.push({
+      type: nestedPayloadType,
+      payload: objectField(nestedPayload, 'data') ?? nestedPayload,
+    });
+  }
+
+  return (
+    candidates.find(({ type, payload }) => {
+      const normalizedType = type.toLowerCase();
+      const typeHasArtifact = normalizedType.includes('artifact');
+      const hasArtifactId = Boolean(readStringField(payload, 'artifact_id'));
+      const hasFileSignal = Boolean(
+        readStringField(payload, 'filename') ??
+          readStringField(payload, 'relativePath') ??
+          readStringField(payload, 'relative_path') ??
+          readStringField(payload, 'path'),
+      );
+      return typeHasArtifact || hasArtifactId || (hasFileSignal && normalizedType.includes('file'));
+    }) ?? null
+  );
+}
+
+function socketArtifactStatus(type: string, payload: Record<string, unknown>): string {
+  const direct = readStringField(payload, 'status') ?? readStringField(payload, 'state');
+  if (direct) return direct;
+  if (type === 'artifact_ready') return 'ready';
+  if (type === 'artifact_created') return 'created';
+  return 'event';
+}
+
+function artifactsFromPlan(plan: PlanSnapshot | null): WorkspaceArtifact[] {
+  if (!plan) return [];
+  const index = plan.artifact_index ?? plan.artifacts;
+  if (!index) return [];
+  if (Array.isArray(index)) {
+    return index.flatMap((entry, position) => artifactFromPlanEntry(entry, String(position)));
+  }
+  const record = asRecordValue(index);
+  if (!record) return [];
+  return Object.entries(record).flatMap(([key, value]) => artifactFromPlanEntry(value, key));
+}
+
+function artifactFromPlanEntry(entry: unknown, key: string): WorkspaceArtifact[] {
+  const record = asRecordValue(entry);
+  const name =
+    (record &&
+      (readStringField(record, 'name') ??
+        readStringField(record, 'filename') ??
+        readStringField(record, 'id'))) ??
+    key;
+  const path = record ? artifactPathFromRecord(record) : '';
+  return [
+    makeWorkspaceArtifact({
+      id: `plan-artifact-${key}`,
+      name,
+      path,
+      kind: artifactKind(name, record ? readStringField(record, 'type') : undefined),
+      source: 'plan',
+      status: record ? readStringField(record, 'status') ?? 'indexed' : 'indexed',
+      sortTime: Date.now() - 1,
+      size: record ? artifactSize(record) : '',
+      diff: record ? readStringField(record, 'diff') ?? '' : '',
+      preview: record ? compactArtifactValue(record) : String(entry),
+      raw: entry,
+    }),
+  ];
+}
+
+function artifactFromPathMetadata(
+  path: Record<string, unknown>,
+  base: {
+    id: string;
+    source: string;
+    status: string;
+    sortTime: number;
+    raw: unknown;
+    fallbackPreview: string;
+    diff: string;
+  },
+): WorkspaceArtifact {
+  const pathValue =
+    readStringField(path, 'relativePath') ??
+    readStringField(path, 'relative_path') ??
+    readStringField(path, 'path') ??
+    'file';
+  const name = pathValue.split('/').filter(Boolean).pop() ?? pathValue;
+  return makeWorkspaceArtifact({
+    id: base.id,
+    name,
+    path: pathValue,
+    kind: artifactKind(pathValue, base.source),
+    source: base.source,
+    status: pathStatus(path, base.status),
+    sortTime: base.sortTime,
+    size: artifactSize(path),
+    diff: pathDiffStatLabel(path, base.diff),
+    preview: readStringField(path, 'preview') ?? base.fallbackPreview,
+    raw: base.raw,
+  });
+}
+
+function makeWorkspaceArtifact(
+  input: Omit<WorkspaceArtifact, 'searchableText' | 'time'>,
+): WorkspaceArtifact {
+  return {
+    ...input,
+    time: formatArtifactTime(input.sortTime),
+    searchableText: [
+      input.name,
+      input.path,
+      input.kind,
+      input.source,
+      input.status,
+      input.size,
+      input.diff,
+      input.preview,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase(),
+  };
+}
+
+function artifactFileMetadata(item: AgentTimelineItem): Record<string, unknown> | null {
+  const direct = asRecordValue(item.fileMetadata);
+  if (direct) return direct;
+  const output = asRecordValue(item.toolOutput);
+  if (!output) return null;
+  return objectField(output, 'fileMetadata') ?? objectField(output, 'file_metadata');
+}
+
+function artifactKind(name: string, hint?: string): WorkspaceArtifactKind {
+  const value = `${name} ${hint ?? ''}`.toLowerCase();
+  if (value.includes('patch') || value.endsWith('.diff') || value.endsWith('.patch')) return 'Patches';
+  if (value.includes('report') || value.endsWith('.md') || value.endsWith('.pdf')) return 'Reports';
+  if (value.includes('log') || value.endsWith('.log')) return 'Logs';
+  if (value.includes('event') || value.includes('artifact_')) return 'Events';
+  return 'Files';
+}
+
+function artifactStatus(item: AgentTimelineItem): string {
+  if (item.isError || item.error || item.type === 'artifact_error') return 'error';
+  if (item.type === 'artifact_ready') return 'ready';
+  if (item.type === 'artifact_created') return 'created';
+  if (item.type === 'observe') return 'observed';
+  if (item.type === 'act') return 'running';
+  return item.type;
+}
+
+function artifactSortTime(item: AgentTimelineItem): number {
+  return item.eventTimeUs ? Math.floor(item.eventTimeUs / 1000) : normalizeTimestamp(item.timestamp);
+}
+
+function pathStatus(path: Record<string, unknown>, fallback: string): string {
+  if (path.deleted === true) return 'deleted';
+  if (path.created === true) return 'created';
+  if (path.changed === true) return 'changed';
+  return fallback;
+}
+
+function artifactPathFromRecord(record: Record<string, unknown> | null): string {
+  if (!record) return '';
+  return (
+    readStringField(record, 'path') ??
+    readStringField(record, 'relativePath') ??
+    readStringField(record, 'relative_path') ??
+    readStringField(record, 'url') ??
+    ''
+  );
+}
+
+function artifactSize(record: Record<string, unknown> | null): string {
+  if (!record) return '';
+  const size =
+    numberField(record, 'bytesWritten') ??
+    numberField(record, 'bytes_written') ??
+    numberField(record, 'bytesRead') ??
+    numberField(record, 'bytes_read') ??
+    numberField(record, 'size') ??
+    numberField(record, 'size_bytes');
+  return typeof size === 'number' ? formatBytes(size) : '';
+}
+
+function diffStatLabel(metadata: Record<string, unknown> | null): string {
+  const diffStat = metadata ? objectField(metadata, 'diffStat') ?? objectField(metadata, 'diff_stat') : null;
+  if (!diffStat) return '';
+  const files = numberField(diffStat, 'filesChanged') ?? numberField(diffStat, 'files_changed');
+  const additions = numberField(diffStat, 'additions');
+  const deletions = numberField(diffStat, 'deletions');
+  const parts = [];
+  if (typeof files === 'number') parts.push(`${files} files`);
+  if (typeof additions === 'number') parts.push(`+${additions}`);
+  if (typeof deletions === 'number') parts.push(`-${deletions}`);
+  return parts.join(' / ');
+}
+
+function pathDiffStatLabel(path: Record<string, unknown>, fallback: string): string {
+  const direct = readStringField(path, 'diff') ?? readStringField(path, 'diffStatLabel');
+  if (direct) return direct;
+  const diffStat = objectField(path, 'diffStat') ?? objectField(path, 'diff_stat');
+  if (!diffStat) return fallback;
+  const additions = numberField(diffStat, 'additions');
+  const deletions = numberField(diffStat, 'deletions');
+  const parts = [];
+  if (typeof additions === 'number') parts.push(`+${additions}`);
+  if (typeof deletions === 'number') parts.push(`-${deletions}`);
+  return parts.length ? parts.join(' / ') : fallback;
+}
+
+function timelineArtifactPreview(item: AgentTimelineItem): string {
+  if (item.error) return item.error;
+  if (item.content) return item.content;
+  const display = asRecordValue(item.display);
+  const summary = display ? readStringField(display, 'summary') ?? readStringField(display, 'title') : undefined;
+  if (summary) return summary;
+  if (item.payload !== undefined) return compactArtifactValue(item.payload);
+  if (item.toolOutput !== undefined) return compactArtifactValue(item.toolOutput);
+  return item.toolName || item.type;
+}
+
+function compactArtifactValue(value: unknown): string {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return text.length > 180 ? `${text.slice(0, 177)}...` : text;
+}
+
+function formatArtifactTime(sortTime: number): string {
+  const date = new Date(sortTime);
+  if (!Number.isFinite(date.getTime())) return 'unknown';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function timestampFromIso(value: string | null | undefined): number {
+  if (!value) return 0;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function formatRunTime(value: string | null | undefined): string {
+  const timestamp = timestampFromIso(value);
+  if (!timestamp) return 'now';
+  return formatArtifactTime(timestamp);
+}
+
+function normalizeTimestamp(value: number | string | null | undefined): number {
+  if (typeof value === 'string') {
+    const parsed = timestampFromIso(value);
+    return parsed || Date.now();
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) return Date.now();
+  return value < 10_000_000_000 ? value * 1000 : value;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
+}
+
+function arrayField(payload: Record<string, unknown>, key: string): unknown[] {
+  const value = payload[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function asRecordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return Boolean(asRecordValue(value));
+}
+
 export function App() {
   const runsInTauri = detectTauriShell();
+  const { t } = useI18n();
   const [config, setConfig] = useState<DesktopRuntimeConfig>(DEFAULT_CONFIG);
-  const [runtimeApiKeyFocusSignal, setRuntimeApiKeyFocusSignal] = useState(0);
   const [auth, setAuth] = useState<AuthState>(emptyAuthState);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskPreferredWorkspaceId, setNewTaskPreferredWorkspaceId] = useState('');
+  const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('account');
   const [commandQuery, setCommandQuery] = useState('');
   const commandInputRef = useRef<HTMLInputElement>(null);
   const commandPaletteTriggerRef = useRef<HTMLElement | null>(null);
@@ -638,8 +1870,11 @@ export function App() {
   const loginRestoreTargetRef = useRef<HTMLElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
+  const [runActionsMenuOpen, setRunActionsMenuOpen] = useState(false);
   const [mobileSectionMenuOpen, setMobileSectionMenuOpen] = useState(false);
   const [activeMobileMenuItemId, setActiveMobileMenuItemId] = useState<string | null>(null);
+  const runActionsButtonRef = useRef<HTMLButtonElement>(null);
+  const runActionsMenuRef = useRef<HTMLDivElement>(null);
   const mobileSectionButtonRef = useRef<HTMLButtonElement>(null);
   const mobileSectionMenuRef = useRef<HTMLDivElement>(null);
   const mobileTitlebarItemsRef = useRef<MobileTitlebarMenuItem[]>([]);
@@ -647,7 +1882,6 @@ export function App() {
     ? mobileMenuOptionId(activeMobileMenuItemId)
     : undefined;
   const [sessionGroupMode, setSessionGroupMode] = useState<SessionGroupMode>('project');
-  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(() => new Set());
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -655,13 +1889,35 @@ export function App() {
   const [connection, setConnection] = useState<ConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>('never');
+  const [localRuntimeStatus, setLocalRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
+  const [selectedSidebarRunId, setSelectedSidebarRunId] = useState('');
+  const [runStateById, setRunStateById] = useState<Record<string, RunControlState>>({});
+  const [runControlState, setRunControlState] = useState<RunControlState>('running');
+  const [runtimeTarget, setRuntimeTarget] = useState<RuntimeTarget>('local');
+  const [runLiveMode, setRunLiveMode] = useState(true);
+  const [showLegacyBoard, setShowLegacyBoard] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [changeSnapshot, setChangeSnapshot] = useState<ChangeSnapshot | null>(null);
+  const [changeSnapshotLoading, setChangeSnapshotLoading] = useState(false);
+  const [changeSnapshotError, setChangeSnapshotError] = useState<string | null>(null);
+  const [runInputReferences, setRunInputReferences] = useState<CodeRangeReference[]>([]);
+  const [runInputDelivery, setRunInputDelivery] = useState<RunInputDelivery | null>(null);
+  const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([]);
+  const [runInputsLoading, setRunInputsLoading] = useState(false);
+  const [runInputsError, setRunInputsError] = useState<string | null>(null);
+  const [promotingRunInputId, setPromotingRunInputId] = useState<string | null>(null);
+  const [sessionRunActionPending, setSessionRunActionPending] =
+    useState<SessionRunAction | null>(null);
+  const [artifactActionPending, setArtifactActionPending] = useState<{
+    versionId: string;
+    action: ArtifactVersionAction;
+  } | null>(null);
   const [activeSection, setActiveSection] = useState<WorkbenchSection>('workspace');
   const activeSectionRef = useRef<WorkbenchSection>('workspace');
   const [sectionBackStack, setSectionBackStack] = useState<WorkbenchSection[]>([]);
   const [sectionForwardStack, setSectionForwardStack] = useState<WorkbenchSection[]>([]);
-  const [reviewTab, setReviewTab] = useState<ReviewTab>('plan');
+  const [reviewTab, setReviewTab] = useState<ReviewTab>('overview');
   const [reviewPanelOpen, setReviewPanelOpen] = useState(true);
   const [boardMode, setBoardMode] = useState<BoardMode>('flow');
   const [selectedTaskId, setSelectedTaskId] = useState('');
@@ -683,18 +1939,23 @@ export function App() {
     useState<ConversationTimelineState>(emptyConversationTimeline);
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
   const timelineRequestRef = useRef(0);
+  const contextRevisionRef = useRef(0);
+  const localResumeAttemptRef = useRef('');
+  const runInputRequestRef = useRef<{
+    signature: string;
+    messageId: string;
+    idempotencyKey: string;
+  } | null>(null);
+  const terminalStartGenerationRef = useRef(0);
+  const currentArtifactRunRef = useRef<DesktopRun | null>(null);
+  const terminalRunScopeKeyRef = useRef('');
 
   const api = useMemo(() => new DesktopApiClient(config), [config]);
-  const socket = useAgentSocket(config, connection === 'ready');
-  const terminalUrl = useMemo(() => {
-    if (!terminal?.success || !terminal.session_id) return null;
-    try {
-      return api.terminalProxyUrl(terminal.session_id);
-    } catch {
-      return null;
-    }
-  }, [api, terminal?.session_id, terminal?.success]);
-  const terminalProxy = useTerminalProxy(terminalUrl);
+  const socket = useAgentSocket(
+    config,
+    connection === 'ready',
+    auth.context?.revision ?? null,
+  );
   const desktopFrameUrl = useMemo(() => {
     if (!desktop?.success) return null;
     try {
@@ -703,11 +1964,97 @@ export function App() {
       return null;
     }
   }, [api, desktop?.success]);
-  const modalOpen = loginModalOpen || commandPaletteOpen;
+  const modalOpen = loginModalOpen || commandPaletteOpen || newTaskOpen || settingsWindowOpen;
+  const localRuntimeMode = config.mode === 'local' && runsInTauri;
 
+  const syncLocalRuntimeConfig = useCallback(
+    async (nextConfig: DesktopRuntimeConfig): Promise<DesktopRuntimeConfig> => {
+      if (!runsInTauri || nextConfig.mode !== 'local') return nextConfig;
+      const invoke = window.__TAURI__?.core?.invoke;
+      if (!invoke) return nextConfig;
+      const status = await invoke<LocalRuntimeStatus>('local_runtime_configure', {
+        config: localRuntimeTauriConfig(nextConfig),
+      });
+      setLocalRuntimeStatus(status);
+      return mergeLocalRuntimeStatus(nextConfig, status);
+    },
+    [runsInTauri],
+  );
+
+  useEffect(() => {
+    if (!localRuntimeMode) return;
+    let cancelled = false;
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (!invoke) return;
+    invoke<LocalRuntimeStatus>('local_runtime_status')
+      .then((status) => {
+        if (cancelled) return;
+        setLocalRuntimeStatus(status);
+        setConfig((current) => mergeLocalRuntimeStatus(current, status));
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(formatError(caught));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [localRuntimeMode]);
+
+  const scopedConversation =
+    agentConversationSession?.scopeKey === agentConversationScopeKey(config)
+      ? agentConversationSession.conversation
+      : null;
+  const activeDataset = dataset;
+  const sessionDataset = useMemo<RuntimeDataset>(() => {
+    if (!scopedConversation) return activeDataset;
+    const conversationId = scopedConversation.id;
+    return {
+      ...activeDataset,
+      tasks: activeDataset.tasks.filter((task) =>
+        taskBelongsToConversation(task, conversationId),
+      ),
+      plan: planForConversation(activeDataset.plan, conversationId),
+    };
+  }, [activeDataset, scopedConversation]);
   const selectedTask = useMemo(
-    () => dataset.tasks.find((task) => task.id === selectedTaskId) ?? dataset.tasks[0] ?? null,
-    [dataset.tasks, selectedTaskId],
+    () =>
+      activeDataset.tasks.find((task) => task.id === selectedTaskId) ??
+      activeDataset.tasks[0] ??
+      null,
+    [activeDataset.tasks, selectedTaskId],
+  );
+  const reviewSelectedTask = useMemo(
+    () =>
+      sessionDataset.tasks.find((task) => task.id === selectedTaskId) ??
+      sessionDataset.tasks[0] ??
+      null,
+    [selectedTaskId, sessionDataset.tasks],
+  );
+  const workspaceEventInputs = useMemo(
+    () =>
+      scopedConversation
+        ? socket.events.filter((event) =>
+            socketEventBelongsToConversation(event, scopedConversation.id),
+          )
+        : socket.events,
+    [scopedConversation, socket.events],
+  );
+  const workspaceArtifacts = useMemo(
+    () =>
+      buildWorkspaceArtifacts(
+        conversationTimeline.items,
+        workspaceEventInputs,
+        sessionDataset.plan,
+      ),
+    [conversationTimeline.items, sessionDataset.plan, workspaceEventInputs],
+  );
+  const chatWorkflowCounts = useMemo<Partial<Record<ChatWorkflowTarget, number | string>>>(
+    () => ({
+      plan: sessionDataset.plan ? 'ready' : 'idle',
+      background: workspaceEventInputs.length,
+      artifacts: workspaceArtifacts.length,
+    }),
+    [sessionDataset.plan, workspaceEventInputs.length, workspaceArtifacts.length],
   );
   const upsertAgentTaskSignal = useCallback((patch: AgentTaskSignalPatch) => {
     setAgentTaskSignals((current) => {
@@ -749,6 +2096,10 @@ export function App() {
           return {
             conversationId: conversation.id,
             items,
+            approvalRequests: response.approval_requests ?? [],
+            artifactVersions: response.artifact_versions ?? [],
+            artifactDeliveries: response.artifact_deliveries ?? [],
+            toolInvocations: response.tool_invocations ?? [],
             loading: false,
             loadingEarlier: false,
             error: null,
@@ -793,6 +2144,10 @@ export function App() {
         return {
           ...current,
           items,
+          approvalRequests: response.approval_requests ?? current.approvalRequests,
+          artifactVersions: response.artifact_versions ?? current.artifactVersions,
+          artifactDeliveries: response.artifact_deliveries ?? current.artifactDeliveries,
+          toolInvocations: response.tool_invocations ?? current.toolInvocations,
           loadingEarlier: false,
           hasMore: Boolean(response.has_more),
           firstCursor:
@@ -818,10 +2173,51 @@ export function App() {
     conversationTimeline.loadingEarlier,
   ]);
 
+  const respondToHitl = useCallback(
+    async (submission: HitlResponseSubmission) => {
+      setError(null);
+      try {
+        await api.respondToHitl(submission);
+        setConversationTimeline((current) => ({
+          ...current,
+          items: current.items.map((item) => {
+            const payload = asRecordValue(item.payload);
+            const itemRequestId =
+              item.requestId ??
+              (typeof item.request_id === 'string' ? item.request_id : undefined) ??
+              (payload ? readStringField(payload, 'request_id') : undefined);
+            return itemRequestId === submission.requestId
+              ? { ...item, answered: true, ...submission.responseData }
+              : item;
+          }),
+          approvalRequests: current.approvalRequests.map((request) =>
+            request.id === submission.requestId
+              ? {
+                  ...request,
+                  status: 'responded',
+                  responded_at: new Date().toISOString(),
+                  response_data: submission.responseData,
+                  response_actor: 'local_user',
+                  response_revision: submission.expectedRevision,
+                  idempotency_key: submission.idempotencyKey,
+                }
+              : request,
+          ),
+        }));
+      } catch (caught) {
+        const message = formatConnectionError(caught, config.apiBaseUrl);
+        setError(message);
+        throw new Error(message, { cause: caught });
+      }
+    },
+    [api, config.apiBaseUrl],
+  );
+
   const openCommandPalette = useCallback((trigger?: HTMLElement | null) => {
     commandPaletteTriggerRef.current =
       trigger ??
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setRunActionsMenuOpen(false);
     setSessionMenuOpen(false);
     setMobileSectionMenuOpen(false);
     setActiveMobileMenuItemId(null);
@@ -885,6 +2281,12 @@ export function App() {
         event.preventDefault();
         setSessionMenuOpen(false);
       }
+      if (event.key === 'Escape' && runActionsMenuOpen) {
+        event.preventDefault();
+        setRunActionsMenuOpen(false);
+        runActionsButtonRef.current?.focus();
+        return;
+      }
       if (event.key === 'Escape' && mobileSectionMenuOpen) {
         event.preventDefault();
         setMobileSectionMenuOpen(false);
@@ -930,6 +2332,7 @@ export function App() {
     loginModalOpen,
     mobileSectionMenuOpen,
     openCommandPalette,
+    runActionsMenuOpen,
     sessionMenuOpen,
   ]);
 
@@ -974,6 +2377,21 @@ export function App() {
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [mobileSectionMenuOpen]);
+
+  useEffect(() => {
+    if (!runActionsMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (runActionsMenuRef.current?.contains(target)) return;
+      if (runActionsButtonRef.current?.contains(target)) return;
+      setRunActionsMenuOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [runActionsMenuOpen]);
 
   useEffect(() => {
     if (!mobileSectionMenuOpen || !activeMobileMenuOptionId) return;
@@ -1050,62 +2468,147 @@ export function App() {
     });
   }, [agentConversationSession, config, socket.events]);
 
-  const showRuntimeConfig = auth.status === 'signed_in' || auth.status === 'manual';
-  const showReviewPanel = showRuntimeConfig && reviewPanelOpen;
+  useEffect(() => {
+    const runs = authoritativeRunsFromSocketEvents(socket.events);
+    if (!runs.length) return;
+    setAgentConversationSession((current) => {
+      if (!current) return current;
+      const run = runs.find((candidate) => candidate.conversation_id === current.conversation.id);
+      if (!run) return current;
+      const conversation = conversationWithAuthoritativeRun(current.conversation, run);
+      return conversation === current.conversation ? current : { ...current, conversation };
+    });
+    setDataset((current) => {
+      let changed = false;
+      const conversationsByWorkspace = Object.fromEntries(
+        Object.entries(current.conversationsByWorkspace).map(([workspaceId, conversations]) => [
+          workspaceId,
+          conversations.map((conversation) => {
+            const run = runs.find((candidate) => candidate.conversation_id === conversation.id);
+            if (!run) return conversation;
+            const updated = conversationWithAuthoritativeRun(conversation, run);
+            changed ||= updated !== conversation;
+            return updated;
+          }),
+        ]),
+      );
+      return changed ? { ...current, conversationsByWorkspace } : current;
+    });
+  }, [socket.events]);
+
+  const showRuntimeConfig = isWorkspaceAuthenticated(auth);
+  const showReviewPanel =
+    showRuntimeConfig &&
+    reviewPanelOpen &&
+    activeSection !== 'review' &&
+    activeSection !== 'board';
+  const runControlLabel = runControlLabels[runControlState];
   const runtimeDisabledReason = !showRuntimeConfig
     ? 'Sign in or use a manual API key before connecting.'
+    : !config.apiBaseUrl.trim()
+      ? 'Local runtime URL is not ready yet.'
     : !config.apiKey.trim()
-      ? 'Enter an API key or sign in before connecting.'
+      ? 'An authenticated session is required before connecting.'
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before connecting.'
         : null;
   const workspaceDisabledReason = !showRuntimeConfig
     ? 'Sign in or use a manual API key before loading workspaces.'
     : !config.apiKey.trim()
-      ? 'Enter an API key before loading workspaces.'
+      ? 'An authenticated session is required before loading workspaces.'
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before loading workspaces.'
         : null;
   const sandboxDisabledReason = !showRuntimeConfig
-    ? 'Sign in or use a manual API key before starting sandbox services.'
+    ? t('sandbox.disabled.signIn')
     : !config.apiKey.trim()
-      ? 'Enter an API key before starting sandbox services.'
+      ? t('sandbox.disabled.authRequired')
       : !config.projectId.trim()
-        ? 'Select a project before starting sandbox services.'
+        ? t('sandbox.disabled.projectRequired')
         : null;
   const chatDisabledReason = !showRuntimeConfig
     ? 'Sign in or enter an API key before sending messages.'
     : !config.apiKey.trim()
-      ? 'Enter an API key before sending messages.'
+      ? 'An authenticated session is required before sending messages.'
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before chatting.'
     : !config.workspaceId
       ? 'Create or select a workspace before sending messages.'
       : connection !== 'ready'
         ? 'Connect the workspace before sending messages.'
-        : !socket.connected
+        : !socket.connected && !localRuntimeMode
           ? socket.error
             ? `Agent live connection is unavailable: ${socket.error}`
             : 'Agent live connection is still connecting.'
         : null;
 
   useEffect(() => {
-    if (!dataset.tasks.length) {
+    if (!activeDataset.tasks.length) {
       setSelectedTaskId('');
       return;
     }
-    if (!dataset.tasks.some((task) => task.id === selectedTaskId)) {
-      setSelectedTaskId(dataset.tasks[0].id);
+    if (!activeDataset.tasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId(activeDataset.tasks[0].id);
     }
-  }, [dataset.tasks, selectedTaskId]);
+  }, [activeDataset.tasks, selectedTaskId]);
+
+  const resetProjectScopedState = () => {
+    setDataset(emptyDataset);
+    setConnection('idle');
+    setError(null);
+    setLastSync('never');
+    setChatInput('');
+    setSelectedSidebarRunId('');
+    setRunStateById({});
+    setRunControlState('running');
+    setRunLiveMode(true);
+    setSelectedTaskId('');
+    setReviewTab('overview');
+    setReviewPanelOpen(true);
+    setDesktop(null);
+    setTerminal(null);
+    setTerminalInput('');
+    setMemoryResult(null);
+    setAgentConversationSession(null);
+    setConversationTimeline(emptyConversationTimeline);
+    setAgentTaskSignals([]);
+    setChangeSnapshot(null);
+    setChangeSnapshotError(null);
+    setRunInputReferences([]);
+    setRunInputDelivery(null);
+    setRunInputs([]);
+    setRunInputsLoading(false);
+    setRunInputsError(null);
+    setPromotingRunInputId(null);
+    runInputRequestRef.current = null;
+    setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
+    setCreatingSessionWorkspaceId(null);
+    setExpandedWorkspaceIds(new Set());
+    terminalProxy.clear();
+  };
 
   const refreshRuntime = useCallback(
     async (nextConfig: DesktopRuntimeConfig = config, projectOverride?: ProjectSummary[]) => {
+      const expectedContextRevision = contextRevisionRef.current;
+      const contextIsCurrent = () =>
+        isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current);
       setConnection('loading');
       setError(null);
       try {
-        const projects =
-          projectOverride ?? resolveSidebarProjects(nextConfig, auth.status, auth.projects);
+        const runtimeConfig = await syncLocalRuntimeConfig(nextConfig);
+        if (!contextIsCurrent()) return false;
+        const availableProjects =
+          projectOverride ?? resolveSidebarProjects(runtimeConfig, auth.status, auth.projects);
+        const resolvedProjectId = availableProjects.some(
+          (project) => project.id === runtimeConfig.projectId.trim(),
+        )
+          ? runtimeConfig.projectId.trim()
+          : availableProjects[0]?.id ?? runtimeConfig.projectId.trim();
+        const resolvedProject =
+          availableProjects.find((project) => project.id === resolvedProjectId) ??
+          availableProjects[0] ??
+          null;
+        const projects = resolvedProject ? [resolvedProject] : [];
         const loadingNodeState: RuntimeNodeLoadState = {
           projects: Object.fromEntries(
             projects.map((project) => [
@@ -1115,13 +2618,14 @@ export function App() {
           ),
           workspaces: {},
         };
+        if (!contextIsCurrent()) return false;
         setDataset((current) => ({ ...current, nodeState: loadingNodeState }));
 
         const workspaceResults = await Promise.all(
           projects.map(async (project) => {
-            const projectTenantId = project.tenant_id || nextConfig.tenantId;
+            const projectTenantId = project.tenant_id || runtimeConfig.tenantId;
             const client = new DesktopApiClient({
-              ...nextConfig,
+              ...runtimeConfig,
               tenantId: projectTenantId,
               projectId: project.id,
               workspaceId: '',
@@ -1134,6 +2638,13 @@ export function App() {
             }
           }),
         );
+        if (!contextIsCurrent()) return false;
+        const selectedProjectError = workspaceResults.find(
+          (result) => result.project.id === resolvedProjectId,
+        )?.error;
+        if (selectedProjectError) {
+          throw new Error(selectedProjectError);
+        }
 
         const workspacesByProject = Object.fromEntries(
           workspaceResults.map((result) => [result.project.id, result.workspaces]),
@@ -1151,37 +2662,38 @@ export function App() {
             return workspace;
           }),
         );
-        const resolvedProjectId =
-          projects.some((project) => project.id === nextConfig.projectId.trim())
-            ? nextConfig.projectId.trim()
-            : projects[0]?.id ?? nextConfig.projectId.trim();
-        const resolvedProject =
-          projects.find((project) => project.id === resolvedProjectId) ?? projects[0] ?? null;
         const projectWorkspaces = workspacesByProject[resolvedProjectId] ?? [];
         const workspaceId =
-          nextConfig.workspaceId.trim() &&
-          projectWorkspaces.some((workspace) => workspace.id === nextConfig.workspaceId.trim())
-            ? nextConfig.workspaceId.trim()
+          runtimeConfig.workspaceId.trim() &&
+          projectWorkspaces.some((workspace) => workspace.id === runtimeConfig.workspaceId.trim())
+            ? runtimeConfig.workspaceId.trim()
             : projectWorkspaces[0]?.id ?? '';
         const resolvedConfig = {
-          ...nextConfig,
-          tenantId: resolvedProject?.tenant_id || nextConfig.tenantId,
+          ...runtimeConfig,
+          tenantId: resolvedProject?.tenant_id || runtimeConfig.tenantId,
           projectId: resolvedProjectId,
           workspaceId,
         };
         const scopedClient = new DesktopApiClient(resolvedConfig);
-        const [messages, tasks, plan] = await Promise.all([
+        const [messages, tasks, plan, myWorkResult] = await Promise.all([
           workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
           workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
           workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
+          resolvedProjectId
+            ? scopedClient
+                .listMyWork(resolvedProjectId)
+                .then((response) => ({ items: response.items, error: null }))
+                .catch((caught) => ({ items: [] as ProjectWorkItem[], error: formatError(caught) }))
+            : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
         ]);
+        if (!contextIsCurrent()) return false;
         const conversationResults = await Promise.all(
           workspaces.map(async (workspace) => {
             const projectId = workspaceProjectIds.get(workspace.id) ?? resolvedProjectId;
             const project = projects.find((item) => item.id === projectId);
             const client = new DesktopApiClient({
-              ...nextConfig,
-              tenantId: project?.tenant_id || nextConfig.tenantId,
+              ...runtimeConfig,
+              tenantId: project?.tenant_id || runtimeConfig.tenantId,
               projectId,
               workspaceId: workspace.id,
             });
@@ -1197,6 +2709,7 @@ export function App() {
             }
           }),
         );
+        if (!contextIsCurrent()) return false;
         const conversationsByWorkspace = Object.fromEntries(
           conversationResults.map((result) => [result.workspaceId, result.conversations]),
         );
@@ -1207,6 +2720,7 @@ export function App() {
           ]),
         );
 
+        if (!contextIsCurrent()) return false;
         setConfig(resolvedConfig);
         setDataset({
           workspaces,
@@ -1217,21 +2731,23 @@ export function App() {
           tasks,
           plan,
           sandbox: null,
+          myWork: myWorkResult.items,
+          myWorkError: myWorkResult.error,
         });
-        if (resolvedProjectId) {
-          setExpandedProjectIds((current) => new Set([...current, resolvedProjectId]));
-        }
         if (workspaceId) {
           setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
         }
         setConnection('ready');
         setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        return true;
       } catch (caught) {
+        if (!contextIsCurrent()) return false;
         setConnection('error');
         setError(formatConnectionError(caught, nextConfig.apiBaseUrl));
+        return false;
       }
     },
-    [auth.projects, auth.status, config],
+    [auth.projects, auth.status, config, syncLocalRuntimeConfig],
   );
 
   const login = async () => {
@@ -1250,16 +2766,33 @@ export function App() {
         identityClient.currentUser(),
         identityClient.listTenants(),
       ]);
-      const firstTenantId = tenants[0]?.id ?? '';
-      const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId: firstTenantId });
-      const projects = await projectClient.listProjects(firstTenantId || undefined);
-      const tenantId = firstTenantId || projects[0]?.tenant_id || '';
-      const projectId = projects[0]?.id ?? '';
+      const preferredTenantId = outcome.context?.tenant_id ?? tenants[0]?.id ?? '';
+      const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId: preferredTenantId });
+      const projects = await projectClient.listProjects(preferredTenantId || undefined);
+      const tenantId = preferredTenantId || projects[0]?.tenant_id || '';
+      const preferredProjectId = outcome.context?.project_id ?? '';
+      const projectId = projects.some((project) => project.id === preferredProjectId)
+        ? preferredProjectId
+        : projects[0]?.id ?? '';
+      const context =
+        outcome.context?.tenant_id === tenantId && outcome.context.project_id === projectId
+          ? outcome.context
+          : {
+              tenant_id: tenantId,
+              project_id: projectId,
+              revision: 0,
+              updated_at: new Date().toISOString(),
+            };
       const nextConfig = { ...tokenConfig, tenantId, projectId, workspaceId: '' };
 
+      contextRevisionRef.current = context.revision;
+      resetProjectScopedState();
       setConfig(nextConfig);
       setAuth({
         status: 'signed_in',
+        credentialKind: 'cloud_session',
+        session: outcome.session ?? null,
+        context,
         user,
         tenants,
         projects,
@@ -1270,7 +2803,7 @@ export function App() {
 
       if (projectId) {
         await refreshRuntime(nextConfig, projects);
-        applySectionSideEffects('chat');
+        applySectionSideEffects('workspace');
       } else {
         setDataset(emptyDataset);
         setConnection('ready');
@@ -1285,8 +2818,85 @@ export function App() {
     }
   };
 
+  const hydrateLocalSession = async (
+    outcome: LoginOutcome,
+    runtimeConfig: DesktopRuntimeConfig,
+  ) => {
+    if (!outcome.context) {
+      throw new Error('The local session did not return an authoritative workspace context.');
+    }
+    const tokenConfig = {
+      ...runtimeConfig,
+      apiKey: outcome.access_token,
+      tenantId: outcome.context.tenant_id,
+      projectId: outcome.context.project_id,
+      workspaceId: '',
+    };
+    const identityClient = new DesktopApiClient(tokenConfig);
+    const [user, tenants, projects] = await Promise.all([
+      identityClient.currentUser(),
+      identityClient.listTenants(),
+      identityClient.listProjects(outcome.context.tenant_id),
+    ]);
+    const selectedProject = projects.find((project) => project.id === outcome.context?.project_id);
+    if (!selectedProject) {
+      throw new Error('The active local project is not available to this user.');
+    }
+
+    contextRevisionRef.current = outcome.context.revision;
+    resetProjectScopedState();
+    setConfig(tokenConfig);
+    setAuth({
+      status: 'signed_in',
+      credentialKind: 'local_session',
+      session: outcome.session ?? null,
+      context: outcome.context,
+      user,
+      tenants,
+      projects,
+      mustChangePassword: false,
+      error: null,
+    });
+    await refreshRuntime(tokenConfig, [selectedProject]);
+  };
+
+  const loginLocalSession = async (trustedDevice: boolean) => {
+    if (!localRuntimeMode || !config.localApiToken.trim()) {
+      setAuth((current) => ({
+        ...current,
+        error: 'The trusted local runtime is not ready yet.',
+      }));
+      return;
+    }
+
+    setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+    setConnection('loading');
+    setError(null);
+    try {
+      if (!trustedDevice) clearTrustedLocalSessionReference(window.localStorage);
+      const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
+      const outcome = await bootstrapClient.createLocalSession(trustedDevice);
+      await hydrateLocalSession(outcome, config);
+      writeTrustedLocalSessionReference(window.localStorage, outcome.session);
+      applySectionSideEffects('workspace');
+    } catch (caught) {
+      const message = formatLoginError(caught, config.apiBaseUrl);
+      setAuth({ ...emptyAuthState, error: message });
+      setConnection('error');
+      setError(message);
+    }
+  };
+
   const handleConfigChange = (nextConfig: DesktopRuntimeConfig) => {
-    setConfig(nextConfig);
+    const resolvedConfig =
+      nextConfig.mode === 'local'
+        ? {
+            ...nextConfig,
+            tenantId: nextConfig.tenantId.trim() || 'local',
+            projectId: nextConfig.projectId.trim() || 'local-project',
+          }
+        : nextConfig;
+    setConfig(resolvedConfig);
     setConnection('idle');
     setAgentConversationSession(null);
     setConversationTimeline(emptyConversationTimeline);
@@ -1294,66 +2904,46 @@ export function App() {
   };
 
   const useApiKeyManually = () => {
-    setAuth({ ...emptyAuthState, status: 'manual' });
     setLoginModalOpen(false);
-    setConnection('idle');
-    setError(null);
-    setSectionBackStack([]);
-    setSectionForwardStack([]);
-    setConversationTimeline(emptyConversationTimeline);
-    setAgentTaskSignals([]);
-    applySectionSideEffects('settings');
-    setRuntimeApiKeyFocusSignal((signal) => signal + 1);
+    setAuth((current) => ({
+      ...current,
+      error: 'Manual API keys must be validated by the server before opening a workspace.',
+    }));
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const authenticatedClient = api;
+    const shouldRevoke = Boolean(config.apiKey.trim());
+    if (auth.credentialKind === 'local_session') {
+      clearTrustedLocalSessionReference(window.localStorage);
+    }
+    contextRevisionRef.current += 1;
     setAuth(emptyAuthState);
     setLoginModalOpen(false);
-    setConfig({ ...DEFAULT_CONFIG, apiBaseUrl: config.apiBaseUrl, mode: config.mode });
-    setDataset(emptyDataset);
-    setConnection('idle');
-    setError(null);
-    setLastSync('never');
-    setChatInput('');
+    setConfig({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: config.apiBaseUrl,
+      localApiToken: config.localApiToken,
+      mode: config.mode,
+      llmProvider: config.llmProvider,
+      llmBaseUrl: config.llmBaseUrl,
+      llmModel: config.llmModel,
+      llmApiKey: config.llmApiKey,
+      workspaceRoot: config.workspaceRoot,
+    });
+    resetProjectScopedState();
     setSectionBackStack([]);
     setSectionForwardStack([]);
-    setSelectedTaskId('');
-    setDesktop(null);
-    setTerminal(null);
-    setTerminalInput('');
-    setAgentConversationSession(null);
-    setConversationTimeline(emptyConversationTimeline);
-    setAgentTaskSignals([]);
-    setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
-    setCreatingSessionWorkspaceId(null);
-    setExpandedProjectIds(new Set());
-    setExpandedWorkspaceIds(new Set());
+    activeSectionRef.current = 'workspace';
     setActiveSection('workspace');
     setStatusTab('overview');
-    terminalProxy.clear();
-  };
-
-  const selectProject = (projectId: string) => {
-    const project =
-      sidebarProjects.find((item) => item.id === projectId) ??
-      auth.projects.find((item) => item.id === projectId);
-    const workspaces = dataset.workspacesByProject[projectId] ?? [];
-    const workspaceId = workspaces[0]?.id ?? '';
-    const nextConfig = {
-      ...config,
-      tenantId: project?.tenant_id || config.tenantId,
-      projectId,
-      workspaceId,
-    };
-    setConfig(nextConfig);
-    setAgentConversationSession(null);
-    setConversationTimeline(emptyConversationTimeline);
-    setAgentTaskSignals([]);
-    setExpandedProjectIds((current) => new Set([...current, projectId]));
-    if (workspaceId) {
-      setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    if (shouldRevoke) {
+      try {
+        await authenticatedClient.signOut();
+      } catch {
+        // The local UI is signed out even if the runtime is already unavailable.
+      }
     }
-    void refreshRuntime(nextConfig);
   };
 
   const selectWorkspace = (workspaceId: string, projectId = config.projectId) => {
@@ -1370,7 +2960,7 @@ export function App() {
     setAgentConversationSession(null);
     setConversationTimeline(emptyConversationTimeline);
     setAgentTaskSignals([]);
-    setExpandedProjectIds((current) => new Set([...current, projectId]));
+    setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
     void refreshRuntime(nextConfig);
   };
@@ -1379,6 +2969,7 @@ export function App() {
     projectId: string,
     workspaceId: string,
     conversation: AgentConversation,
+    targetSection: WorkbenchSection = 'chat',
   ) => {
     const project =
       sidebarProjects.find((item) => item.id === projectId) ??
@@ -1395,10 +2986,10 @@ export function App() {
       conversation,
     });
     setAgentTaskSignals([]);
-    setExpandedProjectIds((current) => new Set([...current, projectId]));
+    setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
     socket.subscribeConversation(conversation.id);
-    applySectionSideEffects('chat');
+    applySectionSideEffects(targetSection);
     void loadConversationTimeline(conversation, projectId);
     void refreshRuntime(nextConfig);
   };
@@ -1435,7 +3026,6 @@ export function App() {
       setConversationTimeline(emptyConversationTimeline);
       setAgentTaskSignals([]);
       setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
-      setExpandedProjectIds((current) => new Set([...current, projectId]));
       setExpandedWorkspaceIds((current) => new Set([...current, created.id]));
       applySectionSideEffects('chat');
       await refreshRuntime(nextConfig);
@@ -1492,7 +3082,6 @@ export function App() {
           ],
         },
       }));
-      setExpandedProjectIds((current) => new Set([...current, projectId]));
       setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
       socket.subscribeConversation(conversation.id);
       applySectionSideEffects('chat');
@@ -1505,7 +3094,7 @@ export function App() {
     }
   };
 
-  const startNewSession = () => {
+  const openNewTask = (workspaceId = config.workspaceId) => {
     setError(null);
     setLoginModalOpen(false);
     setCommandPaletteOpen(false);
@@ -1518,13 +3107,46 @@ export function App() {
     setReviewTab('plan');
     setSectionBackStack([]);
     setSectionForwardStack([]);
+    setNewTaskPreferredWorkspaceId(workspaceId);
+    setNewTaskOpen(true);
+  };
 
-    if (showRuntimeConfig && !workspaceDisabledReason) {
-      void createWorkspace(config.projectId);
-      return;
-    }
+  const startNewSession = () => openNewTask();
 
-    applySectionSideEffects('workspace');
+  const adoptNewTaskSession = (session: NewTaskSession) => {
+    const { workspace, conversation, config: sessionConfig } = session;
+    setConfig(sessionConfig);
+    setAgentConversationSession({
+      scopeKey: agentConversationScopeKeyFor(sessionConfig.projectId, workspace.id),
+      conversation,
+    });
+    setDataset((current) => ({
+      ...current,
+      workspaces: [workspace, ...current.workspaces.filter((item) => item.id !== workspace.id)],
+      workspacesByProject: {
+        ...current.workspacesByProject,
+        [sessionConfig.projectId]: [
+          workspace,
+          ...(current.workspacesByProject[sessionConfig.projectId] ?? []).filter(
+            (item) => item.id !== workspace.id,
+          ),
+        ],
+      },
+      conversationsByWorkspace: {
+        ...current.conversationsByWorkspace,
+        [workspace.id]: [
+          conversation,
+          ...(current.conversationsByWorkspace[workspace.id] ?? []).filter(
+            (item) => item.id !== conversation.id,
+          ),
+        ],
+      },
+    }));
+    setExpandedWorkspaceIds((current) => new Set([...current, workspace.id]));
+    socket.subscribeConversation(conversation.id);
+    applySectionSideEffects('chat');
+    void loadConversationTimeline(conversation, sessionConfig.projectId);
+    void refreshRuntime(sessionConfig);
   };
 
   const ensureAgentConversation = async (firstMessage: string): Promise<AgentConversation> => {
@@ -1572,11 +3194,11 @@ export function App() {
     return conversation;
   };
 
-  const sendMessage = async () => {
-    const content = chatInput.trim();
+  const sendMessageContent = async (rawContent: string, onWorkspaceMessageSaved?: () => void) => {
+    const content = rawContent.trim();
     if (!content) return;
-    if (chatDisabledReason) {
-      setError(chatDisabledReason);
+    if (sessionChatDisabledReason) {
+      setError(sessionChatDisabledReason);
       return;
     }
     setSending(true);
@@ -1590,9 +3212,65 @@ export function App() {
       createdAt: new Date().toISOString(),
     });
     try {
+      const sendsRunInput = Boolean(
+        localRuntimeMode &&
+          currentArtifactRun?.status === 'running' &&
+          selectedConversation?.id === currentArtifactRun.conversation_id &&
+          runInputDelivery,
+      );
+      if (sendsRunInput && currentArtifactRun && runInputDelivery) {
+        const signature = JSON.stringify({
+          runId: currentArtifactRun.id,
+          revision: currentArtifactRun.revision,
+          delivery: runInputDelivery,
+          content,
+          references: runInputReferences,
+        });
+        if (runInputRequestRef.current?.signature !== signature) {
+          const requestId =
+            globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          runInputRequestRef.current = {
+            signature,
+            messageId: `desktop-run-input-${requestId}`,
+            idempotencyKey: `desktop-run-input:${currentArtifactRun.id}:${requestId}`,
+          };
+        }
+        const request = runInputRequestRef.current;
+        const acknowledgement = await api.createRunInput(currentArtifactRun.id, {
+          expectedRunRevision: currentArtifactRun.revision,
+          message: content,
+          messageId: request.messageId,
+          idempotencyKey: request.idempotencyKey,
+          delivery: runInputDelivery,
+          references: runInputReferences,
+        });
+        onWorkspaceMessageSaved?.();
+        setRunInputReferences([]);
+        setRunInputs((current) =>
+          [...current.filter((input) => input.id !== acknowledgement.input.id), acknowledgement.input]
+            .sort((left, right) => left.sequence - right.sequence),
+        );
+        runInputRequestRef.current = null;
+        upsertAgentTaskSignal({
+          id: signalId,
+          conversationId: acknowledgement.conversation_id,
+          messageId: acknowledgement.message_id,
+          status: 'acknowledged',
+          detail:
+            acknowledgement.delivery_mode === 'steer_now'
+              ? t('session.steeringAccepted')
+              : t('session.queueAccepted', {
+                  position: acknowledgement.queue_position ?? '—',
+                }),
+        });
+        if (selectedConversation) {
+          await loadConversationTimeline(selectedConversation, config.projectId);
+        }
+        return;
+      }
       const saved = await api.sendMessage(content);
       setDataset((current) => ({ ...current, messages: [...current.messages, saved] }));
-      setChatInput('');
+      onWorkspaceMessageSaved?.();
       upsertAgentTaskSignal({
         id: signalId,
         messageId: saved.id,
@@ -1629,7 +3307,14 @@ export function App() {
               lastCursor: timelineCursorFromLast(items),
             };
           });
-          if (!queued) {
+          if (!queued && localRuntimeMode) {
+            await api.runAgentMessage(conversation.id, content, messageId, config.projectId);
+            upsertAgentTaskSignal({
+              id: signalId,
+              status: 'queued',
+              detail: 'Task sent to local Agent runtime over loopback HTTP.',
+            });
+          } else if (!queued) {
             const websocketMessage = 'Message saved, but the Agent WebSocket is not connected yet.';
             setError(websocketMessage);
             upsertAgentTaskSignal({
@@ -1676,6 +3361,10 @@ export function App() {
     }
   };
 
+  const sendMessage = async () => {
+    await sendMessageContent(chatInput, () => setChatInput(''));
+  };
+
   const ensureSandbox = async () => {
     await runSandboxAction(async () => {
       const sandbox = await api.ensureSandbox();
@@ -1696,8 +3385,23 @@ export function App() {
 
   const startTerminal = async () => {
     await runSandboxAction(async () => {
+      const sourceRun = currentArtifactRunRef.current;
+      if (!sourceRun) {
+        throw new Error(t('session.terminalRequiresActiveRun'));
+      }
+      const requestGeneration = terminalStartGenerationRef.current + 1;
+      terminalStartGenerationRef.current = requestGeneration;
       await api.seedProxyAuthCookie();
-      const response = await api.startTerminal();
+      const response = await api.startTerminal(
+        sourceRun.id,
+        sourceRun.revision,
+      );
+      if (terminalStartGenerationRef.current !== requestGeneration) return;
+      if (!terminalSessionMatchesRun(response, currentArtifactRunRef.current)) {
+        throw new Error(t('session.terminalAuthorityMismatch'));
+      }
+      terminalProxy.clear();
+      setTerminalInput('');
       setTerminal(response);
       setStatusTab('sandbox');
     });
@@ -1718,8 +3422,7 @@ export function App() {
   const sendTerminalInput = () => {
     const input = terminalInput.trimEnd();
     if (!input) return;
-    terminalProxy.sendInput(`${input}\n`);
-    setTerminalInput('');
+    if (terminalProxy.sendInput(`${input}\n`)) setTerminalInput('');
   };
 
   const runMemoryAction = async (action: () => Promise<LocalMemoryResult>) => {
@@ -1756,10 +3459,310 @@ export function App() {
       null,
     [auth.projects, config.projectId, sidebarProjects],
   );
-  const selectedConversation =
-    agentConversationSession?.scopeKey === agentConversationScopeKey(config)
-      ? agentConversationSession.conversation
-      : null;
+  const selectedConversation = scopedConversation;
+  const sessionDetailViewModel = useMemo(
+    () =>
+      selectedConversation
+        ? buildSessionDetailViewModel({
+            conversation: selectedConversation,
+            config,
+            workspace: selectedWorkspace,
+            timeline: conversationTimeline,
+            tasks: sessionDataset.tasks,
+            plan: sessionDataset.plan,
+          })
+        : null,
+    [
+      config,
+      conversationTimeline,
+      selectedConversation,
+      selectedWorkspace,
+      sessionDataset.plan,
+      sessionDataset.tasks,
+    ],
+  );
+  const currentArtifactRun = useMemo(
+    () => authoritativeRunFromConversation(selectedConversation),
+    [selectedConversation],
+  );
+  currentArtifactRunRef.current = currentArtifactRun;
+  const currentTerminalRunScopeKey = terminalRunScopeKey(currentArtifactRun);
+  if (terminalRunScopeKeyRef.current !== currentTerminalRunScopeKey) {
+    terminalRunScopeKeyRef.current = currentTerminalRunScopeKey;
+    terminalStartGenerationRef.current += 1;
+  }
+  const terminalMatchesCurrentRun = terminalSessionMatchesRun(terminal, currentArtifactRun);
+  const terminalUrl = useMemo(() => {
+    if (!terminalMatchesCurrentRun || !terminal?.session_id) return null;
+    try {
+      return api.terminalProxyUrl(terminal.session_id, terminal.project_id);
+    } catch {
+      return null;
+    }
+  }, [api, terminal?.project_id, terminal?.session_id, terminalMatchesCurrentRun]);
+  const terminalProxy = useTerminalProxy(
+    terminalUrl,
+    desktopApiCredential(config),
+    desktopLaunchCapability(config),
+  );
+  const terminalBinding = useMemo(
+    () => terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),
+    [currentArtifactRun, terminal, terminalProxy.status],
+  );
+  const runInputDeliveryOptions = useMemo(
+    () =>
+      localRuntimeMode && sessionDetailViewModel?.capabilityMode === 'code'
+        ? allowedRunInputDeliveries(currentArtifactRun?.status, true)
+        : [],
+    [currentArtifactRun?.status, localRuntimeMode, sessionDetailViewModel?.capabilityMode],
+  );
+  const sessionChatDisabledReason =
+    chatDisabledReason ??
+    (selectedConversation?.current_mode === 'build' &&
+    currentArtifactRun &&
+    currentArtifactRun.status !== 'running'
+      ? t('session.composerBlockedByRunState')
+      : null);
+  const loadRunChanges = useCallback(async () => {
+    if (!currentArtifactRun || sessionDetailViewModel?.capabilityMode !== 'code') {
+      setChangeSnapshot(null);
+      setChangeSnapshotError(null);
+      setChangeSnapshotLoading(false);
+      return;
+    }
+    setChangeSnapshotLoading(true);
+    setChangeSnapshotError(null);
+    try {
+      const snapshot = await api.getRunChanges(currentArtifactRun.id, currentArtifactRun.revision);
+      setChangeSnapshot(snapshot);
+      setRunInputReferences((current) =>
+        current.filter(
+          (reference) =>
+            reference.snapshot_id === snapshot.id &&
+            reference.environment_id === snapshot.environment_id,
+        ),
+      );
+    } catch (caught) {
+      setChangeSnapshotError(formatConnectionError(caught, config.apiBaseUrl));
+    } finally {
+      setChangeSnapshotLoading(false);
+    }
+  }, [api, config.apiBaseUrl, currentArtifactRun, sessionDetailViewModel?.capabilityMode]);
+  useEffect(() => {
+    void loadRunChanges();
+  }, [loadRunChanges]);
+  useEffect(() => {
+    setTerminalInput('');
+  }, [currentTerminalRunScopeKey]);
+  useEffect(() => {
+    let active = true;
+    if (!localRuntimeMode || !currentArtifactRun) {
+      setRunInputs([]);
+      setRunInputsLoading(false);
+      setRunInputsError(null);
+      return () => {
+        active = false;
+      };
+    }
+    setRunInputsLoading(true);
+    setRunInputsError(null);
+    void api
+      .listRunInputs(currentArtifactRun.id)
+      .then((response) => {
+        if (active) setRunInputs(response.inputs);
+      })
+      .catch((caught) => {
+        if (active) setRunInputsError(formatConnectionError(caught, config.apiBaseUrl));
+      })
+      .finally(() => {
+        if (active) setRunInputsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, config.apiBaseUrl, currentArtifactRun, localRuntimeMode]);
+  useEffect(() => {
+    setRunInputDelivery((current) =>
+      current && runInputDeliveryOptions.includes(current)
+        ? current
+        : (runInputDeliveryOptions[0] ?? null),
+    );
+  }, [runInputDeliveryOptions]);
+  useEffect(() => {
+    if (
+      snapshotMatchesRun(
+        changeSnapshot,
+        currentArtifactRun?.id,
+        currentArtifactRun?.revision,
+      )
+    ) {
+      return;
+    }
+    setRunInputReferences([]);
+    runInputRequestRef.current = null;
+  }, [changeSnapshot, currentArtifactRun?.id, currentArtifactRun?.revision]);
+  const promoteQueuedRunInput = useCallback(
+    async (input: DesktopRunInput) => {
+      if (!currentArtifactRun || currentArtifactRun.id !== input.run_id) {
+        setError(t('session.queueSourceRunUnavailable'));
+        return;
+      }
+      setPromotingRunInputId(input.id);
+      setError(null);
+      try {
+        const outcome = await api.promoteRunInput(
+          input.id,
+          currentArtifactRun.revision,
+          `desktop-run-input-promotion:${input.id}`,
+        );
+        setRunInputs((current) =>
+          current.map((candidate) =>
+            candidate.id === outcome.input.id ? outcome.input : candidate,
+          ),
+        );
+        setAgentConversationSession((current) =>
+          current?.conversation.id === outcome.conversation.id
+            ? { ...current, conversation: outcome.conversation }
+            : current,
+        );
+        setDataset((current) => ({
+          ...current,
+          conversationsByWorkspace: Object.fromEntries(
+            Object.entries(current.conversationsByWorkspace).map(
+              ([workspaceId, conversations]) => [
+                workspaceId,
+                conversations.map((conversation) =>
+                  conversation.id === outcome.conversation.id
+                    ? outcome.conversation
+                    : conversation,
+                ),
+              ],
+            ),
+          ),
+        }));
+        setReviewTab('plan');
+        await loadConversationTimeline(outcome.conversation, config.projectId);
+      } catch (caught) {
+        setError(formatConnectionError(caught, config.apiBaseUrl));
+      } finally {
+        setPromotingRunInputId(null);
+      }
+    },
+    [api, config.apiBaseUrl, config.projectId, currentArtifactRun, loadConversationTimeline, t],
+  );
+  const titlebarRunState = sessionDetailViewModel
+    ? titlebarRunStateFromStatus(sessionDetailViewModel.status)
+    : runControlState;
+  const titlebarRunLabel = sessionDetailViewModel
+    ? titlebarRunLabelFromStatus(sessionDetailViewModel.status, t)
+    : runControlLabel;
+  const applyAuthoritativeRun = useCallback((run: DesktopRun) => {
+    setAgentConversationSession((current) => {
+      if (!current || current.conversation.id !== run.conversation_id) return current;
+      const conversation = conversationWithAuthoritativeRun(current.conversation, run);
+      return conversation === current.conversation ? current : { ...current, conversation };
+    });
+    setDataset((current) => {
+      let changed = false;
+      const conversationsByWorkspace = Object.fromEntries(
+        Object.entries(current.conversationsByWorkspace).map(([workspaceId, conversations]) => [
+          workspaceId,
+          conversations.map((conversation) => {
+            if (conversation.id !== run.conversation_id) return conversation;
+            const updated = conversationWithAuthoritativeRun(conversation, run);
+            changed ||= updated !== conversation;
+            return updated;
+          }),
+        ]),
+      );
+      return changed ? { ...current, conversationsByWorkspace } : current;
+    });
+  }, []);
+  const handleSessionRunAction = useCallback(
+    async (action: SessionRunAction, feedback?: string) => {
+      const runId = sessionDetailViewModel?.runId;
+      const revision = sessionDetailViewModel?.runRevision;
+      if (!runId || revision === null || revision === undefined) {
+        setError(t('session.runControlUnavailable'));
+        return;
+      }
+      setSessionRunActionPending(action);
+      setError(null);
+      try {
+        const outcome =
+          action === 'pause'
+            ? await api.pauseRun(runId, revision)
+            : action === 'resume' || action === 'reconnect'
+              ? await api.resumeRun(runId, revision)
+              : action === 'fork'
+                ? await api.forkRecoveryRun(
+                    runId,
+                    revision,
+                    `desktop-recovery-fork:${runId}:${revision}`,
+                  )
+              : action === 'cancel'
+                ? await api.cancelRun(runId, revision)
+                : await api.reviewRun(runId, {
+                    action: action === 'approve' ? 'approve' : 'request_changes',
+                    expectedRevision: revision,
+                    ...(feedback ? { feedback } : {}),
+                  });
+        applyAuthoritativeRun(outcome.run);
+      } catch (caught) {
+        setError(formatError(caught));
+      } finally {
+        setSessionRunActionPending(null);
+      }
+    },
+    [api, applyAuthoritativeRun, sessionDetailViewModel, t],
+  );
+  const handleArtifactAction = useCallback(
+    async (
+      version: DesktopArtifactVersion,
+      action: ArtifactVersionAction,
+      feedback?: string,
+    ) => {
+      setArtifactActionPending({ versionId: version.id, action });
+      setError(null);
+      try {
+        if (action === 'deliver') {
+          const outcome = await api.deliverArtifactVersion(
+            version.id,
+            artifactDeliveryRequest(version),
+          );
+          setConversationTimeline((current) => ({
+            ...current,
+            artifactVersions: current.artifactVersions.map((item) =>
+              item.id === outcome.artifact_version.id ? outcome.artifact_version : item,
+            ),
+            artifactDeliveries: [
+              outcome.delivery,
+              ...current.artifactDeliveries.filter(
+                (delivery) => delivery.id !== outcome.delivery.id,
+              ),
+            ],
+          }));
+        } else {
+          const outcome = await api.reviewArtifactVersion(
+            version.id,
+            artifactReviewRequest(version, action, currentArtifactRun, feedback),
+          );
+          setConversationTimeline((current) => ({
+            ...current,
+            artifactVersions: current.artifactVersions.map((item) =>
+              item.id === outcome.artifact_version.id ? outcome.artifact_version : item,
+            ),
+          }));
+          if (outcome.run) applyAuthoritativeRun(outcome.run);
+        }
+      } catch (caught) {
+        setError(formatConnectionError(caught, config.apiBaseUrl));
+      } finally {
+        setArtifactActionPending(null);
+      }
+    },
+    [api, applyAuthoritativeRun, config.apiBaseUrl, currentArtifactRun],
+  );
   const hasWorkspaceScope = Boolean(config.workspaceId.trim());
   const hasProjectScope = Boolean(config.projectId.trim());
   const sessionTitle =
@@ -1779,12 +3782,170 @@ export function App() {
       : auth.status === 'manual'
         ? 'manual API key'
         : 'signed out';
+  const runtimeHealthState: RuntimeHealthState =
+    connection === 'error'
+      ? 'error'
+      : connection === 'loading'
+        ? 'starting'
+        : localRuntimeMode || connection === 'ready'
+          ? 'healthy'
+          : runLiveMode
+            ? 'waiting'
+            : 'offline';
+  const runtimeHealthLabel = runtimeHealthLabels[runtimeHealthState];
+  const runtimeMonitorHealthMetrics = [
+    {
+      label: 'Provider',
+      value: localRuntimeMode
+        ? localRuntimeStatus?.config.provider || config.llmProvider || 'not configured'
+        : config.mode,
+    },
+    {
+      label: 'Model',
+      value: localRuntimeMode
+        ? localRuntimeStatus?.config.model || config.llmModel || 'not configured'
+        : 'server managed',
+    },
+    {
+      label: 'Tools',
+      value: localRuntimeMode ? String(localRuntimeStatus?.tool_count ?? 'unavailable') : 'server',
+    },
+    {
+      label: 'Root',
+      value: localRuntimeMode
+        ? localRuntimeStatus?.workspace_root || config.workspaceRoot || 'not configured'
+        : config.projectId || 'not selected',
+    },
+  ];
   const sessionGroupLabel = sessionGroupMode === 'recent' ? 'Recent first' : 'Project folders';
-  const quickLinkItems: Array<[WorkbenchSection, string, ReactNode, string?]> = [
-    ['workspace', 'Home', <DashboardIcon key="workspace" />],
-    ['board', 'My work', <GridIcon key="board" />],
-    ['status', 'Automations', <ActivityLogIcon key="status" />],
-    ['memory', 'Search', <MagnifyingGlassIcon key="memory" />],
+  const sidebarRunItems = useMemo<SidebarRunItem[]>(() => {
+    if (!showRuntimeConfig) return [];
+
+    const workspaceProjectIds = new Map<string, string>();
+    Object.entries(dataset.workspacesByProject).forEach(([projectId, workspaces]) => {
+      workspaces.forEach((workspace) => workspaceProjectIds.set(workspace.id, projectId));
+    });
+    const workspaceById = new Map(dataset.workspaces.map((workspace) => [workspace.id, workspace]));
+    const conversationItems = Object.entries(dataset.conversationsByWorkspace)
+      .flatMap(([workspaceId, conversations]) =>
+        conversations.map((conversation) => {
+          const workspace = workspaceById.get(workspaceId);
+          const projectId =
+            conversation.project_id || workspaceProjectIds.get(workspaceId) || config.projectId;
+          const updatedAt = conversation.updated_at ?? conversation.created_at;
+          return {
+            id: `conversation:${conversation.id}`,
+            label: conversation.title || conversation.id,
+            status: conversation.status || 'active',
+            meta: `${conversation.message_count} ${
+              conversation.message_count === 1 ? 'message' : 'messages'
+            } · ${workspaceLabel(workspace)}`,
+            time: formatRunTime(updatedAt),
+            sortTime: timestampFromIso(updatedAt),
+            projectId,
+            workspaceId,
+            conversation,
+          };
+        }),
+      )
+      .sort((left, right) => right.sortTime - left.sortTime)
+      .slice(0, 6);
+
+    const workspaceItems = dataset.workspaces
+      .map((workspace) => {
+        const updatedAt = workspace.updated_at ?? workspace.created_at;
+        return {
+          id: `workspace:${workspace.id}`,
+          label: workspaceLabel(workspace),
+          status: workspace.status || 'open',
+          meta: workspace.description || workspace.id,
+          time: formatRunTime(updatedAt),
+          sortTime: timestampFromIso(updatedAt),
+          projectId:
+            workspace.project_id || workspaceProjectIds.get(workspace.id) || config.projectId,
+          workspaceId: workspace.id,
+        };
+      })
+      .sort((left, right) => right.sortTime - left.sortTime)
+      .slice(0, 6);
+
+    const fallbackItems = [
+      {
+        id: 'current-session',
+        label: sessionTitle,
+        status: runControlLabel,
+        meta: sessionInfoLabel,
+        time: lastSync,
+        sortTime: 0,
+        projectId: config.projectId,
+        workspaceId: config.workspaceId || undefined,
+      },
+    ];
+    const dataRunItems = conversationItems.length
+      ? conversationItems
+      : workspaceItems.length
+        ? workspaceItems
+        : fallbackItems;
+    const seen = new Set<string>();
+    return dataRunItems
+      .filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      })
+      .sort((left, right) => right.sortTime - left.sortTime)
+      .slice(0, 6);
+  }, [
+    config.projectId,
+    config.workspaceId,
+    dataset.conversationsByWorkspace,
+    dataset.workspaces,
+    dataset.workspacesByProject,
+    lastSync,
+    runControlLabel,
+    sessionInfoLabel,
+    sessionTitle,
+    showRuntimeConfig,
+  ]);
+  const activeSidebarRunId =
+    selectedSidebarRunId && sidebarRunItems.some((item) => item.id === selectedSidebarRunId)
+      ? selectedSidebarRunId
+      : sidebarRunItems[0]?.id ?? '';
+  const activeSidebarRun =
+    sidebarRunItems.find((item) => item.id === activeSidebarRunId) ?? null;
+  const titlebarPrimaryLabel =
+    showRuntimeConfig && activeSection === 'board'
+      ? t('myWork.title')
+      : showRuntimeConfig && activeSection === 'automations'
+        ? t('automations.title')
+      : `Session: ${sessionTitle}`;
+  const titlebarRunTimeLabel = activeSidebarRun?.time ?? lastSync;
+  useEffect(() => {
+    if (!showRuntimeConfig) {
+      if (selectedSidebarRunId) setSelectedSidebarRunId('');
+      return;
+    }
+    if (activeSidebarRunId !== selectedSidebarRunId) {
+      setSelectedSidebarRunId(activeSidebarRunId);
+    }
+  }, [activeSidebarRunId, selectedSidebarRunId, showRuntimeConfig]);
+  const quickLinkItems: QuickLinkItem[] = [
+    { id: 'home', section: 'workspace', label: t('nav.home'), icon: <DashboardIcon key="home" /> },
+    { id: 'my-work', section: 'board', label: t('nav.myWork'), icon: <GridIcon key="my-work" /> },
+    {
+      id: 'automations',
+      section: 'automations',
+      label: t('nav.automations'),
+      icon: <ActivityLogIcon key="automations" />,
+    },
+    { id: 'search', section: 'memory', label: t('nav.search'), icon: <MagnifyingGlassIcon key="search" /> },
+    {
+      id: 'projects',
+      section: 'settings',
+      settingsSection: 'workspace',
+      label: t('nav.projects'),
+      icon: <ArchiveIcon key="projects" />,
+    },
   ];
   const toolItems: Array<[WorkbenchSection, string, ReactNode]> = [
     ['chat', 'Chats', <ChatBubbleIcon key="chat" />],
@@ -1792,22 +3953,23 @@ export function App() {
     ['terminal', 'Terminal', <CodeIcon key="terminal" />],
     ['settings', 'Settings', <GearIcon key="settings" />],
   ];
-  const mobileSectionItems: Array<[WorkbenchSection, string, ReactNode]> = [
-    ...quickLinkItems.map(([section, label, icon]) => [section, label, icon] as [
-      WorkbenchSection,
-      string,
-      ReactNode,
-    ]),
-    ...toolItems,
-  ];
   const mobileTitlebarItems: MobileTitlebarMenuItem[] = showRuntimeConfig
-    ? mobileSectionItems.map(([section, label, icon]) => ({
-        id: `section-${section}`,
-        label,
-        icon,
-        selected: activeSection === section,
-        onSelect: () => selectMobileSection(section),
-      }))
+    ? [
+        ...quickLinkItems.map((item) => ({
+          id: `quick-${item.id}`,
+          label: item.label,
+          icon: item.icon,
+          selected: isQuickLinkSelected(item),
+          onSelect: () => selectMobileQuickLink(item),
+        })),
+        ...toolItems.map(([section, label, icon]) => ({
+          id: `section-${section}`,
+          label,
+          icon,
+          selected: activeSection === section,
+          onSelect: () => selectMobileSection(section),
+        })),
+      ]
     : [
         {
           id: 'commands',
@@ -1845,15 +4007,6 @@ export function App() {
     setSessionMenuOpen(false);
   };
 
-  const toggleProject = (projectId: string) => {
-    setExpandedProjectIds((current) => {
-      const next = new Set(current);
-      if (next.has(projectId)) next.delete(projectId);
-      else next.add(projectId);
-      return next;
-    });
-  };
-
   const toggleWorkspace = (workspaceId: string) => {
     setExpandedWorkspaceIds((current) => {
       const next = new Set(current);
@@ -1863,6 +4016,81 @@ export function App() {
     });
   };
 
+  function isQuickLinkSelected(item: QuickLinkItem): boolean {
+    if (item.settingsSection) return settingsWindowOpen && settingsInitialSection === item.settingsSection;
+    if (item.target === 'background' || item.target === 'artifacts') {
+      return (
+        (activeSection === 'workspace' || activeSection === 'review') &&
+        reviewTab === item.target
+      );
+    }
+    return activeSection === item.section;
+  }
+
+  function selectQuickLink(item: QuickLinkItem) {
+    if (item.settingsSection) {
+      setSettingsInitialSection(item.settingsSection);
+      setSettingsWindowOpen(true);
+      return;
+    }
+    if (item.target === 'background' || item.target === 'artifacts') {
+      setReviewPanelOpen(true);
+      setReviewTab(item.target);
+      switchSection('workspace');
+      return;
+    }
+    switchSection(item.section);
+  }
+
+  function selectMobileQuickLink(item: QuickLinkItem) {
+    if (item.target === 'background' || item.target === 'artifacts') {
+      setReviewPanelOpen(true);
+      setReviewTab(item.target);
+      switchSection('review');
+      setMobileSectionMenuOpen(false);
+      return;
+    }
+    selectQuickLink(item);
+    setMobileSectionMenuOpen(false);
+  }
+
+  const setActiveRunControlState = (state: RunControlState) => {
+    setRunControlState(state);
+    if (!activeSidebarRunId) return;
+    setRunStateById((current) => ({ ...current, [activeSidebarRunId]: state }));
+  };
+
+  const selectSidebarRun = (item: SidebarRunItem) => {
+    setSelectedSidebarRunId(item.id);
+    setRunControlState(
+      runStateById[item.id] ?? (item.id === activeSidebarRunId ? runControlState : 'running'),
+    );
+    setRunLiveMode(true);
+
+    if (item.conversation && item.workspaceId) {
+      selectConversation(item.projectId, item.workspaceId, item.conversation, 'board');
+      return;
+    }
+
+    if (item.workspaceId) {
+      selectWorkspace(item.workspaceId, item.projectId);
+      applySectionSideEffects('board');
+      return;
+    }
+
+    selectWorkflowTarget('board');
+  };
+
+  const selectBoardTask = (taskId: string, selectionViewLabel?: string) => {
+    setSelectedTaskId(taskId);
+    const task = activeDataset.tasks.find((candidate) => candidate.id === taskId);
+    if (!task) return;
+  };
+
+  const submitBoardCommand = async (command: string) => {
+    await sendMessageContent(command);
+  };
+
   const applySectionSideEffects = (section: WorkbenchSection) => {
     activeSectionRef.current = section;
     setActiveSection(section);
@@ -1870,11 +4098,59 @@ export function App() {
     if (section === 'memory') setStatusTab('memory');
     if (section === 'status') setStatusTab('overview');
     if (section === 'terminal') setReviewTab('terminal');
-    if (section === 'board') setReviewTab('changes');
+    if (section === 'board') {
+      setReviewTab('changes');
+      setReviewPanelOpen(false);
+    }
     if (section === 'status') setReviewTab('plan');
   };
 
+  useEffect(() => {
+    if (!localRuntimeMode || auth.status !== 'signed_out' || !config.localApiToken.trim()) return;
+    const reference = readTrustedLocalSessionReference(window.localStorage);
+    if (!reference) return;
+    const attemptKey = `${config.apiBaseUrl}|${config.localApiToken}|${reference.sessionId}`;
+    if (localResumeAttemptRef.current === attemptKey) return;
+    localResumeAttemptRef.current = attemptKey;
+
+    setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+    setConnection('loading');
+    setError(null);
+    void (async () => {
+      try {
+        const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
+        const outcome = await bootstrapClient.resumeLocalSession(reference.sessionId);
+        if (localResumeAttemptRef.current !== attemptKey) return;
+        if (!outcome) {
+          clearTrustedLocalSessionReference(window.localStorage);
+          setAuth(emptyAuthState);
+          setConnection('idle');
+          return;
+        }
+        writeTrustedLocalSessionReference(window.localStorage, outcome.session);
+        await hydrateLocalSession(outcome, config);
+        applySectionSideEffects('workspace');
+      } catch (caught) {
+        if (localResumeAttemptRef.current !== attemptKey) return;
+        const message = formatLoginError(caught, config.apiBaseUrl);
+        setAuth({ ...emptyAuthState, error: message });
+        setConnection('error');
+        setError(message);
+      }
+    })();
+  }, [
+    auth.status,
+    config.apiBaseUrl,
+    config.localApiToken,
+    config.mode,
+    localRuntimeMode,
+  ]);
+
   const switchSection = (section: WorkbenchSection) => {
+    if (section === 'settings') {
+      setSettingsWindowOpen(true);
+      return;
+    }
     const currentSection = activeSectionRef.current;
     if (section !== currentSection) {
       setSectionBackStack([...sectionBackStack, currentSection].slice(-24));
@@ -1886,9 +4162,57 @@ export function App() {
   const openConnectionSettings = () => {
     if (!showRuntimeConfig) {
       useApiKeyManually();
-      return;
     }
-    switchSection('settings');
+    setSettingsInitialSection('connection');
+    setSettingsWindowOpen(true);
+  };
+
+  const applySettingsContext = async (tenantId: string, projectId: string) => {
+    if (!auth.context) {
+      throw new Error('An authenticated workspace context is required.');
+    }
+    const contextClient = new DesktopApiClient({
+      ...config,
+      tenantId,
+      projectId: '',
+      workspaceId: '',
+    });
+    const projects = await contextClient.listProjects(tenantId);
+    const selectedProject = projects.find((project) => project.id === projectId);
+    if (!selectedProject) {
+      throw new Error('The selected project is not available for this tenant.');
+    }
+
+    const nextContext =
+      auth.credentialKind === 'local_session'
+        ? (
+            await api.switchWorkspaceContext(
+              tenantId,
+              projectId,
+              auth.context.revision,
+              globalThis.crypto.randomUUID(),
+            )
+          ).context
+        : {
+            ...nextRemoteWorkspaceContext(
+              auth.context,
+              tenantId,
+              projectId,
+              new Date().toISOString(),
+            ),
+          };
+    const nextConfig = { ...config, tenantId, projectId, workspaceId: '' };
+    contextRevisionRef.current = nextContext.revision;
+    resetProjectScopedState();
+    setConfig(nextConfig);
+    setAuth((current) => ({ ...current, context: nextContext, projects }));
+    applySectionSideEffects('workspace');
+    const applied = await refreshRuntime(nextConfig, [selectedProject]);
+    if (!applied) {
+      throw new Error(
+        'The context was switched, but the selected project could not be loaded. Refresh to retry.',
+      );
+    }
   };
 
   const selectMobileSection = (section: WorkbenchSection) => {
@@ -1905,6 +4229,7 @@ export function App() {
     const nextOpen = !mobileSectionMenuOpen;
     if (nextOpen) {
       closeCommandPalette();
+      setRunActionsMenuOpen(false);
       setSessionMenuOpen(false);
     }
     setMobileSectionMenuOpen(nextOpen);
@@ -1990,19 +4315,7 @@ export function App() {
   };
 
   const runSelectedSession = () => {
-    if (!showRuntimeConfig) {
-      setLoginModalOpen(true);
-      return;
-    }
-    if (runtimeDisabledReason) {
-      switchSection('settings');
-      return;
-    }
-    if (connection !== 'ready') {
-      void refreshRuntime();
-      return;
-    }
-    switchSection('chat');
+    setError(RUN_CONTROL_UNAVAILABLE);
   };
 
   const openProject = () => {
@@ -2046,10 +4359,10 @@ export function App() {
     },
     {
       id: 'automations',
-      label: 'Automations',
-      description: 'Review connection status, live updates, and workflow activity.',
+      label: t('automations.title'),
+      description: t('automations.commandDescription'),
       icon: <ActivityLogIcon />,
-      onSelect: () => switchSection('status'),
+      onSelect: () => switchSection('automations'),
     },
     {
       id: 'search-memory',
@@ -2111,10 +4424,9 @@ export function App() {
     {
       id: 'run-selected-session',
       label: 'Run selected session',
-      description: showRuntimeConfig
-        ? runtimeDisabledReason ?? 'Connect or open the chat surface for this workspace.'
-        : 'Open sign in before running a workspace session.',
+      description: RUN_CONTROL_UNAVAILABLE,
       icon: <PlayIcon />,
+      disabled: true,
       onSelect: runSelectedSession,
     },
     {
@@ -2139,6 +4451,7 @@ export function App() {
       messages={dataset.messages}
       timelineState={selectedConversation ? conversationTimeline : null}
       agentTaskSignals={agentTaskSignals}
+      workflowCounts={chatWorkflowCounts}
       sessionTitle={selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined)}
       scopeLabel={
         selectedConversation
@@ -2147,9 +4460,24 @@ export function App() {
       }
       input={chatInput}
       sending={sending}
-      disabledReason={chatDisabledReason}
+      disabledReason={sessionChatDisabledReason}
       activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
+      modelLabel={config.llmModel.trim() || undefined}
+      runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
+      runtimeTargetOptions={runtimeTargetComposerOptions}
+      runInputDelivery={runInputDelivery}
+      runInputDeliveryOptions={runInputDeliveryOptions}
+      runInputs={runInputs}
+      runInputsLoading={runInputsLoading}
+      runInputsError={runInputsError}
+      promotingRunInputId={promotingRunInputId}
+      references={runInputReferences}
       onInputChange={setChatInput}
+      onRunInputDeliveryChange={setRunInputDelivery}
+      onPromoteRunInput={(input) => void promoteQueuedRunInput(input)}
+      onRemoveReference={(reference) =>
+        setRunInputReferences((current) => toggleRunInputReference(current, reference))
+      }
       onSend={() => void sendMessage()}
       onRefresh={() =>
         selectedConversation
@@ -2157,155 +4485,127 @@ export function App() {
           : void refreshRuntime()
       }
       onLoadEarlier={() => void loadEarlierTimeline()}
+      onRespondToHitl={respondToHitl}
       onWorkflowSelect={selectChatWorkflowTarget}
+      onRuntimeTargetChange={(value) =>
+        setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local')
+      }
+      onOpenCommands={openCommandPalette}
       onOpenUsagePlan={openUsagePlan}
     />
   );
 
   const renderWorkspaceOverview = () => {
-    const blockedTasks = dataset.tasks.filter((task) => task.status === 'blocked').length;
-    const activeTasks = dataset.tasks.filter((task) => {
-      const status = (task.status ?? '').toLowerCase();
-      return status !== 'done' && status !== 'closed' && status !== 'completed';
-    }).length;
-    const latestMessage = dataset.messages[dataset.messages.length - 1] ?? null;
-    const workspaceStatus = selectedWorkspace?.status ?? 'open';
-
     return (
-      <section className="pane-shell overview-shell">
-        <header className="pane-head">
-          <div>
-            <Heading as="h2" size="3">
-              Workspace
-            </Heading>
-            <Text size="1" color="gray">
-              Chat, work items, plan, and sandbox status for this session.
-            </Text>
-          </div>
-          <Button
-            size="2"
-            variant="surface"
-            aria-label="Refresh workspace overview"
-            onClick={() => void refreshRuntime()}
-            disabled={Boolean(runtimeDisabledReason) || connection === 'loading'}
-            loading={connection === 'loading'}
-          >
-            <RocketIcon /> Refresh
-          </Button>
-        </header>
-        <div className="overview-content">
-          <section className="overview-summary" aria-label="Workspace summary">
-            <div>
-              <Text size="1" color="gray">
-                Current workspace
-              </Text>
-              <Heading as="h3" size="4">
-                {workspaceLabel(selectedWorkspace ?? undefined)}
-              </Heading>
-              <Text size="2" color="gray">
-                {selectedWorkspace?.description ??
-                  (config.workspaceId || 'Select or create a workspace to load live chat and tasks.')}
-              </Text>
-            </div>
-            <Badge color={workspaceStatus === 'closed' ? 'gray' : 'green'} variant="soft">
-              {workspaceStatus}
-            </Badge>
-          </section>
-
-          <div className="overview-metrics">
-            <OverviewMetric label="Messages" value={String(dataset.messages.length)} />
-            <OverviewMetric label="Active tasks" value={String(activeTasks)} />
-            <OverviewMetric label="Blocked" value={String(blockedTasks)} />
-            <OverviewMetric label="Sandbox" value={dataset.sandbox?.status ?? 'idle'} />
-          </div>
-
-          <div className="overview-actions" aria-label="Workspace actions">
-            <button
-              type="button"
-              aria-label="Open workspace chat"
-              onClick={() => switchSection('chat')}
-            >
-              <span>
-                <ChatBubbleIcon />
-              </span>
-              <strong>Open chat</strong>
-              <Text size="1" color="gray">
-                {latestMessage
-                  ? latestMessage.content
-                  : 'No messages loaded for this workspace yet.'}
-              </Text>
-            </button>
-            <button
-              type="button"
-              aria-label="Review workspace work items"
-              onClick={() => switchSection('board')}
-            >
-              <span>
-                <GridIcon />
-              </span>
-              <strong>Review work</strong>
-              <Text size="1" color="gray">
-                {dataset.tasks.length
-                  ? `${dataset.tasks.length} tasks across board lanes.`
-                  : 'No tasks loaded for this workspace yet.'}
-              </Text>
-            </button>
-            <button
-              type="button"
-              aria-label="Open workspace sandbox"
-              onClick={() => switchSection('sandbox')}
-            >
-              <span>
-                <DesktopIcon />
-              </span>
-              <strong>Open sandbox</strong>
-              <Text size="1" color="gray">
-                {dataset.sandbox?.is_healthy
-                  ? 'Desktop and terminal services are available.'
-                  : 'Start sandbox desktop or terminal when a project is configured.'}
-              </Text>
-            </button>
-            <button
-              type="button"
-              aria-label="Open connection settings"
-              onClick={() => switchSection('settings')}
-            >
-              <span>
-                <GearIcon />
-              </span>
-              <strong>Connection settings</strong>
-              <Text size="1" color="gray">
-                {runtimeDisabledReason ?? `${config.apiBaseUrl} / ${config.mode}`}
-              </Text>
-            </button>
-          </div>
-        </div>
-      </section>
+      <WorkspaceOverview
+        workspace={selectedWorkspace}
+        project={selectedProject}
+        tenantName={
+          auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ??
+          config.tenantId ??
+          t('overview.none')
+        }
+        conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
+        tasks={activeDataset.tasks}
+        plan={activeDataset.plan}
+        messageCount={dataset.messages.length}
+        sandboxStatus={dataset.sandbox?.status ?? 'idle'}
+        connection={connection}
+        refreshDisabledReason={runtimeDisabledReason}
+        onRefresh={() => void refreshRuntime()}
+        onNewTask={() => openNewTask(config.workspaceId)}
+        onOpenConversation={(conversationId) => {
+          const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
+            (item) => item.id === conversationId,
+          );
+          if (!conversation) {
+            setError(t('myWork.sessionUnavailable'));
+            return;
+          }
+          selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
+        }}
+        onOpenBoard={() => switchSection('board')}
+        onOpenReview={() => switchSection('review')}
+        onOpenSettings={openConnectionSettings}
+      />
     );
   };
 
-  const renderBoardPanel = () => (
-    <BoardPanel
-      tasks={dataset.tasks}
+  const openMyWorkSession = (item: ProjectWorkItem) => {
+    const workspaceId = item.workspace_id ?? '';
+    const conversation = Object.values(dataset.conversationsByWorkspace)
+      .flat()
+      .find((candidate) => candidate.id === item.conversation_id);
+    if (!workspaceId || !conversation) {
+      setError(t('myWork.sessionUnavailable'));
+      return;
+    }
+    selectConversation(item.project_id, workspaceId, conversation, 'chat');
+  };
+
+  const renderLegacyBoardPanel = () => (
+    <section className="my-work-legacy-board">
+      <header>
+        <Button variant="soft" onClick={() => setShowLegacyBoard(false)}>
+          <ChevronLeftIcon /> {t('myWork.backToQueue')}
+        </Button>
+      </header>
+      <BoardPanel
+      tasks={activeDataset.tasks}
       boardMode={boardMode}
       selectedTaskId={selectedTaskId}
+      activeRunLabel={activeSidebarRun?.label ?? 'Current run'}
+      activeRunTimeLabel={titlebarRunTimeLabel}
+      commandDisabledReason={chatDisabledReason}
+      commandSending={sending}
+      runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
+      runtimeTargetOptions={runtimeTargetComposerOptions}
       onBoardModeChange={setBoardMode}
-      onSelectTask={setSelectedTaskId}
+      onSelectTask={selectBoardTask}
+      onOpenCommands={openCommandPalette}
+      onRuntimeTargetChange={(value) =>
+        setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local')
+      }
+      onSubmitCommand={submitBoardCommand}
+    />
+    </section>
+  );
+
+  const renderBoardPanel = () =>
+    showLegacyBoard ? (
+      renderLegacyBoardPanel()
+    ) : (
+      <MyWorkQueue
+        items={dataset.myWork}
+        error={dataset.myWorkError}
+        loading={connection === 'loading'}
+        onRefresh={() => void refreshRuntime()}
+        onOpenSession={openMyWorkSession}
+        onOpenBoard={() => setShowLegacyBoard(true)}
+      />
+    );
+
+  const renderAutomationsPage = () => (
+    <AutomationsPage
+      api={api}
+      projectId={config.projectId}
+      projectName={auth.projects.find((project) => project.id === config.projectId)?.name}
+      onOpenConnection={openConnectionSettings}
     />
   );
 
   const renderStatusPanel = () => (
     <StatusPanel
       selectedTask={selectedTask}
-      plan={dataset.plan}
+      plan={activeDataset.plan}
       events={socket.events}
       wsConnected={socket.connected}
       tab={statusTab}
-      sandbox={dataset.sandbox}
+      sandbox={activeDataset.sandbox}
       desktop={desktop}
       desktopFrameUrl={desktopFrameUrl}
       terminal={terminal}
-      terminalConnected={terminalProxy.connected}
+      terminalBinding={terminalBinding}
       terminalError={terminalProxy.error}
       terminalLines={terminalProxy.lines}
       terminalInput={terminalInput}
@@ -2342,6 +4642,54 @@ export function App() {
     />
   );
 
+  const renderWorkspaceReviewPanel = (stage = false) => (
+    <WorkspaceReviewPanel
+      activeTab={reviewTab}
+      dataset={scopedConversation ? sessionDataset : activeDataset}
+      connection={connection}
+      socketConnected={socket.connected}
+      socketEvents={workspaceEventInputs}
+      timelineItems={conversationTimeline.items}
+      artifacts={workspaceArtifacts}
+      artifactVersions={conversationTimeline.artifactVersions}
+      artifactDeliveries={conversationTimeline.artifactDeliveries}
+      toolInvocations={conversationTimeline.toolInvocations}
+      currentRun={currentArtifactRun}
+      changeSnapshot={changeSnapshot}
+      changeSnapshotLoading={changeSnapshotLoading}
+      changeSnapshotError={changeSnapshotError}
+      changeReferences={runInputReferences}
+      artifactActionPending={artifactActionPending}
+      selectedTask={scopedConversation ? reviewSelectedTask : selectedTask}
+      terminal={terminal}
+      terminalBinding={terminalBinding}
+      terminalError={terminalProxy.error}
+      terminalLines={terminalProxy.lines}
+      terminalBusy={sandboxBusy}
+      capabilityMode={sessionDetailViewModel?.capabilityMode ?? 'unavailable'}
+      approvalRequests={conversationTimeline.approvalRequests}
+      currentRunId={sessionDetailViewModel?.runId ?? null}
+      sessionViewModel={sessionDetailViewModel}
+      onRespondToHitl={respondToHitl}
+      onArtifactAction={handleArtifactAction}
+      onStartTerminal={() => void startTerminal()}
+      onRefreshChanges={() => void loadRunChanges()}
+      onToggleChangeReference={(reference) =>
+        setRunInputReferences((current) => toggleRunInputReference(current, reference))
+      }
+      onTabChange={setReviewTab}
+      onClose={
+        stage
+          ? () => {
+              setReviewPanelOpen(false);
+              switchSection('workspace');
+            }
+          : () => setReviewPanelOpen(false)
+      }
+      stage={stage}
+    />
+  );
+
   const renderWorkbench = () => {
     if (!showRuntimeConfig) {
       return (
@@ -2355,9 +4703,11 @@ export function App() {
         />
       );
     }
+    if (activeSection === 'review') return renderWorkspaceReviewPanel(true);
     if (activeSection === 'workspace') return renderWorkspaceOverview();
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
+    if (activeSection === 'automations') return renderAutomationsPage();
     if (
       activeSection === 'status' ||
       activeSection === 'sandbox' ||
@@ -2366,54 +4716,26 @@ export function App() {
     ) {
       return renderStatusPanel();
     }
-    if (activeSection === 'settings') {
-      return (
-        <section className="pane-shell settings-shell">
-          <header className="pane-head">
-            <div>
-              <Heading as="h2" size="3">
-                Settings
-              </Heading>
-              <Text size="1" color="gray">
-                Current connection, account, and workspace scope.
-              </Text>
-            </div>
-            <Badge color={connection === 'ready' ? 'green' : 'gray'} variant="soft">
-              {connection}
-            </Badge>
-          </header>
-          <div className="settings-content">
-            <UsagePlanPanel
-              accountLabel={auth.user?.email ?? authStatusLabel}
-              planLabel={auth.status === 'signed_in' ? 'Copilot Max' : 'Local development'}
-              creditsUsedLabel={
-                auth.status === 'signed_in' ? '8 AI credits used' : 'Sign in to view usage'
-              }
-            />
-            <RuntimeConfigPanel
-              config={config}
-              connection={connection}
-              wsConnected={socket.connected}
-              wsError={socket.error}
-              disabledReason={runtimeDisabledReason}
-              focusApiKeySignal={runtimeApiKeyFocusSignal}
-              onChange={handleConfigChange}
-              onRefresh={() => void refreshRuntime()}
-            />
-            <div className="settings-grid">
-              <SettingMetric label="Server" value={config.apiBaseUrl} />
-              <SettingMetric label="Account" value={config.tenantId || '-'} />
-              <SettingMetric label="Project" value={config.projectId || '-'} />
-              <SettingMetric label="Workspace" value={config.workspaceId || '-'} />
-              <SettingMetric label="Connection" value={config.mode} />
-              <SettingMetric label="Live events" value={socket.connected ? 'live' : 'idle'} />
-            </div>
-          </div>
-        </section>
-      );
-    }
     return renderWorkspaceOverview();
   };
+
+  if (!showRuntimeConfig) {
+    return (
+      <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
+        <LoginScreen
+          auth={auth}
+          mode={config.mode}
+          localReady={localRuntimeMode && Boolean(config.localApiToken.trim())}
+          email={loginEmail}
+          password={loginPassword}
+          onEmailChange={setLoginEmail}
+          onPasswordChange={setLoginPassword}
+          onEmailLogin={() => void login()}
+          onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
+        />
+      </Theme>
+    );
+  }
 
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
@@ -2421,7 +4743,9 @@ export function App() {
         ref={appShellRef}
         className={`app-shell ${runsInTauri ? 'tauri-window' : 'browser-window'} ${
           showRuntimeConfig ? 'runtime-mode' : 'signed-out-mode'
-        } ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}
+        } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
+          activeSection === 'board' ? 'my-work-mode' : ''
+        } ${activeSection === 'automations' ? 'automations-mode' : ''}`}
       >
         <header className="titlebar" data-tauri-drag-region>
           <div className="session-crumb">
@@ -2438,9 +4762,11 @@ export function App() {
               </Button>
             ) : null}
             {showRuntimeConfig ? (
-              <Text size="2" weight="bold">
-                {`Session: ${sessionTitle}`}
-              </Text>
+              !sessionDetailViewModel ? (
+                <Text size="2" weight="bold">
+                  {titlebarPrimaryLabel}
+                </Text>
+              ) : null
             ) : (
               <div className="titlebar-signedout-label" aria-label="New session">
                 <Text size="3" weight="bold" className="titlebar-workspace-name">
@@ -2448,7 +4774,7 @@ export function App() {
                 </Text>
               </div>
             )}
-            {showRuntimeConfig ? (
+            {showRuntimeConfig && !sessionDetailViewModel && activeSection !== 'board' ? (
               <button
                 className="session-info-button"
                 type="button"
@@ -2457,6 +4783,24 @@ export function App() {
               >
                 {sessionInfoLabel}
               </button>
+            ) : null}
+            {showRuntimeConfig && !sessionDetailViewModel && activeSection !== 'board' ? (
+              <span
+                className={`titlebar-run-status run-state-${titlebarRunState}`}
+                aria-label={`Run state ${titlebarRunLabel}`}
+              >
+                <i aria-hidden />
+                <span>{titlebarRunLabel}</span>
+              </span>
+            ) : null}
+            {showRuntimeConfig && !sessionDetailViewModel ? (
+              <span
+                className="titlebar-run-clock"
+                aria-label={`Run time ${titlebarRunTimeLabel}`}
+              >
+                <ClockIcon />
+                <span>{titlebarRunTimeLabel}</span>
+              </span>
             ) : null}
           </div>
           {mobileTitlebarItems.length ? (
@@ -2528,17 +4872,186 @@ export function App() {
                   <RocketIcon />
                 </IconButton>
               </Tooltip>
-              <Button
-                size="2"
-                variant="surface"
-                color="gray"
-                aria-label="Run selected session"
-                disabled={Boolean(runtimeDisabledReason) || connection === 'loading'}
-                onClick={runSelectedSession}
-                loading={connection === 'loading'}
-              >
-                <PlayIcon /> Run
-              </Button>
+              {!sessionDetailViewModel && activeSection !== 'board' ? (
+                <Flex align="center" gap="1" className="run-control-group" role="group" aria-label="Run controls">
+                <Button
+                  size="2"
+                  variant="surface"
+                  color={runControlState === 'paused' ? 'green' : 'gray'}
+                  aria-label={RUN_CONTROL_UNAVAILABLE}
+                  title={RUN_CONTROL_UNAVAILABLE}
+                  disabled
+                >
+                  {runControlState === 'paused' ? <PlayIcon /> : <PauseIcon />}
+                  {runControlState === 'paused' ? 'Resume' : 'Pause'}
+                </Button>
+                <Button
+                  size="2"
+                  variant="surface"
+                  color="gray"
+                  aria-label={RUN_CONTROL_UNAVAILABLE}
+                  title={RUN_CONTROL_UNAVAILABLE}
+                  disabled
+                >
+                  <PlayIcon /> Resume
+                </Button>
+                <Button
+                  size="2"
+                  variant="surface"
+                  color="red"
+                  aria-label={RUN_CONTROL_UNAVAILABLE}
+                  title={RUN_CONTROL_UNAVAILABLE}
+                  disabled
+                >
+                  <StopIcon /> Stop
+                </Button>
+                </Flex>
+              ) : null}
+              <span className="run-actions-menu-control">
+                <Tooltip content="More run actions">
+                  <button
+                    className="run-actions-button"
+                    type="button"
+                    aria-label="More run actions"
+                    aria-haspopup="menu"
+                    aria-expanded={runActionsMenuOpen}
+                    ref={runActionsButtonRef}
+                    onClick={() => {
+                      const nextOpen = !runActionsMenuOpen;
+                      if (nextOpen) {
+                        closeCommandPalette();
+                        setSessionMenuOpen(false);
+                        setMobileSectionMenuOpen(false);
+                        setActiveMobileMenuItemId(null);
+                      }
+                      setRunActionsMenuOpen(nextOpen);
+                    }}
+                  >
+                    <DotsHorizontalIcon />
+                  </button>
+                </Tooltip>
+                {runActionsMenuOpen ? (
+                  <div
+                    className="run-actions-menu"
+                    role="menu"
+                    aria-label="More run actions"
+                    ref={runActionsMenuRef}
+                  >
+                    {!sessionDetailViewModel ? <>
+                      <button
+                      type="button"
+                      role="menuitem"
+                      title={RUN_CONTROL_UNAVAILABLE}
+                      disabled
+                    >
+                      {runControlState === 'paused' ? <PlayIcon /> : <PauseIcon />}
+                      <span>
+                        <strong>
+                          {runControlState === 'paused' ? 'Resume run' : 'Pause run'}
+                        </strong>
+                        <em>{RUN_CONTROL_UNAVAILABLE}</em>
+                      </span>
+                      </button>
+                      <button
+                      type="button"
+                      role="menuitem"
+                      title={RUN_CONTROL_UNAVAILABLE}
+                      disabled
+                    >
+                      <StopIcon />
+                      <span>
+                        <strong>Stop run</strong>
+                        <em>{RUN_CONTROL_UNAVAILABLE}</em>
+                      </span>
+                      </button>
+                      <button
+                      type="button"
+                      role="menuitem"
+                      title={RUN_CONTROL_UNAVAILABLE}
+                      disabled
+                    >
+                      <PlayIcon />
+                      <span>
+                        <strong>Run selected session</strong>
+                        <em>{RUN_CONTROL_UNAVAILABLE}</em>
+                      </span>
+                      </button>
+                    </> : null}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={Boolean(runtimeDisabledReason) || connection === 'loading'}
+                      onClick={() => {
+                        void refreshRuntime();
+                        setRunActionsMenuOpen(false);
+                      }}
+                    >
+                      <RocketIcon />
+                      <span>
+                        <strong>Refresh workspace</strong>
+                        <em>Reload chats, plan, sandbox, and work items.</em>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        switchSection('chat');
+                        setRunActionsMenuOpen(false);
+                      }}
+                    >
+                      <ChatBubbleIcon />
+                      <span>
+                        <strong>Open chat</strong>
+                        <em>Jump to the run command composer.</em>
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </span>
+              {!sessionDetailViewModel && activeSection !== 'board' ? (
+                <Button
+                  size="2"
+                  variant="surface"
+                  color="gray"
+                  aria-label={RUN_CONTROL_UNAVAILABLE}
+                  title={RUN_CONTROL_UNAVAILABLE}
+                  disabled
+                >
+                  <PlayIcon /> Run
+                </Button>
+              ) : null}
+              <label className="titlebar-runtime-select">
+                <span>Runtime</span>
+                <select
+                  aria-label="Runtime"
+                  value={runtimeTarget}
+                  onChange={(event) => setRuntimeTarget(event.target.value as RuntimeTarget)}
+                >
+                  <option value="local">{titlebarRuntimeTargetLabels.local}</option>
+                  <option value="staging">{titlebarRuntimeTargetLabels.staging}</option>
+                </select>
+              </label>
+              <div className="titlebar-live-toggle" role="group" aria-label="Run update mode">
+                <button
+                  type="button"
+                  className={runLiveMode ? 'active' : ''}
+                  aria-label="Use live run updates"
+                  aria-pressed={runLiveMode}
+                  onClick={() => setRunLiveMode(true)}
+                >
+                  Live
+                </button>
+                <button
+                  type="button"
+                  className={!runLiveMode ? 'active' : ''}
+                  aria-label="Use offline run updates"
+                  aria-pressed={!runLiveMode}
+                  onClick={() => setRunLiveMode(false)}
+                >
+                  Offline
+                </button>
+              </div>
               <Flex align="center" gap="1" className="open-action-group">
                 <Button
                   size="2"
@@ -2576,39 +5089,45 @@ export function App() {
                   </IconButton>
                 </Tooltip>
               </Flex>
-              <Tooltip
-                content={
-                  socket.connected
-                    ? 'Live updates connected'
-                    : socket.error ?? 'Live updates idle'
-                }
-              >
-                <IconButton
-                  variant="surface"
-                  color={socket.connected ? 'green' : socket.error ? 'red' : 'gray'}
-                  aria-label={
-                    socket.connected
-                      ? 'Open live updates status, connected'
-                      : socket.error
-                        ? 'Open live updates status, error'
-                        : 'Open live updates status, idle'
-                  }
-                  onClick={() => switchSection('status')}
-                >
-                  <CheckCircledIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip content={reviewPanelOpen ? 'Hide workspace panel' : 'Show workspace panel'}>
-                <IconButton
-                  variant="surface"
-                  color={reviewPanelOpen ? 'cyan' : 'gray'}
-                  aria-label={reviewPanelOpen ? 'Hide workspace panel' : 'Show workspace panel'}
-                  aria-pressed={reviewPanelOpen}
-                  onClick={() => setReviewPanelOpen((open) => !open)}
-                >
-                  <ColumnsIcon />
-                </IconButton>
-              </Tooltip>
+              {activeSection !== 'board' ? (
+                <>
+                  <Tooltip
+                    content={
+                      socket.connected
+                        ? 'Live updates connected'
+                        : socket.error ?? 'Live updates idle'
+                    }
+                  >
+                    <IconButton
+                      variant="surface"
+                      color={socket.connected ? 'green' : socket.error ? 'red' : 'gray'}
+                      aria-label={
+                        socket.connected
+                          ? 'Open live updates status, connected'
+                          : socket.error
+                            ? 'Open live updates status, error'
+                            : 'Open live updates status, idle'
+                      }
+                      onClick={() => switchSection('status')}
+                    >
+                      <CheckCircledIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip
+                    content={reviewPanelOpen ? 'Hide workspace panel' : 'Show workspace panel'}
+                  >
+                    <IconButton
+                      variant="surface"
+                      color={reviewPanelOpen ? 'cyan' : 'gray'}
+                      aria-label={reviewPanelOpen ? 'Hide workspace panel' : 'Show workspace panel'}
+                      aria-pressed={reviewPanelOpen}
+                      onClick={() => setReviewPanelOpen((open) => !open)}
+                    >
+                      <ColumnsIcon />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              ) : null}
             </Flex>
           ) : null}
         </header>
@@ -2651,34 +5170,151 @@ export function App() {
             </div>
 
             <div className="sidebar-main">
-              <nav className="quick-links" aria-label="desktop sections">
+              <nav className="quick-links" aria-label="Primary">
                 <div className="sidebar-heading">
                   <Text size="1" weight="bold" color="gray">
                     Quick links
                   </Text>
                 </div>
-                {quickLinkItems.map(([section, label, icon]) => (
+                {quickLinkItems.map((item) => (
                   <button
-                    className={`sidebar-row ${
-                      showRuntimeConfig && activeSection === section ? 'selected' : ''
-                    }`}
+                    className={`sidebar-row ${isQuickLinkSelected(item) ? 'selected' : ''}`}
                     type="button"
-                    key={String(label)}
-                    aria-label={`${String(label)} section`}
-                    onClick={() => {
-                      switchSection(section);
-                    }}
+                    key={item.id}
+                    aria-label={`${item.label} section`}
+                    aria-current={isQuickLinkSelected(item) ? 'page' : undefined}
+                    onClick={() => selectQuickLink(item)}
                   >
-                    <span className="sidebar-icon">{icon}</span>
-                    <span>{label}</span>
+                    <span className="sidebar-icon">{item.icon}</span>
+                    <span>{item.label}</span>
                   </button>
                 ))}
               </nav>
 
+              {showRuntimeConfig && !sessionDetailViewModel && activeSection !== 'board' ? (
+                <section className="sidebar-runs" aria-label="Runs">
+                  <div className="sidebar-heading">
+                    <Text size="1" weight="bold" color="gray">
+                      Runs
+                    </Text>
+                    <span className="sidebar-heading-actions">
+                      <Badge
+                        color={
+                          titlebarRunState === 'running'
+                            ? 'green'
+                            : titlebarRunState === 'planning'
+                              ? 'cyan'
+                              : 'gray'
+                        }
+                        variant="soft"
+                      >
+                        {titlebarRunLabel}
+                      </Badge>
+                      <IconButton
+                        size="1"
+                        variant="ghost"
+                        color="gray"
+                        aria-label="Create new run"
+                        onClick={startNewSession}
+                      >
+                        <PlusIcon />
+                      </IconButton>
+                    </span>
+                  </div>
+                  <div className="sidebar-run-list">
+                    {sidebarRunItems.map((item) => {
+                      const selected = item.id === activeSidebarRunId;
+                      const persistedRunState = runStateById[item.id];
+                      const rowState = selected ? titlebarRunState : persistedRunState;
+                      const statusLabel =
+                        selected && sessionDetailViewModel
+                          ? titlebarRunLabel
+                          : runStatusLabel(rowState, item.status);
+                      const tone = rowState ?? runToneFromStatus(item.status);
+                      return (
+                        <button
+                          className={`sidebar-run-row ${selected ? 'selected' : ''}`}
+                          type="button"
+                          key={item.id}
+                          aria-label={`Open ${item.label} run, ${statusLabel}`}
+                          onClick={() => selectSidebarRun(item)}
+                        >
+                          <span className={`run-dot run-state-${tone}`} aria-hidden />
+                          <span className="sidebar-run-copy">
+                            <strong>{item.label}</strong>
+                            <em>{item.meta}</em>
+                          </span>
+                          <span className="sidebar-run-meta">
+                            <strong>{statusLabel}</strong>
+                            <em>{item.time}</em>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+
+              {showRuntimeConfig && !sessionDetailViewModel && activeSection !== 'board' ? (
+                <section className="sidebar-runtime-monitor" aria-label="Runtime monitor">
+                  <div className="runtime-monitor-head">
+                    <span>
+                      <DashboardIcon />
+                    </span>
+                    <div>
+                      <strong>{titlebarRuntimeTargetLabels[runtimeTarget]}</strong>
+                      <em>{localRuntimeMode ? 'Local core' : config.mode}</em>
+                    </div>
+                    <Badge
+                      color={runtimeHealthBadgeColors[runtimeHealthState]}
+                      variant="soft"
+                      aria-label={`Runtime health ${runtimeHealthLabel}`}
+                    >
+                      {runtimeHealthLabel}
+                    </Badge>
+                  </div>
+                  <dl className="runtime-monitor-grid">
+                    <div>
+                      <dt>Live</dt>
+                      <dd>{socket.connected ? 'connected' : runLiveMode ? 'waiting' : 'offline'}</dd>
+                    </div>
+                    <div>
+                      <dt>Scope</dt>
+                      <dd>{hasWorkspaceScope ? 'workspace' : hasProjectScope ? 'project' : 'setup'}</dd>
+                    </div>
+                    <div>
+                      <dt>Events</dt>
+                      <dd>{workspaceEventInputs.length}</dd>
+                    </div>
+                    <div>
+                      <dt>Queue</dt>
+                      <dd>{agentTaskSignals.length}</dd>
+                    </div>
+                  </dl>
+                  <dl className="runtime-monitor-grid" aria-label="Runtime health metrics">
+                    {runtimeMonitorHealthMetrics.map((metric) => (
+                      <div key={metric.label}>
+                        <dt>{metric.label}</dt>
+                        <dd>{metric.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <button
+                    className="runtime-monitor-action"
+                    type="button"
+                    aria-label={`Open Runtime Monitor, last sync ${lastSync}`}
+                    onClick={() => switchSection('settings')}
+                  >
+                    <span>Open Runtime Monitor</span>
+                    <ChevronRightIcon />
+                  </button>
+                </section>
+              ) : null}
+
               <section className="sidebar-sessions">
                 <div className="sidebar-heading">
                   <Text size="1" weight="bold" color="gray">
-                    Sessions
+                    Workspaces & sessions
                   </Text>
                   <span className="sidebar-heading-actions">
                     <span className="session-grouping-control">
@@ -2693,6 +5329,7 @@ export function App() {
                           const nextOpen = !sessionMenuOpen;
                           if (nextOpen) {
                             closeCommandPalette();
+                            setRunActionsMenuOpen(false);
                             setMobileSectionMenuOpen(false);
                             setActiveMobileMenuItemId(null);
                           }
@@ -2712,8 +5349,8 @@ export function App() {
                           >
                             <CheckCircledIcon />
                             <span>
-                              <strong>Project folders</strong>
-                              <em>Group chats under workspace roots.</em>
+                              <strong>Workspace tree</strong>
+                              <em>Group sessions under the current project&apos;s workspaces.</em>
                             </span>
                           </button>
                           <button
@@ -2738,8 +5375,8 @@ export function App() {
                       color="gray"
                       aria-label={
                         showRuntimeConfig && !workspaceDisabledReason
-                          ? 'Create workspace session'
-                          : 'New session'
+                          ? 'Create task with an Agent plan'
+                          : 'New task'
                       }
                       disabled={creatingWorkspace}
                       onClick={startNewSession}
@@ -2750,19 +5387,15 @@ export function App() {
                 </div>
                 {showRuntimeConfig ? (
                   <WorkspaceDock
-                    projects={sidebarProjects}
-                    workspacesByProject={dataset.workspacesByProject}
+                    workspaces={dataset.workspacesByProject[config.projectId] ?? []}
                     conversationsByWorkspace={dataset.conversationsByWorkspace}
                     nodeState={dataset.nodeState}
                     currentProjectId={config.projectId}
                     currentWorkspaceId={config.workspaceId}
                     currentConversationId={selectedConversation?.id ?? null}
                     groupMode={sessionGroupMode}
-                    expandedProjectIds={expandedProjectIds}
                     expandedWorkspaceIds={expandedWorkspaceIds}
-                    onToggleProject={toggleProject}
                     onToggleWorkspace={toggleWorkspace}
-                    onSelectProject={selectProject}
                     onSelectWorkspace={(projectId, workspaceId) =>
                       selectWorkspace(workspaceId, projectId)
                     }
@@ -2772,12 +5405,16 @@ export function App() {
                     creatingWorkspace={creatingWorkspace}
                     creatingSessionWorkspaceId={creatingSessionWorkspaceId}
                     onCreateWorkspace={(projectId) => void createWorkspace(projectId)}
-                    onCreateSession={(projectId, workspaceId) =>
-                      void createSessionForWorkspace(projectId, workspaceId)
-                    }
+                    onCreateSession={(_projectId, workspaceId) => openNewTask(workspaceId)}
                   />
                 ) : (
-                  <SignedOutSessionTree mode={sessionGroupMode} onNewSession={startNewSession} />
+                  <SignedOutSessionTree
+                    mode={sessionGroupMode}
+                    activeSection={activeSection}
+                    onNewSession={startNewSession}
+                    onOpenChats={() => switchSection('chat')}
+                    onOpenProjectConnection={openConnectionSettings}
+                  />
                 )}
               </section>
             </div>
@@ -2808,23 +5445,28 @@ export function App() {
                 {error}
               </div>
             ) : null}
-            <section
-              className={`workbench-layout ${showReviewPanel ? '' : 'review-panel-collapsed'}`}
-            >
-              <section className={paneStageClassName}>{renderWorkbench()}</section>
-              {showReviewPanel ? (
-                <WorkspaceReviewPanel
-                  activeTab={reviewTab}
-                  dataset={dataset}
-                  connection={connection}
-                  socketConnected={socket.connected}
-                  socketEvents={socket.events}
-                  terminalConnected={terminalProxy.connected}
-                  terminalLines={terminalProxy.lines}
-                  onTabChange={setReviewTab}
-                />
-              ) : null}
-            </section>
+            {activeSection === 'chat' && sessionDetailViewModel ? (
+              <SessionWorkspace
+                viewModel={sessionDetailViewModel}
+                thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
+                canvas={showReviewPanel ? renderWorkspaceReviewPanel() : null}
+                onOpenCanvas={() => setReviewPanelOpen(true)}
+                onCloseCanvas={() => setReviewPanelOpen(false)}
+                runActionPending={sessionRunActionPending}
+                liveConnected={socket.connected}
+                liveError={socket.error}
+                onRunAction={(action, feedback) =>
+                  void handleSessionRunAction(action, feedback)
+                }
+              />
+            ) : (
+              <section
+                className={`workbench-layout ${showReviewPanel ? '' : 'review-panel-collapsed'}`}
+              >
+                <section className={paneStageClassName}>{renderWorkbench()}</section>
+                {showReviewPanel ? renderWorkspaceReviewPanel() : null}
+              </section>
+            )}
           </main>
         </section>
 
@@ -2840,6 +5482,31 @@ export function App() {
               document.body,
             )
           : null}
+        <NewTaskFlow
+          open={newTaskOpen}
+          config={config}
+          workspaces={dataset.workspacesByProject[config.projectId] ?? []}
+          preferredWorkspaceId={newTaskPreferredWorkspaceId}
+          disabledReason={workspaceDisabledReason}
+          onClose={() => setNewTaskOpen(false)}
+          onSessionReady={adoptNewTaskSession}
+          onError={setError}
+        />
+        <SettingsWindow
+          open={settingsWindowOpen}
+          initialSection={settingsInitialSection}
+          auth={auth}
+          config={config}
+          connection={connection}
+          wsConnected={socket.connected}
+          wsError={socket.error}
+          runtimeDisabledReason={runtimeDisabledReason}
+          onClose={() => setSettingsWindowOpen(false)}
+          onConfigChange={handleConfigChange}
+          onRefreshRuntime={() => void refreshRuntime()}
+          onContextChange={applySettingsContext}
+          onSignOut={() => void logout()}
+        />
       </div>
     </Theme>
   );
@@ -2864,16 +5531,28 @@ function formatLoginError(error: unknown, apiBaseUrl: string): string {
 
 function SignedOutSessionTree({
   mode,
+  activeSection,
   onNewSession,
+  onOpenChats,
+  onOpenProjectConnection,
 }: {
   mode: SessionGroupMode;
+  activeSection: WorkbenchSection;
   onNewSession: () => void;
+  onOpenChats: () => void;
+  onOpenProjectConnection: () => void;
 }) {
+  const chatsSelected = activeSection === 'chat';
+  const projectSelected = activeSection === 'settings';
+  const newSessionSelected = !chatsSelected && !projectSelected;
   const newSessionRow = (
     <button
-      className={`sidebar-row selected ${mode === 'project' ? 'session-child-row' : ''}`}
+      className={`sidebar-row ${newSessionSelected ? 'selected' : ''} ${
+        mode === 'project' ? 'session-child-row' : ''
+      }`}
       type="button"
       aria-label="Current new session"
+      aria-current={newSessionSelected ? 'page' : undefined}
       onClick={onNewSession}
     >
       <span className="sidebar-icon">
@@ -2883,7 +5562,13 @@ function SignedOutSessionTree({
     </button>
   );
   const chatsRow = (
-    <button className="sidebar-row" type="button" aria-label="Chats collection">
+    <button
+      className={`sidebar-row ${chatsSelected ? 'selected' : ''}`}
+      type="button"
+      aria-label="Chats collection"
+      aria-current={chatsSelected ? 'page' : undefined}
+      onClick={onOpenChats}
+    >
       <span className="sidebar-icon">
         <ChatBubbleIcon />
       </span>
@@ -2891,7 +5576,13 @@ function SignedOutSessionTree({
     </button>
   );
   const projectRow = (
-    <button className="sidebar-row" type="button" aria-label="Project connection">
+    <button
+      className={`sidebar-row ${projectSelected ? 'selected' : ''}`}
+      type="button"
+      aria-label="Project connection"
+      aria-current={projectSelected ? 'page' : undefined}
+      onClick={onOpenProjectConnection}
+    >
       <span className="sidebar-icon">
         <ArchiveIcon />
       </span>
@@ -3426,7 +6117,7 @@ function WorkflowStrip({
     ['changes', 'Changes', '+0 -0', <CodeIcon key="changes" />],
     ['pull', 'PR', 'idle', <ReaderIcon key="pull" />],
     ['plan', 'Plan', 'idle', <ActivityLogIcon key="plan" />],
-    ['background', 'Background', '0', <DotsHorizontalIcon key="background" />],
+    ['background', 'Tool events', '0', <DotsHorizontalIcon key="background" />],
     ['artifacts', 'Artifacts', '0', <ArchiveIcon key="artifacts" />],
   ];
 
@@ -3455,49 +6146,180 @@ function WorkspaceReviewPanel({
   connection,
   socketConnected,
   socketEvents,
-  terminalConnected,
+  timelineItems,
+  artifacts,
+  artifactVersions,
+  artifactDeliveries,
+  toolInvocations,
+  currentRun,
+  changeSnapshot,
+  changeSnapshotLoading,
+  changeSnapshotError,
+  changeReferences,
+  artifactActionPending,
+  selectedTask,
+  terminal,
+  terminalBinding,
+  terminalError,
   terminalLines,
+  terminalBusy,
+  capabilityMode,
+  approvalRequests,
+  currentRunId,
+  sessionViewModel,
+  onRespondToHitl,
+  onArtifactAction,
+  onStartTerminal,
+  onRefreshChanges,
+  onToggleChangeReference,
   onTabChange,
+  onClose,
+  stage = false,
 }: {
   activeTab: ReviewTab;
   dataset: RuntimeDataset;
   connection: ConnectionState;
   socketConnected: boolean;
   socketEvents: unknown[];
-  terminalConnected: boolean;
+  timelineItems: AgentTimelineItem[];
+  artifacts: WorkspaceArtifact[];
+  artifactVersions: DesktopArtifactVersion[];
+  artifactDeliveries: DesktopArtifactDelivery[];
+  toolInvocations: DesktopToolInvocation[];
+  currentRun: DesktopRun | null;
+  changeSnapshot: ChangeSnapshot | null;
+  changeSnapshotLoading: boolean;
+  changeSnapshotError: string | null;
+  changeReferences: CodeRangeReference[];
+  artifactActionPending: { versionId: string; action: ArtifactVersionAction } | null;
+  selectedTask: WorkspaceTask | null;
+  terminal: TerminalServiceResponse | null;
+  terminalBinding: TerminalBindingState;
+  terminalError: string | null;
   terminalLines: string[];
+  terminalBusy: boolean;
+  capabilityMode: SessionCapabilityMode;
+  approvalRequests: DesktopApprovalRequest[];
+  currentRunId: string | null;
+  sessionViewModel: SessionDetailViewModel | null;
+  onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  onArtifactAction: (
+    version: DesktopArtifactVersion,
+    action: ArtifactVersionAction,
+    feedback?: string,
+  ) => Promise<void>;
+  onStartTerminal: () => void;
+  onRefreshChanges: () => void;
+  onToggleChangeReference: (reference: CodeRangeReference) => void;
   onTabChange: (tab: ReviewTab) => void;
+  onClose: () => void;
+  stage?: boolean;
 }) {
+  const { t } = useI18n();
   const [showMoreTabs, setShowMoreTabs] = useState(false);
   const [showAddTabs, setShowAddTabs] = useState(false);
   const [panelMode, setPanelMode] = useState<'normal' | 'maximized' | 'fullscreen'>('normal');
+  const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<string | null>(null);
   const moreTabsButtonRef = useRef<HTMLButtonElement>(null);
   const moreTabsMenuRef = useRef<HTMLDivElement>(null);
   const addTabButtonRef = useRef<HTMLButtonElement>(null);
   const addTabMenuRef = useRef<HTMLDivElement>(null);
   const planRows = dataset.plan ? buildPlanDisplayRows(dataset.plan) : [];
+  const workspaceEvents = useMemo(() => buildWorkspaceEvents(socketEvents), [socketEvents]);
+  const invocationLedger = useMemo(
+    () =>
+      buildSessionInvocationLedger(timelineItems, {
+        runId: sessionViewModel?.runId,
+        revision: sessionViewModel?.runRevision,
+      }, toolInvocations),
+    [sessionViewModel?.runId, sessionViewModel?.runRevision, timelineItems, toolInvocations],
+  );
+  const invocationSummary = useMemo(
+    () => sessionInvocationLedgerSummary(invocationLedger),
+    [invocationLedger],
+  );
+  const sourceEvidence = useMemo(
+    () => artifactEvidenceForCurrentVersions(artifactVersions, 'sources'),
+    [artifactVersions],
+  );
+  const checkEvidence = useMemo(
+    () => artifactEvidenceForCurrentVersions(artifactVersions, 'checks'),
+    [artifactVersions],
+  );
+  const approvalRequest = useMemo(
+    () => latestPendingApproval(approvalRequests, currentRunId),
+    [approvalRequests, currentRunId],
+  );
+  const reviewDecision = useMemo(
+    () =>
+      buildReviewDecisionSummary(
+        dataset,
+        workspaceEvents,
+        artifacts,
+        selectedTask,
+        approvalRequest,
+      ),
+    [approvalRequest, artifacts, dataset, selectedTask, workspaceEvents],
+  );
+  const pullRequestSummary = useMemo(
+    () => buildPullRequestSummary(dataset, workspaceEvents, artifacts, reviewDecision),
+    [artifacts, dataset, reviewDecision, workspaceEvents],
+  );
+  const configuredCanvasTabs = useMemo(() => sessionCanvasTabs(capabilityMode), [capabilityMode]);
+  const tabValue = (tab: SessionCanvasTabId): string => {
+    if (tab === 'overview') return sessionViewModel?.status ?? 'idle';
+    if (tab === 'changes') {
+      return changeSnapshot?.status === 'ready'
+        ? `+${changeSnapshot.additions} / −${changeSnapshot.deletions}`
+        : reviewDecision.changeValue;
+    }
+    if (tab === 'plan') return dataset.plan ? 'ready' : 'idle';
+    if (tab === 'terminal') return terminalBinding;
+    if (tab === 'activity') return invocationSummary.total ? `${invocationSummary.total}` : 'idle';
+    if (tab === 'checks') {
+      const failed = checkEvidence.rows.filter((row) => {
+        const status = row.status?.toLowerCase();
+        return status === 'failed' || status === 'error';
+      }).length;
+      if (failed) return `${failed} ${t('session.failedShort')}`;
+      if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
+      return checkEvidence.missing.length ? t('session.evidence.missing') : 'idle';
+    }
+    if (tab === 'artifacts') {
+      return artifactVersions.length
+        ? `${currentArtifactVersions(artifactVersions).length}`
+        : socketConnected
+          ? 'subscribed'
+          : 'idle';
+    }
+    if (tab === 'sources') {
+      if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
+      return sourceEvidence.missing.length ? t('session.evidence.missing') : 'idle';
+    }
+    if (tab === 'verification') {
+      if (checkEvidence.rows.length) return `${checkEvidence.rows.length}`;
+      return checkEvidence.missing.length ? t('session.evidence.missing') : 'idle';
+    }
+    return 'idle';
+  };
   const reviewTabs: Array<{
     tab: ReviewTab;
     label: string;
     value?: string;
-  }> = [
-    { tab: 'changes', label: 'Changes', value: '+0 -0' },
-    { tab: 'pull', label: 'Pull request', value: 'idle' },
-    { tab: 'plan', label: 'Plan', value: dataset.plan ? 'active' : 'idle' },
-    { tab: 'terminal', label: 'Terminal', value: terminalConnected ? 'live' : 'idle' },
-  ];
+  }> = configuredCanvasTabs.primary.map((tab) => ({
+    tab: tab.id,
+    label: t(tab.labelKey),
+    value: tabValue(tab.id),
+  }));
   const overflowReviewTabs: Array<{
     tab: ReviewTab;
     label: string;
     value: string;
-  }> = [
-    {
-      tab: 'background',
-      label: 'Background agents',
-      value: socketEvents.length ? `${socketEvents.length} events` : 'idle',
-    },
-    { tab: 'artifacts', label: 'Artifacts', value: socketConnected ? 'subscribed' : 'idle' },
-  ];
+  }> = configuredCanvasTabs.secondary.map((tab) => ({
+    tab: tab.id,
+    label: t(tab.labelKey),
+    value: tabValue(tab.id),
+  }));
   const moreTabs: Array<{
     tab: ReviewTab;
     label: string;
@@ -3512,9 +6334,14 @@ function WorkspaceReviewPanel({
     label,
     value: value ?? 'tab',
   }));
-  const panelClassName = `review-panel ${panelMode === 'fullscreen' ? 'full-screen' : ''} ${
-    panelMode === 'maximized' ? 'maximized' : ''
-  }`;
+  const panelClassName = [
+    'review-panel',
+    stage ? 'review-panel-stage' : '',
+    panelMode === 'fullscreen' ? 'full-screen' : '',
+    panelMode === 'maximized' ? 'maximized' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   const pinnedReviewTabs = reviewTabs.slice(0, 4);
   const activeReviewTab = [...reviewTabs, ...overflowReviewTabs].find(
     ({ tab }) => tab === activeTab,
@@ -3529,6 +6356,22 @@ function WorkspaceReviewPanel({
     setShowMoreTabs(false);
     setShowAddTabs(false);
   };
+  useEffect(() => {
+    const availableTabs = new Set(
+      [...configuredCanvasTabs.primary, ...configuredCanvasTabs.secondary].map((tab) => tab.id),
+    );
+    if (activeTab === 'background' && availableTabs.has('activity')) {
+      onTabChange('activity');
+      return;
+    }
+    if (activeTab === 'pull' && availableTabs.has('checks')) {
+      onTabChange('checks');
+      return;
+    }
+    if (!availableTabs.has(activeTab as SessionCanvasTabId)) {
+      onTabChange(configuredCanvasTabs.primary[0]?.id ?? 'plan');
+    }
+  }, [activeTab, configuredCanvasTabs, onTabChange]);
 
   useEffect(() => {
     if (!showMoreTabs) return;
@@ -3593,9 +6436,22 @@ function WorkspaceReviewPanel({
             Review changes, pull requests, plans, background agents, artifacts, and terminal output.
           </Text>
         </div>
-        <Badge color={connection === 'ready' ? 'green' : 'gray'} variant="soft">
-          {connection}
-        </Badge>
+        <div className="review-head-actions">
+          <Badge color={connection === 'ready' ? 'green' : 'gray'} variant="soft">
+            {connection}
+          </Badge>
+          <Tooltip content="Close workspace panel">
+            <IconButton
+              size="1"
+              variant="ghost"
+              color="gray"
+              aria-label="Close drawer"
+              onClick={onClose}
+            >
+              <Cross2Icon />
+            </IconButton>
+          </Tooltip>
+        </div>
       </header>
 
       <div className="review-tabs" aria-label="Workspace tabs">
@@ -3728,19 +6584,125 @@ function WorkspaceReviewPanel({
       </div>
 
       <div className="review-content">
+        {activeTab === 'overview' ? (
+          <section className="session-overview-canvas" aria-label={t('session.canvasOverview')}>
+            <header>
+              <span>{t('session.overviewKicker')}</span>
+              <h2>{sessionViewModel?.title ?? t('session.workspaceOverview')}</h2>
+              <p>{t('session.overviewDescription')}</p>
+            </header>
+            <div className="session-overview-metrics">
+              <article>
+                <span>{t('session.overviewStatus')}</span>
+                <strong>{sessionViewModel?.status ?? t('session.notAvailable')}</strong>
+                <small>{sessionViewModel?.executionMode ?? t('session.notAvailable')}</small>
+              </article>
+              <article>
+                <span>{t('session.overviewStage')}</span>
+                <strong>{sessionViewModel?.stage ?? t('session.notAvailable')}</strong>
+                <small>{sessionViewModel?.elapsedLabel ?? t('session.notAvailable')}</small>
+              </article>
+              <article>
+                <span>{t('session.overviewEvidence')}</span>
+                <strong>
+                  {t('session.overviewEvidenceCount', {
+                    artifacts: artifactVersions.length || artifacts.length,
+                    events: workspaceEvents.length,
+                  })}
+                </strong>
+                <small>{sessionViewModel?.usageLabel ?? t('session.notAvailable')}</small>
+              </article>
+            </div>
+            <div className="session-overview-jump-grid">
+              <button type="button" onClick={() => selectTab('plan')}>
+                <ActivityLogIcon />
+                <span>
+                  <strong>{t('session.canvasPlan')}</strong>
+                  <small>{dataset.plan ? t('session.planReady') : t('session.noPlanShort')}</small>
+                </span>
+                <ChevronRightIcon />
+              </button>
+              <button type="button" onClick={() => selectTab('activity')}>
+                <DotsHorizontalIcon />
+                <span>
+                  <strong>{t('session.canvasActivity')}</strong>
+                  <small>{t('session.overviewEventCount', { count: workspaceEvents.length })}</small>
+                </span>
+                <ChevronRightIcon />
+              </button>
+              <button type="button" onClick={() => selectTab('artifacts')}>
+                <ArchiveIcon />
+                <span>
+                  <strong>{t('session.canvasArtifacts')}</strong>
+                  <small>
+                    {t('session.overviewArtifactCount', {
+                      count: artifactVersions.length || artifacts.length,
+                    })}
+                  </small>
+                </span>
+                <ChevronRightIcon />
+              </button>
+            </div>
+            <dl className="session-overview-facts">
+              <div>
+                <dt>{t('session.overviewEnvironment')}</dt>
+                <dd>{sessionViewModel?.environmentLabel ?? t('session.notAvailable')}</dd>
+              </div>
+              <div>
+                <dt>{t('session.overviewModel')}</dt>
+                <dd>{sessionViewModel?.modelLabel ?? t('session.notAvailable')}</dd>
+              </div>
+              <div>
+                <dt>{t('session.overviewPermission')}</dt>
+                <dd>{sessionViewModel?.permissionLabel ?? t('session.notAvailable')}</dd>
+              </div>
+              <div>
+                <dt>{t('session.overviewRun')}</dt>
+                <dd>
+                  {sessionViewModel?.runId
+                    ? `${sessionViewModel.runId.slice(0, 8)} · r${sessionViewModel.runRevision ?? '—'}`
+                    : t('session.notAvailable')}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
+
         {activeTab === 'changes' ? (
-          <ReviewEmpty
-            icon={<CodeIcon />}
-            title="No synced changes"
-            body="Connect a workspace session to show repository diffs, changed files, and review actions."
+          <SessionChangesCanvas
+            snapshot={changeSnapshot}
+            loading={changeSnapshotLoading}
+            error={changeSnapshotError}
+            references={changeReferences}
+            onRefresh={onRefreshChanges}
+            onToggleReference={onToggleChangeReference}
+            decision={
+              reviewDecision.canAct && approvalRequest ? (
+                <ReviewDecisionPanel
+                  summary={reviewDecision}
+                  request={approvalRequest}
+                  onRespond={onRespondToHitl}
+                  onOpenArtifacts={() => selectTab('artifacts')}
+                />
+              ) : undefined
+            }
+          />
+        ) : null}
+
+        {activeTab === 'verification' && approvalRequest ? (
+          <ReviewDecisionPanel
+            summary={reviewDecision}
+            request={approvalRequest}
+            onRespond={onRespondToHitl}
+            onOpenArtifacts={() => selectTab('artifacts')}
           />
         ) : null}
 
         {activeTab === 'pull' ? (
-          <ReviewEmpty
-            icon={<ReaderIcon />}
-            title="No pull request linked"
-            body="Connect a GitHub-backed workspace to show PR overview, checks, branch state, and review actions."
+          <PullRequestReviewPanel
+            summary={pullRequestSummary}
+            onOpenChanges={() => selectTab('changes')}
+            onOpenArtifacts={() => selectTab('artifacts')}
           />
         ) : null}
 
@@ -3780,101 +6742,820 @@ function WorkspaceReviewPanel({
                 </details>
               </>
             ) : (
-              <div className="review-plan-tree">
-                <div className="plan-node complete">
-                  <CheckCircledIcon />
-                  <span>Start desktop shell</span>
-                </div>
-                <div className="plan-branch">
-                  <div className="plan-node">
-                    <CheckCircledIcon />
-                    <span>Sign in or configure API key</span>
-                  </div>
-                  <div className="plan-node">
-                    <CheckCircledIcon />
-                    <span>Select account, project, and workspace</span>
-                  </div>
-                  <div className="plan-node">
-                    <CheckCircledIcon />
-                    <span>Load work items, plan, sandbox, and terminal state</span>
-                  </div>
-                </div>
-              </div>
+              <ReviewEmpty
+                icon={<ActivityLogIcon />}
+                title={t('session.noPlan')}
+                body={t('session.noPlanDescription')}
+              />
             )}
           </div>
         ) : null}
 
-        {activeTab === 'background' ? (
-          <div className="review-background">
-            <div className="review-section-title">
-              <Text size="1" weight="bold" color="gray">
-                Background agents
-              </Text>
-              <Badge color={socketEvents.length ? 'green' : 'gray'} variant="soft">
-                {socketEvents.length ? `${socketEvents.length} events` : 'idle'}
-              </Badge>
-            </div>
-            {socketEvents.length ? (
-              socketEvents.slice(0, 8).map((event, index) => (
-                <pre className="event-pill" key={index}>
-                  {JSON.stringify(event, null, 2)}
-                </pre>
-              ))
-            ) : (
-              <ReviewEmpty
-                icon={<DotsHorizontalIcon />}
-                title="No background agents"
-                body="Long-running work, queued checks, and progress updates appear here after connection."
-              />
-            )}
-          </div>
+        {activeTab === 'activity' || activeTab === 'background' ? (
+          <SessionInvocationActivity entries={invocationLedger} />
         ) : null}
 
         {activeTab === 'artifacts' ? (
-          <div className="review-artifacts">
-            <div className="review-section-title">
-              <Text size="1" weight="bold" color="gray">
-                Agent events
-              </Text>
-              <Badge color={socketConnected ? 'green' : 'gray'} variant="soft">
-                {socketConnected ? 'subscribed' : 'idle'}
-              </Badge>
-            </div>
-            {socketEvents.length ? (
-              socketEvents.slice(-8).map((event, index) => (
-                <pre className="event-pill" key={index}>
-                  {JSON.stringify(event, null, 2)}
-                </pre>
-              ))
-            ) : (
-              <ReviewEmpty
-                icon={<ArchiveIcon />}
-                title="No artifacts yet"
-                body="Generated files, event updates, and background activity will appear here after connection."
-              />
-            )}
-          </div>
+          <ArtifactLifecyclePanel
+            versions={artifactVersions}
+            deliveries={artifactDeliveries}
+            currentRun={currentRun}
+            focusVersionId={focusedArtifactVersionId}
+            unversionedEvidenceCount={artifacts.length}
+            pending={artifactActionPending}
+            onAction={onArtifactAction}
+          />
         ) : null}
 
         {activeTab === 'terminal' ? (
-          <div className="review-terminal">
-            <div className="review-section-title">
-              <Text size="1" weight="bold" color="gray">
-                Terminal
-              </Text>
-              <Badge color={terminalConnected ? 'green' : 'gray'} variant="soft">
-                {terminalConnected ? 'connected' : 'idle'}
-              </Badge>
-            </div>
-            <pre className="terminal-preview">
-              {terminalLines.length
-                ? terminalLines.slice(-20).join('\n')
-                : 'Start a sandbox terminal to stream output here.'}
-            </pre>
-          </div>
+          <SessionTerminalCanvas
+            terminal={terminal}
+            binding={terminalBinding}
+            error={terminalError}
+            lines={terminalLines}
+            busy={terminalBusy}
+            currentRun={currentRun}
+            onStart={onStartTerminal}
+          />
+        ) : null}
+
+        {activeTab === 'checks' ? (
+          <SessionEvidenceCanvas
+            collection="checks"
+            presentation="checks"
+            versions={artifactVersions}
+            onOpenArtifact={(artifactVersionId) => {
+              setFocusedArtifactVersionId(artifactVersionId);
+              selectTab('artifacts');
+            }}
+          />
+        ) : null}
+
+        {activeTab === 'sources' ? (
+          <SessionEvidenceCanvas
+            collection="sources"
+            presentation="sources"
+            versions={artifactVersions}
+            onOpenArtifact={(artifactVersionId) => {
+              setFocusedArtifactVersionId(artifactVersionId);
+              selectTab('artifacts');
+            }}
+          />
+        ) : null}
+
+        {activeTab === 'verification' ? (
+          <SessionEvidenceCanvas
+            collection="checks"
+            presentation="verification"
+            versions={artifactVersions}
+            onOpenArtifact={(artifactVersionId) => {
+              setFocusedArtifactVersionId(artifactVersionId);
+              selectTab('artifacts');
+            }}
+          />
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function PullRequestReviewPanel({
+  summary,
+  onOpenChanges,
+  onOpenArtifacts,
+}: {
+  summary: ReviewPullRequestSummary;
+  onOpenChanges: () => void;
+  onOpenArtifacts: () => void;
+}) {
+  const statusColor =
+    summary.status === 'needs review' ? 'red' : summary.status === 'idle' ? 'gray' : 'green';
+  const riskClassName = `risk-${summary.risk.toLowerCase()}`;
+
+  return (
+    <div className="review-pr">
+      <section className="pr-summary-panel">
+        <div className="pr-summary-head">
+          <div>
+            <span className="pr-kicker">
+              <ReaderIcon />
+              Pull request packet
+            </span>
+            <Heading as="h3" size="3">
+              {summary.title}
+            </Heading>
+            <p>{summary.summary}</p>
+          </div>
+          <Badge color={statusColor} variant="soft">
+            {summary.status}
+          </Badge>
+        </div>
+
+        <div className="pr-branch-strip" aria-label="Pull request branch summary">
+          <div>
+            <span>Branch</span>
+            <strong>{summary.branch}</strong>
+          </div>
+          <ChevronRightIcon aria-hidden />
+          <div>
+            <span>Base</span>
+            <strong>{summary.base}</strong>
+          </div>
+          <div>
+            <span>Diff</span>
+            <strong>{summary.diff}</strong>
+          </div>
+        </div>
+
+        <div className="pr-metric-grid" aria-label="Pull request review metrics">
+          <div>
+            <CommitIcon />
+            <span>Files changed</span>
+            <strong>{summary.filesChanged}</strong>
+          </div>
+          <div>
+            <ExclamationTriangleIcon />
+            <span>Estimated risk</span>
+            <strong className={riskClassName}>{summary.risk}</strong>
+          </div>
+          <div>
+            <ActivityLogIcon />
+            <span>Checks</span>
+            <strong>{summary.checks.filter((check) => check.status === 'passed').length} passed</strong>
+          </div>
+        </div>
+
+        <section className="pr-section">
+          <div className="pr-section-head">
+            <strong>Checks</strong>
+            <button type="button" onClick={onOpenChanges}>
+              Open review
+              <ChevronRightIcon />
+            </button>
+          </div>
+          <div className="pr-check-list">
+            {summary.checks.map((check) => (
+              <div className={`pr-check-row ${check.status}`} key={check.label}>
+                <CheckCircledIcon />
+                <span>{check.label}</span>
+                <strong>{check.value}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="pr-section">
+          <div className="pr-section-head">
+            <strong>Files</strong>
+            <button type="button" onClick={onOpenArtifacts}>
+              Open artifacts
+              <ChevronRightIcon />
+            </button>
+          </div>
+          {summary.files.length ? (
+            <div className="pr-file-list">
+              {summary.files.map((file) => (
+                <div className="pr-file-row" key={file.id}>
+                  <FileTextIcon />
+                  <span>
+                    <strong>{file.name}</strong>
+                    <small title={file.path}>{file.path}</small>
+                  </span>
+                  <em>{file.meta || 'tracked'}</em>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="pr-empty-copy">No file artifacts are attached to this workspace yet.</p>
+          )}
+        </section>
+      </section>
+
+      <section className="pr-actions-panel">
+        <div>
+          <Heading as="h3" size="2">
+            Review actions
+          </Heading>
+          <Text size="1" color="gray">
+            Read-only packet — no backend PR review contract
+          </Text>
+        </div>
+        <button
+          className="decision-approve-button"
+          type="button"
+          title={REVIEW_ACTION_UNAVAILABLE}
+          disabled
+        >
+          <CheckCircledIcon />
+          <span>
+            <strong>Approve</strong>
+            <small>{REVIEW_ACTION_UNAVAILABLE}</small>
+          </span>
+        </button>
+        <button
+          className="decision-request-button"
+          type="button"
+          title={REVIEW_ACTION_UNAVAILABLE}
+          disabled
+        >
+          <MixerHorizontalIcon />
+          <span>
+            <strong>Request changes</strong>
+            <small>{REVIEW_ACTION_UNAVAILABLE}</small>
+          </span>
+        </button>
+
+        <div className="pr-activity-list" aria-label="Recent pull request activity">
+          <strong>Recent activity</strong>
+          {summary.activity.length ? (
+            summary.activity.map((event) => (
+              <div className="pr-activity-row" key={event.id}>
+                <span>{event.time}</span>
+                <em>{event.status}</em>
+                <strong>{event.label}</strong>
+                <small title={event.detail}>{event.detail}</small>
+              </div>
+            ))
+          ) : (
+            <p>No background activity loaded.</p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ArtifactLifecyclePanel({
+  versions,
+  deliveries,
+  currentRun,
+  focusVersionId,
+  unversionedEvidenceCount,
+  pending,
+  onAction,
+}: {
+  versions: DesktopArtifactVersion[];
+  deliveries: DesktopArtifactDelivery[];
+  currentRun: DesktopRun | null;
+  focusVersionId: string | null;
+  unversionedEvidenceCount: number;
+  pending: { versionId: string; action: ArtifactVersionAction } | null;
+  onAction: (
+    version: DesktopArtifactVersion,
+    action: ArtifactVersionAction,
+    feedback?: string,
+  ) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const currentVersions = useMemo(() => currentArtifactVersions(versions), [versions]);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  useEffect(() => {
+    if (!focusVersionId) return;
+    const focusedVersion = versions.find((version) => version.id === focusVersionId);
+    if (!focusedVersion) return;
+    setSelectedArtifactId(focusedVersion.artifact_id);
+    setSelectedVersionId(focusedVersion.id);
+  }, [focusVersionId, versions]);
+
+  useEffect(() => {
+    if (!currentVersions.length) {
+      setSelectedArtifactId(null);
+      setSelectedVersionId(null);
+      return;
+    }
+    if (!selectedArtifactId || !currentVersions.some((item) => item.artifact_id === selectedArtifactId)) {
+      setSelectedArtifactId(currentVersions[0].artifact_id);
+      setSelectedVersionId(currentVersions[0].id);
+    }
+  }, [currentVersions, selectedArtifactId]);
+
+  const artifactVersions = useMemo(
+    () =>
+      versions
+        .filter((version) => version.artifact_id === selectedArtifactId)
+        .sort((left, right) => right.version - left.version),
+    [selectedArtifactId, versions],
+  );
+  const selectedVersion =
+    artifactVersions.find((version) => version.id === selectedVersionId) ??
+    artifactVersions[0] ??
+    null;
+  const actions = selectedVersion ? artifactVersionActions(selectedVersion, currentRun) : [];
+  const delivery = selectedVersion
+    ? deliveryForArtifactVersion(deliveries, selectedVersion.id)
+    : null;
+  const isPending = Boolean(selectedVersion && pending?.versionId === selectedVersion.id);
+
+  useEffect(() => {
+    if (!selectedVersion) return;
+    setSelectedVersionId(selectedVersion.id);
+    setFeedbackOpen(false);
+    setFeedback('');
+  }, [selectedVersion?.id]);
+
+  if (!versions.length) {
+    return (
+      <section className="artifact-lifecycle artifact-lifecycle-empty" aria-label={t('artifact.title')}>
+        <ReviewEmpty
+          icon={<ArchiveIcon />}
+          title={t('artifact.emptyTitle')}
+          body={t('artifact.emptyDescription')}
+        />
+        {unversionedEvidenceCount ? (
+          <p>{t('artifact.unversionedEvidence', { count: unversionedEvidenceCount })}</p>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className="artifact-lifecycle" aria-label={t('artifact.title')}>
+      <header className="artifact-lifecycle-header">
+        <span>
+          <ArchiveIcon />
+          <strong>{t('artifact.title')}</strong>
+          <small>{t('artifact.description')}</small>
+        </span>
+        <Badge color="cyan" variant="soft">
+          {t('artifact.currentCount', { count: currentVersions.length })}
+        </Badge>
+      </header>
+
+      <div className="artifact-lifecycle-layout">
+        <nav className="artifact-lifecycle-list" aria-label={t('artifact.currentVersions')}>
+          {currentVersions.map((version) => (
+            <button
+              type="button"
+              className={version.artifact_id === selectedArtifactId ? 'selected' : ''}
+              aria-pressed={version.artifact_id === selectedArtifactId}
+              key={version.artifact_id}
+              onClick={() => {
+                setSelectedArtifactId(version.artifact_id);
+                setSelectedVersionId(version.id);
+              }}
+            >
+              <FileTextIcon />
+              <span>
+                <strong>{version.filename}</strong>
+                <small>
+                  v{version.version} · {formatBytes(version.bytes)}
+                </small>
+              </span>
+              <Badge color={artifactStatusColor(version.status)} variant="soft">
+                {t(`artifact.status.${version.status}`)}
+              </Badge>
+            </button>
+          ))}
+        </nav>
+
+        {selectedVersion ? (
+          <article className="artifact-version-detail">
+            <header className="artifact-version-heading">
+              <span>
+                <small>{t('artifact.immutableVersion')}</small>
+                <strong>{selectedVersion.filename}</strong>
+                <code>{selectedVersion.source_artifact_id}</code>
+              </span>
+              <label>
+                <span>{t('artifact.version')}</span>
+                <select
+                  aria-label={t('artifact.version')}
+                  value={selectedVersion.id}
+                  onChange={(event) => setSelectedVersionId(event.target.value)}
+                >
+                  {artifactVersions.map((version) => (
+                    <option value={version.id} key={version.id}>
+                      v{version.version} · {t(`artifact.status.${version.status}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </header>
+
+            <div className="artifact-status-track" aria-label={t('artifact.lifecycle')}>
+              {(['ready', 'approved', 'delivered'] as const).map((status, index) => {
+                const reached = artifactStatusReached(selectedVersion.status, status);
+                return (
+                  <span className={reached ? 'reached' : ''} key={status}>
+                    {reached ? <CheckCircledIcon /> : <ClockIcon />}
+                    <small>0{index + 1}</small>
+                    <strong>{t(`artifact.status.${status}`)}</strong>
+                  </span>
+                );
+              })}
+            </div>
+
+            <dl className="artifact-version-facts">
+              <div>
+                <dt>{t('artifact.location')}</dt>
+                <dd title={selectedVersion.path}>{selectedVersion.relative_path}</dd>
+              </div>
+              <div>
+                <dt>{t('artifact.type')}</dt>
+                <dd>{selectedVersion.mime_type}</dd>
+              </div>
+              <div>
+                <dt>{t('artifact.revision')}</dt>
+                <dd>r{selectedVersion.revision}</dd>
+              </div>
+              <div>
+                <dt>{t('artifact.created')}</dt>
+                <dd>{new Date(selectedVersion.created_at).toLocaleString()}</dd>
+              </div>
+            </dl>
+
+            <div className="artifact-evidence-grid">
+              <ArtifactEvidenceSection
+                title={t('artifact.sources')}
+                empty={t('artifact.sourcesMissing')}
+                items={selectedVersion.sources}
+              />
+              <ArtifactEvidenceSection
+                title={t('artifact.checks')}
+                empty={t('artifact.checksMissing')}
+                items={selectedVersion.checks}
+              />
+            </div>
+
+            {selectedVersion.feedback ? (
+              <div className="artifact-feedback-record">
+                <MixerHorizontalIcon />
+                <span>
+                  <strong>{t('artifact.changesRequested')}</strong>
+                  <small>{selectedVersion.feedback}</small>
+                </span>
+              </div>
+            ) : null}
+
+            {delivery ? (
+              <div className="artifact-delivery-receipt">
+                <RocketIcon />
+                <span>
+                  <strong>{t('artifact.deliveryReceipt')}</strong>
+                  <small>{delivery.destination}</small>
+                  <code>{String(delivery.receipt.relative_path ?? delivery.receipt.path ?? '')}</code>
+                </span>
+                <time>{new Date(delivery.created_at).toLocaleString()}</time>
+              </div>
+            ) : null}
+
+            {feedbackOpen && actions.includes('request_changes') ? (
+              <form
+                className="artifact-feedback-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!feedback.trim()) return;
+                  void onAction(selectedVersion, 'request_changes', feedback.trim()).then(() => {
+                    setFeedbackOpen(false);
+                    setFeedback('');
+                  });
+                }}
+              >
+                <label htmlFor="artifact-review-feedback">{t('artifact.feedbackLabel')}</label>
+                <textarea
+                  id="artifact-review-feedback"
+                  value={feedback}
+                  placeholder={t('artifact.feedbackPlaceholder')}
+                  onChange={(event) => setFeedback(event.target.value)}
+                />
+                <div>
+                  <Button type="button" variant="ghost" onClick={() => setFeedbackOpen(false)}>
+                    {t('session.cancelAction')}
+                  </Button>
+                  <Button type="submit" disabled={!feedback.trim() || isPending}>
+                    {isPending ? t('artifact.submitting') : t('artifact.sendChanges')}
+                  </Button>
+                </div>
+              </form>
+            ) : null}
+
+            <footer className="artifact-version-actions">
+              <span>
+                {t('artifact.versionIdentity', {
+                  version: selectedVersion.version,
+                  revision: selectedVersion.revision,
+                })}
+              </span>
+              <div>
+                {actions.includes('request_changes') && !feedbackOpen ? (
+                  <Button
+                    variant="surface"
+                    disabled={isPending}
+                    onClick={() => setFeedbackOpen(true)}
+                  >
+                    <MixerHorizontalIcon /> {t('artifact.requestChanges')}
+                  </Button>
+                ) : null}
+                {actions.includes('approve') ? (
+                  <Button
+                    color="green"
+                    disabled={isPending}
+                    onClick={() => void onAction(selectedVersion, 'approve')}
+                  >
+                    <CheckCircledIcon />
+                    {isPending && pending?.action === 'approve'
+                      ? t('artifact.approving')
+                      : t('artifact.approveVersion')}
+                  </Button>
+                ) : null}
+                {actions.includes('deliver') ? (
+                  <Button
+                    color="cyan"
+                    disabled={isPending}
+                    onClick={() => void onAction(selectedVersion, 'deliver')}
+                  >
+                    <RocketIcon />
+                    {isPending && pending?.action === 'deliver'
+                      ? t('artifact.delivering')
+                      : t('artifact.deliverVersion')}
+                  </Button>
+                ) : null}
+              </div>
+            </footer>
+          </article>
+        ) : null}
+      </div>
+
+      {unversionedEvidenceCount ? (
+        <p className="artifact-unversioned-note">
+          {t('artifact.unversionedEvidence', { count: unversionedEvidenceCount })}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ArtifactEvidenceSection({
+  title,
+  empty,
+  items,
+}: {
+  title: string;
+  empty: string;
+  items: unknown[];
+}) {
+  return (
+    <section>
+      <strong>{title}</strong>
+      {items.length ? (
+        <ul>
+          {items.map((item, index) => {
+            const record = asRecordValue(item);
+            const label = record
+              ? readStringField(record, 'label') ??
+                readStringField(record, 'id') ??
+                readStringField(record, 'kind') ??
+                compactArtifactValue(record)
+              : compactArtifactValue(item);
+            const status = record ? readStringField(record, 'status') : undefined;
+            return (
+              <li key={`${label}-${index}`}>
+                <CheckCircledIcon />
+                <span>
+                  <strong>{label}</strong>
+                  {status ? <small>{status}</small> : null}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p>{empty}</p>
+      )}
+    </section>
+  );
+}
+
+function artifactStatusReached(
+  current: DesktopArtifactVersion['status'],
+  target: 'ready' | 'approved' | 'delivered',
+): boolean {
+  const order = { draft: 0, ready: 1, approved: 2, delivered: 3, superseded: 0 };
+  return order[current] >= order[target];
+}
+
+function artifactStatusColor(
+  status: DesktopArtifactVersion['status'],
+): 'gray' | 'cyan' | 'green' | 'amber' {
+  if (status === 'delivered') return 'green';
+  if (status === 'approved') return 'cyan';
+  if (status === 'ready') return 'amber';
+  return 'gray';
+}
+
+function ReviewDecisionPanel({
+  summary,
+  request,
+  onRespond,
+  onOpenArtifacts,
+}: {
+  summary: ReviewDecisionSummary;
+  request: DesktopApprovalRequest;
+  onRespond: (submission: HitlResponseSubmission) => Promise<void>;
+  onOpenArtifacts: () => void;
+}) {
+  const { t } = useI18n();
+  const [feedback, setFeedback] = useState('');
+  const [submitting, setSubmitting] = useState<'approve' | 'request_changes' | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const validation = validateApprovalRequest(request);
+  const decision = request.decision;
+  const statusColor =
+    summary.risk === 'High' ? 'red' : summary.risk === 'Medium' ? 'amber' : 'gray';
+
+  const submit = async (action: 'approve' | 'request_changes') => {
+    if (submitting) return;
+    if (action === 'approve' && !validation.canApprove) return;
+    if (action === 'request_changes' && !feedback.trim()) return;
+    setSubmitting(action);
+    setSubmissionError(null);
+    try {
+      await onRespond(approvalResponseSubmission(request, action, feedback));
+    } catch (caught) {
+      setSubmissionError(caught instanceof Error ? caught.message : t('approval.submitFailed'));
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  return (
+    <div className="review-decision" aria-label={t('approval.humanDecision')}>
+      <section className="decision-summary">
+        <div className="decision-summary-head">
+          <div>
+            <span className="decision-kicker">
+              <ExclamationTriangleIcon />
+              {t('approval.humanDecision')}
+            </span>
+            <small className="decision-request-source">
+              {t('approval.requestIdentity', {
+                requestId: request.id,
+                revision: request.run_revision ?? '—',
+              })}
+            </small>
+            <Heading as="h3" size="3">
+              {decision?.action.label ?? request.prompt}
+            </Heading>
+          </div>
+          <Badge color={statusColor} variant="soft">
+            {summary.risk === 'Unassessed'
+              ? t('approval.unassessed')
+              : t('approval.riskBadge', { risk: summary.risk })}
+          </Badge>
+        </div>
+
+        <Text as="p" size="2" color="gray">
+          {request.prompt}
+        </Text>
+
+        <div className="decision-risk-strip" aria-label={t('approval.reviewSummary')}>
+          <div>
+            <ActivityLogIcon />
+            <span>{t('approval.action')}</span>
+            <strong>{decision?.action.name ?? t('approval.notProvided')}</strong>
+          </div>
+          <div>
+            <FileTextIcon />
+            <span>{t('approval.target')}</span>
+            <strong>
+              {decision
+                ? `${decision.target.kind} · ${decision.target.id}`
+                : t('approval.notProvided')}
+            </strong>
+          </div>
+          <div>
+            <ExclamationTriangleIcon />
+            <span>{t('approval.agentRisk')}</span>
+            <strong className={`risk-${summary.risk.toLowerCase()}`}>{summary.risk}</strong>
+          </div>
+        </div>
+
+        <div className="decision-section">
+          <strong>{t('approval.whatWillHappen')}</strong>
+          <p>{summary.summary}</p>
+          {decision?.data.redacted_fields?.length ? (
+            <small>
+              {t('approval.redactedFields', {
+                fields: decision.data.redacted_fields.join(', '),
+              })}
+            </small>
+          ) : null}
+        </div>
+
+        <div className="decision-section">
+          <strong>{t('approval.reason')}</strong>
+          <p className="decision-reasoning">{summary.reasoning}</p>
+        </div>
+
+        <div className="decision-section">
+          <strong>{t('approval.riskScope')}</strong>
+          <div className="decision-context-grid" aria-label={t('approval.riskScope')}>
+            <div>
+              <span>{t('approval.riskRationale')}</span>
+              <strong>{decision?.risk.rationale ?? t('approval.notProvided')}</strong>
+            </div>
+            <div>
+              <span>{t('approval.reversibility')}</span>
+              <strong>{decision?.reversibility.mode ?? t('approval.notProvided')}</strong>
+            </div>
+            <div>
+              <span>{t('approval.recovery')}</span>
+              <strong>{decision?.reversibility.recovery ?? t('approval.notProvided')}</strong>
+            </div>
+            <div>
+              <span>{t('approval.scope')}</span>
+              <strong>
+                {decision
+                  ? `${decision.scope.kind} · ${decision.scope.ids.join(', ')}`
+                  : t('approval.notProvided')}
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="decision-section">
+          <div className="decision-section-head">
+            <strong>{t('approval.evidence')}</strong>
+            {summary.artifacts.length ? (
+              <button type="button" onClick={onOpenArtifacts}>
+                {t('approval.openArtifacts')}
+                <ChevronRightIcon aria-hidden />
+              </button>
+            ) : null}
+          </div>
+          {summary.artifacts.length ? (
+            <div className="decision-file-list">
+              {summary.artifacts.map((artifact) => (
+                <div className="decision-file-row" key={artifact.id}>
+                  <span>{artifact.name}</span>
+                  <strong>{artifact.meta}</strong>
+                  <small title={artifact.path}>{artifact.path}</small>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p>{t('approval.noEvidence')}</p>
+          )}
+        </div>
+      </section>
+
+      <section className="decision-actions-panel">
+        <div>
+          <Heading as="h3" size="2">
+            {t('approval.chooseAction')}
+          </Heading>
+          {!validation.complete ? (
+            <Text as="p" size="1" color="red">
+              {t('approval.incomplete', { fields: validation.missing.join(', ') })}
+            </Text>
+          ) : null}
+        </div>
+        <button
+          className="decision-approve-button"
+          type="button"
+          disabled={!validation.canApprove || Boolean(submitting)}
+          onClick={() => void submit('approve')}
+        >
+          <CheckCircledIcon />
+          <span>
+            <strong>
+              {submitting === 'approve' ? t('approval.submitting') : t('approval.approve')}
+            </strong>
+            <small>{t('approval.approveDescription')}</small>
+          </span>
+        </button>
+        <label className="decision-feedback-field">
+          <span>{t('approval.feedback')}</span>
+          <textarea
+            value={feedback}
+            placeholder={t('approval.feedbackPlaceholder')}
+            onChange={(event) => setFeedback(event.currentTarget.value)}
+          />
+        </label>
+        <button
+          className="decision-request-button"
+          type="button"
+          disabled={!feedback.trim() || Boolean(submitting)}
+          onClick={() => void submit('request_changes')}
+        >
+          <MixerHorizontalIcon />
+          <span>
+            <strong>
+              {submitting === 'request_changes'
+                ? t('approval.submitting')
+                : t('approval.requestChanges')}
+            </strong>
+            <small>{t('approval.requestChangesDescription')}</small>
+          </span>
+        </button>
+        {submissionError ? <p className="decision-submit-error">{submissionError}</p> : null}
+        <small>{t('approval.authoritativeNotice')}</small>
+      </section>
+    </div>
   );
 }
 
@@ -3949,17 +7630,18 @@ function ReviewEmpty({
 }
 
 function reviewTabToWorkflowTarget(tab: ReviewTab): WorkflowTarget {
-  if (tab === 'pull') return 'pull';
+  if (tab === 'pull' || tab === 'checks') return 'pull';
   if (tab === 'plan') return 'plan';
-  if (tab === 'background') return 'background';
+  if (tab === 'background' || tab === 'activity') return 'background';
   if (tab === 'artifacts') return 'artifacts';
   if (tab === 'terminal') return 'runtime';
+  if (tab === 'sources' || tab === 'verification') return 'artifacts';
   return 'changes';
 }
 
 function chatWorkflowTargetForReviewTab(tab: ReviewTab): ChatWorkflowTarget {
-  if (tab === 'pull') return 'pull';
-  if (tab === 'background') return 'background';
+  if (tab === 'pull' || tab === 'checks') return 'pull';
+  if (tab === 'background' || tab === 'activity') return 'background';
   if (tab === 'artifacts') return 'artifacts';
   if (tab === 'changes') return 'changes';
   return 'plan';
@@ -3993,8 +7675,8 @@ function signedOutWorkflowContext(target: WorkflowTarget): { title: string; body
   }
   if (target === 'background') {
     return {
-      title: 'Background agents',
-      body: 'Background work, queued checks, and progress updates appear here after connection.',
+      title: 'Tool events',
+      body: 'Tool calls, reasoning updates, queued checks, and progress events appear here after connection.',
     };
   }
   if (target === 'artifacts') {
@@ -4190,96 +7872,5 @@ function getCommandPaletteFocusableElements(container: HTMLElement | null): HTML
   ].join(',');
   return Array.from(container.querySelectorAll<HTMLElement>(selectors)).filter(
     (element) => element.getAttribute('aria-hidden') !== 'true',
-  );
-}
-
-function OverviewMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric overview-metric">
-      <Text size="1" color="gray">
-        {label}
-      </Text>
-      <Text size="2" weight="bold">
-        {value}
-      </Text>
-    </div>
-  );
-}
-
-function SettingMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric setting-metric">
-      <Text size="1" color="gray">
-        {label}
-      </Text>
-      <Text size="2" weight="bold">
-        {value}
-      </Text>
-    </div>
-  );
-}
-
-function UsagePlanPanel({
-  accountLabel,
-  planLabel,
-  creditsUsedLabel,
-}: {
-  accountLabel: string;
-  planLabel: string;
-  creditsUsedLabel: string;
-}) {
-  return (
-    <section className="usage-plan-panel" aria-labelledby="usage-plan-heading">
-      <div className="usage-plan-header">
-        <div>
-          <Text size="1" color="gray">
-            Accounts /
-          </Text>
-          <Heading id="usage-plan-heading" as="h3" size="3">
-            Usage & Plan
-          </Heading>
-        </div>
-        <Badge color="gray" variant="soft">
-          100%
-        </Badge>
-      </div>
-      <div className="usage-account-card">
-        <div className="account-avatar" aria-hidden>
-          {accountLabel.slice(0, 1).toUpperCase()}
-        </div>
-        <div className="usage-account-copy">
-          <Text size="2" weight="bold">
-            {accountLabel}
-          </Text>
-          <Text size="1" color="gray">
-            Default
-          </Text>
-        </div>
-      </div>
-      <div className="usage-plan-row">
-        <Text size="1" color="gray">
-          Plan
-        </Text>
-        <Text size="2">{planLabel}</Text>
-      </div>
-      <div className="usage-plan-row">
-        <Text size="1" color="gray">
-          AI credits
-        </Text>
-        <Text size="2">100% quota used</Text>
-      </div>
-      <div className="usage-plan-meter" aria-label="100% quota used">
-        <span />
-      </div>
-      <Text size="1" color="gray">
-        AI credits are consumed based on model and token usage.
-      </Text>
-      <div className="usage-plan-row">
-        <Text size="1" color="gray">
-          Additional usage
-        </Text>
-        <Text size="2">{creditsUsedLabel}</Text>
-      </div>
-    </section>
   );
 }

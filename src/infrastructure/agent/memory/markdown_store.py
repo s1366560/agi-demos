@@ -98,7 +98,7 @@ class MarkdownMemoryStore:
         timestamp_str = now.strftime("%Y%m%d_%H%M%S")
 
         file_name = f"{timestamp_str}_{short_hash}.md"
-        dir_path = self._base_dir / project_id / conversation_id
+        dir_path = self._scoped_path(project_id, conversation_id)
         file_path = dir_path / file_name
 
         md_content = self._build_markdown(
@@ -133,7 +133,7 @@ class MarkdownMemoryStore:
         Returns:
             List of matching :class:`MemoryEntry` instances, newest first.
         """
-        project_dir = self._base_dir / project_id
+        project_dir = self._scoped_path(project_id)
         if not project_dir.exists():
             return []
 
@@ -153,7 +153,7 @@ class MarkdownMemoryStore:
         Returns:
             List of all :class:`MemoryEntry` instances for the project.
         """
-        project_dir = self._base_dir / project_id
+        project_dir = self._scoped_path(project_id)
         if not project_dir.exists():
             return []
 
@@ -172,7 +172,12 @@ class MarkdownMemoryStore:
             ``False`` if the file was not found or deletion failed.
         """
         try:
-            target = Path(file_path)
+            raw_target = Path(file_path)
+            if raw_target.is_symlink():
+                raise ValueError("cannot delete a symlink from the memory store")
+            target = self._inside_base(raw_target)
+            if target.suffix != ".md":
+                raise ValueError("memory deletion is limited to markdown files")
             if not target.exists():
                 logger.debug(f"Memory file not found for deletion: {file_path}")
                 return False
@@ -183,8 +188,33 @@ class MarkdownMemoryStore:
             logger.debug(f"Memory file not found for deletion: {file_path}")
             return False
         except Exception as e:
+            if isinstance(e, ValueError):
+                raise
             logger.warning(f"Failed to delete memory file {file_path}: {e}")
             return False
+
+    @staticmethod
+    def _validate_scope_identifier(value: str) -> str:
+        if (
+            not value
+            or value in {".", ".."}
+            or Path(value).is_absolute()
+            or "/" in value
+            or "\\" in value
+            or "\x00" in value
+        ):
+            raise ValueError("memory scope identifier must be one safe path component")
+        return value
+
+    def _inside_base(self, candidate: Path) -> Path:
+        resolved = candidate.expanduser().resolve()
+        if resolved == self._base_dir or self._base_dir not in resolved.parents:
+            raise ValueError("path resolves outside memory store")
+        return resolved
+
+    def _scoped_path(self, *identifiers: str) -> Path:
+        safe_identifiers = tuple(self._validate_scope_identifier(value) for value in identifiers)
+        return self._inside_base(self._base_dir.joinpath(*safe_identifiers))
 
     @staticmethod
     def _build_markdown(

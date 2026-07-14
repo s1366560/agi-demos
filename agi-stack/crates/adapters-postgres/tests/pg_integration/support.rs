@@ -7,28 +7,28 @@ pub(super) use agistack_adapters_postgres::{
     ConversationListQuery, ConversationModePatch, ConversationMutationAccess, CreateTenantWebhook,
     CronJobListQuery, DataStatsAccess, DataStatsScopeError, DeployAccess, DeployListQuery,
     GeneListQuery, GenomeListQuery, InstanceListQuery, InstanceMemberListQuery, InvitationRecord,
-    LlmProviderCreateRecord, LlmProviderUpdateRecord, NewDecisionRecordRecord, NewShareRecord,
-    NewTrustPolicyRecord, PgAdminAccessRepository, PgAgentConversationRepository,
-    PgAgentExecutionEventRepository, PgApiKeyStore, PgArtifactRepository, PgAttachmentRepository,
-    PgAuditLogRepository, PgBillingRepository, PgChannelRepository, PgCheckpointStore,
-    PgCronRepository, PgDataStatsRepository, PgDeployRepository, PgEventLogRepository,
-    PgGeneRepository, PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository,
-    PgLlmProviderRepository, PgMemoryRepository, PgNotificationRepository, PgProjectReadRepository,
-    PgProjectSandboxRepository, PgProjectStore, PgSchemaRepository, PgShareRepository,
-    PgSkillEvolutionRepository, PgSkillRepository, PgSubagentTemplateRepository,
-    PgSupportRepository, PgTenantRepository, PgTenantSkillConfigRepository,
-    PgTenantWebhookRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
-    PgWorkspaceRepository, ProjectCreateRecord, ProjectListForUserQuery, ProjectLookup,
-    ProjectMembersLookup, ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch,
-    RuntimeHookAuditQuery, SkillEvolutionJobAuditEventInsertRecord, SkillEvolutionJobInsertRecord,
-    SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus,
-    TenantAdminStatus, TenantEventLogListQuery, TenantLookup, TenantSkillConfigRecord,
-    TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord, TrustDecisionResolution,
-    UsageStatisticsQuery, WorkspaceAccess, WorkspacePipelineRunRecord,
-    WorkspacePipelineStageRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
-    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
-    WorkspaceTaskSessionAttemptRecord,
+    LlmProviderCreateRecord, LlmProviderUpdateRecord, NewDecisionRecordRecord,
+    NewHitlRequestRecord, NewShareRecord, NewTrustPolicyRecord, PgAdminAccessRepository,
+    PgAgentConversationRepository, PgAgentExecutionEventRepository, PgApiKeyStore,
+    PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository, PgBillingRepository,
+    PgChannelRepository, PgCheckpointStore, PgCronRepository, PgDataStatsRepository,
+    PgDeployRepository, PgEventLogRepository, PgGeneRepository, PgHitlRequestRepository,
+    PgInstanceRepository, PgInvitationRepository, PgLlmProviderRepository, PgMemoryRepository,
+    PgNotificationRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
+    PgSchemaRepository, PgShareRepository, PgSkillEvolutionRepository, PgSkillRepository,
+    PgSubagentTemplateRepository, PgSupportRepository, PgTenantRepository,
+    PgTenantSkillConfigRepository, PgTenantWebhookRepository, PgTrustRepository, PgUserStore,
+    PgVectorIndex, PgWorkspaceRepository, ProjectCreateRecord, ProjectListForUserQuery,
+    ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord, ProjectStatsLookup,
+    ProjectUpdatePatch, RuntimeHookAuditQuery, SkillEvolutionJobAuditEventInsertRecord,
+    SkillEvolutionJobInsertRecord, SkillProjectAccess, SkillRecord, SkillUpdateRecord,
+    SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantEventLogListQuery,
+    TenantLookup, TenantSkillConfigRecord, TenantUpdatePatch, TopologyEdgeRecord,
+    TopologyNodeRecord, TrustDecisionResolution, UsageStatisticsQuery, WorkspaceAccess,
+    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
+    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 pub(super) use agistack_core::agent::types::{SessionState, SessionStatus};
 pub(super) use agistack_core::model::{Entity, Memory};
@@ -56,9 +56,24 @@ pub(super) fn ts(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32)
 }
 
 /// Create the minimal Python-shaped tables the adapter reads/writes, plus the
-/// Rust-owned auxiliary schema. Idempotent (`IF NOT EXISTS`), so tests can share a
-/// database. Uses a per-test id prefix to isolate rows.
+/// Rust-owned auxiliary schema.
+///
+/// An Alembic-managed database already owns the Python schema. Avoid issuing
+/// additive DDL against those tables because even an `IF NOT EXISTS` alteration
+/// requires an exclusive relation lock and can block a running Python backend.
+/// Empty integration databases still receive the minimal compatibility schema.
 pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
+    let python_schema_is_migration_managed =
+        sqlx::query_scalar::<_, bool>("SELECT to_regclass('public.alembic_version') IS NOT NULL")
+            .fetch_one(pool)
+            .await
+            .expect("inspect Python schema ownership");
+
+    if python_schema_is_migration_managed {
+        ensure_aux_schema(pool).await.expect("aux schema");
+        return;
+    }
+
     for ddl in [
         "CREATE TABLE IF NOT EXISTS users (id text PRIMARY KEY, email text)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser boolean DEFAULT false",
@@ -319,7 +334,8 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "CREATE TABLE IF NOT EXISTS cron_jobs (\
             id text PRIMARY KEY, project_id text NOT NULL, tenant_id text NOT NULL, \
             name varchar(255) NOT NULL, description text, enabled boolean DEFAULT true, \
-            delete_after_run boolean DEFAULT false, schedule_type varchar(50) NOT NULL, \
+            delete_after_run boolean DEFAULT false, revision bigint DEFAULT 1 NOT NULL, \
+            schedule_revision bigint DEFAULT 1 NOT NULL, schedule_type varchar(50) NOT NULL, \
             schedule_config json DEFAULT '{}'::json, payload_type varchar(50) NOT NULL, \
             payload_config json DEFAULT '{}'::json, delivery_type varchar(50) DEFAULT 'none', \
             delivery_config json DEFAULT '{}'::json, conversation_mode varchar(50) DEFAULT 'reuse', \
