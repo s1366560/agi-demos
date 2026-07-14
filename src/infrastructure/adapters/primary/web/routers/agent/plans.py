@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import exists, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as ConversationModel,
+    Project as ProjectModel,
+    UserProject as UserProjectModel,
+    UserTenant as UserTenantModel,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -148,6 +151,40 @@ class TaskListResponse(BaseModel):
 # === Task List Endpoints ===
 
 
+async def _require_owned_task_conversation(
+    db: AsyncSession,
+    *,
+    conversation_id: str,
+    user_id: str,
+) -> None:
+    """Require conversation ownership plus active tenant and project membership."""
+    statement = select(ConversationModel.id).where(
+        ConversationModel.id == conversation_id,
+        ConversationModel.user_id == user_id,
+        exists(
+            select(ProjectModel.id).where(
+                ProjectModel.id == ConversationModel.project_id,
+                ProjectModel.tenant_id == ConversationModel.tenant_id,
+            )
+        ),
+        exists(
+            select(UserProjectModel.id).where(
+                UserProjectModel.project_id == ConversationModel.project_id,
+                UserProjectModel.user_id == user_id,
+            )
+        ),
+        exists(
+            select(UserTenantModel.id).where(
+                UserTenantModel.tenant_id == ConversationModel.tenant_id,
+                UserTenantModel.user_id == user_id,
+            )
+        ),
+    )
+    result = await db.execute(refresh_select_statement(statement))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
+
+
 @router.get("/tasks/{conversation_id}")
 async def get_tasks(
     conversation_id: str,
@@ -159,6 +196,12 @@ async def get_tasks(
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository import (
             SqlAgentTaskRepository,
+        )
+
+        await _require_owned_task_conversation(
+            db,
+            conversation_id=conversation_id,
+            user_id=current_user.id,
         )
 
         repo = SqlAgentTaskRepository(db)
@@ -185,6 +228,8 @@ async def get_tasks(
             total_count=len(tasks),
         )
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Error getting tasks")
         raise HTTPException(status_code=500, detail=_("Failed to get tasks")) from exc
