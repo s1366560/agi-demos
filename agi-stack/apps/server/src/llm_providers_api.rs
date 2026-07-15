@@ -1,18 +1,18 @@
 //! P7 LLM provider metadata strangler slice.
 //!
 //! Rust owns authenticated provider-type discovery plus provider metadata CRUD,
-//! read-only model catalog
-//! list/search/provider-model endpoints backed by the same embedded Python
-//! `models_snapshot.json`, admin-only environment provider detection, and latest
-//! persisted provider-health reads plus tenant assignment list and provider usage
-//! statistics reads. Catalog refresh, active health checks, assignment
-//! mutations/provider resolution, system resilience runtime, and usage writes
-//! remain Python-owned.
+//! read-only model catalog list/search/provider-model endpoints backed by the
+//! same embedded Python `models_snapshot.json`, admin-only environment provider
+//! detection, live connection probes, persisted provider-health reads/writes,
+//! tenant assignment list, and provider usage statistics reads. Catalog refresh,
+//! assignment mutations/provider resolution, system resilience runtime, and
+//! usage writes remain Python-owned.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use axum::{
@@ -27,6 +27,7 @@ use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
+use url::Url;
 
 use agistack_adapters_postgres::{
     decrypt_provider_api_key_for_mask, LlmProviderCreateRecord, LlmProviderRecord,
@@ -119,6 +120,12 @@ pub(crate) trait LlmProviderCatalogService: Send + Sync {
         user_id: &str,
         provider_id: &str,
     ) -> Result<bool, LlmProvidersApiError>;
+
+    async fn provider_probe_config(
+        &self,
+        user_id: &str,
+        provider_id: &str,
+    ) -> Result<Option<ProviderProbeConfig>, LlmProvidersApiError>;
 }
 
 pub(crate) struct PgLlmProviderCatalogService {
@@ -209,13 +216,15 @@ impl LlmProviderCatalogService for PgLlmProviderCatalogService {
             return Ok(None);
         };
         let update = provider_update_record(&existing, request)?;
-        let Some(updated) = self
+        let updated = self
             .repo
             .update_provider(provider_id, &update)
             .await
-            .map_err(LlmProvidersApiError::internal)?
-        else {
-            return Ok(None);
+            .map_err(LlmProvidersApiError::internal)?;
+        let Some(updated) = updated else {
+            return Err(LlmProvidersApiError::conflict(
+                "Provider configuration changed; reload and try again",
+            ));
         };
         self.record_to_response(updated).await.map(Some)
     }
@@ -229,6 +238,22 @@ impl LlmProviderCatalogService for PgLlmProviderCatalogService {
             .soft_delete_provider(provider_id)
             .await
             .map_err(LlmProvidersApiError::internal)
+    }
+
+    async fn provider_probe_config(
+        &self,
+        _user_id: &str,
+        provider_id: &str,
+    ) -> Result<Option<ProviderProbeConfig>, LlmProvidersApiError> {
+        let Some(record) = self
+            .repo
+            .get_provider(provider_id)
+            .await
+            .map_err(LlmProvidersApiError::internal)?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(ProviderProbeConfig::from_persisted_record(record)))
     }
 }
 
@@ -259,7 +284,7 @@ impl PgLlmProviderCatalogService {
 
 #[derive(Default)]
 pub(crate) struct DevLlmProviderCatalogService {
-    records: Mutex<Vec<ProviderConfigResponse>>,
+    records: Mutex<Vec<LlmProviderRecord>>,
 }
 
 #[async_trait]
@@ -274,6 +299,7 @@ impl LlmProviderCatalogService for DevLlmProviderCatalogService {
             .iter()
             .filter(|record| include_inactive || record.is_active)
             .cloned()
+            .map(|record| provider_response_from_record(record, None))
             .collect())
     }
 
@@ -286,7 +312,8 @@ impl LlmProviderCatalogService for DevLlmProviderCatalogService {
         Ok(records
             .iter()
             .find(|record| record.id == provider_id)
-            .cloned())
+            .cloned()
+            .map(|record| provider_response_from_record(record, None)))
     }
 
     async fn create_provider(
@@ -295,8 +322,8 @@ impl LlmProviderCatalogService for DevLlmProviderCatalogService {
         request: ProviderCreateRequest,
     ) -> Result<ProviderConfigResponse, LlmProvidersApiError> {
         let record = provider_record_from_create_for_dev(request)?;
-        let response = provider_response_from_record(record, None);
-        self.records.lock().await.push(response.clone());
+        let response = provider_response_from_record(record.clone(), None);
+        self.records.lock().await.push(record);
         Ok(response)
     }
 
@@ -310,12 +337,9 @@ impl LlmProviderCatalogService for DevLlmProviderCatalogService {
         let Some(position) = records.iter().position(|record| record.id == provider_id) else {
             return Ok(None);
         };
-        let existing = provider_record_from_response(&records[position]);
-        let update = provider_update_record(&existing, request)?;
-        let mut merged = existing;
-        apply_update_to_dev_record(&mut merged, update);
-        let response = provider_response_from_record(merged, None);
-        records[position] = response.clone();
+        let update = provider_update_record(&records[position], request)?;
+        apply_update_to_dev_record(&mut records[position], update);
+        let response = provider_response_from_record(records[position].clone(), None);
         Ok(Some(response))
     }
 
@@ -331,6 +355,19 @@ impl LlmProviderCatalogService for DevLlmProviderCatalogService {
         record.is_active = false;
         Ok(true)
     }
+
+    async fn provider_probe_config(
+        &self,
+        _user_id: &str,
+        provider_id: &str,
+    ) -> Result<Option<ProviderProbeConfig>, LlmProvidersApiError> {
+        let records = self.records.lock().await;
+        Ok(records
+            .iter()
+            .find(|record| record.id == provider_id)
+            .cloned()
+            .map(ProviderProbeConfig::from_dev_record))
+    }
 }
 
 #[async_trait]
@@ -339,6 +376,11 @@ pub(crate) trait LlmProviderHealthService: Send + Sync {
         &self,
         provider_id: &str,
     ) -> Result<Option<ProviderHealthResponse>, LlmProvidersApiError>;
+
+    async fn record_health(
+        &self,
+        record: &ProviderHealthRecord,
+    ) -> Result<(), LlmProvidersApiError>;
 }
 
 pub(crate) struct PgLlmProviderHealthService {
@@ -363,11 +405,22 @@ impl LlmProviderHealthService for PgLlmProviderHealthService {
             .map(|record| record.map(ProviderHealthResponse::from))
             .map_err(LlmProvidersApiError::internal)
     }
+
+    async fn record_health(
+        &self,
+        record: &ProviderHealthRecord,
+    ) -> Result<(), LlmProvidersApiError> {
+        self.repo
+            .record_health(record)
+            .await
+            .map(|_| ())
+            .map_err(LlmProvidersApiError::internal)
+    }
 }
 
 #[derive(Default)]
 pub(crate) struct DevLlmProviderHealthService {
-    records: BTreeMap<String, ProviderHealthResponse>,
+    records: Mutex<BTreeMap<String, ProviderHealthRecord>>,
 }
 
 #[async_trait]
@@ -376,7 +429,24 @@ impl LlmProviderHealthService for DevLlmProviderHealthService {
         &self,
         provider_id: &str,
     ) -> Result<Option<ProviderHealthResponse>, LlmProvidersApiError> {
-        Ok(self.records.get(provider_id).cloned())
+        Ok(self
+            .records
+            .lock()
+            .await
+            .get(provider_id)
+            .cloned()
+            .map(ProviderHealthResponse::from))
+    }
+
+    async fn record_health(
+        &self,
+        record: &ProviderHealthRecord,
+    ) -> Result<(), LlmProvidersApiError> {
+        self.records
+            .lock()
+            .await
+            .insert(record.provider_id.clone(), record.clone());
+        Ok(())
     }
 }
 
@@ -572,10 +642,18 @@ pub(crate) fn router() -> Router<AppState> {
             get(detect_env_providers),
         )
         .route(
+            "/api/v1/llm-providers/test-connection",
+            axum::routing::post(test_provider_connection),
+        )
+        .route(
             "/api/v1/llm-providers/:provider_id",
             get(get_provider)
                 .put(update_provider)
                 .delete(delete_provider),
+        )
+        .route(
+            "/api/v1/llm-providers/:provider_id/health-check",
+            axum::routing::post(check_provider_health),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/health",
@@ -598,6 +676,8 @@ async fn list_provider_types() -> Json<Vec<ProviderTypeDescriptor>> {
             .copied()
             .map(|provider_type| ProviderTypeDescriptor {
                 provider_type,
+                operation_type: inferred_operation_type(provider_type),
+                probe_supported: provider_probe_supported(provider_type),
                 auth_methods: if matches!(provider_type, "ollama" | "lmstudio") {
                     NO_AUTH_METHODS
                 } else {
@@ -706,12 +786,101 @@ async fn detect_env_providers(
     Ok(Json(detect_env_provider_configs()))
 }
 
+async fn test_provider_connection(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Json(request): Json<ProviderCreateRequest>,
+) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+    ensure_admin_access(&app, &identity.user_id).await?;
+    Ok(Json(execute_provider_connection_test(request).await?))
+}
+
+async fn check_provider_health(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(provider_id): Path<String>,
+) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+    ensure_admin_access(&app, &identity.user_id).await?;
+    Ok(Json(
+        execute_persisted_provider_health_check(
+            &app.llm_providers,
+            &app.llm_provider_health,
+            &identity.user_id,
+            &provider_id,
+        )
+        .await?,
+    ))
+}
+
+async fn execute_provider_connection_test(
+    request: ProviderCreateRequest,
+) -> Result<ProviderHealthResponse, LlmProvidersApiError> {
+    let config = ProviderProbeConfig::from_create_record(provider_create_record(request)?);
+    if !provider_probe_supported(&config.provider_type) {
+        return Err(LlmProvidersApiError::bad_request(
+            "Provider health check is not supported for this provider type",
+        ));
+    }
+    Ok(ProviderHealthResponse::from(
+        probe_provider_connection(&config).await,
+    ))
+}
+
+async fn execute_persisted_provider_health_check(
+    providers: &SharedLlmProviders,
+    health_service: &SharedLlmProviderHealth,
+    user_id: &str,
+    provider_id: &str,
+) -> Result<ProviderHealthResponse, LlmProvidersApiError> {
+    let provider_id = validate_provider_id(provider_id)?;
+    let config = providers
+        .provider_probe_config(user_id, &provider_id)
+        .await?
+        .ok_or_else(|| LlmProvidersApiError::not_found("Provider not found"))?;
+    if !provider_probe_supported(&config.provider_type) {
+        return Err(LlmProvidersApiError::bad_request(
+            "Provider health check is not supported for this provider type",
+        ));
+    }
+    let health = probe_provider_connection(&config).await;
+    let current_config = providers
+        .provider_probe_config(user_id, &provider_id)
+        .await?
+        .ok_or_else(|| LlmProvidersApiError::not_found("Provider not found"))?;
+    if current_config.revision != config.revision {
+        return Err(LlmProvidersApiError::conflict(
+            "Provider configuration changed during health check; retry the check",
+        ));
+    }
+    health_service.record_health(&health).await?;
+    let persisted_config = providers
+        .provider_probe_config(user_id, &provider_id)
+        .await?
+        .ok_or_else(|| LlmProvidersApiError::not_found("Provider not found"))?;
+    if persisted_config.revision != config.revision {
+        return Err(LlmProvidersApiError::conflict(
+            "Provider configuration changed during health check; retry the check",
+        ));
+    }
+    Ok(ProviderHealthResponse::from(health))
+}
+
 async fn get_provider_health(
     State(app): State<AppState>,
-    Extension(_identity): Extension<Identity>,
+    Extension(identity): Extension<Identity>,
     Path(provider_id): Path<String>,
 ) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
     let provider_id = validate_provider_id(&provider_id)?;
+    let config = app
+        .llm_providers
+        .provider_probe_config(&identity.user_id, &provider_id)
+        .await?
+        .ok_or_else(|| LlmProvidersApiError::not_found("Provider not found"))?;
+    if !provider_probe_supported(&config.provider_type) {
+        return Err(LlmProvidersApiError::bad_request(
+            "Provider health check is not supported for this provider type",
+        ));
+    }
     let health = app
         .llm_provider_health
         .latest_health(&provider_id)
@@ -719,7 +888,24 @@ async fn get_provider_health(
         .ok_or_else(|| {
             LlmProvidersApiError::not_found("No health data available for this provider")
         })?;
+    if !provider_health_matches_config(&health, &config) {
+        return Err(LlmProvidersApiError::not_found(
+            "No health data available for the current provider configuration",
+        ));
+    }
     Ok(Json(health))
+}
+
+fn provider_health_matches_config(
+    health: &ProviderHealthResponse,
+    config: &ProviderProbeConfig,
+) -> bool {
+    let Some(revision) = config.revision else {
+        return false;
+    };
+    DateTime::parse_from_rfc3339(&health.last_check)
+        .map(|checked_at| checked_at.timestamp_micros() >= revision)
+        .unwrap_or(false)
 }
 
 async fn list_tenant_assignments(
@@ -755,7 +941,7 @@ struct ProviderListQuery {
     include_inactive: Option<bool>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub(crate) struct ProviderCreateRequest {
     name: String,
     provider_type: String,
@@ -779,8 +965,9 @@ pub(crate) struct ProviderCreateRequest {
     secondary_models: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub(crate) struct ProviderUpdateRequest {
+    expected_revision: i64,
     name: Option<String>,
     provider_type: Option<String>,
     operation_type: Option<String>,
@@ -879,6 +1066,8 @@ struct ProviderModelsResponse {
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 struct ProviderTypeDescriptor {
     provider_type: &'static str,
+    operation_type: &'static str,
+    probe_supported: bool,
     auth_methods: &'static [&'static str],
 }
 
@@ -894,6 +1083,257 @@ pub(crate) struct ProviderHealthResponse {
     last_check: String,
     error_message: Option<String>,
     response_time_ms: Option<i32>,
+}
+
+pub(crate) struct ProviderProbeConfig {
+    provider_id: String,
+    provider_type: String,
+    base_url: Option<String>,
+    llm_model: Option<String>,
+    api_key: Option<String>,
+    revision: Option<i64>,
+}
+
+impl ProviderProbeConfig {
+    fn from_create_record(record: LlmProviderCreateRecord) -> Self {
+        Self {
+            provider_id: uuid::Uuid::new_v4().to_string(),
+            provider_type: record.provider_type,
+            base_url: record.base_url,
+            llm_model: record.llm_model,
+            api_key: usable_probe_api_key(Some(record.api_key_plaintext)),
+            revision: None,
+        }
+    }
+
+    fn from_persisted_record(record: LlmProviderRecord) -> Self {
+        let api_key = decrypt_provider_api_key_for_mask(&record.api_key_encrypted);
+        Self {
+            provider_id: record.id,
+            provider_type: record.provider_type,
+            base_url: record.base_url,
+            llm_model: record.llm_model,
+            api_key: usable_probe_api_key(api_key),
+            revision: Some(record.updated_at.timestamp_micros()),
+        }
+    }
+
+    fn from_dev_record(record: LlmProviderRecord) -> Self {
+        Self {
+            provider_id: record.id,
+            provider_type: record.provider_type,
+            base_url: record.base_url,
+            llm_model: record.llm_model,
+            api_key: usable_probe_api_key(Some(record.api_key_encrypted)),
+            revision: Some(record.updated_at.timestamp_micros()),
+        }
+    }
+}
+
+async fn probe_provider_connection(config: &ProviderProbeConfig) -> ProviderHealthRecord {
+    let started = Instant::now();
+    let outcome = match provider_probe_client() {
+        Ok(client) => match build_provider_probe_request(&client, config) {
+            Ok(request) => match request.send().await {
+                Ok(response) if response.status() == StatusCode::OK => ProbeOutcome::healthy(),
+                Ok(response) => {
+                    ProbeOutcome::unhealthy(format!("HTTP {}", response.status().as_u16()))
+                }
+                Err(error) if error.is_timeout() => ProbeOutcome::unhealthy("Connection timed out"),
+                Err(error) if error.is_connect() => ProbeOutcome::unhealthy("Connection failed"),
+                Err(_) => ProbeOutcome::unhealthy("Request failed"),
+            },
+            Err(message) => ProbeOutcome::unhealthy(message),
+        },
+        Err(message) => ProbeOutcome::unhealthy(message),
+    };
+    let response_time_ms = i32::try_from(started.elapsed().as_millis()).unwrap_or(i32::MAX);
+
+    ProviderHealthRecord {
+        provider_id: config.provider_id.clone(),
+        status: outcome.status.to_string(),
+        last_check: Utc::now(),
+        error_message: outcome.error_message,
+        response_time_ms: Some(response_time_ms),
+    }
+}
+
+struct ProbeOutcome {
+    status: &'static str,
+    error_message: Option<String>,
+}
+
+impl ProbeOutcome {
+    fn healthy() -> Self {
+        Self {
+            status: "healthy",
+            error_message: None,
+        }
+    }
+
+    fn unhealthy(message: impl Into<String>) -> Self {
+        Self {
+            status: "unhealthy",
+            error_message: Some(message.into()),
+        }
+    }
+}
+
+fn provider_probe_client() -> Result<reqwest::Client, &'static str> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "HTTP client initialization failed")
+}
+
+fn build_provider_probe_request(
+    client: &reqwest::Client,
+    config: &ProviderProbeConfig,
+) -> Result<reqwest::RequestBuilder, &'static str> {
+    let provider_type = catalog_provider_key(&config.provider_type);
+    if !provider_probe_supported(&provider_type) {
+        return Err("Provider health check is not supported for this provider type");
+    }
+    let raw_base_url = config
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| provider_probe_default_base_url(&provider_type))
+        .ok_or("Provider base URL is required")?;
+    let base_url = validated_probe_base_url(raw_base_url)?;
+    validate_probe_transport(&base_url, &provider_type)?;
+
+    let request = match provider_type.as_str() {
+        "gemini" => {
+            let model = config
+                .llm_model
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("gemini-pro");
+            let url = append_probe_url_segments(base_url, &["v1beta", "models", model])?;
+            client
+                .get(url)
+                .header("x-goog-api-key", required_probe_api_key(config)?)
+        }
+        "anthropic" => {
+            let url = append_probe_url_segments(base_url, &["v1", "models"])?;
+            client
+                .get(url)
+                .header("x-api-key", required_probe_api_key(config)?)
+                .header("anthropic-version", "2023-06-01")
+        }
+        "ollama" => {
+            let url = append_probe_url_segments(base_url, &["api", "tags"])?;
+            client.get(url)
+        }
+        "lmstudio" => {
+            let url = append_probe_url_segments(base_url, &["models"])?;
+            client.get(url)
+        }
+        "azure_openai" => {
+            let url = append_probe_url_segments(base_url, &["models"])?;
+            client
+                .get(url)
+                .header("api-key", required_probe_api_key(config)?)
+        }
+        _ => {
+            let url = append_probe_url_segments(base_url, &["models"])?;
+            client.get(url).bearer_auth(required_probe_api_key(config)?)
+        }
+    };
+
+    Ok(request)
+}
+
+fn provider_probe_default_base_url(provider_type: &str) -> Option<&'static str> {
+    match provider_type {
+        "openai" => Some("https://api.openai.com/v1"),
+        "openrouter" => Some("https://openrouter.ai/api/v1"),
+        "dashscope" => Some("https://dashscope.aliyuncs.com/compatible-mode/v1"),
+        "deepseek" => Some("https://api.deepseek.com/v1"),
+        "minimax" => Some("https://api.minimax.io/v1"),
+        "zai" => Some("https://open.bigmodel.cn/api/paas/v4"),
+        "kimi" => Some("https://api.moonshot.cn/v1"),
+        "groq" => Some("https://api.groq.com/openai/v1"),
+        "mistral" => Some("https://api.mistral.ai/v1"),
+        "volcengine" => Some("https://ark.cn-beijing.volces.com/api/v3"),
+        "cohere" => Some("https://api.cohere.com/v1"),
+        "anthropic" => Some("https://api.anthropic.com"),
+        "gemini" => Some("https://generativelanguage.googleapis.com"),
+        "ollama" => Some("http://localhost:11434"),
+        "lmstudio" => Some("http://localhost:1234/v1"),
+        _ => None,
+    }
+}
+
+fn provider_probe_supported(provider_type: &str) -> bool {
+    !matches!(
+        catalog_provider_key(provider_type).as_str(),
+        "azure_openai" | "bedrock" | "vertex"
+    )
+}
+
+fn validated_probe_base_url(raw_url: &str) -> Result<Url, &'static str> {
+    let url = Url::parse(raw_url).map_err(|_| "Invalid provider base URL")?;
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.host_str().is_none()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("Invalid provider base URL");
+    }
+    Ok(url)
+}
+
+fn validate_probe_transport(url: &Url, provider_type: &str) -> Result<(), &'static str> {
+    if provider_requires_api_key(provider_type) {
+        return (url.scheme() == "https")
+            .then_some(())
+            .ok_or("HTTPS is required for credentialed providers");
+    }
+    if url.scheme() == "http" && !is_local_probe_host(url) {
+        return Err("HTTP is only allowed for local provider endpoints");
+    }
+    Ok(())
+}
+
+fn is_local_probe_host(url: &Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
+}
+
+fn append_probe_url_segments(mut url: Url, segments: &[&str]) -> Result<Url, &'static str> {
+    {
+        let mut path = url
+            .path_segments_mut()
+            .map_err(|_| "Invalid provider base URL")?;
+        path.pop_if_empty();
+        for segment in segments {
+            path.push(segment);
+        }
+    }
+    Ok(url)
+}
+
+fn required_probe_api_key(config: &ProviderProbeConfig) -> Result<&str, &'static str> {
+    config.api_key.as_deref().ok_or("API key is required")
+}
+
+fn usable_probe_api_key(api_key: Option<String>) -> Option<String> {
+    api_key.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty() && trimmed != LOCAL_NO_API_KEY_SENTINEL).then(|| trimmed.to_string())
+    })
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -919,7 +1359,10 @@ pub(crate) struct ProviderConfigResponse {
     pool_enabled: bool,
     model_tier: Option<String>,
     secondary_models: Vec<String>,
+    auth_method: &'static str,
+    credential_configured: bool,
     api_key_masked: String,
+    revision: i64,
     created_at: String,
     updated_at: String,
     health_status: Option<String>,
@@ -1016,7 +1459,15 @@ fn provider_response_from_record(
     record: LlmProviderRecord,
     health: Option<ProviderHealthRecord>,
 ) -> ProviderConfigResponse {
+    let health = health.filter(|value| {
+        provider_probe_supported(&record.provider_type) && value.last_check >= record.updated_at
+    });
     let embedding_config = extract_embedding_config(&record.config);
+    let auth_method = provider_auth_method(&record.provider_type);
+    let encrypted_api_key = record.api_key_encrypted.trim();
+    let credential_configured = auth_method == "api_key"
+        && !encrypted_api_key.is_empty()
+        && encrypted_api_key != LOCAL_NO_API_KEY_SENTINEL;
     let health_last_check = health.as_ref().map(|value| {
         value
             .last_check
@@ -1044,7 +1495,10 @@ fn provider_response_from_record(
         pool_enabled: record.pool_enabled,
         model_tier: record.model_tier,
         secondary_models: record.secondary_models,
+        auth_method,
+        credential_configured,
         api_key_masked: mask_api_key(&record.api_key_encrypted),
+        revision: record.updated_at.timestamp_micros(),
         created_at: record
             .created_at
             .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
@@ -1056,37 +1510,6 @@ fn provider_response_from_record(
         response_time_ms: health.as_ref().and_then(|value| value.response_time_ms),
         error_message: health.and_then(|value| value.error_message),
         resilience: default_resilience_status(),
-    }
-}
-
-fn provider_record_from_response(response: &ProviderConfigResponse) -> LlmProviderRecord {
-    LlmProviderRecord {
-        id: response.id.clone(),
-        name: response.name.clone(),
-        provider_type: response.provider_type.clone(),
-        operation_type: response.operation_type.clone(),
-        api_key_encrypted: String::new(),
-        base_url: response.base_url.clone(),
-        llm_model: response.llm_model.clone(),
-        llm_small_model: response.llm_small_model.clone(),
-        embedding_model: response.embedding_model.clone(),
-        reranker_model: response.reranker_model.clone(),
-        config: response.config.clone(),
-        is_active: response.is_active,
-        is_default: response.is_default,
-        is_enabled: response.is_enabled,
-        allowed_models: response.allowed_models.clone(),
-        blocked_models: response.blocked_models.clone(),
-        pool_weight: response.pool_weight,
-        pool_enabled: response.pool_enabled,
-        model_tier: response.model_tier.clone(),
-        secondary_models: response.secondary_models.clone(),
-        created_at: DateTime::parse_from_rfc3339(&response.created_at)
-            .map(|value| value.with_timezone(&Utc))
-            .unwrap_or_else(|_| Utc::now()),
-        updated_at: DateTime::parse_from_rfc3339(&response.updated_at)
-            .map(|value| value.with_timezone(&Utc))
-            .unwrap_or_else(|_| Utc::now()),
     }
 }
 
@@ -1182,7 +1605,10 @@ fn apply_update_to_dev_record(record: &mut LlmProviderRecord, update: LlmProvide
     if let Some(value) = update.secondary_models {
         record.secondary_models = value;
     }
-    record.updated_at = Utc::now();
+    let next_revision = Utc::now()
+        .timestamp_micros()
+        .max(record.updated_at.timestamp_micros().saturating_add(1));
+    record.updated_at = DateTime::from_timestamp_micros(next_revision).unwrap_or_else(Utc::now);
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1640,11 +2066,35 @@ fn provider_update_record(
     existing: &LlmProviderRecord,
     request: ProviderUpdateRequest,
 ) -> Result<LlmProviderUpdateRecord, LlmProvidersApiError> {
-    let provider_type = match request.provider_type {
-        Some(value) => normalize_provider_type(value)?,
+    if existing.updated_at.timestamp_micros() != request.expected_revision {
+        return Err(LlmProvidersApiError::conflict(
+            "Provider configuration changed; reload and try again",
+        ));
+    }
+    let expected_updated_at = DateTime::from_timestamp_micros(request.expected_revision)
+        .ok_or_else(|| LlmProvidersApiError::bad_request("Invalid provider revision"))?;
+    let provider_type = match request.provider_type.as_ref() {
+        Some(value) => normalize_provider_type(value.clone())?,
         None => existing.provider_type.clone(),
     };
-    let operation_type = effective_operation_type(&provider_type, request.operation_type)?;
+    let provider_type_changed = provider_type != existing.provider_type;
+    let base_url_changed = request
+        .base_url
+        .as_ref()
+        .is_some_and(|base_url| existing.base_url.as_ref() != Some(base_url));
+    let api_key_submitted = request
+        .api_key
+        .as_deref()
+        .is_some_and(|api_key| !api_key.trim().is_empty());
+    if provider_requires_api_key(&provider_type)
+        && (provider_type_changed || base_url_changed)
+        && !api_key_submitted
+    {
+        return Err(LlmProvidersApiError::bad_request(
+            "API key must be resubmitted when changing provider type or base URL",
+        ));
+    }
+    let operation_type = effective_operation_type(&provider_type, request.operation_type.clone())?;
     let mut config = request.config.unwrap_or_else(|| existing.config.clone());
     let embedding_payload = match request.embedding_config.as_ref() {
         Some(_) => build_embedding_payload(
@@ -1699,11 +2149,16 @@ fn provider_update_record(
     });
     validate_model_tier(model_tier.as_deref())?;
     validate_pool_weight(request.pool_weight)?;
-    let api_key_plaintext = request
-        .api_key
-        .map(|api_key| storable_api_key(&provider_type, Some(api_key)))
-        .transpose()?;
+    let api_key_plaintext = if provider_type_changed && !provider_requires_api_key(&provider_type) {
+        Some(LOCAL_NO_API_KEY_SENTINEL.to_string())
+    } else {
+        request
+            .api_key
+            .map(|api_key| storable_api_key(&provider_type, Some(api_key)))
+            .transpose()?
+    };
     Ok(LlmProviderUpdateRecord {
+        expected_updated_at,
         name: request.name.map(normalize_required_name).transpose()?,
         provider_type: Some(provider_type),
         operation_type: Some(operation_type),
@@ -1806,15 +2261,23 @@ fn effective_operation_type(
     provider_type: &str,
     requested: Option<String>,
 ) -> Result<String, LlmProvidersApiError> {
-    if provider_type.ends_with("_embedding") {
-        return Ok("embedding".to_string());
-    }
-    if provider_type.ends_with("_reranker") {
-        return Ok("rerank".to_string());
+    let inferred = inferred_operation_type(provider_type);
+    if inferred != "llm" {
+        return Ok(inferred.to_string());
     }
     match validate_operation_type(requested)? {
         Some(value) => Ok(value),
         None => Ok("llm".to_string()),
+    }
+}
+
+fn inferred_operation_type(provider_type: &str) -> &'static str {
+    if provider_type.ends_with("_embedding") {
+        "embedding"
+    } else if provider_type.ends_with("_reranker") {
+        "rerank"
+    } else {
+        "llm"
     }
 }
 
@@ -2195,6 +2658,14 @@ fn provider_requires_api_key(provider_name: &str) -> bool {
     !matches!(provider_name, "ollama" | "lmstudio")
 }
 
+fn provider_auth_method(provider_name: &str) -> &'static str {
+    if provider_requires_api_key(&catalog_provider_key(provider_name)) {
+        "api_key"
+    } else {
+        "none"
+    }
+}
+
 fn env_present<F>(lookup: &F, name: &str) -> bool
 where
     F: Fn(&str) -> Option<String>,
@@ -2450,6 +2921,13 @@ impl LlmProvidersApiError {
         }
     }
 
+    fn conflict(detail: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            detail: detail.into(),
+        }
+    }
+
     fn bad_request(detail: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -2480,10 +2958,213 @@ impl IntoResponse for LlmProvidersApiError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex as StdMutex;
+
+    use axum::http::header::AUTHORIZATION;
+    use axum::http::HeaderMap;
     use chrono::{TimeZone, Utc};
     use serde_json::Value;
+    use tokio::net::TcpListener;
 
     use super::*;
+
+    struct MockProviderServer {
+        base_url: String,
+        requests: Arc<StdMutex<Vec<HeaderMap>>>,
+        task: tokio::task::JoinHandle<()>,
+    }
+
+    struct MockApiServer {
+        base_url: String,
+        task: tokio::task::JoinHandle<()>,
+    }
+
+    impl Drop for MockApiServer {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    impl Drop for MockProviderServer {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    async fn spawn_mock_provider(path: &'static str, status: StatusCode) -> MockProviderServer {
+        let requests = Arc::new(StdMutex::new(Vec::new()));
+        let captured_requests = Arc::clone(&requests);
+        let app = Router::new().route(
+            path,
+            get(move |headers: HeaderMap| {
+                let captured_requests = Arc::clone(&captured_requests);
+                async move {
+                    captured_requests
+                        .lock()
+                        .expect("request capture lock remains available")
+                        .push(headers);
+                    status
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("mock provider binds");
+        let address = listener.local_addr().expect("mock provider has address");
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("mock provider serves requests");
+        });
+        MockProviderServer {
+            base_url: format!("http://{address}"),
+            requests,
+            task,
+        }
+    }
+
+    async fn unguarded_test_connection_route(
+        Json(request): Json<ProviderCreateRequest>,
+    ) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+        execute_provider_connection_test(request).await.map(Json)
+    }
+
+    async fn spawn_test_connection_api() -> MockApiServer {
+        let app = Router::new().route(
+            "/api/v1/llm-providers/test-connection",
+            axum::routing::post(unguarded_test_connection_route),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("test provider API binds");
+        let address = listener
+            .local_addr()
+            .expect("test provider API has address");
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("test provider API serves requests");
+        });
+        MockApiServer {
+            base_url: format!("http://{address}"),
+            task,
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestHealthCheckState {
+        providers: SharedLlmProviders,
+        health: SharedLlmProviderHealth,
+    }
+
+    async fn unguarded_persisted_health_check_route(
+        State(state): State<TestHealthCheckState>,
+        Path(provider_id): Path<String>,
+    ) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+        execute_persisted_provider_health_check(
+            &state.providers,
+            &state.health,
+            "dev-user",
+            &provider_id,
+        )
+        .await
+        .map(Json)
+    }
+
+    async fn spawn_persisted_health_check_api(
+        providers: SharedLlmProviders,
+        health: SharedLlmProviderHealth,
+    ) -> MockApiServer {
+        let app = Router::new()
+            .route(
+                "/api/v1/llm-providers/:provider_id/health-check",
+                axum::routing::post(unguarded_persisted_health_check_route),
+            )
+            .with_state(TestHealthCheckState { providers, health });
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("test persisted health API binds");
+        let address = listener
+            .local_addr()
+            .expect("test persisted health API has address");
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("test persisted health API serves requests");
+        });
+        MockApiServer {
+            base_url: format!("http://{address}"),
+            task,
+        }
+    }
+
+    async fn post_test_connection(api: &MockApiServer, payload: Value) -> (StatusCode, Value) {
+        let response = reqwest::Client::new()
+            .post(format!(
+                "{}/api/v1/llm-providers/test-connection",
+                api.base_url
+            ))
+            .json(&payload)
+            .send()
+            .await
+            .expect("test connection request succeeds");
+        let status = response.status();
+        let body = response
+            .json::<Value>()
+            .await
+            .expect("test connection response is JSON");
+        (status, body)
+    }
+
+    async fn post_persisted_health_check(
+        api: &MockApiServer,
+        provider_id: &str,
+    ) -> (StatusCode, Value) {
+        let response = reqwest::Client::new()
+            .post(format!(
+                "{}/api/v1/llm-providers/{provider_id}/health-check",
+                api.base_url
+            ))
+            .send()
+            .await
+            .expect("persisted health check request succeeds");
+        let status = response.status();
+        let body = response
+            .json::<Value>()
+            .await
+            .expect("persisted health check response is JSON");
+        (status, body)
+    }
+
+    fn provider_create_request(
+        provider_type: &str,
+        base_url: String,
+        api_key: Option<&str>,
+        model: &str,
+    ) -> ProviderCreateRequest {
+        ProviderCreateRequest {
+            name: format!("{provider_type}-test"),
+            provider_type: provider_type.to_string(),
+            operation_type: None,
+            api_key: api_key.map(str::to_string),
+            base_url: Some(base_url),
+            llm_model: Some(model.to_string()),
+            llm_small_model: None,
+            embedding_model: None,
+            embedding_config: None,
+            reranker_model: None,
+            config: None,
+            is_active: None,
+            is_default: None,
+            is_enabled: None,
+            allowed_models: None,
+            blocked_models: None,
+            pool_weight: None,
+            pool_enabled: None,
+            model_tier: None,
+            secondary_models: None,
+        }
+    }
 
     #[tokio::test]
     async fn provider_types_response_matches_python_descriptor_contract() {
@@ -2504,8 +3185,265 @@ mod tests {
     }
 
     #[test]
-    fn router_builds_with_catalog_and_provider_model_routes() {
+    fn router_builds_with_catalog_provider_model_and_probe_routes() {
         let _ = router();
+    }
+
+    #[tokio::test]
+    async fn provider_connection_probe_returns_healthy_for_local_ollama() {
+        let server = spawn_mock_provider("/api/tags", StatusCode::OK).await;
+        let api = spawn_test_connection_api().await;
+
+        let (status, body) = post_test_connection(
+            &api,
+            json!({
+                "name": "Ollama test",
+                "provider_type": "ollama",
+                "base_url": server.base_url.clone(),
+                "llm_model": "llama3.1:8b"
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "healthy");
+        assert_eq!(body["error_message"], Value::Null);
+        let requests = server
+            .requests
+            .lock()
+            .expect("request capture lock remains available");
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].get(AUTHORIZATION).is_none());
+    }
+
+    #[tokio::test]
+    async fn provider_connection_probe_returns_unhealthy_without_response_body_or_secret() {
+        let server = spawn_mock_provider("/v1/models", StatusCode::UNAUTHORIZED).await;
+        let api = spawn_test_connection_api().await;
+        let secret = "sk-rejected-secret-98765";
+
+        let (status, body) = post_test_connection(
+            &api,
+            json!({
+                "name": "OpenAI rejected",
+                "provider_type": "openai",
+                "api_key": secret,
+                "base_url": format!("{}/v1", server.base_url),
+                "llm_model": "gpt-4o"
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "unhealthy");
+        assert_eq!(
+            body["error_message"],
+            "HTTPS is required for credentialed providers"
+        );
+        let response_json = serde_json::to_string(&body).expect("health response serializes");
+        assert!(!response_json.contains(secret));
+        assert!(!response_json.contains("response body"));
+        assert!(server
+            .requests
+            .lock()
+            .expect("request capture lock remains available")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn provider_connection_probe_allows_ollama_without_credentials() {
+        let server = spawn_mock_provider("/api/tags", StatusCode::OK).await;
+        let api = spawn_test_connection_api().await;
+
+        let (status, body) = post_test_connection(
+            &api,
+            json!({
+                "name": "Ollama local",
+                "provider_type": "ollama",
+                "base_url": server.base_url.clone(),
+                "llm_model": "llama3.1:8b"
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "healthy");
+        let requests = server
+            .requests
+            .lock()
+            .expect("request capture lock remains available");
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].get(AUTHORIZATION).is_none());
+    }
+
+    #[tokio::test]
+    async fn persisted_health_check_route_probes_and_records_success_and_failure() {
+        let ollama_server = spawn_mock_provider("/api/tags", StatusCode::OK).await;
+        let lmstudio_server = spawn_mock_provider("/models", StatusCode::SERVICE_UNAVAILABLE).await;
+        let catalog = Arc::new(DevLlmProviderCatalogService::default());
+        let health_service = Arc::new(DevLlmProviderHealthService::default());
+        let ollama = catalog
+            .create_provider(
+                "dev-user",
+                provider_create_request(
+                    "ollama",
+                    ollama_server.base_url.clone(),
+                    None,
+                    "llama3.1:8b",
+                ),
+            )
+            .await
+            .expect("ollama provider create succeeds");
+        let lmstudio = catalog
+            .create_provider(
+                "dev-user",
+                provider_create_request(
+                    "lmstudio",
+                    lmstudio_server.base_url.clone(),
+                    None,
+                    "local-model",
+                ),
+            )
+            .await
+            .expect("lmstudio provider create succeeds");
+        let providers: SharedLlmProviders = catalog;
+        let persisted_health: SharedLlmProviderHealth = health_service.clone();
+        let api = spawn_persisted_health_check_api(providers, persisted_health).await;
+
+        let (ollama_status, ollama_body) = post_persisted_health_check(&api, &ollama.id).await;
+        let (lmstudio_status, lmstudio_body) =
+            post_persisted_health_check(&api, &lmstudio.id).await;
+
+        assert_eq!(ollama_status, StatusCode::OK);
+        assert_eq!(ollama_body["status"], "healthy");
+        assert_eq!(lmstudio_status, StatusCode::OK);
+        assert_eq!(lmstudio_body["status"], "unhealthy");
+        assert_eq!(lmstudio_body["error_message"], "HTTP 503");
+        let stored_ollama = health_service
+            .latest_health(&ollama.id)
+            .await
+            .expect("stored ollama health read succeeds")
+            .expect("stored ollama health exists");
+        let stored_lmstudio = health_service
+            .latest_health(&lmstudio.id)
+            .await
+            .expect("stored lmstudio health read succeeds")
+            .expect("stored lmstudio health exists");
+        assert_eq!(stored_ollama.status, "healthy");
+        assert_eq!(stored_lmstudio.status, "unhealthy");
+        assert_eq!(stored_lmstudio.error_message.as_deref(), Some("HTTP 503"));
+    }
+
+    #[test]
+    fn provider_probe_builds_secure_provider_requests_and_omits_local_credentials() {
+        let client = provider_probe_client().expect("probe client builds");
+        let anthropic = ProviderProbeConfig {
+            provider_id: uuid::Uuid::new_v4().to_string(),
+            provider_type: "anthropic".to_string(),
+            base_url: Some("https://proxy.example/root".to_string()),
+            llm_model: Some("claude-sonnet-4".to_string()),
+            api_key: Some("anthropic-test-secret".to_string()),
+            revision: None,
+        };
+        let gemini = ProviderProbeConfig {
+            provider_id: uuid::Uuid::new_v4().to_string(),
+            provider_type: "gemini".to_string(),
+            base_url: Some("https://generative.example".to_string()),
+            llm_model: Some("gemini/test".to_string()),
+            api_key: Some("gemini-test-secret".to_string()),
+            revision: None,
+        };
+        let lmstudio = ProviderProbeConfig {
+            provider_id: uuid::Uuid::new_v4().to_string(),
+            provider_type: "lmstudio".to_string(),
+            base_url: Some("http://127.0.0.1:1234/v1".to_string()),
+            llm_model: Some("local-model".to_string()),
+            api_key: Some("must-not-be-sent".to_string()),
+            revision: None,
+        };
+
+        let anthropic_request = build_provider_probe_request(&client, &anthropic)
+            .expect("anthropic request builds")
+            .build()
+            .expect("anthropic headers are valid");
+        let gemini_request = build_provider_probe_request(&client, &gemini)
+            .expect("gemini request builds")
+            .build()
+            .expect("gemini headers are valid");
+        let lmstudio_request = build_provider_probe_request(&client, &lmstudio)
+            .expect("lmstudio request builds")
+            .build()
+            .expect("lmstudio request is valid");
+
+        assert_eq!(anthropic_request.url().path(), "/root/v1/models");
+        assert_eq!(
+            anthropic_request
+                .headers()
+                .get("x-api-key")
+                .expect("anthropic key header exists"),
+            "anthropic-test-secret"
+        );
+        assert!(!anthropic_request.url().as_str().contains("test-secret"));
+        assert_eq!(gemini_request.url().path(), "/v1beta/models/gemini%2Ftest");
+        assert_eq!(
+            gemini_request
+                .headers()
+                .get("x-goog-api-key")
+                .expect("gemini key header exists"),
+            "gemini-test-secret"
+        );
+        assert!(!gemini_request.url().as_str().contains("test-secret"));
+        assert_eq!(lmstudio_request.url().path(), "/v1/models");
+        assert!(lmstudio_request.headers().get(AUTHORIZATION).is_none());
+    }
+
+    #[test]
+    fn provider_probe_rejects_credentialed_or_query_bearing_base_urls() {
+        assert!(validated_probe_base_url("https://user:pass@example.com/v1").is_err());
+        assert!(validated_probe_base_url("https://example.com/v1?api_key=secret").is_err());
+        assert!(validated_probe_base_url("file:///tmp/provider").is_err());
+        let insecure_remote = validated_probe_base_url("http://api.example.test/v1")
+            .expect("HTTP URL parses structurally");
+        assert!(validate_probe_transport(&insecure_remote, "openai").is_err());
+        let remote_ollama = validated_probe_base_url("http://ollama.example.test:11434")
+            .expect("remote Ollama URL parses structurally");
+        assert!(validate_probe_transport(&remote_ollama, "ollama").is_err());
+        let local_ollama = validated_probe_base_url("http://127.0.0.1:11434")
+            .expect("local Ollama URL parses structurally");
+        assert!(validate_probe_transport(&local_ollama, "ollama").is_ok());
+
+        let unsupported = ProviderProbeConfig {
+            provider_id: "draft-provider".to_string(),
+            provider_type: "azure_openai".to_string(),
+            base_url: Some("https://example.openai.azure.com".to_string()),
+            llm_model: Some("gpt-4o".to_string()),
+            api_key: Some("test-secret".to_string()),
+            revision: None,
+        };
+        let client = provider_probe_client().expect("probe client builds");
+        assert_eq!(
+            build_provider_probe_request(&client, &unsupported)
+                .expect_err("unsupported provider probe must fail"),
+            "Provider health check is not supported for this provider type"
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_connection_test_rejects_unsupported_provider_types() {
+        let error = execute_provider_connection_test(provider_create_request(
+            "azure_openai",
+            "https://example.openai.azure.com".to_string(),
+            Some("test-secret"),
+            "gpt-4o",
+        ))
+        .await
+        .expect_err("unsupported provider probe must fail before network I/O");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            error.detail,
+            "Provider health check is not supported for this provider type"
+        );
     }
 
     #[test]
@@ -2656,7 +3594,7 @@ mod tests {
         ))
         .expect("llm provider health golden must be valid JSON");
 
-        let value = serde_json::to_value(ProviderHealthResponse::from(ProviderHealthRecord {
+        let response = ProviderHealthResponse::from(ProviderHealthRecord {
             provider_id: "11111111-2222-4333-8444-555555555555".to_string(),
             status: "healthy".to_string(),
             last_check: Utc
@@ -2665,10 +3603,35 @@ mod tests {
                 .expect("fixture timestamp is valid"),
             error_message: None,
             response_time_ms: Some(88),
-        }))
-        .expect("response serializes");
+        });
+        let value = serde_json::to_value(response.clone()).expect("response serializes");
 
         agistack_parity::assert_parity(&golden, &value);
+
+        let current_config = ProviderProbeConfig {
+            provider_id: response.provider_id.clone(),
+            provider_type: "openai".to_string(),
+            base_url: None,
+            llm_model: Some("gpt-4o".to_string()),
+            api_key: Some("test-secret".to_string()),
+            revision: Some(
+                Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 4)
+                    .single()
+                    .expect("fixture timestamp is valid")
+                    .timestamp_micros(),
+            ),
+        };
+        assert!(provider_health_matches_config(&response, &current_config));
+        let stale_config = ProviderProbeConfig {
+            revision: Some(
+                Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 6)
+                    .single()
+                    .expect("fixture timestamp is valid")
+                    .timestamp_micros(),
+            ),
+            ..current_config
+        };
+        assert!(!provider_health_matches_config(&response, &stale_config));
     }
 
     #[test]
@@ -2718,10 +3681,209 @@ mod tests {
             error_message: None,
             response_time_ms: Some(88),
         };
-        let value = serde_json::to_value(provider_response_from_record(record, Some(health)))
-            .expect("response serializes");
+        let current = provider_response_from_record(record.clone(), Some(health.clone()));
+        let value = serde_json::to_value(current).expect("response serializes");
 
         agistack_parity::assert_parity(&golden, &value);
+
+        let stale = provider_response_from_record(
+            LlmProviderRecord {
+                updated_at: Utc
+                    .with_ymd_and_hms(2026, 1, 2, 3, 7, 5)
+                    .single()
+                    .expect("fixture timestamp is valid"),
+                ..record.clone()
+            },
+            Some(health.clone()),
+        );
+        assert_eq!(stale.health_status, None);
+        assert_eq!(stale.health_last_check, None);
+
+        let unsupported = provider_response_from_record(
+            LlmProviderRecord {
+                provider_type: "azure_openai".to_string(),
+                ..record.clone()
+            },
+            Some(health),
+        );
+        assert_eq!(unsupported.health_status, None);
+
+        let sentinel = provider_response_from_record(
+            LlmProviderRecord {
+                api_key_encrypted: LOCAL_NO_API_KEY_SENTINEL.to_string(),
+                ..record
+            },
+            None,
+        );
+        assert!(!sentinel.credential_configured);
+    }
+
+    #[tokio::test]
+    async fn dev_provider_update_preserves_credentials_and_advances_response_contract() {
+        let service = DevLlmProviderCatalogService::default();
+        let created = service
+            .create_provider(
+                "dev-user",
+                provider_create_request(
+                    "openai",
+                    "https://api.example.test/v1".to_string(),
+                    Some("sk-dev-secret-12345"),
+                    "gpt-4o",
+                ),
+            )
+            .await
+            .expect("dev provider create succeeds");
+
+        let updated = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                ProviderUpdateRequest {
+                    expected_revision: created.revision,
+                    name: Some("updated-openai".to_string()),
+                    llm_model: Some("gpt-4o-mini".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("dev provider update succeeds")
+            .expect("updated provider exists");
+
+        assert_eq!(updated.name, "updated-openai");
+        assert_eq!(updated.llm_model.as_deref(), Some("gpt-4o-mini"));
+        assert_eq!(updated.auth_method, "api_key");
+        assert!(updated.credential_configured);
+        assert!(!updated.api_key_masked.contains("sk-dev-secret-12345"));
+        assert!(updated.revision > created.revision);
+        let probe = service
+            .provider_probe_config("dev-user", &created.id)
+            .await
+            .expect("dev probe lookup succeeds")
+            .expect("dev probe config exists");
+        assert_eq!(probe.api_key.as_deref(), Some("sk-dev-secret-12345"));
+
+        let stale = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                ProviderUpdateRequest {
+                    expected_revision: created.revision,
+                    name: Some("stale-name".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("stale revision is rejected");
+        assert_eq!(stale.status, StatusCode::CONFLICT);
+
+        let unsafe_endpoint_change = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                ProviderUpdateRequest {
+                    expected_revision: updated.revision,
+                    base_url: Some("https://other.example.test/v1".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("endpoint change without a new key is rejected");
+        assert_eq!(unsafe_endpoint_change.status, StatusCode::BAD_REQUEST);
+
+        let unsafe_provider_change = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                ProviderUpdateRequest {
+                    expected_revision: updated.revision,
+                    provider_type: Some("anthropic".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("provider change without a new key is rejected");
+        assert_eq!(unsafe_provider_change.status, StatusCode::BAD_REQUEST);
+
+        let safely_rekeyed = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                ProviderUpdateRequest {
+                    expected_revision: updated.revision,
+                    api_key: Some("sk-replacement-secret-67890".to_string()),
+                    base_url: Some("https://other.example.test/v1".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("endpoint change with replacement key succeeds")
+            .expect("rekeyed provider exists");
+        let probe = service
+            .provider_probe_config("dev-user", &created.id)
+            .await
+            .expect("rekeyed probe lookup succeeds")
+            .expect("rekeyed probe config exists");
+        assert_eq!(
+            probe.api_key.as_deref(),
+            Some("sk-replacement-secret-67890")
+        );
+        assert!(safely_rekeyed.revision > updated.revision);
+
+        let local = service
+            .create_provider(
+                "dev-user",
+                provider_create_request(
+                    "ollama",
+                    "http://127.0.0.1:11434".to_string(),
+                    None,
+                    "llama3.1:8b",
+                ),
+            )
+            .await
+            .expect("local provider create succeeds");
+        let unsafe_auth_change = service
+            .update_provider(
+                "dev-user",
+                &local.id,
+                ProviderUpdateRequest {
+                    expected_revision: local.revision,
+                    provider_type: Some("openai".to_string()),
+                    base_url: Some("https://api.openai.com/v1".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("local to credentialed change requires a new API key");
+        assert_eq!(unsafe_auth_change.status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn dev_health_service_persists_latest_probe_result() {
+        let service = DevLlmProviderHealthService::default();
+        let record = ProviderHealthRecord {
+            provider_id: "11111111-2222-4333-8444-555555555555".to_string(),
+            status: "unhealthy".to_string(),
+            last_check: Utc
+                .with_ymd_and_hms(2026, 1, 2, 3, 4, 5)
+                .single()
+                .expect("fixture timestamp is valid"),
+            error_message: Some("HTTP 503".to_string()),
+            response_time_ms: Some(91),
+        };
+
+        service
+            .record_health(&record)
+            .await
+            .expect("dev health write succeeds");
+        let latest = service
+            .latest_health(&record.provider_id)
+            .await
+            .expect("dev health read succeeds")
+            .expect("dev health record exists");
+
+        assert_eq!(latest.status, "unhealthy");
+        assert_eq!(latest.error_message.as_deref(), Some("HTTP 503"));
+        assert_eq!(latest.response_time_ms, Some(91));
     }
 
     #[test]

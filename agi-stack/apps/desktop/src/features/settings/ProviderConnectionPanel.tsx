@@ -15,38 +15,33 @@ import {
 import { useI18n } from '../../i18n';
 import type {
   LlmProviderMutationInput,
+  LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
-  RuntimeMode,
 } from '../../types';
 import {
   providerDraftFromProvider,
   providerDraftIsValid,
   providerMutationFromDraft,
+  providerValidationSucceeded,
   type ProviderEditorDraft,
 } from './providerManagementModel';
 
 type ProviderConnectionPanelProps = {
   provider: ManagedLlmProvider;
-  mode: RuntimeMode;
+  providerTypeDescriptor?: LlmProviderTypeDescriptor;
   canManage: boolean;
   onSave: (
     provider: ManagedLlmProvider,
     mutation: LlmProviderMutationInput,
   ) => Promise<ManagedLlmProvider>;
   onValidate: (providerId: string) => Promise<LlmProviderValidationOutcome>;
-  onValidateDraft: (
-    mutation: LlmProviderMutationInput,
-  ) => Promise<LlmProviderValidationOutcome>;
+  onValidateDraft: (mutation: LlmProviderMutationInput) => Promise<LlmProviderValidationOutcome>;
 };
-
-function validationSucceeded(outcome: LlmProviderValidationOutcome | null): boolean {
-  return outcome?.status === 'healthy' || outcome?.status === 'configuration_valid';
-}
 
 export function ProviderConnectionPanel({
   provider,
-  mode,
+  providerTypeDescriptor,
   canManage,
   onSave,
   onValidate,
@@ -86,6 +81,12 @@ export function ProviderConnectionPanel({
   }, [provider.id]);
 
   const mutation = useMemo(() => providerMutationFromDraft(draft), [draft]);
+  const normalizedProviderBaseUrl = (provider.base_url ?? '').trim().replace(/\/$/, '');
+  const endpointChanged =
+    draft.providerType.trim() !== provider.provider_type ||
+    draft.baseUrl.trim().replace(/\/$/, '') !== normalizedProviderBaseUrl;
+  const credentialRequiredForDraft =
+    draft.authMethod === 'api_key' && endpointChanged && !mutation.apiKey;
   const updateDraft = <Key extends keyof ProviderEditorDraft>(
     key: Key,
     value: ProviderEditorDraft[Key],
@@ -103,35 +104,31 @@ export function ProviderConnectionPanel({
     validationRequestId.current = requestId;
     const providerId = provider.id;
     const draftMutation = mutation;
-    const validateDraft = editing;
+    const validateDraft = editing && !(draft.authMethod === 'api_key' && !draftMutation.apiKey);
     setBusy('test');
     setError(null);
     setValidation(null);
+    if (credentialRequiredForDraft) {
+      setError(t('providers.secretRequiredForEndpointChange'));
+      setBusy(null);
+      return;
+    }
     try {
       const outcome = validateDraft
         ? await onValidateDraft(draftMutation)
         : await onValidate(providerId);
-      if (
-        requestId !== validationRequestId.current ||
-        providerId !== activeProviderIdRef.current
-      ) {
+      if (requestId !== validationRequestId.current || providerId !== activeProviderIdRef.current) {
         return;
       }
       setValidation(outcome);
     } catch (caught) {
-      if (
-        requestId !== validationRequestId.current ||
-        providerId !== activeProviderIdRef.current
-      ) {
+      if (requestId !== validationRequestId.current || providerId !== activeProviderIdRef.current) {
         return;
       }
       setValidation(null);
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      if (
-        requestId === validationRequestId.current &&
-        providerId === activeProviderIdRef.current
-      ) {
+      if (requestId === validationRequestId.current && providerId === activeProviderIdRef.current) {
         setBusy(null);
       }
     }
@@ -185,8 +182,11 @@ export function ProviderConnectionPanel({
     setBusy((current) => (current === 'test' ? null : current));
   };
 
-  const configurationOnly = mode === 'local';
-  const verified = validationSucceeded(validation);
+  const verified = providerValidationSucceeded(validation);
+  const authMethods = providerTypeDescriptor?.authMethods ?? [];
+  const authCapabilityAvailable = authMethods.includes(draft.authMethod);
+  const probeSupported = providerTypeDescriptor?.probeSupported === true;
+  const connectionTestAvailable = authCapabilityAvailable && probeSupported;
   const credentialValue = editing
     ? draft.apiKey
     : provider.api_key_masked ||
@@ -237,13 +237,11 @@ export function ProviderConnectionPanel({
           role="group"
           aria-label={t('providers.authenticationMethod')}
         >
-          {(['api_key', 'none'] as const).map((authMethod) => (
+          {authMethods.map((authMethod) => (
             <button
               className={draft.authMethod === authMethod ? 'selected' : ''}
               type="button"
-              disabled={
-                !editing || busy === 'save' || (mode === 'cloud' && authMethod === 'none')
-              }
+              disabled={!editing || busy === 'save'}
               key={authMethod}
               onClick={() => updateDraft('authMethod', authMethod)}
             >
@@ -255,7 +253,26 @@ export function ProviderConnectionPanel({
             </button>
           ))}
         </div>
-        {draft.authMethod === 'api_key' ? (
+        {authMethods.length === 0 ? (
+          <div className="provider-capability-note compact">
+            <ExclamationTriangleIcon />
+            <span>
+              <b>{t('providers.authCapabilityUnavailable')}</b>
+              <small>{t('providers.authCapabilityUnavailableDescription')}</small>
+            </span>
+          </div>
+        ) : null}
+        {providerTypeDescriptor && !probeSupported ? (
+          <div className="provider-capability-note compact" role="status">
+            <ExclamationTriangleIcon />
+            <span>
+              <b>{t('providers.probeUnsupported')}</b>
+              <small>{t('providers.probeUnsupportedDescription')}</small>
+            </span>
+          </div>
+        ) : null}
+        {authCapabilityAvailable ? (
+          draft.authMethod === 'api_key' ? (
           <label className="provider-input-label">
             <span>{t('providers.apiKey')}</span>
             <div className="provider-secret-input">
@@ -286,7 +303,8 @@ export function ProviderConnectionPanel({
               <small>{t('providers.noAuthenticationDescription')}</small>
             </span>
           </div>
-        )}
+          )
+        ) : null}
       </div>
 
       <div className="provider-form-section">
@@ -307,6 +325,15 @@ export function ProviderConnectionPanel({
             placeholder="https://api.example.com/v1"
           />
         </label>
+        {credentialRequiredForDraft ? (
+          <div className="provider-capability-note compact" role="alert">
+            <ExclamationTriangleIcon />
+            <span>
+              <b>{t('providers.secretRequiredForEndpointChange')}</b>
+              <small>{t('providers.secretDescription')}</small>
+            </span>
+          </div>
+        ) : null}
         <button
           className="provider-advanced-toggle"
           type="button"
@@ -347,7 +374,9 @@ export function ProviderConnectionPanel({
           role="status"
           aria-live="polite"
         >
-          {busy === 'test' ? (
+          {!probeSupported ? (
+            <ExclamationTriangleIcon />
+          ) : busy === 'test' ? (
             <ReloadIcon className="spin" />
           ) : verified ? (
             <CheckCircledIcon />
@@ -359,47 +388,46 @@ export function ProviderConnectionPanel({
           <span>
             <b>
               {t(
-                busy === 'test'
-                  ? configurationOnly
-                    ? 'providers.validatingConfiguration'
-                    : 'providers.testingConnection'
+                !probeSupported
+                  ? 'providers.probeUnsupported'
+                  : busy === 'test'
+                    ? 'providers.testingConnection'
                   : verified
-                    ? configurationOnly
-                      ? 'providers.configurationValid'
-                      : 'providers.connectionVerified'
+                      ? 'providers.connectionVerified'
                     : validation
                       ? 'providers.connectionFailed'
-                      : configurationOnly
-                        ? 'providers.validateBeforeSaving'
                         : 'providers.testBeforeSaving',
               )}
             </b>
             <small>
-              {error ||
-                validation?.detail ||
+              {!probeSupported
+                ? t('providers.probeUnsupportedDescription')
+                : error ||
                 validation?.errorMessage ||
-                t(
-                  configurationOnly
-                    ? 'providers.configurationValidationDescription'
-                    : 'providers.connectionTestDescription',
-                )}
+                  validation?.detail ||
+                  t('providers.connectionTestDescription')}
             </small>
           </span>
         </div>
         {canManage ? (
           <button
             type="button"
-            disabled={busy !== null || (editing && !providerDraftIsValid(draft))}
+            disabled={
+              busy !== null ||
+              !connectionTestAvailable ||
+              credentialRequiredForDraft ||
+              (editing && !providerDraftIsValid(draft))
+            }
             onClick={() => void testConnection()}
           >
-            {t(configurationOnly ? 'providers.validateConfiguration' : 'providers.testConnection')}
+            {t('providers.testConnection')}
           </button>
         ) : null}
         {editing ? (
           <button
             className="primary"
             type="button"
-            disabled={!verified || busy !== null}
+            disabled={!probeSupported || !verified || busy !== null}
             onClick={() => void saveConnection()}
           >
             {t('providers.saveConnection')}

@@ -16,6 +16,7 @@ import type {
   DesktopRuntimeConfig,
   LlmProviderCreateInput,
   LlmProviderMutationInput,
+  LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
 } from '../../types';
@@ -29,10 +30,7 @@ import {
   type ProviderTab,
 } from './ProviderOverviewPanels';
 import { ProviderStatusBadge } from './ProviderStatusBadge';
-import {
-  filterProviders,
-  type ProviderListFilter,
-} from './providerManagementModel';
+import { filterProviders, type ProviderListFilter } from './providerManagementModel';
 import './ModelProviderWorkspace.css';
 
 type ModelProviderWorkspaceProps = {
@@ -60,6 +58,7 @@ export function ModelProviderWorkspace({
   const { locale, t } = useI18n();
   const client = useMemo(() => new DesktopApiClient(config), [config]);
   const [providers, setProviders] = useState<ManagedLlmProvider[]>([]);
+  const [providerTypes, setProviderTypes] = useState<LlmProviderTypeDescriptor[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<ProviderTab>('overview');
   const [query, setQuery] = useState('');
@@ -88,15 +87,25 @@ export function ModelProviderWorkspace({
       setLoading(true);
       setError(null);
       try {
-        const items = await client.listLlmProviders(signal);
-        setProviders(items);
-        onCountChange?.(items.length);
+        const [items, types] = await Promise.all([
+          client.listLlmProviders(signal),
+          client.listLlmProviderTypes(signal).catch(() => []),
+        ]);
+        const modelProviders = items.filter(
+          (item) => !item.operation_type || item.operation_type === 'llm',
+        );
+        setProviders(modelProviders);
+        setProviderTypes(types);
+        onCountChange?.(modelProviders.length);
         setSelectedId((current) =>
-          current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
+          current && modelProviders.some((item) => item.id === current)
+            ? current
+            : (modelProviders[0]?.id ?? null),
         );
       } catch (caught) {
         if (signal?.aborted) return;
         setProviders([]);
+        setProviderTypes([]);
         onCountChange?.(null);
         setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
@@ -117,6 +126,9 @@ export function ModelProviderWorkspace({
     [filter, providers, query],
   );
   const provider = providers.find((item) => item.id === selectedId) ?? providers[0] ?? null;
+  const providerTypeDescriptor = providerTypes.find(
+    (descriptor) => descriptor.providerType === provider?.provider_type,
+  );
 
   const replaceProvider = useCallback((nextProvider: ManagedLlmProvider) => {
     setProviders((current) =>
@@ -165,13 +177,32 @@ export function ModelProviderWorkspace({
   const createProvider = useCallback(
     async (input: LlmProviderCreateInput) => {
       const created = await client.createLlmProvider(input);
-      setProviders((current) => [...current, created]);
+      let connected = false;
+      let checkedProvider = created;
+      try {
+        const outcome = await client.checkLlmProvider(created.id);
+        connected = outcome.status === 'healthy';
+        checkedProvider = {
+          ...created,
+          health_status: outcome.status,
+          health_last_check: outcome.lastChecked ?? null,
+          response_time_ms: outcome.responseTimeMs ?? null,
+          error_message: outcome.errorMessage ?? null,
+        };
+      } catch {
+        checkedProvider = { ...created, health_status: null };
+      }
+      setProviders((current) => [...current, checkedProvider]);
       onCountChange?.(providers.length + 1);
       setSelectedId(created.id);
       setTab('overview');
       setAdding(false);
-      showToast(t('providers.providerAddedInactive', { provider: created.name }));
-      return created;
+      showToast(
+        t(connected ? 'providers.providerConnected' : 'providers.providerAddedNeedsAttention', {
+          provider: created.name,
+        }),
+      );
+      return checkedProvider;
     },
     [client, onCountChange, providers.length, showToast, t],
   );
@@ -205,6 +236,14 @@ export function ModelProviderWorkspace({
       showToast(t('providers.copyUnavailable'));
     }
   };
+
+  const providerRuntimeSelected = Boolean(
+    provider &&
+    config.mode === 'local' &&
+    config.llmProvider === provider.provider_type &&
+    config.llmBaseUrl.replace(/\/$/, '') === (provider.base_url ?? '').replace(/\/$/, '') &&
+    config.llmModel === (provider.llm_model ?? ''),
+  );
 
   return (
     <main className="model-provider-workspace">
@@ -266,9 +305,11 @@ export function ModelProviderWorkspace({
                 <b>{item.name || item.provider_type}</b>
                 <small>
                   {item.provider_type} ·{' '}
-                  {t('providers.modelCount', { count: item.allowed_models?.length ?? 0 })}
+                  {t('providers.modelCount', {
+                    count: item.allowed_models?.length ?? 0,
+                  })}
                 </small>
-                <ProviderStatusBadge provider={item} mode={config.mode} />
+                <ProviderStatusBadge provider={item} />
               </span>
               <ArrowRightIcon />
             </button>
@@ -365,7 +406,7 @@ export function ModelProviderWorkspace({
                 <h1>{provider.name || provider.provider_type}</h1>
                 <p>{t('providers.identityDescription')}</p>
                 <div>
-                  <ProviderStatusBadge provider={provider} mode={config.mode} />
+                  <ProviderStatusBadge provider={provider} />
                   <span className="provider-auth-badge">
                     <LockClosedIcon />
                     {t(
@@ -390,20 +431,23 @@ export function ModelProviderWorkspace({
             </section>
             <nav
               className="provider-tabs"
-              aria-label={t('providers.providerSettings', { provider: provider.name })}
+              role="tablist"
+              aria-label={t('providers.providerSettings', {
+                provider: provider.name,
+              })}
             >
-              {(['overview', 'connection', 'models', 'routing', 'usage'] as const).map(
-                (value) => (
+              {(['overview', 'connection', 'models', 'routing', 'usage'] as const).map((value) => (
                   <button
                     className={tab === value ? 'active' : ''}
                     type="button"
+                  role="tab"
+                  aria-selected={tab === value}
                     key={value}
                     onClick={() => setTab(value)}
                   >
                     {t(`providers.tab.${value}`)}
                   </button>
-                ),
-              )}
+              ))}
             </nav>
             <div className="provider-tab-content">
               {!canManage ? (
@@ -422,7 +466,7 @@ export function ModelProviderWorkspace({
               {tab === 'connection' ? (
                 <ProviderConnectionPanel
                   provider={provider}
-                  mode={config.mode}
+                  providerTypeDescriptor={providerTypeDescriptor}
                   canManage={canManage}
                   onSave={saveProvider}
                   onValidate={validateProvider}
@@ -441,6 +485,7 @@ export function ModelProviderWorkspace({
                 <ProviderRoutingPanel
                   provider={provider}
                   mode={config.mode}
+                  runtimeSelected={providerRuntimeSelected}
                   canManage={canManage}
                   onSave={saveProvider}
                   onRuntimeSelected={selectRuntimeProvider}
@@ -449,8 +494,7 @@ export function ModelProviderWorkspace({
               {tab === 'usage' ? (
                 <ProviderUsagePanel
                   provider={provider}
-                  mode={config.mode}
-                  canReadUsage={config.mode === 'cloud' && canManage}
+                  canReadUsage={canManage}
                   onLoadUsage={client.getLlmProviderUsage.bind(client)}
                 />
               ) : null}
@@ -461,7 +505,6 @@ export function ModelProviderWorkspace({
 
       {adding ? (
         <AddProviderDialog
-          mode={config.mode}
           onClose={() => setAdding(false)}
           onLoadTypes={client.listLlmProviderTypes.bind(client)}
           onLoadCatalog={client.listLlmProviderModels.bind(client)}

@@ -176,8 +176,7 @@ const enUS: Record<string, string> = {
   'settings.chooseTenantDescription':
     'Tenants define members, credentials, memory, and policy boundaries.',
   'settings.chooseProject': 'Choose project',
-  'settings.chooseProjectDescription':
-    'Only projects available in the selected tenant are shown.',
+  'settings.chooseProjectDescription': 'Only projects available in the selected tenant are shown.',
   'settings.noProjects': 'No projects are available in this tenant.',
   'settings.noDescription': 'No description provided',
   'settings.memberCount': '{count} members',
@@ -191,8 +190,7 @@ const enUS: Record<string, string> = {
     'Task lists, memory, agents, and permissions reload inside the selected project.',
   'settings.authenticatedContextRequired': 'An authenticated workspace context is required.',
   'settings.selectedTenantUnavailable': 'The selected tenant is not available to this user.',
-  'settings.selectedProjectUnavailable':
-    'The selected project is not available for this tenant.',
+  'settings.selectedProjectUnavailable': 'The selected project is not available for this tenant.',
   'settings.contextResponseMismatch':
     'The workspace context response did not match the selected project.',
   'settings.contextSwitchLoadFailed':
@@ -214,8 +212,7 @@ const enUS: Record<string, string> = {
     'Open the governed models, skills, plugins, and agents available in this context.',
   'settings.open': 'Open',
   'settings.appearanceTitle': 'Appearance',
-  'settings.appearanceSubtitle':
-    'Keep the dense desktop layout readable across long-running work.',
+  'settings.appearanceSubtitle': 'Keep the dense desktop layout readable across long-running work.',
   'settings.notificationsTitle': 'Notifications',
   'settings.notificationsSubtitle': 'Only interrupt for states that need a human decision.',
   'settings.preferenceUnavailable': 'Not configurable in the current runtime',
@@ -364,8 +361,7 @@ const enUS: Record<string, string> = {
   'providers.loadFailed': 'Unable to load providers',
   'providers.retry': 'Retry',
   'providers.noProviders': 'No providers configured',
-  'providers.noProvidersDescription':
-    'Add a provider to connect credentials, models, and routing.',
+  'providers.noProvidersDescription': 'Add a provider to connect credentials, models, and routing.',
   'providers.modelProviderEyebrow': 'MODEL PROVIDER',
   'providers.identityDescription':
     'Manage credentials, endpoint health, models, and workspace routing independently.',
@@ -375,7 +371,8 @@ const enUS: Record<string, string> = {
   'providers.neverChecked': 'Not checked',
   'providers.providerSettings': '{provider} provider settings',
   'providers.providerSaved': '{provider} saved',
-  'providers.providerAddedInactive': '{provider} added in inactive state',
+  'providers.providerConnected': '{provider} connected',
+  'providers.providerAddedNeedsAttention': '{provider} added; connection needs attention',
   'providers.localRuntimeUpdated': 'Local runtime selection updated',
   'providers.providerIdCopied': 'Provider ID copied',
   'providers.copyUnavailable': 'Clipboard access is unavailable',
@@ -436,6 +433,8 @@ const enUS: Record<string, string> = {
   'providers.hideSecret': 'Hide secret',
   'providers.showSecret': 'Show secret',
   'providers.secretDescription': 'Secrets are encrypted and never shown again after saving.',
+  'providers.secretRequiredForEndpointChange':
+    'Enter the API key again before testing a different provider endpoint.',
   'providers.noAuthentication': 'No authentication',
   'providers.noAuthenticationDescription':
     'Requests are sent without credentials. Use only with a trusted local endpoint.',
@@ -449,23 +448,15 @@ const enUS: Record<string, string> = {
   'providers.advancedUnavailable': 'Advanced request policy is managed by the server',
   'providers.advancedUnavailableDescription':
     'Timeouts and custom headers are not exposed by the current provider contract.',
-  'providers.validatingConfiguration': 'Validating configuration…',
   'providers.testingConnection': 'Testing provider…',
-  'providers.configurationValid': 'Configuration valid',
   'providers.connectionVerified': 'Connection verified',
   'providers.connectionFailed': 'Connection failed',
-  'providers.validateBeforeSaving': 'Validate before saving',
   'providers.testBeforeSaving': 'Test before saving',
-  'providers.configurationValidationDescription':
-    'Checks the local provider configuration without an external request.',
-  'providers.connectionTestDescription':
-    'Checks authentication, endpoint, and model availability.',
-  'providers.validateConfiguration': 'Validate configuration',
+  'providers.connectionTestDescription': 'Checks authentication and endpoint connectivity.',
   'providers.testConnection': 'Test connection',
   'providers.saveConnection': 'Save connection',
   'providers.modelCatalogTitle': 'Choose models from this provider',
-  'providers.modelCatalogDescription':
-    'Only enabled models appear in agent and routing selectors.',
+  'providers.modelCatalogDescription': 'Only enabled models appear in agent and routing selectors.',
   'providers.savingModels': 'Saving models…',
   'providers.saveModels': 'Save models',
   'providers.loadingModels': 'Discovering…',
@@ -543,11 +534,12 @@ const enUS: Record<string, string> = {
   'providers.connectProvider': 'Connect {provider}',
   'providers.connectProviderDescription':
     'Authenticate once at provider level, then verify before selecting models.',
-  'providers.connectProviderLocalDescription':
-    'Configure the local connection, then validate it before selecting models.',
   'providers.authCapabilityUnavailable': 'Authentication capability unavailable',
   'providers.authCapabilityUnavailableDescription':
     'This server did not declare a supported authentication method for the provider.',
+  'providers.probeUnsupported': 'Connection test unavailable',
+  'providers.probeUnsupportedDescription':
+    'This provider needs a provider-specific connection flow before it can be tested here.',
   'providers.testModelId': 'Test model ID',
   'providers.enableModels': 'Enable discovered models',
   'providers.enableModelsDescription':
@@ -814,19 +806,26 @@ const enUS: Record<string, string> = {
   'session.inspectArtifactsDescription': 'Review current immutable artifact versions',
   'session.inspectActivityDescription': 'Inspect structured run and tool activity',
   'session.needsInput': 'Your input is required',
-  'session.needsInputDescription': 'Review the latest request in the thread before this run can continue.',
+  'session.needsInputDescription':
+    'Review the latest request in the thread before this run can continue.',
   'session.needsApproval': 'Approval required',
-  'session.needsApprovalDescription': 'Review the permission request in the thread before the agent continues.',
+  'session.needsApprovalDescription':
+    'Review the permission request in the thread before the agent continues.',
   'session.runFailed': 'Run failed',
-  'session.runFailedDescription': 'Review the failure details and retry from the last safe checkpoint.',
+  'session.runFailedDescription':
+    'Review the failure details and retry from the last safe checkpoint.',
   'session.runInterrupted': 'Run interrupted',
-  'session.runInterruptedDescription': 'The local runtime stopped before this run reached a review boundary.',
+  'session.runInterruptedDescription':
+    'The local runtime stopped before this run reached a review boundary.',
   'session.runPaused': 'Paused by you',
-  'session.runPausedDescription': 'The agent stopped at a safe checkpoint. Resume continues the same run without repeating completed work.',
+  'session.runPausedDescription':
+    'The agent stopped at a safe checkpoint. Resume continues the same run without repeating completed work.',
   'session.runDisconnected': 'Execution disconnected',
-  'session.runDisconnectedDescription': 'Live execution could not be confirmed. Reconnect to the same run before taking another action.',
+  'session.runDisconnectedDescription':
+    'Live execution could not be confirmed. Reconnect to the same run before taking another action.',
   'session.readyReview': 'Ready for review',
-  'session.readyReviewDescription': 'The agent finished this run. Review the result and evidence before marking it complete.',
+  'session.readyReviewDescription':
+    'The agent finished this run. Review the result and evidence before marking it complete.',
   'session.pauseRun': 'Pause',
   'session.pausing': 'Pausing…',
   'session.resumeRun': 'Resume',
@@ -1020,7 +1019,8 @@ const enUS: Record<string, string> = {
   'automations.runTrigger.scheduled': 'Scheduled',
   'automations.runTrigger.event': 'Event',
   'automations.runTrigger.unknown': 'Unknown source',
-  'session.runControlUnavailable': 'This session does not have an authoritative run that can be controlled.',
+  'session.runControlUnavailable':
+    'This session does not have an authoritative run that can be controlled.',
   'session.authorityLoading': 'Loading authoritative session state…',
   'session.authorityLoadingDescription':
     'Messages remain available while run controls and review actions are verified.',
@@ -1028,23 +1028,28 @@ const enUS: Record<string, string> = {
   'session.authorityErrorDescription':
     'Conversation history is still available. Retry before approving, steering, or delivering work.',
   'session.authorityRetry': 'Retry controls',
-  'session.authorityActionUnavailable': 'This action is not allowed by the current session authority.',
+  'session.authorityActionUnavailable':
+    'This action is not allowed by the current session authority.',
   'session.dataUnavailableTitle': 'Session data unavailable',
   'session.dataUnavailableDescription':
     'Authoritative artifact and evidence data has not loaded, so this is not shown as an empty result.',
   'session.emptyTitle': 'This session has no activity yet',
-  'session.emptyDescription': 'Send a prompt below to begin planning. Open the canvas when you need to review context or evidence.',
+  'session.emptyDescription':
+    'Send a prompt below to begin planning. Open the canvas when you need to review context or evidence.',
   'session.loadingHistory': 'Loading session history…',
   'session.noPlan': 'No plan is attached to this session.',
-  'session.noPlanDescription': 'Create a task with an Agent plan or wait for a persisted plan version to arrive.',
+  'session.noPlanDescription':
+    'Create a task with an Agent plan or wait for a persisted plan version to arrive.',
   'session.noChanges': 'No changes in this session',
-  'session.noChangesDescription': 'File changes and review decisions appear here only when they belong to the selected conversation.',
+  'session.noChangesDescription':
+    'File changes and review decisions appear here only when they belong to the selected conversation.',
   'session.changesKicker': 'Authoritative run evidence',
   'session.changesTitle': 'Changes',
   'session.changesRefresh': 'Refresh',
   'session.changesRefreshing': 'Refreshing…',
   'session.changesLoading': 'Loading run changes',
-  'session.changesLoadingBody': 'Reading the approved execution environment with fixed, read-only Git commands.',
+  'session.changesLoadingBody':
+    'Reading the approved execution environment with fixed, read-only Git commands.',
   'session.changesError': 'Changes could not be loaded',
   'session.changesUnavailable': 'Changes are unavailable',
   'session.changesUnavailableBody': 'This run is not bound to a readable repository environment.',
@@ -1052,14 +1057,20 @@ const enUS: Record<string, string> = {
   'session.changesStatus.unattributed': 'Changes cannot be attributed to this run',
   'session.changesStatus.unavailable': 'Run environment unavailable',
   'session.changesStatus.failed': 'Git inspection failed',
-  'session.changesReason.base_revision_unavailable': 'The run has no persisted base revision, so existing files cannot be attributed to the Agent.',
-  'session.changesReason.run_environment_unavailable': 'The authoritative run has no execution environment.',
-  'session.changesReason.repository_unavailable': 'The run environment is not linked to a Git repository.',
-  'session.changesReason.workspace_path_unavailable': 'The run workspace path is no longer available.',
-  'session.changesReason.git_repository_unavailable': 'The run workspace is not a readable Git repository.',
+  'session.changesReason.base_revision_unavailable':
+    'The run has no persisted base revision, so existing files cannot be attributed to the Agent.',
+  'session.changesReason.run_environment_unavailable':
+    'The authoritative run has no execution environment.',
+  'session.changesReason.repository_unavailable':
+    'The run environment is not linked to a Git repository.',
+  'session.changesReason.workspace_path_unavailable':
+    'The run workspace path is no longer available.',
+  'session.changesReason.git_repository_unavailable':
+    'The run workspace is not a readable Git repository.',
   'session.changesReason.repository_path_invalid': 'The repository path could not be verified.',
   'session.changesReason.workspace_path_invalid': 'The workspace path could not be verified.',
-  'session.changesReason.worktree_identity_mismatch': 'The persisted worktree identity no longer matches the run.',
+  'session.changesReason.worktree_identity_mismatch':
+    'The persisted worktree identity no longer matches the run.',
   'session.changesReason.git_diff_failed': 'Git could not produce a read-only diff for this run.',
   'session.changesReason.unknown': 'No authoritative reason was supplied.',
   'session.branchUnavailable': 'branch unavailable',
@@ -1067,7 +1078,8 @@ const enUS: Record<string, string> = {
   'session.changedFileTabs': 'Changed files',
   'session.changeReferenceHint': 'Select a line to attach a structured reference.',
   'session.referenceChangeLine': 'Reference {kind} line {line}',
-  'session.binaryChange': 'Binary file content is not rendered. Its patch digest remains bound to this snapshot.',
+  'session.binaryChange':
+    'Binary file content is not rendered. Its patch digest remains bound to this snapshot.',
   'session.attachedReferences': 'Attached code references',
   'session.removeReference': 'Remove reference {reference}',
   'session.deliveryMode': 'Run input delivery',
@@ -1077,7 +1089,8 @@ const enUS: Record<string, string> = {
   'session.sendQueuedInput': 'Queue input for the next task',
   'session.sendMessage': 'Send message',
   'session.sendShortcut': 'Press Command or Control plus Enter to send',
-  'session.composerBlockedByRunState': 'This run is not accepting ordinary input. Use the visible review, approval, or recovery action.',
+  'session.composerBlockedByRunState':
+    'This run is not accepting ordinary input. Use the visible review, approval, or recovery action.',
   'session.steeringAccepted': 'Steering persisted and will apply at the next durable run boundary.',
   'session.queueAccepted': 'Queued for the next task at position {position}.',
   'session.queueHandoffRegion': 'Queued task handoff',
@@ -1089,14 +1102,18 @@ const enUS: Record<string, string> = {
   'session.queueHandoffReady': 'Ready for plan',
   'session.queueHandoffBlocked': 'Blocked',
   'session.queueHandoffPromoted': 'Plan started',
-  'session.queueHandoffWaitingBody': 'This task stays queued until the source run is reviewed and completed.',
-  'session.queueHandoffReadyBody': 'Review the request, then explicitly start a separate Agent planning turn.',
-  'session.queueHandoffBlockedBody': 'The source run ended without completion. This task was not started.',
+  'session.queueHandoffWaitingBody':
+    'This task stays queued until the source run is reviewed and completed.',
+  'session.queueHandoffReadyBody':
+    'Review the request, then explicitly start a separate Agent planning turn.',
+  'session.queueHandoffBlockedBody':
+    'The source run ended without completion. This task was not started.',
   'session.queueHandoffPromotedBody': 'The request was handed to a separate Agent planning turn.',
   'session.queuePosition': 'Queue {position}',
   'session.startPlanTurn': 'Start planning',
   'session.startingPlanTurn': 'Starting…',
-  'session.queueSourceRunUnavailable': 'The source run changed. Refresh the session before starting this plan.',
+  'session.queueSourceRunUnavailable':
+    'The source run changed. Refresh the session before starting this plan.',
   'session.canvasOverview': 'Overview',
   'session.canvasPlan': 'Plan',
   'session.canvasActivity': 'Activity',
@@ -1237,7 +1254,8 @@ const enUS: Record<string, string> = {
   'approval.requestChangesDescription': 'Return explicit feedback without approving the action.',
   'approval.submitting': 'Submitting…',
   'approval.submitFailed': 'The decision could not be submitted.',
-  'approval.authoritativeNotice': 'This response is persisted against the request ID and Run revision.',
+  'approval.authoritativeNotice':
+    'This response is persisted against the request ID and Run revision.',
   'task.eyebrow': 'NEW AGENT TASK',
   'task.createTitle': 'Create task with a reviewable plan',
   'task.close': 'Close new task',
@@ -1267,7 +1285,8 @@ const enUS: Record<string, string> = {
     'Run directly in the configured folder. Existing uncommitted files remain in scope.',
   'task.environmentCreatedAfterApproval':
     'The environment is materialized only after this plan is approved.',
-  'task.authorityNote': 'Planning is read-only. The Agent cannot use write tools until you approve.',
+  'task.authorityNote':
+    'Planning is read-only. The Agent cannot use write tools until you approve.',
   'task.planReadOnly': 'PLAN MODE · READ ONLY',
   'task.planningTitle': 'The Agent is building a structured plan',
   'task.planningDescription':
@@ -1328,7 +1347,8 @@ const enUS: Record<string, string> = {
   'task.defineTitle': 'What should the Agent accomplish?',
   'task.defineDescription':
     'Describe the outcome and suggest useful context. The Agent will propose a plan before work starts.',
-  'task.objectiveHelp': 'Include the audience, decision, deliverable, or evidence that defines done.',
+  'task.objectiveHelp':
+    'Include the audience, decision, deliverable, or evidence that defines done.',
   'task.contextBoundaries': 'PLANNING CONTEXT',
   'task.contextTitle': 'Suggest where the Agent should start',
   'task.availableContext': 'Requested planning context',
@@ -1362,8 +1382,7 @@ const enUS: Record<string, string> = {
   'task.planOnly': 'Plan only',
   'task.reviewEyebrow': 'HUMAN REVIEW REQUIRED',
   'task.reviewTitle': 'Review the Agent’s plan',
-  'task.reviewDescription':
-    'Enable, edit, or add steps before granting execution authority.',
+  'task.reviewDescription': 'Enable, edit, or add steps before granting execution authority.',
   'task.planReady': 'Plan ready',
   'task.workTask': 'WORK TASK',
   'task.codeTask': 'CODE TASK',
@@ -1449,8 +1468,7 @@ const zhCN: Record<string, string> = {
   'login.localTenantUnavailable': '当前本地租户对该用户不可用。',
   'login.localProjectUnavailable': '当前本地项目对该用户不可用。',
   'login.localRuntimeNotReady': '受信任的本地运行时尚未就绪。',
-  'login.manualApiKeyRequiresValidation':
-    '必须先由服务端验证手动 API 密钥，才能打开工作空间。',
+  'login.manualApiKeyRequiresValidation': '必须先由服务端验证手动 API 密钥，才能打开工作空间。',
   'login.restoreFailed': '无法恢复已保存的登录状态，请重新登录。',
   'login.signOutPersistenceFailed': '退出登录时无法清除操作系统凭据，请重试后再关闭应用。',
   'login.signOutPersistenceWarning': '已退出登录，但无法从操作系统凭据存储中移除已撤销的凭据。',
@@ -1746,7 +1764,8 @@ const zhCN: Record<string, string> = {
   'providers.neverChecked': '尚未检查',
   'providers.providerSettings': '{provider} 供应商设置',
   'providers.providerSaved': '已保存 {provider}',
-  'providers.providerAddedInactive': '已添加 {provider}，当前未启用',
+  'providers.providerConnected': '已连接 {provider}',
+  'providers.providerAddedNeedsAttention': '已添加 {provider}，但连接需要处理',
   'providers.localRuntimeUpdated': '已更新本地运行时选择',
   'providers.providerIdCopied': '已复制供应商 ID',
   'providers.copyUnavailable': '无法访问剪贴板',
@@ -1804,6 +1823,7 @@ const zhCN: Record<string, string> = {
   'providers.hideSecret': '隐藏密钥',
   'providers.showSecret': '显示密钥',
   'providers.secretDescription': '密钥会加密保存，保存后不再完整显示。',
+  'providers.secretRequiredForEndpointChange': '更改供应商端点后，请重新输入 API 密钥再测试。',
   'providers.noAuthentication': '无需认证',
   'providers.noAuthenticationDescription': '请求不会携带凭据，仅用于可信的本地端点。',
   'providers.endpoint': '端点',
@@ -1814,16 +1834,11 @@ const zhCN: Record<string, string> = {
   'providers.connectionName': '连接名称',
   'providers.advancedUnavailable': '高级请求策略由服务端管理',
   'providers.advancedUnavailableDescription': '当前供应商契约未开放超时与自定义请求头配置。',
-  'providers.validatingConfiguration': '正在校验配置…',
   'providers.testingConnection': '正在测试供应商…',
-  'providers.configurationValid': '配置有效',
   'providers.connectionVerified': '连接已验证',
   'providers.connectionFailed': '连接失败',
-  'providers.validateBeforeSaving': '保存前校验',
   'providers.testBeforeSaving': '保存前测试',
-  'providers.configurationValidationDescription': '检查本地供应商配置，不发起外部请求。',
-  'providers.connectionTestDescription': '检查认证、端点与模型可用性。',
-  'providers.validateConfiguration': '校验配置',
+  'providers.connectionTestDescription': '检查认证与端点连通性。',
   'providers.testConnection': '测试连接',
   'providers.saveConnection': '保存连接',
   'providers.modelCatalogTitle': '选择此供应商的模型',
@@ -1846,7 +1861,8 @@ const zhCN: Record<string, string> = {
   'providers.source.configured': '已配置',
   'providers.toggleModel': '切换 {model}',
   'providers.discoveryUnavailable': '自动发现不可用',
-  'providers.discoveryUnavailableDescription': '当前运行时未提供兼容模型目录，请手动添加精确模型 ID。',
+  'providers.discoveryUnavailableDescription':
+    '当前运行时未提供兼容模型目录，请手动添加精确模型 ID。',
   'providers.noModelsReturned': '自动发现未返回模型',
   'providers.noModelsReturnedDescription':
     '部分供应商不提供兼容的模型目录端点，请手动添加精确模型 ID。',
@@ -1897,9 +1913,10 @@ const zhCN: Record<string, string> = {
   'providers.cloudApi': '云 API',
   'providers.connectProvider': '连接 {provider}',
   'providers.connectProviderDescription': '在供应商层级完成一次认证，验证后再选择模型。',
-  'providers.connectProviderLocalDescription': '配置本地连接，校验通过后再选择模型。',
   'providers.authCapabilityUnavailable': '认证能力不可用',
   'providers.authCapabilityUnavailableDescription': '当前服务器未声明此供应商支持的认证方式。',
+  'providers.probeUnsupported': '暂不支持连接测试',
+  'providers.probeUnsupportedDescription': '此供应商需要专用连接流程，当前无法在此测试。',
   'providers.testModelId': '测试模型 ID',
   'providers.enableModels': '启用已发现模型',
   'providers.enableModelsDescription': '启用后，模型会出现在智能体与工作区路由中。',
@@ -2048,8 +2065,7 @@ const zhCN: Record<string, string> = {
     '此记录来自最近一次已持久化的工作空间任务执行尝试；该来源不提供桌面 Run 字段。',
   'myWork.authorityDescription.hitl_request':
     '此记录标识一个待处理的交互请求。打开对应会话可查看并响应后端授权的内容。',
-  'myWork.authorityDescription.unknown':
-    '后端返回了不受支持的权威来源；界面未推断任何运行时含义。',
+  'myWork.authorityDescription.unknown': '后端返回了不受支持的权威来源；界面未推断任何运行时含义。',
   'myWork.currentAuthority': '当前已持久化记录',
   'myWork.attemptNumber': '尝试次数',
   'myWork.recordStatus': '记录状态',
@@ -2164,9 +2180,11 @@ const zhCN: Record<string, string> = {
   'session.runInterrupted': '运行已中断',
   'session.runInterruptedDescription': '本地运行时在到达审查阶段前停止。',
   'session.runPaused': '已由你暂停',
-  'session.runPausedDescription': '智能体已停在安全检查点；恢复后继续同一次运行，不会重复已完成的工作。',
+  'session.runPausedDescription':
+    '智能体已停在安全检查点；恢复后继续同一次运行，不会重复已完成的工作。',
   'session.runDisconnected': '执行连接已断开',
-  'session.runDisconnectedDescription': '当前无法确认实时执行状态。请先重新连接同一次运行，再执行其他操作。',
+  'session.runDisconnectedDescription':
+    '当前无法确认实时执行状态。请先重新连接同一次运行，再执行其他操作。',
   'session.readyReview': '可以开始审查',
   'session.readyReviewDescription': '智能体已完成本次运行，请先审查结果与证据，再标记为完成。',
   'session.pauseRun': '暂停',
@@ -2180,8 +2198,7 @@ const zhCN: Record<string, string> = {
   'session.forkRecovery': '分叉恢复',
   'session.forkingRecovery': '正在创建恢复分支…',
   'session.forkRecoveryTitle': '启动隔离的恢复运行？',
-  'session.forkRecoveryDescription':
-    '分叉恢复会保留来源运行，并以新的隔离环境创建一个新运行。',
+  'session.forkRecoveryDescription': '分叉恢复会保留来源运行，并以新的隔离环境创建一个新运行。',
   'session.forkRecoveryNewRun': '将创建新的运行 ID 和隔离 Worktree。',
   'session.forkRecoveryVerifiedHead': '新 Worktree 从来源仓库最后验证的 Git HEAD 开始。',
   'session.forkRecoveryLocalChanges': '来源 Worktree 中未提交和未跟踪的文件不会被复制。',
@@ -2217,10 +2234,8 @@ const zhCN: Record<string, string> = {
   'session.terminalEmpty': '打开已授权的运行终端后，输出会显示在这里。',
   'session.terminalOutput': '运行终端输出',
   'session.openNewTerminal': '打开新 Shell',
-  'session.terminalAuthorityMismatch':
-    '终端回执与当前 Run、修订版本、会话或执行环境不一致。',
-  'session.terminalStaleBody':
-    '此 Shell 属于另一组运行身份，现已解除绑定并清除旧输出。',
+  'session.terminalAuthorityMismatch': '终端回执与当前 Run、修订版本、会话或执行环境不一致。',
+  'session.terminalStaleBody': '此 Shell 属于另一组运行身份，现已解除绑定并清除旧输出。',
   'session.terminalClosedBody':
     '连接关闭时 Shell 进程已结束；如果当前运行仍获授权，请打开新的 Shell。',
   'session.terminalErrorBody': '连接或运行权限已失效，因此 Shell 已停止。',
@@ -2257,11 +2272,9 @@ const zhCN: Record<string, string> = {
   'sandbox.startTerminal': '启动沙盒终端',
   'sandbox.liveShell': 'Shell 状态',
   'sandbox.desktopFrameTitle': '沙盒桌面',
-  'sandbox.desktopUnavailableDescription':
-    '桌面服务未返回可连接的代理，请先启动生产沙盒运行时。',
+  'sandbox.desktopUnavailableDescription': '桌面服务未返回可连接的代理，请先启动生产沙盒运行时。',
   'sandbox.desktopEmptyDescription': '启动沙盒桌面后，可在这里查看工作空间环境。',
-  'sandbox.terminalUnavailableDescription':
-    '终端服务未返回可连接的代理，请先启动生产沙盒运行时。',
+  'sandbox.terminalUnavailableDescription': '终端服务未返回可连接的代理，请先启动生产沙盒运行时。',
   'sandbox.clearTerminalOutput': '清除终端输出',
   'sandbox.clear': '清除',
   'sandbox.terminalInput': '终端输入',
@@ -2295,8 +2308,7 @@ const zhCN: Record<string, string> = {
   'automations.loading': '正在加载自动化',
   'automations.loadingBody': '正在读取项目范围内的计划任务与执行历史。',
   'automations.empty': '此项目没有自动化',
-  'automations.emptyBody':
-    '调度服务返回了空列表；在变更契约可用前，创建操作保持禁用。',
+  'automations.emptyBody': '调度服务返回了空列表；在变更契约可用前，创建操作保持禁用。',
   'automations.list': '项目自动化列表',
   'automations.active': '已启用',
   'automations.paused': '已暂停',
@@ -2329,12 +2341,9 @@ const zhCN: Record<string, string> = {
     '当前服务端未声明修订版本、幂等与持久化执行能力，因此变更操作保持禁用。',
   'automations.capabilityReason.client_handler_unavailable':
     '当前客户端尚未实现此变更处理器，因此控件保持禁用。',
-  'automations.capabilityReason.revision_guard_required':
-    '此操作需要服务端提供修订版本保护。',
-  'automations.capabilityReason.idempotency_guard_required':
-    '此操作需要服务端提供幂等保护。',
-  'automations.capabilityReason.durable_execution_required':
-    '此操作需要持久化自动化执行运行时。',
+  'automations.capabilityReason.revision_guard_required': '此操作需要服务端提供修订版本保护。',
+  'automations.capabilityReason.idempotency_guard_required': '此操作需要服务端提供幂等保护。',
+  'automations.capabilityReason.durable_execution_required': '此操作需要持久化自动化执行运行时。',
   'automations.runHistory': '运行历史',
   'automations.runCount': '{count} 次运行',
   'automations.loadingRuns': '正在加载运行历史…',
@@ -2383,7 +2392,8 @@ const zhCN: Record<string, string> = {
   'session.changesStatus.unattributed': '无法将变更归因到此运行',
   'session.changesStatus.unavailable': '运行环境不可用',
   'session.changesStatus.failed': 'Git 检查失败',
-  'session.changesReason.base_revision_unavailable': '运行缺少持久化的基线版本，因此不能把现有文件变更归因给智能体。',
+  'session.changesReason.base_revision_unavailable':
+    '运行缺少持久化的基线版本，因此不能把现有文件变更归因给智能体。',
   'session.changesReason.run_environment_unavailable': '权威运行没有执行环境。',
   'session.changesReason.repository_unavailable': '运行环境未关联 Git 仓库。',
   'session.changesReason.workspace_path_unavailable': '运行工作区路径已不可用。',
@@ -2408,7 +2418,8 @@ const zhCN: Record<string, string> = {
   'session.sendQueuedInput': '将输入排入下一任务',
   'session.sendMessage': '发送消息',
   'session.sendShortcut': '按 Command 或 Control 加 Enter 发送',
-  'session.composerBlockedByRunState': '此运行当前不接受普通输入，请使用页面中显示的审查、审批或恢复操作。',
+  'session.composerBlockedByRunState':
+    '此运行当前不接受普通输入，请使用页面中显示的审查、审批或恢复操作。',
   'session.steeringAccepted': '引导已持久化，将在下一个安全运行边界应用。',
   'session.queueAccepted': '已排入下一任务，队列位置 {position}。',
   'session.queueHandoffRegion': '排队任务移交',
@@ -2452,8 +2463,7 @@ const zhCN: Record<string, string> = {
   'session.evidence.verification.description': '展示每个当前通用产物版本声明的结构化完成检查。',
   'session.evidence.recordCount': '{count} 条记录',
   'session.evidence.noArtifacts': '尚无版本化产物',
-  'session.evidence.noArtifactsDescription':
-    '后端持久化权威产物版本后，这里才会显示来源与检查。',
+  'session.evidence.noArtifactsDescription': '后端持久化权威产物版本后，这里才会显示来源与检查。',
   'session.evidence.unlabeled': '未命名证据',
   'session.evidence.statusUnknown': '未声明状态',
   'session.evidence.raw': '查看原始证据',
@@ -2499,8 +2509,7 @@ const zhCN: Record<string, string> = {
   'artifact.currentVersions': '当前产物版本',
   'artifact.emptyTitle': '尚无已导出的产物',
   'artifact.emptyDescription': '智能体需要显式导出产物，产物才可被审查或交付。',
-  'artifact.unversionedEvidence':
-    '另有 {count} 个未版本化事件仍可在“活动”中查看，但不能被批准。',
+  'artifact.unversionedEvidence': '另有 {count} 个未版本化事件仍可在“活动”中查看，但不能被批准。',
   'artifact.immutableVersion': '不可变产物版本',
   'artifact.version': '版本',
   'artifact.lifecycle': '产物生命周期',
@@ -2604,7 +2613,8 @@ const zhCN: Record<string, string> = {
   'task.planChangedDescription': '权威任务列表已变化；批准前请重新审查刷新后的步骤。',
   'task.reviewLatestPlan': '我已审查刷新后的计划',
   'task.revisionNotAcknowledgedTitle': '智能体未确认修改请求',
-  'task.revisionNotAcknowledgedDescription': '批准仍被阻止；你可以重试，或停止等待并重新审查当前计划。',
+  'task.revisionNotAcknowledgedDescription':
+    '批准仍被阻止；你可以重试，或停止等待并重新审查当前计划。',
   'task.stopWaitingForRevision': '停止等待并重新审查',
   'task.reviewCurrentPlanTitle': '再次审查当前计划',
   'task.reviewCurrentPlanDescription': '延迟到达的智能体响应仍可能在批准前刷新这些步骤。',
@@ -2699,7 +2709,8 @@ const zhCN: Record<string, string> = {
   'task.legacyApprovalTitle': '旧版计划→执行切换',
   'task.legacyApprovalDescription': '该后端无法原子绑定计划版本，因此权限和环境控制保持不可用。',
   'task.limitedAuthorityTitle': '你正在授予有限权限',
-  'task.limitedAuthorityDescription': '批准会启动 {count} 个已审查步骤；智能体仍必须在策略关口停止。',
+  'task.limitedAuthorityDescription':
+    '批准会启动 {count} 个已审查步骤；智能体仍必须在策略关口停止。',
   'task.legacyAuthorityTitle': '由后端定义执行权限',
   'task.legacyAuthorityDescription': '执行模式使用后端默认值；当前审查无法约束权限或环境。',
   'task.editBrief': '编辑任务说明',

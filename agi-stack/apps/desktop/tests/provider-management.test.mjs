@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -18,8 +19,25 @@ const {
   providerMutationFromDraft,
   providerTypeDisplayName,
   providerValidationSignal,
+  providerValidationSucceeded,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings/providerManagementModel.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+const addProviderDialogSource = readFileSync(
+  new URL('../src/features/settings/AddProviderDialog.tsx', import.meta.url),
+  'utf8',
+);
+const providerConnectionPanelSource = readFileSync(
+  new URL('../src/features/settings/ProviderConnectionPanel.tsx', import.meta.url),
+  'utf8',
+);
+const providerOverviewPanelsSource = readFileSync(
+  new URL('../src/features/settings/ProviderOverviewPanels.tsx', import.meta.url),
+  'utf8',
+);
+const modelProviderWorkspaceSource = readFileSync(
+  new URL('../src/features/settings/ModelProviderWorkspace.tsx', import.meta.url),
+  'utf8',
+);
 
 test('provider management permissions keep local owner and cloud admin boundaries explicit', () => {
   assert.equal(providerManagementAllowed('local', ['owner']), true);
@@ -40,11 +58,15 @@ test('provider setup fails closed when the server does not declare an auth capab
   const legacyDescriptor = {
     providerType: 'legacy',
     authMethods: [],
+    operationType: 'llm',
+    probeSupported: true,
     source: 'cloud_api',
   };
   const apiKeyDescriptor = {
     providerType: 'openai',
     authMethods: ['api_key'],
+    operationType: 'llm',
+    probeSupported: true,
     source: 'cloud_api',
   };
 
@@ -175,7 +197,7 @@ test('provider workspace helpers search structured fields and map attention stat
       is_active: true,
       credential_configured: true,
     }),
-    'attention'
+    'attention',
   );
   assert.equal(
     providerConnectionStatus({
@@ -186,7 +208,7 @@ test('provider workspace helpers search structured fields and map attention stat
       credential_configured: true,
       health_status: 'rate_limited',
     }),
-    'attention'
+    'attention',
   );
   assert.equal(
     providerConnectionStatus({
@@ -198,19 +220,19 @@ test('provider workspace helpers search structured fields and map attention stat
       credential_configured: false,
       health_status: 'configuration_valid',
     }),
-    'connected'
+    'attention',
   );
   assert.deepEqual(
     filterProviders(providers, '  ANTHRO ', 'all').map((provider) => provider.id),
-    ['anthropic']
+    ['anthropic'],
   );
   assert.deepEqual(
     filterProviders(providers, 'open', 'connected').map((provider) => provider.id),
-    ['openai']
+    ['openai'],
   );
   assert.deepEqual(
     filterProviders(providers, '', 'attention').map((provider) => provider.id),
-    ['anthropic', 'embedding']
+    ['anthropic', 'embedding'],
   );
   assert.deepEqual(providerModelsFromProvider(providers[0]), [
     { id: 'gpt-5', capability: 'chat' },
@@ -229,7 +251,7 @@ test('provider validation distinguishes configuration-only results from real pro
       probed: false,
       detail: 'No external request was sent',
     }),
-    { kind: 'configuration_only', status: 'configuration_valid' }
+    { kind: 'configuration_only', status: 'configuration_valid' },
   );
   assert.deepEqual(
     providerValidationSignal({
@@ -238,37 +260,103 @@ test('provider validation distinguishes configuration-only results from real pro
       probed: true,
       detail: null,
     }),
-    { kind: 'external_probe', status: 'healthy' }
+    { kind: 'external_probe', status: 'healthy' },
+  );
+  assert.equal(
+    providerValidationSucceeded({
+      provider: null,
+      status: 'configuration_valid',
+      probed: false,
+      detail: 'No external request was sent',
+    }),
+    false,
+  );
+  assert.equal(
+    providerValidationSucceeded({
+      provider: null,
+      status: 'healthy',
+      probed: true,
+      detail: null,
+    }),
+    true,
   );
 });
 
-test('provider API adapters preserve local revision and cloud health contracts', async () => {
+test('provider wizard creates only active providers with an enabled model', () => {
+  assert.match(addProviderDialogSource, /active: true/);
+  assert.doesNotMatch(addProviderDialogSource, /active: false/);
+  assert.match(addProviderDialogSource, /step === 3 && selectedModels\.size === 0/);
+  assert.match(
+    addProviderDialogSource,
+    /nextTypes\.filter\([\s\S]{0,160}descriptor\.operationType === 'llm' && descriptor\.probeSupported/,
+  );
+  assert.match(addProviderDialogSource, /if \(modelId === primaryModel\) return/);
+  assert.match(addProviderDialogSource, /disabled=\{model\.id === primaryModel\}/);
+  assert.match(addProviderDialogSource, /descriptor\.authMethods\.includes\('none'\)/);
+  assert.match(
+    addProviderDialogSource,
+    /ollama:[\s\S]{0,100}baseUrl: 'http:\/\/127\.0\.0\.1:11434'/,
+  );
+});
+
+test('provider editing preserves stored credentials only for the unchanged endpoint', () => {
+  assert.match(
+    providerConnectionPanelSource,
+    /credentialRequiredForDraft[\s\S]{0,200}draft\.authMethod === 'api_key'[\s\S]{0,200}endpointChanged[\s\S]{0,100}!mutation\.apiKey/,
+  );
+  assert.match(
+    providerConnectionPanelSource,
+    /validateDraft[\s\S]{0,160}editing && !\(draft\.authMethod === 'api_key' && !draftMutation\.apiKey\)/,
+  );
+  assert.match(providerConnectionPanelSource, /secretRequiredForEndpointChange/);
+  assert.match(
+    providerConnectionPanelSource,
+    /probeSupported = providerTypeDescriptor\?\.probeSupported === true/,
+  );
+  assert.match(
+    providerConnectionPanelSource,
+    /connectionTestAvailable = authCapabilityAvailable && probeSupported/,
+  );
+  assert.match(providerConnectionPanelSource, /disabled=\{!probeSupported \|\| !verified/);
+});
+
+test('provider routing and usage obey current runtime and request identity', () => {
+  assert.match(
+    providerOverviewPanelsSource,
+    /runtimeSelected && defaultModel === provider\.llm_model/,
+  );
+  assert.match(providerOverviewPanelsSource, /const controller = new AbortController\(\)/);
+  assert.match(providerOverviewPanelsSource, /onLoadUsage\(provider\.id, controller\.signal\)/);
+  assert.match(providerOverviewPanelsSource, /return \(\) => controller\.abort\(\)/);
+  assert.match(
+    modelProviderWorkspaceSource,
+    /config\.llmProvider === provider\.provider_type[\s\S]{0,220}config\.llmModel === \(provider\.llm_model \?\? ''\)/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /items\.filter\([\s\S]{0,120}!item\.operation_type \|\| item\.operation_type === 'llm'/,
+  );
+});
+
+test('provider API adapters share PUT and live health-check contracts', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     calls.push({ input, init });
     const url = String(input);
-    if (url.endsWith('/test')) {
-      return new Response(
-        JSON.stringify({
-          provider: { id: 'local-runtime', revision: 8 },
-          status: 'configuration_valid',
-          probed: false,
-          detail: 'configuration validated locally; no external request was sent',
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } }
-      );
-    }
     if (url.endsWith('/health-check')) {
       return new Response(
         JSON.stringify({
-          provider_id: '11111111-2222-4333-8444-555555555555',
+          provider_id: url.includes('local-runtime')
+            ? 'local-runtime'
+            : '11111111-2222-4333-8444-555555555555',
           status: 'healthy',
+          probed: true,
           last_check: '2026-07-13T10:00:00Z',
           response_time_ms: 42,
           error_message: null,
         }),
-        { status: 200, headers: { 'content-type': 'application/json' } }
+        { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }
     return new Response(
@@ -278,9 +366,21 @@ test('provider API adapters preserve local revision and cloud health contracts',
           : '11111111-2222-4333-8444-555555555555',
         name: 'Provider',
         provider_type: 'openai',
+        ...(url.includes('local-runtime')
+          ? {
+              authMethod: 'api_key',
+              credentialConfigured: true,
+              runtimeSelected: true,
+              version: 8,
+            }
+          : {
+              auth_method: 'api_key',
+              credential_configured: true,
+              runtime_selected: false,
         revision: 8,
       }),
-      { status: 200, headers: { 'content-type': 'application/json' } }
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
     );
   };
 
@@ -309,14 +409,12 @@ test('provider API adapters preserve local revision and cloud health contracts',
       expectedRevision: 7,
     };
 
-    await local.updateLlmProvider('local-runtime', mutation);
+    const localUpdated = await local.updateLlmProvider('local-runtime', mutation);
     const localValidation = await local.checkLlmProvider('local-runtime');
     await cloud.updateLlmProvider('11111111-2222-4333-8444-555555555555', mutation);
-    const cloudValidation = await cloud.checkLlmProvider(
-      '11111111-2222-4333-8444-555555555555'
-    );
+    const cloudValidation = await cloud.checkLlmProvider('11111111-2222-4333-8444-555555555555');
 
-    assert.equal(calls[0]?.init?.method, 'PATCH');
+    assert.equal(calls[0]?.init?.method, 'PUT');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
       name: 'Provider',
       provider_type: 'openai',
@@ -327,7 +425,23 @@ test('provider API adapters preserve local revision and cloud health contracts',
       is_active: true,
       expected_revision: 7,
     });
-    assert.equal(localValidation.probed, false);
+    assert.deepEqual(
+      {
+        authMethod: localUpdated.auth_method,
+        credentialConfigured: localUpdated.credential_configured,
+        revision: localUpdated.revision,
+        runtimeSelected: localUpdated.runtime_selected,
+      },
+      {
+        authMethod: 'api_key',
+        credentialConfigured: true,
+        revision: 8,
+        runtimeSelected: true,
+      },
+    );
+    assert.equal(String(calls[1]?.input).endsWith('/local-runtime/health-check'), true);
+    assert.equal(localValidation.probed, true);
+    assert.equal(localValidation.status, 'healthy');
     assert.equal(calls[2]?.init?.method, 'PUT');
     assert.deepEqual(JSON.parse(String(calls[2]?.init?.body)), {
       name: 'Provider',
@@ -355,7 +469,7 @@ test('provider create adapters keep local-only auth fields out of cloud requests
         name: 'New provider',
         provider_type: 'openai_compatible',
       }),
-      { status: 201, headers: { 'content-type': 'application/json' } }
+      { status: 201, headers: { 'content-type': 'application/json' } },
     );
   };
 
@@ -414,7 +528,73 @@ test('provider create adapters keep local-only auth fields out of cloud requests
   }
 });
 
-test('provider discovery and usage fail closed locally and normalize cloud payloads', async () => {
+test('provider responses normalize compatibility fields explicitly', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify([
+        {
+          id: 'local-ollama',
+          name: 'Local Ollama',
+          providerType: 'ollama',
+          authMethod: 'none',
+          credentialConfigured: false,
+          runtimeSelected: true,
+          version: 12,
+        },
+        {
+          id: 'legacy-openai',
+          name: 'Legacy OpenAI',
+          provider_type: 'openai',
+          api_key_masked: 'sk-…last4',
+        },
+      ]),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const local = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-user-session',
+      localApiToken: 'launch-capability',
+    });
+    const providers = await local.listLlmProviders();
+    assert.deepEqual(
+      providers.map((provider) => ({
+        id: provider.id,
+        providerType: provider.provider_type,
+        authMethod: provider.auth_method,
+        credentialConfigured: provider.credential_configured,
+        runtimeSelected: provider.runtime_selected,
+        revision: provider.revision,
+      })),
+      [
+        {
+          id: 'local-ollama',
+          providerType: 'ollama',
+          authMethod: 'none',
+          credentialConfigured: false,
+          runtimeSelected: true,
+          revision: 12,
+        },
+        {
+          id: 'legacy-openai',
+          providerType: 'openai',
+          authMethod: undefined,
+          credentialConfigured: true,
+          runtimeSelected: false,
+          revision: 0,
+        },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('provider discovery and usage use the same local and cloud contracts', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
@@ -423,9 +603,32 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
     if (url.endsWith('/types')) {
       const types = url.startsWith('http://127.0.0.1:8088')
         ? [
-            { provider_type: 'openai', auth_methods: ['api_key', 'none'] },
-            { provider_type: 'anthropic', auth_methods: ['api_key', 'none'] },
-            { provider_type: 'openai_compatible', auth_methods: ['api_key', 'none'] },
+            {
+              provider_type: 'openai',
+              operation_type: 'llm',
+              auth_methods: ['api_key'],
+            },
+            {
+              provider_type: 'anthropic',
+              operation_type: 'llm',
+              auth_methods: ['api_key'],
+            },
+            {
+              provider_type: 'azure_openai',
+              operation_type: 'llm',
+              probe_supported: false,
+              auth_methods: ['api_key'],
+            },
+            {
+              provider_type: 'ollama',
+              operation_type: 'llm',
+              auth_methods: ['none'],
+            },
+            {
+              provider_type: 'dashscope_embedding',
+              operation_type: 'embedding',
+              auth_methods: ['api_key'],
+            },
           ]
         : [
             { provider_type: 'openai', auth_methods: ['api_key'] },
@@ -436,6 +639,20 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
+    }
+    if (url.endsWith('/models/openai')) {
+      return new Response(
+        JSON.stringify({
+          provider_type: 'openai',
+          source: 'models.dev',
+          models: {
+            chat: ['gpt-local'],
+            embedding: [],
+            rerank: [],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     }
     if (url.endsWith('/models/anthropic')) {
       return new Response(
@@ -448,7 +665,7 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
             rerank: ['rerank-test'],
           },
         }),
-        { status: 200, headers: { 'content-type': 'application/json' } }
+        { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }
     if (url.endsWith('/provider-cloud/usage')) {
@@ -472,7 +689,31 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
             },
           ],
         }),
-        { status: 200, headers: { 'content-type': 'application/json' } }
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (url.endsWith('/provider-local/usage')) {
+      return new Response(
+        JSON.stringify({
+          provider_id: 'provider-local',
+          tenant_id: null,
+          statistics: [
+            {
+              provider_id: 'provider-local',
+              tenant_id: null,
+              operation_type: 'llm',
+              total_requests: 2,
+              total_prompt_tokens: 10,
+              total_completion_tokens: 4,
+              total_tokens: 14,
+              total_cost_usd: null,
+              avg_response_time_ms: 21,
+              first_request_at: '2026-07-14T00:00:00Z',
+              last_request_at: '2026-07-14T00:01:00Z',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }
     return new Response('Not Found', { status: 404 });
@@ -496,38 +737,94 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
     assert.deepEqual(await local.listLlmProviderTypes(), [
       {
         providerType: 'openai',
-        authMethods: ['api_key', 'none'],
+        authMethods: ['api_key'],
+        operationType: 'llm',
+        probeSupported: true,
         source: 'local_runtime',
       },
       {
         providerType: 'anthropic',
-        authMethods: ['api_key', 'none'],
+        authMethods: ['api_key'],
+        operationType: 'llm',
+        probeSupported: true,
         source: 'local_runtime',
       },
       {
-        providerType: 'openai_compatible',
-        authMethods: ['api_key', 'none'],
+        providerType: 'azure_openai',
+        authMethods: ['api_key'],
+        operationType: 'llm',
+        probeSupported: false,
+        source: 'local_runtime',
+      },
+      {
+        providerType: 'ollama',
+        authMethods: ['none'],
+        operationType: 'llm',
+        probeSupported: true,
+        source: 'local_runtime',
+      },
+      {
+        providerType: 'dashscope_embedding',
+        authMethods: ['api_key'],
+        operationType: 'embedding',
+        probeSupported: true,
         source: 'local_runtime',
       },
     ]);
     assert.deepEqual(await local.listLlmProviderModels('openai'), {
       providerType: 'openai',
-      availability: 'unavailable',
-      source: null,
-      models: [],
+      availability: 'available',
+      source: 'models.dev',
+      models: [{ id: 'gpt-local', capability: 'chat' }],
     });
     assert.deepEqual(await local.getLlmProviderUsage('provider-local'), {
       provider_id: 'provider-local',
       tenant_id: null,
-      availability: 'unavailable',
-      statistics: [],
+      availability: 'available',
+      statistics: [
+        {
+          provider_id: 'provider-local',
+          tenant_id: null,
+          operation_type: 'llm',
+          total_requests: 2,
+          total_prompt_tokens: 10,
+          total_completion_tokens: 4,
+          total_tokens: 14,
+          total_cost_usd: null,
+          avg_response_time_ms: 21,
+          first_request_at: '2026-07-14T00:00:00Z',
+          last_request_at: '2026-07-14T00:01:00Z',
+        },
+      ],
     });
-    assert.deepEqual(calls, ['http://127.0.0.1:8088/api/v1/llm-providers/types']);
+    assert.deepEqual(calls, [
+      'http://127.0.0.1:8088/api/v1/llm-providers/types',
+      'http://127.0.0.1:8088/api/v1/llm-providers/models/openai',
+      'http://127.0.0.1:8088/api/v1/llm-providers/provider-local/usage',
+    ]);
 
     assert.deepEqual(await cloud.listLlmProviderTypes(), [
-      { providerType: 'openai', authMethods: ['api_key'], source: 'cloud_api' },
-      { providerType: 'ollama', authMethods: ['none'], source: 'cloud_api' },
-      { providerType: 'anthropic', authMethods: [], source: 'cloud_api' },
+      {
+        providerType: 'openai',
+        authMethods: ['api_key'],
+        operationType: 'llm',
+        probeSupported: true,
+        source: 'cloud_api',
+      },
+      {
+        providerType: 'ollama',
+        authMethods: ['none'],
+        operationType: 'llm',
+        probeSupported: true,
+        source: 'cloud_api',
+      },
+      {
+        providerType: 'anthropic',
+        authMethods: [],
+        operationType: 'llm',
+        probeSupported: true,
+        source: 'cloud_api',
+      },
     ]);
     assert.deepEqual(await cloud.listLlmProviderModels('anthropic'), {
       providerType: 'anthropic',
@@ -560,6 +857,8 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
     });
     assert.deepEqual(calls, [
       'http://127.0.0.1:8088/api/v1/llm-providers/types',
+      'http://127.0.0.1:8088/api/v1/llm-providers/models/openai',
+      'http://127.0.0.1:8088/api/v1/llm-providers/provider-local/usage',
       'https://api.example.test/api/v1/llm-providers/types',
       'https://api.example.test/api/v1/llm-providers/models/anthropic',
       'https://api.example.test/api/v1/llm-providers/provider-cloud/usage',
@@ -569,20 +868,22 @@ test('provider discovery and usage fail closed locally and normalize cloud paylo
   }
 });
 
-test('draft connection tests probe only cloud and report local structural validation honestly', async () => {
+test('draft connection tests probe both runtimes and preserve live failures', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
+    const local = String(input).startsWith('http://127.0.0.1:8088');
     return new Response(
       JSON.stringify({
         provider_id: 'temporary-probe',
-        status: 'healthy',
+        status: local ? 'healthy' : 'unhealthy',
+        ...(local ? { probed: true } : {}),
         last_check: '2026-07-14T10:00:00Z',
         response_time_ms: 37,
-        error_message: null,
+        error_message: local ? null : 'model was not available',
       }),
-      { status: 200, headers: { 'content-type': 'application/json' } }
+      { status: 200, headers: { 'content-type': 'application/json' } },
     );
   };
 
@@ -602,34 +903,16 @@ test('draft connection tests probe only cloud and report local structural valida
     });
     const input = {
       name: 'Draft provider',
-      providerType: 'anthropic',
+      providerType: 'custom_gateway',
       authMethod: 'api_key',
-      baseUrl: 'https://api.anthropic.test',
-      primaryModel: 'claude-sonnet-4',
-      allowedModels: ['claude-sonnet-4'],
+      baseUrl: 'https://gateway.example.test/v1',
+      primaryModel: 'gateway-model',
+      allowedModels: ['gateway-model'],
       active: true,
       apiKey: 'draft-secret',
     };
 
     assert.deepEqual(await local.testLlmProviderDraft(input), {
-      provider: null,
-      status: 'configuration_valid',
-      probed: false,
-      detail: 'configuration_only',
-    });
-    assert.deepEqual(
-      await local.testLlmProviderDraft({ ...input, baseUrl: 'file:///tmp/not-an-api' }),
-      {
-        provider: null,
-        status: 'configuration_invalid',
-        probed: false,
-        detail: 'configuration_only',
-        errorMessage: 'invalid_base_url',
-      }
-    );
-    assert.deepEqual(calls, []);
-
-    assert.deepEqual(await cloud.testLlmProviderDraft(input), {
       provider: null,
       status: 'healthy',
       probed: true,
@@ -638,17 +921,35 @@ test('draft connection tests probe only cloud and report local structural valida
       responseTimeMs: 37,
       errorMessage: null,
     });
-    assert.equal(
-      calls[0]?.input,
-      'https://api.example.test/api/v1/llm-providers/test-connection'
-    );
+    assert.deepEqual(await cloud.testLlmProviderDraft(input), {
+      provider: null,
+      status: 'unhealthy',
+      probed: true,
+      detail: null,
+      lastChecked: '2026-07-14T10:00:00Z',
+      responseTimeMs: 37,
+      errorMessage: 'model was not available',
+    });
+    assert.equal(calls[0]?.input, 'http://127.0.0.1:8088/api/v1/llm-providers/test-connection');
     assert.equal(calls[0]?.init?.method, 'POST');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
       name: 'Draft provider',
-      provider_type: 'anthropic',
-      base_url: 'https://api.anthropic.test',
-      llm_model: 'claude-sonnet-4',
-      allowed_models: ['claude-sonnet-4'],
+      provider_type: 'custom_gateway',
+      base_url: 'https://gateway.example.test/v1',
+      llm_model: 'gateway-model',
+      allowed_models: ['gateway-model'],
+      is_active: true,
+      auth_method: 'api_key',
+      api_key: 'draft-secret',
+    });
+    assert.equal(calls[1]?.input, 'https://api.example.test/api/v1/llm-providers/test-connection');
+    assert.equal(calls[1]?.init?.method, 'POST');
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
+      name: 'Draft provider',
+      provider_type: 'custom_gateway',
+      base_url: 'https://gateway.example.test/v1',
+      llm_model: 'gateway-model',
+      allowed_models: ['gateway-model'],
       is_active: true,
       api_key: 'draft-secret',
     });

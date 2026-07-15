@@ -118,8 +118,7 @@ export function providerConnectionStatus(
   if (
     healthStatus !== 'healthy' &&
     healthStatus !== 'connected' &&
-    healthStatus !== 'ready' &&
-    healthStatus !== 'configuration_valid'
+    healthStatus !== 'ready'
   ) {
     return 'attention';
   }
@@ -200,6 +199,12 @@ export function providerValidationSignal(
     kind: outcome.probed ? 'external_probe' : 'configuration_only',
     status: outcome.status,
   };
+}
+
+export function providerValidationSucceeded(
+  outcome: LlmProviderValidationOutcome | null,
+): boolean {
+  return outcome?.probed === true && outcome.status === 'healthy';
 }
 
 function normalizedModelIds(value: string): string[] {

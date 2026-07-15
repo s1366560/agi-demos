@@ -1,46 +1,47 @@
-# Desktop Session Detail Design QA
+# Desktop Model Provider Settings Design QA
 
-## Findings
+## Verdict
 
-- P0 — Visual comparison is blocked for the production desktop implementation. The approved in-app browser rejected navigation to `http://127.0.0.1:5173/` under its browser security policy, so no current implementation screenshot can be captured through the permitted surface.
-- No fidelity verdict is issued without a source-to-implementation comparison. Build, unit, Rust, and static checks are implementation evidence, not visual evidence.
+- P0: none.
+- P1: none.
+- P2: none after the provider-kind, catalog-filtering, and unsupported-probe fixes.
+- P3: the implementation uses live tenant/provider data, so the provider names and empty model catalog differ from the prototype's illustrative rows. This is authoritative content, not structural drift.
 
 ## Comparison setup
 
-- Source visual truth:
-  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/session-detail-conversation-1565-final.png`
-  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/session-detail-redesign-1565-final.png`
-  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/session-detail-redesign-1100-final.png`
-- Competitive visual references:
-  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/reference-codex-session-canvas-focus.png`
-  - `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/reference-copilot-session-canvas-focus.png`
+- Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control`
 - Implementation URL: `http://127.0.0.1:5173/`
-- Required viewports: 1280 × 800 and 1100 × 800.
-- Required states: Code split view, Work split view, Canvas focus, Canvas collapsed, Needs input, Ready review, Artifact Ready, Artifact Approved, Artifact Delivered.
-- Implementation screenshot: unavailable because the permitted browser surface blocked the URL.
+- Viewport: 1280 x 720.
+- State: dark mode, authenticated, Settings -> Models -> Provider Overview.
+- Source screenshot: `/tmp/memstack-goal-audit-20260715/07-prototype-model-settings-current.png`
+- Implementation screenshot: `/tmp/memstack-goal-audit-20260715/08-implementation-model-settings-final.png`
+- Focused source provider detail: `/tmp/memstack-goal-audit-20260715/11-prototype-provider-detail.png`
+- Focused implementation provider detail: `/tmp/memstack-goal-audit-20260715/12-implementation-provider-detail.png`
+- Provider wizard step 1: `/tmp/memstack-goal-audit-20260715/13-implementation-provider-wizard-step1.png`
+- Provider wizard step 3: `/tmp/memstack-goal-audit-20260715/14-implementation-provider-wizard-step3.png`
 
-## Verified implementation evidence
+The source and implementation screenshots were opened together at the same viewport before the final verdict. Modal geometry, three-column composition, header, sidebar, provider list, detail hierarchy, tabs, cards, spacing, typography, borders, and color treatment match closely.
 
-- Session structure is implemented as Session Header + Narrative Thread + mode-aware Work Canvas.
-- Code and Work expose distinct authoritative Canvas tabs through `sessionCanvasModel`.
-- Run controls are revision-bound and separate Run approval from Artifact approval and delivery.
-- Artifact versions are immutable, reviewable, revision-guarded, and delivered only after approval with a persisted receipt.
-- Requesting Artifact changes updates the Artifact and its Run atomically in one SQLite transaction.
-- Code task approval now persists the selected Local/Worktree execution environment; Worktrees are materialized only after approval.
-- Reattach keeps the authoritative Run and environment; Fork recovery creates a traceable child Run and isolated Worktree while preserving the source Run.
-- Agent tools and the task-scoped Terminal resolve their working directory from the authoritative Run environment.
-- Frontend tests: 54 passed.
-- Desktop Rust tests: 43 passed.
-- Local tool tests: 10 passed.
-- Desktop and local-tool Clippy checks passed with `-D warnings`.
-- Production frontend build passed; Vite reports only the existing large-chunk warning.
+## Primary interactions verified
 
-## Remaining visual checks
+- Open Settings as an independent modal window and navigate to Models.
+- List only LLM providers; embedding and rerank providers no longer appear in this workspace.
+- Select a provider and switch among Overview, Connection, Models, Routing, and Usage tabs.
+- Edit an existing API-key provider without revealing or resending the stored secret.
+- Validate an unchanged existing connection through the persisted-provider health endpoint.
+- Open the add-provider wizard and choose a supported cloud or local runtime.
+- Confirm unsupported Azure OpenAI, Bedrock, and Vertex types are hidden until provider-specific probes exist.
+- Validate an Ollama draft against a local runtime before continuing.
+- Confirm the primary discovered model is selected and cannot be deselected.
+- Close the wizard without creating test data.
+- Browser console errors: none.
 
-- Compare layout proportions, clipping, scroll ownership, and primary-action visibility at both required viewports.
-- Confirm Thread/Canvas focus switching preserves context and gives a visible restore affordance.
-- Confirm Artifact lifecycle, Source/Check empty states, and delivery receipt remain readable without a static third rail.
-- Confirm English and Simplified Chinese do not overflow the header, status banner, Canvas tabs, or Artifact actions.
-- Run the visual-verdict loop after an allowed implementation screenshot becomes available.
+## Comparison history
 
-final result: blocked
+1. Initial comparison found an embedding provider in the LLM settings list, unsupported provider types exposed in the wizard, and a misleading provider-kind label.
+2. The UI was changed to filter non-LLM operations, require `probe_supported`, and derive cloud/local labeling from the authentication contract.
+3. Post-fix comparison shows four authoritative LLM providers, supported-only wizard choices, correct cloud/local labels, and a real validation gate before model selection.
+4. Connection editing was hardened so endpoint/provider changes require a new key, while an unchanged endpoint can validate with the encrypted stored credential.
+5. Final browser flow completed with zero console errors and no remaining P0/P1/P2 visual or interaction findings.
+
+final result: passed

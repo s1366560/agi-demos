@@ -18,10 +18,7 @@ import type {
   ManagedLlmProvider,
   RuntimeMode,
 } from '../../types';
-import {
-  providerDraftFromProvider,
-  providerMutationFromDraft,
-} from './providerManagementModel';
+import { providerDraftFromProvider, providerMutationFromDraft } from './providerManagementModel';
 import { ProviderStatusBadge } from './ProviderStatusBadge';
 
 export type ProviderTab = 'overview' | 'connection' | 'models' | 'routing' | 'usage';
@@ -32,11 +29,7 @@ type ProviderOverviewPanelProps = {
   onTabChange: (tab: ProviderTab) => void;
 };
 
-export function ProviderOverviewPanel({
-  provider,
-  mode,
-  onTabChange,
-}: ProviderOverviewPanelProps) {
+export function ProviderOverviewPanel({ provider, mode, onTabChange }: ProviderOverviewPanelProps) {
   const { locale, t } = useI18n();
   const enabledModels = provider.allowed_models ?? [];
   const checkedAt = provider.health_last_check
@@ -50,7 +43,7 @@ export function ProviderOverviewPanel({
             <span>{t('providers.connectionEyebrow')}</span>
             <h3>{t('providers.providerHealth')}</h3>
           </div>
-          <ProviderStatusBadge provider={provider} mode={mode} />
+          <ProviderStatusBadge provider={provider} />
         </header>
         <div className="provider-health-row">
           <div className="provider-health-icon">
@@ -60,12 +53,12 @@ export function ProviderOverviewPanel({
             <b>{provider.base_url || t('providers.providerDefaultEndpoint')}</b>
             <span>
               {t(
-                provider.auth_method === 'none'
-                  ? 'providers.auth.none'
-                  : 'providers.auth.api_key',
+                provider.auth_method === 'none' ? 'providers.auth.none' : 'providers.auth.api_key',
               )}
               {' · '}
-              {provider.credential_configured || provider.api_key_masked
+              {provider.auth_method === 'none' ||
+              provider.credential_configured ||
+              provider.api_key_masked
                 ? t('providers.credentialConfigured')
                 : t('providers.credentialMissing')}
             </span>
@@ -82,7 +75,9 @@ export function ProviderOverviewPanel({
           {provider.response_time_ms != null ? (
             <span>
               <ActivityLogIcon />
-              {t('providers.responseTime', { count: provider.response_time_ms })}
+              {t('providers.responseTime', {
+                count: provider.response_time_ms,
+              })}
             </span>
           ) : null}
         </div>
@@ -108,9 +103,7 @@ export function ProviderOverviewPanel({
               </div>
               <em>
                 {t(
-                  model === provider.llm_model
-                    ? 'providers.defaultRole'
-                    : 'providers.enabledRole',
+                  model === provider.llm_model ? 'providers.defaultRole' : 'providers.enabledRole',
                 )}
               </em>
             </article>
@@ -167,6 +160,7 @@ export function ProviderOverviewPanel({
 type ProviderRoutingPanelProps = {
   provider: ManagedLlmProvider;
   mode: RuntimeMode;
+  runtimeSelected: boolean;
   canManage: boolean;
   onSave: (
     provider: ManagedLlmProvider,
@@ -178,6 +172,7 @@ type ProviderRoutingPanelProps = {
 export function ProviderRoutingPanel({
   provider,
   mode,
+  runtimeSelected,
   canManage,
   onSave,
   onRuntimeSelected,
@@ -185,7 +180,9 @@ export function ProviderRoutingPanel({
   const { t } = useI18n();
   const availableModels = useMemo(
     () =>
-      [...new Set([provider.llm_model, ...(provider.allowed_models ?? [])].filter(Boolean))] as string[],
+      [
+        ...new Set([provider.llm_model, ...(provider.allowed_models ?? [])].filter(Boolean)),
+      ] as string[],
     [provider.allowed_models, provider.llm_model],
   );
   const [defaultModel, setDefaultModel] = useState(provider.llm_model ?? availableModels[0] ?? '');
@@ -229,7 +226,9 @@ export function ProviderRoutingPanel({
           <button
             className="primary"
             type="button"
-            disabled={saving || !defaultModel || defaultModel === provider.llm_model}
+            disabled={
+              saving || !defaultModel || (runtimeSelected && defaultModel === provider.llm_model)
+            }
             onClick={() => void saveDefaultRoute()}
           >
             {saving ? <ReloadIcon className="spin" /> : <CheckCircledIcon />}
@@ -277,9 +276,7 @@ export function ProviderRoutingPanel({
               <small>{t('providers.roleContractUnavailable')}</small>
             </span>
             <select value={model || ''} disabled>
-              <option value="">
-                {model || t('providers.notExposedByServer')}
-              </option>
+              <option value="">{model || t('providers.notExposedByServer')}</option>
             </select>
           </label>
         ))}
@@ -298,7 +295,9 @@ export function ProviderRoutingPanel({
             <div key={`${model}-${index}`}>
               <span>{index + 1}</span>
               <select value={model} disabled>
-                <option value={model}>{provider.name} / {model}</option>
+                <option value={model}>
+                  {provider.name} / {model}
+                </option>
               </select>
               <em>{t('providers.readOnly')}</em>
             </div>
@@ -323,14 +322,12 @@ export function ProviderRoutingPanel({
 
 type ProviderUsagePanelProps = {
   provider: ManagedLlmProvider;
-  mode: RuntimeMode;
   canReadUsage: boolean;
-  onLoadUsage: (providerId: string) => Promise<LlmProviderUsage>;
+  onLoadUsage: (providerId: string, signal?: AbortSignal) => Promise<LlmProviderUsage>;
 };
 
 export function ProviderUsagePanel({
   provider,
-  mode,
   canReadUsage,
   onLoadUsage,
 }: ProviderUsagePanelProps) {
@@ -340,14 +337,24 @@ export function ProviderUsagePanel({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     setUsage(null);
     setError(null);
-    if (!canReadUsage) return;
+    if (!canReadUsage) return () => controller.abort();
     setLoading(true);
-    void onLoadUsage(provider.id)
-      .then(setUsage)
-      .catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)))
-      .finally(() => setLoading(false));
+    void onLoadUsage(provider.id, controller.signal)
+      .then((nextUsage) => {
+        if (!controller.signal.aborted) setUsage(nextUsage);
+      })
+      .catch((caught) => {
+        if (!controller.signal.aborted) {
+          setError(caught instanceof Error ? caught.message : String(caught));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [canReadUsage, onLoadUsage, provider.id]);
 
   const totals = useMemo(() => {
@@ -367,7 +374,7 @@ export function ProviderUsagePanel({
     };
   }, [usage]);
 
-  if (mode === 'local' || !canReadUsage || usage?.availability === 'unavailable') {
+  if (!canReadUsage || usage?.availability === 'unavailable') {
     return (
       <section className="provider-activity-card provider-unavailable-card">
         <InfoCircledIcon />
@@ -399,7 +406,10 @@ export function ProviderUsagePanel({
   }
 
   const number = new Intl.NumberFormat(locale);
-  const currency = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' });
+  const currency = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'USD',
+  });
   return (
     <div className="provider-panel-grid">
       <section className="provider-metric-grid">
@@ -410,7 +420,9 @@ export function ProviderUsagePanel({
             t('providers.averageLatency'),
             totals.latency == null
               ? t('providers.notAvailable')
-              : t('providers.milliseconds', { count: Math.round(totals.latency) }),
+              : t('providers.milliseconds', {
+                  count: Math.round(totals.latency),
+                }),
           ],
           [t('providers.totalCost'), currency.format(totals.cost)],
         ].map(([label, value]) => (

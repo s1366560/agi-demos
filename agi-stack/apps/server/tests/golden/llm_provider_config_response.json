@@ -24,7 +24,10 @@
   "secondary_models": [
     "gpt-4o-mini"
   ],
+  "auth_method": "api_key",
+  "credential_configured": true,
   "api_key_masked": "sk-sk-t...2345",
+  "revision": 1767323105000000,
   "created_at": "2026-01-02T03:04:05Z",
   "updated_at": "2026-01-02T03:05:05Z",
   "health_status": "healthy",

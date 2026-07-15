@@ -1,13 +1,12 @@
-import type { ManagedLlmProvider, RuntimeMode } from '../../types';
+import type { ManagedLlmProvider } from '../../types';
 import { useI18n } from '../../i18n';
 import { providerConnectionStatus } from './providerManagementModel';
 
 type ProviderStatusBadgeProps = {
   provider: ManagedLlmProvider;
-  mode: RuntimeMode;
 };
 
-function providerStatusKey(provider: ManagedLlmProvider, mode: RuntimeMode): string {
+function providerStatusKey(provider: ManagedLlmProvider): string {
   if (provider.is_active === false || provider.is_enabled === false) {
     return 'providers.status.disabled';
   }
@@ -28,13 +27,13 @@ function providerStatusKey(provider: ManagedLlmProvider, mode: RuntimeMode): str
   }
   if (status === 'configuration_valid') return 'providers.status.configured';
   if (status === 'healthy' || status === 'connected' || status === 'ready') {
-    return mode === 'local' ? 'providers.status.configured' : 'providers.status.connected';
+    return 'providers.status.connected';
   }
   if (status) return 'providers.status.attention';
   return 'providers.status.notChecked';
 }
 
-export function ProviderStatusBadge({ provider, mode }: ProviderStatusBadgeProps) {
+export function ProviderStatusBadge({ provider }: ProviderStatusBadgeProps) {
   const { t } = useI18n();
   const connectionStatus = providerConnectionStatus(provider);
   const healthStatus = provider.health_status?.trim().toLowerCase();
@@ -48,7 +47,7 @@ export function ProviderStatusBadge({ provider, mode }: ProviderStatusBadgeProps
   return (
     <span className={`provider-status ${visualStatus}`}>
       <i />
-      {t(providerStatusKey(provider, mode))}
+      {t(providerStatusKey(provider))}
     </span>
   );
 }

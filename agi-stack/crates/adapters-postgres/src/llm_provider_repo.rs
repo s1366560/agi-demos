@@ -1,10 +1,9 @@
 //! Adapter for Python-owned LLM provider rows.
 //!
 //! Rust owns provider metadata CRUD over the shared `llm_providers` table, but
-//! active health checks and provider-resolution runtime remain Python-owned
-//! because they perform outbound requests and participate in Python's runtime
-//! resilience caches. API keys are written with the same Python AES-GCM envelope
-//! so Python can continue to decrypt rows created by Rust.
+//! provider-resolution runtime remains Python-owned because it participates in
+//! Python's runtime resilience caches. API keys are written with the same Python
+//! AES-GCM envelope so Python can continue to decrypt rows created by Rust.
 
 use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{QueryBuilder, Row};
@@ -73,6 +72,7 @@ pub struct LlmProviderCreateRecord {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LlmProviderUpdateRecord {
+    pub expected_updated_at: DateTime<Utc>,
     pub name: Option<String>,
     pub provider_type: Option<String>,
     pub operation_type: Option<String>,
@@ -276,8 +276,10 @@ impl PgLlmProviderRepository {
                  reranker_model=$10, config=$11, is_active=$12, is_default=$13, \
                  is_enabled=$14, allowed_models=$15, blocked_models=$16, \
                  pool_weight=$17, pool_enabled=$18, model_tier=$19, \
-                 secondary_models=$20, updated_at=now() \
-             WHERE id=$1::uuid RETURNING {PROVIDER_COLS}"
+                 secondary_models=$20, \
+                 updated_at=GREATEST(now(), updated_at + interval '1 microsecond') \
+             WHERE id=$1::uuid AND updated_at = $21::timestamptz \
+             RETURNING {PROVIDER_COLS}"
         );
         sqlx::query(&sql)
             .bind(provider_id)
@@ -329,6 +331,7 @@ impl PgLlmProviderRepository {
                 update.model_tier.as_ref().or(existing.model_tier.as_ref())
             })
             .bind(&secondary_models)
+            .bind(update.expected_updated_at)
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| CoreError::Storage(format!("update llm provider: {e}")))?
@@ -374,6 +377,36 @@ impl PgLlmProviderRepository {
         })
         .transpose()
         .map_err(|e: sqlx::Error| CoreError::Storage(format!("decode latest provider health: {e}")))
+    }
+
+    pub async fn record_health(
+        &self,
+        record: &ProviderHealthRecord,
+    ) -> CoreResult<ProviderHealthRecord> {
+        sqlx::query(
+            "INSERT INTO provider_health (\
+                 provider_id, status, last_check, error_message, response_time_ms\
+             ) VALUES ($1::uuid, $2, $3, $4, $5) \
+             RETURNING provider_id::text AS provider_id, status, last_check, \
+                       error_message, response_time_ms",
+        )
+        .bind(&record.provider_id)
+        .bind(&record.status)
+        .bind(record.last_check)
+        .bind(&record.error_message)
+        .bind(record.response_time_ms)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(format!("record provider health: {e}")))
+        .and_then(|row| {
+            Ok(ProviderHealthRecord {
+                provider_id: row.try_get("provider_id").map_err(storage)?,
+                status: row.try_get("status").map_err(storage)?,
+                last_check: row.try_get("last_check").map_err(storage)?,
+                error_message: row.try_get("error_message").map_err(storage)?,
+                response_time_ms: row.try_get("response_time_ms").map_err(storage)?,
+            })
+        })
     }
 
     pub async fn user_can_read_tenant_assignments(

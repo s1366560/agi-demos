@@ -67,12 +67,7 @@ export function mergeLocalRuntimeStatus(
   };
 }
 
-export type HitlType =
-  | 'clarification'
-  | 'decision'
-  | 'env_var'
-  | 'permission'
-  | 'a2ui_action';
+export type HitlType = 'clarification' | 'decision' | 'env_var' | 'permission' | 'a2ui_action';
 
 export type HitlResponseSubmission = {
   requestId: string;
@@ -434,12 +429,7 @@ export type ChangeSnapshot = {
 
 export type RunInputDelivery = 'steer_now' | 'queue_next';
 export type RunInputStatus =
-  | 'pending_boundary'
-  | 'queued'
-  | 'applied'
-  | 'ready'
-  | 'blocked'
-  | 'promoted_to_plan';
+  'pending_boundary' | 'queued' | 'applied' | 'ready' | 'blocked' | 'promoted_to_plan';
 export type ChangeReferenceSide = 'old' | 'new';
 
 export type CodeRangeReference = {
@@ -563,10 +553,7 @@ type HitlRequestWorkItem = ProjectWorkItemBase & {
   last_heartbeat_at?: null;
 };
 
-export type ProjectWorkItem =
-  | DesktopRunWorkItem
-  | WorkspaceAttemptWorkItem
-  | HitlRequestWorkItem;
+export type ProjectWorkItem = DesktopRunWorkItem | WorkspaceAttemptWorkItem | HitlRequestWorkItem;
 
 export type ProjectMyWorkResponse = {
   project_id: string;
@@ -652,12 +639,14 @@ export type ReviewRunRequest = {
   feedback?: string;
 };
 
+export type LlmProviderAuthMethod = 'api_key' | 'none';
+
 export type ManagedLlmProvider = {
   id: string;
   name: string;
   provider_type: string;
   operation_type?: string;
-  auth_method?: 'api_key' | 'none' | string;
+  auth_method?: LlmProviderAuthMethod;
   is_active?: boolean;
   is_enabled?: boolean;
   base_url?: string | null;
@@ -682,7 +671,7 @@ export type ManagedLlmProvider = {
 export type LlmProviderMutationInput = {
   name: string;
   providerType: string;
-  authMethod: 'api_key' | 'none';
+  authMethod: LlmProviderAuthMethod;
   baseUrl: string;
   primaryModel: string;
   allowedModels: string[];
@@ -693,11 +682,11 @@ export type LlmProviderMutationInput = {
 
 export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
 
-export type LlmProviderAuthMethod = 'api_key' | 'none';
-
 export type LlmProviderTypeDescriptor = {
   providerType: string;
   authMethods: LlmProviderAuthMethod[];
+  operationType: 'llm' | 'embedding' | 'rerank';
+  probeSupported: boolean;
   source: 'local_runtime' | 'cloud_api';
 };
 
@@ -889,12 +878,7 @@ export type DesktopApprovalRequest = {
   idempotency_key?: string | null;
 };
 
-export type DesktopArtifactStatus =
-  | 'draft'
-  | 'ready'
-  | 'approved'
-  | 'delivered'
-  | 'superseded';
+export type DesktopArtifactStatus = 'draft' | 'ready' | 'approved' | 'delivered' | 'superseded';
 
 export type DesktopArtifactVersion = {
   id: string;
@@ -1071,12 +1055,7 @@ export type TerminalServiceResponse = {
   environment?: DesktopExecutionEnvironment | null;
 };
 
-export type TerminalConnectionStatus =
-  | 'idle'
-  | 'connecting'
-  | 'connected'
-  | 'closed'
-  | 'error';
+export type TerminalConnectionStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error';
 
 export type AutomationConfig = {
   kind: string;

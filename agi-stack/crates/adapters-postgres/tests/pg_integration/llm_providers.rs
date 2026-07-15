@@ -1,4 +1,5 @@
 use super::support::*;
+use agistack_adapters_postgres::ProviderHealthRecord;
 
 const PROVIDER_ID: &str = "11111111-2222-4333-8444-555555555555";
 const OTHER_PROVIDER_ID: &str = "21111111-2222-4333-8444-555555555555";
@@ -65,6 +66,29 @@ async fn llm_provider_latest_health_matches_python_ordering() {
         .await
         .expect("missing provider health query succeeds")
         .is_none());
+
+    let recorded = repo
+        .record_health(&ProviderHealthRecord {
+            provider_id: PROVIDER_ID.to_string(),
+            status: "unhealthy".to_string(),
+            last_check: ts(2026, 1, 4, 0, 0, 0),
+            error_message: Some("HTTP 401 Unauthorized".to_string()),
+            response_time_ms: Some(42),
+        })
+        .await
+        .expect("provider health write succeeds");
+    assert_eq!(recorded.status, "unhealthy");
+    assert_eq!(
+        recorded.error_message.as_deref(),
+        Some("HTTP 401 Unauthorized")
+    );
+
+    let latest = repo
+        .latest_health(PROVIDER_ID)
+        .await
+        .expect("written provider health query succeeds")
+        .expect("written provider health exists");
+    assert_eq!(latest, recorded);
 }
 
 #[tokio::test]
@@ -132,6 +156,7 @@ async fn llm_provider_crud_writes_python_encrypted_metadata_rows() {
         .update_provider(
             &created.id,
             &LlmProviderUpdateRecord {
+                expected_updated_at: created.updated_at,
                 name: Some("llm_provider_crud_embedding".to_string()),
                 provider_type: Some("dashscope_embedding".to_string()),
                 operation_type: Some("embedding".to_string()),
@@ -166,6 +191,19 @@ async fn llm_provider_crud_writes_python_encrypted_metadata_rows() {
         .expect("updated provider api key decrypts"),
         "dashscope-crud-secret"
     );
+
+    let stale_update = repo
+        .update_provider(
+            &created.id,
+            &LlmProviderUpdateRecord {
+                expected_updated_at: created.updated_at,
+                name: Some("stale-provider-name".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("stale provider update query succeeds");
+    assert!(stale_update.is_none());
 
     assert!(repo
         .soft_delete_provider(&created.id)
@@ -448,8 +486,13 @@ async fn clean_llm_provider_assignment_rows(pool: &PgPool) {
 
 async fn seed_llm_provider(pool: &PgPool, id: &str, name: &str) {
     sqlx::query(
-        "INSERT INTO llm_providers (id, name, provider_type, operation_type, api_key_encrypted, config) \
-         VALUES ($1::uuid, $2, 'openai', 'llm', 'encrypted-test-key', '{}'::json) \
+        "INSERT INTO llm_providers (\
+             id, name, provider_type, operation_type, api_key_encrypted, config, \
+             is_active, is_default, is_enabled, pool_weight, pool_enabled, created_at, updated_at\
+         ) VALUES (\
+             $1::uuid, $2, 'openai', 'llm', 'encrypted-test-key', '{}'::json, \
+             true, false, true, 1.0, true, now(), now()\
+         ) \
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
     )
     .bind(id)

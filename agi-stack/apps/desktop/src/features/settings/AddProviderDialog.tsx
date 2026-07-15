@@ -18,63 +18,47 @@ import type {
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
-  RuntimeMode,
 } from '../../types';
 import {
   providerAuthMethodSupported,
   providerTypeDisplayName,
+  providerValidationSucceeded,
 } from './providerManagementModel';
 import { useModalDialog } from './useModalDialog';
 
 type AddProviderDialogProps = {
-  mode: RuntimeMode;
   onClose: () => void;
   onLoadTypes: () => Promise<LlmProviderTypeDescriptor[]>;
   onLoadCatalog: (providerType: string) => Promise<LlmProviderModelCatalog>;
-  onValidateDraft: (
-    input: LlmProviderCreateInput,
-  ) => Promise<LlmProviderValidationOutcome>;
+  onValidateDraft: (input: LlmProviderCreateInput) => Promise<LlmProviderValidationOutcome>;
   onCreate: (input: LlmProviderCreateInput) => Promise<ManagedLlmProvider>;
 };
 
-const providerDefaults: Record<
-  string,
-  { baseUrl: string; model: string; authMethod: 'api_key' | 'none' }
-> = {
+const providerDefaults: Record<string, { baseUrl: string; model: string }> = {
   openai: {
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
-    authMethod: 'api_key',
   },
   anthropic: {
     baseUrl: 'https://api.anthropic.com',
     model: 'claude-3-5-sonnet-latest',
-    authMethod: 'api_key',
   },
   openai_compatible: {
     baseUrl: 'http://127.0.0.1:11434/v1',
     model: '',
-    authMethod: 'none',
   },
-  azure_openai: { baseUrl: '', model: '', authMethod: 'api_key' },
+  azure_openai: { baseUrl: '', model: '' },
   ollama: {
-    baseUrl: 'http://127.0.0.1:11434/v1',
+    baseUrl: 'http://127.0.0.1:11434',
     model: '',
-    authMethod: 'none',
   },
   lmstudio: {
     baseUrl: 'http://127.0.0.1:1234/v1',
     model: '',
-    authMethod: 'none',
   },
 };
 
-function validationSucceeded(outcome: LlmProviderValidationOutcome | null): boolean {
-  return outcome?.status === 'healthy' || outcome?.status === 'configuration_valid';
-}
-
 export function AddProviderDialog({
-  mode,
   onClose,
   onLoadTypes,
   onLoadCatalog,
@@ -112,11 +96,15 @@ export function AddProviderDialog({
 
   useEffect(() => {
     let cancelled = false;
-    void onLoadTypesRef.current()
+    void onLoadTypesRef
+      .current()
       .then((nextTypes) => {
         if (cancelled) return;
-        setTypes(nextTypes);
-        if (nextTypes[0]) chooseType(nextTypes[0]);
+        const chatProviderTypes = nextTypes.filter(
+          (descriptor) => descriptor.operationType === 'llm' && descriptor.probeSupported,
+        );
+        setTypes(chatProviderTypes);
+        if (chatProviderTypes[0]) chooseType(chatProviderTypes[0]);
       })
       .catch((caught) => {
         if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
@@ -140,11 +128,8 @@ export function AddProviderDialog({
     const defaults = providerDefaults[descriptor.providerType] ?? {
       baseUrl: '',
       model: '',
-      authMethod: 'api_key' as const,
     };
-    const nextAuth = descriptor.authMethods.includes(defaults.authMethod)
-      ? defaults.authMethod
-      : descriptor.authMethods[0] || 'api_key';
+    const nextAuth = descriptor.authMethods[0] || 'api_key';
     setSelectedType(descriptor.providerType);
     setName(providerTypeDisplayName(descriptor.providerType));
     setAuthMethod(nextAuth);
@@ -155,7 +140,8 @@ export function AddProviderDialog({
     setSelectedModels(defaults.model ? new Set([defaults.model]) : new Set());
     setBusy('catalog');
     setError(null);
-    void onLoadCatalogRef.current(descriptor.providerType)
+    void onLoadCatalogRef
+      .current(descriptor.providerType)
       .then((nextCatalog) => {
         if (requestId !== catalogRequestId.current) return;
         setCatalog(nextCatalog);
@@ -182,15 +168,13 @@ export function AddProviderDialog({
       baseUrl: baseUrl.trim().replace(/\/$/, ''),
       primaryModel: primaryModel.trim(),
       allowedModels: [...selectedModels],
-      active: false,
+      active: true,
       ...(authMethod === 'api_key' && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
     }),
     [apiKey, authMethod, baseUrl, name, primaryModel, selectedModels, selectedType],
   );
 
-  const selectedDescriptor = types.find(
-    (descriptor) => descriptor.providerType === selectedType,
-  );
+  const selectedDescriptor = types.find((descriptor) => descriptor.providerType === selectedType);
   const authCapabilityAvailable = selectedDescriptor
     ? providerAuthMethodSupported(selectedDescriptor, authMethod)
     : false;
@@ -203,7 +187,7 @@ export function AddProviderDialog({
       input.primaryModel &&
       (input.authMethod === 'none' || input.apiKey),
   );
-  const verified = validationSucceeded(validation);
+  const verified = providerValidationSucceeded(validation);
 
   const testDraft = async () => {
     const requestId = validationRequestId.current + 1;
@@ -237,6 +221,7 @@ export function AddProviderDialog({
   };
 
   const toggleDiscoveredModel = (modelId: string) => {
+    if (modelId === primaryModel) return;
     setSelectedModels((current) => {
       const next = new Set(current);
       if (next.has(modelId)) next.delete(modelId);
@@ -251,7 +236,7 @@ export function AddProviderDialog({
       className="provider-dialog-backdrop"
       onMouseDown={(event) => {
         event.stopPropagation();
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && busy !== 'create') onClose();
       }}
     >
       <section
@@ -268,7 +253,12 @@ export function AddProviderDialog({
             <span>{t('providers.productName')}</span>
             <h2>{t('providers.addProviderStep', { step })}</h2>
           </div>
-          <button type="button" aria-label={t('providers.closeWizard')} onClick={onClose}>
+          <button
+            type="button"
+            disabled={busy === 'create'}
+            aria-label={t('providers.closeWizard')}
+            onClick={onClose}
+          >
             <Cross2Icon />
           </button>
         </header>
@@ -289,7 +279,7 @@ export function AddProviderDialog({
                 <p>{t('providers.chooseProviderDescription')}</p>
               </header>
               {busy === 'types' ? (
-                <div className="provider-loading-state">
+                <div className="provider-loading-state" role="status" aria-live="polite">
                   <ReloadIcon className="spin" />
                   <span>{t('providers.loadingProviderTypes')}</span>
                 </div>
@@ -309,7 +299,7 @@ export function AddProviderDialog({
                         <b>{providerTypeDisplayName(descriptor.providerType)}</b>
                         <small>
                           {t(
-                            descriptor.source === 'local_runtime'
+                            descriptor.authMethods.includes('none')
                               ? 'providers.localRuntime'
                               : 'providers.cloudApi',
                           )}
@@ -327,13 +317,7 @@ export function AddProviderDialog({
             <section>
               <header>
                 <h3>{t('providers.connectProvider', { provider: name })}</h3>
-                <p>
-                  {t(
-                    mode === 'local'
-                      ? 'providers.connectProviderLocalDescription'
-                      : 'providers.connectProviderDescription',
-                  )}
-                </p>
+                <p>{t('providers.connectProviderDescription')}</p>
               </header>
               <div className="provider-wizard-form">
                 <label>
@@ -427,15 +411,9 @@ export function AddProviderDialog({
                   )}
                   {t(
                     busy === 'test'
-                      ? mode === 'local'
-                        ? 'providers.validatingConfiguration'
-                        : 'providers.testingConnection'
+                      ? 'providers.testingConnection'
                       : verified
-                        ? mode === 'local'
-                          ? 'providers.configurationValid'
-                          : 'providers.connectionVerified'
-                        : mode === 'local'
-                          ? 'providers.validateConfiguration'
+                        ? 'providers.connectionVerified'
                           : 'providers.testConnection',
                   )}
                 </button>
@@ -462,6 +440,7 @@ export function AddProviderDialog({
                       <input
                         type="checkbox"
                         checked={selectedModels.has(model.id)}
+                        disabled={model.id === primaryModel}
                         onChange={() => toggleDiscoveredModel(model.id)}
                       />
                       <CubeIcon />
@@ -502,6 +481,7 @@ export function AddProviderDialog({
           <footer>
             <button
               type="button"
+              disabled={busy === 'create'}
               onClick={
                 step === 1
                   ? onClose
@@ -523,9 +503,7 @@ export function AddProviderDialog({
                 (step === 3 && selectedModels.size === 0)
               }
               onClick={
-                step === 3
-                  ? () => void createProvider()
-                  : () => setStep((current) => current + 1)
+                step === 3 ? () => void createProvider() : () => setStep((current) => current + 1)
               }
             >
               {t(
