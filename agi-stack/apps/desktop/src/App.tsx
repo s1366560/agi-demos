@@ -11,9 +11,7 @@ import {
 import { createPortal } from 'react-dom';
 import {
   Badge,
-  Box,
   Button,
-  Flex,
   Heading,
   IconButton,
   Text,
@@ -23,35 +21,25 @@ import {
 import {
   ActivityLogIcon,
   ArchiveIcon,
-  ArrowUpIcon,
   ChatBubbleIcon,
   CheckCircledIcon,
   ClockIcon,
   CodeIcon,
-  CommitIcon,
-  ChevronDownIcon,
-  ChevronLeftIcon,
   ChevronRightIcon,
   ColumnsIcon,
   Cross2Icon,
   DashboardIcon,
   DotsHorizontalIcon,
-  DesktopIcon,
   EnterFullScreenIcon,
   FileTextIcon,
-  FrameIcon,
   GearIcon,
   GridIcon,
   MagnifyingGlassIcon,
   MixerHorizontalIcon,
-  PauseIcon,
   PlayIcon,
-  ReaderIcon,
   ReloadIcon,
   RocketIcon,
   ExclamationTriangleIcon,
-  StopIcon,
-  ViewVerticalIcon,
 } from '@radix-ui/react-icons';
 
 import {
@@ -91,7 +79,6 @@ import {
   type AgentTaskSignalStatus,
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
-import { ComposerControls } from './features/chat/ComposerControls';
 import { markA2UIActionAnswered } from './features/chat/a2uiAction';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
@@ -179,7 +166,6 @@ import {
   newTaskAgentTurnResolution,
   newTaskAgentTurnTransport,
 } from './features/task/newTaskPlanModel';
-import { WorkspaceDock } from './features/workspace/WorkspaceDock';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
@@ -207,7 +193,6 @@ import type {
   LocalMemoryResult,
   PlanSnapshot,
   ProjectSummary,
-  ProjectSandbox,
   ProjectWorkItem,
   RuntimeNodeLoadState,
   RuntimeDataset,
@@ -294,7 +279,6 @@ type WorkflowTarget =
   | 'background'
   | 'artifacts'
   | 'runtime';
-type SessionGroupMode = 'recent' | 'project';
 type RunControlState = 'planning' | 'running' | 'paused' | 'stopped';
 type RunDotTone = RunControlState | 'completed' | 'failed' | 'idle';
 const runControlLabels: Record<RunControlState, string> = {
@@ -406,14 +390,6 @@ const runtimeHealthBadgeColors: Record<RuntimeHealthState, 'gray' | 'blue' | 'gr
   offline: 'gray',
   error: 'red',
 };
-type QuickLinkItem = {
-  id: string;
-  section: WorkbenchSection;
-  target?: WorkflowTarget;
-  settingsSection?: SettingsSection;
-  label: string;
-  icon: ReactNode;
-};
 type SidebarRunItem = {
   id: string;
   label: string;
@@ -424,16 +400,6 @@ type SidebarRunItem = {
   projectId: string;
   workspaceId?: string;
   conversation?: AgentConversation;
-};
-type SessionScopeKind = 'project' | 'worktree' | 'branch';
-type ComposerReferenceKind = 'files' | 'issues';
-type MobileTitlebarMenuItem = {
-  id: string;
-  label: string;
-  icon: ReactNode;
-  selected?: boolean;
-  disabled?: boolean;
-  onSelect: () => void;
 };
 type ReviewTab = SessionCanvasTabId | 'pull' | 'background';
 type WorkspaceEventKind = 'Tools' | 'Reasoning' | 'Messages' | 'System' | 'Errors';
@@ -510,68 +476,6 @@ function localRuntimeTauriConfig(config: DesktopRuntimeConfig) {
     api_key: config.llmApiKey,
     workspace_root: config.workspaceRoot,
   };
-}
-
-const composerReferenceOptions: Record<
-  ComposerReferenceKind,
-  Array<{ id: string; label: string; description: string; icon: ReactNode }>
-> = {
-  files: [
-    {
-      id: 'readme',
-      label: 'README.md',
-      description: 'Project quick start and desktop run notes.',
-      icon: <FileTextIcon />,
-    },
-    {
-      id: 'desktop-app',
-      label: 'apps/desktop/src/App.tsx',
-      description: 'Desktop shell, command palette, and signed-out composer.',
-      icon: <CodeIcon />,
-    },
-    {
-      id: 'styles',
-      label: 'apps/desktop/src/styles.css',
-      description: 'Copilot-like layout, popovers, and responsive polish.',
-      icon: <MixerHorizontalIcon />,
-    },
-  ],
-  issues: [
-    {
-      id: 'login',
-      label: '#desktop-login',
-      description: 'Sign-in flow, account scope, and session readiness.',
-      icon: <ChatBubbleIcon />,
-    },
-    {
-      id: 'sandbox',
-      label: '#sandbox-terminal',
-      description: 'Workspace shell, desktop view, and sandbox health.',
-      icon: <DesktopIcon />,
-    },
-    {
-      id: 'figma',
-      label: '#figma-design',
-      description: 'Design capture and componentized desktop screen work.',
-      icon: <FrameIcon />,
-    },
-  ],
-};
-
-const sessionScopeOptions: Record<SessionScopeKind, string[]> = {
-  project: ['No project', 'Connect project', 'Manual API key'],
-  worktree: ['New worktree', 'Current worktree', 'Review worktree'],
-  branch: ['Default branch', 'Current branch', 'Review branch'],
-};
-
-function sessionScopeOptionId(kind: SessionScopeKind, option: string): string {
-  const normalized = option.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `session-scope-option-${kind}-${normalized}`;
-}
-
-function mobileMenuOptionId(id: string): string {
-  const normalized = id.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `mobile-section-option-${normalized}`;
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -1683,17 +1587,8 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const [runActionsMenuOpen, setRunActionsMenuOpen] = useState(false);
-  const [mobileSectionMenuOpen, setMobileSectionMenuOpen] = useState(false);
-  const [activeMobileMenuItemId, setActiveMobileMenuItemId] = useState<string | null>(null);
   const runActionsButtonRef = useRef<HTMLButtonElement>(null);
   const runActionsMenuRef = useRef<HTMLDivElement>(null);
-  const mobileSectionButtonRef = useRef<HTMLButtonElement>(null);
-  const mobileSectionMenuRef = useRef<HTMLDivElement>(null);
-  const mobileTitlebarItemsRef = useRef<MobileTitlebarMenuItem[]>([]);
-  const activeMobileMenuOptionId = activeMobileMenuItemId
-    ? mobileMenuOptionId(activeMobileMenuItemId)
-    : undefined;
-  const [sessionGroupMode, setSessionGroupMode] = useState<SessionGroupMode>('project');
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(() => new Set());
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -2245,8 +2140,6 @@ export function App() {
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setRunActionsMenuOpen(false);
     setSessionMenuOpen(false);
-    setMobileSectionMenuOpen(false);
-    setActiveMobileMenuItemId(null);
     setCommandPaletteOpen(true);
   }, []);
 
@@ -2313,50 +2206,14 @@ export function App() {
         runActionsButtonRef.current?.focus();
         return;
       }
-      if (event.key === 'Escape' && mobileSectionMenuOpen) {
-        event.preventDefault();
-        setMobileSectionMenuOpen(false);
-        setActiveMobileMenuItemId(null);
-        mobileSectionButtonRef.current?.focus();
-        return;
-      }
-      if (
-        mobileSectionMenuOpen &&
-        ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(event.key)
-      ) {
-        const enabledItems = mobileTitlebarItemsRef.current.filter((item) => !item.disabled);
-        if (!enabledItems.length) return;
-        event.preventDefault();
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-          const delta = event.key === 'ArrowDown' ? 1 : -1;
-          setActiveMobileMenuItemId((current) => {
-            const currentIndex = enabledItems.findIndex((item) => item.id === current);
-            const startIndex = currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
-            const nextIndex = (startIndex + delta + enabledItems.length) % enabledItems.length;
-            return enabledItems[nextIndex].id;
-          });
-          return;
-        }
-        if (event.key === 'Home' || event.key === 'End') {
-          setActiveMobileMenuItemId(
-            event.key === 'Home' ? enabledItems[0].id : enabledItems[enabledItems.length - 1].id,
-          );
-          return;
-        }
-        const activeItem =
-          enabledItems.find((item) => item.id === activeMobileMenuItemId) ?? enabledItems[0];
-        activeItem.onSelect();
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    activeMobileMenuItemId,
     closeCommandPalette,
     commandPaletteOpen,
     loginModalOpen,
-    mobileSectionMenuOpen,
     openCommandPalette,
     runActionsMenuOpen,
     sessionMenuOpen,
@@ -2389,22 +2246,6 @@ export function App() {
   }, [modalOpen]);
 
   useEffect(() => {
-    if (!mobileSectionMenuOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (mobileSectionMenuRef.current?.contains(target)) return;
-      if (mobileSectionButtonRef.current?.contains(target)) return;
-      setMobileSectionMenuOpen(false);
-      setActiveMobileMenuItemId(null);
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [mobileSectionMenuOpen]);
-
-  useEffect(() => {
     if (!runActionsMenuOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -2418,15 +2259,6 @@ export function App() {
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [runActionsMenuOpen]);
-
-  useEffect(() => {
-    if (!mobileSectionMenuOpen || !activeMobileMenuOptionId) return;
-    const activeOption = document.getElementById(activeMobileMenuOptionId);
-    activeOption?.scrollIntoView({ block: 'nearest' });
-    if (activeOption instanceof HTMLElement && document.activeElement !== activeOption) {
-      activeOption.focus({ preventScroll: true });
-    }
-  }, [activeMobileMenuOptionId, mobileSectionMenuOpen]);
 
   useEffect(() => {
     if (!commandPaletteOpen) return;
@@ -4318,7 +4150,6 @@ export function App() {
         : config.projectId || 'not selected',
     },
   ];
-  const sessionGroupLabel = sessionGroupMode === 'recent' ? 'Recent first' : 'Project folders';
   const sidebarRunItems = useMemo<SidebarRunItem[]>(() => {
     if (!showRuntimeConfig) return [];
 
@@ -4430,84 +4261,6 @@ export function App() {
       setSelectedSidebarRunId(activeSidebarRunId);
     }
   }, [activeSidebarRunId, selectedSidebarRunId, showRuntimeConfig]);
-  const quickLinkItems: QuickLinkItem[] = [
-    { id: 'home', section: 'workspace', label: t('nav.home'), icon: <DashboardIcon key="home" /> },
-    { id: 'my-work', section: 'board', label: t('nav.myWork'), icon: <GridIcon key="my-work" /> },
-    {
-      id: 'automations',
-      section: 'automations',
-      label: t('nav.automations'),
-      icon: <ActivityLogIcon key="automations" />,
-    },
-    { id: 'search', section: 'memory', label: t('nav.search'), icon: <MagnifyingGlassIcon key="search" /> },
-    {
-      id: 'projects',
-      section: 'settings',
-      settingsSection: 'workspace',
-      label: t('nav.projects'),
-      icon: <ArchiveIcon key="projects" />,
-    },
-  ];
-  const toolItems: Array<[WorkbenchSection, string, ReactNode]> = [
-    ['chat', 'Chats', <ChatBubbleIcon key="chat" />],
-    ['sandbox', 'Sandbox', <DesktopIcon key="sandbox" />],
-    ['terminal', 'Terminal', <CodeIcon key="terminal" />],
-    ['settings', 'Settings', <GearIcon key="settings" />],
-  ];
-  const mobileTitlebarItems: MobileTitlebarMenuItem[] = showRuntimeConfig
-    ? [
-        ...quickLinkItems.map((item) => ({
-          id: `quick-${item.id}`,
-          label: item.label,
-          icon: item.icon,
-          selected: isQuickLinkSelected(item),
-          onSelect: () => selectMobileQuickLink(item),
-        })),
-        ...toolItems.map(([section, label, icon]) => ({
-          id: `section-${section}`,
-          label,
-          icon,
-          selected: activeSection === section,
-          onSelect: () => selectMobileSection(section),
-        })),
-      ]
-    : [
-        {
-          id: 'commands',
-          label: 'Commands',
-          icon: <MagnifyingGlassIcon />,
-          onSelect: () => {
-            setMobileSectionMenuOpen(false);
-            openCommandPalette(mobileSectionButtonRef.current);
-          },
-        },
-        {
-          id: 'sign-in',
-          label: 'Sign in',
-          icon: <RocketIcon />,
-          onSelect: () => {
-            setMobileSectionMenuOpen(false);
-            mobileSectionButtonRef.current?.focus();
-            setLoginModalOpen(true);
-          },
-        },
-        {
-          id: 'api-key',
-          label: 'API key',
-          icon: <GearIcon />,
-          onSelect: () => {
-            setMobileSectionMenuOpen(false);
-            useApiKeyManually();
-          },
-        },
-      ];
-  mobileTitlebarItemsRef.current = mobileTitlebarItems;
-
-  const changeSessionGroupMode = (mode: SessionGroupMode) => {
-    setSessionGroupMode(mode);
-    setSessionMenuOpen(false);
-  };
-
   const toggleWorkspace = (workspaceId: string) => {
     setExpandedWorkspaceIds((current) => {
       const next = new Set(current);
@@ -4516,43 +4269,6 @@ export function App() {
       return next;
     });
   };
-
-  function isQuickLinkSelected(item: QuickLinkItem): boolean {
-    if (item.settingsSection) return settingsWindowOpen && settingsInitialSection === item.settingsSection;
-    if (item.target === 'background' || item.target === 'artifacts') {
-      return (
-        activeSection === 'workspace' && reviewTab === item.target
-      );
-    }
-    return activeSection === item.section;
-  }
-
-  function selectQuickLink(item: QuickLinkItem) {
-    if (item.settingsSection) {
-      setSettingsInitialSection(item.settingsSection);
-      setSettingsWindowOpen(true);
-      return;
-    }
-    if (item.target === 'background' || item.target === 'artifacts') {
-      setReviewPanelOpen(true);
-      setReviewTab(item.target);
-      switchSection('workspace');
-      return;
-    }
-    switchSection(item.section);
-  }
-
-  function selectMobileQuickLink(item: QuickLinkItem) {
-    if (item.target === 'background' || item.target === 'artifacts') {
-      setReviewPanelOpen(true);
-      setReviewTab(item.target);
-      switchSection('workspace');
-      setMobileSectionMenuOpen(false);
-      return;
-    }
-    selectQuickLink(item);
-    setMobileSectionMenuOpen(false);
-  }
 
   const setActiveRunControlState = (state: RunControlState) => {
     setRunControlState(state);
@@ -4796,27 +4512,6 @@ export function App() {
         'The context was switched, but the selected project could not be loaded. Refresh to retry.',
       );
     }
-  };
-
-  const selectMobileSection = (section: WorkbenchSection) => {
-    switchSection(section);
-    setMobileSectionMenuOpen(false);
-  };
-
-  const defaultMobileMenuItemId = () =>
-    mobileTitlebarItems.find((item) => item.selected && !item.disabled)?.id ??
-    mobileTitlebarItems.find((item) => !item.disabled)?.id ??
-    null;
-
-  const toggleMobileSectionMenu = () => {
-    const nextOpen = !mobileSectionMenuOpen;
-    if (nextOpen) {
-      closeCommandPalette();
-      setRunActionsMenuOpen(false);
-      setSessionMenuOpen(false);
-    }
-    setMobileSectionMenuOpen(nextOpen);
-    setActiveMobileMenuItemId(nextOpen ? defaultMobileMenuItemId() : null);
   };
 
   const goBackSection = () => {
@@ -5316,8 +5011,8 @@ export function App() {
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div
         ref={appShellRef}
-        className={`app-shell hierarchy-shell ${runsInTauri ? 'tauri-window' : 'browser-window'} ${
-          identityAuthenticated ? 'runtime-mode' : 'signed-out-mode'
+        className={`app-shell hierarchy-shell runtime-mode ${
+          runsInTauri ? 'tauri-window' : 'browser-window'
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
           activeSection === 'board' ? 'my-work-mode' : ''
         } ${activeSection === 'automations' ? 'automations-mode' : ''}`}
@@ -5460,86 +5155,6 @@ function formatLoginError(error: unknown, apiBaseUrl: string): string {
   return formatConnectionError(error, apiBaseUrl);
 }
 
-function SignedOutSessionTree({
-  mode,
-  activeSection,
-  onNewSession,
-  onOpenChats,
-  onOpenProjectConnection,
-}: {
-  mode: SessionGroupMode;
-  activeSection: WorkbenchSection;
-  onNewSession: () => void;
-  onOpenChats: () => void;
-  onOpenProjectConnection: () => void;
-}) {
-  const chatsSelected = activeSection === 'chat';
-  const projectSelected = activeSection === 'settings';
-  const newSessionSelected = !chatsSelected && !projectSelected;
-  const newSessionRow = (
-    <button
-      className={`sidebar-row ${newSessionSelected ? 'selected' : ''} ${
-        mode === 'project' ? 'session-child-row' : ''
-      }`}
-      type="button"
-      aria-label="Current new session"
-      aria-current={newSessionSelected ? 'page' : undefined}
-      onClick={onNewSession}
-    >
-      <span className="sidebar-icon">
-        <CommitIcon />
-      </span>
-      <span>New session</span>
-    </button>
-  );
-  const chatsRow = (
-    <button
-      className={`sidebar-row ${chatsSelected ? 'selected' : ''}`}
-      type="button"
-      aria-label="Chats collection"
-      aria-current={chatsSelected ? 'page' : undefined}
-      onClick={onOpenChats}
-    >
-      <span className="sidebar-icon">
-        <ChatBubbleIcon />
-      </span>
-      <span>Chats</span>
-    </button>
-  );
-  const projectRow = (
-    <button
-      className={`sidebar-row ${projectSelected ? 'selected' : ''}`}
-      type="button"
-      aria-label="Project connection"
-      aria-current={projectSelected ? 'page' : undefined}
-      onClick={onOpenProjectConnection}
-    >
-      <span className="sidebar-icon">
-        <ArchiveIcon />
-      </span>
-      <span>Connect project</span>
-    </button>
-  );
-
-  return (
-    <div className={`signed-out-session-tree ${mode === 'recent' ? 'recent-first' : ''}`}>
-      {mode === 'recent' ? (
-        <>
-          {newSessionRow}
-          {chatsRow}
-          {projectRow}
-        </>
-      ) : (
-        <>
-          {chatsRow}
-          {projectRow}
-          {newSessionRow}
-        </>
-      )}
-    </div>
-  );
-}
-
 function workspaceLabel(workspace: { id: string; name?: string; title?: string } | undefined): string {
   return workspace?.name ?? workspace?.title ?? workspace?.id ?? 'No workspace';
 }
@@ -5562,513 +5177,6 @@ function resolveSidebarProjects(
   if (authStatus === 'signed_in') return projects;
   const configured = projectSummaryFromConfig(config);
   return configured ? [configured] : [];
-}
-
-function SignedOutPanel({
-  activeTarget,
-  onWorkflowSelect,
-  onSignIn,
-  onUseManualKey,
-  onOpenCommands,
-  onCloseCommands,
-}: {
-  activeTarget: WorkflowTarget;
-  onWorkflowSelect: (target: WorkflowTarget) => void;
-  onSignIn: () => void;
-  onUseManualKey: () => void;
-  onOpenCommands: () => void;
-  onCloseCommands: () => void;
-}) {
-  const context = signedOutWorkflowContext(activeTarget);
-  const [warningVisible, setWarningVisible] = useState(true);
-  const [scopeMenu, setScopeMenu] = useState<SessionScopeKind | null>(null);
-  const [activeScopeOption, setActiveScopeOption] = useState<string | null>(null);
-  const [composerDraft, setComposerDraft] = useState('');
-  const [referenceMenu, setReferenceMenu] = useState<ComposerReferenceKind | null>(null);
-  const [activeReferenceId, setActiveReferenceId] = useState<string | null>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
-  const composerDraftRef = useRef<HTMLTextAreaElement>(null);
-  const referenceOptions = useMemo(
-    () => (referenceMenu ? composerReferenceOptions[referenceMenu] : []),
-    [referenceMenu],
-  );
-  const activeReference =
-    referenceOptions.find((option) => option.id === activeReferenceId) ?? referenceOptions[0];
-  const activeReferenceOptionId = activeReference
-    ? `composer-reference-option-${activeReference.id}`
-    : undefined;
-  const [sessionScope, setSessionScope] = useState<Record<SessionScopeKind, string>>({
-    project: 'No project',
-    worktree: 'New worktree',
-    branch: 'Default branch',
-  });
-  const activeScopeOptionId =
-    scopeMenu && activeScopeOption ? sessionScopeOptionId(scopeMenu, activeScopeOption) : undefined;
-
-  const selectScopeValue = useCallback((kind: SessionScopeKind, value: string) => {
-    setSessionScope((current) => ({ ...current, [kind]: value }));
-    setScopeMenu(null);
-    setActiveScopeOption(null);
-  }, []);
-
-  const openCommands = () => {
-    setScopeMenu(null);
-    setActiveScopeOption(null);
-    setReferenceMenu(null);
-    onOpenCommands();
-  };
-
-  const openReferenceMenu = (kind: ComposerReferenceKind) => {
-    onCloseCommands();
-    setScopeMenu(null);
-    setActiveScopeOption(null);
-    setReferenceMenu(kind);
-  };
-
-  useEffect(() => {
-    if (!scopeMenu) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const options = sessionScopeOptions[scopeMenu];
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setScopeMenu(null);
-        setActiveScopeOption(null);
-        return;
-      }
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        const delta = event.key === 'ArrowDown' ? 1 : -1;
-        setActiveScopeOption((current) => {
-          const currentOption = current ?? sessionScope[scopeMenu];
-          const currentIndex = options.findIndex((option) => option === currentOption);
-          const startIndex = currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
-          const nextIndex = (startIndex + delta + options.length) % options.length;
-          return options[nextIndex];
-        });
-        return;
-      }
-      if (event.key === 'Home' || event.key === 'End') {
-        event.preventDefault();
-        setActiveScopeOption(event.key === 'Home' ? options[0] : options[options.length - 1]);
-        return;
-      }
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        selectScopeValue(scopeMenu, activeScopeOption ?? sessionScope[scopeMenu]);
-      }
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest('.session-scope-control')) return;
-      setScopeMenu(null);
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [activeScopeOption, scopeMenu, selectScopeValue, sessionScope]);
-
-  useEffect(() => {
-    if (!scopeMenu) {
-      setActiveScopeOption(null);
-      return;
-    }
-    setActiveScopeOption(sessionScope[scopeMenu]);
-  }, [scopeMenu, sessionScope]);
-
-  useEffect(() => {
-    setActiveReferenceId(referenceOptions[0]?.id ?? null);
-  }, [referenceOptions]);
-
-  useEffect(() => {
-    if (!activeReferenceOptionId) return;
-    document.getElementById(activeReferenceOptionId)?.scrollIntoView({ block: 'nearest' });
-  }, [activeReferenceOptionId]);
-
-  useEffect(() => {
-    if (!referenceMenu) return;
-
-    const closeIfOutsideComposer = (event: Event) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (composerRef.current?.contains(target)) return;
-      setReferenceMenu(null);
-    };
-
-    document.addEventListener('pointerdown', closeIfOutsideComposer, true);
-    document.addEventListener('focusin', closeIfOutsideComposer);
-    return () => {
-      document.removeEventListener('pointerdown', closeIfOutsideComposer, true);
-      document.removeEventListener('focusin', closeIfOutsideComposer);
-    };
-  }, [referenceMenu]);
-
-  useEffect(() => {
-    if (!activeScopeOptionId) return;
-    document.getElementById(activeScopeOptionId)?.scrollIntoView({ block: 'nearest' });
-  }, [activeScopeOptionId]);
-
-  const updateComposerDraft = (value: string, caret: number) => {
-    if (value === '/' && caret === 1) {
-      setComposerDraft('');
-      openCommands();
-      requestAnimationFrame(() => composerDraftRef.current?.focus());
-      return;
-    }
-
-    setComposerDraft(value);
-    const token = value.slice(0, caret).split(/\s/).pop() ?? '';
-    if (token.startsWith('@')) {
-      openReferenceMenu('files');
-      return;
-    }
-    if (token.startsWith('#')) {
-      openReferenceMenu('issues');
-      return;
-    }
-    setReferenceMenu(null);
-  };
-
-  const moveActiveReference = (delta: number) => {
-    setActiveReferenceId((current) => {
-      if (referenceOptions.length === 0) return null;
-      const currentIndex = referenceOptions.findIndex((option) => option.id === current);
-      const startIndex = currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
-      const nextIndex = (startIndex + delta + referenceOptions.length) % referenceOptions.length;
-      return referenceOptions[nextIndex].id;
-    });
-  };
-
-  const insertComposerReference = (label: string) => {
-    const input = composerDraftRef.current;
-    const selectionStart = input?.selectionStart ?? composerDraft.length;
-    const selectionEnd = input?.selectionEnd ?? selectionStart;
-    const beforeSelection = composerDraft.slice(0, selectionStart);
-    const afterSelection = composerDraft.slice(selectionEnd);
-    const tokenMatch = beforeSelection.match(/(^|\s)([@#][^\s]*)$/);
-    const tokenStart = tokenMatch ? beforeSelection.length - tokenMatch[2].length : selectionStart;
-    const insertLabel = referenceMenu === 'files' ? `@${label}` : label;
-    const nextDraft = `${composerDraft.slice(0, tokenStart)}${insertLabel} ${
-      afterSelection.startsWith(' ') ? afterSelection.slice(1) : afterSelection
-    }`;
-    const nextCursor = tokenStart + insertLabel.length + 1;
-    setComposerDraft(nextDraft);
-    setReferenceMenu(null);
-    requestAnimationFrame(() => {
-      composerDraftRef.current?.focus();
-      composerDraftRef.current?.setSelectionRange(nextCursor, nextCursor);
-    });
-  };
-
-  const renderScopeControl = (
-    kind: SessionScopeKind,
-    label: string,
-    icon: ReactNode,
-  ) => {
-    const options = sessionScopeOptions[kind];
-    const isOpen = scopeMenu === kind;
-    const menuId = `session-scope-menu-${kind}`;
-
-    return (
-      <span className="session-scope-control" data-scope-kind={kind}>
-        <button
-          type="button"
-          aria-label={`Choose ${label}`}
-          aria-haspopup="menu"
-          aria-controls={isOpen ? menuId : undefined}
-          aria-expanded={isOpen}
-          onClick={() => {
-            const nextMenu = isOpen ? null : kind;
-            if (nextMenu) {
-              onCloseCommands();
-              setReferenceMenu(null);
-            }
-            setScopeMenu(nextMenu);
-            setActiveScopeOption(nextMenu ? sessionScope[kind] : null);
-          }}
-        >
-          {icon}
-          <span className="session-scope-label">{sessionScope[kind]}</span>
-          <ChevronDownIcon className="footer-chevron" aria-hidden />
-        </button>
-        {isOpen ? (
-          <div
-            className="session-scope-menu"
-            id={menuId}
-            role="menu"
-            aria-label={`${label} options`}
-            aria-activedescendant={activeScopeOptionId}
-          >
-            {options.map((option) => {
-              const isSelected = sessionScope[kind] === option;
-              const isActive = activeScopeOption === option;
-              return (
-                <button
-                  id={sessionScopeOptionId(kind, option)}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={isSelected}
-                  className={[isSelected ? 'selected' : '', isActive ? 'active' : '']
-                    .filter(Boolean)
-                    .join(' ')}
-                  key={option}
-                  onFocus={() => setActiveScopeOption(option)}
-                  onMouseEnter={() => setActiveScopeOption(option)}
-                  onClick={() => selectScopeValue(kind, option)}
-                >
-                  <span>{option}</span>
-                  {isSelected ? <CheckCircledIcon /> : null}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-      </span>
-    );
-  };
-
-  return (
-    <section className="pane-shell welcome-shell">
-      <div className="signed-out-canvas" aria-hidden="true">
-        <div className="signed-out-mark">
-          <span />
-          <span />
-          <span />
-        </div>
-      </div>
-      <section className="welcome-timeline" aria-label="Conversation transcript">
-        <div className="session-empty-hint">
-          <span>Open any file in the repo with</span>
-          <kbd aria-label="Command P">⌘ P</kbd>
-          <span>.</span>
-        </div>
-      </section>
-      <div
-        className={`signed-out-dock ${warningVisible ? '' : 'warning-hidden'}`}
-        aria-label="New session composer"
-      >
-        <WorkflowStrip activeTarget={activeTarget} onSelect={onWorkflowSelect} />
-        {warningVisible ? (
-          <div className="usage-warning">
-            <div className="usage-warning-copy">
-              <ExclamationTriangleIcon />
-              <Text size="2">
-                Sign in to connect workspace, sandbox, and terminal.
-              </Text>
-            </div>
-            <div className="usage-warning-actions">
-              <Button
-                size="2"
-                color="gray"
-                variant="surface"
-                aria-label="Sign in from connection warning"
-                onClick={onSignIn}
-              >
-                Sign in
-              </Button>
-              <Button
-                size="2"
-                color="gray"
-                variant="ghost"
-                aria-label="Use API key from connection warning"
-                onClick={onUseManualKey}
-              >
-                API key
-              </Button>
-              <IconButton
-                size="1"
-                color="gray"
-                variant="ghost"
-                className="usage-warning-dismiss"
-                aria-label="Dismiss connection warning"
-                onClick={() => setWarningVisible(false)}
-              >
-                <Cross2Icon />
-              </IconButton>
-            </div>
-          </div>
-        ) : null}
-        <div className="composer signed-out-composer" ref={composerRef}>
-          <textarea
-            ref={composerDraftRef}
-            className="composer-draft-input"
-            value={composerDraft}
-            rows={2}
-            aria-label="New session prompt"
-            aria-controls={referenceMenu ? 'composer-reference-menu' : undefined}
-            aria-expanded={Boolean(referenceMenu)}
-            aria-haspopup="listbox"
-            aria-activedescendant={referenceMenu ? activeReferenceOptionId : undefined}
-            placeholder="Ask anything. Type / for commands, @ to add files, or # to reference issues..."
-            onChange={(event) =>
-              updateComposerDraft(event.currentTarget.value, event.currentTarget.selectionStart)
-            }
-            onKeyDown={(event) => {
-              const draftIsEmpty = event.currentTarget.value.trim() === '';
-              if (event.key === '/' && draftIsEmpty) {
-                event.preventDefault();
-                setComposerDraft('');
-                openCommands();
-                return;
-              }
-              if (referenceMenu && event.key === 'ArrowDown') {
-                event.preventDefault();
-                moveActiveReference(1);
-                return;
-              }
-              if (referenceMenu && event.key === 'ArrowUp') {
-                event.preventDefault();
-                moveActiveReference(-1);
-                return;
-              }
-              if (referenceMenu && (event.key === 'Enter' || event.key === 'Tab')) {
-                event.preventDefault();
-                if (activeReference) {
-                  insertComposerReference(activeReference.label);
-                }
-                return;
-              }
-              if (event.key === 'Escape' && referenceMenu) {
-                event.preventDefault();
-                setReferenceMenu(null);
-              }
-            }}
-          />
-          {referenceMenu ? (
-            <div
-              className="composer-reference-menu"
-              id="composer-reference-menu"
-              role="listbox"
-              aria-label={referenceMenu === 'files' ? 'Files to add' : 'Issues to reference'}
-            >
-              <strong>{referenceMenu === 'files' ? 'Files' : 'Issues'}</strong>
-              {referenceOptions.map((option) => (
-                <button
-                  id={`composer-reference-option-${option.id}`}
-                  key={option.id}
-                  type="button"
-                  role="option"
-                  aria-selected={option.id === activeReference?.id}
-                  className={option.id === activeReference?.id ? 'selected' : ''}
-                  onMouseEnter={() => setActiveReferenceId(option.id)}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => insertComposerReference(option.label)}
-                >
-                  <span className="reference-icon">{option.icon}</span>
-                  <span className="reference-copy">
-                    <span>{option.label}</span>
-                    <em>{option.description}</em>
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <Flex align="center" justify="between" className="composer-toolbar">
-            <ComposerControls
-              disabledHint={context.body}
-              effortLabel="Max"
-              modeLabel="Interactive"
-              modelLabel="Claude Fable 5 · 1M"
-            />
-            <Flex align="center" gap="2" className="composer-right-actions">
-              <button
-                className="composer-ring-button"
-                type="button"
-                aria-label="Open command palette"
-                title="Open command palette"
-                onClick={openCommands}
-              >
-                <ActivityLogIcon />
-              </button>
-              <Button
-                size="2"
-                color="green"
-                className="send-pill"
-                aria-label="Send message, sign in required"
-                disabled
-              >
-                <ArrowUpIcon />
-              </Button>
-            </Flex>
-          </Flex>
-        </div>
-        <div
-          className={`signed-out-session-footer ${
-            warningVisible ? '' : 'auth-fallback-visible'
-          }`}
-          aria-label={warningVisible ? 'Session scope' : 'Connection actions'}
-        >
-          {warningVisible ? (
-            <>
-              {renderScopeControl('project', 'project', <ArchiveIcon />)}
-              {renderScopeControl('worktree', 'worktree', <EnterFullScreenIcon />)}
-              {renderScopeControl('branch', 'branch', <CommitIcon />)}
-            </>
-          ) : (
-            <>
-              <button type="button" aria-label="Sign in from connection footer" onClick={onSignIn}>
-                <ChatBubbleIcon /> Sign in
-              </button>
-              <button
-                type="button"
-                aria-label="Use API key from connection footer"
-                onClick={onUseManualKey}
-              >
-                <GearIcon /> API key
-              </button>
-              <button
-                type="button"
-                aria-label="Open command palette for project setup"
-                onClick={openCommands}
-              >
-                <ArchiveIcon /> No project
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WorkflowStrip({
-  activeTarget,
-  onSelect,
-}: {
-  activeTarget: WorkflowTarget;
-  onSelect: (target: WorkflowTarget) => void;
-}) {
-  const items: Array<[WorkflowTarget, string, string, ReactNode]> = [
-    ['changes', 'Changes', '+0 -0', <CodeIcon key="changes" />],
-    ['pull', 'PR', 'idle', <ReaderIcon key="pull" />],
-    ['plan', 'Plan', 'idle', <ActivityLogIcon key="plan" />],
-    ['background', 'Tool events', '0', <DotsHorizontalIcon key="background" />],
-    ['artifacts', 'Artifacts', '0', <ArchiveIcon key="artifacts" />],
-  ];
-
-  return (
-    <div className="composer-workflows signed-out-workflows" aria-label="session workflow shortcuts">
-      {items.map(([target, label, value, icon]) => (
-        <button
-          className={activeTarget === target ? 'selected' : ''}
-          type="button"
-          aria-label={`${label} ${value}`}
-          key={target}
-          onClick={() => onSelect(target)}
-        >
-          <span>{icon}</span>
-          <strong>{label}</strong>
-          <em>{value}</em>
-        </button>
-      ))}
-    </div>
-  );
 }
 
 function WorkspaceReviewPanel({
@@ -7276,72 +6384,12 @@ function ReviewEmpty({
   );
 }
 
-function reviewTabToWorkflowTarget(tab: ReviewTab): WorkflowTarget {
-  if (tab === 'pull' || tab === 'checks') return 'pull';
-  if (tab === 'plan') return 'plan';
-  if (tab === 'background' || tab === 'activity') return 'background';
-  if (tab === 'artifacts') return 'artifacts';
-  if (tab === 'terminal') return 'runtime';
-  if (tab === 'sources' || tab === 'verification') return 'artifacts';
-  return 'changes';
-}
-
 function chatWorkflowTargetForReviewTab(tab: ReviewTab): ChatWorkflowTarget {
   if (tab === 'pull' || tab === 'checks') return 'pull';
   if (tab === 'background' || tab === 'activity') return 'background';
   if (tab === 'artifacts') return 'artifacts';
   if (tab === 'changes') return 'changes';
   return 'plan';
-}
-
-function signedOutTargetForSection(section: WorkbenchSection, tab: ReviewTab): WorkflowTarget {
-  if (section === 'board') return 'changes';
-  if (section === 'status') return 'background';
-  if (section === 'memory') return 'runtime';
-  return reviewTabToWorkflowTarget(tab);
-}
-
-function signedOutWorkflowContext(target: WorkflowTarget): { title: string; body: string } {
-  if (target === 'plan') {
-    return {
-      title: 'Plan snapshot',
-      body: 'Sign in to load the active plan, checkpoints, and open decisions.',
-    };
-  }
-  if (target === 'pull') {
-    return {
-      title: 'Pull request',
-      body: 'Connect a GitHub-backed workspace to show PR overview, checks, branch state, and review actions.',
-    };
-  }
-  if (target === 'board') {
-    return {
-      title: 'Task board',
-      body: 'Sign in to show workspace tasks as board lanes with status, progress, and priority.',
-    };
-  }
-  if (target === 'background') {
-    return {
-      title: 'Tool events',
-      body: 'Tool calls, reasoning updates, queued checks, and progress events appear here after connection.',
-    };
-  }
-  if (target === 'artifacts') {
-    return {
-      title: 'Artifacts and events',
-      body: 'Generated files, event updates, and background activity appear here after connection.',
-    };
-  }
-  if (target === 'runtime') {
-    return {
-      title: 'Local workspace',
-      body: 'Sign in or configure a connection to start the sandbox desktop and terminal.',
-    };
-  }
-  return {
-    title: 'Workspace changes',
-    body: 'No repository diff is loaded yet. Sign in or configure a connection to sync this session.',
-  };
 }
 
 function CommandPalette({

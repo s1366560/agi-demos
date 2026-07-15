@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
 const globalStyles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const sessionStyles = readFileSync(
   new URL('../src/features/session/SessionWorkspace.css', import.meta.url),
@@ -29,6 +30,16 @@ test('authenticated identities without a project remain inside the desktop shell
   assert.match(appSource, /if \(!identityAuthenticated\) \{[\s\S]*<LoginScreen/);
   assert.match(renderWorkbench, /if \(!showRuntimeConfig\) return renderWorkspaceOverview\(\)/);
   assert.doesNotMatch(renderWorkbench, /<SignedOutPanel/);
+});
+
+test('login is the only signed-out surface retained by the desktop shell', () => {
+  assert.doesNotMatch(appSource, /function SignedOutPanel\b/);
+  assert.doesNotMatch(appSource, /function SignedOutSessionTree\b/);
+  assert.doesNotMatch(appSource, /function WorkflowStrip\b/);
+  assert.doesNotMatch(appSource, /signedOutTargetForSection|signedOutWorkflowContext/);
+  assert.doesNotMatch(appSource, /mobileSectionMenuOpen|mobileTitlebarItems/);
+  assert.doesNotMatch(appSource, /signed-out-mode/);
+  assert.doesNotMatch(mainSource, /\.signed-out-workflows/);
 });
 
 test('workspace hydration and refresh fail closed across tenant boundaries', () => {
@@ -65,4 +76,11 @@ test('desktop styles remove standalone workspace drawer and pull-request chrome'
   assert.doesNotMatch(globalStyles, /\.review-pr\b/);
   assert.doesNotMatch(globalStyles, /\.pr-summary-panel\b/);
   assert.doesNotMatch(sessionStyles, /\.review-head\b/);
+});
+
+test('desktop styles contain no retired signed-out or mobile menu chrome', () => {
+  assert.doesNotMatch(
+    globalStyles,
+    /\.(?:signed-out(?:-[\w-]+)?|mobile-section-[\w-]+|session-group-[\w-]+|welcome-(?:shell|timeline)|usage-warning(?:-[\w-]+)?|workflow-(?:strip|chip)|session-scope-[\w-]+|composer-(?:reference-menu|draft-input|toolbar))\b/,
+  );
 });

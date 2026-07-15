@@ -47,23 +47,9 @@ function reportFrontendReady() {
   if (!invoke) return;
 
   window.requestAnimationFrame(() => {
-    const workflows = document.querySelector<HTMLElement>('.signed-out-workflows');
-    const workflowRect = workflows?.getBoundingClientRect();
-    const workflowStyle = workflows ? window.getComputedStyle(workflows) : null;
     const summary = document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 240);
     void invoke('frontend_ready', {
       summary: summary || 'mounted without visible text',
-      workflowProbe: workflowRect
-        ? {
-            x: Math.round(workflowRect.x),
-            y: Math.round(workflowRect.y),
-            width: Math.round(workflowRect.width),
-            height: Math.round(workflowRect.height),
-            display: workflowStyle?.display,
-            visibility: workflowStyle?.visibility,
-            opacity: workflowStyle?.opacity,
-          }
-        : null,
     });
   });
 }

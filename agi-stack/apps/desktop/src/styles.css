@@ -13,7 +13,6 @@
   --desktop-amber: #f0b35a;
   --desktop-red: #ff6978;
   --desktop-sidebar-width: 220px;
-  --signed-out-dock-width: 580px;
 }
 
 * {
@@ -148,11 +147,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   background: #0b0f16;
 }
 
-.signed-out-mode .titlebar,
-.signed-out-mode .workbench {
-  background: #0b0f16;
-}
-
 .app-shell.tauri-window .titlebar {
   padding-left: 10px;
 }
@@ -171,13 +165,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.titlebar-signedout-label {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
 }
 
 .titlebar-workspace-name {
@@ -307,64 +294,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   max-width: 72px;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.mobile-section-switcher {
-  position: relative;
-  display: none;
-  flex: 0 0 auto;
-}
-
-.mobile-section-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 8px);
-  right: 0;
-  display: grid;
-  gap: 4px;
-  width: 232px;
-  padding: 8px;
-  border: 1px solid var(--desktop-border);
-  border-radius: 8px;
-  background: #111821;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.62);
-}
-
-.mobile-section-menu button {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  align-items: center;
-  min-height: 34px;
-  gap: 8px;
-  padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--desktop-muted);
-  font: inherit;
-  text-align: left;
-}
-
-.mobile-section-menu button:hover,
-.mobile-section-menu button.active,
-.mobile-section-menu button.selected {
-  border-color: rgba(56, 214, 255, 0.32);
-  background: rgba(56, 214, 255, 0.13);
-  color: var(--desktop-text);
-}
-
-.mobile-section-menu button span {
-  display: grid;
-  place-items: center;
-  color: var(--desktop-cyan);
-}
-
-.mobile-section-menu button strong {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .titlebar-actions {
@@ -667,10 +596,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   overflow: auto;
   border-top: 1px solid var(--desktop-border-soft);
   background: #0b1119;
-}
-
-.signed-out-mode .left-dock {
-  max-height: 58px;
 }
 
 .quick-links,
@@ -982,74 +907,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   gap: 2px;
 }
 
-.session-grouping-control {
-  position: relative;
-  display: inline-flex;
-}
-
-.session-group-menu {
-  position: absolute;
-  top: 36px;
-  right: -36px;
-  z-index: 45;
-  display: grid;
-  gap: 4px;
-  width: 220px;
-  padding: 7px;
-  border: 1px solid var(--desktop-border);
-  border-radius: 7px;
-  background: #111821;
-  box-shadow: 0 16px 54px rgba(0, 0, 0, 0.46);
-}
-
-.session-group-menu button {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 38px;
-  padding: 6px 7px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--desktop-muted);
-  text-align: left;
-}
-
-.session-group-menu button:hover,
-.session-group-menu button.selected {
-  border-color: rgba(56, 214, 255, 0.18);
-  background: rgba(56, 214, 255, 0.1);
-  color: var(--desktop-text);
-}
-
-.session-group-menu button:not(.selected) svg {
-  opacity: 0;
-}
-
-.session-group-menu span {
-  display: grid;
-  min-width: 0;
-}
-
-.session-group-menu strong,
-.session-group-menu em {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-group-menu strong {
-  font-size: 12px;
-}
-
-.session-group-menu em {
-  color: var(--desktop-faint);
-  font-size: 11px;
-  font-style: normal;
-}
-
 .sidebar-row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
@@ -1077,38 +934,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   background: rgba(56, 214, 255, 0.12);
 }
 
-.signed-out-mode .quick-links {
-  padding: 8px 10px 15px;
-}
-
-.signed-out-mode .quick-links .sidebar-heading {
-  display: none;
-}
-
-.signed-out-mode .sidebar-row {
-  min-height: 34px;
-}
-
-.signed-out-mode .quick-links .sidebar-row.selected {
-  border-color: rgba(56, 214, 255, 0.22);
-  background: rgba(56, 214, 255, 0.1);
-  color: var(--desktop-text);
-}
-
-.signed-out-mode .quick-links .sidebar-row.selected .sidebar-icon {
-  color: var(--desktop-cyan);
-}
-
-.signed-out-mode .signed-out-session-tree .sidebar-row.selected {
-  border-color: rgba(148, 163, 184, 0.08);
-  background: #202833;
-  color: #d6dbe4;
-}
-
-.signed-out-mode .signed-out-session-tree .sidebar-row.selected .sidebar-icon {
-  color: #a78bfa;
-}
-
 .sidebar-row span:nth-child(2) {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1125,16 +950,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
 
 .sidebar-row.selected .sidebar-icon {
   color: var(--desktop-cyan);
-}
-
-.signed-out-session-tree {
-  display: grid;
-  gap: 4px;
-}
-
-.session-child-row {
-  margin-left: 12px;
-  width: calc(100% - 12px);
 }
 
 .sidebar-runtime {
@@ -1214,10 +1029,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.signed-out-mode .account-panel:not(.signed-in) .account-row {
-  gap: 4px;
-}
-
 .account-profile-button {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -1229,11 +1040,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   background: transparent;
   color: inherit;
   text-align: left;
-}
-
-.signed-out-mode .account-panel:not(.signed-in) .account-profile-button {
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 5px;
 }
 
 .account-profile-button:hover .account-avatar {
@@ -1252,11 +1058,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   color: var(--desktop-cyan);
 }
 
-.signed-out-mode .account-panel:not(.signed-in) .account-avatar {
-  width: 24px;
-  height: 24px;
-}
-
 .account-copy {
   display: grid;
   min-width: 0;
@@ -1270,25 +1071,10 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   white-space: nowrap;
 }
 
-.signed-out-mode .account-panel:not(.signed-in) .account-copy .rt-Text:first-child {
-  font-size: 13px;
-  line-height: 1;
-}
-
-.signed-out-mode .account-panel:not(.signed-in) .account-copy .rt-Text:last-child {
-  display: none;
-}
-
 .account-actions {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-}
-
-.signed-out-mode .account-panel:not(.signed-in) .account-actions .rt-IconButton {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
 }
 
 .account-primary-action {
@@ -1792,8 +1578,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   padding: 0;
 }
 
-.workspace-session-tree .workspace-child-row,
-.workspace-session-tree .session-child-row {
+.workspace-session-tree .workspace-child-row {
   width: calc(100% - 18px);
   margin-left: 18px;
 }
@@ -1921,11 +1706,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
 }
 
 .pane-stage.single-stage.my-work-stage {
-  padding: 0;
-  overflow: hidden;
-}
-
-.signed-out-mode .pane-stage.single-stage {
   padding: 0;
   overflow: hidden;
 }
@@ -6033,68 +5813,10 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   white-space: normal;
 }
 
-.welcome-shell,
 .settings-shell {
   min-height: 0;
 }
 
-.welcome-shell {
-  position: relative;
-  grid-template-rows: minmax(0, 1fr);
-  border: 0;
-  border-radius: 0;
-  background: #0b0f16;
-}
-
-.welcome-shell .pane-head {
-  display: none;
-}
-
-.signed-out-canvas {
-  position: relative;
-  grid-area: 1 / 1;
-  min-width: 0;
-  min-height: 0;
-}
-
-.signed-out-mark {
-  position: absolute;
-  top: calc(50% - 158px);
-  left: 50%;
-  display: grid;
-  width: 42px;
-  height: 42px;
-  grid-template-rows: repeat(3, 8px);
-  gap: 7px;
-  opacity: 0.16;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.signed-out-mark span {
-  display: block;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #d7e4f4, #7f95ad);
-  box-shadow: 0 0 22px rgba(183, 210, 238, 0.18);
-}
-
-.signed-out-mark span:nth-child(3) {
-  width: 26px;
-}
-
-.signed-out-dock {
-  position: absolute;
-  right: max(24px, calc((100% - var(--signed-out-dock-width)) / 2));
-  bottom: 14px;
-  left: max(24px, calc((100% - var(--signed-out-dock-width)) / 2));
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.welcome-timeline,
 .settings-grid {
   display: grid;
   align-content: start;
@@ -6177,174 +5899,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   height: 100%;
   border-radius: inherit;
   background: #d7e4f4;
-}
-
-.welcome-timeline {
-  grid-area: 1 / 1;
-  justify-items: center;
-  align-content: center;
-  padding: 0 max(24px, calc((100% - var(--signed-out-dock-width)) / 2)) 260px;
-  overflow: auto;
-}
-
-.session-empty-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 24px;
-  color: var(--desktop-muted);
-  font-size: 12px;
-  line-height: 1.45;
-  text-align: center;
-}
-
-.session-empty-hint kbd {
-  color: var(--desktop-text);
-  font: inherit;
-}
-
-.welcome-shell .timeline-message {
-  width: min(720px, 100%);
-  padding: 8px 0 14px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.signed-out-composer {
-  position: relative;
-  display: grid;
-  box-sizing: border-box;
-  gap: 4px;
-  width: 100%;
-  min-width: 0;
-  min-height: 84px;
-  margin: 0;
-  padding: 10px 14px 7px;
-  border: 1px solid rgba(132, 147, 169, 0.48);
-  border-radius: 10px;
-  background: #080d14;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
-  opacity: 1;
-}
-
-.composer-draft-input {
-  width: 100%;
-  min-height: 30px;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  outline: 0;
-  resize: none;
-  background: transparent;
-  color: var(--desktop-faint);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.signed-out-composer .composer-draft-input {
-  height: 38px;
-  min-height: 38px;
-}
-
-.composer-draft-input:focus,
-.composer-draft-input:not(:placeholder-shown) {
-  color: var(--desktop-text);
-}
-
-.composer-draft-input::placeholder {
-  color: var(--desktop-faint);
-  opacity: 1;
-}
-
-.composer-reference-menu {
-  position: absolute;
-  right: 14px;
-  bottom: calc(100% - 4px);
-  left: 14px;
-  z-index: 25;
-  display: grid;
-  gap: 4px;
-  max-height: min(260px, calc(100vh - 180px));
-  padding: 8px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--desktop-border);
-  border-radius: 8px;
-  background: #121820;
-  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.58);
-}
-
-.composer-reference-menu strong {
-  padding: 2px 4px 5px;
-  color: var(--desktop-muted);
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.composer-reference-menu button {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--desktop-muted);
-  text-align: left;
-}
-
-.composer-reference-menu button:hover,
-.composer-reference-menu button.selected {
-  border-color: rgba(56, 214, 255, 0.26);
-  background: rgba(56, 214, 255, 0.11);
-  color: var(--desktop-text);
-}
-
-.composer-reference-menu button.selected {
-  border-color: rgba(56, 214, 255, 0.44);
-  box-shadow: inset 0 0 0 1px rgba(56, 214, 255, 0.08);
-}
-
-.reference-icon {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid var(--desktop-border-soft);
-  border-radius: 6px;
-  color: var(--desktop-cyan);
-}
-
-.reference-copy {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.reference-copy span,
-.reference-copy em {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reference-copy span {
-  color: var(--desktop-text);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.reference-copy em {
-  color: var(--desktop-faint);
-  font-size: 11px;
-  font-style: normal;
-}
-
-.composer-toolbar {
-  min-width: 0;
 }
 
 .composer-control-tray {
@@ -6503,18 +6057,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   vertical-align: middle;
 }
 
-.workflow-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  width: min(720px, calc(100% - 32px));
-  min-height: 28px;
-  margin: 0 auto 10px;
-  overflow: hidden;
-}
-
-.workflow-chip,
 .composer-workflows button {
   display: inline-flex;
   align-items: center;
@@ -6528,270 +6070,10 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   line-height: 1;
 }
 
-.workflow-chip {
-  flex: 0 0 auto;
-  height: 26px;
-  padding: 0 9px;
-  cursor: pointer;
-}
-
-.workflow-chip:hover,
-.workflow-chip.selected {
-  border-color: rgba(56, 214, 255, 0.28);
-  background: rgba(56, 214, 255, 0.11);
-  color: var(--desktop-text);
-}
-
-.workflow-chip.selected .workflow-chip strong,
-.workflow-chip.selected strong {
-  color: var(--desktop-text);
-}
-
-.workflow-chip.selected em {
-  color: var(--desktop-cyan);
-}
-
-.workflow-chip strong {
-  color: var(--desktop-text);
-  font-size: 11px;
-}
-
-.workflow-chip em {
-  color: var(--desktop-faint);
-  font-style: normal;
-}
-
-.usage-warning {
-  display: flex;
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-  min-height: 34px;
-  margin: 0 0 8px;
-  padding: 5px 8px 5px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 7px;
-  background: rgba(18, 26, 37, 0.78);
-  color: #aab4c3;
-}
-
-.usage-warning-copy,
-.usage-warning-actions,
 .composer-right-actions {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-}
-
-.usage-warning-copy {
-  flex: 1 1 auto;
-  gap: 8px;
-}
-
-.usage-warning-copy svg {
-  flex: 0 0 auto;
-  color: #8aa0b6;
-}
-
-.usage-warning-copy .rt-Text {
-  overflow: visible;
-  font-size: 12px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.usage-warning-actions {
-  flex: 0 0 auto;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.usage-warning-actions .rt-Button {
-  min-height: 28px;
-  height: 28px;
-  padding-inline: 9px;
-}
-
-.usage-warning-dismiss {
-  flex: 0 0 auto;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  color: var(--desktop-muted);
-}
-
-.usage-warning-dismiss:hover {
-  color: var(--desktop-text);
-}
-
-.composer-ring-button {
-  display: inline-grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--desktop-muted);
-  cursor: pointer;
-}
-
-.composer-ring-button:hover {
-  background: rgba(148, 163, 184, 0.12);
-  color: var(--desktop-text);
-}
-
-.composer-ring-button svg {
-  width: 21px;
-  height: 21px;
-}
-
-.signed-out-session-footer {
-  display: flex;
-  box-sizing: border-box;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 0 12px;
-  overflow: visible;
-  border-radius: 0 0 9px 9px;
-  background: #0f1722;
-}
-
-.signed-out-session-footer button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 220px;
-  height: 30px;
-  padding: 0 8px;
-  overflow: hidden;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--desktop-muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.signed-out-session-footer button:hover {
-  background: rgba(148, 163, 184, 0.1);
-  color: var(--desktop-text);
-}
-
-.signed-out-session-footer.auth-fallback-visible {
-  background: #0e1520;
-}
-
-.signed-out-session-footer.auth-fallback-visible button {
-  max-width: 32%;
-}
-
-.signed-out-session-footer svg {
-  flex: 0 0 auto;
-}
-
-.signed-out-session-footer .footer-chevron {
-  width: 12px;
-  height: 12px;
-  margin-left: -2px;
-  color: var(--desktop-faint);
-}
-
-.session-scope-control {
-  position: relative;
-  display: inline-flex;
-  min-width: 0;
-  max-width: 220px;
-}
-
-.session-scope-control > button {
-  width: 100%;
-  max-width: 100%;
-}
-
-.session-scope-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-scope-menu {
-  position: absolute;
-  z-index: 35;
-  bottom: calc(100% + 8px);
-  left: 0;
-  display: grid;
-  gap: 4px;
-  width: 220px;
-  padding: 7px;
-  border: 1px solid var(--desktop-border);
-  border-radius: 7px;
-  background: #111821;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58);
-}
-
-.session-scope-menu button {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  max-width: none;
-  min-height: 30px;
-  height: auto;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  color: var(--desktop-muted);
-  text-align: left;
-}
-
-.session-scope-menu button:hover,
-.session-scope-menu button.active,
-.session-scope-menu button.selected {
-  border-color: rgba(56, 214, 255, 0.32);
-  background: rgba(56, 214, 255, 0.14);
-  color: var(--desktop-text);
-}
-
-.session-scope-menu button svg {
-  color: var(--desktop-cyan);
-}
-
-.signed-out-mode .workflow-strip {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 30px;
-  margin: 0;
-  padding: 2px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 999px;
-  background: rgba(16, 24, 35, 0.94);
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.signed-out-mode .workflow-chip {
-  border-color: rgba(148, 163, 184, 0.24);
-  background: #1b2532;
-  color: #d7deea;
-}
-
-.signed-out-mode .workflow-chip em {
-  color: #9fb0c6;
-}
-
-.signed-out-mode .workflow-strip::-webkit-scrollbar {
-  display: none;
 }
 
 .composer-workflows {
@@ -6803,46 +6085,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
 
 .composer-workflows button {
   padding: 0 8px;
-}
-
-.signed-out-workflows {
-  position: relative;
-  z-index: 12;
-  gap: 6px;
-  width: 100%;
-  min-height: 30px;
-  margin: 0;
-  padding: 0;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  border: 0;
-  background: transparent;
-  scrollbar-width: none;
-}
-
-.signed-out-workflows::-webkit-scrollbar {
-  display: none;
-}
-
-.signed-out-workflows button {
-  flex: 0 0 auto;
-  height: 28px;
-  border-color: rgba(148, 163, 184, 0.22);
-  background: #0d131d;
-  color: #cdd7e6;
-  cursor: pointer;
-}
-
-.signed-out-workflows button.selected {
-  border-color: rgba(56, 214, 255, 0.36);
-  background: rgba(56, 214, 255, 0.12);
-  color: var(--desktop-text);
-}
-
-.signed-out-workflows button em {
-  color: #9aa8ba;
-  font-style: normal;
 }
 
 .chat-composer-workflows {
@@ -6942,15 +6184,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     max-height: calc(100vh - 112px);
   }
 
-  .session-group-menu {
-    top: auto;
-    bottom: calc(100% + 4px);
-  }
 
-  .signed-out-mode .quick-links {
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
 
   .quick-links,
   .sidebar-runs,
@@ -7039,15 +6273,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     display: none;
   }
 
-  .mobile-section-switcher {
-    display: block;
-  }
 
-  .mobile-section-switcher .rt-IconButton {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-  }
 
   .command-row {
     align-items: start;
@@ -7058,15 +6284,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     margin-top: 2px;
   }
 
-  .mobile-section-menu {
-    position: fixed;
-    top: 44px;
-    right: 8px;
-    left: 8px;
-    width: auto;
-    max-height: calc(100vh - 64px);
-    overflow: auto;
-  }
 
   .copilot-sidebar {
     display: none;
@@ -7091,11 +6308,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     padding: 8px;
   }
 
-  .signed-out-mode .pane-stage,
-  .signed-out-mode .pane-stage.overview-stage {
-    padding: 0;
-    overflow: hidden;
-  }
 
   .pane-shell,
   .pane-stage.overview-stage .pane-shell {
@@ -7167,46 +6379,13 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     min-height: 78px;
   }
 
-  .welcome-shell {
-    border-radius: 0;
-  }
 
-  .welcome-timeline {
-    align-content: center;
-    padding: 0 10px 252px;
-    justify-items: stretch;
-  }
 
-  .session-empty-hint {
-    justify-content: center;
-    width: 100%;
-    overflow-wrap: anywhere;
-  }
 
-  .signed-out-composer,
-  .workflow-strip,
-  .usage-warning {
-    width: 100%;
-  }
 
-  .signed-out-dock {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-  }
 
-  .usage-warning {
-    align-items: stretch;
-    flex-direction: column;
-  }
 
-  .usage-warning-copy .rt-Text {
-    white-space: normal;
-  }
 
-  .usage-warning-actions {
-    justify-content: flex-end;
-  }
 
   .auth-modal-actions {
     grid-template-columns: minmax(0, 1fr);
@@ -7329,16 +6508,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .signed-out-composer {
-    min-height: 106px;
-  }
-
-  .composer-toolbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
-    gap: 8px;
-  }
 
   .chat-composer-footer {
     display: grid;
@@ -7398,58 +6567,6 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     justify-self: end;
     align-self: end;
   }
-
-  .signed-out-session-footer {
-    gap: 2px;
-    padding: 0 7px;
-  }
-
-  .signed-out-session-footer button {
-    max-width: 34%;
-    gap: 3px;
-    padding: 0 3px;
-  }
-
-  .session-scope-control {
-    flex: 1 1 0;
-    max-width: none;
-  }
-
-  .session-scope-control[data-scope-kind="project"] {
-    flex-grow: 0.98;
-  }
-
-  .session-scope-control[data-scope-kind="worktree"] {
-    flex-grow: 1.08;
-  }
-
-  .session-scope-control[data-scope-kind="branch"] {
-    flex-grow: 1.24;
-  }
-
-  .signed-out-session-footer .session-scope-control > button {
-    max-width: 100%;
-  }
-
-  .session-scope-menu {
-    position: fixed;
-    right: 10px;
-    bottom: 44px;
-    left: 10px;
-    width: auto;
-  }
-
-  .signed-out-session-footer .session-scope-menu button {
-    width: 100%;
-    max-width: none;
-  }
-}
-
-@media (max-width: 760px) and (max-height: 700px) {
-  .welcome-timeline {
-    align-content: start;
-    padding-top: 20px;
-  }
 }
 
 @media (max-width: 360px) {
@@ -7491,43 +6608,11 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
     -webkit-line-clamp: unset;
   }
 
-  .welcome-timeline {
-    align-content: start;
-    padding-top: 18px;
-  }
 
-  .signed-out-session-footer {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    min-height: 70px;
-    align-items: center;
-    gap: 2px 4px;
-    padding: 4px 7px;
-  }
 
-  .signed-out-session-footer button {
-    width: 100%;
-    max-width: none;
-    height: 30px;
-    padding: 0 7px;
-  }
 
-  .session-scope-control,
-  .session-scope-control[data-scope-kind="project"],
-  .session-scope-control[data-scope-kind="worktree"],
-  .session-scope-control[data-scope-kind="branch"] {
-    flex: none;
-    width: 100%;
-    max-width: none;
-  }
 
-  .session-scope-control[data-scope-kind="project"] {
-    grid-column: 1 / -1;
-  }
 
-  .signed-out-session-footer .session-scope-control > button {
-    max-width: none;
-  }
 }
 
 .run-input-queue {

@@ -229,12 +229,8 @@ fn mark_tauri_runtime(window: &tauri::WebviewWindow) {
     }
 }
 
-fn probe_frontend_dom(window: &tauri::WebviewWindow) {
-    if !tauri::is_dev() {
-        return;
-    }
-
-    let js = r#"
+fn frontend_dom_probe_script() -> &'static str {
+    r#"
       (() => {
         document.documentElement.dataset.runtimeShell = 'tauri';
         document.documentElement.setAttribute('data-tauri-window', 'true');
@@ -276,12 +272,14 @@ fn probe_frontend_dom(window: &tauri::WebviewWindow) {
           title: document.title,
           text: document.body?.innerText?.replace(/\s+/g, ' ').trim().slice(0, 240) ?? '',
           rootChildren: document.getElementById('root')?.childElementCount ?? 0,
+          hasLoginScreen: Boolean(document.querySelector('.desktop-login-screen')),
           hasAppShell: Boolean(document.querySelector('.app-shell')),
+          hasSettingsWindow: Boolean(document.querySelector('.settings-window-dialog')),
           hasFatalError: Boolean(document.querySelector('.app-fatal-error')),
           hasTauriGlobal: Boolean(window.__TAURI__ || window.__TAURI_INTERNALS__),
-          signedOutDock: elementProbe('.signed-out-dock'),
-          signedOutWorkflows: elementProbe('.signed-out-workflows'),
-          signedOutComposer: elementProbe('.signed-out-composer'),
+          loginScreen: elementProbe('.desktop-login-screen'),
+          appShell: elementProbe('.app-shell'),
+          settingsWindow: elementProbe('.settings-window-dialog'),
           ...extra,
         });
 
@@ -294,7 +292,11 @@ fn probe_frontend_dom(window: &tauri::WebviewWindow) {
 
         setTimeout(async () => {
           let summary = summarize('probe');
-          if (!summary.hasAppShell && location.hostname === '127.0.0.1') {
+          if (
+            !summary.hasLoginScreen &&
+            !summary.hasAppShell &&
+            location.hostname === '127.0.0.1'
+          ) {
             try {
               await import('/src/main.tsx');
               summary = summarize('probe-after-dev-import');
@@ -307,9 +309,15 @@ fn probe_frontend_dom(window: &tauri::WebviewWindow) {
           report(summary);
         }, 750);
       })()
-    "#;
+    "#
+}
 
-    if let Err(error) = window.eval(js) {
+fn probe_frontend_dom(window: &tauri::WebviewWindow) {
+    if !tauri::is_dev() {
+        return;
+    }
+
+    if let Err(error) = window.eval(frontend_dom_probe_script()) {
         eprintln!("failed to probe agistack desktop dom: {error}");
     }
 }
@@ -456,6 +464,15 @@ mod tests {
         let script = tauri_runtime_marker_script();
         assert!(script.contains("dataset.runtimeShell = 'tauri'"));
         assert!(script.contains("data-tauri-window"));
+    }
+
+    #[test]
+    fn frontend_probe_tracks_current_auth_and_workspace_surfaces() {
+        let script = frontend_dom_probe_script();
+        assert!(script.contains(".desktop-login-screen"));
+        assert!(script.contains(".app-shell"));
+        assert!(script.contains(".settings-window-dialog"));
+        assert!(!script.contains(".signed-out-"));
     }
 
     #[test]
