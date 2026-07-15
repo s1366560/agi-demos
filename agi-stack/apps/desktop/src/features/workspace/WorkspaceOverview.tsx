@@ -33,6 +33,10 @@ import {
   buildWorkspaceOverviewModel,
   type WorkspaceSessionSummary,
 } from './workspaceOverviewModel';
+import {
+  conversationTreeStatusPresentation,
+  type WorkspaceTreeStatusTone,
+} from './workspaceTreeModel';
 import './WorkspaceOverview.css';
 
 type WorkspaceOverviewProps = {
@@ -84,6 +88,9 @@ export function WorkspaceOverview({
     model.agentRosterNames.length,
     t,
   );
+  const officeStatusPresentation = model.officeStatus
+    ? workspaceStatusPresentation(model.officeStatus)
+    : null;
 
   return (
     <main className="workspace-design-overview">
@@ -94,10 +101,10 @@ export function WorkspaceOverview({
           </span>
           <div className="workspace-design-title-line">
             <h1>{workspaceName}</h1>
-            {model.officeStatus ? (
-              <em data-status={model.officeStatus}>
+            {officeStatusPresentation ? (
+              <em data-status={officeStatusPresentation.tone}>
                 <i />
-                {workspaceStatusLabel(model.officeStatus, t)}
+                {t(officeStatusPresentation.labelKey)}
               </em>
             ) : null}
           </div>
@@ -417,7 +424,8 @@ function SessionRow({
   onOpen: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
-  const StatusIcon = sessionStatusIcon(session.status);
+  const statusPresentation = conversationTreeStatusPresentation(session.status);
+  const StatusIcon = sessionStatusIcon(statusPresentation.tone);
   return (
     <button type="button" onClick={onOpen}>
       <span
@@ -430,7 +438,7 @@ function SessionRow({
         <b>{session.title}</b>
         <small>{formatDate(session.updatedAt, locale, t)}</small>
       </span>
-      <em data-status={session.status}>{sessionStatusLabel(session.status, t)}</em>
+      <em data-status={statusPresentation.tone}>{t(statusPresentation.labelKey)}</em>
     </button>
   );
 }
@@ -444,30 +452,18 @@ function EmptyState({ title, description }: { title: string; description: string
   );
 }
 
-function sessionStatusIcon(status: string) {
-  if (status === 'running') return LightningBoltIcon;
-  if (status === 'needs_input' || status === 'needs_approval') return ExclamationTriangleIcon;
-  return CheckCircledIcon;
+function sessionStatusIcon(tone: WorkspaceTreeStatusTone) {
+  if (tone === 'active' || tone === 'queued') return LightningBoltIcon;
+  if (tone === 'attention' || tone === 'danger') return ExclamationTriangleIcon;
+  if (tone === 'ready' || tone === 'completed') return CheckCircledIcon;
+  return ActivityLogIcon;
 }
 
-function sessionStatusLabel(
-  status: string,
-  t: (key: string, values?: Record<string, string | number>) => string,
-) {
-  if (status === 'running') return t('overview.statusRunning');
-  if (status === 'needs_input' || status === 'needs_approval') {
-    return t('overview.statusNeedsInput');
+function workspaceStatusPresentation(status: string) {
+  if (status.trim().toLowerCase() === 'online') {
+    return { tone: 'active' as const, labelKey: 'overview.workspaceOnline' };
   }
-  if (status === 'ready_review') return t('overview.statusReady');
-  if (status === 'completed') return t('overview.statusCompleted');
-  return status;
-}
-
-function workspaceStatusLabel(
-  status: string,
-  t: (key: string, values?: Record<string, string | number>) => string,
-) {
-  return status === 'online' ? t('overview.workspaceOnline') : status;
+  return conversationTreeStatusPresentation(status);
 }
 
 function collaborationModeLabel(

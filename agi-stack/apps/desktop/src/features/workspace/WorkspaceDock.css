@@ -112,9 +112,30 @@
   background: var(--desktop-faint);
 }
 
-.workspace-tree-workspace-action > i[data-status='online'] {
+.workspace-tree-workspace-action > i[data-status='active'] {
   background: #54d68b;
   box-shadow: 0 0 8px rgba(84, 214, 139, 0.55);
+}
+
+.workspace-tree-workspace-action > i[data-status='attention'] {
+  background: var(--desktop-amber);
+  box-shadow: 0 0 8px rgba(245, 180, 76, 0.42);
+}
+
+.workspace-tree-workspace-action > i[data-status='danger'] {
+  background: #ff6978;
+  box-shadow: 0 0 8px rgba(255, 105, 120, 0.42);
+}
+
+.workspace-tree-workspace-action > i[data-status='ready'],
+.workspace-tree-workspace-action > i[data-status='completed'] {
+  background: #54d68b;
+}
+
+.workspace-tree-workspace-action > i[data-status='queued'],
+.workspace-tree-workspace-action > i[data-status='paused'] {
+  background: var(--desktop-cyan);
+  opacity: 0.72;
 }
 
 .workspace-tree-session-children {
@@ -158,18 +179,28 @@
   color: var(--desktop-faint);
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='running'] {
+.workspace-tree-session-row > svg:last-child[data-status='active'],
+.workspace-tree-session-row > svg:last-child[data-status='queued'] {
   color: var(--desktop-cyan);
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='needs_input'],
-.workspace-tree-session-row > svg:last-child[data-status='needs_approval'] {
+.workspace-tree-session-row > svg:last-child[data-status='attention'] {
   color: var(--desktop-amber);
 }
 
-.workspace-tree-session-row > svg:last-child[data-status='ready_review'],
+.workspace-tree-session-row > svg:last-child[data-status='ready'],
 .workspace-tree-session-row > svg:last-child[data-status='completed'] {
   color: #54d68b;
+}
+
+.workspace-tree-session-row > svg:last-child[data-status='danger'] {
+  color: #ff6978;
+}
+
+.workspace-tree-session-row > svg:last-child[data-status='paused'],
+.workspace-tree-session-row > svg:last-child[data-status='offline'],
+.workspace-tree-session-row > svg:last-child[data-status='unknown'] {
+  color: var(--desktop-faint);
 }
 
 .workspace-tree-state {
@@ -195,4 +226,25 @@
   color: var(--desktop-faint);
   font-size: 8px;
   line-height: 1.4;
+}
+
+.workspace-tree-state > button {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--desktop-cyan);
+  font: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.workspace-tree-state > button:hover {
+  color: var(--desktop-text);
+}
+
+.workspace-tree-state > button:focus-visible {
+  border-radius: 3px;
+  outline: 1px solid var(--desktop-cyan);
+  outline-offset: 2px;
 }

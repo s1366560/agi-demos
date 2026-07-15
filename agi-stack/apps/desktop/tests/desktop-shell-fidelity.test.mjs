@@ -21,6 +21,14 @@ const sidebarSource = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
   'utf8'
 );
+const workspaceDockSource = readFileSync(
+  new URL('../src/features/workspace/WorkspaceDock.tsx', import.meta.url),
+  'utf8'
+);
+const workspaceDockStyles = readFileSync(
+  new URL('../src/features/workspace/WorkspaceDock.css', import.meta.url),
+  'utf8'
+);
 
 test('desktop shell mounts only the prototype sidebar and page-owned headers', () => {
   assert.doesNotMatch(appSource, /className="titlebar"/);
@@ -73,6 +81,103 @@ test('workspace hydration and refresh fail closed across tenant boundaries', () 
   assert.doesNotMatch(appSource, /availableProjects\[0\]/);
 });
 
+test('an authoritative context switch closes settings even when workspace hydration degrades', () => {
+  const applySettingsContext =
+    appSource.match(
+      /const applySettingsContext = async \(tenantId: string, projectId: string\) => \{[\s\S]*?\n  \};/
+    )?.[0] ?? '';
+
+  assert.match(applySettingsContext, /await refreshRuntime\(nextConfig, \[selectedProject\]\)/);
+  assert.doesNotMatch(applySettingsContext, /contextSwitchLoadFailed/);
+  assert.match(appSource, /connection === 'error'[\s\S]*runtime\.retryWorkspace/);
+  assert.match(
+    appSource,
+    /workbenchRef\.current\?\.focus\(\);[\s\S]*void refreshRuntime\(\)/
+  );
+});
+
+test('runtime refresh hydrates conversations only for selected or expanded workspaces', () => {
+  const refreshRuntime =
+    appSource.match(
+      /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+    )?.[0] ?? '';
+
+  assert.match(refreshRuntime, /workspaceConversationLoadTargets\(/);
+  assert.doesNotMatch(refreshRuntime, /workspaces\.map\(async \(workspace\) => \{/);
+  assert.match(appSource, /loadWorkspaceConversations/);
+  assert.match(appSource, /if \(!wasExpanded\) void loadWorkspaceConversations\(workspaceId\)/);
+});
+
+test('runtime refresh preserves workspace expansion changes made while hydration is pending', () => {
+  const refreshRuntime =
+    appSource.match(
+      /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+    )?.[0] ?? '';
+
+  assert.match(
+    refreshRuntime,
+    /const committedExpandedWorkspaceIds = reconcileExpandedWorkspaceIds\(\s*expandedWorkspaceIdsRef\.current,/
+  );
+  assert.match(
+    refreshRuntime,
+    /expandedWorkspaceIdsRef\.current = committedExpandedWorkspaceIds;[\s\S]*setExpandedWorkspaceIds\(committedExpandedWorkspaceIds\)/
+  );
+  assert.doesNotMatch(refreshRuntime, /expandedWorkspaceIdsRef\.current = nextExpandedWorkspaceIds/);
+});
+
+test('workspace tree loading and error states announce changes and expose explicit retries', () => {
+  assert.match(workspaceDockSource, /role="status"/);
+  assert.match(workspaceDockSource, /aria-live="polite"/);
+  assert.match(workspaceDockSource, /onRetryProject/);
+  assert.match(workspaceDockSource, /onRetryWorkspace/);
+  assert.match(workspaceDockSource, /actionLabel=\{t\('workspaceTree\.retry'\)\}/);
+  assert.match(sidebarSource, /onRetryProject=\{onRetryProject\}/);
+  assert.match(sidebarSource, /onRetryWorkspace=\{onRetryWorkspace\}/);
+  assert.match(appSource, /onRetryProject=\{\(\) => void refreshRuntime\(\)\}/);
+  assert.match(appSource, /onRetryWorkspace=\{\(workspaceId\) => void loadWorkspaceConversations\(workspaceId\)\}/);
+  assert.match(workspaceDockStyles, /\.workspace-tree-state > button/);
+  assert.match(
+    workspaceDockSource,
+    /navigationRef\.current\?\.focus\(\);[\s\S]*onRetryProject\(\)/
+  );
+  assert.match(
+    workspaceDockSource,
+    /workspaceToggleRefs\.current\.get\(workspace\.id\)\?\.focus\(\);[\s\S]*onRetryWorkspace\(workspace\.id\)/
+  );
+});
+
+test('workspace hierarchy uses native navigation controls instead of an incomplete ARIA tree', () => {
+  assert.match(workspaceDockSource, /<nav[\s\S]*aria-label=\{t\('workspaceTree\.navigation'\)\}/);
+  assert.match(workspaceDockSource, /className="workspace-tree-toggle"[\s\S]*aria-expanded=\{workspaceExpanded\}/);
+  assert.doesNotMatch(workspaceDockSource, /role="(?:tree|treeitem|group)"/);
+});
+
+test('workspace conversation loads remain project scoped while the selected workspace changes', () => {
+  const loader =
+    appSource.match(
+      /const loadWorkspaceConversations = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+    )?.[0] ?? '';
+
+  assert.match(loader, /isSameDesktopProjectRequestScope\(requestConfig, configRef\.current\)/);
+  assert.match(loader, /beginWorkspaceConversationRequest\(/);
+  assert.match(loader, /isCurrentWorkspaceConversationRequest\(/);
+  assert.doesNotMatch(loader, /expectedScopeEpoch/);
+  assert.doesNotMatch(loader, /isSameDesktopRequestScope\(requestConfig, configRef\.current\)/);
+  assert.match(loader, /updateDataset\(\(current\) => \{[\s\S]*return nextDataset/);
+  assert.doesNotMatch(loader, /setDataset\(loadingDataset\)/);
+  assert.match(
+    appSource,
+    /conversationRequestGenerations[\s\S]*beginWorkspaceConversationRequest\([\s\S]*isCurrentWorkspaceConversationRequest\(/
+  );
+  assert.match(appSource, /activeRuntimeConversationRequestsRef/);
+  assert.match(appSource, /supersedeWorkspaceConversationRequests\(/);
+  assert.match(loader, /mergeConversationListWithCurrentRunAuthority\(/);
+  assert.match(
+    appSource,
+    /currentConversationResults[\s\S]*mergeConversationListWithCurrentRunAuthority\(/
+  );
+});
+
 test('workspace roster hydration isolates authority failures from the runtime connection', () => {
   const refreshRuntime =
     appSource.match(
@@ -88,7 +193,7 @@ test('workspace roster hydration isolates authority failures from the runtime co
     refreshRuntime,
     /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceAgents\(\)\)/,
   );
-  assert.match(refreshRuntime, /setDataset\(\{[\s\S]*workspaceMembers,[\s\S]*workspaceAgents,/);
+  assert.match(refreshRuntime, /const nextDataset = \{[\s\S]*workspaceMembers,[\s\S]*workspaceAgents,/);
   assert.match(refreshRuntime, /failLoadingWorkspaceAuthority\(/);
 });
 
@@ -199,4 +304,15 @@ test('every runtime config transition invalidates stale data before the visible 
   assert.match(commit, /const previousConfig = configRef\.current/);
   assert.match(commit, /beginDesktopRuntimeScopeTransition\(current, previousConfig, nextConfig\)/);
   assert.ok(commit.indexOf('beginDesktopRuntimeScopeTransition') < commit.indexOf('setConfig'));
+});
+
+test('project scope reset clears state refs before replacement hydration can begin', () => {
+  const reset =
+    appSource.match(/const resetProjectScopedState = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+
+  assert.match(reset, /datasetRef\.current = emptyDataset[\s\S]*setDataset\(emptyDataset\)/);
+  assert.match(
+    reset,
+    /expandedWorkspaceIdsRef\.current = clearedExpandedWorkspaceIds[\s\S]*setExpandedWorkspaceIds\(clearedExpandedWorkspaceIds\)/,
+  );
 });

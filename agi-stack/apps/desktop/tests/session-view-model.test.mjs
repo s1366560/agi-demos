@@ -8,6 +8,7 @@ const {
   authoritativeRunsFromSocketEvents,
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
+  mergeConversationListWithCurrentRunAuthority,
   sessionRecoveryPresentation,
   sessionStatusPresentation,
 } = require(
@@ -316,7 +317,7 @@ test('session view model fails closed instead of reading authority from conversa
   assert.deepEqual(view.runActions, []);
 });
 
-test('authoritative run socket events update conversation status by monotonic revision', () => {
+test('authoritative run socket events update run metadata without changing conversation lifecycle', () => {
   const event = {
     type: 'run_status',
     conversation_id: 'conversation-1',
@@ -338,7 +339,7 @@ test('authoritative run socket events update conversation status by monotonic re
   const run = authoritativeRunFromSocketEvent(event);
   assert.equal(run?.status, 'running');
   const updated = conversationWithAuthoritativeRun(conversation(), run);
-  assert.equal(updated.status, 'running');
+  assert.equal(updated.status, 'active');
   assert.equal(updated.metadata.run.revision, 2);
 
   const stale = conversationWithAuthoritativeRun(updated, { ...run, status: 'queued', revision: 1 });
@@ -361,6 +362,35 @@ test('authoritative run socket events update conversation status by monotonic re
   assert.equal(forked.metadata.run.id, 'run-2');
   assert.equal(forked.metadata.run.revision, 1);
   assert.equal(authoritativeRunFromSocketEvent({ type: 'assistant_message', payload: event.payload }), null);
+});
+
+test('conversation list refresh preserves a newer current run without overwriting lifecycle', () => {
+  const currentRun = {
+    id: 'run-1',
+    conversation_id: 'conversation-1',
+    project_id: 'project-1',
+    plan_version_id: 'plan-1',
+    idempotency_key: 'approval-1',
+    message_id: 'message-1',
+    request_message: 'Execute',
+    status: 'needs_approval',
+    revision: 5,
+    created_at: '2026-07-13T00:00:00Z',
+    updated_at: '2026-07-13T00:00:05Z',
+    authorization_snapshot: {},
+  };
+  const current = conversation({ metadata: { run: currentRun } });
+  const staleListRow = conversation({
+    status: 'active',
+    updated_at: '2026-07-13T00:00:03Z',
+    metadata: { run: { ...currentRun, status: 'running', revision: 3 } },
+  });
+
+  const [merged] = mergeConversationListWithCurrentRunAuthority([staleListRow], [current]);
+
+  assert.equal(merged.status, 'active');
+  assert.equal(merged.metadata.run.status, 'needs_approval');
+  assert.equal(merged.metadata.run.revision, 5);
 });
 
 test('authoritative run parsing preserves attention, control, recovery, and review states', () => {

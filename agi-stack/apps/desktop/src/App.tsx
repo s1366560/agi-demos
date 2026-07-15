@@ -63,6 +63,7 @@ import {
   isCurrentContextRevision,
   isCurrentLocalRuntimeAuthority,
   isIdentityAuthenticated,
+  isSameDesktopProjectRequestScope,
   isSameDesktopRequestScope,
   isWorkspaceReady,
   nextRemoteWorkspaceContext,
@@ -131,6 +132,7 @@ import {
   authoritativeRunsFromSocketEvents,
   buildSessionDetailViewModel,
   conversationWithAuthoritativeRun,
+  mergeConversationListWithCurrentRunAuthority,
   type SessionCapabilityMode,
   type SessionDetailViewModel,
   type SessionRunAction,
@@ -166,7 +168,12 @@ import {
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import {
+  beginWorkspaceConversationRequest,
+  isCurrentWorkspaceConversationRequest,
   reconcileExpandedWorkspaceIds,
+  shouldLoadWorkspaceConversations,
+  supersedeWorkspaceConversationRequests,
+  workspaceConversationLoadTargets,
   workspaceTreeRefreshFailed,
 } from './features/workspace/workspaceTreeModel';
 import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
@@ -1677,6 +1684,11 @@ export function App() {
   const myWorkEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const contextRevisionRef = useRef(0);
   const configRef = useRef(config);
+  const datasetRef = useRef(dataset);
+  const expandedWorkspaceIdsRef = useRef(expandedWorkspaceIds);
+  const runtimeRefreshRequestRef = useRef(0);
+  const activeRuntimeConversationRequestsRef = useRef(new Map<string, number>());
+  const workspaceConversationRequestGenerationsRef = useRef(new Map<string, number>());
   const configScopeEpochRef = useRef(0);
   const workspaceExpansionScopeRef = useRef('');
   const localResumeAttemptRef = useRef('');
@@ -1689,18 +1701,40 @@ export function App() {
   const terminalStartGenerationRef = useRef(0);
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
   const terminalRunScopeKeyRef = useRef('');
+  const workbenchRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    datasetRef.current = dataset;
+  }, [dataset]);
+
+  useEffect(() => {
+    expandedWorkspaceIdsRef.current = expandedWorkspaceIds;
+  }, [expandedWorkspaceIds]);
+
+  const updateDataset = useCallback((updater: (current: RuntimeDataset) => RuntimeDataset) => {
+    setDataset((current) => {
+      const nextDataset = updater(current);
+      datasetRef.current = nextDataset;
+      return nextDataset;
+    });
+  }, []);
 
   const commitRuntimeConfig = useCallback((nextConfig: DesktopRuntimeConfig) => {
     const previousConfig = configRef.current;
+    if (!isSameDesktopProjectRequestScope(previousConfig, nextConfig)) {
+      runtimeRefreshRequestRef.current += 1;
+      activeRuntimeConversationRequestsRef.current = new Map();
+      workspaceConversationRequestGenerationsRef.current = new Map();
+    }
     if (!isSameDesktopRequestScope(previousConfig, nextConfig)) {
       configScopeEpochRef.current += 1;
-      setDataset((current) =>
+      updateDataset((current) =>
         beginDesktopRuntimeScopeTransition(current, previousConfig, nextConfig),
       );
     }
     configRef.current = nextConfig;
     setConfig(nextConfig);
-  }, []);
+  }, [updateDataset]);
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
   const showRuntimeConfig = isWorkspaceReady(auth, config);
@@ -2501,6 +2535,9 @@ export function App() {
   }, [activeDataset.tasks, selectedTaskId]);
 
   const resetProjectScopedState = () => {
+    runtimeRefreshRequestRef.current += 1;
+    activeRuntimeConversationRequestsRef.current = new Map();
+    workspaceConversationRequestGenerationsRef.current = new Map();
     myWorkAbortRef.current?.abort();
     myWorkAbortRef.current = null;
     myWorkRequestRef.current += 1;
@@ -2509,6 +2546,7 @@ export function App() {
       myWorkRefreshTimerRef.current = null;
     }
     setMyWorkRefreshing(false);
+    datasetRef.current = emptyDataset;
     setDataset(emptyDataset);
     setConnection('idle');
     setError(null);
@@ -2541,21 +2579,31 @@ export function App() {
     runInputRequestRef.current = null;
     setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
     setCreatingSessionWorkspaceId(null);
-    setExpandedWorkspaceIds(new Set());
+    const clearedExpandedWorkspaceIds = new Set<string>();
+    expandedWorkspaceIdsRef.current = clearedExpandedWorkspaceIds;
+    setExpandedWorkspaceIds(clearedExpandedWorkspaceIds);
     workspaceExpansionScopeRef.current = '';
     terminalProxy.clear();
   };
 
   const refreshRuntime = useCallback(
     async (nextConfig: DesktopRuntimeConfig = config, projectOverride?: ProjectSummary[]) => {
+      const refreshRequestGeneration = runtimeRefreshRequestRef.current + 1;
+      runtimeRefreshRequestRef.current = refreshRequestGeneration;
       const expectedContextRevision = contextRevisionRef.current;
       const expectedScopeEpoch = configScopeEpochRef.current;
       const contextIsCurrent = () =>
         isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
-        expectedScopeEpoch === configScopeEpochRef.current;
+        expectedScopeEpoch === configScopeEpochRef.current &&
+        refreshRequestGeneration === runtimeRefreshRequestRef.current;
       setConnection('loading');
       setError(null);
       let refreshProjectId = nextConfig.projectId.trim();
+      let conversationRequestGenerations = supersedeWorkspaceConversationRequests(
+        workspaceConversationRequestGenerationsRef.current,
+        activeRuntimeConversationRequestsRef.current,
+      );
+      activeRuntimeConversationRequestsRef.current = conversationRequestGenerations;
       try {
         const runtimeConfig = await syncLocalRuntimeConfig(nextConfig);
         if (!contextIsCurrent()) return false;
@@ -2592,7 +2640,7 @@ export function App() {
           workspaces: {},
         };
         if (!contextIsCurrent()) return false;
-        setDataset((current) => ({
+        updateDataset((current) => ({
           ...current,
           nodeState: {
             projects: { ...current.nodeState.projects, ...loadingNodeState.projects },
@@ -2634,19 +2682,38 @@ export function App() {
             { loading: false, error: result.error },
           ]),
         );
-        const workspaceProjectIds = new Map<string, string>();
-        const workspaces = workspaceResults.flatMap((result) =>
-          result.workspaces.map((workspace) => {
-            workspaceProjectIds.set(workspace.id, result.project.id);
-            return workspace;
-          }),
-        );
+        const workspaces = workspaceResults.flatMap((result) => result.workspaces);
         const projectWorkspaces = workspacesByProject[resolvedProjectId] ?? [];
         const workspaceId =
           runtimeConfig.workspaceId.trim() &&
           projectWorkspaces.some((workspace) => workspace.id === runtimeConfig.workspaceId.trim())
             ? runtimeConfig.workspaceId.trim()
             : projectWorkspaces[0]?.id ?? '';
+        const nextExpandedWorkspaceIds = reconcileExpandedWorkspaceIds(
+          expandedWorkspaceIdsRef.current,
+          projectWorkspaces.map((workspace) => workspace.id),
+          workspaceId,
+          expandSelectedWorkspace,
+        );
+        const conversationLoadTargets = workspaceConversationLoadTargets(
+          projectWorkspaces,
+          workspaceId,
+          nextExpandedWorkspaceIds,
+        );
+        const conversationLoadTargetIds = new Set(conversationLoadTargets);
+        const supersededRefreshWorkspaceIds = [...conversationRequestGenerations.keys()].filter(
+          (targetWorkspaceId) => !conversationLoadTargetIds.has(targetWorkspaceId),
+        );
+        conversationRequestGenerations = new Map(
+          conversationLoadTargets.map((targetWorkspaceId) => [
+            targetWorkspaceId,
+            beginWorkspaceConversationRequest(
+              workspaceConversationRequestGenerationsRef.current,
+              targetWorkspaceId,
+            ),
+          ]),
+        );
+        activeRuntimeConversationRequestsRef.current = conversationRequestGenerations;
         const resolvedConfig = {
           ...runtimeConfig,
           tenantId: resolvedProject.tenant_id,
@@ -2655,124 +2722,317 @@ export function App() {
         };
         const scopedClient = new DesktopApiClient(resolvedConfig);
         if (!contextIsCurrent()) return false;
-        setDataset((current) => ({
-          ...current,
-          workspaceMembers: workspaceId
-            ? loadingWorkspaceAuthority()
-            : unavailableWorkspaceAuthority(),
-          workspaceAgents: workspaceId
-            ? loadingWorkspaceAuthority()
-            : unavailableWorkspaceAuthority(),
-        }));
-        const [messages, tasks, plan, workspaceMembers, workspaceAgents, myWorkResult] =
-          await Promise.all([
-            workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
-            workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
-            workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
-            workspaceId
-              ? resolveWorkspaceAuthority(scopedClient.listWorkspaceMembers())
-              : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
-            workspaceId
-              ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
-              : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
-            resolvedProjectId
-              ? scopedClient
-                  .listMyWork(resolvedProjectId)
-                  .then((response) => ({ items: response.items, error: null }))
-                  .catch((caught) => ({
-                    items: [] as ProjectWorkItem[],
-                    error: formatError(caught),
-                  }))
-              : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
-          ]);
-        if (!contextIsCurrent()) return false;
-        const conversationResults = await Promise.all(
-          workspaces.map(async (workspace) => {
-            const projectId = workspaceProjectIds.get(workspace.id) ?? resolvedProjectId;
-            const project = projects.find((item) => item.id === projectId);
+        updateDataset((current) => {
+          const workspaceNodeState = { ...current.nodeState.workspaces };
+          for (const targetWorkspaceId of supersededRefreshWorkspaceIds) {
+            if ((current.conversationsByWorkspace[targetWorkspaceId] ?? []).length > 0) {
+              workspaceNodeState[targetWorkspaceId] = { loading: false, error: null };
+            } else {
+              delete workspaceNodeState[targetWorkspaceId];
+            }
+          }
+          for (const targetWorkspaceId of conversationLoadTargets) {
+            workspaceNodeState[targetWorkspaceId] = { loading: true, error: null };
+          }
+          return {
+            ...current,
+            nodeState: {
+              projects: { ...current.nodeState.projects, ...projectNodeState },
+              workspaces: workspaceNodeState,
+            },
+            workspaceMembers: workspaceId
+              ? loadingWorkspaceAuthority()
+              : unavailableWorkspaceAuthority(),
+            workspaceAgents: workspaceId
+              ? loadingWorkspaceAuthority()
+              : unavailableWorkspaceAuthority(),
+          };
+        });
+        const conversationResultsPromise = Promise.all(
+          conversationLoadTargets.map(async (targetWorkspaceId) => {
+            const requestGeneration = conversationRequestGenerations.get(targetWorkspaceId);
             const client = new DesktopApiClient({
-              ...runtimeConfig,
-              tenantId: project?.tenant_id || runtimeConfig.tenantId,
-              projectId,
-              workspaceId: workspace.id,
+              ...resolvedConfig,
+              workspaceId: targetWorkspaceId,
             });
             try {
-              const response = await client.listConversations(projectId, workspace.id);
-              return { workspaceId: workspace.id, conversations: response.items, error: null };
+              const response = await client.listConversations(
+                resolvedProjectId,
+                targetWorkspaceId,
+              );
+              return {
+                workspaceId: targetWorkspaceId,
+                requestGeneration,
+                conversations: response.items,
+                error: null,
+              };
             } catch (caught) {
               return {
-                workspaceId: workspace.id,
+                workspaceId: targetWorkspaceId,
+                requestGeneration,
                 conversations: [] as AgentConversation[],
                 error: formatError(caught),
               };
             }
           }),
         );
-        if (!contextIsCurrent()) return false;
-        const conversationsByWorkspace = Object.fromEntries(
-          conversationResults.map((result) => [result.workspaceId, result.conversations]),
-        );
-        const workspaceNodeState = Object.fromEntries(
-          conversationResults.map((result) => [
-            result.workspaceId,
-            { loading: false, error: result.error },
-          ]),
-        );
-
-        if (!contextIsCurrent()) return false;
-        commitRuntimeConfig(resolvedConfig);
-        setDataset({
-          workspaces,
-          workspacesByProject,
-          conversationsByWorkspace,
-          nodeState: { projects: projectNodeState, workspaces: workspaceNodeState },
+        const [
           messages,
           tasks,
           plan,
           workspaceMembers,
           workspaceAgents,
-          sandbox: null,
-          myWork: myWorkResult.items,
-          myWorkError: myWorkResult.error,
-        });
-        setExpandedWorkspaceIds((current) =>
-          reconcileExpandedWorkspaceIds(
-            current,
-            projectWorkspaces.map((workspace) => workspace.id),
-            workspaceId,
-            expandSelectedWorkspace,
-          ),
+          myWorkResult,
+          conversationResults,
+        ] = await Promise.all([
+          workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
+          workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
+          workspaceId
+            ? scopedClient.getPlanSnapshot().catch(() => null)
+            : Promise.resolve(null),
+          workspaceId
+            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceMembers())
+            : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
+          workspaceId
+            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
+            : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
+          resolvedProjectId
+            ? scopedClient
+                .listMyWork(resolvedProjectId)
+                .then((response) => ({ items: response.items, error: null }))
+                .catch((caught) => ({
+                  items: [] as ProjectWorkItem[],
+                  error: formatError(caught),
+                }))
+            : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
+          conversationResultsPromise,
+        ]);
+        if (!contextIsCurrent()) return false;
+        const validWorkspaceIds = new Set(projectWorkspaces.map((workspace) => workspace.id));
+        const currentConversationResults = conversationResults.filter(
+          (result) =>
+            result.requestGeneration !== undefined &&
+            isCurrentWorkspaceConversationRequest(
+              workspaceConversationRequestGenerationsRef.current,
+              result.workspaceId,
+              result.requestGeneration,
+            ),
         );
+
+        if (!contextIsCurrent()) return false;
+        commitRuntimeConfig(resolvedConfig);
+        updateDataset((current) => {
+          const conversationsByWorkspace = {
+            ...Object.fromEntries(
+              Object.entries(current.conversationsByWorkspace).filter(([targetWorkspaceId]) =>
+                validWorkspaceIds.has(targetWorkspaceId),
+              ),
+            ),
+            ...Object.fromEntries(
+              currentConversationResults.map((result) => [
+                result.workspaceId,
+                mergeConversationListWithCurrentRunAuthority(
+                  result.conversations,
+                  current.conversationsByWorkspace[result.workspaceId] ?? [],
+                ),
+              ]),
+            ),
+          };
+          const workspaceNodeState = {
+            ...Object.fromEntries(
+              Object.entries(current.nodeState.workspaces).filter(([targetWorkspaceId]) =>
+                validWorkspaceIds.has(targetWorkspaceId),
+              ),
+            ),
+            ...Object.fromEntries(
+              currentConversationResults.map((result) => [
+                result.workspaceId,
+                { loading: false, error: result.error },
+              ]),
+            ),
+          };
+          const nextDataset = {
+            workspaces,
+            workspacesByProject,
+            conversationsByWorkspace,
+            nodeState: { projects: projectNodeState, workspaces: workspaceNodeState },
+            messages,
+            tasks,
+            plan,
+            workspaceMembers,
+            workspaceAgents,
+            sandbox: null,
+            myWork: myWorkResult.items,
+            myWorkError: myWorkResult.error,
+          } satisfies RuntimeDataset;
+          return nextDataset;
+        });
+        const committedExpandedWorkspaceIds = reconcileExpandedWorkspaceIds(
+          expandedWorkspaceIdsRef.current,
+          projectWorkspaces.map((workspace) => workspace.id),
+          workspaceId,
+          expandSelectedWorkspace,
+        );
+        expandedWorkspaceIdsRef.current = committedExpandedWorkspaceIds;
+        setExpandedWorkspaceIds(committedExpandedWorkspaceIds);
         if (workspaceId) workspaceExpansionScopeRef.current = expansionScope;
+        if (runtimeRefreshRequestRef.current === refreshRequestGeneration) {
+          activeRuntimeConversationRequestsRef.current = new Map();
+        }
         setConnection('ready');
         setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         return true;
       } catch (caught) {
         if (!contextIsCurrent()) return false;
         const connectionError = formatConnectionError(caught, nextConfig.apiBaseUrl);
-        setDataset((current) => ({
-          ...current,
-          nodeState: workspaceTreeRefreshFailed(
-            current.nodeState,
-            refreshProjectId,
-            connectionError,
-          ),
-          workspaceMembers: failLoadingWorkspaceAuthority(
-            current.workspaceMembers,
-            connectionError,
-          ),
-          workspaceAgents: failLoadingWorkspaceAuthority(
-            current.workspaceAgents,
-            connectionError,
-          ),
-        }));
+        updateDataset((current) => {
+          const failedWorkspaceNodeState = { ...current.nodeState.workspaces };
+          for (const [workspaceId, generation] of conversationRequestGenerations) {
+            if (
+              isCurrentWorkspaceConversationRequest(
+                workspaceConversationRequestGenerationsRef.current,
+                workspaceId,
+                generation,
+              )
+            ) {
+              failedWorkspaceNodeState[workspaceId] = {
+                loading: false,
+                error: connectionError,
+              };
+            }
+          }
+          return {
+            ...current,
+            nodeState: {
+              ...workspaceTreeRefreshFailed(
+                current.nodeState,
+                refreshProjectId,
+                connectionError,
+              ),
+              workspaces: failedWorkspaceNodeState,
+            },
+            workspaceMembers: failLoadingWorkspaceAuthority(
+              current.workspaceMembers,
+              connectionError,
+            ),
+            workspaceAgents: failLoadingWorkspaceAuthority(
+              current.workspaceAgents,
+              connectionError,
+            ),
+          };
+        });
+        activeRuntimeConversationRequestsRef.current = new Map();
         setConnection('error');
         setError(connectionError);
         return false;
       }
     },
-    [auth.projects, auth.status, auth.tenants, commitRuntimeConfig, config, syncLocalRuntimeConfig, t],
+    [
+      auth.projects,
+      auth.status,
+      auth.tenants,
+      commitRuntimeConfig,
+      config,
+      syncLocalRuntimeConfig,
+      t,
+      updateDataset,
+    ],
   );
+
+  const loadWorkspaceConversations = useCallback(async (workspaceId: string) => {
+    const requestConfig = configRef.current;
+    const projectId = requestConfig.projectId.trim();
+    const tenantId = requestConfig.tenantId.trim();
+    const currentDataset = datasetRef.current;
+    const workspaceExists = (currentDataset.workspacesByProject[projectId] ?? []).some(
+      (workspace) => workspace.id === workspaceId,
+    );
+    if (!tenantId || !projectId || !workspaceExists) return;
+    if (!shouldLoadWorkspaceConversations(currentDataset.nodeState.workspaces[workspaceId])) {
+      return;
+    }
+
+    const requestGeneration = beginWorkspaceConversationRequest(
+      workspaceConversationRequestGenerationsRef.current,
+      workspaceId,
+    );
+    const expectedContextRevision = contextRevisionRef.current;
+    const requestIsCurrent = () =>
+      isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) &&
+      isSameDesktopProjectRequestScope(requestConfig, configRef.current) &&
+      isCurrentWorkspaceConversationRequest(
+        workspaceConversationRequestGenerationsRef.current,
+        workspaceId,
+        requestGeneration,
+      );
+    updateDataset((current) => ({
+      ...current,
+      nodeState: {
+        ...current.nodeState,
+        workspaces: {
+          ...current.nodeState.workspaces,
+          [workspaceId]: { loading: true, error: null },
+        },
+      },
+    }));
+
+    try {
+      const client = new DesktopApiClient({ ...requestConfig, workspaceId });
+      const response = await client.listConversations(projectId, workspaceId);
+      if (!requestIsCurrent()) return;
+      updateDataset((current) => {
+        if (
+          !requestIsCurrent() ||
+          !(current.workspacesByProject[projectId] ?? []).some(
+            (workspace) => workspace.id === workspaceId,
+          )
+        ) {
+          return current;
+        }
+        const nextDataset: RuntimeDataset = {
+          ...current,
+          conversationsByWorkspace: {
+            ...current.conversationsByWorkspace,
+            [workspaceId]: mergeConversationListWithCurrentRunAuthority(
+              response.items,
+              current.conversationsByWorkspace[workspaceId] ?? [],
+            ),
+          },
+          nodeState: {
+            ...current.nodeState,
+            workspaces: {
+              ...current.nodeState.workspaces,
+              [workspaceId]: { loading: false, error: null },
+            },
+          },
+        };
+        return nextDataset;
+      });
+    } catch (caught) {
+      if (!requestIsCurrent()) return;
+      updateDataset((current) => {
+        if (
+          !requestIsCurrent() ||
+          !(current.workspacesByProject[projectId] ?? []).some(
+            (workspace) => workspace.id === workspaceId,
+          )
+        ) {
+          return current;
+        }
+        const nextDataset: RuntimeDataset = {
+          ...current,
+          nodeState: {
+            ...current.nodeState,
+            workspaces: {
+              ...current.nodeState.workspaces,
+              [workspaceId]: { loading: false, error: formatError(caught) },
+            },
+          },
+        };
+        return nextDataset;
+      });
+    }
+  }, [updateDataset]);
 
   const refreshMyWork = useCallback(async (scheduledScope?: MyWorkRefreshScope) => {
     const projectId = config.projectId.trim();
@@ -4319,12 +4579,15 @@ export function App() {
     }
   }, [activeSidebarRunId, selectedSidebarRunId, showRuntimeConfig]);
   const toggleWorkspace = (workspaceId: string) => {
+    const wasExpanded = expandedWorkspaceIds.has(workspaceId);
     setExpandedWorkspaceIds((current) => {
       const next = new Set(current);
       if (next.has(workspaceId)) next.delete(workspaceId);
       else next.add(workspaceId);
+      expandedWorkspaceIdsRef.current = next;
       return next;
     });
+    if (!wasExpanded) void loadWorkspaceConversations(workspaceId);
   };
 
   const setActiveRunControlState = (state: RunControlState) => {
@@ -4572,10 +4835,7 @@ export function App() {
     commitRuntimeConfig(nextConfig);
     setAuth((current) => ({ ...current, context: nextContext, projects: scopedProjects }));
     applySectionSideEffects('workspace');
-    const applied = await refreshRuntime(nextConfig, [selectedProject]);
-    if (!applied) {
-      throw new Error(t('settings.contextSwitchLoadFailed'));
-    }
+    await refreshRuntime(nextConfig, [selectedProject]);
   };
 
   const goBackSection = () => {
@@ -5061,6 +5321,8 @@ export function App() {
               if (section === 'notifications') openSettingsEntry('sidebar_notifications');
             }}
             onToggleWorkspace={toggleWorkspace}
+            onRetryProject={() => void refreshRuntime()}
+            onRetryWorkspace={(workspaceId) => void loadWorkspaceConversations(workspaceId)}
             onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
             onSelectConversation={selectConversation}
             onNewTask={startNewSession}
@@ -5069,10 +5331,21 @@ export function App() {
             onSignOut={() => void logout()}
           />
 
-          <main className="workbench">
+          <main ref={workbenchRef} className="workbench" tabIndex={-1}>
             {error ? (
               <div className="workbench-error" role="alert" aria-live="polite">
-                {error}
+                <span>{error}</span>
+                {connection === 'error' && showRuntimeConfig ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      workbenchRef.current?.focus();
+                      void refreshRuntime();
+                    }}
+                  >
+                    {t('runtime.retryWorkspace')}
+                  </button>
+                ) : null}
               </div>
             ) : null}
             {activeSection === 'chat' && sessionDetailViewModel ? (

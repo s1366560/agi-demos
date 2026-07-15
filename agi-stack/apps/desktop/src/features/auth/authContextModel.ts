@@ -77,13 +77,22 @@ export function isSameDesktopRequestScope(
   current: DesktopRuntimeConfig,
 ): boolean {
   return (
+    isSameDesktopProjectRequestScope(expected, current) &&
+    expected.workspaceId === current.workspaceId
+  );
+}
+
+export function isSameDesktopProjectRequestScope(
+  expected: DesktopRuntimeConfig,
+  current: DesktopRuntimeConfig,
+): boolean {
+  return (
     expected.mode === current.mode &&
     expected.apiBaseUrl === current.apiBaseUrl &&
     expected.apiKey === current.apiKey &&
     expected.localApiToken === current.localApiToken &&
     expected.tenantId === current.tenantId &&
-    expected.projectId === current.projectId &&
-    expected.workspaceId === current.workspaceId
+    expected.projectId === current.projectId
   );
 }
 

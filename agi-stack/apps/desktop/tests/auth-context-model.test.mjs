@@ -8,6 +8,7 @@ const {
   isCurrentContextRevision,
   isCurrentLocalRuntimeAuthority,
   isIdentityAuthenticated,
+  isSameDesktopProjectRequestScope,
   isSameDesktopRequestScope,
   isWorkspaceReady,
   nextRemoteWorkspaceContext,
@@ -167,6 +168,37 @@ test('desktop request scope invalidates every identity and hierarchy boundary', 
     ['workspaceId', 'workspace-2'],
   ]) {
     assert.equal(isSameDesktopRequestScope(scope, { ...scope, [field]: value }), false, field);
+  }
+});
+
+test('project request scope survives workspace navigation but not authority changes', () => {
+  const scope = {
+    mode: 'cloud',
+    apiBaseUrl: 'http://127.0.0.1:8000',
+    apiKey: 'session-a',
+    localApiToken: '',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  };
+
+  assert.equal(
+    isSameDesktopProjectRequestScope(scope, { ...scope, workspaceId: 'workspace-2' }),
+    true
+  );
+  for (const [field, value] of [
+    ['mode', 'local'],
+    ['apiBaseUrl', 'http://127.0.0.1:8088'],
+    ['apiKey', 'session-b'],
+    ['localApiToken', 'launch-b'],
+    ['tenantId', 'tenant-2'],
+    ['projectId', 'project-2'],
+  ]) {
+    assert.equal(
+      isSameDesktopProjectRequestScope(scope, { ...scope, [field]: value }),
+      false,
+      field
+    );
   }
 });
 

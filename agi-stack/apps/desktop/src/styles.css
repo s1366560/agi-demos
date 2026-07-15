@@ -1678,6 +1678,9 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   top: 8px;
   right: 10px;
   z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   max-width: min(520px, 58vw);
   padding: 6px 9px;
   overflow: hidden;
@@ -1688,6 +1691,26 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workbench-error > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workbench-error > button {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 182, 190, 0.38);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workbench-error > button:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .pane-stage {

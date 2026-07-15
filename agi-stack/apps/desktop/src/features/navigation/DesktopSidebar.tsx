@@ -47,6 +47,8 @@ type DesktopSidebarProps = {
   onModeChange: (mode: 'work' | 'code') => void;
   onNavigate: (section: DesktopSidebarSection) => void;
   onToggleWorkspace: (workspaceId: string) => void;
+  onRetryProject: () => void;
+  onRetryWorkspace: (workspaceId: string) => void;
   onSelectWorkspace: (projectId: string, workspaceId: string) => void;
   onSelectConversation: (
     projectId: string,
@@ -85,6 +87,8 @@ export function DesktopSidebar({
   onModeChange,
   onNavigate,
   onToggleWorkspace,
+  onRetryProject,
+  onRetryWorkspace,
   onSelectWorkspace,
   onSelectConversation,
   onNewTask,
@@ -145,6 +149,8 @@ export function DesktopSidebar({
           selectionMode={workspaceTreeSelectionMode}
           expandedWorkspaceIds={expandedWorkspaceIds}
           onToggleWorkspace={onToggleWorkspace}
+          onRetryProject={onRetryProject}
+          onRetryWorkspace={onRetryWorkspace}
           onSelectWorkspace={onSelectWorkspace}
           onSelectConversation={onSelectConversation}
         />

@@ -141,10 +141,22 @@ export function conversationWithAuthoritativeRun(
   if (parsedCurrent && !isNewerAuthoritativeRun(run, parsedCurrent)) return conversation;
   return {
     ...conversation,
-    status: run.status,
     updated_at: run.updated_at,
     metadata: { ...metadata, run },
   };
+}
+
+export function mergeConversationListWithCurrentRunAuthority(
+  incoming: AgentConversation[],
+  current: AgentConversation[],
+): AgentConversation[] {
+  const currentById = new Map(current.map((conversation) => [conversation.id, conversation]));
+  return incoming.map((conversation) => {
+    const currentRun = authoritativeRunFromConversation(
+      currentById.get(conversation.id) ?? null,
+    );
+    return currentRun ? conversationWithAuthoritativeRun(conversation, currentRun) : conversation;
+  });
 }
 
 function isNewerAuthoritativeRun(candidate: DesktopRun, current: DesktopRun): boolean {

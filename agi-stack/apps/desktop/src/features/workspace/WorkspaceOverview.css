@@ -59,6 +59,13 @@
   font-style: normal;
 }
 
+.workspace-design-title-line em[data-status='offline'],
+.workspace-design-title-line em[data-status='unknown'] {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.05);
+  color: var(--desktop-faint);
+}
+
 .workspace-design-title-line em i,
 .workspace-design-environment span i {
   width: 6px;
@@ -427,16 +434,20 @@
   font-style: normal;
 }
 
-.workspace-design-sessions-card button em[data-status='needs_input'],
-.workspace-design-sessions-card button em[data-status='needs_approval'] {
+.workspace-design-sessions-card button em[data-status='attention'] {
   background: rgba(240, 179, 90, 0.08);
   color: var(--desktop-amber);
 }
 
-.workspace-design-sessions-card button em[data-status='ready_review'],
+.workspace-design-sessions-card button em[data-status='ready'],
 .workspace-design-sessions-card button em[data-status='completed'] {
   background: rgba(74, 222, 128, 0.07);
   color: #63d78f;
+}
+
+.workspace-design-sessions-card button em[data-status='danger'] {
+  background: rgba(255, 105, 120, 0.08);
+  color: #ff8793;
 }
 
 .workspace-design-activity-card > div > div:not(.workspace-design-empty) {

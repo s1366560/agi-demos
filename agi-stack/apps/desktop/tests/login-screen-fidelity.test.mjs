@@ -76,7 +76,6 @@ test('authentication and workspace context failures are localized at their sourc
     'settings.selectedTenantUnavailable',
     'settings.selectedProjectUnavailable',
     'settings.contextResponseMismatch',
-    'settings.contextSwitchLoadFailed',
   ];
 
   for (const key of localizedKeys) {

@@ -1187,10 +1187,6 @@ impl LocalRuntimeState {
             .list_runs(&conversation.id)
             .ok()
             .and_then(|runs| runs.into_iter().next());
-        let status = latest_run
-            .as_ref()
-            .and_then(|run| serde_json::to_value(run.status).ok())
-            .unwrap_or_else(|| json!("active"));
         let run_metadata = latest_run
             .as_ref()
             .and_then(|run| serde_json::to_value(run).ok())
@@ -1206,7 +1202,7 @@ impl LocalRuntimeState {
             "tenant_id": conversation.tenant_id,
             "user_id": "local-user",
             "title": conversation.title,
-            "status": status,
+            "status": "active",
             "message_count": self
                 .session_store
                 .timeline_count(&conversation.id)
@@ -6790,6 +6786,58 @@ mod tests {
         assert_eq!(plan["conversation_plans"][0]["plan"]["version"], 2);
         assert_eq!(plan["conversation_plans"][0]["run"]["id"], approved.run.id);
         assert_eq!(plan["plan_history"].as_array().map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn conversation_projection_separates_lifecycle_status_from_latest_run() {
+        let state = test_state("conversation-status-contract-secret");
+        let conversation = LocalConversation {
+            id: "conversation-status-contract".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Separate lifecycle and execution status".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        state
+            .session_store
+            .replace_agent_plan_tasks(
+                &conversation.id,
+                &[json!({
+                    "id": "conversation-status-task",
+                    "conversation_id": conversation.id,
+                    "content": "Verify the status contract",
+                    "status": "pending",
+                    "priority": "high",
+                    "order_index": 0,
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                })],
+            )
+            .expect("store plan");
+        let approved = state
+            .session_store
+            .approve_plan_and_start(
+                &conversation.id,
+                "local-project",
+                "conversation-status-approval",
+                "conversation-status-message",
+                "Execute the reviewed plan",
+                &now_iso(),
+            )
+            .expect("approve plan");
+
+        let projected = state.conversation_value(&conversation);
+        assert_eq!(projected["status"], "active");
+        assert_eq!(projected["metadata"]["run"]["id"], approved.run.id);
+        assert_eq!(projected["metadata"]["run"]["status"], "queued");
     }
 
     #[tokio::test]

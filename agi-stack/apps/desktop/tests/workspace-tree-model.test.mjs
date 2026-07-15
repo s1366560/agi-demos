@@ -4,11 +4,20 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  beginWorkspaceConversationRequest,
   buildWorkspaceTree,
+  conversationTreeStatusPresentation,
+  conversationTreeStatusValue,
   isWorkspaceConversationSelected,
+  isCurrentWorkspaceConversationRequest,
   isWorkspaceOverviewSelected,
   reconcileExpandedWorkspaceIds,
+  shouldLoadWorkspaceConversations,
+  supersedeWorkspaceConversationRequests,
+  workspaceConversationLoadTargets,
+  workspaceTreeRootStatusPresentation,
   workspaceTreeRefreshFailed,
+  workspaceTreeSessionAvailability,
   workspaceTreeAvailability,
 } = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
 
@@ -167,4 +176,159 @@ test('refresh failure settles the active project without discarding workspace no
       workspaces: { 'workspace-a': { loading: false, error: null } },
     }
   );
+});
+
+test('conversation hydration targets only the selected and expanded workspace roots', () => {
+  const workspaces = [
+    { id: 'workspace-a' },
+    { id: 'workspace-b' },
+    { id: 'workspace-c' },
+  ];
+
+  assert.deepEqual(
+    workspaceConversationLoadTargets(
+      workspaces,
+      'workspace-b',
+      new Set(['workspace-a', 'workspace-missing'])
+    ),
+    ['workspace-a', 'workspace-b']
+  );
+  assert.deepEqual(workspaceConversationLoadTargets(workspaces, '', new Set()), []);
+});
+
+test('workspace conversations load once and can retry after a node error', () => {
+  assert.equal(shouldLoadWorkspaceConversations(undefined), true);
+  assert.equal(shouldLoadWorkspaceConversations({ loading: true, error: null }), false);
+  assert.equal(shouldLoadWorkspaceConversations({ loading: false, error: null }), false);
+  assert.equal(shouldLoadWorkspaceConversations({ loading: false, error: 'offline' }), true);
+
+  assert.equal(workspaceTreeSessionAvailability(undefined, 0), 'deferred');
+  assert.equal(
+    workspaceTreeSessionAvailability({ loading: true, error: null }, 0),
+    'loading'
+  );
+  assert.equal(
+    workspaceTreeSessionAvailability({ loading: false, error: 'offline' }, 0),
+    'error'
+  );
+  assert.equal(
+    workspaceTreeSessionAvailability({ loading: false, error: null }, 0),
+    'empty'
+  );
+  assert.equal(
+    workspaceTreeSessionAvailability({ loading: false, error: null }, 2),
+    'ready'
+  );
+});
+
+test('workspace conversation request generations allow only the latest request to settle', () => {
+  const generations = new Map();
+  const first = beginWorkspaceConversationRequest(generations, 'workspace-a');
+  const unrelated = beginWorkspaceConversationRequest(generations, 'workspace-b');
+  const second = beginWorkspaceConversationRequest(generations, 'workspace-a');
+
+  assert.equal(first, 1);
+  assert.equal(unrelated, 1);
+  assert.equal(second, 2);
+  assert.equal(isCurrentWorkspaceConversationRequest(generations, 'workspace-a', first), false);
+  assert.equal(isCurrentWorkspaceConversationRequest(generations, 'workspace-a', second), true);
+  assert.equal(isCurrentWorkspaceConversationRequest(generations, 'workspace-b', unrelated), true);
+});
+
+test('a newer runtime refresh takes ownership of unresolved refresh workspace requests', () => {
+  const generations = new Map();
+  const firstA = beginWorkspaceConversationRequest(generations, 'workspace-a');
+  const firstB = beginWorkspaceConversationRequest(generations, 'workspace-b');
+  const activeRefresh = new Map([
+    ['workspace-a', firstA],
+    ['workspace-b', firstB],
+  ]);
+  const newerLazyB = beginWorkspaceConversationRequest(generations, 'workspace-b');
+
+  const nextRefresh = supersedeWorkspaceConversationRequests(generations, activeRefresh);
+
+  assert.equal(isCurrentWorkspaceConversationRequest(generations, 'workspace-a', firstA), false);
+  assert.equal(nextRefresh.get('workspace-a'), 2);
+  assert.equal(nextRefresh.has('workspace-b'), false);
+  assert.equal(isCurrentWorkspaceConversationRequest(generations, 'workspace-b', newerLazyB), true);
+});
+
+test('tree status presentation translates every governed conversation state', () => {
+  const expected = {
+    active: 'idle',
+    running: 'active',
+    queued: 'queued',
+    paused: 'paused',
+    needs_input: 'attention',
+    needs_approval: 'attention',
+    ready_review: 'ready',
+    completed: 'completed',
+    failed: 'danger',
+    disconnected: 'danger',
+    interrupted: 'danger',
+    cancelled: 'offline',
+    archived: 'offline',
+    inactive: 'offline',
+  };
+
+  for (const [status, tone] of Object.entries(expected)) {
+    const presentation = conversationTreeStatusPresentation(status);
+    assert.equal(presentation.tone, tone, status);
+    assert.match(presentation.labelKey, /^workspaceTree\./, status);
+  }
+  assert.deepEqual(conversationTreeStatusPresentation('future_state'), {
+    tone: 'unknown',
+    labelKey: 'workspaceTree.unknown',
+  });
+  assert.deepEqual(conversationTreeStatusPresentation('needs_approval'), {
+    tone: 'attention',
+    labelKey: 'workspaceTree.needsApproval',
+  });
+});
+
+test('conversation lifecycle activity remains distinct from an executing run', () => {
+  const lifecycleOnly = conversation(
+    'conversation-active',
+    'Active conversation',
+    '2026-07-14T09:30:00Z'
+  );
+
+  assert.equal(conversationTreeStatusValue(lifecycleOnly), 'active');
+  assert.deepEqual(conversationTreeStatusPresentation('active'), {
+    tone: 'idle',
+    labelKey: 'workspaceTree.active',
+  });
+  assert.deepEqual(workspaceTreeRootStatusPresentation('inactive', [lifecycleOnly]), {
+    tone: 'offline',
+    labelKey: 'workspaceTree.offline',
+  });
+});
+
+test('workspace root status escalates structured child attention before runtime health', () => {
+  const running = conversation('conversation-running', 'Running', '2026-07-14T09:30:00Z');
+  running.metadata = { run: { status: 'running' } };
+  const approval = conversation('conversation-approval', 'Approval', '2026-07-14T09:31:00Z');
+  approval.metadata = { run: { status: 'needs_approval' } };
+  const input = conversation('conversation-input', 'Input', '2026-07-14T09:31:30Z');
+  input.metadata = { run: { status: 'needs_input' } };
+  const failed = conversation('conversation-failed', 'Failed', '2026-07-14T09:32:00Z');
+  failed.metadata = { run: { status: 'failed' } };
+
+  assert.equal(conversationTreeStatusValue(approval), 'needs_approval');
+  assert.deepEqual(
+    workspaceTreeRootStatusPresentation('online', [running, failed, approval]),
+    { tone: 'attention', labelKey: 'workspaceTree.needsAttention' }
+  );
+  assert.deepEqual(
+    workspaceTreeRootStatusPresentation('online', [approval, input]),
+    workspaceTreeRootStatusPresentation('online', [input, approval])
+  );
+  assert.deepEqual(workspaceTreeRootStatusPresentation('online', [running, failed]), {
+    tone: 'danger',
+    labelKey: 'workspaceTree.issue',
+  });
+  assert.deepEqual(workspaceTreeRootStatusPresentation('online', []), {
+    tone: 'active',
+    labelKey: 'workspaceTree.online',
+  });
 });
