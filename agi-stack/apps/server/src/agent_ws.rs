@@ -30,6 +30,7 @@ use agistack_adapters_postgres::AgentExecutionEventInsertRecord;
 use agistack_core::agent::{HitlRequest, ReActObserver, SessionStatus};
 use agistack_core::ports::CoreResult;
 
+use crate::agent_conversations_api::{AgentConversationsApiError, ConversationSocketAccess};
 use crate::auth::{AuthRejection, Identity};
 use crate::hitl_api::{ws_ack_message, HitlResponsePayload};
 use crate::AppState;
@@ -242,7 +243,15 @@ async fn handle_socket(
                 }
             }
             _ = interval.tick() => {
-                if flush_event_subscriptions(&app, &mut socket, &mut subscriptions).await.is_err() {
+                if flush_event_subscriptions(
+                    &app,
+                    &identity.user_id,
+                    &mut socket,
+                    &mut subscriptions,
+                )
+                .await
+                .is_err()
+                {
                     break;
                 }
             }
@@ -277,26 +286,38 @@ async fn handle_client_message(
             from_time_us,
             from_counter,
         } => {
-            if !subscriptions.subscribe_conversation(
+            let access = app
+                .agent_conversations
+                .authorize_event_subscription(&identity.user_id, &conversation_id)
+                .await;
+            match register_conversation_subscription(
+                access,
+                subscriptions,
                 conversation_id.clone(),
                 last_event_id,
                 message_id,
                 from_time_us,
                 from_counter,
             ) {
-                let _ = send_subscription_limit_error(
-                    socket,
-                    json!({"conversation_id": conversation_id}),
-                )
-                .await;
-                return true;
+                ConversationSubscriptionOutcome::Subscribed => {
+                    let _ = send_ack(
+                        socket,
+                        "subscribe",
+                        json!({"conversation_id": conversation_id}),
+                    )
+                    .await;
+                }
+                ConversationSubscriptionOutcome::AccessDenied => {
+                    let _ = send_error(socket, "Access denied").await;
+                }
+                ConversationSubscriptionOutcome::LimitReached => {
+                    let _ = send_subscription_limit_error(
+                        socket,
+                        json!({"conversation_id": conversation_id}),
+                    )
+                    .await;
+                }
             }
-            let _ = send_ack(
-                socket,
-                "subscribe",
-                json!({"conversation_id": conversation_id}),
-            )
-            .await;
         }
         ClientMessage::Unsubscribe { conversation_id } => {
             subscriptions.unsubscribe_conversation(&conversation_id);
@@ -313,7 +334,7 @@ async fn handle_client_message(
             tenant_id,
             last_event_id,
         } => {
-            let resolved_tenant_id = match app
+            let workspace_tenant_id = app
                 .workspaces
                 .authorize_workspace_event_subscription(
                     &identity.user_id,
@@ -321,40 +342,52 @@ async fn handle_client_message(
                     &project_id,
                     tenant_id.as_deref(),
                 )
-                .await
-            {
-                Ok(resolved_tenant_id) => resolved_tenant_id,
-                Err(_) => {
-                    let _ = send_error(socket, "Access denied").await;
-                    return true;
-                }
-            };
-            let requested_tenant_id = tenant_id.as_deref();
-            if requested_tenant_id
-                .map(|value| value != resolved_tenant_id)
-                .unwrap_or(false)
-            {
-                let _ = send_error(socket, "Access denied").await;
-                return true;
-            }
-            if !subscriptions.subscribe_workspace(workspace_id.clone(), last_event_id) {
-                let _ = send_subscription_limit_error(
-                    socket,
-                    json!({"workspace_id": workspace_id, "project_id": project_id}),
-                )
                 .await;
-                return true;
+            let resolved_tenant_id = match workspace_tenant_id {
+                Ok(workspace_tenant_id) => app
+                    .auth
+                    .authorize_project_event_subscription(
+                        &identity.user_id,
+                        &project_id,
+                        Some(&workspace_tenant_id),
+                    )
+                    .await
+                    .ok()
+                    .flatten()
+                    .filter(|project_tenant_id| project_tenant_id == &workspace_tenant_id),
+                Err(_) => None,
+            };
+            match register_workspace_subscription(
+                resolved_tenant_id,
+                subscriptions,
+                workspace_id.clone(),
+                project_id.clone(),
+                tenant_id.as_deref(),
+                last_event_id,
+            ) {
+                ScopedSubscriptionOutcome::Subscribed { tenant_id } => {
+                    let _ = send_ack(
+                        socket,
+                        "subscribe_workspace",
+                        json!({
+                            "workspace_id": workspace_id,
+                            "project_id": project_id,
+                            "tenant_id": tenant_id
+                        }),
+                    )
+                    .await;
+                }
+                ScopedSubscriptionOutcome::AccessDenied => {
+                    let _ = send_error(socket, "Access denied").await;
+                }
+                ScopedSubscriptionOutcome::LimitReached => {
+                    let _ = send_subscription_limit_error(
+                        socket,
+                        json!({"workspace_id": workspace_id, "project_id": project_id}),
+                    )
+                    .await;
+                }
             }
-            let _ = send_ack(
-                socket,
-                "subscribe_workspace",
-                json!({
-                    "workspace_id": workspace_id,
-                    "project_id": project_id,
-                    "tenant_id": resolved_tenant_id
-                }),
-            )
-            .await;
         }
         ClientMessage::UnsubscribeWorkspace { workspace_id } => {
             subscriptions.unsubscribe_workspace(&workspace_id);
@@ -409,17 +442,39 @@ async fn handle_client_message(
             project_id,
             tenant_id,
         } => {
-            if !subscriptions.subscribe_sandbox(project_id.clone()) {
-                let _ =
-                    send_subscription_limit_error(socket, json!({"project_id": project_id})).await;
-                return true;
+            let resolved_tenant_id = app
+                .auth
+                .authorize_project_event_subscription(
+                    &identity.user_id,
+                    &project_id,
+                    tenant_id.as_deref(),
+                )
+                .await
+                .ok()
+                .flatten();
+            match register_sandbox_subscription(
+                resolved_tenant_id,
+                subscriptions,
+                project_id.clone(),
+                tenant_id.as_deref(),
+            ) {
+                ScopedSubscriptionOutcome::Subscribed { tenant_id } => {
+                    let _ = send_ack(
+                        socket,
+                        "subscribe_sandbox",
+                        json!({"project_id": project_id, "tenant_id": tenant_id}),
+                    )
+                    .await;
+                }
+                ScopedSubscriptionOutcome::AccessDenied => {
+                    let _ = send_error(socket, "Access denied").await;
+                }
+                ScopedSubscriptionOutcome::LimitReached => {
+                    let _ =
+                        send_subscription_limit_error(socket, json!({"project_id": project_id}))
+                            .await;
+                }
             }
-            let _ = send_ack(
-                socket,
-                "subscribe_sandbox",
-                json!({"project_id": project_id, "tenant_id": tenant_id}),
-            )
-            .await;
         }
         ClientMessage::UnsubscribeSandbox {
             project_id,
@@ -439,6 +494,16 @@ async fn handle_client_message(
             project_id,
             message_id,
         } => {
+            let access = app
+                .agent_conversations
+                .authorize_message_send(&identity.user_id, &conversation_id, &project_id)
+                .await;
+            if resolve_conversation_access(access, subscriptions, &conversation_id)
+                == ConversationAccessOutcome::AccessDenied
+            {
+                let _ = send_error(socket, "Access denied").await;
+                return true;
+            }
             if !subscriptions.ensure_conversation(conversation_id.clone(), message_id.clone()) {
                 let _ = send_subscription_limit_error(
                     socket,
@@ -454,14 +519,12 @@ async fn handle_client_message(
             )
             .await;
             let run_app = app.clone();
-            let run_identity = identity.clone();
             let run_conversation_id = conversation_id.clone();
             let run_project_id = project_id.clone();
             let run_message_id = message_id.clone();
             tokio::spawn(async move {
                 if let Err(err) = run_agent_message(
                     &run_app,
-                    &run_identity,
                     &run_conversation_id,
                     &run_project_id,
                     run_message_id.as_deref(),
@@ -482,14 +545,30 @@ async fn handle_client_message(
             });
         }
         ClientMessage::StopSession { conversation_id } => {
+            let access = app
+                .agent_conversations
+                .authorize_session_stop(&identity.user_id, &conversation_id)
+                .await;
+            if resolve_conversation_access(access, subscriptions, &conversation_id)
+                == ConversationAccessOutcome::AccessDenied
+            {
+                let _ = send_error(socket, "Access denied").await;
+                return true;
+            }
             let data = json!({"conversation_id": conversation_id, "cancelled": true});
-            let _ = append_event(app, &conversation_id, AgentEventType::Cancelled, data).await;
-            let _ = send_ack(
-                socket,
-                "stop_session",
-                json!({"conversation_id": conversation_id}),
-            )
-            .await;
+            if append_event(app, &conversation_id, AgentEventType::Cancelled, data)
+                .await
+                .is_ok()
+            {
+                let _ = send_ack(
+                    socket,
+                    "stop_session",
+                    json!({"conversation_id": conversation_id}),
+                )
+                .await;
+            } else {
+                let _ = send_error(socket, "Failed to stop session").await;
+            }
         }
         ClientMessage::ClarificationRespond { request_id, answer } => {
             let request = HitlResponsePayload {
@@ -576,6 +655,111 @@ async fn handle_client_message(
     true
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConversationSubscriptionOutcome {
+    Subscribed,
+    AccessDenied,
+    LimitReached,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConversationAccessOutcome {
+    Allowed,
+    AccessDenied,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ScopedSubscriptionOutcome {
+    Subscribed { tenant_id: String },
+    AccessDenied,
+    LimitReached,
+}
+
+fn resolve_conversation_access(
+    access: Result<ConversationSocketAccess, AgentConversationsApiError>,
+    subscriptions: &mut ConnectionSubscriptions,
+    conversation_id: &str,
+) -> ConversationAccessOutcome {
+    if matches!(access, Ok(ConversationSocketAccess::Allowed)) {
+        ConversationAccessOutcome::Allowed
+    } else {
+        subscriptions.unsubscribe_conversation(conversation_id);
+        ConversationAccessOutcome::AccessDenied
+    }
+}
+
+fn register_conversation_subscription(
+    access: Result<ConversationSocketAccess, AgentConversationsApiError>,
+    subscriptions: &mut ConnectionSubscriptions,
+    conversation_id: String,
+    last_event_id: Option<String>,
+    message_id: Option<String>,
+    from_time_us: Option<i64>,
+    from_counter: Option<u64>,
+) -> ConversationSubscriptionOutcome {
+    if resolve_conversation_access(access, subscriptions, &conversation_id)
+        == ConversationAccessOutcome::AccessDenied
+    {
+        return ConversationSubscriptionOutcome::AccessDenied;
+    }
+    if subscriptions.subscribe_conversation(
+        conversation_id,
+        last_event_id,
+        message_id,
+        from_time_us,
+        from_counter,
+    ) {
+        ConversationSubscriptionOutcome::Subscribed
+    } else {
+        ConversationSubscriptionOutcome::LimitReached
+    }
+}
+
+fn register_workspace_subscription(
+    resolved_tenant_id: Option<String>,
+    subscriptions: &mut ConnectionSubscriptions,
+    workspace_id: String,
+    project_id: String,
+    requested_tenant_id: Option<&str>,
+    last_event_id: Option<String>,
+) -> ScopedSubscriptionOutcome {
+    let Some(tenant_id) = resolved_tenant_id.filter(|resolved_tenant_id| {
+        requested_tenant_id
+            .map(|requested_tenant_id| requested_tenant_id == resolved_tenant_id)
+            .unwrap_or(true)
+    }) else {
+        subscriptions.unsubscribe_workspace(&workspace_id);
+        return ScopedSubscriptionOutcome::AccessDenied;
+    };
+    if subscriptions.subscribe_workspace(workspace_id, project_id, tenant_id.clone(), last_event_id)
+    {
+        ScopedSubscriptionOutcome::Subscribed { tenant_id }
+    } else {
+        ScopedSubscriptionOutcome::LimitReached
+    }
+}
+
+fn register_sandbox_subscription(
+    resolved_tenant_id: Option<String>,
+    subscriptions: &mut ConnectionSubscriptions,
+    project_id: String,
+    requested_tenant_id: Option<&str>,
+) -> ScopedSubscriptionOutcome {
+    let Some(tenant_id) = resolved_tenant_id.filter(|resolved_tenant_id| {
+        requested_tenant_id
+            .map(|requested_tenant_id| requested_tenant_id == resolved_tenant_id)
+            .unwrap_or(true)
+    }) else {
+        subscriptions.unsubscribe_sandbox(&project_id);
+        return ScopedSubscriptionOutcome::AccessDenied;
+    };
+    if subscriptions.subscribe_sandbox(project_id, tenant_id.clone()) {
+        ScopedSubscriptionOutcome::Subscribed { tenant_id }
+    } else {
+        ScopedSubscriptionOutcome::LimitReached
+    }
+}
+
 async fn handle_hitl_response(
     app: &AppState,
     identity: &Identity,
@@ -591,20 +775,11 @@ async fn handle_hitl_response(
 
 async fn run_agent_message(
     app: &AppState,
-    identity: &Identity,
     conversation_id: &str,
     project_id: &str,
     message_id: Option<&str>,
     message: &str,
 ) -> Result<(), String> {
-    let allowed = app
-        .auth
-        .can_access_project(&identity.user_id, project_id)
-        .await?;
-    if !allowed {
-        return Err("Access denied".to_string());
-    }
-
     append_event(
         app,
         conversation_id,
@@ -1162,5 +1337,134 @@ mod tests {
             permission,
             ClientMessage::PermissionRespond { .. }
         ));
+    }
+
+    #[test]
+    fn denied_conversation_access_does_not_register_event_subscription() {
+        for access in [
+            ConversationSocketAccess::Denied,
+            ConversationSocketAccess::NotFound,
+        ] {
+            let mut subscriptions = ConnectionSubscriptions::default();
+            assert!(subscriptions.ensure_conversation(
+                "conversation-private".to_string(),
+                Some("previous-message".to_string()),
+            ));
+
+            let outcome = register_conversation_subscription(
+                Ok(access),
+                &mut subscriptions,
+                "conversation-private".to_string(),
+                Some("99-0".to_string()),
+                Some("message-private".to_string()),
+                Some(99),
+                Some(4),
+            );
+
+            assert_eq!(outcome, ConversationSubscriptionOutcome::AccessDenied);
+            assert!(!subscriptions.contains_conversation("conversation-private"));
+        }
+
+        let mut subscriptions = ConnectionSubscriptions::default();
+        assert!(subscriptions.ensure_conversation("conversation-private".to_string(), None));
+        let outcome = register_conversation_subscription(
+            Err(AgentConversationsApiError::internal(
+                "conversation access unavailable",
+            )),
+            &mut subscriptions,
+            "conversation-private".to_string(),
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(outcome, ConversationSubscriptionOutcome::AccessDenied);
+        assert!(!subscriptions.contains_conversation("conversation-private"));
+    }
+
+    #[test]
+    fn authorized_conversation_access_registers_event_subscription() {
+        let mut subscriptions = ConnectionSubscriptions::default();
+
+        let outcome = register_conversation_subscription(
+            Ok(ConversationSocketAccess::Allowed),
+            &mut subscriptions,
+            "conversation-owned".to_string(),
+            Some("7-0".to_string()),
+            Some("message-owned".to_string()),
+            Some(10),
+            Some(2),
+        );
+
+        assert_eq!(outcome, ConversationSubscriptionOutcome::Subscribed);
+        assert!(subscriptions.contains_conversation("conversation-owned"));
+    }
+
+    #[test]
+    fn denied_scoped_stream_access_removes_existing_subscriptions() {
+        let mut subscriptions = ConnectionSubscriptions::default();
+        assert!(subscriptions.subscribe_workspace(
+            "workspace-private".to_string(),
+            "project-private".to_string(),
+            "tenant-private".to_string(),
+            None,
+        ));
+        assert_eq!(
+            register_workspace_subscription(
+                None,
+                &mut subscriptions,
+                "workspace-private".to_string(),
+                "project-private".to_string(),
+                Some("tenant-private"),
+                None,
+            ),
+            ScopedSubscriptionOutcome::AccessDenied
+        );
+        assert!(!subscriptions.contains_workspace("workspace-private"));
+
+        assert!(subscriptions
+            .subscribe_sandbox("project-private".to_string(), "tenant-private".to_string(),));
+        assert_eq!(
+            register_sandbox_subscription(
+                Some("other-tenant".to_string()),
+                &mut subscriptions,
+                "project-private".to_string(),
+                Some("tenant-private"),
+            ),
+            ScopedSubscriptionOutcome::AccessDenied
+        );
+        assert!(!subscriptions.contains_sandbox("project-private"));
+    }
+
+    #[test]
+    fn authorized_scoped_stream_access_persists_resolved_scope() {
+        let mut subscriptions = ConnectionSubscriptions::default();
+        assert_eq!(
+            register_workspace_subscription(
+                Some("tenant-owned".to_string()),
+                &mut subscriptions,
+                "workspace-owned".to_string(),
+                "project-owned".to_string(),
+                None,
+                Some("8-0".to_string()),
+            ),
+            ScopedSubscriptionOutcome::Subscribed {
+                tenant_id: "tenant-owned".to_string(),
+            }
+        );
+        assert!(subscriptions.contains_workspace("workspace-owned"));
+
+        assert_eq!(
+            register_sandbox_subscription(
+                Some("tenant-owned".to_string()),
+                &mut subscriptions,
+                "project-owned".to_string(),
+                None,
+            ),
+            ScopedSubscriptionOutcome::Subscribed {
+                tenant_id: "tenant-owned".to_string(),
+            }
+        );
+        assert!(subscriptions.contains_sandbox("project-owned"));
     }
 }

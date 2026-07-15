@@ -100,6 +100,15 @@ pub trait Authenticator: Send + Sync {
     /// Whether `user_id` may read within `project_id` (owner / public / member).
     async fn can_access_project(&self, user_id: &str, project_id: &str) -> Result<bool, String>;
 
+    /// Resolve the exact tenant for a project runtime-event subscription.
+    /// Public visibility alone never grants access to tenant-private streams.
+    async fn authorize_project_event_subscription(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<Option<String>, String>;
+
     /// Whether `user_id` may create memories/episodes within `project_id`.
     async fn can_write_project(&self, user_id: &str, project_id: &str) -> Result<bool, String>;
 
@@ -160,6 +169,38 @@ impl Authenticator for PgAuthenticator {
                 .await
                 .map_err(|e| e.to_string()),
             None => Ok(false),
+        }
+    }
+
+    async fn authorize_project_event_subscription(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        let Some(project) = self
+            .projects
+            .find_by_id(project_id)
+            .await
+            .map_err(|error| error.to_string())?
+        else {
+            return Ok(None);
+        };
+        if tenant_id
+            .map(|requested_tenant_id| requested_tenant_id != project.tenant_id)
+            .unwrap_or(false)
+        {
+            return Ok(None);
+        }
+        if self
+            .projects
+            .user_can_subscribe_project_events(user_id, &project)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            Ok(Some(project.tenant_id))
+        } else {
+            Ok(None)
         }
     }
 
@@ -229,6 +270,23 @@ impl Authenticator for DevAuthenticator {
 
     async fn can_access_project(&self, _user_id: &str, _project_id: &str) -> Result<bool, String> {
         Ok(true)
+    }
+
+    async fn authorize_project_event_subscription(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        if user_id != self.dev_user_id
+            || project_id != "dev-project"
+            || tenant_id
+                .map(|requested_tenant_id| requested_tenant_id != "dev-tenant")
+                .unwrap_or(false)
+        {
+            return Ok(None);
+        }
+        Ok(Some("dev-tenant".to_string()))
     }
 
     async fn can_write_project(&self, _user_id: &str, _project_id: &str) -> Result<bool, String> {
@@ -432,6 +490,36 @@ mod unit {
         assert!(auth.can_access_project("dev-user", "p1").await.unwrap());
         assert!(auth.can_write_project("dev-user", "p1").await.unwrap());
         assert!(auth.can_admin_project("dev-user", "p1").await.unwrap());
+        assert_eq!(
+            auth.authorize_project_event_subscription(
+                "dev-user",
+                "dev-project",
+                Some("dev-tenant")
+            )
+            .await
+            .unwrap(),
+            Some("dev-tenant".to_string())
+        );
+        assert_eq!(
+            auth.authorize_project_event_subscription(
+                "other-user",
+                "dev-project",
+                Some("dev-tenant")
+            )
+            .await
+            .unwrap(),
+            None
+        );
+        assert_eq!(
+            auth.authorize_project_event_subscription(
+                "dev-user",
+                "dev-project",
+                Some("other-tenant")
+            )
+            .await
+            .unwrap(),
+            None
+        );
         assert!(auth.authenticate("nope", 0).await.is_err());
     }
 }

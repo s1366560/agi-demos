@@ -1,13 +1,35 @@
-use std::collections::HashMap;
+mod authorization;
+mod scope_validation;
+
+use std::{collections::HashMap, time::Instant};
 
 use axum::extract::ws::{Message, WebSocket};
 use serde_json::{json, Value};
 
 use crate::AppState;
 
+#[cfg(test)]
+use authorization::{
+    conversation_authorization_needs_refresh, refresh_conversation_authorization,
+    refresh_scoped_authorization, scoped_authorization_needs_refresh,
+    CONVERSATION_AUTHORIZATION_LEASE, SCOPED_AUTHORIZATION_LEASE,
+};
+use authorization::{
+    reauthorize_conversation_subscriptions, reauthorize_sandbox_subscriptions,
+    reauthorize_workspace_subscriptions,
+};
+use scope_validation::{sandbox_message_matches_scope, workspace_message_matches_scope};
+
 const EVENT_REPLAY_BATCH: usize = 100;
 const MAX_EVENTS_PER_FLUSH: usize = 256;
 const MAX_SUBSCRIPTIONS_PER_CONNECTION: usize = 64;
+
+#[derive(Debug, Clone)]
+struct SubscriptionScope {
+    tenant_id: String,
+    project_id: String,
+    authorized_at: Instant,
+}
 
 #[derive(Debug, Clone, Default)]
 struct Subscription {
@@ -15,6 +37,8 @@ struct Subscription {
     message_id: Option<String>,
     from_time_us: Option<i64>,
     from_counter: Option<u64>,
+    conversation_authorized_at: Option<Instant>,
+    scope: Option<SubscriptionScope>,
 }
 
 #[derive(Debug, Default)]
@@ -43,6 +67,8 @@ impl ConnectionSubscriptions {
                 message_id,
                 from_time_us,
                 from_counter,
+                conversation_authorized_at: Some(Instant::now()),
+                scope: None,
             },
         );
         true
@@ -56,10 +82,15 @@ impl ConnectionSubscriptions {
         if !self.can_add(self.conversations.contains_key(&conversation_id)) {
             return false;
         }
+        let authorization_time = Instant::now();
         self.conversations
             .entry(conversation_id)
+            .and_modify(|subscription| {
+                subscription.conversation_authorized_at = Some(authorization_time);
+            })
             .or_insert_with(|| Subscription {
                 message_id,
+                conversation_authorized_at: Some(authorization_time),
                 ..Subscription::default()
             });
         true
@@ -69,9 +100,16 @@ impl ConnectionSubscriptions {
         self.conversations.remove(conversation_id);
     }
 
+    #[cfg(test)]
+    pub(super) fn contains_conversation(&self, conversation_id: &str) -> bool {
+        self.conversations.contains_key(conversation_id)
+    }
+
     pub(super) fn subscribe_workspace(
         &mut self,
         workspace_id: String,
+        project_id: String,
+        tenant_id: String,
         last_id: Option<String>,
     ) -> bool {
         if !self.can_add(self.workspaces.contains_key(&workspace_id)) {
@@ -81,6 +119,11 @@ impl ConnectionSubscriptions {
             workspace_id,
             Subscription {
                 last_id: last_id.unwrap_or_default(),
+                scope: Some(SubscriptionScope {
+                    tenant_id,
+                    project_id,
+                    authorized_at: Instant::now(),
+                }),
                 ..Subscription::default()
             },
         );
@@ -91,16 +134,36 @@ impl ConnectionSubscriptions {
         self.workspaces.remove(workspace_id);
     }
 
-    pub(super) fn subscribe_sandbox(&mut self, project_id: String) -> bool {
+    #[cfg(test)]
+    pub(super) fn contains_workspace(&self, workspace_id: &str) -> bool {
+        self.workspaces.contains_key(workspace_id)
+    }
+
+    pub(super) fn subscribe_sandbox(&mut self, project_id: String, tenant_id: String) -> bool {
         if !self.can_add(self.sandboxes.contains_key(&project_id)) {
             return false;
         }
-        self.sandboxes.entry(project_id).or_default();
+        self.sandboxes.insert(
+            project_id.clone(),
+            Subscription {
+                scope: Some(SubscriptionScope {
+                    tenant_id,
+                    project_id,
+                    authorized_at: Instant::now(),
+                }),
+                ..Subscription::default()
+            },
+        );
         true
     }
 
     pub(super) fn unsubscribe_sandbox(&mut self, project_id: &str) {
         self.sandboxes.remove(project_id);
+    }
+
+    #[cfg(test)]
+    pub(super) fn contains_sandbox(&self, project_id: &str) -> bool {
+        self.sandboxes.contains_key(project_id)
     }
 
     fn can_add(&self, already_subscribed: bool) -> bool {
@@ -114,10 +177,16 @@ impl ConnectionSubscriptions {
 
 pub(super) async fn flush_event_subscriptions(
     app: &AppState,
+    user_id: &str,
     socket: &mut WebSocket,
     subscriptions: &mut ConnectionSubscriptions,
 ) -> Result<(), ()> {
     let mut sent_this_flush = 0;
+    reauthorize_conversation_subscriptions(app, user_id, socket, &mut subscriptions.conversations)
+        .await?;
+    reauthorize_sandbox_subscriptions(app, user_id, socket, &mut subscriptions.sandboxes).await?;
+    reauthorize_workspace_subscriptions(app, user_id, socket, &mut subscriptions.workspaces)
+        .await?;
     flush_conversation_subscriptions(
         app,
         socket,
@@ -199,6 +268,10 @@ async fn flush_sandbox_subscriptions(
         for entry in entries {
             let entry_id = entry.id;
             let message = sandbox_entry_to_ws_message(project_id, &entry.payload, &entry_id);
+            if !sandbox_message_matches_scope(subscription, &message) {
+                subscription.last_id = entry_id;
+                continue;
+            }
             send_json(socket, message).await?;
             *sent_this_flush += 1;
             subscription.last_id = entry_id;
@@ -232,6 +305,10 @@ async fn flush_workspace_subscriptions(
         for entry in entries {
             let entry_id = entry.id;
             let message = workspace_entry_to_ws_message(workspace_id, &entry.payload, &entry_id);
+            if !workspace_message_matches_scope(subscription, &message) {
+                subscription.last_id = entry_id;
+                continue;
+            }
             send_json(socket, message).await?;
             *sent_this_flush += 1;
             subscription.last_id = entry_id;
@@ -376,6 +453,10 @@ fn workspace_stream_topic(workspace_id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, Instant};
+
+    use crate::agent_conversations_api::{AgentConversationsApiError, ConversationSocketAccess};
+
     use super::*;
 
     #[test]
@@ -424,6 +505,8 @@ mod tests {
             message_id: Some("m1".to_string()),
             from_time_us: Some(10),
             from_counter: Some(2),
+            conversation_authorized_at: None,
+            scope: None,
         };
 
         assert!(subscription_allows(
@@ -451,14 +534,29 @@ mod tests {
             assert!(subscriptions.ensure_conversation(format!("c{index}"), None));
         }
 
-        assert!(!subscriptions.subscribe_sandbox("p1".to_string()));
-        assert!(!subscriptions.subscribe_workspace("w1".to_string(), None));
+        assert!(!subscriptions.subscribe_sandbox("p1".to_string(), "t1".to_string()));
+        assert!(!subscriptions.subscribe_workspace(
+            "w1".to_string(),
+            "p1".to_string(),
+            "t1".to_string(),
+            None,
+        ));
         assert!(subscriptions.ensure_conversation("c0".to_string(), Some("m1".to_string())));
         subscriptions.unsubscribe_conversation("c0");
-        assert!(subscriptions.subscribe_sandbox("p1".to_string()));
-        assert!(!subscriptions.subscribe_workspace("w1".to_string(), None));
+        assert!(subscriptions.subscribe_sandbox("p1".to_string(), "t1".to_string()));
+        assert!(!subscriptions.subscribe_workspace(
+            "w1".to_string(),
+            "p1".to_string(),
+            "t1".to_string(),
+            None,
+        ));
         subscriptions.unsubscribe_sandbox("p1");
-        assert!(subscriptions.subscribe_workspace("w1".to_string(), Some("7-0".to_string())));
+        assert!(subscriptions.subscribe_workspace(
+            "w1".to_string(),
+            "p1".to_string(),
+            "t1".to_string(),
+            Some("7-0".to_string()),
+        ));
         assert!(!subscriptions.ensure_conversation("new".to_string(), None));
     }
 
@@ -467,6 +565,170 @@ mod tests {
         assert_eq!(replay_limit(0), Some(EVENT_REPLAY_BATCH));
         assert_eq!(replay_limit(MAX_EVENTS_PER_FLUSH - 1), Some(1));
         assert_eq!(replay_limit(MAX_EVENTS_PER_FLUSH), None);
+    }
+
+    #[test]
+    fn conversation_authorization_lease_requires_periodic_refresh() {
+        let authorized_at = Instant::now();
+        let subscription = Subscription {
+            conversation_authorized_at: Some(authorized_at),
+            ..Subscription::default()
+        };
+
+        assert!(!conversation_authorization_needs_refresh(
+            &subscription,
+            authorized_at + CONVERSATION_AUTHORIZATION_LEASE - Duration::from_millis(1),
+        ));
+        assert!(conversation_authorization_needs_refresh(
+            &subscription,
+            authorized_at + CONVERSATION_AUTHORIZATION_LEASE,
+        ));
+        assert!(conversation_authorization_needs_refresh(
+            &Subscription::default(),
+            authorized_at,
+        ));
+    }
+
+    #[test]
+    fn conversation_authorization_refresh_fails_closed_and_removes_subscription() {
+        for access in [
+            Ok(ConversationSocketAccess::Denied),
+            Ok(ConversationSocketAccess::NotFound),
+            Err(AgentConversationsApiError::internal(
+                "authorization unavailable",
+            )),
+        ] {
+            let mut subscriptions =
+                HashMap::from([("conversation-private".to_string(), Subscription::default())]);
+
+            assert!(!refresh_conversation_authorization(
+                access,
+                &mut subscriptions,
+                "conversation-private",
+                Instant::now(),
+            ));
+            assert!(!subscriptions.contains_key("conversation-private"));
+        }
+
+        let authorized_at = Instant::now();
+        let mut subscriptions =
+            HashMap::from([("conversation-owned".to_string(), Subscription::default())]);
+        assert!(refresh_conversation_authorization(
+            Ok(ConversationSocketAccess::Allowed),
+            &mut subscriptions,
+            "conversation-owned",
+            authorized_at,
+        ));
+        assert_eq!(
+            subscriptions["conversation-owned"].conversation_authorized_at,
+            Some(authorized_at)
+        );
+    }
+
+    #[test]
+    fn scoped_authorization_lease_refreshes_without_resetting_cursor() {
+        let authorized_at = Instant::now();
+        let subscription = Subscription {
+            last_id: "41-0".to_string(),
+            scope: Some(SubscriptionScope {
+                tenant_id: "tenant-1".to_string(),
+                project_id: "project-1".to_string(),
+                authorized_at,
+            }),
+            ..Subscription::default()
+        };
+        assert!(!scoped_authorization_needs_refresh(
+            &subscription,
+            authorized_at + SCOPED_AUTHORIZATION_LEASE - Duration::from_millis(1),
+        ));
+        assert!(scoped_authorization_needs_refresh(
+            &subscription,
+            authorized_at + SCOPED_AUTHORIZATION_LEASE,
+        ));
+
+        let refreshed_at = authorized_at + SCOPED_AUTHORIZATION_LEASE;
+        let mut subscriptions = HashMap::from([("project-1".to_string(), subscription)]);
+        assert!(refresh_scoped_authorization(
+            true,
+            &mut subscriptions,
+            "project-1",
+            refreshed_at,
+        ));
+        assert_eq!(subscriptions["project-1"].last_id, "41-0");
+        assert_eq!(
+            subscriptions["project-1"]
+                .scope
+                .as_ref()
+                .map(|scope| scope.authorized_at),
+            Some(refreshed_at)
+        );
+
+        assert!(!refresh_scoped_authorization(
+            false,
+            &mut subscriptions,
+            "project-1",
+            Instant::now(),
+        ));
+        assert!(!subscriptions.contains_key("project-1"));
+    }
+
+    #[test]
+    fn scoped_event_payloads_reject_conflicting_project_or_tenant_metadata() {
+        let subscription = Subscription {
+            scope: Some(SubscriptionScope {
+                tenant_id: "tenant-1".to_string(),
+                project_id: "project-1".to_string(),
+                authorized_at: Instant::now(),
+            }),
+            ..Subscription::default()
+        };
+        let sandbox_allowed = sandbox_entry_to_ws_message(
+            "project-1",
+            &json!({
+                "type": "sandbox.started",
+                "project_id": "project-1",
+                "tenant_id": "tenant-1",
+            })
+            .to_string(),
+            "1-0",
+        );
+        let sandbox_denied = sandbox_entry_to_ws_message(
+            "project-1",
+            &json!({"type": "sandbox.started", "project_id": "project-other"}).to_string(),
+            "2-0",
+        );
+        assert!(sandbox_message_matches_scope(
+            &subscription,
+            &sandbox_allowed
+        ));
+        assert!(!sandbox_message_matches_scope(
+            &subscription,
+            &sandbox_denied
+        ));
+
+        let workspace_allowed = workspace_entry_to_ws_message(
+            "workspace-1",
+            &json!({
+                "type": "workspace_event",
+                "project_id": "project-1",
+                "tenant_id": "tenant-1",
+            })
+            .to_string(),
+            "3-0",
+        );
+        let workspace_denied = workspace_entry_to_ws_message(
+            "workspace-1",
+            &json!({"type": "workspace_event", "tenant_id": "tenant-other"}).to_string(),
+            "4-0",
+        );
+        assert!(workspace_message_matches_scope(
+            &subscription,
+            &workspace_allowed
+        ));
+        assert!(!workspace_message_matches_scope(
+            &subscription,
+            &workspace_denied
+        ));
     }
 
     #[test]

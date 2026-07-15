@@ -120,11 +120,19 @@ impl PgAgentExecutionEventRepository {
             return Ok(ConversationReplayAccess::NotFound);
         };
 
-        if conversation.user_id == user_id
-            || self
-                .user_is_tenant_admin(user_id, &conversation.tenant_id)
-                .await?
-        {
+        let (project_scope_exists, active_project_member, tenant_admin) = self
+            .conversation_scope_access(user_id, &conversation.tenant_id, &conversation.project_id)
+            .await?;
+        if !project_scope_exists {
+            return Ok(ConversationReplayAccess::Denied);
+        }
+        if tenant_admin {
+            return Ok(ConversationReplayAccess::Allowed);
+        }
+        if !active_project_member {
+            return Ok(ConversationReplayAccess::Denied);
+        }
+        if conversation.user_id == user_id {
             return Ok(ConversationReplayAccess::Allowed);
         }
 
@@ -311,18 +319,32 @@ impl PgAgentExecutionEventRepository {
         .map_err(storage)
     }
 
-    async fn user_is_tenant_admin(&self, user_id: &str, tenant_id: &str) -> CoreResult<bool> {
-        let count = sqlx::query_as::<_, (i64,)>(
-            "SELECT count(*) FROM user_tenants \
-             WHERE user_id = $1 AND tenant_id = $2 AND role IN ('admin', 'owner')",
+    async fn conversation_scope_access(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+    ) -> CoreResult<(bool, bool, bool)> {
+        sqlx::query_as::<_, (bool, bool, bool)>(
+            "SELECT \
+                 EXISTS(SELECT 1 FROM projects p \
+                        WHERE p.id = $3 AND p.tenant_id = $2), \
+                 EXISTS(SELECT 1 FROM projects p \
+                        JOIN user_tenants ut \
+                          ON ut.tenant_id = p.tenant_id AND ut.user_id = $1 \
+                        JOIN user_projects up \
+                          ON up.project_id = p.id AND up.user_id = $1 \
+                        WHERE p.id = $3 AND p.tenant_id = $2), \
+                 EXISTS(SELECT 1 FROM user_tenants ut \
+                        WHERE ut.user_id = $1 AND ut.tenant_id = $2 \
+                          AND ut.role IN ('admin', 'owner'))",
         )
         .bind(user_id)
         .bind(tenant_id)
+        .bind(project_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(storage)?
-        .0;
-        Ok(count > 0)
+        .map_err(storage)
     }
 
     async fn user_has_workspace_access(

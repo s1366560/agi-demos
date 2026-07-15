@@ -66,8 +66,54 @@ const TIMELINE_EXCLUDED_EVENT_TYPES: &[&str] = &[
 
 pub(crate) type SharedAgentConversations = Arc<dyn AgentConversationApiService>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConversationSocketAccess {
+    Allowed,
+    Denied,
+    NotFound,
+}
+
+impl From<ConversationReplayAccess> for ConversationSocketAccess {
+    fn from(access: ConversationReplayAccess) -> Self {
+        match access {
+            ConversationReplayAccess::Allowed => Self::Allowed,
+            ConversationReplayAccess::Denied => Self::Denied,
+            ConversationReplayAccess::NotFound => Self::NotFound,
+        }
+    }
+}
+
+impl From<ConversationMutationAccess> for ConversationSocketAccess {
+    fn from(access: ConversationMutationAccess) -> Self {
+        match access {
+            ConversationMutationAccess::Allowed => Self::Allowed,
+            ConversationMutationAccess::Denied => Self::Denied,
+            ConversationMutationAccess::NotFound => Self::NotFound,
+        }
+    }
+}
+
 #[async_trait]
 pub(crate) trait AgentConversationApiService: Send + Sync {
+    async fn authorize_event_subscription(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError>;
+
+    async fn authorize_message_send(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError>;
+
+    async fn authorize_session_stop(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError>;
+
     async fn list_conversations(
         &self,
         user_id: &str,
@@ -118,6 +164,43 @@ impl PgAgentConversationService {
 
 #[async_trait]
 impl AgentConversationApiService for PgAgentConversationService {
+    async fn authorize_event_subscription(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
+        self.events
+            .replay_access(user_id, conversation_id)
+            .await
+            .map(ConversationSocketAccess::from)
+            .map_err(AgentConversationsApiError::internal)
+    }
+
+    async fn authorize_session_stop(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
+        self.conversations
+            .owner_access(user_id, conversation_id)
+            .await
+            .map(ConversationSocketAccess::from)
+            .map_err(AgentConversationsApiError::internal)
+    }
+
+    async fn authorize_message_send(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
+        self.conversations
+            .message_send_access(user_id, project_id, conversation_id)
+            .await
+            .map(ConversationSocketAccess::from)
+            .map_err(AgentConversationsApiError::internal)
+    }
+
     async fn list_conversations(
         &self,
         user_id: &str,
@@ -441,6 +524,63 @@ impl DevAgentConversationService {
 
 #[async_trait]
 impl AgentConversationApiService for DevAgentConversationService {
+    async fn authorize_event_subscription(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
+        let conversations = self
+            .conversations
+            .lock()
+            .map_err(|_| AgentConversationsApiError::internal("conversation lock poisoned"))?;
+        Ok(match conversations.get(conversation_id) {
+            Some(conversation) if conversation.user_id == user_id => {
+                ConversationSocketAccess::Allowed
+            }
+            Some(_) => ConversationSocketAccess::Denied,
+            None => ConversationSocketAccess::NotFound,
+        })
+    }
+
+    async fn authorize_session_stop(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
+        let conversations = self
+            .conversations
+            .lock()
+            .map_err(|_| AgentConversationsApiError::internal("conversation lock poisoned"))?;
+        Ok(match conversations.get(conversation_id) {
+            Some(conversation) if conversation.user_id == user_id => {
+                ConversationSocketAccess::Allowed
+            }
+            Some(_) => ConversationSocketAccess::Denied,
+            None => ConversationSocketAccess::NotFound,
+        })
+    }
+
+    async fn authorize_message_send(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        project_id: &str,
+    ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
+        let conversations = self
+            .conversations
+            .lock()
+            .map_err(|_| AgentConversationsApiError::internal("conversation lock poisoned"))?;
+        Ok(match conversations.get(conversation_id) {
+            Some(conversation)
+                if conversation.user_id == user_id && conversation.project_id == project_id =>
+            {
+                ConversationSocketAccess::Allowed
+            }
+            Some(_) => ConversationSocketAccess::Denied,
+            None => ConversationSocketAccess::NotFound,
+        })
+    }
+
     async fn list_conversations(
         &self,
         _user_id: &str,
@@ -976,7 +1116,7 @@ impl AgentConversationsApiError {
         Self::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
     }
 
-    fn internal(detail: impl std::fmt::Display) -> Self {
+    pub(crate) fn internal(detail: impl std::fmt::Display) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, detail.to_string())
     }
 }
@@ -1827,6 +1967,8 @@ fn tool_lookup_keys(
 
 #[cfg(test)]
 mod tests {
+    use agistack_adapters_mem::InMemoryEventStream;
+
     use super::*;
 
     fn event(event_type: &str, time: i64, data: Value) -> AgentExecutionEventRecord {
@@ -1990,5 +2132,72 @@ mod tests {
         assert_eq!(response.total, 7);
         assert!(response.has_more);
         assert_eq!(response.next_offset, Some(5));
+    }
+
+    #[tokio::test]
+    async fn dev_conversation_event_subscription_access_is_owner_scoped() {
+        let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
+        let service = DevAgentConversationService::new(events);
+        let conversation = service
+            .create_conversation(
+                "user-a",
+                CreateConversationRequest {
+                    project_id: "project-a".to_string(),
+                    title: Some("Private session".to_string()),
+                    agent_config: None,
+                },
+            )
+            .await
+            .expect("conversation creation succeeds");
+
+        assert_eq!(
+            service
+                .authorize_event_subscription("user-a", &conversation.id)
+                .await
+                .expect("owner access resolves"),
+            ConversationSocketAccess::Allowed
+        );
+        assert_eq!(
+            service
+                .authorize_event_subscription("user-b", &conversation.id)
+                .await
+                .expect("non-owner access resolves"),
+            ConversationSocketAccess::Denied
+        );
+        assert_eq!(
+            service
+                .authorize_event_subscription("user-a", "missing-conversation")
+                .await
+                .expect("missing access resolves"),
+            ConversationSocketAccess::NotFound
+        );
+        assert_eq!(
+            service
+                .authorize_message_send("user-a", &conversation.id, "project-a")
+                .await
+                .expect("message access resolves"),
+            ConversationSocketAccess::Allowed
+        );
+        assert_eq!(
+            service
+                .authorize_message_send("user-a", &conversation.id, "project-b")
+                .await
+                .expect("project mismatch resolves"),
+            ConversationSocketAccess::Denied
+        );
+        assert_eq!(
+            service
+                .authorize_session_stop("user-a", &conversation.id)
+                .await
+                .expect("owner stop access resolves"),
+            ConversationSocketAccess::Allowed
+        );
+        assert_eq!(
+            service
+                .authorize_session_stop("user-b", &conversation.id)
+                .await
+                .expect("non-owner stop access resolves"),
+            ConversationSocketAccess::Denied
+        );
     }
 }

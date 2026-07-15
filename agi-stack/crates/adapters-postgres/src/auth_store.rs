@@ -149,6 +149,30 @@ impl PgProjectStore {
         Ok(row.0 > 0)
     }
 
+    /// Whether a user may receive project runtime events. Unlike ordinary
+    /// project reads, public visibility is insufficient because sandbox events
+    /// can contain tenant-private execution details.
+    pub async fn user_can_subscribe_project_events(
+        &self,
+        user_id: &str,
+        project: &ProjectRecord,
+    ) -> CoreResult<bool> {
+        let (tenant_member, project_member) = sqlx::query_as::<_, (bool, bool)>(
+            "SELECT \
+                 EXISTS(SELECT 1 FROM user_tenants \
+                        WHERE user_id = $1 AND tenant_id = $2), \
+                 EXISTS(SELECT 1 FROM user_projects \
+                        WHERE user_id = $1 AND project_id = $3)",
+        )
+        .bind(user_id)
+        .bind(&project.tenant_id)
+        .bind(&project.id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(tenant_member && project_member)
+    }
+
     /// Whether `user_id` may write memories/episodes in `project`. Mirrors
     /// Python `_load_project_for_create`: owners and non-viewer project members
     /// may create; public visibility never grants writes.

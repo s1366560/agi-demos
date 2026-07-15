@@ -226,6 +226,79 @@ impl PgAgentConversationRepository {
         }
     }
 
+    pub async fn owner_access(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+    ) -> CoreResult<ConversationMutationAccess> {
+        let Some((owner_id, project_scope_exists, project_member, tenant_member)) =
+            sqlx::query_as::<_, (String, bool, bool, bool)>(
+                "SELECT c.user_id, \
+                        EXISTS(SELECT 1 FROM projects p \
+                               WHERE p.id = c.project_id AND p.tenant_id = c.tenant_id), \
+                        EXISTS(SELECT 1 FROM user_projects up \
+                               WHERE up.user_id = $2 AND up.project_id = c.project_id), \
+                        EXISTS(SELECT 1 FROM user_tenants ut \
+                               WHERE ut.user_id = $2 AND ut.tenant_id = c.tenant_id) \
+                 FROM conversations c WHERE c.id = $1",
+            )
+            .bind(conversation_id)
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?
+        else {
+            return Ok(ConversationMutationAccess::NotFound);
+        };
+        if owner_id == user_id && project_scope_exists && project_member && tenant_member {
+            Ok(ConversationMutationAccess::Allowed)
+        } else {
+            Ok(ConversationMutationAccess::Denied)
+        }
+    }
+
+    pub async fn message_send_access(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        conversation_id: &str,
+    ) -> CoreResult<ConversationMutationAccess> {
+        let Some((
+            owner_id,
+            stored_project_id,
+            project_scope_exists,
+            project_member,
+            tenant_member,
+        )) = sqlx::query_as::<_, (String, String, bool, bool, bool)>(
+            "SELECT c.user_id, c.project_id, \
+                        EXISTS(SELECT 1 FROM projects p \
+                               WHERE p.id = c.project_id AND p.tenant_id = c.tenant_id), \
+                        EXISTS(SELECT 1 FROM user_projects up \
+                               WHERE up.user_id = $2 AND up.project_id = c.project_id), \
+                        EXISTS(SELECT 1 FROM user_tenants ut \
+                               WHERE ut.user_id = $2 AND ut.tenant_id = c.tenant_id) \
+                 FROM conversations c WHERE c.id = $1",
+        )
+        .bind(conversation_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        else {
+            return Ok(ConversationMutationAccess::NotFound);
+        };
+        if owner_id == user_id
+            && stored_project_id == project_id
+            && project_scope_exists
+            && project_member
+            && tenant_member
+        {
+            Ok(ConversationMutationAccess::Allowed)
+        } else {
+            Ok(ConversationMutationAccess::Denied)
+        }
+    }
+
     pub async fn update_mode(
         &self,
         conversation_id: &str,
