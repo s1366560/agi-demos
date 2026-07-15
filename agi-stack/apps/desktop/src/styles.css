@@ -5833,7 +5833,7 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   overflow: auto;
 }
 
-.settings-content .runtime-panel {
+.settings-window-content .runtime-panel {
   max-height: none;
   padding-bottom: 14px;
   overflow: visible;

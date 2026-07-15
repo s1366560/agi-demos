@@ -591,6 +591,7 @@ function ProviderSettingsQa() {
     'skills',
     'plugins',
     'agents',
+    'connection',
   ]);
   const initialSection =
     requestedSection && supportedSections.has(requestedSection as SettingsSection)

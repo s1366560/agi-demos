@@ -34,6 +34,7 @@ const testFiles = [
   'desktop-shell-fidelity.test.mjs',
   'login-screen-fidelity.test.mjs',
   'login-screen-model.test.mjs',
+  'runtime-config-model.test.mjs',
   'trusted-session-broker.test.mjs',
   'local-runtime-status.test.mjs',
   'my-work-model.test.mjs',

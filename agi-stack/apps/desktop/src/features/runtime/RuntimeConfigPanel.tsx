@@ -4,6 +4,10 @@ import { Badge, Button, Flex, Grid, Select, Text, TextField } from '@radix-ui/th
 import { LOCAL_DEV_SERVER_PRESETS } from '../../types';
 import type { ConnectionState, DesktopRuntimeConfig, RuntimeMode } from '../../types';
 import { useI18n } from '../../i18n';
+import {
+  updateRuntimeConnectionConfig,
+  type RuntimeConnectionField,
+} from './runtimeConfigModel';
 
 type RuntimeConfigPanelProps = {
   config: DesktopRuntimeConfig;
@@ -36,8 +40,11 @@ export function RuntimeConfigPanel({
     });
   }, [focusApiKeySignal]);
 
-  const update = <K extends keyof DesktopRuntimeConfig>(key: K, value: DesktopRuntimeConfig[K]) => {
-    onChange({ ...config, [key]: value });
+  const update = <K extends RuntimeConnectionField>(
+    key: K,
+    value: DesktopRuntimeConfig[K],
+  ) => {
+    onChange(updateRuntimeConnectionConfig(config, key, value));
   };
 
   return (
@@ -46,8 +53,14 @@ export function RuntimeConfigPanel({
         <Text size="1" weight="bold" color="gray">
           {t('runtime.connection')}
         </Text>
-        <Badge color={connectionColor(connection)} variant="soft">
-          {connection}
+        <Badge
+          color={connectionColor(connection)}
+          variant="soft"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {t(`runtime.status.${connection}`)}
         </Badge>
       </Flex>
 
@@ -55,13 +68,16 @@ export function RuntimeConfigPanel({
         <label className="field-label">
           <span>{t('runtime.serverUrl')}</span>
           <TextField.Root
-            aria-label="Server URL"
+            aria-label={t('runtime.serverUrl')}
             value={config.apiBaseUrl}
             onChange={(event) => update('apiBaseUrl', event.target.value)}
             placeholder="http://127.0.0.1:8000"
           />
         </label>
-        <div className="runtime-local-presets" aria-label="Local development server presets">
+        <div
+          className="runtime-local-presets"
+          aria-label={t('runtime.localDevelopmentPresets')}
+        >
           {LOCAL_DEV_SERVER_PRESETS.map((preset) => (
             <Button
               key={preset.id}
@@ -76,97 +92,15 @@ export function RuntimeConfigPanel({
             </Button>
           ))}
         </div>
-        {config.mode === 'local' ? (
-          <>
-            <label className="field-label">
-              <span>{t('runtime.llmProvider')}</span>
-              <Select.Root
-                value={config.llmProvider}
-                onValueChange={(value) => update('llmProvider', value)}
-              >
-                <Select.Trigger aria-label="Local LLM provider" />
-                <Select.Content>
-                  <Select.Item value="mock">mock</Select.Item>
-                  <Select.Item value="openai">OpenAI-compatible</Select.Item>
-                  <Select.Item value="anthropic">Anthropic-compatible</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </label>
-            <label className="field-label">
-              <span>{t('runtime.llmBaseUrl')}</span>
-              <TextField.Root
-                aria-label="Local LLM base URL"
-                value={config.llmBaseUrl}
-                onChange={(event) => update('llmBaseUrl', event.target.value)}
-                placeholder="http://127.0.0.1:11434/v1"
-              />
-            </label>
-            <label className="field-label">
-              <span>{t('runtime.llmModel')}</span>
-              <TextField.Root
-                aria-label="Local LLM model"
-                value={config.llmModel}
-                onChange={(event) => update('llmModel', event.target.value)}
-                placeholder="leave empty for mock local agent"
-              />
-            </label>
-            <label className="field-label">
-              <span>{t('runtime.llmApiKey')}</span>
-              <TextField.Root
-                aria-label="Local LLM API key"
-                type="password"
-                value={config.llmApiKey}
-                onChange={(event) => update('llmApiKey', event.target.value)}
-                placeholder="optional for local gateways"
-              />
-            </label>
-            <label className="field-label">
-              <span>{t('runtime.workspaceRoot')}</span>
-              <TextField.Root
-                aria-label="Local workspace root"
-                value={config.workspaceRoot}
-                onChange={(event) => update('workspaceRoot', event.target.value)}
-                placeholder="/path/to/workspace"
-              />
-            </label>
-          </>
-        ) : null}
         <label className="field-label">
           <span>{t('runtime.apiKey')}</span>
           <TextField.Root
-            aria-label="API key"
+            aria-label={t('runtime.apiKey')}
             ref={apiKeyInputRef}
             type="password"
             value={config.apiKey}
             onChange={(event) => update('apiKey', event.target.value)}
-            placeholder="session only, not saved"
-          />
-        </label>
-        <label className="field-label">
-          <span>{t('runtime.tenantId')}</span>
-          <TextField.Root
-            aria-label="Tenant ID"
-            value={config.tenantId}
-            onChange={(event) => update('tenantId', event.target.value)}
-            placeholder="tenant id"
-          />
-        </label>
-        <label className="field-label">
-          <span>{t('runtime.projectId')}</span>
-          <TextField.Root
-            aria-label="Project ID"
-            value={config.projectId}
-            onChange={(event) => update('projectId', event.target.value)}
-            placeholder="choose or paste project id"
-          />
-        </label>
-        <label className="field-label">
-          <span>{t('runtime.workspaceId')}</span>
-          <TextField.Root
-            aria-label="Workspace ID"
-            value={config.workspaceId}
-            onChange={(event) => update('workspaceId', event.target.value)}
-            placeholder="auto from workspace list"
+            placeholder={t('runtime.apiKeyPlaceholder')}
           />
         </label>
       </Grid>
@@ -176,15 +110,15 @@ export function RuntimeConfigPanel({
           value={config.mode}
           onValueChange={(value) => update('mode', value as RuntimeMode)}
         >
-          <Select.Trigger aria-label="Connection mode" />
+          <Select.Trigger aria-label={t('runtime.connectionMode')} />
           <Select.Content>
-            <Select.Item value="local">local</Select.Item>
-            <Select.Item value="cloud">cloud</Select.Item>
+            <Select.Item value="local">{t('runtime.mode.local')}</Select.Item>
+            <Select.Item value="cloud">{t('runtime.mode.cloud')}</Select.Item>
           </Select.Content>
         </Select.Root>
         <Button
           size="2"
-          aria-label="Connect runtime"
+          aria-label={t('runtime.connectRuntime')}
           onClick={onRefresh}
           loading={connection === 'loading'}
           disabled={Boolean(disabledReason)}
@@ -202,7 +136,13 @@ export function RuntimeConfigPanel({
         <Text size="1" color="gray">
           {t('runtime.liveUpdates')}
         </Text>
-        <Badge color={wsConnected ? 'green' : wsError ? 'red' : 'gray'} variant="soft">
+        <Badge
+          color={wsConnected ? 'green' : wsError ? 'red' : 'gray'}
+          variant="soft"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {wsConnected ? t('runtime.connected') : wsError ? t('runtime.error') : t('runtime.idle')}
         </Badge>
       </Flex>

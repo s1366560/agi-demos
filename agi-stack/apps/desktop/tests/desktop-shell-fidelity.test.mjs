@@ -13,6 +13,10 @@ const sessionWorkspaceSource = readFileSync(
   new URL('../src/features/session/SessionWorkspace.tsx', import.meta.url),
   'utf8'
 );
+const runtimeConfigSource = readFileSync(
+  new URL('../src/features/runtime/RuntimeConfigPanel.tsx', import.meta.url),
+  'utf8'
+);
 const sidebarSource = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
   'utf8'
@@ -94,6 +98,34 @@ test('command palette cannot bypass the workspace and conversation hierarchy', (
   assert.doesNotMatch(commandItems, /id: '(?:search-memory|chats|run-selected-session|open-project)'/);
   assert.doesNotMatch(commandItems, /switchSection\('(?:chat|memory)'\)/);
   assert.doesNotMatch(commandItems, /Open in VS Code|Run selected session|Search local memory/);
+});
+
+test('connection recovery cannot bypass governed model or workspace settings', () => {
+  assert.match(runtimeConfigSource, /update\('apiBaseUrl'/);
+  assert.match(runtimeConfigSource, /update\('apiKey'/);
+  assert.match(runtimeConfigSource, /update\('mode'/);
+  assert.match(runtimeConfigSource, /onClick=\{onRefresh\}/);
+  assert.doesNotMatch(
+    runtimeConfigSource,
+    /update\('(llmProvider|llmBaseUrl|llmModel|llmApiKey|workspaceRoot|tenantId|projectId|workspaceId)'/,
+  );
+  assert.doesNotMatch(
+    runtimeConfigSource,
+    /runtime\.(llmProvider|llmBaseUrl|llmModel|llmApiKey|workspaceRoot|tenantId|projectId|workspaceId)/,
+  );
+  assert.match(runtimeConfigSource, /t\(`runtime\.status\.\$\{connection\}`\)/);
+  assert.match(runtimeConfigSource, /aria-label=\{t\('runtime\.connectionMode'\)\}/);
+  assert.equal((runtimeConfigSource.match(/role="status"/g) ?? []).length, 2);
+  assert.equal((runtimeConfigSource.match(/aria-live="polite"/g) ?? []).length, 2);
+  assert.doesNotMatch(
+    runtimeConfigSource,
+    /aria-label="(Server URL|API key|Connection mode|Connect runtime)"/,
+  );
+  assert.match(
+    globalStyles,
+    /\.settings-window-content \.runtime-panel\s*\{[\s\S]*?max-height:\s*none;[\s\S]*?overflow:\s*visible;/,
+  );
+  assert.doesNotMatch(globalStyles, /\.settings-content \.runtime-panel/);
 });
 
 test('conversation attention states remain visible after the passive inspector is removed', () => {
