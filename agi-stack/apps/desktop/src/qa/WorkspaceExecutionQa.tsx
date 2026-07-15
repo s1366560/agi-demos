@@ -266,7 +266,6 @@ function WorkspaceExecutionQa() {
               updated_at: now,
               metadata: {
                 collaboration_mode: 'multi_agent_shared',
-                member_count: 8,
               },
             }}
             project={{
@@ -277,7 +276,6 @@ function WorkspaceExecutionQa() {
                 memory_count: 248,
                 node_count: 1842,
                 storage_used: 641728512,
-                member_count: 8,
                 recent_activity: [
                   { title: '定向测试套件已通过', detail: 'Code agent · 2 分钟前' },
                   { title: '桌面导航原型已更新', detail: 'Design agent · 11 分钟前' },
@@ -287,6 +285,50 @@ function WorkspaceExecutionQa() {
             }}
             tenantName="Northstar"
             conversations={conversations}
+            members={{
+              status: 'ready',
+              error: null,
+              items: Array.from({ length: 8 }, (_, index) => ({
+                id: `member-${index + 1}`,
+                workspace_id: 'desktop-client',
+                user_id: `user-${index + 1}`,
+                role: index === 0 ? 'owner' : 'viewer',
+              })),
+            }}
+            agents={{
+              status: 'ready',
+              error: null,
+              items: [
+                {
+                  id: 'binding-1',
+                  workspace_id: 'desktop-client',
+                  agent_id: 'planner',
+                  display_name: 'Planner',
+                  is_active: true,
+                },
+                {
+                  id: 'binding-2',
+                  workspace_id: 'desktop-client',
+                  agent_id: 'coder',
+                  display_name: 'Coder',
+                  is_active: true,
+                },
+                {
+                  id: 'binding-3',
+                  workspace_id: 'desktop-client',
+                  agent_id: 'reviewer',
+                  display_name: 'Reviewer',
+                  is_active: true,
+                },
+                {
+                  id: 'binding-4',
+                  workspace_id: 'desktop-client',
+                  agent_id: 'researcher',
+                  display_name: 'Researcher',
+                  is_active: true,
+                },
+              ],
+            }}
             plan={{
               ...plan,
               root_goal: {

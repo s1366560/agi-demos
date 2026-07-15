@@ -522,6 +522,24 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             id text PRIMARY KEY, workspace_id text NOT NULL, user_id text NOT NULL, \
             role varchar(20) DEFAULT 'viewer' NOT NULL, invited_by text, \
             created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS agent_definitions (\
+            id text PRIMARY KEY, tenant_id text NOT NULL, project_id text, name varchar(100) NOT NULL, \
+            display_name varchar(200) NOT NULL, system_prompt text NOT NULL, \
+            trigger_examples json, trigger_keywords json, model varchar(50) NOT NULL, \
+            persona_files json, allowed_tools json NOT NULL, allowed_skills json NOT NULL, \
+            allowed_mcp_servers json NOT NULL, max_tokens integer NOT NULL, \
+            temperature double precision NOT NULL, max_iterations integer NOT NULL, \
+            can_spawn boolean NOT NULL, max_spawn_depth integer NOT NULL, \
+            agent_to_agent_enabled boolean NOT NULL, discoverable boolean NOT NULL, \
+            source varchar(20) NOT NULL, enabled boolean NOT NULL, max_retries integer NOT NULL, \
+            fallback_models json, total_invocations integer NOT NULL, \
+            avg_execution_time_ms double precision NOT NULL, success_rate double precision NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS workspace_agents (\
+            id text PRIMARY KEY, workspace_id text NOT NULL, agent_id text NOT NULL, \
+            display_name varchar(255), description text, config_json json DEFAULT '{}'::json, \
+            is_active boolean DEFAULT true NOT NULL, hex_q integer, hex_r integer, \
+            theme_color varchar(20), label varchar(100), status varchar(20) DEFAULT 'idle' NOT NULL, \
+            created_at timestamptz DEFAULT now(), updated_at timestamptz)",
         "CREATE TABLE IF NOT EXISTS workspace_tasks (\
             id text PRIMARY KEY, workspace_id text NOT NULL, title varchar(255) NOT NULL, \
             description text, created_by text NOT NULL, assignee_user_id text, \

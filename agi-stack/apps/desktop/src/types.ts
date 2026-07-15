@@ -185,6 +185,42 @@ export type WorkspaceSummary = {
   metadata?: Record<string, unknown> | null;
 };
 
+export type WorkspaceMemberSummary = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  user_email?: string | null;
+  role: string;
+  invited_by?: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+};
+
+export type WorkspaceAgentBinding = {
+  id: string;
+  workspace_id: string;
+  agent_id: string;
+  display_name?: string | null;
+  description?: string | null;
+  config?: Record<string, unknown> | null;
+  is_active: boolean;
+  hex_q?: number | null;
+  hex_r?: number | null;
+  theme_color?: string | null;
+  label?: string | null;
+  status?: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+};
+
+export type WorkspaceAuthorityStatus = 'unavailable' | 'loading' | 'ready' | 'error';
+
+export type WorkspaceAuthorityCollection<T> = {
+  status: WorkspaceAuthorityStatus;
+  items: T[];
+  error: string | null;
+};
+
 export type WorkspaceMessage = {
   id: string;
   workspace_id?: string;
@@ -1170,6 +1206,8 @@ export type RuntimeDataset = {
   messages: WorkspaceMessage[];
   tasks: WorkspaceTask[];
   plan: PlanSnapshot | null;
+  workspaceMembers: WorkspaceAuthorityCollection<WorkspaceMemberSummary>;
+  workspaceAgents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
   sandbox: ProjectSandbox | null;
   myWork: ProjectWorkItem[];
   myWorkError: string | null;

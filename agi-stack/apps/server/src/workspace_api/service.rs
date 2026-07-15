@@ -32,6 +32,24 @@ pub(crate) trait WorkspaceService: Send + Sync {
         workspace_id: &str,
     ) -> Result<WorkspaceView, WorkspaceApiError>;
 
+    async fn list_workspace_members(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: LimitOffset,
+    ) -> Result<Vec<WorkspaceMemberView>, WorkspaceApiError>;
+
+    async fn list_workspace_agents(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: WorkspaceAgentListQuery,
+    ) -> Result<Vec<WorkspaceAgentView>, WorkspaceApiError>;
+
     async fn authorize_workspace_event_subscription(
         &self,
         user_id: &str,

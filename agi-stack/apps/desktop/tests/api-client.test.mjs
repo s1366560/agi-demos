@@ -70,6 +70,215 @@ test('workspace context requests preserve the authoritative revision contract', 
   }
 });
 
+test('workspace roster requests stay inside the selected scope', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    calls.push(url);
+    const payload = url.includes('/members?')
+      ? [
+          {
+            id: 'member-1',
+            workspace_id: 'workspace/1',
+            user_id: 'user-1',
+            user_email: 'member@example.com',
+            role: 'owner',
+            invited_by: null,
+            created_at: '2026-07-15T00:00:00Z',
+            updated_at: null,
+          },
+        ]
+      : [
+          {
+            id: 'binding-1',
+            workspace_id: 'workspace/1',
+            agent_id: 'agent-1',
+            display_name: 'Planner',
+            description: null,
+            config: {},
+            is_active: true,
+            hex_q: null,
+            hex_r: null,
+            theme_color: null,
+            label: null,
+            status: 'idle',
+            created_at: '2026-07-15T00:00:00Z',
+            updated_at: null,
+          },
+        ];
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      workspaceId: 'workspace/1',
+    });
+
+    const [members, agents] = await Promise.all([
+      client.listWorkspaceMembers(),
+      client.listWorkspaceAgents(),
+    ]);
+
+    assert.equal(members[0].user_email, 'member@example.com');
+    assert.equal(agents[0].display_name, 'Planner');
+    const rosterBaseUrl =
+      'http://127.0.0.1:8088/api/v1/tenants/tenant%2F1/projects/project%2F1' +
+      '/workspaces/workspace%2F1';
+    assert.deepEqual(calls.sort(), [
+      `${rosterBaseUrl}/agents?active_only=true&limit=500&offset=0`,
+      `${rosterBaseUrl}/members?limit=500&offset=0`,
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace roster requests reject wrapped collections', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ items: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      workspaceId: 'workspace-1',
+    });
+
+    await assert.rejects(client.listWorkspaceMembers(), (error) => {
+      assert.equal(error instanceof DesktopApiError, true);
+      assert.equal(error.status, 502);
+      assert.match(error.message, /Invalid workspace members response/);
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace roster requests reject malformed and cross-scope rows', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    apiKey: 'authenticated-session',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  });
+
+  try {
+    for (const payload of [
+      [null],
+      [{ id: 'member-1', workspace_id: 'workspace-1', user_id: 'user-1' }],
+      [
+        {
+          id: 'member-1',
+          workspace_id: 'workspace-2',
+          user_id: 'user-1',
+          role: 'owner',
+        },
+      ],
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.listWorkspaceMembers(), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      });
+    }
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify([
+          {
+            id: 'binding-1',
+            workspace_id: 'workspace-1',
+            agent_id: 'agent-1',
+          },
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    await assert.rejects(client.listWorkspaceAgents(), (error) => {
+      assert.equal(error instanceof DesktopApiError, true);
+      assert.equal(error.status, 502);
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace member roster exhausts every authoritative page', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    calls.push(url);
+    const offset = new URL(url).searchParams.get('offset');
+    const items =
+      offset === '0'
+        ? Array.from({ length: 500 }, (_, index) => ({
+            id: `member-${index}`,
+            workspace_id: 'workspace-1',
+            user_id: `user-${index}`,
+            role: 'member',
+          }))
+        : [
+            {
+              id: 'member-500',
+              workspace_id: 'workspace-1',
+              user_id: 'user-500',
+              role: 'member',
+            },
+          ];
+    return new Response(JSON.stringify(items), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      workspaceId: 'workspace-1',
+    });
+
+    const members = await client.listWorkspaceMembers();
+
+    assert.equal(members.length, 501);
+    assert.deepEqual(
+      calls.map((url) => new URL(url).searchParams.get('offset')),
+      ['0', '500'],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace context compatibility fallback accepts only the legacy missing-route envelope', () => {
   assert.equal(
     isLegacyWorkspaceContextRouteMissing(

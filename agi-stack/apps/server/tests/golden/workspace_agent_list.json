@@ -1,0 +1,20 @@
+[
+  {
+    "id": "binding-1",
+    "workspace_id": "ws-1",
+    "agent_id": "agent-1",
+    "display_name": "Builder",
+    "description": "Builds the selected plan",
+    "config": {
+      "model": "provider/model"
+    },
+    "is_active": true,
+    "hex_q": 1,
+    "hex_r": -1,
+    "theme_color": "#14b8a6",
+    "label": "Build",
+    "status": "idle",
+    "created_at": "2026-01-02T03:04:05.000Z",
+    "updated_at": null
+  }
+]

@@ -73,6 +73,25 @@ test('workspace hydration and refresh fail closed across tenant boundaries', () 
   assert.doesNotMatch(appSource, /availableProjects\[0\]/);
 });
 
+test('workspace roster hydration isolates authority failures from the runtime connection', () => {
+  const refreshRuntime =
+    appSource.match(
+      /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/,
+    )?.[0] ?? '';
+
+  assert.match(refreshRuntime, /loadingWorkspaceAuthority\(\)/);
+  assert.match(
+    refreshRuntime,
+    /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceMembers\(\)\)/,
+  );
+  assert.match(
+    refreshRuntime,
+    /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceAgents\(\)\)/,
+  );
+  assert.match(refreshRuntime, /setDataset\(\{[\s\S]*workspaceMembers,[\s\S]*workspaceAgents,/);
+  assert.match(refreshRuntime, /failLoadingWorkspaceAuthority\(/);
+});
+
 test('notifications never open a standalone workspace review route', () => {
   assert.doesNotMatch(appSource, /activeSection === 'review'/);
   assert.doesNotMatch(appSource, /switchSection\('review'\)/);

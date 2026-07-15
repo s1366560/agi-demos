@@ -63,6 +63,217 @@ async fn dev_service_authorizes_workspace_event_subscription_by_workspace_scope(
 }
 
 #[tokio::test]
+async fn dev_service_lists_authoritative_workspace_roster_with_scope() {
+    let service = DevWorkspaceService::new("user-1");
+    let workspace = service
+        .create_workspace(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            WorkspaceCreatePayload {
+                name: "Roster Workspace".to_string(),
+                description: None,
+                metadata: json!({"member_count": 99, "active_agent_count": 99}),
+                use_case: Some("programming".to_string()),
+                collaboration_mode: Some("multi_agent_shared".to_string()),
+                autonomy_profile: None,
+                sandbox_code_root: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let members = service
+        .list_workspace_members(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            &workspace.id,
+            LimitOffset::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(members.len(), 1);
+    assert_eq!(members[0].user_id, "user-1");
+    assert_eq!(members[0].role, "owner");
+    assert_eq!(members[0].invited_by.as_deref(), Some("user-1"));
+
+    let agents = service
+        .list_workspace_agents(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            &workspace.id,
+            WorkspaceAgentListQuery::default(),
+        )
+        .await
+        .unwrap();
+    assert!(agents.is_empty());
+
+    let wrong_scope = service
+        .list_workspace_members(
+            "user-1",
+            "tenant-1",
+            "other-project",
+            &workspace.id,
+            LimitOffset::default(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(wrong_scope.status, StatusCode::NOT_FOUND);
+
+    let wrong_user = service
+        .list_workspace_members(
+            "user-2",
+            "tenant-1",
+            "project-1",
+            &workspace.id,
+            LimitOffset::default(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(wrong_user.status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn dev_service_filters_workspace_agents_before_pagination() {
+    let service = DevWorkspaceService::new("user-1");
+    let workspace = service
+        .create_workspace(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            WorkspaceCreatePayload {
+                name: "Agent Roster".to_string(),
+                description: None,
+                metadata: json!({}),
+                use_case: None,
+                collaboration_mode: None,
+                autonomy_profile: None,
+                sandbox_code_root: None,
+            },
+        )
+        .await
+        .unwrap();
+    let created_at = "2026-01-02T03:04:05Z".parse().unwrap();
+    let make_agent = |id: &str, is_active: bool| WorkspaceAgentDetailRecord {
+        id: id.to_string(),
+        workspace_id: workspace.id.clone(),
+        agent_id: format!("agent-{id}"),
+        display_name: Some(format!("Agent {id}")),
+        description: None,
+        config_json: json!({}),
+        is_active,
+        hex_q: None,
+        hex_r: None,
+        theme_color: None,
+        label: None,
+        status: Some("idle".to_string()),
+        created_at,
+        updated_at: None,
+    };
+    {
+        let mut state = service.lock_state().unwrap();
+        state.workspace_agent_details.push(make_agent("b", false));
+        state.workspace_agent_details.push(make_agent("a", true));
+        state.workspace_agent_details.push(make_agent("c", true));
+    }
+
+    let all = service
+        .list_workspace_agents(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            &workspace.id,
+            WorkspaceAgentListQuery::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        all.iter()
+            .map(|agent| agent.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["a", "b", "c"]
+    );
+
+    let active_page = service
+        .list_workspace_agents(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            &workspace.id,
+            WorkspaceAgentListQuery {
+                active_only: true,
+                limit: Some(1),
+                offset: Some(1),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(active_page.len(), 1);
+    assert_eq!(active_page[0].id, "c");
+}
+
+#[tokio::test]
+async fn dev_service_rejects_invalid_workspace_roster_pagination() {
+    let service = DevWorkspaceService::new("user-1");
+    let workspace = service
+        .create_workspace(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            WorkspaceCreatePayload {
+                name: "Roster Pagination".to_string(),
+                description: None,
+                metadata: json!({}),
+                use_case: None,
+                collaboration_mode: None,
+                autonomy_profile: None,
+                sandbox_code_root: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    for query in [
+        LimitOffset {
+            limit: Some(0),
+            offset: None,
+        },
+        LimitOffset {
+            limit: Some(501),
+            offset: None,
+        },
+        LimitOffset {
+            limit: None,
+            offset: Some(-1),
+        },
+    ] {
+        let error = service
+            .list_workspace_members("user-1", "tenant-1", "project-1", &workspace.id, query)
+            .await
+            .unwrap_err();
+        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    let error = service
+        .list_workspace_agents(
+            "user-1",
+            "tenant-1",
+            "project-1",
+            &workspace.id,
+            WorkspaceAgentListQuery {
+                active_only: true,
+                limit: Some(0),
+                offset: None,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
 async fn dev_service_roundtrips_workspace_task_topology_blackboard() {
     let service = DevWorkspaceService::new("user-1");
     let workspace = service

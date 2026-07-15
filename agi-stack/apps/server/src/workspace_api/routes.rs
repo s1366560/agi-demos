@@ -17,6 +17,14 @@ pub(crate) fn router() -> Router<AppState> {
             get(get_workspace).patch(update_workspace).delete(delete_workspace),
         )
         .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/members",
+            get(list_workspace_members),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/agents",
+            get(list_workspace_agents),
+        )
+        .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/messages",
             post(send_message).get(list_messages),
         )

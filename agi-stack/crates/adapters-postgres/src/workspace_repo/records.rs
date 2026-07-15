@@ -23,6 +23,7 @@ pub struct WorkspaceMemberRecord {
     pub id: String,
     pub workspace_id: String,
     pub user_id: String,
+    pub user_email: Option<String>,
     pub role: String,
     pub invited_by: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -35,6 +36,24 @@ pub struct WorkspaceAgentRecord {
     pub workspace_id: String,
     pub agent_id: String,
     pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceAgentDetailRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub agent_id: String,
+    pub display_name: Option<String>,
+    pub description: Option<String>,
+    pub config_json: Value,
+    pub is_active: bool,
+    pub hex_q: Option<i32>,
+    pub hex_r: Option<i32>,
+    pub theme_color: Option<String>,
+    pub label: Option<String>,
+    pub status: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

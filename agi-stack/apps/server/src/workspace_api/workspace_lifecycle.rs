@@ -217,9 +217,21 @@ impl DevWorkspaceService {
             created_at: now,
             updated_at: None,
         };
-        self.lock_state()?
+        let owner = WorkspaceMemberRecord {
+            id: new_id(),
+            workspace_id: workspace.id.clone(),
+            user_id: user_id.to_string(),
+            user_email: None,
+            role: "owner".to_string(),
+            invited_by: Some(user_id.to_string()),
+            created_at: now,
+            updated_at: None,
+        };
+        let mut state = self.lock_state()?;
+        state
             .workspaces
             .insert(workspace.id.clone(), workspace.clone());
+        state.workspace_members.push(owner);
         Ok(workspace.into())
     }
 
@@ -340,6 +352,15 @@ impl DevWorkspaceService {
         if !in_scope || state.workspaces.remove(workspace_id).is_none() {
             return Err(WorkspaceApiError::workspace_not_found());
         }
+        state
+            .workspace_members
+            .retain(|member| member.workspace_id != workspace_id);
+        state
+            .workspace_agents
+            .retain(|agent| agent.workspace_id != workspace_id);
+        state
+            .workspace_agent_details
+            .retain(|agent| agent.workspace_id != workspace_id);
         state
             .tasks
             .retain(|_, task| task.workspace_id != workspace_id);

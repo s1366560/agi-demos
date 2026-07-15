@@ -35,6 +35,42 @@ pub(in crate::workspace_api) async fn get_workspace(
         .map(Json)
 }
 
+pub(in crate::workspace_api) async fn list_workspace_members(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    Query(query): Query<LimitOffset>,
+) -> Result<Json<Vec<WorkspaceMemberView>>, WorkspaceApiError> {
+    app.workspaces
+        .list_workspace_members(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            query,
+        )
+        .await
+        .map(Json)
+}
+
+pub(in crate::workspace_api) async fn list_workspace_agents(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    Query(query): Query<WorkspaceAgentListQuery>,
+) -> Result<Json<Vec<WorkspaceAgentView>>, WorkspaceApiError> {
+    app.workspaces
+        .list_workspace_agents(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            query,
+        )
+        .await
+        .map(Json)
+}
+
 pub(in crate::workspace_api) async fn send_message(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,

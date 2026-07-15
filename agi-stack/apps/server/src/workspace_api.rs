@@ -35,9 +35,10 @@ use agistack_adapters_mem::InMemoryObjectStore;
 use agistack_adapters_postgres::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceAgentRecord, WorkspaceMessageRecord, WorkspacePlanBlackboardEntryRecord,
-    WorkspacePlanEventRecord, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord,
-    WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceAgentDetailRecord, WorkspaceAgentRecord, WorkspaceMemberRecord,
+    WorkspaceMessageRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
+    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
     WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
@@ -67,6 +68,7 @@ mod types;
 mod views;
 mod workspace_chat;
 mod workspace_lifecycle;
+mod workspace_roster;
 mod workspace_service_dev;
 mod workspace_service_pg;
 
@@ -85,8 +87,9 @@ use types::{
     LimitOffset, MessageListQuery, MessageListView, MessageMentionQuery, MessageView, MkdirPayload,
     RenameOrMoveFilePayload, SendMessagePayload, TaskListQuery, TaskTransitionAction,
     TopologyEdgeCreatePayload, TopologyEdgeUpdatePayload, TopologyEdgeView,
-    TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView, WorkspaceApiError,
-    WorkspaceCreatePayload, WorkspaceDeliverySummaryView, WorkspaceListQuery,
+    TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView,
+    WorkspaceAgentListQuery, WorkspaceAgentView, WorkspaceApiError, WorkspaceCreatePayload,
+    WorkspaceDeliverySummaryView, WorkspaceListQuery, WorkspaceMemberView,
     WorkspacePlanActionCapabilityView, WorkspacePlanActionRequest, WorkspacePlanActionResultView,
     WorkspacePlanBlackboardEntryView, WorkspacePlanEventView, WorkspacePlanEvidenceBundleView,
     WorkspacePlanGateStatusView, WorkspacePlanHistoryItemView, WorkspacePlanIterationPhaseView,
@@ -263,7 +266,9 @@ impl PgWorkspaceService {
 #[derive(Default)]
 struct DevWorkspaceState {
     workspaces: HashMap<String, WorkspaceRecord>,
+    workspace_members: Vec<WorkspaceMemberRecord>,
     workspace_agents: Vec<WorkspaceAgentRecord>,
+    workspace_agent_details: Vec<WorkspaceAgentDetailRecord>,
     tasks: HashMap<String, WorkspaceTaskRecord>,
     messages: HashMap<String, WorkspaceMessageRecord>,
     task_attempts: HashMap<String, WorkspaceTaskSessionAttemptRecord>,

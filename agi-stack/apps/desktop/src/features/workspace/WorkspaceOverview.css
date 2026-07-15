@@ -259,6 +259,9 @@
 .workspace-design-system-card header b { font-size: 11px; }
 .workspace-design-system-card header small { color: var(--desktop-faint); font-size: 8px; }
 .workspace-design-system-card header em { color: #63d78f; font-size: 8px; font-style: normal; }
+.workspace-design-system-card header em[data-state='loading'] { color: var(--desktop-cyan); }
+.workspace-design-system-card header em[data-state='error'] { color: var(--desktop-amber); }
+.workspace-design-system-card header em[data-state='unavailable'] { color: var(--desktop-faint); }
 
 .workspace-design-knowledge-metrics {
   display: grid;

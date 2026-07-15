@@ -22,6 +22,42 @@ impl From<WorkspaceRecord> for WorkspaceView {
     }
 }
 
+impl From<WorkspaceMemberRecord> for WorkspaceMemberView {
+    fn from(record: WorkspaceMemberRecord) -> Self {
+        Self {
+            id: record.id,
+            workspace_id: record.workspace_id,
+            user_id: record.user_id,
+            user_email: record.user_email,
+            role: record.role,
+            invited_by: record.invited_by,
+            created_at: iso(record.created_at),
+            updated_at: record.updated_at.map(iso),
+        }
+    }
+}
+
+impl From<WorkspaceAgentDetailRecord> for WorkspaceAgentView {
+    fn from(record: WorkspaceAgentDetailRecord) -> Self {
+        Self {
+            id: record.id,
+            workspace_id: record.workspace_id,
+            agent_id: record.agent_id,
+            display_name: record.display_name,
+            description: record.description,
+            config: record.config_json,
+            is_active: record.is_active,
+            hex_q: record.hex_q,
+            hex_r: record.hex_r,
+            theme_color: record.theme_color,
+            label: record.label,
+            status: record.status,
+            created_at: iso(record.created_at),
+            updated_at: record.updated_at.map(iso),
+        }
+    }
+}
+
 impl From<WorkspaceTaskRecord> for WorkspaceTaskView {
     fn from(record: WorkspaceTaskRecord) -> Self {
         let metadata = object_or_empty(record.metadata_json);

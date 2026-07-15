@@ -23,6 +23,10 @@ import type {
   ConnectionState,
   PlanSnapshot,
   ProjectSummary,
+  WorkspaceAgentBinding,
+  WorkspaceAuthorityCollection,
+  WorkspaceAuthorityStatus,
+  WorkspaceMemberSummary,
   WorkspaceSummary,
 } from '../../types';
 import {
@@ -36,6 +40,8 @@ type WorkspaceOverviewProps = {
   project: ProjectSummary | null;
   tenantName: string;
   conversations: AgentConversation[];
+  members: WorkspaceAuthorityCollection<WorkspaceMemberSummary>;
+  agents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
   plan: PlanSnapshot | null;
   sandboxStatus: string | null;
   connection: ConnectionState;
@@ -50,6 +56,8 @@ export function WorkspaceOverview({
   project,
   tenantName,
   conversations,
+  members,
+  agents,
   plan,
   sandboxStatus,
   connection,
@@ -63,12 +71,19 @@ export function WorkspaceOverview({
     workspace,
     project,
     conversations,
+    members,
+    agents,
     plan,
     sandboxStatus,
     connection,
   });
   const projectName = project?.name ?? project?.id ?? t('overview.none');
   const workspaceName = model.workspaceName ?? t('overview.none');
+  const agentRosterCopy = describeAgentRoster(
+    model.agentRosterStatus,
+    model.agentRosterNames.length,
+    t,
+  );
 
   return (
     <main className="workspace-design-overview">
@@ -148,13 +163,25 @@ export function WorkspaceOverview({
             <Metric
               label={t('overview.members')}
               value={model.memberCount}
-              note={t('overview.workspaceCollaborators')}
+              note={rosterMetricNote(
+                model.memberRosterStatus,
+                t('overview.workspaceCollaborators'),
+                t('overview.loadingMembers'),
+                t('overview.membersUnavailable'),
+              )}
+              busy={model.memberRosterStatus === 'loading'}
             />
             <Metric
               label={t('overview.activeAgents')}
               value={model.activeAgentCount}
-              note={t('overview.boundToWorkspace')}
-              tone="green"
+              note={rosterMetricNote(
+                model.agentRosterStatus,
+                t('overview.boundToWorkspace'),
+                t('overview.loadingAgents'),
+                t('overview.agentsUnavailable'),
+              )}
+              busy={model.agentRosterStatus === 'loading'}
+              tone={model.agentRosterStatus === 'ready' ? 'green' : 'neutral'}
             />
           </div>
         </section>
@@ -186,17 +213,23 @@ export function WorkspaceOverview({
             icon={<PersonIcon />}
             title={t('overview.agentRoster')}
             subtitle={collaborationModeLabel(model.collaborationMode, t)}
-            status={countLabel(model.activeAgentCount, t)}
+            status={rosterStatusLabel(
+              model.agentRosterStatus,
+              model.activeAgentCount,
+              t,
+            )}
+            statusState={model.agentRosterStatus}
+            busy={model.agentRosterStatus === 'loading'}
           >
             <div className="workspace-design-agent-roster">
               <div className="workspace-design-agent-stack" aria-hidden>
-                {agentInitials(conversations).map((initials, index) => (
+                {agentInitials(model.agentRosterNames).map((initials, index) => (
                   <span key={`${initials}-${index}`}>{initials}</span>
                 ))}
               </div>
               <div>
-                <b>{t('overview.boundAgents')}</b>
-                <small>{t('overview.explicitWorkspaceBindings')}</small>
+                <b>{agentRosterCopy.title}</b>
+                <small>{agentRosterCopy.description}</small>
               </div>
             </div>
           </SystemCard>
@@ -286,15 +319,23 @@ function Metric({
   label,
   value,
   note,
+  busy = false,
   tone = 'neutral',
 }: {
   label: string;
   value: number | null;
   note: string;
+  busy?: boolean;
   tone?: 'neutral' | 'cyan' | 'amber' | 'green';
 }) {
   return (
-    <article className="workspace-design-metric" data-tone={tone}>
+    <article
+      className="workspace-design-metric"
+      data-tone={tone}
+      aria-busy={busy || undefined}
+      aria-live="polite"
+      aria-atomic="true"
+    >
       <span>{label}</span>
       <b>{value ?? '—'}</b>
       <small>{note}</small>
@@ -327,23 +368,29 @@ function SystemCard({
   title,
   subtitle,
   status,
+  statusState,
+  busy = false,
   children,
 }: {
   icon: ReactNode;
   title: string;
   subtitle: string;
   status: string;
+  statusState?: WorkspaceAuthorityStatus;
+  busy?: boolean;
   children: ReactNode;
 }) {
   return (
-    <article className="workspace-design-system-card">
+    <article className="workspace-design-system-card" aria-busy={busy || undefined}>
       <header>
         {icon}
         <div>
           <b>{title}</b>
           <small>{subtitle}</small>
         </div>
-        <em>{status}</em>
+        <em data-state={statusState} aria-live="polite">
+          {status}
+        </em>
       </header>
       {children}
     </article>
@@ -439,11 +486,61 @@ function connectionLabel(
   return connection === 'ready' ? t('overview.connected') : t('overview.unavailable');
 }
 
-function countLabel(
+function rosterStatusLabel(
+  status: WorkspaceAuthorityStatus,
   count: number | null,
   t: (key: string, values?: Record<string, string | number>) => string,
 ) {
-  return count === null ? t('overview.unavailable') : t('overview.activeCount', { count });
+  if (status === 'loading') return t('overview.loading');
+  if (status === 'error') return t('overview.rosterError');
+  if (status === 'unavailable') return t('overview.unavailable');
+  return t('overview.activeCount', { count: count ?? 0 });
+}
+
+function rosterMetricNote(
+  status: WorkspaceAuthorityStatus,
+  ready: string,
+  loading: string,
+  unavailable: string,
+) {
+  if (status === 'ready') return ready;
+  if (status === 'loading') return loading;
+  return unavailable;
+}
+
+function describeAgentRoster(
+  status: WorkspaceAuthorityStatus,
+  activeCount: number,
+  t: (key: string, values?: Record<string, string | number>) => string,
+) {
+  if (status === 'loading') {
+    return {
+      title: t('overview.loadingAgents'),
+      description: t('overview.loadingRosterDescription'),
+    };
+  }
+  if (status === 'error') {
+    return {
+      title: t('overview.agentsUnavailable'),
+      description: t('overview.retryRosterDescription'),
+    };
+  }
+  if (status === 'unavailable') {
+    return {
+      title: t('overview.agentsUnavailable'),
+      description: t('overview.selectWorkspaceForRoster'),
+    };
+  }
+  if (activeCount === 0) {
+    return {
+      title: t('overview.noBoundAgents'),
+      description: t('overview.noBoundAgentsDescription'),
+    };
+  }
+  return {
+    title: t('overview.boundAgents'),
+    description: t('overview.explicitWorkspaceBindings'),
+  };
 }
 
 function formatNumber(
@@ -485,10 +582,9 @@ function formatDate(
   });
 }
 
-function agentInitials(conversations: AgentConversation[]) {
-  const agents = [...new Set(conversations.flatMap((item) => item.participant_agents ?? []))];
-  return agents.slice(0, 4).map((agent) =>
-    agent
+function agentInitials(names: string[]) {
+  return names.slice(0, 4).map((name) =>
+    name
       .split(/[-_\s]+/)
       .filter(Boolean)
       .slice(0, 2)

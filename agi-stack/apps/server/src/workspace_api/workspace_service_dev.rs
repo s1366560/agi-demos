@@ -35,6 +35,30 @@ impl WorkspaceService for DevWorkspaceService {
             .await
     }
 
+    async fn list_workspace_members(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: LimitOffset,
+    ) -> Result<Vec<WorkspaceMemberView>, WorkspaceApiError> {
+        self.dev_list_workspace_members(user_id, tenant_id, project_id, workspace_id, query)
+            .await
+    }
+
+    async fn list_workspace_agents(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: WorkspaceAgentListQuery,
+    ) -> Result<Vec<WorkspaceAgentView>, WorkspaceApiError> {
+        self.dev_list_workspace_agents(user_id, tenant_id, project_id, workspace_id, query)
+            .await
+    }
+
     async fn authorize_workspace_event_subscription(
         &self,
         user_id: &str,

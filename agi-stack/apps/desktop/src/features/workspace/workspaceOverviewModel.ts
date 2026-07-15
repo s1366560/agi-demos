@@ -6,6 +6,10 @@ import type {
   PlanSnapshot,
   ProjectSummary,
   RuntimeDataset,
+  WorkspaceAgentBinding,
+  WorkspaceAuthorityCollection,
+  WorkspaceAuthorityStatus,
+  WorkspaceMemberSummary,
   WorkspaceSummary,
 } from '../../types';
 
@@ -37,6 +41,9 @@ export type WorkspaceOverviewModel = {
   };
   memberCount: number | null;
   activeAgentCount: number | null;
+  memberRosterStatus: WorkspaceAuthorityStatus;
+  agentRosterStatus: WorkspaceAuthorityStatus;
+  agentRosterNames: string[];
   knowledge: {
     memories: number | null;
     graphNodes: number | null;
@@ -54,6 +61,8 @@ type BuildWorkspaceOverviewModelInput = {
   workspace: WorkspaceSummary | null;
   project: ProjectSummary | null;
   conversations: AgentConversation[];
+  members: WorkspaceAuthorityCollection<WorkspaceMemberSummary>;
+  agents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
   plan: PlanSnapshot | null;
   sandboxStatus: string | null;
   connection: ConnectionState;
@@ -68,6 +77,8 @@ export function beginWorkspaceRuntimeTransition(dataset: RuntimeDataset): Runtim
     messages: [],
     tasks: [],
     plan: null,
+    workspaceMembers: unavailableAuthorityCollection(),
+    workspaceAgents: unavailableAuthorityCollection(),
   };
 }
 
@@ -85,6 +96,8 @@ export function beginDesktopRuntimeScopeTransition(
       messages: [],
       tasks: [],
       plan: null,
+      workspaceMembers: unavailableAuthorityCollection(),
+      workspaceAgents: unavailableAuthorityCollection(),
       sandbox: null,
       myWork: [],
       myWorkError: null,
@@ -100,6 +113,8 @@ export function buildWorkspaceOverviewModel({
   workspace,
   project,
   conversations,
+  members,
+  agents,
   plan,
   sandboxStatus,
   connection,
@@ -107,9 +122,8 @@ export function buildWorkspaceOverviewModel({
   const sessions = conversations.map(projectConversation);
   const metadata = workspace?.metadata ?? null;
   const stats = project?.stats ?? null;
-  const participantAgents = new Set(
-    conversations.flatMap((conversation) => conversation.participant_agents ?? []),
-  );
+  const activeAgents =
+    agents.status === 'ready' ? agents.items.filter((agent) => agent.is_active) : [];
 
   return {
     workspaceName: workspace ? workspace.name ?? workspace.title ?? workspace.id : null,
@@ -124,10 +138,11 @@ export function buildWorkspaceOverviewModel({
       attention: sessions.filter((session) => ATTENTION_STATUSES.has(session.status)).length,
       ready: sessions.filter((session) => READY_STATUSES.has(session.status)).length,
     },
-    memberCount: numberValue(metadata?.member_count) ?? numberValue(stats?.member_count),
-    activeAgentCount:
-      numberValue(metadata?.active_agent_count) ??
-      (participantAgents.size > 0 ? participantAgents.size : null),
+    memberCount: members.status === 'ready' ? members.items.length : null,
+    activeAgentCount: agents.status === 'ready' ? activeAgents.length : null,
+    memberRosterStatus: members.status,
+    agentRosterStatus: agents.status,
+    agentRosterNames: activeAgents.map(agentBindingName),
     knowledge: {
       memories: numberValue(stats?.memory_count),
       graphNodes: numberValue(stats?.node_count),
@@ -137,6 +152,14 @@ export function buildWorkspaceOverviewModel({
     recentSessions: sessions.slice(0, 5),
     recentActivity: readRecentActivity(stats?.recent_activity),
   };
+}
+
+function unavailableAuthorityCollection<T>(): WorkspaceAuthorityCollection<T> {
+  return { status: 'unavailable', items: [], error: null };
+}
+
+function agentBindingName(agent: WorkspaceAgentBinding): string {
+  return stringValue(agent.display_name) ?? stringValue(agent.label) ?? agent.agent_id;
 }
 
 function projectConversation(conversation: AgentConversation): WorkspaceSessionSummary {

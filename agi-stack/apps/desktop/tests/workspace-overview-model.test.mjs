@@ -70,6 +70,34 @@ test('workspace overview projects only authoritative workspace and project field
         'researcher',
       ]),
     ],
+    members: {
+      status: 'ready',
+      error: null,
+      items: [
+        { id: 'member-1', workspace_id: 'workspace-1', user_id: 'user-1', role: 'owner' },
+        { id: 'member-2', workspace_id: 'workspace-1', user_id: 'user-2', role: 'editor' },
+      ],
+    },
+    agents: {
+      status: 'ready',
+      error: null,
+      items: [
+        {
+          id: 'binding-1',
+          workspace_id: 'workspace-1',
+          agent_id: 'planner',
+          display_name: 'Planner',
+          is_active: true,
+        },
+        {
+          id: 'binding-2',
+          workspace_id: 'workspace-1',
+          agent_id: 'reviewer',
+          display_name: 'Reviewer',
+          is_active: true,
+        },
+      ],
+    },
     plan: {
       root_goal: {
         title: 'Ship a dependable desktop agent workspace across Work and Code.',
@@ -83,8 +111,11 @@ test('workspace overview projects only authoritative workspace and project field
   assert.equal(model.officeStatus, 'online');
   assert.equal(model.rootGoal, 'Ship a dependable desktop agent workspace across Work and Code.');
   assert.deepEqual(model.sessionCounts, { total: 3, running: 1, attention: 1, ready: 1 });
-  assert.equal(model.memberCount, 8);
-  assert.equal(model.activeAgentCount, 4);
+  assert.equal(model.memberCount, 2);
+  assert.equal(model.activeAgentCount, 2);
+  assert.equal(model.memberRosterStatus, 'ready');
+  assert.equal(model.agentRosterStatus, 'ready');
+  assert.deepEqual(model.agentRosterNames, ['Planner', 'Reviewer']);
   assert.deepEqual(model.knowledge, {
     memories: 248,
     graphNodes: 1842,
@@ -103,6 +134,8 @@ test('workspace overview exposes unavailable values instead of inventing operati
     workspace: null,
     project: null,
     conversations: [],
+    members: { status: 'unavailable', items: [], error: null },
+    agents: { status: 'unavailable', items: [], error: null },
     plan: null,
     sandboxStatus: null,
     connection: 'idle',
@@ -121,6 +154,35 @@ test('workspace overview exposes unavailable values instead of inventing operati
   assert.deepEqual(model.recentActivity, []);
 });
 
+test('workspace overview distinguishes an authoritative empty roster from a failed load', () => {
+  const baseInput = {
+    workspace: { id: 'workspace-1', metadata: { member_count: 99, active_agent_count: 99 } },
+    project: { id: 'project-1', tenant_id: 'tenant-1', stats: { member_count: 99 } },
+    conversations: [conversation('conversation-1', 'Session', 'running', ['fallback-agent'])],
+    plan: null,
+    sandboxStatus: null,
+    connection: 'ready',
+  };
+  const empty = buildWorkspaceOverviewModel({
+    ...baseInput,
+    members: { status: 'ready', items: [], error: null },
+    agents: { status: 'ready', items: [], error: null },
+  });
+  const failed = buildWorkspaceOverviewModel({
+    ...baseInput,
+    members: { status: 'error', items: [], error: 'members unavailable' },
+    agents: { status: 'error', items: [], error: 'agents unavailable' },
+  });
+
+  assert.equal(empty.memberCount, 0);
+  assert.equal(empty.activeAgentCount, 0);
+  assert.deepEqual(empty.agentRosterNames, []);
+  assert.equal(failed.memberCount, null);
+  assert.equal(failed.activeAgentCount, null);
+  assert.equal(failed.memberRosterStatus, 'error');
+  assert.equal(failed.agentRosterStatus, 'error');
+});
+
 test('workspace transition clears only payload owned by the previous workspace', () => {
   const dataset = {
     workspaces: [{ id: 'workspace-a' }, { id: 'workspace-b' }],
@@ -135,6 +197,16 @@ test('workspace transition clears only payload owned by the previous workspace',
     messages: [{ id: 'message-a', content: 'old workspace message' }],
     tasks: [{ id: 'task-a', title: 'Old workspace task' }],
     plan: { workspace_id: 'workspace-a', root_goal: 'Old workspace goal' },
+    workspaceMembers: {
+      status: 'ready',
+      items: [{ id: 'member-a', workspace_id: 'workspace-a', user_id: 'user-a' }],
+      error: null,
+    },
+    workspaceAgents: {
+      status: 'ready',
+      items: [{ id: 'binding-a', workspace_id: 'workspace-a', agent_id: 'agent-a' }],
+      error: null,
+    },
     sandbox: { id: 'sandbox-a', status: 'running' },
     myWork: [{ id: 'work-a', project_id: 'project-1' }],
     myWorkError: null,
@@ -148,6 +220,16 @@ test('workspace transition clears only payload owned by the previous workspace',
   assert.deepEqual(transitioned.messages, []);
   assert.deepEqual(transitioned.tasks, []);
   assert.equal(transitioned.plan, null);
+  assert.deepEqual(transitioned.workspaceMembers, {
+    status: 'unavailable',
+    items: [],
+    error: null,
+  });
+  assert.deepEqual(transitioned.workspaceAgents, {
+    status: 'unavailable',
+    items: [],
+    error: null,
+  });
   assert.equal(transitioned.sandbox, dataset.sandbox);
 });
 
@@ -160,6 +242,8 @@ test('desktop runtime transition invalidates data at its exact authority boundar
     messages: [{ id: 'message-a', content: 'workspace message' }],
     tasks: [{ id: 'task-a', title: 'Workspace task' }],
     plan: { workspace_id: 'workspace-a' },
+    workspaceMembers: { status: 'ready', items: [], error: null },
+    workspaceAgents: { status: 'ready', items: [], error: null },
     sandbox: { id: 'sandbox-a', status: 'running' },
     myWork: [{ id: 'work-a', project_id: 'project-1' }],
     myWorkError: 'stale project warning',
@@ -184,6 +268,8 @@ test('desktop runtime transition invalidates data at its exact authority boundar
     workspaceId: 'workspace-b',
   });
   assert.deepEqual(workspaceChanged.messages, []);
+  assert.equal(workspaceChanged.workspaceMembers.status, 'unavailable');
+  assert.equal(workspaceChanged.workspaceAgents.status, 'unavailable');
   assert.equal(workspaceChanged.sandbox, dataset.sandbox);
   assert.equal(workspaceChanged.myWork, dataset.myWork);
 
@@ -200,6 +286,8 @@ test('desktop runtime transition invalidates data at its exact authority boundar
     messages: [],
     tasks: [],
     plan: null,
+    workspaceMembers: { status: 'unavailable', items: [], error: null },
+    workspaceAgents: { status: 'unavailable', items: [], error: null },
     sandbox: null,
     myWork: [],
     myWorkError: null,

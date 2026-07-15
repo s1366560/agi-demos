@@ -52,6 +52,9 @@ import type {
   WorkspaceMessage,
   WorkspaceContextResponse,
   WorkspaceContextSwitchOutcome,
+  WorkspaceAgentBinding,
+  WorkspaceAuthorityCollection,
+  WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
 } from '../types';
@@ -63,6 +66,8 @@ type RequestOptions = {
   signal?: AbortSignal;
   skipAuth?: boolean;
 };
+
+const WORKSPACE_ROSTER_PAGE_SIZE = 500;
 
 export class DesktopApiError extends Error {
   readonly status: number;
@@ -268,6 +273,53 @@ export class DesktopApiClient {
       { signal },
     );
     return readArray<WorkspaceSummary>(payload, ['workspaces', 'items', 'data']);
+  }
+
+  async listWorkspaceMembers(signal?: AbortSignal): Promise<WorkspaceMemberSummary[]> {
+    const workspaceId = requireValue(this.config.workspaceId, 'workspace id');
+    const members: WorkspaceMemberSummary[] = [];
+    for (let offset = 0; ; offset += WORKSPACE_ROSTER_PAGE_SIZE) {
+      const params = new URLSearchParams({
+        limit: String(WORKSPACE_ROSTER_PAGE_SIZE),
+        offset: String(offset),
+      });
+      const payload = await this.request<unknown>(
+        this.workspacePath(`/members?${params.toString()}`),
+        { signal },
+      );
+      const page = requireWorkspaceRosterPage(
+        payload,
+        'workspace members',
+        workspaceId,
+        isWorkspaceMemberSummary,
+      );
+      members.push(...page);
+      if (page.length < WORKSPACE_ROSTER_PAGE_SIZE) return members;
+    }
+  }
+
+  async listWorkspaceAgents(signal?: AbortSignal): Promise<WorkspaceAgentBinding[]> {
+    const workspaceId = requireValue(this.config.workspaceId, 'workspace id');
+    const agents: WorkspaceAgentBinding[] = [];
+    for (let offset = 0; ; offset += WORKSPACE_ROSTER_PAGE_SIZE) {
+      const params = new URLSearchParams({
+        active_only: 'true',
+        limit: String(WORKSPACE_ROSTER_PAGE_SIZE),
+        offset: String(offset),
+      });
+      const payload = await this.request<unknown>(
+        this.workspacePath(`/agents?${params.toString()}`),
+        { signal },
+      );
+      const page = requireWorkspaceRosterPage(
+        payload,
+        'workspace agents',
+        workspaceId,
+        isWorkspaceAgentBinding,
+      );
+      agents.push(...page);
+      if (page.length < WORKSPACE_ROSTER_PAGE_SIZE) return agents;
+    }
   }
 
   async createWorkspace(name: string, description?: string): Promise<WorkspaceSummary> {
@@ -966,13 +1018,27 @@ export class DesktopApiClient {
 
   async loadRuntime(signal?: AbortSignal): Promise<RuntimeDataset> {
     const projectId = this.config.projectId.trim();
-    const [workspaces, messages, tasks, plan, myWorkResult] = await Promise.all([
+    const [
+      workspaces,
+      messages,
+      tasks,
+      plan,
+      workspaceMembers,
+      workspaceAgents,
+      myWorkResult,
+    ] = await Promise.all([
       this.listWorkspaces(signal),
       this.config.workspaceId ? this.listMessages(signal) : Promise.resolve([]),
       this.config.workspaceId ? this.listTasks(signal) : Promise.resolve([]),
       this.config.workspaceId
         ? this.getPlanSnapshot(signal).catch(() => null)
         : Promise.resolve(null),
+      this.config.workspaceId
+        ? loadWorkspaceAuthority(this.listWorkspaceMembers(signal))
+        : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
+      this.config.workspaceId
+        ? loadWorkspaceAuthority(this.listWorkspaceAgents(signal))
+        : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
       projectId
         ? this.listMyWork(projectId, signal)
             .then((response) => ({ items: response.items, error: null }))
@@ -997,6 +1063,8 @@ export class DesktopApiClient {
       messages,
       tasks,
       plan,
+      workspaceMembers,
+      workspaceAgents,
       sandbox: null,
       myWork: myWorkResult.items,
       myWorkError: myWorkResult.error,
@@ -1122,6 +1190,102 @@ function readArray<T>(payload: unknown, keys: string[]): T[] {
     if (Array.isArray(value)) return value as T[];
   }
   return [];
+}
+
+function requireWorkspaceRosterPage<T>(
+  payload: unknown,
+  label: string,
+  workspaceId: string,
+  isItem: (value: unknown, workspaceId: string) => value is T,
+): T[] {
+  if (Array.isArray(payload) && payload.every((item) => isItem(item, workspaceId))) {
+    return payload;
+  }
+  throw new DesktopApiError(`Invalid ${label} response`, 502, payload);
+}
+
+function isWorkspaceMemberSummary(
+  value: unknown,
+  workspaceId: string,
+): value is WorkspaceMemberSummary {
+  if (!isRecord(value)) return false;
+  return (
+    isNonEmptyString(value.id) &&
+    value.workspace_id === workspaceId &&
+    isNonEmptyString(value.user_id) &&
+    isNonEmptyString(value.role) &&
+    isOptionalNullableString(value.user_email) &&
+    isOptionalNullableString(value.invited_by) &&
+    isOptionalString(value.created_at) &&
+    isOptionalNullableString(value.updated_at)
+  );
+}
+
+function isWorkspaceAgentBinding(
+  value: unknown,
+  workspaceId: string,
+): value is WorkspaceAgentBinding {
+  if (!isRecord(value)) return false;
+  return (
+    isNonEmptyString(value.id) &&
+    value.workspace_id === workspaceId &&
+    isNonEmptyString(value.agent_id) &&
+    typeof value.is_active === 'boolean' &&
+    isOptionalNullableString(value.display_name) &&
+    isOptionalNullableString(value.description) &&
+    isOptionalNullableRecord(value.config) &&
+    isOptionalNullableInteger(value.hex_q) &&
+    isOptionalNullableInteger(value.hex_r) &&
+    isOptionalNullableString(value.theme_color) &&
+    isOptionalNullableString(value.label) &&
+    isOptionalNullableString(value.status) &&
+    isOptionalString(value.created_at) &&
+    isOptionalNullableString(value.updated_at)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
+}
+
+function isOptionalNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === 'string';
+}
+
+function isOptionalNullableInteger(value: unknown): value is number | null | undefined {
+  return value === undefined || value === null || Number.isInteger(value);
+}
+
+function isOptionalNullableRecord(
+  value: unknown,
+): value is Record<string, unknown> | null | undefined {
+  return value === undefined || value === null || isRecord(value);
+}
+
+function unavailableWorkspaceAuthority<T>(): WorkspaceAuthorityCollection<T> {
+  return { status: 'unavailable', items: [], error: null };
+}
+
+async function loadWorkspaceAuthority<T>(
+  request: Promise<T[]>,
+): Promise<WorkspaceAuthorityCollection<T>> {
+  try {
+    return { status: 'ready', items: await request, error: null };
+  } catch (error) {
+    return {
+      status: 'error',
+      items: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function requireValue(value: string, label: string): string {

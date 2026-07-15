@@ -202,7 +202,10 @@ import type {
   StatusTab,
   TerminalServiceResponse,
   WorkbenchSection,
+  WorkspaceAgentBinding,
+  WorkspaceAuthorityCollection,
   WorkspaceContextSnapshot,
+  WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
 } from './types';
@@ -216,6 +219,8 @@ const emptyDataset: RuntimeDataset = {
   messages: [],
   tasks: [],
   plan: null,
+  workspaceMembers: unavailableWorkspaceAuthority(),
+  workspaceAgents: unavailableWorkspaceAuthority(),
   sandbox: null,
   myWork: [],
   myWorkError: null,
@@ -2649,17 +2654,37 @@ export function App() {
           workspaceId,
         };
         const scopedClient = new DesktopApiClient(resolvedConfig);
-        const [messages, tasks, plan, myWorkResult] = await Promise.all([
-          workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
-          workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
-          workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
-          resolvedProjectId
-            ? scopedClient
-                .listMyWork(resolvedProjectId)
-                .then((response) => ({ items: response.items, error: null }))
-                .catch((caught) => ({ items: [] as ProjectWorkItem[], error: formatError(caught) }))
-            : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
-        ]);
+        if (!contextIsCurrent()) return false;
+        setDataset((current) => ({
+          ...current,
+          workspaceMembers: workspaceId
+            ? loadingWorkspaceAuthority()
+            : unavailableWorkspaceAuthority(),
+          workspaceAgents: workspaceId
+            ? loadingWorkspaceAuthority()
+            : unavailableWorkspaceAuthority(),
+        }));
+        const [messages, tasks, plan, workspaceMembers, workspaceAgents, myWorkResult] =
+          await Promise.all([
+            workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
+            workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
+            workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
+            workspaceId
+              ? resolveWorkspaceAuthority(scopedClient.listWorkspaceMembers())
+              : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
+            workspaceId
+              ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
+              : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
+            resolvedProjectId
+              ? scopedClient
+                  .listMyWork(resolvedProjectId)
+                  .then((response) => ({ items: response.items, error: null }))
+                  .catch((caught) => ({
+                    items: [] as ProjectWorkItem[],
+                    error: formatError(caught),
+                  }))
+              : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
+          ]);
         if (!contextIsCurrent()) return false;
         const conversationResults = await Promise.all(
           workspaces.map(async (workspace) => {
@@ -2704,6 +2729,8 @@ export function App() {
           messages,
           tasks,
           plan,
+          workspaceMembers,
+          workspaceAgents,
           sandbox: null,
           myWork: myWorkResult.items,
           myWorkError: myWorkResult.error,
@@ -2728,6 +2755,14 @@ export function App() {
           nodeState: workspaceTreeRefreshFailed(
             current.nodeState,
             refreshProjectId,
+            connectionError,
+          ),
+          workspaceMembers: failLoadingWorkspaceAuthority(
+            current.workspaceMembers,
+            connectionError,
+          ),
+          workspaceAgents: failLoadingWorkspaceAuthority(
+            current.workspaceAgents,
             connectionError,
           ),
         }));
@@ -4756,6 +4791,8 @@ export function App() {
           t('overview.none')
         }
         conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
+        members={dataset.workspaceMembers}
+        agents={dataset.workspaceAgents}
         plan={activeDataset.plan}
         sandboxStatus={dataset.sandbox?.status ?? null}
         connection={connection}
@@ -5109,6 +5146,33 @@ export function App() {
       </div>
     </Theme>
   );
+}
+
+function unavailableWorkspaceAuthority<T>(): WorkspaceAuthorityCollection<T> {
+  return { status: 'unavailable', items: [], error: null };
+}
+
+function loadingWorkspaceAuthority<T>(): WorkspaceAuthorityCollection<T> {
+  return { status: 'loading', items: [], error: null };
+}
+
+function failLoadingWorkspaceAuthority<T>(
+  collection: WorkspaceAuthorityCollection<T>,
+  error: string,
+): WorkspaceAuthorityCollection<T> {
+  return collection.status === 'loading'
+    ? { status: 'error', items: [], error }
+    : collection;
+}
+
+async function resolveWorkspaceAuthority<T>(
+  request: Promise<T[]>,
+): Promise<WorkspaceAuthorityCollection<T>> {
+  try {
+    return { status: 'ready', items: await request, error: null };
+  } catch (error) {
+    return { status: 'error', items: [], error: formatError(error) };
+  }
 }
 
 function formatError(error: unknown): string {

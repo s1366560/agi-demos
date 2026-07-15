@@ -204,7 +204,7 @@ impl PgWorkspaceRepository {
         sqlx::query(
             "INSERT INTO workspace_members \
                 (id, workspace_id, user_id, role, invited_by, created_at, updated_at) \
-             VALUES ($1,$2,$3,'owner',NULL,$4,NULL)",
+             VALUES ($1,$2,$3,'owner',$3,$4,NULL)",
         )
         .bind(owner_member_id)
         .bind(&workspace.id)
@@ -271,6 +271,43 @@ impl PgWorkspaceRepository {
         Ok(rows.into_iter().map(|(user_id,)| user_id).collect())
     }
 
+    pub async fn list_workspace_members(
+        &self,
+        workspace_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> CoreResult<Vec<WorkspaceMemberRecord>> {
+        let rows = sqlx::query(
+            "SELECT wm.id, wm.workspace_id, wm.user_id, u.email AS user_email, wm.role, \
+                    wm.invited_by, wm.created_at, wm.updated_at \
+             FROM workspace_members wm \
+             LEFT JOIN users u ON u.id = wm.user_id \
+             WHERE wm.workspace_id = $1 \
+             ORDER BY wm.created_at ASC, wm.id ASC \
+             OFFSET $2 LIMIT $3",
+        )
+        .bind(workspace_id)
+        .bind(offset)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(WorkspaceMemberRecord {
+                    id: row.try_get("id").map_err(storage)?,
+                    workspace_id: row.try_get("workspace_id").map_err(storage)?,
+                    user_id: row.try_get("user_id").map_err(storage)?,
+                    user_email: row.try_get("user_email").map_err(storage)?,
+                    role: row.try_get("role").map_err(storage)?,
+                    invited_by: row.try_get("invited_by").map_err(storage)?,
+                    created_at: row.try_get("created_at").map_err(storage)?,
+                    updated_at: row.try_get("updated_at").map_err(storage)?,
+                })
+            })
+            .collect()
+    }
+
     pub async fn list_workspace_agent_ids(&self, workspace_id: &str) -> CoreResult<Vec<String>> {
         Ok(self
             .list_active_workspace_agents(workspace_id)
@@ -300,6 +337,52 @@ impl PgWorkspaceRepository {
                     workspace_id: row.try_get("workspace_id").map_err(storage)?,
                     agent_id: row.try_get("agent_id").map_err(storage)?,
                     display_name: row.try_get("display_name").map_err(storage)?,
+                })
+            })
+            .collect()
+    }
+
+    pub async fn list_workspace_agents(
+        &self,
+        workspace_id: &str,
+        active_only: bool,
+        limit: i64,
+        offset: i64,
+    ) -> CoreResult<Vec<WorkspaceAgentDetailRecord>> {
+        let rows = sqlx::query(
+            "SELECT id, workspace_id, agent_id, display_name, description, \
+                    COALESCE(config_json, '{}'::json) AS config_json, \
+                    is_active, hex_q, hex_r, theme_color, label, status, created_at, updated_at \
+             FROM workspace_agents \
+             WHERE workspace_id = $1 AND ($2 = false OR is_active = true) \
+             ORDER BY created_at ASC, id ASC \
+             OFFSET $3 LIMIT $4",
+        )
+        .bind(workspace_id)
+        .bind(active_only)
+        .bind(offset)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter()
+            .map(|row| {
+                let Json(config_json): Json<Value> = row.try_get("config_json").map_err(storage)?;
+                Ok(WorkspaceAgentDetailRecord {
+                    id: row.try_get("id").map_err(storage)?,
+                    workspace_id: row.try_get("workspace_id").map_err(storage)?,
+                    agent_id: row.try_get("agent_id").map_err(storage)?,
+                    display_name: row.try_get("display_name").map_err(storage)?,
+                    description: row.try_get("description").map_err(storage)?,
+                    config_json,
+                    is_active: row.try_get("is_active").map_err(storage)?,
+                    hex_q: row.try_get("hex_q").map_err(storage)?,
+                    hex_r: row.try_get("hex_r").map_err(storage)?,
+                    theme_color: row.try_get("theme_color").map_err(storage)?,
+                    label: row.try_get("label").map_err(storage)?,
+                    status: row.try_get("status").map_err(storage)?,
+                    created_at: row.try_get("created_at").map_err(storage)?,
+                    updated_at: row.try_get("updated_at").map_err(storage)?,
                 })
             })
             .collect()

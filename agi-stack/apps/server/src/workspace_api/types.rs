@@ -34,6 +34,10 @@ impl WorkspaceApiError {
         Self::new(StatusCode::BAD_REQUEST, detail)
     }
 
+    pub(in crate::workspace_api) fn unprocessable(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNPROCESSABLE_ENTITY, detail)
+    }
+
     pub(in crate::workspace_api) fn forbidden() -> Self {
         Self::new(StatusCode::FORBIDDEN, "Access denied")
     }
@@ -79,6 +83,16 @@ impl IntoResponse for WorkspaceApiError {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct WorkspaceListQuery {
+    #[serde(default)]
+    pub(in crate::workspace_api) limit: Option<i64>,
+    #[serde(default)]
+    pub(in crate::workspace_api) offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct WorkspaceAgentListQuery {
+    #[serde(default)]
+    pub(in crate::workspace_api) active_only: bool,
     #[serde(default)]
     pub(in crate::workspace_api) limit: Option<i64>,
     #[serde(default)]
@@ -426,6 +440,36 @@ pub(crate) struct WorkspaceView {
     pub(in crate::workspace_api) metadata: Value,
     pub(in crate::workspace_api) office_status: String,
     pub(in crate::workspace_api) hex_layout_config: Value,
+    pub(in crate::workspace_api) created_at: String,
+    pub(in crate::workspace_api) updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspaceMemberView {
+    pub(in crate::workspace_api) id: String,
+    pub(in crate::workspace_api) workspace_id: String,
+    pub(in crate::workspace_api) user_id: String,
+    pub(in crate::workspace_api) user_email: Option<String>,
+    pub(in crate::workspace_api) role: String,
+    pub(in crate::workspace_api) invited_by: Option<String>,
+    pub(in crate::workspace_api) created_at: String,
+    pub(in crate::workspace_api) updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspaceAgentView {
+    pub(in crate::workspace_api) id: String,
+    pub(in crate::workspace_api) workspace_id: String,
+    pub(in crate::workspace_api) agent_id: String,
+    pub(in crate::workspace_api) display_name: Option<String>,
+    pub(in crate::workspace_api) description: Option<String>,
+    pub(in crate::workspace_api) config: Value,
+    pub(in crate::workspace_api) is_active: bool,
+    pub(in crate::workspace_api) hex_q: Option<i32>,
+    pub(in crate::workspace_api) hex_r: Option<i32>,
+    pub(in crate::workspace_api) theme_color: Option<String>,
+    pub(in crate::workspace_api) label: Option<String>,
+    pub(in crate::workspace_api) status: Option<String>,
     pub(in crate::workspace_api) created_at: String,
     pub(in crate::workspace_api) updated_at: Option<String>,
 }

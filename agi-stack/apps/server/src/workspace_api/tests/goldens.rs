@@ -12,6 +12,51 @@ fn workspace_response_matches_golden() {
 }
 
 #[test]
+fn workspace_roster_responses_match_goldens() {
+    let created_at = "2026-01-02T03:04:05Z".parse().unwrap();
+    let members = vec![WorkspaceMemberView::from(WorkspaceMemberRecord {
+        id: "member-1".to_string(),
+        workspace_id: "ws-1".to_string(),
+        user_id: "user-1".to_string(),
+        user_email: Some("user@example.com".to_string()),
+        role: "owner".to_string(),
+        invited_by: Some("user-1".to_string()),
+        created_at,
+        updated_at: None,
+    })];
+    let agents = vec![WorkspaceAgentView::from(WorkspaceAgentDetailRecord {
+        id: "binding-1".to_string(),
+        workspace_id: "ws-1".to_string(),
+        agent_id: "agent-1".to_string(),
+        display_name: Some("Builder".to_string()),
+        description: Some("Builds the selected plan".to_string()),
+        config_json: json!({"model": "provider/model"}),
+        is_active: true,
+        hex_q: Some(1),
+        hex_r: Some(-1),
+        theme_color: Some("#14b8a6".to_string()),
+        label: Some("Build".to_string()),
+        status: Some("idle".to_string()),
+        created_at,
+        updated_at: None,
+    })];
+    assert_golden(
+        &members,
+        serde_json::from_str(include_str!(
+            "../../../tests/golden/workspace_member_list.json"
+        ))
+        .unwrap(),
+    );
+    assert_golden(
+        &agents,
+        serde_json::from_str(include_str!(
+            "../../../tests/golden/workspace_agent_list.json"
+        ))
+        .unwrap(),
+    );
+}
+
+#[test]
 fn workspace_task_response_matches_golden() {
     let task = WorkspaceTaskRecord {
         id: "task-1".to_string(),
