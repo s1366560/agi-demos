@@ -34,6 +34,18 @@ const enUS: Record<string, string> = {
   'login.workEmail': 'Work email',
   'login.password': 'Password',
   'login.passwordPlaceholder': 'Enter your password',
+  'login.invalidCredentials': 'Enter a valid work email and at least 6 password characters.',
+  'login.passwordChangeRequired':
+    'Your organization requires a password change before this desktop can continue.',
+  'login.persistenceUnavailable':
+    'Signed in for this session, but the operating system credential store is unavailable.',
+  'login.credentialStoreUnavailable':
+    'Unlock the operating system credential store before switching accounts.',
+  'login.restoreFailed': 'Saved sign-in could not be restored. Sign in again.',
+  'login.signOutPersistenceFailed':
+    'Sign out could not clear the operating system credential store. Try again before closing the app.',
+  'login.signOutPersistenceWarning':
+    'Signed out, but the revoked credential could not be removed from the operating system store.',
   'login.hidePassword': 'Hide password',
   'login.showPassword': 'Show password',
   'login.keepSignedIn': 'Keep me signed in on this device',
@@ -1386,6 +1398,13 @@ const zhCN: Record<string, string> = {
   'login.workEmail': '工作邮箱',
   'login.password': '密码',
   'login.passwordPlaceholder': '输入密码',
+  'login.invalidCredentials': '请输入有效的工作邮箱，密码至少 6 个字符。',
+  'login.passwordChangeRequired': '组织要求先修改密码，完成后才能继续使用桌面客户端。',
+  'login.persistenceUnavailable': '已登录当前会话，但操作系统凭据存储暂不可用。',
+  'login.credentialStoreUnavailable': '切换账号前，请先解锁操作系统凭据存储。',
+  'login.restoreFailed': '无法恢复已保存的登录状态，请重新登录。',
+  'login.signOutPersistenceFailed': '退出登录时无法清除操作系统凭据，请重试后再关闭应用。',
+  'login.signOutPersistenceWarning': '已退出登录，但无法从操作系统凭据存储中移除已撤销的凭据。',
   'login.hidePassword': '隐藏密码',
   'login.showPassword': '显示密码',
   'login.keepSignedIn': '在此设备上保持登录',

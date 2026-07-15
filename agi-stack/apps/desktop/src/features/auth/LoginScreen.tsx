@@ -11,7 +11,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { AuthState, RuntimeMode } from '../../types';
-import { resolveWorkspaceSsoAction } from './loginScreenModel';
+import { resolveWorkspaceSsoAction, validateLoginCredentials } from './loginScreenModel';
 import './LoginScreen.css';
 
 type LoginScreenProps = {
@@ -22,7 +22,7 @@ type LoginScreenProps = {
   password: string;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
-  onEmailLogin: () => void;
+  onEmailLogin: (trustedDevice: boolean) => void;
   onLocalSession: (trustedDevice: boolean) => void;
 };
 
@@ -45,7 +45,7 @@ export function LoginScreen({
 
   const continueWithWorkspaceSso = () => {
     setInteractionError(null);
-    const action = resolveWorkspaceSsoAction(mode, localReady, trustedDevice);
+    const action = resolveWorkspaceSsoAction(mode, localReady);
     if (action.kind === 'local_session') {
       onLocalSession(action.trustedDevice);
       return;
@@ -101,10 +101,15 @@ export function LoginScreen({
       <section className="desktop-login-form-side">
         <form
           className="desktop-login-card"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
+            if (validateLoginCredentials(email, password)) {
+              setInteractionError(t('login.invalidCredentials'));
+              return;
+            }
             setInteractionError(null);
-            onEmailLogin();
+            onEmailLogin(trustedDevice);
           }}
         >
           <header>

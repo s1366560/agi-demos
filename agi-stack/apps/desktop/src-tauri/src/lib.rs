@@ -17,6 +17,7 @@ use std::{
 };
 
 mod local_runtime;
+mod trusted_session;
 
 use agistack_adapters_device::{SqliteMemoryRepository, SqliteVectorIndex};
 use agistack_adapters_mem::{HashEmbedding, StubLlm, SystemClock};
@@ -25,6 +26,9 @@ use local_runtime::{LocalRuntimeConfig, LocalRuntimeService, LocalRuntimeStatus}
 use tauri::{
     webview::PageLoadEvent, Manager, RunEvent, State, TitleBarStyle, Url, WebviewUrl,
     WebviewWindowBuilder,
+};
+use trusted_session::{
+    trusted_session_clear, trusted_session_load, trusted_session_save, TrustedSessionBroker,
 };
 
 /// Embedding width for the on-device hash embedding (toy; Wave F upgrades the
@@ -404,6 +408,7 @@ pub fn run() {
             .map_err(setup_error)?;
             app.manage(core);
             app.manage(local_runtime);
+            app.manage(TrustedSessionBroker::native());
             ensure_main_window(app.handle())?;
             Ok(())
         })
@@ -413,7 +418,10 @@ pub fn run() {
             semantic_search,
             frontend_ready,
             local_runtime_status,
-            local_runtime_configure
+            local_runtime_configure,
+            trusted_session_save,
+            trusted_session_load,
+            trusted_session_clear
         ])
         .build(tauri::generate_context!())
         .expect("error while building the agistack desktop application")

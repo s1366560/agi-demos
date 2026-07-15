@@ -65,20 +65,23 @@ import {
   searchLocalMemory,
   semanticSearchLocalMemory,
 } from './api/localMemory';
-import { AuthPanel } from './features/auth/AuthPanel';
+import {
+  clearNativeTrustedSession,
+  hasNativeTrustedSessionBroker,
+  loadNativeTrustedSession,
+  saveNativeTrustedSession,
+  type NativeTrustedSession,
+} from './api/trustedSession';
 import { AutomationsPage } from './features/automations/AutomationsPage';
 import {
   isCurrentContextRevision,
+  isCurrentLocalRuntimeAuthority,
   isSameDesktopRequestScope,
   isWorkspaceAuthenticated,
   nextRemoteWorkspaceContext,
+  resolveSignOutDisposition,
 } from './features/auth/authContextModel';
 import { LoginScreen } from './features/auth/LoginScreen';
-import {
-  clearTrustedLocalSessionReference,
-  readTrustedLocalSessionReference,
-  writeTrustedLocalSessionReference,
-} from './features/auth/trustedLocalSessionReference';
 import {
   ChatPanel,
   type AgentTaskSignal,
@@ -1773,6 +1776,7 @@ export function App() {
   const configRef = useRef(config);
   const configScopeEpochRef = useRef(0);
   const localResumeAttemptRef = useRef('');
+  const authAttemptRevisionRef = useRef(0);
   const runInputRequestRef = useRef<{
     signature: string;
     messageId: string;
@@ -1806,6 +1810,11 @@ export function App() {
   }, [api, desktop?.success]);
   const modalOpen = loginModalOpen || commandPaletteOpen || newTaskOpen || settingsWindowOpen;
   const localRuntimeMode = config.mode === 'local' && runsInTauri;
+  const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
+    config,
+    localRuntimeStatus,
+    runsInTauri,
+  );
 
   const syncLocalRuntimeConfig = useCallback(
     async (nextConfig: DesktopRuntimeConfig): Promise<DesktopRuntimeConfig> => {
@@ -2923,80 +2932,133 @@ export function App() {
     [refreshMyWork],
   );
 
-  const login = async () => {
+  const hydrateCloudSession = async (
+    outcome: LoginOutcome,
+    runtimeConfig: DesktopRuntimeConfig,
+    authAttemptRevision: number,
+  ): Promise<boolean> => {
+    const tokenConfig = { ...runtimeConfig, apiKey: outcome.access_token, workspaceId: '' };
+    const identityClient = new DesktopApiClient(tokenConfig);
+    const [user, tenants, authoritativeContext] = await Promise.all([
+      identityClient.currentUser(),
+      identityClient.listTenants(),
+      identityClient
+        .getWorkspaceContext()
+        .then((response) => response.context)
+        .catch((caught) => {
+          if (isLegacyWorkspaceContextRouteMissing(caught)) return null;
+          throw caught;
+        }),
+    ]);
+    const preferredTenantId =
+      authoritativeContext?.tenant_id ?? outcome.context?.tenant_id ?? tenants[0]?.id ?? '';
+    const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId: preferredTenantId });
+    const projects = await projectClient.listProjects(preferredTenantId || undefined);
+    if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
+    const tenantId = preferredTenantId || projects[0]?.tenant_id || '';
+    const preferredProjectId =
+      authoritativeContext?.project_id ?? outcome.context?.project_id ?? '';
+    const projectId = projects.some((project) => project.id === preferredProjectId)
+      ? preferredProjectId
+      : projects[0]?.id ?? '';
+    if (authoritativeContext && authoritativeContext.project_id !== projectId) {
+      throw new Error('The authoritative workspace project is no longer available.');
+    }
+    const context = authoritativeContext
+      ? authoritativeContext
+      : outcome.context?.tenant_id === tenantId && outcome.context.project_id === projectId
+        ? outcome.context
+        : {
+            tenant_id: tenantId,
+            project_id: projectId,
+            revision: 0,
+            updated_at: new Date().toISOString(),
+          };
+    const nextConfig = { ...tokenConfig, tenantId, projectId, workspaceId: '' };
+
+    contextRevisionRef.current = context.revision;
+    resetProjectScopedState();
+    commitRuntimeConfig(nextConfig);
+    setAuth({
+      status: 'signed_in',
+      credentialKind: 'cloud_session',
+      session: outcome.session ?? null,
+      context,
+      user,
+      tenants,
+      projects,
+      mustChangePassword: outcome.must_change_password,
+      error: null,
+    });
+    setLoginPassword('');
+
+    if (projectId) {
+      await refreshRuntime(nextConfig, projects);
+      if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
+      applySectionSideEffects('workspace');
+    } else {
+      setDataset(emptyDataset);
+      setConnection('ready');
+      setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      applySectionSideEffects('settings');
+    }
+    return true;
+  };
+
+  const login = async (trustedDevice: boolean) => {
     const username = loginEmail.trim();
     if (!username || !loginPassword) return;
 
+    const authAttemptRevision = ++authAttemptRevisionRef.current;
+    localResumeAttemptRef.current = '';
     setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
     setConnection('loading');
     setError(null);
+    let persistenceWarning: string | null = null;
     try {
+      if (hasNativeTrustedSessionBroker()) {
+        try {
+          await clearNativeTrustedSession();
+        } catch {
+          // An uncleared record may belong to another identity. Fail closed before account switch.
+          throw new Error(t('login.credentialStoreUnavailable'));
+        }
+        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+      }
       const loginClient = new DesktopApiClient({ ...config, apiKey: '' });
       const outcome = await loginClient.login(username, loginPassword);
-      const tokenConfig = { ...config, apiKey: outcome.access_token, workspaceId: '' };
-      const identityClient = new DesktopApiClient(tokenConfig);
-      const [user, tenants, authoritativeContext] = await Promise.all([
-        identityClient.currentUser(),
-        identityClient.listTenants(),
-        identityClient
-          .getWorkspaceContext()
-          .then((response) => response.context)
-          .catch((caught) => {
-            if (isLegacyWorkspaceContextRouteMissing(caught)) return null;
-            throw caught;
-          }),
-      ]);
-      const preferredTenantId =
-        authoritativeContext?.tenant_id ?? outcome.context?.tenant_id ?? tenants[0]?.id ?? '';
-      const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId: preferredTenantId });
-      const projects = await projectClient.listProjects(preferredTenantId || undefined);
-      const tenantId = preferredTenantId || projects[0]?.tenant_id || '';
-      const preferredProjectId =
-        authoritativeContext?.project_id ?? outcome.context?.project_id ?? '';
-      const projectId = projects.some((project) => project.id === preferredProjectId)
-        ? preferredProjectId
-        : projects[0]?.id ?? '';
-      if (authoritativeContext && authoritativeContext.project_id !== projectId) {
-        throw new Error('The authoritative workspace project is no longer available.');
+      if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+      if (outcome.must_change_password) {
+        throw new Error(t('login.passwordChangeRequired'));
       }
-      const context = authoritativeContext
-        ? authoritativeContext
-        : outcome.context?.tenant_id === tenantId && outcome.context.project_id === projectId
-          ? outcome.context
-          : {
-              tenant_id: tenantId,
-              project_id: projectId,
-              revision: 0,
-              updated_at: new Date().toISOString(),
-            };
-      const nextConfig = { ...tokenConfig, tenantId, projectId, workspaceId: '' };
-
-      contextRevisionRef.current = context.revision;
-      resetProjectScopedState();
-      commitRuntimeConfig(nextConfig);
-      setAuth({
-        status: 'signed_in',
-        credentialKind: 'cloud_session',
-        session: outcome.session ?? null,
-        context,
-        user,
-        tenants,
-        projects,
-        mustChangePassword: outcome.must_change_password,
-        error: null,
-      });
-      setLoginPassword('');
-
-      if (projectId) {
-        await refreshRuntime(nextConfig, projects);
-        applySectionSideEffects('workspace');
-      } else {
-        setDataset(emptyDataset);
-        setConnection('ready');
-        setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        applySectionSideEffects('settings');
+      if (trustedDevice && hasNativeTrustedSessionBroker()) {
+        const trustedSession: NativeTrustedSession = {
+          version: 1,
+          api_base_url: config.apiBaseUrl,
+          runtime_mode: 'cloud',
+          credential_kind: 'cloud_bearer',
+          credential: outcome.access_token,
+          expires_at: outcome.session?.expires_at ?? null,
+        };
+        try {
+          await saveNativeTrustedSession(trustedSession);
+        } catch {
+          persistenceWarning = t('login.persistenceUnavailable');
+        }
+        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       }
+      const hydrated = await hydrateCloudSession(outcome, config, authAttemptRevision);
+      if (!hydrated) return;
+      if (persistenceWarning) setError(persistenceWarning);
     } catch (caught) {
+      if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+      if (hasNativeTrustedSessionBroker()) {
+        try {
+          await clearNativeTrustedSession();
+        } catch {
+          // Preserve the original authentication failure without exposing credential-store detail.
+        }
+      }
       const message = formatLoginError(caught, config.apiBaseUrl);
       setAuth({ ...emptyAuthState, error: message });
       setConnection('error');
@@ -3007,7 +3069,8 @@ export function App() {
   const hydrateLocalSession = async (
     outcome: LoginOutcome,
     runtimeConfig: DesktopRuntimeConfig,
-  ) => {
+    authAttemptRevision: number,
+  ): Promise<boolean> => {
     if (!outcome.context) {
       throw new Error('The local session did not return an authoritative workspace context.');
     }
@@ -3024,6 +3087,7 @@ export function App() {
       identityClient.listTenants(),
       identityClient.listProjects(outcome.context.tenant_id),
     ]);
+    if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
     const selectedProject = projects.find((project) => project.id === outcome.context?.project_id);
     if (!selectedProject) {
       throw new Error('The active local project is not available to this user.');
@@ -3044,10 +3108,11 @@ export function App() {
       error: null,
     });
     await refreshRuntime(tokenConfig, [selectedProject]);
+    return authAttemptRevisionRef.current === authAttemptRevision;
   };
 
   const loginLocalSession = async (trustedDevice: boolean) => {
-    if (!localRuntimeMode || !config.localApiToken.trim()) {
+    if (!localRuntimeAuthorityReady) {
       setAuth((current) => ({
         ...current,
         error: 'The trusted local runtime is not ready yet.',
@@ -3055,17 +3120,55 @@ export function App() {
       return;
     }
 
+    const authAttemptRevision = ++authAttemptRevisionRef.current;
+    localResumeAttemptRef.current = '';
     setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
     setConnection('loading');
     setError(null);
+    let persistenceWarning: string | null = null;
     try {
-      if (!trustedDevice) clearTrustedLocalSessionReference(window.localStorage);
+      if (hasNativeTrustedSessionBroker()) {
+        try {
+          await clearNativeTrustedSession();
+        } catch {
+          // An uncleared record may belong to another identity. Fail closed before account switch.
+          throw new Error(t('login.credentialStoreUnavailable'));
+        }
+        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+      }
       const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
       const outcome = await bootstrapClient.createLocalSession(trustedDevice);
-      await hydrateLocalSession(outcome, config);
-      writeTrustedLocalSessionReference(window.localStorage, outcome.session);
+      if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+      const sessionId = outcome.session?.session_id?.trim();
+      if (trustedDevice && hasNativeTrustedSessionBroker() && sessionId) {
+        const trustedSession: NativeTrustedSession = {
+          version: 1,
+          api_base_url: config.apiBaseUrl,
+          runtime_mode: 'local',
+          credential_kind: 'local_session_reference',
+          credential: sessionId,
+          expires_at: outcome.session?.expires_at ?? null,
+        };
+        try {
+          await saveNativeTrustedSession(trustedSession);
+        } catch {
+          persistenceWarning = t('login.persistenceUnavailable');
+        }
+        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+      }
+      const hydrated = await hydrateLocalSession(outcome, config, authAttemptRevision);
+      if (!hydrated) return;
       applySectionSideEffects('workspace');
+      if (persistenceWarning) setError(persistenceWarning);
     } catch (caught) {
+      if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+      if (hasNativeTrustedSessionBroker()) {
+        try {
+          await clearNativeTrustedSession();
+        } catch {
+          // Preserve the original authentication failure without exposing credential-store detail.
+        }
+      }
       const message = formatLoginError(caught, config.apiBaseUrl);
       setAuth({ ...emptyAuthState, error: message });
       setConnection('error');
@@ -3103,13 +3206,41 @@ export function App() {
   };
 
   const logout = async () => {
+    const authAttemptRevision = ++authAttemptRevisionRef.current;
+    localResumeAttemptRef.current = '';
     const authenticatedClient = api;
     const shouldRevoke = Boolean(config.apiKey.trim());
-    if (auth.credentialKind === 'local_session') {
-      clearTrustedLocalSessionReference(window.localStorage);
+    const hasCredentialBroker = hasNativeTrustedSessionBroker();
+    const [credentialRevoked, persistedCredentialCleared] = await Promise.all([
+      shouldRevoke
+        ? authenticatedClient
+            .signOut()
+            .then((outcome) => outcome.success === true)
+            .catch(() => false)
+        : Promise.resolve(false),
+      hasCredentialBroker
+        ? clearNativeTrustedSession()
+            .then(() => true)
+            .catch(() => false)
+        : Promise.resolve(true),
+    ]);
+    if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+    const signOutDisposition = resolveSignOutDisposition(
+      hasCredentialBroker,
+      persistedCredentialCleared,
+      credentialRevoked,
+    );
+    if (signOutDisposition === 'blocked') {
+      setError(t('login.signOutPersistenceFailed'));
+      return;
     }
+    const persistenceWarning =
+      signOutDisposition === 'complete_with_persistence_warning'
+        ? t('login.signOutPersistenceWarning')
+        : null;
+    localResumeAttemptRef.current = `${config.mode}|${config.apiBaseUrl}|${config.localApiToken}`;
     contextRevisionRef.current += 1;
-    setAuth(emptyAuthState);
+    setAuth(persistenceWarning ? { ...emptyAuthState, error: persistenceWarning } : emptyAuthState);
     setLoginModalOpen(false);
     commitRuntimeConfig({
       ...DEFAULT_CONFIG,
@@ -3128,13 +3259,7 @@ export function App() {
     activeSectionRef.current = 'workspace';
     setActiveSection('workspace');
     setStatusTab('overview');
-    if (shouldRevoke) {
-      try {
-        await authenticatedClient.signOut();
-      } catch {
-        // The local UI is signed out even if the runtime is already unavailable.
-      }
-    }
+    setError(persistenceWarning);
   };
 
   const selectWorkspace = (workspaceId: string, projectId = config.projectId) => {
@@ -4423,33 +4548,105 @@ export function App() {
   };
 
   useEffect(() => {
-    if (!localRuntimeMode || auth.status !== 'signed_out' || !config.localApiToken.trim()) return;
-    const reference = readTrustedLocalSessionReference(window.localStorage);
-    if (!reference) return;
-    const attemptKey = `${config.apiBaseUrl}|${config.localApiToken}|${reference.sessionId}`;
+    if (!runsInTauri || auth.status !== 'signed_out' || !hasNativeTrustedSessionBroker()) return;
+    const attemptKey = `${config.mode}|${config.apiBaseUrl}|${config.localApiToken}`;
     if (localResumeAttemptRef.current === attemptKey) return;
     localResumeAttemptRef.current = attemptKey;
+    const authAttemptRevision = ++authAttemptRevisionRef.current;
 
-    setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
-    setConnection('loading');
-    setError(null);
     void (async () => {
       try {
-        const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
-        const outcome = await bootstrapClient.resumeLocalSession(reference.sessionId);
-        if (localResumeAttemptRef.current !== attemptKey) return;
-        if (!outcome) {
-          clearTrustedLocalSessionReference(window.localStorage);
+        const trustedSession = await loadNativeTrustedSession();
+        if (!trustedSession) return;
+        if (
+          localResumeAttemptRef.current !== attemptKey ||
+          authAttemptRevisionRef.current !== authAttemptRevision
+        ) {
+          return;
+        }
+
+        setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+        setConnection('loading');
+        setError(null);
+
+        if (trustedSession.credential_kind === 'cloud_bearer') {
+          if (trustedSession.runtime_mode !== 'cloud') {
+            await clearNativeTrustedSession();
+            if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+            setAuth(emptyAuthState);
+            setConnection('idle');
+            return;
+          }
+          const restoredConfig: DesktopRuntimeConfig = {
+            ...config,
+            apiBaseUrl: trustedSession.api_base_url,
+            apiKey: trustedSession.credential,
+            tenantId: '',
+            projectId: '',
+            workspaceId: '',
+            mode: 'cloud',
+          };
+          await hydrateCloudSession(
+            {
+              access_token: trustedSession.credential,
+              token_type: 'bearer',
+              must_change_password: false,
+            },
+            restoredConfig,
+            authAttemptRevision,
+          );
+          return;
+        }
+
+        if (trustedSession.runtime_mode !== 'local' || !localRuntimeAuthorityReady) {
+          localResumeAttemptRef.current = '';
           setAuth(emptyAuthState);
           setConnection('idle');
           return;
         }
-        writeTrustedLocalSessionReference(window.localStorage, outcome.session);
-        await hydrateLocalSession(outcome, config);
+
+        // The native local runtime uses an ephemeral port after each launch. Bind recovery to the
+        // exact live endpoint and launch capability reported by Tauri, then rotate the saved record.
+        const bootstrapClient = new DesktopApiClient({ ...config, apiKey: '' });
+        const outcome = await bootstrapClient.resumeLocalSession(trustedSession.credential);
+        if (
+          localResumeAttemptRef.current !== attemptKey ||
+          authAttemptRevisionRef.current !== authAttemptRevision
+        ) {
+          return;
+        }
+        if (!outcome?.session?.session_id) {
+          await clearNativeTrustedSession();
+          if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+          setAuth(emptyAuthState);
+          setConnection('idle');
+          return;
+        }
+        await saveNativeTrustedSession({
+          version: 1,
+          api_base_url: config.apiBaseUrl,
+          runtime_mode: 'local',
+          credential_kind: 'local_session_reference',
+          credential: outcome.session.session_id,
+          expires_at: outcome.session.expires_at ?? null,
+        });
+        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
+        const hydrated = await hydrateLocalSession(outcome, config, authAttemptRevision);
+        if (!hydrated) return;
         applySectionSideEffects('workspace');
       } catch (caught) {
-        if (localResumeAttemptRef.current !== attemptKey) return;
-        const message = formatLoginError(caught, config.apiBaseUrl);
+        if (
+          localResumeAttemptRef.current !== attemptKey ||
+          authAttemptRevisionRef.current !== authAttemptRevision
+        ) {
+          return;
+        }
+        try {
+          await clearNativeTrustedSession();
+        } catch {
+          // The original restore failure remains the user-facing error.
+        }
+        const message = t('login.restoreFailed');
         setAuth({ ...emptyAuthState, error: message });
         setConnection('error');
         setError(message);
@@ -4460,7 +4657,8 @@ export function App() {
     config.apiBaseUrl,
     config.localApiToken,
     config.mode,
-    localRuntimeMode,
+    localRuntimeAuthorityReady,
+    runsInTauri,
   ]);
 
   const switchSection = (section: WorkbenchSection) => {
@@ -5053,12 +5251,12 @@ export function App() {
         <LoginScreen
           auth={auth}
           mode={config.mode}
-          localReady={localRuntimeMode && Boolean(config.localApiToken.trim())}
+          localReady={localRuntimeAuthorityReady}
           email={loginEmail}
           password={loginPassword}
           onEmailChange={setLoginEmail}
           onPasswordChange={setLoginPassword}
-          onEmailLogin={() => void login()}
+          onEmailLogin={(trustedDevice) => void login(trustedDevice)}
           onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
         />
       </Theme>

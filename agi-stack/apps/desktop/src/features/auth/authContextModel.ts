@@ -1,4 +1,34 @@
-import type { AuthState, DesktopRuntimeConfig, WorkspaceContextSnapshot } from '../../types';
+import type {
+  AuthState,
+  DesktopRuntimeConfig,
+  LocalRuntimeStatus,
+  WorkspaceContextSnapshot,
+} from '../../types';
+
+export type SignOutDisposition = 'complete' | 'complete_with_persistence_warning' | 'blocked';
+
+export function isCurrentLocalRuntimeAuthority(
+  config: DesktopRuntimeConfig,
+  status: LocalRuntimeStatus | null,
+  runsInTauri: boolean,
+): boolean {
+  return Boolean(
+    runsInTauri &&
+      config.mode === 'local' &&
+      status?.running &&
+      status.api_base_url === config.apiBaseUrl &&
+      status.api_token === config.localApiToken,
+  );
+}
+
+export function resolveSignOutDisposition(
+  hasCredentialBroker: boolean,
+  persistedCredentialCleared: boolean,
+  credentialRevoked: boolean,
+): SignOutDisposition {
+  if (!hasCredentialBroker || persistedCredentialCleared) return 'complete';
+  return credentialRevoked ? 'complete_with_persistence_warning' : 'blocked';
+}
 
 export function isWorkspaceAuthenticated(auth: AuthState): boolean {
   return (

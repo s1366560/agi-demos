@@ -17,7 +17,7 @@
   flex-direction: column;
   padding: 32px clamp(34px, 5vw, 72px);
   background: #0b1017;
-  border-right: 1px solid var(--gray-5);
+  border-right: 1px solid #242d3a;
 }
 
 .desktop-login-brand,
@@ -62,7 +62,7 @@
 
 .desktop-login-story-copy > span,
 .desktop-login-card > header > span {
-  color: var(--cyan-9);
+  color: #38d6ff;
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -107,7 +107,7 @@
 .desktop-login-proof-list article > svg {
   width: 18px;
   height: 18px;
-  color: var(--cyan-9);
+  color: #38d6ff;
 }
 
 .desktop-login-proof-list article > div {
@@ -290,7 +290,7 @@
   display: grid;
   width: 15px;
   height: 15px;
-  color: var(--cyan-9);
+  color: #38d6ff;
   font-style: normal;
   border: 1px solid #3b4858;
   border-radius: 4px;
@@ -326,13 +326,13 @@
   color: white;
   font-size: 10px;
   font-weight: 700;
-  background: #346e84;
-  border: 1px solid #477f94;
+  background: #146f87;
+  border: 1px solid #2b8ea7;
   border-radius: 7px;
 }
 
 .desktop-login-submit:hover {
-  background: #3c7b91;
+  background: #177c96;
 }
 
 .desktop-login-submit:disabled,
@@ -362,19 +362,4 @@
   font-size: 8px;
   background: transparent;
   border: 0;
-}
-
-@media (max-width: 900px) {
-  .desktop-login-screen {
-    min-height: 100vh;
-    grid-template-columns: 1fr;
-  }
-
-  .desktop-login-story {
-    display: none;
-  }
-
-  .desktop-login-form-side {
-    padding: 28px;
-  }
 }

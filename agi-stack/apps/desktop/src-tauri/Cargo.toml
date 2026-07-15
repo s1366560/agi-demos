@@ -41,6 +41,21 @@ agistack-adapters-http-llm = { path = "../../../crates/adapters-http-llm" }
 agistack-adapters-local-tools = { path = "../../../crates/adapters-local-tools" }
 agistack-adapters-mem = { path = "../../../crates/adapters-mem" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "=3.6.3", default-features = false, features = ["apple-native"] }
+# keyring's `security-framework = "3"` range currently resolves to releases
+# above this crate's Rust 1.81 MSRV. Keep the newest compatible native backend.
+security-framework = { version = "=3.5.1", default-features = false }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "=3.6.3", default-features = false, features = [
+  "crypto-rust",
+  "linux-native-sync-persistent",
+] }
+
 [dev-dependencies]
 # Single-threaded executor for the headless command round-trip test (no tokio,
 # mirroring the core's runtime-agnostic contract).
