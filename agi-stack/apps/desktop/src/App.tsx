@@ -21,10 +21,8 @@ import {
 import {
   ActivityLogIcon,
   ArchiveIcon,
-  ChatBubbleIcon,
   CheckCircledIcon,
   ClockIcon,
-  CodeIcon,
   ChevronRightIcon,
   ColumnsIcon,
   Cross2Icon,
@@ -36,7 +34,6 @@ import {
   GridIcon,
   MagnifyingGlassIcon,
   MixerHorizontalIcon,
-  PlayIcon,
   ReloadIcon,
   RocketIcon,
   ExclamationTriangleIcon,
@@ -168,6 +165,10 @@ import {
 } from './features/task/newTaskPlanModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
+import {
+  reconcileExpandedWorkspaceIds,
+  workspaceTreeRefreshFailed,
+} from './features/workspace/workspaceTreeModel';
 import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
 import { useI18n } from './i18n';
@@ -288,8 +289,6 @@ const runControlLabels: Record<RunControlState, string> = {
   paused: 'Paused',
   stopped: 'Stopped',
 };
-const RUN_CONTROL_UNAVAILABLE =
-  'Run pause, resume, and stop are unavailable until every configured backend provides the same control contract.';
 const runControlStates = new Set<RunControlState>(['planning', 'running', 'paused', 'stopped']);
 function isRunControlState(value: string): value is RunControlState {
   return runControlStates.has(value as RunControlState);
@@ -1674,6 +1673,7 @@ export function App() {
   const contextRevisionRef = useRef(0);
   const configRef = useRef(config);
   const configScopeEpochRef = useRef(0);
+  const workspaceExpansionScopeRef = useRef('');
   const localResumeAttemptRef = useRef('');
   const authAttemptRevisionRef = useRef(0);
   const runInputRequestRef = useRef<{
@@ -2537,6 +2537,7 @@ export function App() {
     setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
     setCreatingSessionWorkspaceId(null);
     setExpandedWorkspaceIds(new Set());
+    workspaceExpansionScopeRef.current = '';
     terminalProxy.clear();
   };
 
@@ -2549,6 +2550,7 @@ export function App() {
         expectedScopeEpoch === configScopeEpochRef.current;
       setConnection('loading');
       setError(null);
+      let refreshProjectId = nextConfig.projectId.trim();
       try {
         const runtimeConfig = await syncLocalRuntimeConfig(nextConfig);
         if (!contextIsCurrent()) return false;
@@ -2571,6 +2573,9 @@ export function App() {
           throw new Error(t('runtime.activeProjectUnavailable'));
         }
         const resolvedProjectId = resolvedProject.id;
+        refreshProjectId = resolvedProjectId;
+        const expansionScope = `${resolvedProject.tenant_id}\u0000${resolvedProjectId}`;
+        const expandSelectedWorkspace = workspaceExpansionScopeRef.current !== expansionScope;
         const projects = [resolvedProject];
         const loadingNodeState: RuntimeNodeLoadState = {
           projects: Object.fromEntries(
@@ -2582,7 +2587,13 @@ export function App() {
           workspaces: {},
         };
         if (!contextIsCurrent()) return false;
-        setDataset((current) => ({ ...current, nodeState: loadingNodeState }));
+        setDataset((current) => ({
+          ...current,
+          nodeState: {
+            projects: { ...current.nodeState.projects, ...loadingNodeState.projects },
+            workspaces: current.nodeState.workspaces,
+          },
+        }));
 
         const workspaceResults = await Promise.all(
           projects.map(async (project) => {
@@ -2697,14 +2708,31 @@ export function App() {
           myWork: myWorkResult.items,
           myWorkError: myWorkResult.error,
         });
-        setExpandedWorkspaceIds(new Set(projectWorkspaces.map((workspace) => workspace.id)));
+        setExpandedWorkspaceIds((current) =>
+          reconcileExpandedWorkspaceIds(
+            current,
+            projectWorkspaces.map((workspace) => workspace.id),
+            workspaceId,
+            expandSelectedWorkspace,
+          ),
+        );
+        if (workspaceId) workspaceExpansionScopeRef.current = expansionScope;
         setConnection('ready');
         setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         return true;
       } catch (caught) {
         if (!contextIsCurrent()) return false;
+        const connectionError = formatConnectionError(caught, nextConfig.apiBaseUrl);
+        setDataset((current) => ({
+          ...current,
+          nodeState: workspaceTreeRefreshFailed(
+            current.nodeState,
+            refreshProjectId,
+            connectionError,
+          ),
+        }));
         setConnection('error');
-        setError(formatConnectionError(caught, nextConfig.apiBaseUrl));
+        setError(connectionError);
         return false;
       }
     },
@@ -3740,14 +3768,6 @@ export function App() {
     ],
   );
   const currentArtifactRun = sessionProjection?.currentRun ?? null;
-  const sessionInspectorEvidence = useMemo(() => {
-    const evidence = displaySessionProjection?.evidenceSummary;
-    return {
-      artifacts: evidence?.artifactVersionCount ?? null,
-      changedFiles: changeSnapshot?.status === 'ready' ? changeSnapshot.files_changed : null,
-      checks: evidence?.checks?.total ?? null,
-    };
-  }, [changeSnapshot, displaySessionProjection?.evidenceSummary]);
   currentArtifactRunRef.current = currentArtifactRun;
   const currentTerminalRunScopeKey = terminalRunScopeKey(currentArtifactRun);
   if (terminalRunScopeKeyRef.current !== currentTerminalRunScopeKey) {
@@ -4601,34 +4621,6 @@ export function App() {
     setReviewTab('plan');
   };
 
-  const runSelectedSession = () => {
-    setError(RUN_CONTROL_UNAVAILABLE);
-  };
-
-  const openProject = () => {
-    if (!identityAuthenticated) {
-      useApiKeyManually();
-      return;
-    }
-    if (!showRuntimeConfig) {
-      openWorkspaceSettings();
-      return;
-    }
-    if (config.workspaceId) {
-      openWorkspaceOverview();
-      return;
-    }
-    openWorkspaceSettings();
-  };
-
-  const openPullRequestOverview = () => {
-    selectWorkflowTarget('pull');
-  };
-
-  const openOtherApps = () => {
-    openCommandPalette();
-  };
-
   const commandItems: CommandPaletteItem[] = [
     {
       id: 'home',
@@ -4652,27 +4644,6 @@ export function App() {
       onSelect: () => switchSection('automations'),
     },
     {
-      id: 'search-memory',
-      label: 'Search local memory',
-      description: showRuntimeConfig
-        ? 'Search local memory records for this desktop session.'
-        : 'Sign in or use a manual API key before searching local memory.',
-      icon: <MagnifyingGlassIcon />,
-      shortcut: '⌘K',
-      disabled: !showRuntimeConfig,
-      onSelect: () => switchSection('memory'),
-    },
-    {
-      id: 'chats',
-      label: 'Chats',
-      description: showRuntimeConfig
-        ? 'Open the workspace message timeline.'
-        : 'Sign in or use a manual API key before opening chats.',
-      icon: <ChatBubbleIcon />,
-      disabled: !showRuntimeConfig,
-      onSelect: () => switchSection('chat'),
-    },
-    {
       id: 'settings',
       label: identityAuthenticated ? 'Settings' : 'Use API key manually',
       description: identityAuthenticated
@@ -4691,7 +4662,7 @@ export function App() {
       icon: <RocketIcon />,
       onSelect: () => {
         if (auth.status === 'signed_in') {
-          switchSection('settings');
+          openSidebarSettings();
           return;
         }
         loginRestoreTargetRef.current = commandPaletteTriggerRef.current?.isConnected
@@ -4707,23 +4678,6 @@ export function App() {
       icon: <RocketIcon />,
       disabled: Boolean(runtimeDisabledReason) || connection === 'loading',
       onSelect: () => void refreshRuntime(),
-    },
-    {
-      id: 'run-selected-session',
-      label: 'Run selected session',
-      description: RUN_CONTROL_UNAVAILABLE,
-      icon: <PlayIcon />,
-      disabled: true,
-      onSelect: runSelectedSession,
-    },
-    {
-      id: 'open-project',
-      label: hasProjectScope ? 'Open in VS Code' : 'Configure project',
-      description: hasProjectScope
-        ? 'Open the selected workspace or project settings.'
-        : 'Add a project id before opening workspace files.',
-      icon: <CodeIcon />,
-      onSelect: openProject,
     },
   ];
   const normalizedCommandQuery = commandQuery.trim().toLowerCase();
@@ -5067,6 +5021,7 @@ export function App() {
               if (section === 'my-work') switchSection('board');
               if (section === 'automations') switchSection('automations');
               if (section === 'search') openCommandPalette();
+              if (section === 'notifications') openSettingsEntry('sidebar_notifications');
             }}
             onToggleWorkspace={toggleWorkspace}
             onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
@@ -5092,7 +5047,6 @@ export function App() {
                     ? (controls) => renderWorkspaceReviewPanel(controls)
                     : null
                 }
-                evidence={sessionInspectorEvidence}
                 onOpenCanvas={(tab) => {
                   if (tab) setReviewTab(tab);
                   setReviewPanelOpen(true);

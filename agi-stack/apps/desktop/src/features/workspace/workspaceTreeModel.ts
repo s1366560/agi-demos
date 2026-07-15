@@ -1,4 +1,9 @@
-import type { AgentConversation, WorkspaceSummary } from '../../types';
+import type {
+  AgentConversation,
+  RuntimeNodeLoadState,
+  RuntimeNodeState,
+  WorkspaceSummary,
+} from '../../types';
 
 export type WorkspaceTreeNode = {
   workspace: WorkspaceSummary;
@@ -6,6 +11,8 @@ export type WorkspaceTreeNode = {
 };
 
 export type WorkspaceTreeSelectionMode = 'overview' | 'conversation' | 'my-work' | 'none';
+
+export type WorkspaceTreeAvailability = 'loading' | 'error' | 'empty' | 'ready';
 
 export function isWorkspaceOverviewSelected(
   currentWorkspaceId: string,
@@ -24,6 +31,49 @@ export function isWorkspaceConversationSelected(
     (selectionMode === 'conversation' || selectionMode === 'my-work') &&
     currentConversationId === conversationId
   );
+}
+
+export function reconcileExpandedWorkspaceIds(
+  current: ReadonlySet<string>,
+  workspaceIds: readonly string[],
+  selectedWorkspaceId: string,
+  expandSelectedWorkspace: boolean,
+): Set<string> {
+  const validWorkspaceIds = new Set(workspaceIds);
+  const next = new Set([...current].filter((workspaceId) => validWorkspaceIds.has(workspaceId)));
+  if (
+    expandSelectedWorkspace &&
+    selectedWorkspaceId &&
+    validWorkspaceIds.has(selectedWorkspaceId)
+  ) {
+    next.add(selectedWorkspaceId);
+  }
+  return next;
+}
+
+export function workspaceTreeRefreshFailed(
+  nodeState: RuntimeNodeLoadState,
+  projectId: string,
+  error: string,
+): RuntimeNodeLoadState {
+  if (!projectId) return nodeState;
+  return {
+    projects: {
+      ...nodeState.projects,
+      [projectId]: { loading: false, error },
+    },
+    workspaces: nodeState.workspaces,
+  };
+}
+
+export function workspaceTreeAvailability(
+  projectState: RuntimeNodeState | undefined,
+  workspaceCount: number,
+): WorkspaceTreeAvailability {
+  if (workspaceCount > 0) return 'ready';
+  if (projectState?.loading) return 'loading';
+  if (projectState?.error) return 'error';
+  return 'empty';
 }
 
 export function buildWorkspaceTree(

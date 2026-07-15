@@ -7,6 +7,9 @@ const {
   buildWorkspaceTree,
   isWorkspaceConversationSelected,
   isWorkspaceOverviewSelected,
+  reconcileExpandedWorkspaceIds,
+  workspaceTreeRefreshFailed,
+  workspaceTreeAvailability,
 } = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
 
 function conversation(id, title, updatedAt) {
@@ -87,5 +90,81 @@ test('conversation rows are selected only in conversation and My Work views', ()
   assert.equal(
     isWorkspaceConversationSelected('conversation-a', 'conversation-a', 'overview'),
     false
+  );
+});
+
+test('workspace refresh expands only the selected root on first load', () => {
+  assert.deepEqual(
+    [
+      ...reconcileExpandedWorkspaceIds(
+        new Set(),
+        ['workspace-a', 'workspace-b'],
+        'workspace-b',
+        true
+      ),
+    ],
+    ['workspace-b']
+  );
+});
+
+test('workspace refresh preserves valid manual expansion and removes stale roots', () => {
+  assert.deepEqual(
+    [
+      ...reconcileExpandedWorkspaceIds(
+        new Set(['workspace-a', 'workspace-stale']),
+        ['workspace-a', 'workspace-b'],
+        'workspace-b',
+        false
+      ),
+    ],
+    ['workspace-a']
+  );
+});
+
+test('same-project refresh preserves a manual collapse of the selected workspace', () => {
+  assert.deepEqual(
+    [
+      ...reconcileExpandedWorkspaceIds(
+        new Set(),
+        ['workspace-a', 'workspace-b'],
+        'workspace-b',
+        false
+      ),
+    ],
+    []
+  );
+});
+
+test('same-project refresh keeps an already loaded tree visible', () => {
+  assert.equal(workspaceTreeAvailability({ loading: true, error: null }, 3), 'ready');
+  assert.equal(workspaceTreeAvailability({ loading: false, error: 'offline' }, 3), 'ready');
+});
+
+test('empty tree renders the authoritative loading, error, or empty state', () => {
+  assert.equal(workspaceTreeAvailability({ loading: true, error: null }, 0), 'loading');
+  assert.equal(workspaceTreeAvailability({ loading: false, error: 'offline' }, 0), 'error');
+  assert.equal(workspaceTreeAvailability(undefined, 0), 'empty');
+});
+
+test('refresh failure settles the active project without discarding workspace node state', () => {
+  assert.deepEqual(
+    workspaceTreeRefreshFailed(
+      {
+        projects: {
+          'project-a': { loading: true, error: null },
+          'project-b': { loading: false, error: null },
+        },
+        workspaces: { 'workspace-a': { loading: false, error: null } },
+      },
+      'project-a',
+      'offline'
+    ),
+    {
+      projects: {
+        'project-a': { loading: false, error: 'offline' },
+        'project-b': { loading: false, error: null },
+      },
+      workspaces: { 'workspace-a': { loading: false, error: null } },
+    }
   );
 });

@@ -19,6 +19,7 @@ import {
   buildWorkspaceTree,
   isWorkspaceConversationSelected,
   isWorkspaceOverviewSelected,
+  workspaceTreeAvailability,
   type WorkspaceTreeSelectionMode,
 } from './workspaceTreeModel';
 import './WorkspaceDock.css';
@@ -57,22 +58,27 @@ export function WorkspaceDock({
   const { t } = useI18n();
   const projectState = nodeState.projects[currentProjectId];
   const tree = buildWorkspaceTree(workspaces, conversationsByWorkspace, 'project');
+  const availability = workspaceTreeAvailability(projectState, tree.length);
 
   return (
-    <div className="workspace-dock workspace-session-tree" role="tree">
+    <div
+      className="workspace-dock workspace-session-tree"
+      role="tree"
+      aria-busy={projectState?.loading || undefined}
+    >
       <ScrollArea className="dock-list">
         <div>
-          {projectState?.loading ? (
+          {availability === 'loading' ? (
             <WorkspaceTreeState
               title={t('workspaceTree.loading')}
               detail={t('workspaceTree.loadingDescription')}
             />
-          ) : projectState?.error ? (
+          ) : availability === 'error' ? (
             <WorkspaceTreeState
               title={t('workspaceTree.unavailable')}
-              detail={projectState.error}
+              detail={projectState?.error ?? undefined}
             />
-          ) : tree.length === 0 ? (
+          ) : availability === 'empty' ? (
             <WorkspaceTreeState
               title={t('workspaceTree.empty')}
               detail={t('workspaceTree.emptyDescription')}

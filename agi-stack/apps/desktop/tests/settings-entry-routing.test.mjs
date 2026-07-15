@@ -11,6 +11,10 @@ test('sidebar Settings and Account settings open the account section', () => {
   assert.equal(settingsSectionForEntry('sidebar'), 'account');
 });
 
+test('sidebar Notifications opens the notifications settings section', () => {
+  assert.equal(settingsSectionForEntry('sidebar_notifications'), 'notifications');
+});
+
 test('Workspace Overview Configure opens workspace settings', () => {
   assert.equal(settingsSectionForEntry('workspace_overview'), 'workspace');
 });

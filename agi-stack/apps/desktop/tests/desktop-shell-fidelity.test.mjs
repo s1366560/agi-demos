@@ -9,6 +9,10 @@ const sessionStyles = readFileSync(
   new URL('../src/features/session/SessionWorkspace.css', import.meta.url),
   'utf8'
 );
+const sessionWorkspaceSource = readFileSync(
+  new URL('../src/features/session/SessionWorkspace.tsx', import.meta.url),
+  'utf8'
+);
 const sidebarSource = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
   'utf8'
@@ -22,7 +26,9 @@ test('desktop shell mounts only the prototype sidebar and page-owned headers', (
 
 test('authenticated identities without a project remain inside the desktop shell', () => {
   const renderWorkbench =
-    appSource.match(/const renderWorkbench = \(\) => \{[\s\S]*?\n  \};\n\n  if \(!identityAuthenticated\)/)?.[0] ?? '';
+    appSource.match(
+      /const renderWorkbench = [\s\S]*?\n  \};\n\n  if \(!identityAuthenticated\)/
+    )?.[0] ?? '';
 
   assert.match(appSource, /const identityAuthenticated = isIdentityAuthenticated\(auth\)/);
   assert.match(appSource, /const showRuntimeConfig = isWorkspaceReady\(auth, config\)/);
@@ -71,6 +77,28 @@ test('notifications never open a standalone workspace review route', () => {
   assert.match(appSource, /className="workbench-layout"/);
   assert.doesNotMatch(appSource, /review-panel-collapsed/);
   assert.doesNotMatch(globalStyles, /review-panel-collapsed/);
+});
+
+test('sidebar notifications open the governed notifications settings section', () => {
+  assert.match(sidebarSource, /onNavigate\('notifications'\)/);
+  assert.match(
+    appSource,
+    /if \(section === 'notifications'\) openSettingsEntry\('sidebar_notifications'\)/,
+  );
+});
+
+test('command palette cannot bypass the workspace and conversation hierarchy', () => {
+  const commandItems =
+    appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
+
+  assert.doesNotMatch(commandItems, /id: '(?:search-memory|chats|run-selected-session|open-project)'/);
+  assert.doesNotMatch(commandItems, /switchSection\('(?:chat|memory)'\)/);
+  assert.doesNotMatch(commandItems, /Open in VS Code|Run selected session|Search local memory/);
+});
+
+test('conversation attention states remain visible after the passive inspector is removed', () => {
+  assert.match(sessionWorkspaceSource, /const showStatusBanner = statusPresentation !== null/);
+  assert.doesNotMatch(sessionWorkspaceSource, /statusPresentation\.tone !== 'attention'/);
 });
 
 test('desktop styles remove standalone workspace drawer and pull-request chrome', () => {

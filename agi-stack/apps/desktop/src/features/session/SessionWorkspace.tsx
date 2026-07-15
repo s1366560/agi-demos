@@ -18,17 +18,15 @@ import {
 
 import { useI18n } from '../../i18n';
 import {
-  SessionInspector,
-  type SessionInspectorEvidence,
-} from './SessionInspector';
-import {
   defaultSessionCanvasTab,
   type SessionCanvasTabId,
 } from './sessionCanvasModel';
 import {
-  nextSessionSurface,
+  sessionSurfaceForSession,
   sessionSurfacePanes,
-  type SessionSurface,
+  transitionSessionSurface,
+  type SessionSurfaceAction,
+  type SessionSurfaceState,
 } from './sessionLayoutModel';
 import type { SessionCanvasControls } from './workspaceReviewPanelModel';
 import {
@@ -44,7 +42,6 @@ type SessionWorkspaceProps = {
   viewModel: SessionDetailViewModel;
   thread: ReactNode;
   canvas: ReactNode | ((controls: SessionCanvasControls) => ReactNode) | null;
-  evidence: SessionInspectorEvidence;
   onOpenCanvas: (tab?: SessionCanvasTabId) => void;
   onCloseCanvas: () => void;
   runActionPending: SessionRunAction | null;
@@ -64,7 +61,6 @@ export function SessionWorkspace({
   viewModel,
   thread,
   canvas,
-  evidence,
   onOpenCanvas,
   onCloseCanvas,
   runActionPending,
@@ -74,7 +70,11 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const { t } = useI18n();
   const hasCanvas = Boolean(canvas);
-  const [surface, setSurface] = useState<SessionSurface>('conversation');
+  const [surfaceState, setSurfaceState] = useState<SessionSurfaceState>(() => ({
+    sessionId: viewModel.id,
+    surface: 'conversation',
+  }));
+  const surface = sessionSurfaceForSession(surfaceState, viewModel.id);
   const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [recoveryConfirmOpen, setRecoveryConfirmOpen] = useState(false);
@@ -86,19 +86,17 @@ export function SessionWorkspace({
   const actionDisabled = runActionPending !== null || viewModel.runRevision === null;
 
   const panes = sessionSurfacePanes(surface, hasCanvas);
-  const showStatusBanner =
-    statusPresentation !== null &&
-    (surface !== 'conversation' || statusPresentation.tone !== 'attention');
+  const showStatusBanner = statusPresentation !== null;
 
-  useEffect(() => {
-    setSurface((current) => nextSessionSurface(current, 'select_session'));
-  }, [viewModel.id]);
+  const transitionSurface = (action: SessionSurfaceAction) => {
+    setSurfaceState((current) => transitionSessionSurface(current, viewModel.id, action));
+  };
 
   useEffect(() => {
     if (!hasCanvas) {
-      setSurface((current) => nextSessionSurface(current, 'close_canvas'));
+      transitionSurface('close_canvas');
     }
-  }, [hasCanvas]);
+  }, [hasCanvas, viewModel.id]);
 
   useEffect(() => {
     if (viewModel.status !== 'ready_review') {
@@ -107,18 +105,22 @@ export function SessionWorkspace({
     }
   }, [viewModel.status]);
 
-  const openCanvas = (tab?: SessionCanvasTabId) => {
+  const revealCanvas = () => {
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
       canvasTriggerRef.current =
         document.activeElement.dataset.sessionCanvasTrigger ?? canvasTriggerRef.current;
     }
-    setSurface((current) => nextSessionSurface(current, 'open_canvas'));
+    transitionSurface('open_canvas');
+  };
+
+  const openCanvas = (tab?: SessionCanvasTabId) => {
+    revealCanvas();
     onOpenCanvas(tab ?? defaultSessionCanvasTab(viewModel.status, viewModel.capabilityMode));
   };
 
   const closeCanvas = () => {
     const triggerId = canvasTriggerRef.current;
-    setSurface((current) => nextSessionSurface(current, 'close_canvas'));
+    transitionSurface('close_canvas');
     onCloseCanvas();
     if (triggerId && typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
@@ -137,9 +139,7 @@ export function SessionWorkspace({
   const canvasControls: SessionCanvasControls = {
     layout: surface === 'canvas' ? 'focus' : 'split',
     onLayoutChange: (layout) => {
-      setSurface((current) =>
-        nextSessionSurface(current, layout === 'focus' ? 'focus_canvas' : 'show_split'),
-      );
+      transitionSurface(layout === 'focus' ? 'focus_canvas' : 'show_split');
     },
     onClose: closeCanvas,
   };
@@ -445,9 +445,6 @@ export function SessionWorkspace({
             </div>
             {thread}
           </section>
-        ) : null}
-        {panes.inspector ? (
-          <SessionInspector viewModel={viewModel} evidence={evidence} onOpenCanvas={openCanvas} />
         ) : null}
         {panes.canvas && canvasContent ? (
           <aside className="session-workspace-canvas" aria-label={t('session.canvas')}>
