@@ -2,8 +2,10 @@ import type {
   AgentCapabilityMode,
   AgentConversation,
   ConnectionState,
+  DesktopRuntimeConfig,
   PlanSnapshot,
   ProjectSummary,
+  RuntimeDataset,
   WorkspaceSummary,
 } from '../../types';
 
@@ -59,6 +61,40 @@ type BuildWorkspaceOverviewModelInput = {
 
 const ATTENTION_STATUSES = new Set(['needs_input', 'needs_approval']);
 const READY_STATUSES = new Set(['ready_review', 'completed']);
+
+export function beginWorkspaceRuntimeTransition(dataset: RuntimeDataset): RuntimeDataset {
+  return {
+    ...dataset,
+    messages: [],
+    tasks: [],
+    plan: null,
+  };
+}
+
+export function beginDesktopRuntimeScopeTransition(
+  dataset: RuntimeDataset,
+  previousConfig: DesktopRuntimeConfig,
+  nextConfig: DesktopRuntimeConfig,
+): RuntimeDataset {
+  if (!sameProjectRuntimeScope(previousConfig, nextConfig)) {
+    return {
+      workspaces: [],
+      workspacesByProject: {},
+      conversationsByWorkspace: {},
+      nodeState: { projects: {}, workspaces: {} },
+      messages: [],
+      tasks: [],
+      plan: null,
+      sandbox: null,
+      myWork: [],
+      myWorkError: null,
+    };
+  }
+  if (previousConfig.workspaceId !== nextConfig.workspaceId) {
+    return beginWorkspaceRuntimeTransition(dataset);
+  }
+  return dataset;
+}
 
 export function buildWorkspaceOverviewModel({
   workspace,
@@ -161,4 +197,18 @@ function stringValue(value: unknown): string | null {
 
 function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function sameProjectRuntimeScope(
+  previousConfig: DesktopRuntimeConfig,
+  nextConfig: DesktopRuntimeConfig,
+): boolean {
+  return (
+    previousConfig.mode === nextConfig.mode &&
+    previousConfig.apiBaseUrl === nextConfig.apiBaseUrl &&
+    previousConfig.apiKey === nextConfig.apiKey &&
+    previousConfig.localApiToken === nextConfig.localApiToken &&
+    previousConfig.tenantId === nextConfig.tenantId &&
+    previousConfig.projectId === nextConfig.projectId
+  );
 }

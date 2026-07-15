@@ -5,10 +5,12 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   buildHitlSocketMessage,
+  conversationSubscriptionMessages,
   createAgentSocketContextState,
   eventCursor,
   reconnectDelay,
   resetAgentSocketContextState,
+  transitionAgentSocketConversationSelection,
   socketEventKey,
   socketEventsSince,
 } = require('/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js');
@@ -96,4 +98,42 @@ test('workspace context changes clear every replay and subscription cursor', () 
   assert.equal(state.subscribedConversations.size, 0);
   assert.equal(state.workspaceEventId, null);
   assert.equal(state.seenEventKeys.size, 0);
+});
+
+test('active conversation transition replaces stale subscriptions without clearing replay cursors', () => {
+  const state = createAgentSocketContextState();
+  state.subscribedConversations.add('conversation-old');
+  state.conversationCursors.set('conversation-new', {
+    conversationId: 'conversation-new',
+    timeUs: 82,
+    counter: 5,
+  });
+
+  const selected = transitionAgentSocketConversationSelection(state, ' conversation-new ');
+
+  assert.deepEqual(selected, {
+    unsubscribeConversationIds: ['conversation-old'],
+    subscribeConversationId: 'conversation-new',
+  });
+  assert.deepEqual([...state.subscribedConversations], ['conversation-new']);
+  assert.deepEqual(state.conversationCursors.get('conversation-new'), {
+    conversationId: 'conversation-new',
+    timeUs: 82,
+    counter: 5,
+  });
+  assert.deepEqual(conversationSubscriptionMessages(state), [
+    {
+      type: 'subscribe',
+      conversation_id: 'conversation-new',
+      from_time_us: 82,
+      from_counter: 6,
+    },
+  ]);
+
+  const cleared = transitionAgentSocketConversationSelection(state, null);
+  assert.deepEqual(cleared, {
+    unsubscribeConversationIds: ['conversation-new'],
+    subscribeConversationId: null,
+  });
+  assert.equal(state.subscribedConversations.size, 0);
 });

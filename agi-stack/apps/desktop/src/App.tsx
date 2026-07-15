@@ -167,6 +167,7 @@ import {
   newTaskAgentTurnTransport,
 } from './features/task/newTaskPlanModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
+import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import { socketEventsSince, useAgentSocket } from './hooks/useAgentSocket';
 import { useTerminalProxy } from './hooks/useTerminalProxy';
 import { useI18n } from './i18n';
@@ -1685,8 +1686,12 @@ export function App() {
   const terminalRunScopeKeyRef = useRef('');
 
   const commitRuntimeConfig = useCallback((nextConfig: DesktopRuntimeConfig) => {
-    if (!isSameDesktopRequestScope(configRef.current, nextConfig)) {
+    const previousConfig = configRef.current;
+    if (!isSameDesktopRequestScope(previousConfig, nextConfig)) {
       configScopeEpochRef.current += 1;
+      setDataset((current) =>
+        beginDesktopRuntimeScopeTransition(current, previousConfig, nextConfig),
+      );
     }
     configRef.current = nextConfig;
     setConfig(nextConfig);
@@ -1694,11 +1699,17 @@ export function App() {
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
   const showRuntimeConfig = isWorkspaceReady(auth, config);
+  const scopedConversation =
+    agentConversationSession?.scopeKey === agentConversationScopeKey(config)
+      ? agentConversationSession.conversation
+      : null;
+  const scopedConversationId = scopedConversation?.id ?? '';
   const api = useMemo(() => new DesktopApiClient(config), [config]);
   const socket = useAgentSocket(
     config,
     showRuntimeConfig && connection === 'ready',
     auth.context?.revision ?? null,
+    scopedConversation?.id ?? null,
   );
   const desktopFrameUrl = useMemo(() => {
     if (!desktop?.success) return null;
@@ -1749,11 +1760,6 @@ export function App() {
     };
   }, [commitRuntimeConfig, localRuntimeMode]);
 
-  const scopedConversation =
-    agentConversationSession?.scopeKey === agentConversationScopeKey(config)
-      ? agentConversationSession.conversation
-      : null;
-  const scopedConversationId = scopedConversation?.id ?? '';
   const invalidateSessionAuthority = useCallback(() => {
     if (!scopedConversationId) return;
     sessionProjectionRequestRef.current += 1;
@@ -3185,7 +3191,6 @@ export function App() {
     setAgentTaskSignals([]);
     setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
-    socket.subscribeConversation(conversation.id);
     applySectionSideEffects(targetSection);
     void loadConversationTimeline(conversation, projectId);
     void refreshRuntime(nextConfig);
@@ -3280,7 +3285,6 @@ export function App() {
         },
       }));
       setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
-      socket.subscribeConversation(conversation.id);
       applySectionSideEffects('chat');
       void loadConversationTimeline(conversation, projectId);
       await refreshRuntime(nextConfig);
@@ -3340,7 +3344,6 @@ export function App() {
       },
     }));
     setExpandedWorkspaceIds((current) => new Set([...current, workspace.id]));
-    socket.subscribeConversation(conversation.id);
     applySectionSideEffects('chat');
     void loadConversationTimeline(conversation, sessionConfig.projectId);
     void refreshRuntime(sessionConfig);
@@ -3423,7 +3426,6 @@ export function App() {
         },
       }));
     }
-    socket.subscribeConversation(conversation.id);
     void loadConversationTimeline(conversation, config.projectId);
     return conversation;
   };

@@ -30,9 +30,13 @@ type AgentSocketState = {
   connected: boolean;
   error: string | null;
   events: AgentWsEvent[];
-  subscribeConversation: (conversationId: string) => boolean;
   sendAgentMessage: (message: AgentRunMessage) => boolean;
   respondToHitl: (submission: HitlResponseSubmission) => boolean;
+};
+
+export type AgentSocketConversationTransition = {
+  unsubscribeConversationIds: string[];
+  subscribeConversationId: string | null;
 };
 
 type AgentRunMessage = {
@@ -46,6 +50,7 @@ export function useAgentSocket(
   config: DesktopRuntimeConfig,
   enabled: boolean,
   contextRevision: number | null,
+  activeConversationId: string | null,
 ): AgentSocketState {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +58,10 @@ export function useAgentSocket(
   const socketRef = useRef<WebSocket | null>(null);
   const contextStateRef = useRef(createAgentSocketContextState());
 
-  const client = useMemo(() => new DesktopApiClient(config), [config]);
+  const client = useMemo(
+    () => new DesktopApiClient(config),
+    [config.apiBaseUrl, config.apiKey, config.localApiToken, config.mode],
+  );
 
   const sendSocketMessage = useCallback((payload: Record<string, unknown>) => {
     const socket = socketRef.current;
@@ -99,12 +107,39 @@ export function useAgentSocket(
     resetAgentSocketContextState(contextStateRef.current);
     setEvents([]);
   }, [
+    config.apiBaseUrl,
     config.apiKey,
+    config.localApiToken,
     config.mode,
     config.projectId,
     config.tenantId,
     config.workspaceId,
     contextRevision,
+  ]);
+
+  useEffect(() => {
+    const transition = transitionAgentSocketConversationSelection(
+      contextStateRef.current,
+      activeConversationId,
+    );
+    transition.unsubscribeConversationIds.forEach((conversationId) => {
+      sendSocketMessage({ type: 'unsubscribe', conversation_id: conversationId });
+    });
+    if (transition.subscribeConversationId) {
+      subscribeConversation(transition.subscribeConversationId);
+    }
+  }, [
+    activeConversationId,
+    config.apiBaseUrl,
+    config.apiKey,
+    config.localApiToken,
+    config.mode,
+    config.projectId,
+    config.tenantId,
+    config.workspaceId,
+    contextRevision,
+    sendSocketMessage,
+    subscribeConversation,
   ]);
 
   const respondToHitl = useCallback(
@@ -169,20 +204,8 @@ export function useAgentSocket(
           }),
         );
       }
-      contextStateRef.current.subscribedConversations.forEach((conversationId) => {
-        const cursor = contextStateRef.current.conversationCursors.get(conversationId);
-        socket.send(
-          JSON.stringify({
-            type: 'subscribe',
-            conversation_id: conversationId,
-            ...(cursor
-              ? {
-                  from_time_us: cursor.timeUs,
-                  from_counter: cursor.counter + 1,
-                }
-              : {}),
-          }),
-        );
+      conversationSubscriptionMessages(contextStateRef.current).forEach((message) => {
+        socket.send(JSON.stringify(message));
       });
     };
 
@@ -313,7 +336,6 @@ export function useAgentSocket(
     connected,
     error,
     events,
-    subscribeConversation,
     sendAgentMessage,
     respondToHitl,
   };
@@ -333,6 +355,42 @@ export function resetAgentSocketContextState(state: AgentSocketContextState): vo
   state.subscribedConversations.clear();
   state.workspaceEventId = null;
   state.seenEventKeys.clear();
+}
+
+export function transitionAgentSocketConversationSelection(
+  state: AgentSocketContextState,
+  conversationId: string | null,
+): AgentSocketConversationTransition {
+  const normalizedConversationId = conversationId?.trim() || null;
+  const unsubscribeConversationIds = [...state.subscribedConversations].filter(
+    (currentConversationId) => currentConversationId !== normalizedConversationId,
+  );
+  state.subscribedConversations.clear();
+  if (normalizedConversationId) {
+    state.subscribedConversations.add(normalizedConversationId);
+  }
+  return {
+    unsubscribeConversationIds,
+    subscribeConversationId: normalizedConversationId,
+  };
+}
+
+export function conversationSubscriptionMessages(
+  state: AgentSocketContextState,
+): Record<string, unknown>[] {
+  return [...state.subscribedConversations].map((conversationId) => {
+    const cursor = state.conversationCursors.get(conversationId);
+    return {
+      type: 'subscribe',
+      conversation_id: conversationId,
+      ...(cursor
+        ? {
+            from_time_us: cursor.timeUs,
+            from_counter: cursor.counter + 1,
+          }
+        : {}),
+    };
+  });
 }
 
 export function buildHitlSocketMessage(

@@ -3,7 +3,11 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { buildWorkspaceOverviewModel } = require(
+const {
+  beginDesktopRuntimeScopeTransition,
+  beginWorkspaceRuntimeTransition,
+  buildWorkspaceOverviewModel,
+} = require(
   '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceOverviewModel.js'
 );
 
@@ -115,4 +119,89 @@ test('workspace overview exposes unavailable values instead of inventing operati
   });
   assert.deepEqual(model.recentSessions, []);
   assert.deepEqual(model.recentActivity, []);
+});
+
+test('workspace transition clears only payload owned by the previous workspace', () => {
+  const dataset = {
+    workspaces: [{ id: 'workspace-a' }, { id: 'workspace-b' }],
+    workspacesByProject: {
+      'project-1': [{ id: 'workspace-a' }, { id: 'workspace-b' }],
+    },
+    conversationsByWorkspace: {
+      'workspace-a': [conversation('conversation-a', 'Old session', 'running')],
+      'workspace-b': [conversation('conversation-b', 'New session', 'ready_review')],
+    },
+    nodeState: { projects: {}, workspaces: {} },
+    messages: [{ id: 'message-a', content: 'old workspace message' }],
+    tasks: [{ id: 'task-a', title: 'Old workspace task' }],
+    plan: { workspace_id: 'workspace-a', root_goal: 'Old workspace goal' },
+    sandbox: { id: 'sandbox-a', status: 'running' },
+    myWork: [{ id: 'work-a', project_id: 'project-1' }],
+    myWorkError: null,
+  };
+
+  const transitioned = beginWorkspaceRuntimeTransition(dataset);
+
+  assert.equal(transitioned.workspaces, dataset.workspaces);
+  assert.equal(transitioned.conversationsByWorkspace, dataset.conversationsByWorkspace);
+  assert.equal(transitioned.myWork, dataset.myWork);
+  assert.deepEqual(transitioned.messages, []);
+  assert.deepEqual(transitioned.tasks, []);
+  assert.equal(transitioned.plan, null);
+  assert.equal(transitioned.sandbox, dataset.sandbox);
+});
+
+test('desktop runtime transition invalidates data at its exact authority boundary', () => {
+  const dataset = {
+    workspaces: [{ id: 'workspace-a' }],
+    workspacesByProject: { 'project-1': [{ id: 'workspace-a' }] },
+    conversationsByWorkspace: { 'workspace-a': [] },
+    nodeState: { projects: {}, workspaces: {} },
+    messages: [{ id: 'message-a', content: 'workspace message' }],
+    tasks: [{ id: 'task-a', title: 'Workspace task' }],
+    plan: { workspace_id: 'workspace-a' },
+    sandbox: { id: 'sandbox-a', status: 'running' },
+    myWork: [{ id: 'work-a', project_id: 'project-1' }],
+    myWorkError: 'stale project warning',
+  };
+  const previousConfig = {
+    mode: 'cloud',
+    apiBaseUrl: 'http://127.0.0.1:8000',
+    apiKey: 'session-a',
+    localApiToken: '',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-a',
+  };
+
+  assert.equal(
+    beginDesktopRuntimeScopeTransition(dataset, previousConfig, previousConfig),
+    dataset
+  );
+
+  const workspaceChanged = beginDesktopRuntimeScopeTransition(dataset, previousConfig, {
+    ...previousConfig,
+    workspaceId: 'workspace-b',
+  });
+  assert.deepEqual(workspaceChanged.messages, []);
+  assert.equal(workspaceChanged.sandbox, dataset.sandbox);
+  assert.equal(workspaceChanged.myWork, dataset.myWork);
+
+  const projectChanged = beginDesktopRuntimeScopeTransition(dataset, previousConfig, {
+    ...previousConfig,
+    projectId: 'project-2',
+    workspaceId: '',
+  });
+  assert.deepEqual(projectChanged, {
+    workspaces: [],
+    workspacesByProject: {},
+    conversationsByWorkspace: {},
+    nodeState: { projects: {}, workspaces: {} },
+    messages: [],
+    tasks: [],
+    plan: null,
+    sandbox: null,
+    myWork: [],
+    myWorkError: null,
+  });
 });

@@ -104,3 +104,20 @@ test('Home clears an open conversation through the workspace-overview transition
   assert.match(appSource, /if \(section === 'home'\) openWorkspaceOverview\(\)/);
   assert.match(appSource, /onSelect: openWorkspaceOverview/);
 });
+
+test('selected conversations are declarative socket state across workspace reconnects', () => {
+  assert.match(
+    appSource,
+    /useAgentSocket\([\s\S]*?scopedConversation\?\.id \?\? null[\s\S]*?\)/,
+  );
+  assert.doesNotMatch(appSource, /socket\.subscribeConversation\(/);
+});
+
+test('every runtime config transition invalidates stale data before the visible scope changes', () => {
+  const commit =
+    appSource.match(/const commitRuntimeConfig = useCallback\([\s\S]*?\n  \}, \[\]\);/)?.[0] ?? '';
+
+  assert.match(commit, /const previousConfig = configRef\.current/);
+  assert.match(commit, /beginDesktopRuntimeScopeTransition\(current, previousConfig, nextConfig\)/);
+  assert.ok(commit.indexOf('beginDesktopRuntimeScopeTransition') < commit.indexOf('setConfig'));
+});
