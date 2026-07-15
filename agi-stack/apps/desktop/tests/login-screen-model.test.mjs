@@ -3,23 +3,31 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { resolveWorkspaceSsoAction, validateLoginCredentials } = require(
+const {
+  resolveWorkspaceContinueLabelKey,
+  resolveWorkspaceSsoAction,
+  validateLoginCredentials,
+} = require(
   '/tmp/agistack-desktop-test-dist/src/features/auth/loginScreenModel.js',
 );
 
-test('workspace SSO uses one trusted native local session when the runtime is ready', () => {
+test('local workspace continue uses one trusted native session when the runtime is ready', () => {
+  assert.equal(resolveWorkspaceContinueLabelKey('local'), 'login.localWorkspace');
   assert.deepEqual(resolveWorkspaceSsoAction('local', true), {
     kind: 'local_session',
     trustedDevice: true,
   });
 });
 
-test('workspace SSO never impersonates password login when no SSO runtime is configured', () => {
+test('workspace continue reports the unavailable capability for each runtime mode', () => {
+  assert.equal(resolveWorkspaceContinueLabelKey('cloud'), 'login.workspaceSso');
   assert.deepEqual(resolveWorkspaceSsoAction('local', false), {
     kind: 'unavailable',
+    capability: 'local_workspace',
   });
   assert.deepEqual(resolveWorkspaceSsoAction('cloud', true), {
     kind: 'unavailable',
+    capability: 'workspace_sso',
   });
 });
 

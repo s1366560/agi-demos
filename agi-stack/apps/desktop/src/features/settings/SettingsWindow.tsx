@@ -55,6 +55,7 @@ import {
   type SettingsSearchCopy,
   type SettingsSection,
 } from './settingsNavigationModel';
+import { useModalDialog } from './useModalDialog';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -149,6 +150,7 @@ export function SettingsWindow({
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const resourceRequestId = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const activeSectionRef = useRef(section);
   const resourceContextKey = `${config.mode}:${config.tenantId}:${config.projectId}`;
   const resourceContextKeyRef = useRef(resourceContextKey);
@@ -165,6 +167,11 @@ export function SettingsWindow({
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
   const isResourceSection = isResource(section);
   const canManageProviders = providerManagementAllowed(config.mode, auth.user?.roles ?? []);
+  const settingsDialogRef = useModalDialog({
+    active: open,
+    initialFocusRef: searchInputRef,
+    onClose,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -183,15 +190,6 @@ export function SettingsWindow({
     if (!open) return;
     setResourceCounts({ models: null, skills: null, plugins: null, agents: null });
   }, [config.projectId, config.tenantId, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, open]);
 
   const loadResources = useCallback(
     async (resourceSection: ResourceSection, signal?: AbortSignal) => {
@@ -389,10 +387,12 @@ export function SettingsWindow({
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="settings-window-backdrop" onMouseDown={onClose}>
         <section
+          ref={settingsDialogRef}
           className="settings-window-dialog"
           role="dialog"
           aria-modal="true"
           aria-label={t('settings.title')}
+          tabIndex={-1}
           onMouseDown={(event) => event.stopPropagation()}
         >
           <header className="settings-window-titlebar">
@@ -409,6 +409,7 @@ export function SettingsWindow({
             <label className="settings-window-search">
               <MagnifyingGlassIcon />
               <input
+                ref={searchInputRef}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t('settings.search')}

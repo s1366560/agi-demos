@@ -11,7 +11,11 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { AuthState, RuntimeMode } from '../../types';
-import { resolveWorkspaceSsoAction, validateLoginCredentials } from './loginScreenModel';
+import {
+  resolveWorkspaceContinueLabelKey,
+  resolveWorkspaceSsoAction,
+  validateLoginCredentials,
+} from './loginScreenModel';
 import './LoginScreen.css';
 
 type LoginScreenProps = {
@@ -43,14 +47,18 @@ export function LoginScreen({
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const busy = auth.status === 'signing_in';
 
-  const continueWithWorkspaceSso = () => {
+  const continueWithWorkspace = () => {
     setInteractionError(null);
     const action = resolveWorkspaceSsoAction(mode, localReady);
     if (action.kind === 'local_session') {
       onLocalSession(action.trustedDevice);
       return;
     }
-    setInteractionError(t('login.workspaceSsoUnavailable'));
+    setInteractionError(
+      action.capability === 'local_workspace'
+        ? t('login.localWorkspaceUnavailable')
+        : t('login.workspaceSsoUnavailable'),
+    );
   };
 
   const visibleError = interactionError ?? auth.error;
@@ -121,11 +129,11 @@ export function LoginScreen({
           <button
             className="desktop-login-sso"
             type="button"
-            onClick={continueWithWorkspaceSso}
+            onClick={continueWithWorkspace}
             disabled={busy}
           >
             <img src="/icon-192.png" alt="" />
-            {t('login.workspaceSso')}
+            {t(resolveWorkspaceContinueLabelKey(mode))}
             <ArrowRightIcon />
           </button>
 

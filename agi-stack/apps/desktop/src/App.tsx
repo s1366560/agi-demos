@@ -2560,7 +2560,7 @@ export function App() {
           auth.status === 'signed_in' &&
           !auth.tenants.some((tenant) => tenant.id === requestedTenantId)
         ) {
-          throw new Error('The active tenant is not available to the authenticated user.');
+          throw new Error(t('runtime.activeTenantUnavailable'));
         }
         const resolvedProject = findWorkspaceProject(
           availableProjects,
@@ -2568,7 +2568,7 @@ export function App() {
           requestedProjectId,
         );
         if (!resolvedProject) {
-          throw new Error('The active project is not available in the authenticated tenant.');
+          throw new Error(t('runtime.activeProjectUnavailable'));
         }
         const resolvedProjectId = resolvedProject.id;
         const projects = [resolvedProject];
@@ -2708,7 +2708,7 @@ export function App() {
         return false;
       }
     },
-    [auth.projects, auth.status, auth.tenants, commitRuntimeConfig, config, syncLocalRuntimeConfig],
+    [auth.projects, auth.status, auth.tenants, commitRuntimeConfig, config, syncLocalRuntimeConfig, t],
   );
 
   const refreshMyWork = useCallback(async (scheduledScope?: MyWorkRefreshScope) => {
@@ -2817,7 +2817,7 @@ export function App() {
     if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
     const tenantId = preferredTenantId;
     if (tenantId && !tenants.some((tenant) => tenant.id === tenantId)) {
-      throw new Error('The authenticated workspace tenant is not available to this user.');
+      throw new Error(t('login.authenticatedTenantUnavailable'));
     }
     const scopedProjects = projects.filter((project) => project.tenant_id === tenantId);
     const preferredProjectId =
@@ -2832,7 +2832,7 @@ export function App() {
       authoritativeContext &&
       !workspaceContextMatchesSelection(authoritativeContext, tenantId, projectId)
     ) {
-      throw new Error('The authoritative workspace project is no longer available.');
+      throw new Error(t('login.authoritativeProjectUnavailable'));
     }
     const context = authoritativeContext
       ? authoritativeContext
@@ -2845,7 +2845,7 @@ export function App() {
             updated_at: new Date().toISOString(),
           };
     if (!workspaceContextMatchesSelection(context, tenantId, projectId)) {
-      throw new Error('The authenticated workspace context does not match the selected project.');
+      throw new Error(t('login.authenticatedContextMismatch'));
     }
     const nextConfig = { ...tokenConfig, tenantId, projectId, workspaceId: '' };
 
@@ -2947,7 +2947,7 @@ export function App() {
     authAttemptRevision: number,
   ): Promise<boolean> => {
     if (!outcome.context) {
-      throw new Error('The local session did not return an authoritative workspace context.');
+      throw new Error(t('login.localContextMissing'));
     }
     const localContext = outcome.context;
     const tokenConfig = {
@@ -2965,7 +2965,7 @@ export function App() {
     ]);
     if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
     if (!tenants.some((tenant) => tenant.id === localContext.tenant_id)) {
-      throw new Error('The active local tenant is not available to this user.');
+      throw new Error(t('login.localTenantUnavailable'));
     }
     const scopedProjects = projects.filter(
       (project) => project.tenant_id === localContext.tenant_id,
@@ -2976,7 +2976,7 @@ export function App() {
       localContext.project_id,
     );
     if (!selectedProject) {
-      throw new Error('The active local project is not available to this user.');
+      throw new Error(t('login.localProjectUnavailable'));
     }
 
     contextRevisionRef.current = localContext.revision;
@@ -3001,7 +3001,7 @@ export function App() {
     if (!localRuntimeAuthorityReady) {
       setAuth((current) => ({
         ...current,
-        error: 'The trusted local runtime is not ready yet.',
+        error: t('login.localRuntimeNotReady'),
       }));
       return;
     }
@@ -3087,7 +3087,7 @@ export function App() {
     setLoginModalOpen(false);
     setAuth((current) => ({
       ...current,
-      error: 'Manual API keys must be validated by the server before opening a workspace.',
+      error: t('login.manualApiKeyRequiresValidation'),
     }));
   };
 
@@ -4466,10 +4466,10 @@ export function App() {
 
   const applySettingsContext = async (tenantId: string, projectId: string) => {
     if (!auth.context) {
-      throw new Error('An authenticated workspace context is required.');
+      throw new Error(t('settings.authenticatedContextRequired'));
     }
     if (!auth.tenants.some((tenant) => tenant.id === tenantId)) {
-      throw new Error('The selected tenant is not available to this user.');
+      throw new Error(t('settings.selectedTenantUnavailable'));
     }
     const contextClient = new DesktopApiClient({
       ...config,
@@ -4481,7 +4481,7 @@ export function App() {
     const scopedProjects = listedProjects.filter((project) => project.tenant_id === tenantId);
     const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
     if (!selectedProject) {
-      throw new Error('The selected project is not available for this tenant.');
+      throw new Error(t('settings.selectedProjectUnavailable'));
     }
 
     let nextContext: WorkspaceContextSnapshot;
@@ -4509,7 +4509,7 @@ export function App() {
       );
     }
     if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
-      throw new Error('The workspace context response did not match the selected project.');
+      throw new Error(t('settings.contextResponseMismatch'));
     }
     const nextConfig = { ...config, tenantId, projectId, workspaceId: '' };
     contextRevisionRef.current = nextContext.revision;
@@ -4519,9 +4519,7 @@ export function App() {
     applySectionSideEffects('workspace');
     const applied = await refreshRuntime(nextConfig, [selectedProject]);
     if (!applied) {
-      throw new Error(
-        'The context was switched, but the selected project could not be loaded. Refresh to retry.',
-      );
+      throw new Error(t('settings.contextSwitchLoadFailed'));
     }
   };
 

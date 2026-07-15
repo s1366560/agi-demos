@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircledIcon,
   ChevronDownIcon,
@@ -62,58 +62,127 @@ export function ProviderConnectionPanel({
   const [validation, setValidation] = useState<LlmProviderValidationOutcome | null>(null);
   const [busy, setBusy] = useState<'test' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const activeProviderIdRef = useRef(provider.id);
+  const validationRequestId = useRef(0);
+  const saveRequestId = useRef(0);
+  activeProviderIdRef.current = provider.id;
+
+  useEffect(() => {
+    validationRequestId.current += 1;
+    saveRequestId.current += 1;
+    setEditing(false);
+    setAdvanced(false);
+    setShowSecret(false);
+    setDraft(providerDraftFromProvider(provider));
+    setValidation(null);
+    setBusy(null);
+    setError(null);
+    return () => {
+      validationRequestId.current += 1;
+      saveRequestId.current += 1;
+    };
+    // Provider identity is the reset and request-cancellation boundary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider.id]);
 
   const mutation = useMemo(() => providerMutationFromDraft(draft), [draft]);
   const updateDraft = <Key extends keyof ProviderEditorDraft>(
     key: Key,
     value: ProviderEditorDraft[Key],
   ) => {
+    if (busy === 'save') return;
+    validationRequestId.current += 1;
     setDraft((current) => ({ ...current, [key]: value }));
     setValidation(null);
+    setError(null);
+    setBusy((current) => (current === 'test' ? null : current));
   };
 
   const testConnection = async () => {
+    const requestId = validationRequestId.current + 1;
+    validationRequestId.current = requestId;
+    const providerId = provider.id;
+    const draftMutation = mutation;
+    const validateDraft = editing;
     setBusy('test');
     setError(null);
+    setValidation(null);
     try {
-      setValidation(editing ? await onValidateDraft(mutation) : await onValidate(provider.id));
+      const outcome = validateDraft
+        ? await onValidateDraft(draftMutation)
+        : await onValidate(providerId);
+      if (
+        requestId !== validationRequestId.current ||
+        providerId !== activeProviderIdRef.current
+      ) {
+        return;
+      }
+      setValidation(outcome);
     } catch (caught) {
+      if (
+        requestId !== validationRequestId.current ||
+        providerId !== activeProviderIdRef.current
+      ) {
+        return;
+      }
       setValidation(null);
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setBusy(null);
+      if (
+        requestId === validationRequestId.current &&
+        providerId === activeProviderIdRef.current
+      ) {
+        setBusy(null);
+      }
     }
   };
 
   const saveConnection = async () => {
+    const requestId = saveRequestId.current + 1;
+    saveRequestId.current = requestId;
+    const providerId = provider.id;
+    const draftMutation = mutation;
     setBusy('save');
     setError(null);
     try {
-      const updated = await onSave(provider, mutation);
+      const updated = await onSave(provider, draftMutation);
+      if (requestId !== saveRequestId.current || providerId !== activeProviderIdRef.current) {
+        return;
+      }
       setEditing(false);
       setDraft(providerDraftFromProvider(updated));
       setShowSecret(false);
     } catch (caught) {
+      if (requestId !== saveRequestId.current || providerId !== activeProviderIdRef.current) {
+        return;
+      }
       setDraft((current) => ({ ...current, apiKey: '' }));
+      setValidation(null);
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setBusy(null);
+      if (requestId === saveRequestId.current && providerId === activeProviderIdRef.current) {
+        setBusy(null);
+      }
     }
   };
 
   const cancelEdit = () => {
+    validationRequestId.current += 1;
     setDraft(providerDraftFromProvider(provider));
     setEditing(false);
     setValidation(null);
     setError(null);
+    setBusy((current) => (current === 'test' ? null : current));
   };
 
   const startEdit = () => {
+    validationRequestId.current += 1;
     setDraft(providerDraftFromProvider(provider));
     setEditing(true);
     setValidation(null);
     setError(null);
     setShowSecret(false);
+    setBusy((current) => (current === 'test' ? null : current));
   };
 
   const configurationOnly = mode === 'local';
@@ -134,7 +203,11 @@ export function ProviderConnectionPanel({
           <p>{t('providers.connectionDescription')}</p>
         </div>
         {canManage ? (
-          <button type="button" onClick={editing ? cancelEdit : startEdit}>
+          <button
+            type="button"
+            disabled={busy === 'save'}
+            onClick={editing ? cancelEdit : startEdit}
+          >
             <GearIcon />
             {t(editing ? 'providers.cancelEdit' : 'providers.editConnection')}
           </button>
@@ -168,7 +241,9 @@ export function ProviderConnectionPanel({
             <button
               className={draft.authMethod === authMethod ? 'selected' : ''}
               type="button"
-              disabled={!editing || (mode === 'cloud' && authMethod === 'none')}
+              disabled={
+                !editing || busy === 'save' || (mode === 'cloud' && authMethod === 'none')
+              }
               key={authMethod}
               onClick={() => updateDraft('authMethod', authMethod)}
             >
@@ -185,7 +260,7 @@ export function ProviderConnectionPanel({
             <span>{t('providers.apiKey')}</span>
             <div className="provider-secret-input">
               <input
-                disabled={!editing}
+                disabled={!editing || busy === 'save'}
                 type={showSecret ? 'text' : 'password'}
                 value={credentialValue}
                 autoComplete="new-password"
@@ -194,7 +269,7 @@ export function ProviderConnectionPanel({
               />
               <button
                 type="button"
-                disabled={!editing || !draft.apiKey}
+                disabled={!editing || busy === 'save' || !draft.apiKey}
                 aria-label={t(showSecret ? 'providers.hideSecret' : 'providers.showSecret')}
                 onClick={() => setShowSecret((current) => !current)}
               >
@@ -225,7 +300,7 @@ export function ProviderConnectionPanel({
         <label className="provider-input-label">
           <span>{t('providers.baseUrl')}</span>
           <input
-            disabled={!editing}
+            disabled={!editing || busy === 'save'}
             type="url"
             value={draft.baseUrl}
             onChange={(event) => updateDraft('baseUrl', event.target.value)}
@@ -250,7 +325,7 @@ export function ProviderConnectionPanel({
             <label>
               <span>{t('providers.connectionName')}</span>
               <input
-                disabled={!editing}
+                disabled={!editing || busy === 'save'}
                 value={draft.name}
                 onChange={(event) => updateDraft('name', event.target.value)}
               />

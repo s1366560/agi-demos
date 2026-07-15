@@ -122,7 +122,6 @@ export function ModelProviderWorkspace({
     setProviders((current) =>
       current.map((item) => (item.id === nextProvider.id ? nextProvider : item)),
     );
-    setSelectedId(nextProvider.id);
   }, []);
 
   const saveProvider = useCallback(

@@ -44,6 +44,51 @@ test('login validation remains localized in English and Simplified Chinese', () 
     i18nSource,
     /'login\.credentialStoreUnavailable':[\s\S]*'Unlock the operating system credential store before switching accounts\.'/,
   );
+  assert.match(i18nSource, /'login\.localWorkspace': 'Continue with local workspace'/);
+  assert.match(i18nSource, /'login\.localWorkspace': '继续使用本地工作区'/);
+  assert.match(
+    i18nSource,
+    /'login\.localWorkspaceUnavailable': 'The trusted local workspace is not ready yet\.'/,
+  );
+  assert.match(i18nSource, /'login\.localWorkspaceUnavailable': '受信任的本地工作区尚未就绪。'/);
+});
+
+test('the workspace continue action tells the truth for local and cloud capabilities', () => {
+  assert.match(loginSource, /resolveWorkspaceContinueLabelKey\(mode\)/);
+  assert.match(loginSource, /action\.capability === 'local_workspace'/);
+  assert.match(loginSource, /t\('login\.localWorkspaceUnavailable'\)/);
+  assert.match(loginSource, /t\('login\.workspaceSsoUnavailable'\)/);
+});
+
+test('authentication and workspace context failures are localized at their source', () => {
+  const localizedKeys = [
+    'runtime.activeTenantUnavailable',
+    'runtime.activeProjectUnavailable',
+    'login.authenticatedTenantUnavailable',
+    'login.authoritativeProjectUnavailable',
+    'login.authenticatedContextMismatch',
+    'login.localContextMissing',
+    'login.localTenantUnavailable',
+    'login.localProjectUnavailable',
+    'login.localRuntimeNotReady',
+    'login.manualApiKeyRequiresValidation',
+    'settings.authenticatedContextRequired',
+    'settings.selectedTenantUnavailable',
+    'settings.selectedProjectUnavailable',
+    'settings.contextResponseMismatch',
+    'settings.contextSwitchLoadFailed',
+  ];
+
+  for (const key of localizedKeys) {
+    assert.match(appSource, new RegExp(`t\\('${key.replaceAll('.', '\\.')}'\\)`));
+    assert.equal((i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length, 2);
+  }
+
+  assert.doesNotMatch(
+    appSource,
+    /The (?:active|authenticated|authoritative|local|selected|trusted|workspace|context)[^']+(?:tenant|project|runtime|workspace context|workspace)[^']*\./,
+  );
+  assert.doesNotMatch(appSource, /Manual API keys must be validated[^']+\./);
 });
 
 test('login geometry and primary action colors match the approved prototype', () => {
@@ -52,6 +97,7 @@ test('login geometry and primary action colors match the approved prototype', ()
     /grid-template-columns: minmax\(430px, 0\.78fr\) minmax\(560px, 1\.22fr\)/,
   );
   assert.match(loginStyles, /min-height: 720px/);
+  assert.match(loginStyles, /color: #e7edf6/);
   assert.doesNotMatch(loginStyles, /min-width: 1100px/);
   assert.match(loginStyles, /\.desktop-login-card \{[\s\S]*width: min\(430px, 100%\)/);
   assert.match(
@@ -61,6 +107,10 @@ test('login geometry and primary action colors match the approved prototype', ()
   assert.match(
     loginStyles,
     /\.desktop-login-submit:hover \{[\s\S]*background: #177c96/,
+  );
+  assert.match(
+    loginStyles,
+    /@media \(max-height: 719px\) \{[\s\S]*\.desktop-login-screen \{[\s\S]*min-height: 0/,
   );
 });
 

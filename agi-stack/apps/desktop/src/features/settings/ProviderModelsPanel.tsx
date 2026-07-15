@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircledIcon,
   CubeIcon,
@@ -16,8 +16,9 @@ import type {
   ManagedLlmProvider,
 } from '../../types';
 import {
-  providerDraftFromProvider,
-  providerMutationFromDraft,
+  providerEnabledModelIds,
+  providerModelCanBeDisabled,
+  providerMutationForEnabledModels,
 } from './providerManagementModel';
 
 type ProviderModelsPanelProps = {
@@ -47,27 +48,37 @@ export function ProviderModelsPanel({
   const [query, setQuery] = useState('');
   const [manualModel, setManualModel] = useState('');
   const [enabled, setEnabled] = useState<Set<string>>(
-    () => new Set(provider.allowed_models ?? []),
+    () => new Set(providerEnabledModelIds(provider)),
   );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const catalogRequestId = useRef(0);
+  const saveRequestId = useRef(0);
+  const activeProviderIdRef = useRef(provider.id);
+  const onLoadCatalogRef = useRef(onLoadCatalog);
+  activeProviderIdRef.current = provider.id;
+  onLoadCatalogRef.current = onLoadCatalog;
 
   const loadCatalog = async () => {
+    const requestId = catalogRequestId.current + 1;
+    catalogRequestId.current = requestId;
     setLoading(true);
     setError(null);
     try {
-      const nextCatalog = await onLoadCatalog(provider.provider_type);
+      const nextCatalog = await onLoadCatalogRef.current(provider.provider_type);
+      if (requestId !== catalogRequestId.current) return;
       setCatalog(nextCatalog);
       setEnabled((current) => {
         if (current.size > 0 || nextCatalog.availability !== 'available') return current;
         return new Set(nextCatalog.models.map((model) => model.id));
       });
     } catch (caught) {
+      if (requestId !== catalogRequestId.current) return;
       setCatalog(null);
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setLoading(false);
+      if (requestId === catalogRequestId.current) setLoading(false);
     }
   };
 
@@ -75,9 +86,16 @@ export function ProviderModelsPanel({
     setCatalog(null);
     setQuery('');
     setManualModel('');
-    setEnabled(new Set(provider.allowed_models ?? []));
+    catalogRequestId.current += 1;
+    saveRequestId.current += 1;
+    setEnabled(new Set(providerEnabledModelIds(provider)));
+    setSaving(false);
     setError(null);
     void loadCatalog();
+    return () => {
+      catalogRequestId.current += 1;
+      saveRequestId.current += 1;
+    };
     // The provider identity is the reset boundary; the callback is stable in the parent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider.id]);
@@ -114,7 +132,7 @@ export function ProviderModelsPanel({
     [...enabled].sort().join('\n') !== [...configuredModels].sort().join('\n');
 
   const toggleModel = (modelId: string) => {
-    if (!canManage) return;
+    if (!canManage || !providerModelCanBeDisabled(provider, modelId)) return;
     setEnabled((current) => {
       const next = new Set(current);
       if (next.has(modelId)) next.delete(modelId);
@@ -131,17 +149,28 @@ export function ProviderModelsPanel({
   };
 
   const saveModels = async () => {
+    const requestId = saveRequestId.current + 1;
+    saveRequestId.current = requestId;
+    const providerId = provider.id;
     setSaving(true);
     setError(null);
     try {
-      const draft = providerDraftFromProvider(provider);
-      draft.allowedModels = [...enabled].join('\n');
-      if (!draft.primaryModel && enabled.size > 0) draft.primaryModel = [...enabled][0];
-      await onSave(provider, providerMutationFromDraft(draft));
+      await onSave(provider, providerMutationForEnabledModels(provider, enabled));
     } catch (caught) {
+      if (
+        requestId !== saveRequestId.current ||
+        providerId !== activeProviderIdRef.current
+      ) {
+        return;
+      }
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setSaving(false);
+      if (
+        requestId === saveRequestId.current &&
+        providerId === activeProviderIdRef.current
+      ) {
+        setSaving(false);
+      }
     }
   };
 
@@ -225,7 +254,12 @@ export function ProviderModelsPanel({
                 role="switch"
                 aria-label={t('providers.toggleModel', { model: model.id })}
                 aria-checked={enabled.has(model.id)}
-                disabled={!canManage}
+                disabled={!canManage || !providerModelCanBeDisabled(provider, model.id)}
+                title={
+                  providerModelCanBeDisabled(provider, model.id)
+                    ? undefined
+                    : t('providers.currentDefault')
+                }
                 onClick={() => toggleModel(model.id)}
               >
                 <i />

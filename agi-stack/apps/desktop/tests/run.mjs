@@ -55,6 +55,7 @@ const testFiles = [
   'session-artifact-model.test.mjs',
   'settings-navigation-model.test.mjs',
   'settings-entry-routing.test.mjs',
+  'settings-modal-behavior.test.mjs',
   'managed-resource-model.test.mjs',
   'provider-management.test.mjs',
   'use-agent-socket.test.mjs',

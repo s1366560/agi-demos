@@ -11,7 +11,10 @@ const {
   providerDraftFromProvider,
   providerAuthMethodSupported,
   providerManagementAllowed,
+  providerEnabledModelIds,
+  providerModelCanBeDisabled,
   providerModelsFromProvider,
+  providerMutationForEnabledModels,
   providerMutationFromDraft,
   providerTypeDisplayName,
   providerValidationSignal,
@@ -87,6 +90,46 @@ test('provider drafts produce trimmed mutations without retaining an empty secre
     allowedModels: ['qwen3-coder', 'qwen3-small'],
     active: true,
   });
+});
+
+test('provider model selection always retains the current default model', () => {
+  const provider = {
+    id: 'production',
+    name: 'Production',
+    provider_type: 'openai',
+    auth_method: 'api_key',
+    base_url: 'https://api.openai.com/v1',
+    llm_model: 'gpt-5',
+    allowed_models: ['gpt-5-mini', ' gpt-5-mini '],
+    is_active: true,
+    revision: 4,
+  };
+
+  assert.deepEqual(providerEnabledModelIds(provider), ['gpt-5-mini', 'gpt-5']);
+  assert.equal(providerModelCanBeDisabled(provider, 'gpt-5'), false);
+  assert.equal(providerModelCanBeDisabled(provider, 'gpt-5-mini'), true);
+
+  const mutation = providerMutationForEnabledModels(provider, ['gpt-5-mini']);
+  assert.equal(mutation.primaryModel, 'gpt-5');
+  assert.deepEqual(mutation.allowedModels, ['gpt-5-mini', 'gpt-5']);
+});
+
+test('provider model selection promotes the first enabled model when no default exists', () => {
+  const provider = {
+    id: 'local-runtime',
+    name: 'Local runtime',
+    provider_type: 'openai_compatible',
+    auth_method: 'none',
+    base_url: 'http://127.0.0.1:11434/v1',
+    llm_model: '',
+    allowed_models: [],
+    is_active: true,
+    revision: 2,
+  };
+
+  const mutation = providerMutationForEnabledModels(provider, ['qwen3-coder', 'qwen3-coder']);
+  assert.equal(mutation.primaryModel, 'qwen3-coder');
+  assert.deepEqual(mutation.allowedModels, ['qwen3-coder']);
 });
 
 test('provider workspace helpers search structured fields and map attention states', () => {

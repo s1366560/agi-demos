@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowRightIcon,
@@ -24,6 +24,7 @@ import {
   providerAuthMethodSupported,
   providerTypeDisplayName,
 } from './providerManagementModel';
+import { useModalDialog } from './useModalDialog';
 
 type AddProviderDialogProps = {
   mode: RuntimeMode;
@@ -94,25 +95,48 @@ export function AddProviderDialog({
   const [validation, setValidation] = useState<LlmProviderValidationOutcome | null>(null);
   const [busy, setBusy] = useState<'types' | 'catalog' | 'test' | 'create' | null>('types');
   const [error, setError] = useState<string | null>(null);
+  const catalogRequestId = useRef(0);
+  const validationRequestId = useRef(0);
+  const onLoadCatalogRef = useRef(onLoadCatalog);
+  const onLoadTypesRef = useRef(onLoadTypes);
+  onLoadCatalogRef.current = onLoadCatalog;
+  onLoadTypesRef.current = onLoadTypes;
+  const dialogRef = useModalDialog({ nested: true, onClose });
+
+  const invalidateValidation = () => {
+    validationRequestId.current += 1;
+    setValidation(null);
+    setError(null);
+    setBusy((current) => (current === 'test' ? null : current));
+  };
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    void onLoadTypes()
+    let cancelled = false;
+    void onLoadTypesRef.current()
       .then((nextTypes) => {
+        if (cancelled) return;
         setTypes(nextTypes);
         if (nextTypes[0]) chooseType(nextTypes[0]);
       })
-      .catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)))
-      .finally(() => setBusy((current) => (current === 'types' ? null : current)));
-    return () => window.removeEventListener('keydown', handleKeyDown);
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
+      })
+      .finally(() => {
+        if (!cancelled) setBusy((current) => (current === 'types' ? null : current));
+      });
+    return () => {
+      cancelled = true;
+      catalogRequestId.current += 1;
+      validationRequestId.current += 1;
+    };
     // Dialog callbacks are stable for the lifetime of this modal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const chooseType = (descriptor: LlmProviderTypeDescriptor) => {
+    invalidateValidation();
+    const requestId = catalogRequestId.current + 1;
+    catalogRequestId.current = requestId;
     const defaults = providerDefaults[descriptor.providerType] ?? {
       baseUrl: '',
       model: '',
@@ -127,13 +151,13 @@ export function AddProviderDialog({
     setBaseUrl(defaults.baseUrl);
     setPrimaryModel(defaults.model);
     setApiKey('');
-    setValidation(null);
     setCatalog(null);
     setSelectedModels(defaults.model ? new Set([defaults.model]) : new Set());
     setBusy('catalog');
     setError(null);
-    void onLoadCatalog(descriptor.providerType)
+    void onLoadCatalogRef.current(descriptor.providerType)
       .then((nextCatalog) => {
+        if (requestId !== catalogRequestId.current) return;
         setCatalog(nextCatalog);
         const firstModel = nextCatalog.models.find((model) => model.capability === 'chat')?.id;
         if (firstModel) {
@@ -141,8 +165,13 @@ export function AddProviderDialog({
           setSelectedModels(new Set([firstModel]));
         }
       })
-      .catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)))
-      .finally(() => setBusy(null));
+      .catch((caught) => {
+        if (requestId !== catalogRequestId.current) return;
+        setError(caught instanceof Error ? caught.message : String(caught));
+      })
+      .finally(() => {
+        if (requestId === catalogRequestId.current) setBusy(null);
+      });
   };
 
   const input = useMemo<LlmProviderCreateInput>(
@@ -177,15 +206,22 @@ export function AddProviderDialog({
   const verified = validationSucceeded(validation);
 
   const testDraft = async () => {
+    const requestId = validationRequestId.current + 1;
+    validationRequestId.current = requestId;
+    const draftInput = input;
     setBusy('test');
     setError(null);
+    setValidation(null);
     try {
-      setValidation(await onValidateDraft(input));
+      const outcome = await onValidateDraft(draftInput);
+      if (requestId !== validationRequestId.current) return;
+      setValidation(outcome);
     } catch (caught) {
+      if (requestId !== validationRequestId.current) return;
       setValidation(null);
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setBusy(null);
+      if (requestId === validationRequestId.current) setBusy(null);
     }
   };
 
@@ -211,12 +247,20 @@ export function AddProviderDialog({
   };
 
   return createPortal(
-    <div className="provider-dialog-backdrop" onMouseDown={onClose}>
+    <div
+      className="provider-dialog-backdrop"
+      onMouseDown={(event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
+        ref={dialogRef}
         className="provider-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={t('providers.addProvider')}
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header>
@@ -298,7 +342,7 @@ export function AddProviderDialog({
                     value={name}
                     onChange={(event) => {
                       setName(event.target.value);
-                      setValidation(null);
+                      invalidateValidation();
                     }}
                   />
                 </label>
@@ -309,7 +353,7 @@ export function AddProviderDialog({
                       value={authMethod}
                       onChange={(event) => {
                         setAuthMethod(event.target.value === 'none' ? 'none' : 'api_key');
-                        setValidation(null);
+                        invalidateValidation();
                       }}
                     >
                       {selectedDescriptor.authMethods.map((method) => (
@@ -337,7 +381,7 @@ export function AddProviderDialog({
                       value={apiKey}
                       onChange={(event) => {
                         setApiKey(event.target.value);
-                        setValidation(null);
+                        invalidateValidation();
                       }}
                       placeholder={t('providers.apiKeyPlaceholder')}
                     />
@@ -350,7 +394,7 @@ export function AddProviderDialog({
                     value={baseUrl}
                     onChange={(event) => {
                       setBaseUrl(event.target.value);
-                      setValidation(null);
+                      invalidateValidation();
                     }}
                     placeholder="https://api.example.com/v1"
                   />
@@ -363,7 +407,7 @@ export function AddProviderDialog({
                       const next = event.target.value;
                       setPrimaryModel(next);
                       setSelectedModels(next.trim() ? new Set([next.trim()]) : new Set());
-                      setValidation(null);
+                      invalidateValidation();
                     }}
                     placeholder="provider/exact-model-id"
                   />
@@ -458,7 +502,14 @@ export function AddProviderDialog({
           <footer>
             <button
               type="button"
-              onClick={step === 1 ? onClose : () => setStep((current) => current - 1)}
+              onClick={
+                step === 1
+                  ? onClose
+                  : () => {
+                      invalidateValidation();
+                      setStep((current) => current - 1);
+                    }
+              }
             >
               {t(step === 1 ? 'providers.cancel' : 'providers.back')}
             </button>

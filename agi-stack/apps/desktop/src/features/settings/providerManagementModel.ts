@@ -159,6 +159,31 @@ export function providerModelsFromProvider(
     .map((id) => ({ id, capability }));
 }
 
+export function providerEnabledModelIds(provider: ManagedLlmProvider): string[] {
+  return normalizedModelSequence([...(provider.allowed_models ?? []), provider.llm_model ?? '']);
+}
+
+export function providerModelCanBeDisabled(
+  provider: ManagedLlmProvider,
+  modelId: string,
+): boolean {
+  const primaryModel = provider.llm_model?.trim();
+  return !primaryModel || modelId.trim() !== primaryModel;
+}
+
+export function providerMutationForEnabledModels(
+  provider: ManagedLlmProvider,
+  enabledModelIds: Iterable<string>,
+): LlmProviderMutationInput {
+  const draft = providerDraftFromProvider(provider);
+  const enabled = normalizedModelSequence(enabledModelIds);
+  const primaryModel = draft.primaryModel.trim();
+  if (primaryModel && !enabled.includes(primaryModel)) enabled.push(primaryModel);
+  if (!primaryModel && enabled[0]) draft.primaryModel = enabled[0];
+  draft.allowedModels = enabled.join('\n');
+  return providerMutationFromDraft(draft);
+}
+
 export function providerDraftIsValid(draft: ProviderEditorDraft): boolean {
   return Boolean(
     draft.name.trim() &&
@@ -178,9 +203,12 @@ export function providerValidationSignal(
 }
 
 function normalizedModelIds(value: string): string[] {
+  return normalizedModelSequence(value.split(/[\n,]/));
+}
+
+function normalizedModelSequence(values: Iterable<string>): string[] {
   const seen = new Set<string>();
-  return value
-    .split(/[\n,]/)
+  return [...values]
     .map((model) => model.trim())
     .filter((model) => Boolean(model) && !seen.has(model) && Boolean(seen.add(model)));
 }

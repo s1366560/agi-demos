@@ -28,6 +28,8 @@ const enUS: Record<string, string> = {
   'login.welcome': 'WELCOME BACK',
   'login.signInTitle': 'Sign in to MemStack',
   'login.organizationDescription': 'Use your organization account to continue.',
+  'login.localWorkspace': 'Continue with local workspace',
+  'login.localWorkspaceUnavailable': 'The trusted local workspace is not ready yet.',
   'login.workspaceSso': 'Continue with workspace SSO',
   'login.workspaceSsoUnavailable': 'Workspace SSO is not configured for this runtime.',
   'login.emailDivider': 'or use email',
@@ -41,6 +43,19 @@ const enUS: Record<string, string> = {
     'Signed in for this session, but the operating system credential store is unavailable.',
   'login.credentialStoreUnavailable':
     'Unlock the operating system credential store before switching accounts.',
+  'login.authenticatedTenantUnavailable':
+    'The authenticated workspace tenant is not available to this user.',
+  'login.authoritativeProjectUnavailable':
+    'The authoritative workspace project is no longer available.',
+  'login.authenticatedContextMismatch':
+    'The authenticated workspace context does not match the selected project.',
+  'login.localContextMissing':
+    'The local session did not return an authoritative workspace context.',
+  'login.localTenantUnavailable': 'The active local tenant is not available to this user.',
+  'login.localProjectUnavailable': 'The active local project is not available to this user.',
+  'login.localRuntimeNotReady': 'The trusted local runtime is not ready yet.',
+  'login.manualApiKeyRequiresValidation':
+    'Manual API keys must be validated by the server before opening a workspace.',
   'login.restoreFailed': 'Saved sign-in could not be restored. Sign in again.',
   'login.signOutPersistenceFailed':
     'Sign out could not clear the operating system credential store. Try again before closing the app.',
@@ -174,6 +189,14 @@ const enUS: Record<string, string> = {
   'settings.contextChange': 'Context change',
   'settings.contextChangeDescription':
     'Task lists, memory, agents, and permissions reload inside the selected project.',
+  'settings.authenticatedContextRequired': 'An authenticated workspace context is required.',
+  'settings.selectedTenantUnavailable': 'The selected tenant is not available to this user.',
+  'settings.selectedProjectUnavailable':
+    'The selected project is not available for this tenant.',
+  'settings.contextResponseMismatch':
+    'The workspace context response did not match the selected project.',
+  'settings.contextSwitchLoadFailed':
+    'The context was switched, but the selected project could not be loaded. Refresh to retry.',
   'settings.switchWorkspace': 'Switch workspace',
   'settings.currentWorkspace': 'Current workspace',
   'settings.applyContext': 'Switch context',
@@ -709,6 +732,10 @@ const enUS: Record<string, string> = {
   'runtime.tenantId': 'Tenant ID',
   'runtime.projectId': 'Project ID',
   'runtime.workspaceId': 'Workspace ID',
+  'runtime.activeTenantUnavailable':
+    'The active tenant is not available to the authenticated user.',
+  'runtime.activeProjectUnavailable':
+    'The active project is not available in the authenticated tenant.',
   'runtime.connect': 'Connect',
   'runtime.liveUpdates': 'Live updates',
   'runtime.connected': 'connected',
@@ -1392,6 +1419,8 @@ const zhCN: Record<string, string> = {
   'login.welcome': '欢迎回来',
   'login.signInTitle': '登录 MemStack',
   'login.organizationDescription': '使用组织账号继续。',
+  'login.localWorkspace': '继续使用本地工作区',
+  'login.localWorkspaceUnavailable': '受信任的本地工作区尚未就绪。',
   'login.workspaceSso': '使用工作区 SSO 继续',
   'login.workspaceSsoUnavailable': '当前运行环境尚未配置工作区 SSO。',
   'login.emailDivider': '或使用邮箱',
@@ -1402,6 +1431,15 @@ const zhCN: Record<string, string> = {
   'login.passwordChangeRequired': '组织要求先修改密码，完成后才能继续使用桌面客户端。',
   'login.persistenceUnavailable': '已登录当前会话，但操作系统凭据存储暂不可用。',
   'login.credentialStoreUnavailable': '切换账号前，请先解锁操作系统凭据存储。',
+  'login.authenticatedTenantUnavailable': '登录返回的工作空间租户对当前用户不可用。',
+  'login.authoritativeProjectUnavailable': '权威工作空间中的项目已不可用。',
+  'login.authenticatedContextMismatch': '登录返回的工作空间上下文与所选项目不匹配。',
+  'login.localContextMissing': '本地会话未返回权威工作空间上下文。',
+  'login.localTenantUnavailable': '当前本地租户对该用户不可用。',
+  'login.localProjectUnavailable': '当前本地项目对该用户不可用。',
+  'login.localRuntimeNotReady': '受信任的本地运行时尚未就绪。',
+  'login.manualApiKeyRequiresValidation':
+    '必须先由服务端验证手动 API 密钥，才能打开工作空间。',
   'login.restoreFailed': '无法恢复已保存的登录状态，请重新登录。',
   'login.signOutPersistenceFailed': '退出登录时无法清除操作系统凭据，请重试后再关闭应用。',
   'login.signOutPersistenceWarning': '已退出登录，但无法从操作系统凭据存储中移除已撤销的凭据。',
@@ -1527,6 +1565,11 @@ const zhCN: Record<string, string> = {
   'settings.visibilityUnavailable': '可见性不可用',
   'settings.contextChange': '上下文变更',
   'settings.contextChangeDescription': '任务列表、记忆、智能体与权限将在所选项目内重新加载。',
+  'settings.authenticatedContextRequired': '切换工作空间前需要已认证的上下文。',
+  'settings.selectedTenantUnavailable': '所选租户对当前用户不可用。',
+  'settings.selectedProjectUnavailable': '所选项目在当前租户中不可用。',
+  'settings.contextResponseMismatch': '工作空间上下文响应与所选项目不匹配。',
+  'settings.contextSwitchLoadFailed': '上下文已切换，但无法加载所选项目。请刷新后重试。',
   'settings.switchWorkspace': '切换工作空间',
   'settings.currentWorkspace': '当前工作空间',
   'settings.applyContext': '切换上下文',
@@ -2022,6 +2065,8 @@ const zhCN: Record<string, string> = {
   'runtime.tenantId': '租户 ID',
   'runtime.projectId': '项目 ID',
   'runtime.workspaceId': '工作空间 ID',
+  'runtime.activeTenantUnavailable': '当前租户不在已认证用户的可用范围内。',
+  'runtime.activeProjectUnavailable': '当前项目不在已认证租户的可用范围内。',
   'runtime.connect': '连接',
   'runtime.liveUpdates': '实时更新',
   'runtime.connected': '已连接',
