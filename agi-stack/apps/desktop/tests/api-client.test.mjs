@@ -79,6 +79,12 @@ test('workspace context compatibility fallback accepts only the legacy missing-r
   );
   assert.equal(
     isLegacyWorkspaceContextRouteMissing(
+      new DesktopApiError('Not found', 404, { detail: 'Not found' }),
+    ),
+    true,
+  );
+  assert.equal(
+    isLegacyWorkspaceContextRouteMissing(
       new DesktopApiError('unavailable', 404, {
         detail: { code: 'workspace_context_unavailable' },
       }),
