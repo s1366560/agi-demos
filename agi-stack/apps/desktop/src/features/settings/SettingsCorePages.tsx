@@ -237,6 +237,7 @@ export function WorkspaceSettingsPage({
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;
   const currentTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
   const currentProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
+  const hasCurrentContext = Boolean(config.tenantId.trim() && config.projectId.trim());
   const changed = tenantId !== config.tenantId || projectId !== config.projectId;
 
   const chooseTenant = (nextTenantId: string) => {
@@ -345,7 +346,9 @@ export function WorkspaceSettingsPage({
           loading={applying}
           onClick={() => void applyContext()}
         >
-          {changed ? t('settings.switchWorkspace') : t('settings.currentWorkspace')}
+          {!hasCurrentContext || changed
+            ? t('settings.switchWorkspace')
+            : t('settings.currentWorkspace')}
         </Button>
       </footer>
 

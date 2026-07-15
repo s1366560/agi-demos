@@ -39,6 +39,7 @@ type WorkspaceOverviewProps = {
   plan: PlanSnapshot | null;
   sandboxStatus: string | null;
   connection: ConnectionState;
+  newTaskDisabledReason: string | null;
   onNewTask: () => void;
   onOpenConversation: (conversationId: string) => void;
   onOpenSettings: () => void;
@@ -52,6 +53,7 @@ export function WorkspaceOverview({
   plan,
   sandboxStatus,
   connection,
+  newTaskDisabledReason,
   onNewTask,
   onOpenConversation,
   onOpenSettings,
@@ -90,7 +92,11 @@ export function WorkspaceOverview({
           <Button variant="surface" color="gray" onClick={onOpenSettings}>
             <GearIcon /> {t('overview.configure')}
           </Button>
-          <Button onClick={onNewTask}>
+          <Button
+            disabled={Boolean(newTaskDisabledReason)}
+            title={newTaskDisabledReason ?? undefined}
+            onClick={onNewTask}
+          >
             <PlusIcon /> {t('overview.newTask')}
           </Button>
         </div>

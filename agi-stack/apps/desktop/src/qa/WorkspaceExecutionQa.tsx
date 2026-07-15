@@ -295,6 +295,7 @@ function WorkspaceExecutionQa() {
             }}
             sandboxStatus="connected"
             connection="ready"
+            newTaskDisabledReason={null}
             onNewTask={() => undefined}
             onOpenConversation={() => undefined}
             onOpenSettings={() => undefined}

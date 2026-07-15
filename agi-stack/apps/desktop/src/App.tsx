@@ -74,12 +74,15 @@ import {
 } from './api/trustedSession';
 import { AutomationsPage } from './features/automations/AutomationsPage';
 import {
+  findWorkspaceProject,
   isCurrentContextRevision,
   isCurrentLocalRuntimeAuthority,
+  isIdentityAuthenticated,
   isSameDesktopRequestScope,
-  isWorkspaceAuthenticated,
+  isWorkspaceReady,
   nextRemoteWorkspaceContext,
   resolveSignOutDisposition,
+  workspaceContextMatchesSelection,
 } from './features/auth/authContextModel';
 import { LoginScreen } from './features/auth/LoginScreen';
 import {
@@ -1794,10 +1797,12 @@ export function App() {
     setConfig(nextConfig);
   }, []);
 
+  const identityAuthenticated = isIdentityAuthenticated(auth);
+  const showRuntimeConfig = isWorkspaceReady(auth, config);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
   const socket = useAgentSocket(
     config,
-    connection === 'ready',
+    showRuntimeConfig && connection === 'ready',
     auth.context?.revision ?? null,
   );
   const desktopFrameUrl = useMemo(() => {
@@ -2572,7 +2577,6 @@ export function App() {
     });
   }, [socket.events]);
 
-  const showRuntimeConfig = isWorkspaceAuthenticated(auth);
   const showReviewPanel = shouldShowSessionCanvas({
     authenticated: showRuntimeConfig,
     canvasOpen: reviewPanelOpen,
@@ -2585,8 +2589,10 @@ export function App() {
           : 'other',
   });
   const runControlLabel = runControlLabels[runControlState];
-  const runtimeDisabledReason = !showRuntimeConfig
+  const runtimeDisabledReason = !identityAuthenticated
     ? 'Sign in or use a manual API key before connecting.'
+    : !showRuntimeConfig
+      ? 'Select an account and project before connecting.'
     : !config.apiBaseUrl.trim()
       ? 'Local runtime URL is not ready yet.'
     : !config.apiKey.trim()
@@ -2594,15 +2600,19 @@ export function App() {
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before connecting.'
         : null;
-  const workspaceDisabledReason = !showRuntimeConfig
+  const workspaceDisabledReason = !identityAuthenticated
     ? 'Sign in or use a manual API key before loading workspaces.'
+    : !showRuntimeConfig
+      ? 'Select an account and project before loading workspaces.'
     : !config.apiKey.trim()
       ? 'An authenticated session is required before loading workspaces.'
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before loading workspaces.'
         : null;
-  const newTaskDisabledReason = !showRuntimeConfig
+  const newTaskDisabledReason = !identityAuthenticated
     ? t('task.disabledSignIn')
+    : !showRuntimeConfig
+      ? t('task.disabledProjectRequired')
     : !config.apiKey.trim()
       ? t('task.disabledAuthRequired')
       : !config.tenantId.trim() || !config.projectId.trim()
@@ -2610,15 +2620,19 @@ export function App() {
         : newTaskAgentTurnTransport(config.mode, socket.connected) === 'live_socket_required'
           ? t('task.liveConnectionRequired')
           : null;
-  const sandboxDisabledReason = !showRuntimeConfig
+  const sandboxDisabledReason = !identityAuthenticated
     ? t('sandbox.disabled.signIn')
+    : !showRuntimeConfig
+      ? t('sandbox.disabled.projectRequired')
     : !config.apiKey.trim()
       ? t('sandbox.disabled.authRequired')
       : !config.projectId.trim()
         ? t('sandbox.disabled.projectRequired')
         : null;
-  const chatDisabledReason = !showRuntimeConfig
+  const chatDisabledReason = !identityAuthenticated
     ? 'Sign in or enter an API key before sending messages.'
+    : !showRuntimeConfig
+      ? 'Select an account and project before chatting.'
     : !config.apiKey.trim()
       ? 'An authenticated session is required before sending messages.'
       : !config.tenantId.trim() || !config.projectId.trim()
@@ -2702,16 +2716,24 @@ export function App() {
         if (!contextIsCurrent()) return false;
         const availableProjects =
           projectOverride ?? resolveSidebarProjects(runtimeConfig, auth.status, auth.projects);
-        const resolvedProjectId = availableProjects.some(
-          (project) => project.id === runtimeConfig.projectId.trim(),
-        )
-          ? runtimeConfig.projectId.trim()
-          : availableProjects[0]?.id ?? runtimeConfig.projectId.trim();
-        const resolvedProject =
-          availableProjects.find((project) => project.id === resolvedProjectId) ??
-          availableProjects[0] ??
-          null;
-        const projects = resolvedProject ? [resolvedProject] : [];
+        const requestedTenantId = runtimeConfig.tenantId.trim();
+        const requestedProjectId = runtimeConfig.projectId.trim();
+        if (
+          auth.status === 'signed_in' &&
+          !auth.tenants.some((tenant) => tenant.id === requestedTenantId)
+        ) {
+          throw new Error('The active tenant is not available to the authenticated user.');
+        }
+        const resolvedProject = findWorkspaceProject(
+          availableProjects,
+          requestedTenantId,
+          requestedProjectId,
+        );
+        if (!resolvedProject) {
+          throw new Error('The active project is not available in the authenticated tenant.');
+        }
+        const resolvedProjectId = resolvedProject.id;
+        const projects = [resolvedProject];
         const loadingNodeState: RuntimeNodeLoadState = {
           projects: Object.fromEntries(
             projects.map((project) => [
@@ -2773,7 +2795,7 @@ export function App() {
             : projectWorkspaces[0]?.id ?? '';
         const resolvedConfig = {
           ...runtimeConfig,
-          tenantId: resolvedProject?.tenant_id || runtimeConfig.tenantId,
+          tenantId: resolvedProject.tenant_id,
           projectId: resolvedProjectId,
           workspaceId,
         };
@@ -2848,7 +2870,7 @@ export function App() {
         return false;
       }
     },
-    [auth.projects, auth.status, commitRuntimeConfig, config, syncLocalRuntimeConfig],
+    [auth.projects, auth.status, auth.tenants, commitRuntimeConfig, config, syncLocalRuntimeConfig],
   );
 
   const refreshMyWork = useCallback(async (scheduledScope?: MyWorkRefreshScope) => {
@@ -2955,13 +2977,23 @@ export function App() {
     const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId: preferredTenantId });
     const projects = await projectClient.listProjects(preferredTenantId || undefined);
     if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
-    const tenantId = preferredTenantId || projects[0]?.tenant_id || '';
+    const tenantId = preferredTenantId;
+    if (tenantId && !tenants.some((tenant) => tenant.id === tenantId)) {
+      throw new Error('The authenticated workspace tenant is not available to this user.');
+    }
+    const scopedProjects = projects.filter((project) => project.tenant_id === tenantId);
     const preferredProjectId =
       authoritativeContext?.project_id ?? outcome.context?.project_id ?? '';
-    const projectId = projects.some((project) => project.id === preferredProjectId)
-      ? preferredProjectId
-      : projects[0]?.id ?? '';
-    if (authoritativeContext && authoritativeContext.project_id !== projectId) {
+    const preferredProject = findWorkspaceProject(
+      scopedProjects,
+      tenantId,
+      preferredProjectId,
+    );
+    const projectId = preferredProject?.id ?? scopedProjects[0]?.id ?? '';
+    if (
+      authoritativeContext &&
+      !workspaceContextMatchesSelection(authoritativeContext, tenantId, projectId)
+    ) {
       throw new Error('The authoritative workspace project is no longer available.');
     }
     const context = authoritativeContext
@@ -2974,6 +3006,9 @@ export function App() {
             revision: 0,
             updated_at: new Date().toISOString(),
           };
+    if (!workspaceContextMatchesSelection(context, tenantId, projectId)) {
+      throw new Error('The authenticated workspace context does not match the selected project.');
+    }
     const nextConfig = { ...tokenConfig, tenantId, projectId, workspaceId: '' };
 
     contextRevisionRef.current = context.revision;
@@ -2986,21 +3021,23 @@ export function App() {
       context,
       user,
       tenants,
-      projects,
+      projects: scopedProjects,
       mustChangePassword: outcome.must_change_password,
       error: null,
     });
     setLoginPassword('');
 
     if (projectId) {
-      await refreshRuntime(nextConfig, projects);
+      await refreshRuntime(nextConfig, scopedProjects);
       if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
       applySectionSideEffects('workspace');
     } else {
       setDataset(emptyDataset);
-      setConnection('ready');
+      setConnection('idle');
       setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      applySectionSideEffects('settings');
+      applySectionSideEffects('workspace');
+      setSettingsInitialSection('workspace');
+      setSettingsWindowOpen(true);
     }
     return true;
   };
@@ -3074,36 +3111,47 @@ export function App() {
     if (!outcome.context) {
       throw new Error('The local session did not return an authoritative workspace context.');
     }
+    const localContext = outcome.context;
     const tokenConfig = {
       ...runtimeConfig,
       apiKey: outcome.access_token,
-      tenantId: outcome.context.tenant_id,
-      projectId: outcome.context.project_id,
+      tenantId: localContext.tenant_id,
+      projectId: localContext.project_id,
       workspaceId: '',
     };
     const identityClient = new DesktopApiClient(tokenConfig);
     const [user, tenants, projects] = await Promise.all([
       identityClient.currentUser(),
       identityClient.listTenants(),
-      identityClient.listProjects(outcome.context.tenant_id),
+      identityClient.listProjects(localContext.tenant_id),
     ]);
     if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
-    const selectedProject = projects.find((project) => project.id === outcome.context?.project_id);
+    if (!tenants.some((tenant) => tenant.id === localContext.tenant_id)) {
+      throw new Error('The active local tenant is not available to this user.');
+    }
+    const scopedProjects = projects.filter(
+      (project) => project.tenant_id === localContext.tenant_id,
+    );
+    const selectedProject = findWorkspaceProject(
+      scopedProjects,
+      localContext.tenant_id,
+      localContext.project_id,
+    );
     if (!selectedProject) {
       throw new Error('The active local project is not available to this user.');
     }
 
-    contextRevisionRef.current = outcome.context.revision;
+    contextRevisionRef.current = localContext.revision;
     resetProjectScopedState();
     commitRuntimeConfig(tokenConfig);
     setAuth({
       status: 'signed_in',
       credentialKind: 'local_session',
       session: outcome.session ?? null,
-      context: outcome.context,
+      context: localContext,
       user,
       tenants,
-      projects,
+      projects: scopedProjects,
       mustChangePassword: false,
       error: null,
     });
@@ -3813,7 +3861,7 @@ export function App() {
     [config.projectId, config.tenantId],
   );
   const sidebarProjects = useMemo(() => {
-    if (auth.status === 'signed_in' && auth.projects.length) return auth.projects;
+    if (auth.status === 'signed_in') return auth.projects;
     return configuredProject ? [configuredProject] : [];
   }, [auth.projects, auth.status, configuredProject]);
   const selectedWorkspace = useMemo(
@@ -4683,7 +4731,7 @@ export function App() {
   const openWorkspaceSettings = () => openSettingsEntry('workspace_overview');
 
   const openConnectionSettings = () => {
-    if (!showRuntimeConfig) {
+    if (!identityAuthenticated) {
       useApiKeyManually();
     }
     openSettingsEntry('runtime_connection');
@@ -4693,14 +4741,18 @@ export function App() {
     if (!auth.context) {
       throw new Error('An authenticated workspace context is required.');
     }
+    if (!auth.tenants.some((tenant) => tenant.id === tenantId)) {
+      throw new Error('The selected tenant is not available to this user.');
+    }
     const contextClient = new DesktopApiClient({
       ...config,
       tenantId,
       projectId: '',
       workspaceId: '',
     });
-    const projects = await contextClient.listProjects(tenantId);
-    const selectedProject = projects.find((project) => project.id === projectId);
+    const listedProjects = await contextClient.listProjects(tenantId);
+    const scopedProjects = listedProjects.filter((project) => project.tenant_id === tenantId);
+    const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
     if (!selectedProject) {
       throw new Error('The selected project is not available for this tenant.');
     }
@@ -4729,11 +4781,14 @@ export function App() {
         new Date().toISOString(),
       );
     }
+    if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
+      throw new Error('The workspace context response did not match the selected project.');
+    }
     const nextConfig = { ...config, tenantId, projectId, workspaceId: '' };
     contextRevisionRef.current = nextContext.revision;
     resetProjectScopedState();
     commitRuntimeConfig(nextConfig);
-    setAuth((current) => ({ ...current, context: nextContext, projects }));
+    setAuth((current) => ({ ...current, context: nextContext, projects: scopedProjects }));
     applySectionSideEffects('workspace');
     const applied = await refreshRuntime(nextConfig, [selectedProject]);
     if (!applied) {
@@ -4847,15 +4902,19 @@ export function App() {
   };
 
   const openProject = () => {
-    if (!showRuntimeConfig) {
+    if (!identityAuthenticated) {
       useApiKeyManually();
       return;
     }
-    if (!config.projectId.trim()) {
-      switchSection('settings');
+    if (!showRuntimeConfig) {
+      openWorkspaceSettings();
       return;
     }
-    switchSection(config.workspaceId ? 'workspace' : 'settings');
+    if (config.workspaceId) {
+      switchSection('workspace');
+      return;
+    }
+    openWorkspaceSettings();
   };
 
   const openPullRequestOverview = () => {
@@ -4911,12 +4970,12 @@ export function App() {
     },
     {
       id: 'settings',
-      label: showRuntimeConfig ? 'Settings' : 'Use API key manually',
-      description: showRuntimeConfig
+      label: identityAuthenticated ? 'Settings' : 'Use API key manually',
+      description: identityAuthenticated
         ? 'Edit connection, account, project, and workspace settings.'
         : 'Switch to the manual API key fallback without saving secrets.',
       icon: <GearIcon />,
-      onSelect: openConnectionSettings,
+      onSelect: identityAuthenticated ? openSidebarSettings : openConnectionSettings,
     },
     {
       id: 'sign-in',
@@ -5042,6 +5101,7 @@ export function App() {
         plan={activeDataset.plan}
         sandboxStatus={dataset.sandbox?.status ?? null}
         connection={connection}
+        newTaskDisabledReason={newTaskDisabledReason}
         onNewTask={() => openNewTask(config.workspaceId)}
         onOpenConversation={(conversationId) => {
           const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
@@ -5218,18 +5278,7 @@ export function App() {
   );
 
   const renderWorkbench = () => {
-    if (!showRuntimeConfig) {
-      return (
-        <SignedOutPanel
-          activeTarget={signedOutTargetForSection(activeSection, reviewTab)}
-          onWorkflowSelect={selectWorkflowTarget}
-          onSignIn={() => setLoginModalOpen(true)}
-          onUseManualKey={useApiKeyManually}
-          onOpenCommands={openCommandPalette}
-          onCloseCommands={closeCommandPalette}
-        />
-      );
-    }
+    if (!showRuntimeConfig) return renderWorkspaceOverview();
     if (activeSection === 'workspace') return renderWorkspaceOverview();
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
@@ -5245,7 +5294,7 @@ export function App() {
     return renderWorkspaceOverview();
   };
 
-  if (!showRuntimeConfig) {
+  if (!identityAuthenticated) {
     return (
       <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
         <LoginScreen
@@ -5268,7 +5317,7 @@ export function App() {
       <div
         ref={appShellRef}
         className={`app-shell hierarchy-shell ${runsInTauri ? 'tauri-window' : 'browser-window'} ${
-          showRuntimeConfig ? 'runtime-mode' : 'signed-out-mode'
+          identityAuthenticated ? 'runtime-mode' : 'signed-out-mode'
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
           activeSection === 'board' ? 'my-work-mode' : ''
         } ${activeSection === 'automations' ? 'automations-mode' : ''}`}
@@ -5298,6 +5347,7 @@ export function App() {
             currentWorkspaceId={config.workspaceId}
             currentConversationId={selectedConversation?.id ?? null}
             expandedWorkspaceIds={expandedWorkspaceIds}
+            newTaskDisabledReason={newTaskDisabledReason}
             onModeChange={setPreferredTaskMode}
             onNavigate={(section) => {
               if (section === 'home') switchSection('workspace');
@@ -5509,7 +5559,7 @@ function resolveSidebarProjects(
   authStatus: AuthState['status'],
   projects: ProjectSummary[],
 ): ProjectSummary[] {
-  if (authStatus === 'signed_in' && projects.length) return projects;
+  if (authStatus === 'signed_in') return projects;
   const configured = projectSummaryFromConfig(config);
   return configured ? [configured] : [];
 }

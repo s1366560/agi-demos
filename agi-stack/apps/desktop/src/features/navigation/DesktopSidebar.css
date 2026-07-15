@@ -63,8 +63,15 @@
   font-weight: 650 !important;
 }
 
-.desktop-design-new-task:hover {
+.desktop-design-new-task:hover:not(:disabled) {
   background: rgba(56, 214, 255, 0.16) !important;
+}
+
+.desktop-design-new-task:disabled {
+  border-color: rgba(148, 163, 184, 0.2) !important;
+  background: rgba(148, 163, 184, 0.05) !important;
+  color: var(--desktop-faint) !important;
+  cursor: not-allowed;
 }
 
 .desktop-design-primary-nav,

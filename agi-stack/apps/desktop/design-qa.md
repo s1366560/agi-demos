@@ -182,3 +182,53 @@ No actionable P0, P1, or P2 findings remain.
 - [P3] Code-split the existing desktop bundle in a later performance iteration; this does not affect Provider workflow correctness or visual fidelity.
 
 provider settings final result: passed
+
+---
+
+# Authenticated no-project entry design QA
+
+## Comparison target
+
+- Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/settings-popup-workspace.png`
+- Compact source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/settings-popup-workspace-1100.png`
+- Implementation screenshot: unavailable in this iteration
+- Intended viewports: `1440 × 1024` and `1100 × 782`, device scale factor `1`
+- Intended state: authenticated cloud identity, tenant list available, no current project, Workspace Settings automatically open above the existing workspace overview
+
+## Full-view comparison evidence
+
+Blocked. The application source and automated tests verify the intended entry state, but the in-app Browser control required to capture the rendered implementation is not callable in this Codex session. No screenshot, HTTP health check, or source inspection is being substituted for visible comparison evidence.
+
+## Focused-region comparison evidence
+
+Blocked for the same reason. The workspace selector, current-context card, project empty state, apply control, close action, sidebar task action, and underlying overview cannot be judged from a same-viewport combined image in this iteration.
+
+## Findings
+
+- [P1] Rendered no-project state has not completed the visual comparison gate.
+  - Location: authenticated desktop shell with Workspace Settings open.
+  - Evidence: both source captures are available, but there is no current implementation capture to place beside them.
+  - Impact: layout, disabled-state contrast, popup placement, copy wrapping, and close-to-overview continuity remain visually unverified.
+  - Fix: capture the authenticated no-project state at both target viewports in the in-app Browser, combine each capture with its matching source, and resolve any P0/P1/P2 differences.
+
+## Comparison history
+
+### Iteration 1 — blocked
+
+- The identity/workspace boundary, automatic Workspace Settings entry, project-scoped connection gate, and disabled New Task actions were implemented and passed automated tests.
+- Visual comparison could not begin because the selected in-app Browser control is unavailable to this session.
+- No visual pass is claimed from code or build evidence alone.
+
+## Implementation checklist
+
+- Capture the automatic Workspace Settings state at `1440 × 1024` and `1100 × 782`.
+- Close the popup and capture the authenticated workspace overview with New Task visibly disabled.
+- Reopen Workspace Settings from Configure and verify tenant switching, empty-project copy, and apply-button states.
+- Check keyboard dismissal, focus, browser console errors, horizontal overflow, and copy wrapping.
+- Compare source and implementation on one canvas and fix every P0/P1/P2 difference.
+
+## Follow-up polish
+
+- Defer P3 polish until the blocking comparison pass is available.
+
+final result: blocked

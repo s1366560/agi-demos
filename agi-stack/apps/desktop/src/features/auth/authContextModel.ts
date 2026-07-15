@@ -2,6 +2,7 @@ import type {
   AuthState,
   DesktopRuntimeConfig,
   LocalRuntimeStatus,
+  ProjectSummary,
   WorkspaceContextSnapshot,
 } from '../../types';
 
@@ -30,13 +31,40 @@ export function resolveSignOutDisposition(
   return credentialRevoked ? 'complete_with_persistence_warning' : 'blocked';
 }
 
-export function isWorkspaceAuthenticated(auth: AuthState): boolean {
+export function isIdentityAuthenticated(auth: AuthState): boolean {
+  return auth.status === 'signed_in' && auth.credentialKind !== null && auth.user !== null;
+}
+
+export function findWorkspaceProject(
+  projects: readonly ProjectSummary[],
+  tenantId: string,
+  projectId: string,
+): ProjectSummary | undefined {
+  if (!tenantId || !projectId) return undefined;
+  return projects.find(
+    (project) => project.id === projectId && project.tenant_id === tenantId,
+  );
+}
+
+export function workspaceContextMatchesSelection(
+  context: WorkspaceContextSnapshot,
+  tenantId: string,
+  projectId: string,
+): boolean {
+  return context.tenant_id === tenantId && context.project_id === projectId;
+}
+
+export function isWorkspaceReady(auth: AuthState, config: DesktopRuntimeConfig): boolean {
+  if (!isIdentityAuthenticated(auth)) return false;
+  const tenantId = auth.context?.tenant_id.trim() ?? '';
+  const projectId = auth.context?.project_id.trim() ?? '';
   return (
-    auth.status === 'signed_in' &&
-    auth.credentialKind !== null &&
-    auth.user !== null &&
-    Boolean(auth.context?.tenant_id.trim()) &&
-    Boolean(auth.context?.project_id.trim())
+    Boolean(tenantId) &&
+    Boolean(projectId) &&
+    config.tenantId.trim() === tenantId &&
+    config.projectId.trim() === projectId &&
+    auth.tenants.some((tenant) => tenant.id === tenantId) &&
+    findWorkspaceProject(auth.projects, tenantId, projectId) !== undefined
   );
 }
 

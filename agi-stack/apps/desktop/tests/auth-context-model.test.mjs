@@ -4,12 +4,15 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  findWorkspaceProject,
   isCurrentContextRevision,
   isCurrentLocalRuntimeAuthority,
+  isIdentityAuthenticated,
   isSameDesktopRequestScope,
-  isWorkspaceAuthenticated,
+  isWorkspaceReady,
   nextRemoteWorkspaceContext,
   resolveSignOutDisposition,
+  workspaceContextMatchesSelection,
 } = require('/tmp/agistack-desktop-test-dist/src/features/auth/authContextModel.js');
 
 const authenticated = {
@@ -23,37 +26,104 @@ const authenticated = {
     updated_at: '2026-07-13T00:00:00Z',
   },
   user: { user_id: 'user-1' },
-  tenants: [],
-  projects: [],
+  tenants: [{ id: 'northstar' }],
+  projects: [{ id: 'desktop-client', tenant_id: 'northstar' }],
   mustChangePassword: false,
   error: null,
 };
 
+const authenticatedConfig = {
+  tenantId: 'northstar',
+  projectId: 'desktop-client',
+};
+
 test('a launch capability without a user session never authenticates a workspace', () => {
+  const signedOut = {
+    ...authenticated,
+    status: 'signed_out',
+    credentialKind: null,
+    context: null,
+    user: null,
+  };
+  assert.equal(isIdentityAuthenticated(signedOut), false);
+  assert.equal(isWorkspaceReady(signedOut, authenticatedConfig), false);
+});
+
+test('manual mode cannot bypass authenticated identity and workspace context', () => {
+  const manual = {
+    ...authenticated,
+    status: 'manual',
+    credentialKind: 'manual_api_key',
+    context: null,
+    user: null,
+  };
+  assert.equal(isIdentityAuthenticated(manual), false);
+  assert.equal(isWorkspaceReady(manual, authenticatedConfig), false);
+  assert.equal(isIdentityAuthenticated(authenticated), true);
+  assert.equal(isWorkspaceReady(authenticated, authenticatedConfig), true);
+});
+
+test('an authenticated identity without a project enters project selection', () => {
+  const withoutProject = {
+    ...authenticated,
+    context: { ...authenticated.context, project_id: '' },
+    projects: [],
+  };
+
+  assert.equal(isIdentityAuthenticated(withoutProject), true);
   assert.equal(
-    isWorkspaceAuthenticated({
-      ...authenticated,
-      status: 'signed_out',
-      credentialKind: null,
-      context: null,
-      user: null,
-    }),
+    isWorkspaceReady(withoutProject, { ...authenticatedConfig, projectId: '' }),
     false,
   );
 });
 
-test('manual mode cannot bypass authenticated identity and workspace context', () => {
+test('workspace readiness rejects stale or unscoped project context', () => {
   assert.equal(
-    isWorkspaceAuthenticated({
-      ...authenticated,
-      status: 'manual',
-      credentialKind: 'manual_api_key',
-      context: null,
-      user: null,
-    }),
+    isWorkspaceReady(authenticated, { ...authenticatedConfig, projectId: 'other-project' }),
     false,
   );
-  assert.equal(isWorkspaceAuthenticated(authenticated), true);
+  assert.equal(
+    isWorkspaceReady({ ...authenticated, projects: [] }, authenticatedConfig),
+    false,
+  );
+  assert.equal(
+    isWorkspaceReady({ ...authenticated, tenants: [] }, authenticatedConfig),
+    false,
+  );
+  assert.equal(
+    isWorkspaceReady(
+      {
+        ...authenticated,
+        projects: [{ id: 'desktop-client', tenant_id: 'other-tenant' }],
+      },
+      authenticatedConfig,
+    ),
+    false,
+  );
+});
+
+test('workspace project resolution keeps duplicate ids inside the selected tenant', () => {
+  const projects = [
+    { id: 'shared-id', tenant_id: 'tenant-b', name: 'Wrong tenant' },
+    { id: 'shared-id', tenant_id: 'tenant-a', name: 'Selected tenant' },
+  ];
+
+  assert.equal(findWorkspaceProject(projects, 'tenant-a', 'shared-id')?.name, 'Selected tenant');
+  assert.equal(findWorkspaceProject(projects, 'tenant-c', 'shared-id'), undefined);
+  assert.equal(findWorkspaceProject(projects, 'tenant-a', ''), undefined);
+});
+
+test('workspace context responses must exactly match the requested tenant and project', () => {
+  const context = {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    revision: 4,
+    updated_at: '2026-07-13T02:00:00Z',
+  };
+
+  assert.equal(workspaceContextMatchesSelection(context, 'tenant-a', 'project-a'), true);
+  assert.equal(workspaceContextMatchesSelection(context, 'tenant-b', 'project-a'), false);
+  assert.equal(workspaceContextMatchesSelection(context, 'tenant-a', 'project-b'), false);
 });
 
 test('context revisions reject stale responses and advance remote context monotonically', () => {

@@ -40,6 +40,7 @@ type DesktopSidebarProps = {
   currentWorkspaceId: string;
   currentConversationId: string | null;
   expandedWorkspaceIds: Set<string>;
+  newTaskDisabledReason: string | null;
   onModeChange: (mode: 'work' | 'code') => void;
   onNavigate: (section: DesktopSidebarSection) => void;
   onToggleWorkspace: (workspaceId: string) => void;
@@ -75,6 +76,7 @@ export function DesktopSidebar({
   currentWorkspaceId,
   currentConversationId,
   expandedWorkspaceIds,
+  newTaskDisabledReason,
   onModeChange,
   onNavigate,
   onToggleWorkspace,
@@ -97,7 +99,13 @@ export function DesktopSidebar({
         </div>
       </div>
 
-      <button className="desktop-design-new-task" type="button" onClick={onNewTask}>
+      <button
+        className="desktop-design-new-task"
+        type="button"
+        disabled={Boolean(newTaskDisabledReason)}
+        title={newTaskDisabledReason ?? undefined}
+        onClick={onNewTask}
+      >
         <PlusIcon /> {t('overview.newTask')}
       </button>
 
