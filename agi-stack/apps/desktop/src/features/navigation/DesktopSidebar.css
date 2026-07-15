@@ -267,6 +267,38 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
 }
 
+.desktop-design-profile-menu-identity {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 9px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.desktop-design-profile-menu-identity > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.desktop-design-profile-menu-identity strong,
+.desktop-design-profile-menu-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-design-profile-menu-identity strong {
+  color: var(--desktop-text);
+  font-size: 9px;
+}
+
+.desktop-design-profile-menu-identity small {
+  color: var(--desktop-faint);
+  font-size: 7px;
+}
+
 .desktop-design-profile-menu button {
   display: flex;
   align-items: center;
@@ -282,6 +314,10 @@
 .desktop-design-profile-menu button:hover {
   background: rgba(148, 163, 184, 0.08);
   color: var(--desktop-text);
+}
+
+.desktop-design-profile-menu button.danger {
+  color: #cc7e87;
 }
 
 .app-shell.hierarchy-shell,

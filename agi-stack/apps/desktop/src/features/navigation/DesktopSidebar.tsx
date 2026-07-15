@@ -1,9 +1,10 @@
 import { useState } from 'react';
 
 import {
-  ActivityLogIcon,
   BellIcon,
+  ChevronUpIcon,
   CodeIcon,
+  CubeIcon,
   DashboardIcon,
   GearIcon,
   HomeIcon,
@@ -22,6 +23,7 @@ import type {
   WorkspaceSummary,
 } from '../../types';
 import { WorkspaceDock } from '../workspace/WorkspaceDock';
+import type { WorkspaceTreeSelectionMode } from '../workspace/workspaceTreeModel';
 import './DesktopSidebar.css';
 
 type DesktopSidebarSection = 'home' | 'my-work' | 'automations' | 'search' | 'notifications';
@@ -39,6 +41,7 @@ type DesktopSidebarProps = {
   currentProjectId: string;
   currentWorkspaceId: string;
   currentConversationId: string | null;
+  workspaceTreeSelectionMode: WorkspaceTreeSelectionMode;
   expandedWorkspaceIds: Set<string>;
   newTaskDisabledReason: string | null;
   onModeChange: (mode: 'work' | 'code') => void;
@@ -51,7 +54,8 @@ type DesktopSidebarProps = {
     conversation: AgentConversation,
   ) => void;
   onNewTask: () => void;
-  onOpenSettings: () => void;
+  onOpenAccountSettings: () => void;
+  onSwitchWorkspace: () => void;
   onSignOut: () => void;
 };
 
@@ -75,6 +79,7 @@ export function DesktopSidebar({
   currentProjectId,
   currentWorkspaceId,
   currentConversationId,
+  workspaceTreeSelectionMode,
   expandedWorkspaceIds,
   newTaskDisabledReason,
   onModeChange,
@@ -83,7 +88,8 @@ export function DesktopSidebar({
   onSelectWorkspace,
   onSelectConversation,
   onNewTask,
-  onOpenSettings,
+  onOpenAccountSettings,
+  onSwitchWorkspace,
   onSignOut,
 }: DesktopSidebarProps) {
   const { t } = useI18n();
@@ -136,6 +142,7 @@ export function DesktopSidebar({
           currentProjectId={currentProjectId}
           currentWorkspaceId={currentWorkspaceId}
           currentConversationId={currentConversationId}
+          selectionMode={workspaceTreeSelectionMode}
           expandedWorkspaceIds={expandedWorkspaceIds}
           onToggleWorkspace={onToggleWorkspace}
           onSelectWorkspace={onSelectWorkspace}
@@ -169,7 +176,7 @@ export function DesktopSidebar({
           >
             <BellIcon /> <span>{t('sidebar.notifications')}</span><i />
           </button>
-          <button type="button" onClick={onOpenSettings}>
+          <button type="button" onClick={onOpenAccountSettings}>
             <GearIcon /> <span>{t('settings.title')}</span>
           </button>
         </nav>
@@ -177,10 +184,41 @@ export function DesktopSidebar({
         <div className="desktop-design-profile-wrap">
           {profileOpen ? (
             <div className="desktop-design-profile-menu">
-              <button type="button" onClick={onOpenSettings}>
+              <div className="desktop-design-profile-menu-identity">
+                <span className="desktop-design-profile-avatar">
+                  <PersonIcon />
+                </span>
+                <span>
+                  <strong>{user?.name || user?.email || t('sidebar.account')}</strong>
+                  <small>{user?.email ?? t('overview.none')}</small>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileOpen(false);
+                  onOpenAccountSettings();
+                }}
+              >
                 <GearIcon /> {t('sidebar.accountSettings')}
               </button>
-              <button type="button" onClick={onSignOut}>
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileOpen(false);
+                  onSwitchWorkspace();
+                }}
+              >
+                <CubeIcon /> {t('settings.switchWorkspace')}
+              </button>
+              <button
+                className="danger"
+                type="button"
+                onClick={() => {
+                  setProfileOpen(false);
+                  onSignOut();
+                }}
+              >
                 {t('settings.signOut')}
               </button>
             </div>
@@ -198,7 +236,7 @@ export function DesktopSidebar({
               <strong>{user?.name || user?.email || t('sidebar.account')}</strong>
               <small>{tenantName} · {projectName}</small>
             </span>
-            <ActivityLogIcon />
+            <ChevronUpIcon />
           </button>
         </div>
       </div>

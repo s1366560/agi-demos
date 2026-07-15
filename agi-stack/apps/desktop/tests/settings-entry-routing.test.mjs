@@ -15,6 +15,10 @@ test('Workspace Overview Configure opens workspace settings', () => {
   assert.equal(settingsSectionForEntry('workspace_overview'), 'workspace');
 });
 
+test('profile Switch workspace opens workspace settings', () => {
+  assert.equal(settingsSectionForEntry('profile_workspace_switch'), 'workspace');
+});
+
 test('runtime recovery actions retain a hidden connection recovery surface', () => {
   assert.equal(settingsSectionForEntry('runtime_connection'), 'connection');
 });

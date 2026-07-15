@@ -4445,6 +4445,15 @@ export function App() {
 
   const openSidebarSettings = () => openSettingsEntry('sidebar');
   const openWorkspaceSettings = () => openSettingsEntry('workspace_overview');
+  const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
+
+  const openWorkspaceOverview = () => {
+    if (!selectedConversation || !config.workspaceId) {
+      switchSection('workspace');
+      return;
+    }
+    selectWorkspace(config.workspaceId, config.projectId);
+  };
 
   const openConnectionSettings = () => {
     if (!identityAuthenticated) {
@@ -4606,7 +4615,7 @@ export function App() {
       return;
     }
     if (config.workspaceId) {
-      switchSection('workspace');
+      openWorkspaceOverview();
       return;
     }
     openWorkspaceSettings();
@@ -4626,7 +4635,7 @@ export function App() {
       label: 'Home',
       description: 'Open the workspace overview.',
       icon: <DashboardIcon />,
-      onSelect: () => switchSection('workspace'),
+      onSelect: openWorkspaceOverview,
     },
     {
       id: 'my-work',
@@ -5041,11 +5050,20 @@ export function App() {
             currentProjectId={config.projectId}
             currentWorkspaceId={config.workspaceId}
             currentConversationId={selectedConversation?.id ?? null}
+            workspaceTreeSelectionMode={
+              activeSection === 'workspace'
+                ? 'overview'
+                : activeSection === 'chat'
+                  ? 'conversation'
+                  : activeSection === 'board'
+                    ? 'my-work'
+                    : 'none'
+            }
             expandedWorkspaceIds={expandedWorkspaceIds}
             newTaskDisabledReason={newTaskDisabledReason}
             onModeChange={setPreferredTaskMode}
             onNavigate={(section) => {
-              if (section === 'home') switchSection('workspace');
+              if (section === 'home') openWorkspaceOverview();
               if (section === 'my-work') switchSection('board');
               if (section === 'automations') switchSection('automations');
               if (section === 'search') openCommandPalette();
@@ -5054,7 +5072,8 @@ export function App() {
             onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
             onSelectConversation={selectConversation}
             onNewTask={startNewSession}
-            onOpenSettings={openSidebarSettings}
+            onOpenAccountSettings={openSidebarSettings}
+            onSwitchWorkspace={openProfileWorkspaceSettings}
             onSignOut={() => void logout()}
           />
 

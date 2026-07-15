@@ -15,7 +15,12 @@ import type {
   RuntimeNodeLoadState,
   WorkspaceSummary,
 } from '../../types';
-import { buildWorkspaceTree } from './workspaceTreeModel';
+import {
+  buildWorkspaceTree,
+  isWorkspaceConversationSelected,
+  isWorkspaceOverviewSelected,
+  type WorkspaceTreeSelectionMode,
+} from './workspaceTreeModel';
 import './WorkspaceDock.css';
 
 type WorkspaceDockProps = {
@@ -25,6 +30,7 @@ type WorkspaceDockProps = {
   currentProjectId: string;
   currentWorkspaceId: string;
   currentConversationId: string | null;
+  selectionMode: WorkspaceTreeSelectionMode;
   expandedWorkspaceIds: Set<string>;
   onToggleWorkspace: (workspaceId: string) => void;
   onSelectWorkspace: (projectId: string, workspaceId: string) => void;
@@ -42,6 +48,7 @@ export function WorkspaceDock({
   currentProjectId,
   currentWorkspaceId,
   currentConversationId,
+  selectionMode,
   expandedWorkspaceIds,
   onToggleWorkspace,
   onSelectWorkspace,
@@ -73,7 +80,11 @@ export function WorkspaceDock({
           ) : (
             tree.map(({ workspace, conversations }) => {
               const workspaceExpanded = expandedWorkspaceIds.has(workspace.id);
-              const workspaceSelected = currentWorkspaceId === workspace.id;
+              const workspaceSelected = isWorkspaceOverviewSelected(
+                currentWorkspaceId,
+                workspace.id,
+                selectionMode,
+              );
               const workspaceState = nodeState.workspaces[workspace.id];
 
               return (
@@ -104,9 +115,7 @@ export function WorkspaceDock({
                     <button
                       type="button"
                       className="workspace-tree-workspace-action"
-                      aria-current={
-                        workspaceSelected && !currentConversationId ? 'page' : undefined
-                      }
+                      aria-current={workspaceSelected ? 'page' : undefined}
                       onClick={() => onSelectWorkspace(currentProjectId, workspace.id)}
                     >
                       <CubeIcon />
@@ -144,7 +153,11 @@ export function WorkspaceDock({
                         />
                       ) : (
                         conversations.map((conversation) => {
-                          const selected = conversation.id === currentConversationId;
+                          const selected = isWorkspaceConversationSelected(
+                            currentConversationId,
+                            conversation.id,
+                            selectionMode,
+                          );
                           const CapabilityIcon = conversationIcon(conversation);
                           const status = conversationRunStatus(conversation) ?? conversation.status;
                           const StatusIcon = conversationStatusIcon(status);

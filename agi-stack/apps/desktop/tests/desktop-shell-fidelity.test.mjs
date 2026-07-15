@@ -9,6 +9,10 @@ const sessionStyles = readFileSync(
   new URL('../src/features/session/SessionWorkspace.css', import.meta.url),
   'utf8'
 );
+const sidebarSource = readFileSync(
+  new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
+  'utf8'
+);
 
 test('desktop shell mounts only the prototype sidebar and page-owned headers', () => {
   assert.doesNotMatch(appSource, /className="titlebar"/);
@@ -83,4 +87,20 @@ test('desktop styles contain no retired signed-out or mobile menu chrome', () =>
     globalStyles,
     /\.(?:signed-out(?:-[\w-]+)?|mobile-section-[\w-]+|session-group-[\w-]+|welcome-(?:shell|timeline)|usage-warning(?:-[\w-]+)?|workflow-(?:strip|chip)|session-scope-[\w-]+|composer-(?:reference-menu|draft-input|toolbar))\b/,
   );
+});
+
+test('profile menu keeps account and workspace switching as distinct settings entries', () => {
+  assert.match(sidebarSource, /onOpenAccountSettings/);
+  assert.match(sidebarSource, /onSwitchWorkspace/);
+  assert.match(sidebarSource, /settings\.switchWorkspace/);
+  assert.match(appSource, /openSettingsEntry\('profile_workspace_switch'\)/);
+});
+
+test('Home clears an open conversation through the workspace-overview transition', () => {
+  assert.match(
+    appSource,
+    /const openWorkspaceOverview = \(\) => \{[\s\S]*?selectWorkspace\(config\.workspaceId, config\.projectId\);/,
+  );
+  assert.match(appSource, /if \(section === 'home'\) openWorkspaceOverview\(\)/);
+  assert.match(appSource, /onSelect: openWorkspaceOverview/);
 });

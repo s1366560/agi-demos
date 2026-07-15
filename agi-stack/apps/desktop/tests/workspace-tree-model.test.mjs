@@ -3,9 +3,11 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { buildWorkspaceTree } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js'
-);
+const {
+  buildWorkspaceTree,
+  isWorkspaceConversationSelected,
+  isWorkspaceOverviewSelected,
+} = require('/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceTreeModel.js');
 
 function conversation(id, title, updatedAt) {
   return {
@@ -64,5 +66,26 @@ test('recent grouping orders workspaces and conversations by authoritative times
   assert.deepEqual(
     tree[0].conversations.map((item) => item.id),
     ['conversation-latest', 'conversation-earlier']
+  );
+});
+
+test('workspace root is selected only while its overview is visible', () => {
+  assert.equal(isWorkspaceOverviewSelected('workspace-a', 'workspace-a', 'overview'), true);
+  assert.equal(isWorkspaceOverviewSelected('workspace-a', 'workspace-a', 'conversation'), false);
+  assert.equal(isWorkspaceOverviewSelected('workspace-a', 'workspace-b', 'overview'), false);
+});
+
+test('conversation rows are selected only in conversation and My Work views', () => {
+  assert.equal(
+    isWorkspaceConversationSelected('conversation-a', 'conversation-a', 'conversation'),
+    true
+  );
+  assert.equal(
+    isWorkspaceConversationSelected('conversation-a', 'conversation-a', 'my-work'),
+    true
+  );
+  assert.equal(
+    isWorkspaceConversationSelected('conversation-a', 'conversation-a', 'overview'),
+    false
   );
 });

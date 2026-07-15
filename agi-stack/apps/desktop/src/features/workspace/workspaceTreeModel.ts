@@ -5,6 +5,27 @@ export type WorkspaceTreeNode = {
   conversations: AgentConversation[];
 };
 
+export type WorkspaceTreeSelectionMode = 'overview' | 'conversation' | 'my-work' | 'none';
+
+export function isWorkspaceOverviewSelected(
+  currentWorkspaceId: string,
+  workspaceId: string,
+  selectionMode: WorkspaceTreeSelectionMode,
+): boolean {
+  return selectionMode === 'overview' && currentWorkspaceId === workspaceId;
+}
+
+export function isWorkspaceConversationSelected(
+  currentConversationId: string | null,
+  conversationId: string,
+  selectionMode: WorkspaceTreeSelectionMode,
+): boolean {
+  return (
+    (selectionMode === 'conversation' || selectionMode === 'my-work') &&
+    currentConversationId === conversationId
+  );
+}
+
 export function buildWorkspaceTree(
   workspaces: WorkspaceSummary[],
   conversationsByWorkspace: Record<string, AgentConversation[]>,
