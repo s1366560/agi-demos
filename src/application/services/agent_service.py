@@ -63,6 +63,24 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 
 _AGENT_CLIENT_TURN_PAYLOAD_VERSION = b"memstack-agent-client-turn:v1\0"
 
+# Redis assigns stream entry IDs from the server clock while event cursors use
+# the producer clock. When deriving a stream start ID from an event-time cursor,
+# subtract this margin so clock skew can never cause unseen entries to be
+# skipped; entries re-read inside the margin are dropped by the existing
+# time/counter dedup filter.
+_STREAM_CURSOR_SKEW_MARGIN_MS = 10_000
+
+
+def stream_start_id_from_cursor(cursor_time_us: int) -> str:
+    """Convert an event-time cursor (microseconds) into a Redis stream start ID.
+
+    Returns "0" (read from the beginning) when there is no usable cursor.
+    """
+    if cursor_time_us <= 0:
+        return "0"
+    start_ms = max(cursor_time_us // 1000 - _STREAM_CURSOR_SKEW_MARGIN_MS, 0)
+    return f"{start_ms}-0"
+
 
 def canonical_agent_client_turn_payload_hash(payload: Mapping[str, Any]) -> str:
     """Hash the exact structured execution input for client-turn idempotency."""
@@ -802,10 +820,13 @@ class AgentService(AgentServicePort):
         delayed_start = time_module.time()
         last_activity_time = delayed_start  # Track last time we saw any event
         result: list[dict[str, Any]] = []
+        # Start near the already-consumed watermark instead of re-reading the
+        # whole stream a second time after completion.
+        delayed_stream_start_id = stream_start_id_from_cursor(last_event_time_us)
         try:
             assert self._event_bus is not None
             async for delayed_message in self._event_bus.stream_read(
-                stream_key, last_id="0", count=100, block_ms=200
+                stream_key, last_id=delayed_stream_start_id, count=100, block_ms=200
             ):
                 current_time = time_module.time()
 
@@ -1154,15 +1175,18 @@ class AgentService(AgentServicePort):
 
         # 4. Stream live events from Redis Stream (reliable real-time)
         stream_key = f"agent:events:{conversation_id}"
+        # Start near the already-consumed watermark instead of re-reading the
+        # whole (up to 1000-entry) stream on every (re)connect.
+        stream_start_id = stream_start_id_from_cursor(last_event_time_us)
         logger.info(
             f"[AgentService] Streaming live from Redis Stream: {stream_key}, "
             f"message_id={message_id or 'ALL'}, "
-            f"last_event_time_us={last_event_time_us}"
+            f"last_event_time_us={last_event_time_us}, start_id={stream_start_id}"
         )
         live_event_count = 0
         try:
             async for message in self._event_bus.stream_read(
-                stream_key, last_id="0", count=1000, block_ms=1000
+                stream_key, last_id=stream_start_id, count=1000, block_ms=1000
             ):
                 live_event_count += 1
                 filtered = self._filter_live_event(

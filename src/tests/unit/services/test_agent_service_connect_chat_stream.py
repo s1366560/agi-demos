@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.application.services.agent_service import AgentService
+from src.application.services.agent_service import AgentService, stream_start_id_from_cursor
 from src.domain.model.agent import ToolExecutionRecord
 from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 
@@ -577,3 +577,94 @@ async def test_extract_title_seed_exchange_reads_user_and_assistant_message() ->
         conversation_id="conv-1",
         message_id="msg-1",
     )
+
+
+@pytest.mark.unit
+def test_stream_start_id_from_cursor_without_cursor_reads_from_beginning() -> None:
+    assert stream_start_id_from_cursor(0) == "0"
+    assert stream_start_id_from_cursor(-5) == "0"
+
+
+@pytest.mark.unit
+def test_stream_start_id_from_cursor_applies_skew_margin() -> None:
+    # 60s cursor -> start 50s (10s skew margin)
+    assert stream_start_id_from_cursor(60_000_000) == "50000-0"
+    # Cursor below the margin clamps to the stream beginning
+    assert stream_start_id_from_cursor(5_000_000) == "0-0"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_chat_stream_starts_live_read_near_cursor() -> None:
+    service = _build_service()
+    service._replay_db_events = AsyncMock(return_value=([], 0, 0, False))
+
+    captured: dict[str, Any] = {}
+
+    async def _stream_read(_stream_key, *, last_id, **_kwargs):
+        captured["last_id"] = last_id
+        return
+        yield  # pragma: no cover - keep this an async generator
+
+    service._event_bus.stream_read = _stream_read
+
+    async for _ in service.connect_chat_stream(
+        conversation_id="conv-1",
+        message_id="m1",
+        replay_from_db=True,
+        from_time_us=60_000_000,
+    ):
+        pass
+
+    assert captured["last_id"] == "50000-0"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_chat_stream_without_cursor_reads_from_beginning() -> None:
+    service = _build_service()
+    service._replay_db_events = AsyncMock(return_value=([], 0, 0, False))
+
+    captured: dict[str, Any] = {}
+
+    async def _stream_read(_stream_key, *, last_id, **_kwargs):
+        captured["last_id"] = last_id
+        return
+        yield  # pragma: no cover - keep this an async generator
+
+    service._event_bus.stream_read = _stream_read
+
+    async for _ in service.connect_chat_stream(
+        conversation_id="conv-1",
+        message_id="m1",
+        replay_from_db=False,
+    ):
+        pass
+
+    assert captured["last_id"] == "0"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_read_delayed_events_starts_near_cursor() -> None:
+    service = _build_service()
+
+    captured: dict[str, Any] = {}
+
+    async def _stream_read(_stream_key, *, last_id, **_kwargs):
+        captured["last_id"] = last_id
+        return
+        yield  # pragma: no cover - keep this an async generator
+
+    service._event_bus.stream_read = _stream_read
+
+    result = await service._read_delayed_events(
+        stream_key="agent:events:conv-1",
+        conversation_id="conv-1",
+        message_id="m1",
+        last_event_time_us=120_000_000,
+        last_event_counter=7,
+    )
+
+    assert result == []
+    assert captured["last_id"] == "110000-0"
