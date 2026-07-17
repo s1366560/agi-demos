@@ -1217,3 +1217,121 @@ async def test_persist_events_keeps_prefixed_correlation_id() -> None:
 
     insert_stmt = session.execute.await_args_list[1].args[0]
     assert insert_stmt.compile().params["correlation_id"] == correlation_id
+
+
+class _DeltaStreamingAgent(_FakeAgent):
+    async def execute_chat(self, **kwargs):
+        self.execute_chat_kwargs = kwargs
+        yield {"type": "text_delta", "data": {"delta": "Hel"}}
+        yield {"type": "text_delta", "data": {"delta": "lo"}}
+        yield {"type": "complete", "data": {"content": "Hello"}}
+
+
+class _RecordingPipeline:
+    def __init__(self) -> None:
+        self.xadd_calls: list[tuple[tuple, dict]] = []
+        self.execute_calls = 0
+
+    def xadd(self, *args, **kwargs):
+        self.xadd_calls.append((args, kwargs))
+        return self
+
+    async def execute(self):
+        self.execute_calls += 1
+        return []
+
+
+class _RecordingRedis:
+    def __init__(self) -> None:
+        self.pipeline_instance = _RecordingPipeline()
+        self.xadd = AsyncMock()
+
+    def pipeline(self, transaction: bool = False):
+        assert transaction is False
+        return self.pipeline_instance
+
+
+def _stream_payload(redis_message: dict) -> dict:
+    return json.loads(redis_message["data"])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_batches_delta_events_into_one_pipeline_flush() -> None:
+    agent = _DeltaStreamingAgent()
+    redis_client = _RecordingRedis()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+    )
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=redis_client)),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent=agent, request=request)
+
+    assert result.is_error is False
+
+    pipeline = redis_client.pipeline_instance
+    # Both deltas were flushed together when the structural event arrived.
+    assert pipeline.execute_calls == 1
+    assert len(pipeline.xadd_calls) == 2
+    payloads = [_stream_payload(call_args[1]) for call_args, _kwargs in pipeline.xadd_calls]
+    assert [p["type"] for p in payloads] == ["text_delta", "text_delta"]
+    delta_times = [p["event_time_us"] for p in payloads]
+    assert all(t > 0 for t in delta_times)
+    assert delta_times[0] <= delta_times[1]
+    assert [p["data"]["delta"] for p in payloads] == ["Hel", "lo"]
+    assert all(call_args[0] == "agent:events:conv-1" for call_args, _ in pipeline.xadd_calls)
+
+    # The structural event bypassed the pipeline and published directly.
+    redis_client.xadd.assert_awaited_once()
+    direct = redis_client.xadd.await_args
+    assert direct.args[0] == "agent:events:conv-1"
+    assert _stream_payload(direct.args[1])["type"] == "complete"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_flushes_deltas_on_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(execution, "_STREAM_DELTA_FLUSH_INTERVAL_S", 0.0)
+    agent = _DeltaStreamingAgent()
+    redis_client = _RecordingRedis()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+    )
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=redis_client)),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent=agent, request=request)
+
+    assert result.is_error is False
+    pipeline = redis_client.pipeline_instance
+    # Interval trigger flushed each delta separately; the complete event did
+    # not trigger another flush because the buffer was already empty.
+    assert pipeline.execute_calls == 2
+    assert len(pipeline.xadd_calls) == 2

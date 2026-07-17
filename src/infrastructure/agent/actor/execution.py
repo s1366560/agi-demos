@@ -957,6 +957,8 @@ async def execute_project_chat(
 
     try:
         redis_client = await _get_redis_client()
+        pending_delta_events: list[tuple[dict[str, Any], int, int]] = []
+        last_delta_flush = time_module.time()
 
         if request.agent_id and request.parent_session_id:
             await _update_spawn_status(
@@ -993,14 +995,16 @@ async def execute_project_chat(
             event["event_counter"] = evt_counter
             ss.events.append(event)
 
-            await _publish_event_to_stream(
-                conversation_id=request.conversation_id,
+            last_delta_flush = await _stream_publish_event(
                 event=event,
-                message_id=request.message_id,
                 event_time_us=evt_time_us,
                 event_counter=evt_counter,
+                pending_deltas=pending_delta_events,
+                conversation_id=request.conversation_id,
+                message_id=request.message_id,
                 correlation_id=request.correlation_id,
                 redis_client=redis_client,
+                last_delta_flush=last_delta_flush,
             )
 
             side_effects = _extract_event_side_effects(event)
@@ -1032,6 +1036,13 @@ async def execute_project_chat(
                 last_persist=now,
             )
 
+        await _flush_pending_delta_events(
+            pending_delta_events,
+            conversation_id=request.conversation_id,
+            message_id=request.message_id,
+            correlation_id=request.correlation_id,
+            redis_client=redis_client,
+        )
         await _flush_remaining_events(
             ss.events,
             ss.persisted_count,
@@ -1697,18 +1708,18 @@ async def _publish_error_event(
         )
 
 
-async def _publish_event_to_stream(
+def _build_stream_redis_message(
     conversation_id: str,
     event: dict[str, Any],
     message_id: str,
     event_time_us: int,
     event_counter: int,
     correlation_id: str | None = None,
-    redis_client: aioredis.Redis | None = None,
-) -> None:
+) -> dict[str, str] | None:
+    """Build the Redis stream message for one event, or None if it normalizes away."""
     normalized_event = normalize_event_dict(event)
     if normalized_event is None:
-        return
+        return None
 
     event_type = normalized_event.get("type", "unknown")
     event_data = normalized_event.get("data", {})
@@ -1729,7 +1740,33 @@ async def _publish_event_to_stream(
     if correlation_id:
         stream_event_payload["correlation_id"] = correlation_id
 
-    redis_message = {"data": json.dumps(stream_event_payload)}
+    return {"data": json.dumps(stream_event_payload)}
+
+
+async def _publish_event_to_stream(
+    conversation_id: str,
+    event: dict[str, Any],
+    message_id: str,
+    event_time_us: int,
+    event_counter: int,
+    correlation_id: str | None = None,
+    redis_client: aioredis.Redis | None = None,
+) -> None:
+    normalized_event = normalize_event_dict(event)
+    if normalized_event is None:
+        return
+    event_type = normalized_event.get("type", "unknown")
+
+    redis_message = _build_stream_redis_message(
+        conversation_id,
+        event,
+        message_id,
+        event_time_us,
+        event_counter,
+        correlation_id,
+    )
+    if redis_message is None:
+        return
 
     if redis_client is None:
         redis_client = await _get_redis_client()
@@ -1738,6 +1775,7 @@ async def _publish_event_to_stream(
         stream_key = f"agent:events:{conversation_id}"
         await redis_client.xadd(stream_key, redis_message, maxlen=1000)  # type: ignore[arg-type]
         if event_type in ("task_list_updated", "task_updated"):
+            event_data = normalized_event.get("data", {})
             task_count = len(event_data.get("tasks", [])) if isinstance(event_data, dict) else 0
             logger.info(
                 f"[ActorExecution] Published {event_type} to Redis: "
@@ -1757,6 +1795,116 @@ async def _publish_event_to_stream(
             "project_agent.event_publish_errors",
             labels={"event_type": event_type},
         )
+
+
+# Delta event types that are buffered and flushed to the Redis stream in
+# batches. They fire once per LLM token; batching removes one Redis round
+# trip per token from the actor event loop while keeping one stream entry
+# per event (so replay/dedup semantics are unchanged).
+_STREAM_BATCHABLE_DELTA_TYPES = frozenset({"text_delta", "thought_delta", "act_delta"})
+
+# Flush buffered deltas at least this often; also flushed before any
+# non-delta event and at end of stream, preserving event order.
+_STREAM_DELTA_FLUSH_INTERVAL_S = 0.05
+
+
+async def _flush_pending_delta_events(
+    pending: list[tuple[dict[str, Any], int, int]],
+    *,
+    conversation_id: str,
+    message_id: str,
+    correlation_id: str | None,
+    redis_client: aioredis.Redis,
+) -> None:
+    """Flush buffered delta events with one pipelined Redis round trip.
+
+    Failure semantics match ``_publish_event_to_stream``: log + metric, never
+    raise — the DB remains the source of truth for replay.
+    """
+    if not pending:
+        return
+    try:
+        stream_key = f"agent:events:{conversation_id}"
+        pipeline = redis_client.pipeline(transaction=False)
+        queued = 0
+        for event, event_time_us, event_counter in pending:
+            redis_message = _build_stream_redis_message(
+                conversation_id,
+                event,
+                message_id,
+                event_time_us,
+                event_counter,
+                correlation_id,
+            )
+            if redis_message is None:
+                continue
+            pipeline.xadd(stream_key, redis_message, maxlen=1000)  # type: ignore[arg-type]
+            queued += 1
+        if queued:
+            await pipeline.execute()
+    except Exception as e:
+        logger.error(
+            f"[ActorExecution] Failed to publish {len(pending)} delta events to Redis "
+            f"(conversation={conversation_id}): {e}",
+            exc_info=True,
+        )
+        agent_metrics.increment(
+            "project_agent.event_publish_errors",
+            labels={"event_type": "delta_batch"},
+        )
+    finally:
+        pending.clear()
+
+
+async def _stream_publish_event(
+    *,
+    event: dict[str, Any],
+    event_time_us: int,
+    event_counter: int,
+    pending_deltas: list[tuple[dict[str, Any], int, int]],
+    conversation_id: str,
+    message_id: str,
+    correlation_id: str | None,
+    redis_client: aioredis.Redis,
+    last_delta_flush: float,
+) -> float:
+    """Route one event to the Redis stream: buffer deltas, publish others.
+
+    Per-token deltas are buffered and flushed in batches (on interval, before
+    any non-delta event so stream order is preserved, and at end of stream by
+    the caller). Returns the updated last-flush timestamp.
+    """
+    if event.get("type") in _STREAM_BATCHABLE_DELTA_TYPES:
+        pending_deltas.append((event, event_time_us, event_counter))
+        now = time_module.time()
+        if now - last_delta_flush < _STREAM_DELTA_FLUSH_INTERVAL_S:
+            return last_delta_flush
+        await _flush_pending_delta_events(
+            pending_deltas,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            correlation_id=correlation_id,
+            redis_client=redis_client,
+        )
+        return now
+
+    await _flush_pending_delta_events(
+        pending_deltas,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        correlation_id=correlation_id,
+        redis_client=redis_client,
+    )
+    await _publish_event_to_stream(
+        conversation_id=conversation_id,
+        event=event,
+        message_id=message_id,
+        event_time_us=event_time_us,
+        event_counter=event_counter,
+        correlation_id=correlation_id,
+        redis_client=redis_client,
+    )
+    return time_module.time()
 
 
 async def _get_redis_client() -> aioredis.Redis:
