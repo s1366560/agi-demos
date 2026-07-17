@@ -208,12 +208,8 @@ class RetrievalStoreService:
     async def batch_resolve_store_views(
         self, tenant_id: str, store_ids: list[str]
     ) -> dict[str, StoreDisplay]:
-        out: dict[str, StoreDisplay] = {}
-        for store_id in dict.fromkeys(store_ids):
-            store = await self._repo.find_by_id(tenant_id, store_id)
-            if store is not None:
-                out[store_id] = _to_display(store)
-        return out
+        stores = await self._repo.find_by_ids(tenant_id, store_ids)
+        return {store_id: _to_display(store) for store_id, store in stores.items()}
 
     async def update_connection_config(
         self,

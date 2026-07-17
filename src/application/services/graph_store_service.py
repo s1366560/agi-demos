@@ -253,13 +253,9 @@ class GraphStoreService:
     async def batch_resolve_store_views(
         self, tenant_id: str, store_ids: list[str]
     ) -> dict[str, StoreDisplay]:
-        """Resolve multiple stores at once (avoids N+1)."""
-        out: dict[str, StoreDisplay] = {}
-        for sid in dict.fromkeys(store_ids):  # de-dup, preserve order
-            store = await self._repo.find_by_id(tenant_id, sid)
-            if store is not None:
-                out[sid] = _to_display(store)
-        return out
+        """Resolve multiple stores at once (single IN query via find_by_ids)."""
+        stores = await self._repo.find_by_ids(tenant_id, store_ids)
+        return {store_id: _to_display(store) for store_id, store in stores.items()}
 
     def env_default_store_view(self, tenant_id: str) -> StoreDisplay:
         """Return API-safe display for the env-configured graph backend."""

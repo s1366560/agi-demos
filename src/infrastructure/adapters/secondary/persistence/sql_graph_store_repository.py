@@ -125,6 +125,24 @@ class SqlGraphStoreRepository(GraphStoreRepository):
         return self._to_domain(result.scalar_one_or_none())
 
     @override
+    async def find_by_ids(self, tenant_id: str, store_ids: list[str]) -> dict[str, GraphStore]:
+        unique_ids = list(dict.fromkeys(store_ids))
+        if not unique_ids:
+            return {}
+        query = select(GraphStoreModel).where(
+            GraphStoreModel.id.in_(unique_ids),
+            GraphStoreModel.tenant_id == tenant_id,
+            GraphStoreModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(refresh_select_statement(query))
+        stores: dict[str, GraphStore] = {}
+        for row in result.scalars().all():
+            store = self._to_domain(row)
+            if store is not None:
+                stores[store.id] = store
+        return stores
+
+    @override
     async def find_by_name(self, tenant_id: str, name: str) -> GraphStore | None:
         query = (
             select(GraphStoreModel)

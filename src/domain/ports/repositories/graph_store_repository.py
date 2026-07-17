@@ -18,6 +18,19 @@ class GraphStoreRepository(ABC):
     async def find_by_id(self, tenant_id: str, store_id: str) -> GraphStore | None:
         """Find a non-deleted graph store by id, scoped to the tenant."""
 
+    async def find_by_ids(self, tenant_id: str, store_ids: list[str]) -> dict[str, GraphStore]:
+        """Find multiple non-deleted graph stores by id, keyed by store id.
+
+        The default implementation issues one query per id; backends should
+        override it with a single IN query to avoid N+1 reads.
+        """
+        stores: dict[str, GraphStore] = {}
+        for store_id in dict.fromkeys(store_ids):
+            store = await self.find_by_id(tenant_id, store_id)
+            if store is not None:
+                stores[store_id] = store
+        return stores
+
     @abstractmethod
     async def find_by_name(self, tenant_id: str, name: str) -> GraphStore | None:
         """Find a non-deleted graph store by tenant + name."""

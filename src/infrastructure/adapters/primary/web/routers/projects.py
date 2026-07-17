@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +15,10 @@ from sqlalchemy import and_, case, delete, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
+
+if TYPE_CHECKING:
+    from src.application.services.graph_store_service import GraphStoreService
+    from src.application.services.retrieval_store_service import RetrievalStoreService
 
 from src.application.schemas.project import (
     BackendStoreSummary,
@@ -109,11 +114,11 @@ async def _normalize_retrieval_store_binding(
     return store_id
 
 
-async def _attach_backend_summaries(
-    response: ProjectResponse,
-    project: Project,
-    db: AsyncSession,
-) -> ProjectResponse:
+def _build_backend_services(db: AsyncSession) -> tuple[GraphStoreService, RetrievalStoreService]:
+    """Construct graph/retrieval store services once per request.
+
+    Imports stay lazy (function-level) to avoid module import cycles.
+    """
     from src.application.services.graph_store_service import GraphStoreService
     from src.application.services.retrieval_store_service import RetrievalStoreService
     from src.infrastructure.graph.backend_factory import build_default_factory
@@ -131,26 +136,60 @@ async def _attach_backend_summaries(
         registry=get_retrieval_backend_registry(),
         factory=build_default_retrieval_factory(),
     )
+    return graph_service, retrieval_service
 
-    if project.graph_store_id:
+
+async def _batch_resolve_store_views(
+    service: GraphStoreService | RetrievalStoreService,
+    projects: Sequence[Project],
+    id_attr: str,
+) -> dict[str, Any]:
+    """Resolve all distinct bound store ids for a page of projects.
+
+    Groups by tenant (one IN query per tenant) instead of resolving per
+    project; a failed group is logged and omitted, matching the previous
+    per-project failure tolerance.
+    """
+    ids_by_tenant: dict[str, list[str]] = {}
+    for project in projects:
+        store_id = getattr(project, id_attr)
+        if store_id:
+            ids_by_tenant.setdefault(project.tenant_id, []).append(store_id)
+    views: dict[str, Any] = {}
+    for tenant_id, store_ids in ids_by_tenant.items():
         try:
-            response.graph_store = _store_summary(
-                await graph_service.resolve_store_view(project.tenant_id, project.graph_store_id)
-            )
+            views.update(await service.batch_resolve_store_views(tenant_id, store_ids))
         except Exception:
+            logger.warning("Failed to batch resolve stores for tenant %s", tenant_id)
+    return views
+
+
+def _attach_backend_summaries_from_views(
+    response: ProjectResponse,
+    project: Project,
+    *,
+    graph_service: GraphStoreService,
+    retrieval_service: RetrievalStoreService,
+    graph_views: dict[str, Any],
+    retrieval_views: dict[str, Any],
+) -> ProjectResponse:
+    """Attach store summaries from pre-resolved views (no per-project queries)."""
+    if project.graph_store_id:
+        graph_view = graph_views.get(project.graph_store_id)
+        if graph_view is not None:
+            response.graph_store = _store_summary(graph_view)
+        else:
             logger.warning("Failed to resolve project graph store %s", project.graph_store_id)
     else:
-        response.graph_store = _store_summary(graph_service.env_default_store_view(project.tenant_id))
+        response.graph_store = _store_summary(
+            graph_service.env_default_store_view(project.tenant_id)
+        )
 
     if project.retrieval_store_id:
-        try:
-            response.retrieval_store = _store_summary(
-                await retrieval_service.resolve_store_view(
-                    project.tenant_id,
-                    project.retrieval_store_id,
-                )
-            )
-        except Exception:
+        retrieval_view = retrieval_views.get(project.retrieval_store_id)
+        if retrieval_view is not None:
+            response.retrieval_store = _store_summary(retrieval_view)
+        else:
             logger.warning(
                 "Failed to resolve project retrieval store %s",
                 project.retrieval_store_id,
@@ -160,6 +199,26 @@ async def _attach_backend_summaries(
             retrieval_service.env_default_store_view(project.tenant_id)
         )
     return response
+
+
+async def _attach_backend_summaries(
+    response: ProjectResponse,
+    project: Project,
+    db: AsyncSession,
+) -> ProjectResponse:
+    graph_service, retrieval_service = _build_backend_services(db)
+    graph_views = await _batch_resolve_store_views(graph_service, [project], "graph_store_id")
+    retrieval_views = await _batch_resolve_store_views(
+        retrieval_service, [project], "retrieval_store_id"
+    )
+    return _attach_backend_summaries_from_views(
+        response,
+        project,
+        graph_service=graph_service,
+        retrieval_service=retrieval_service,
+        graph_views=graph_views,
+        retrieval_views=retrieval_views,
+    )
 
 
 async def _project_response(project: Project, db: AsyncSession) -> ProjectResponse:
@@ -484,6 +543,15 @@ async def list_projects(  # noqa: C901, PLR0915
             except Exception as exc:
                 logger.warning("Failed to fetch bulk graph stats: %s", exc)
 
+        # Resolve bound store views for the whole page in one query per
+        # store type (per tenant) instead of rebuilding services and
+        # re-querying per project.
+        graph_service, retrieval_service = _build_backend_services(db)
+        graph_views = await _batch_resolve_store_views(graph_service, projects, "graph_store_id")
+        retrieval_views = await _batch_resolve_store_views(
+            retrieval_service, projects, "retrieval_store_id"
+        )
+
         for project in projects:
             p_resp = ProjectResponse.model_validate(project)
 
@@ -512,7 +580,14 @@ async def list_projects(  # noqa: C901, PLR0915
                 member_count=int(member_count),
                 last_active=last_active,
             )
-            p_resp = await _attach_backend_summaries(p_resp, project, db)
+            p_resp = _attach_backend_summaries_from_views(
+                p_resp,
+                project,
+                graph_service=graph_service,
+                retrieval_service=retrieval_service,
+                graph_views=graph_views,
+                retrieval_views=retrieval_views,
+            )
             project_responses.append(p_resp)
 
     return ProjectListResponse(
