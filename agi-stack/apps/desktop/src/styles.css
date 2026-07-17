@@ -1007,6 +1007,11 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   color: var(--desktop-text);
 }
 
+.runtime-live-error {
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
 .auth-form,
 .auth-summary,
 .auth-selection {
@@ -1878,6 +1883,207 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+}
+
+.session-plan-review-header {
+  display: grid;
+  gap: 7px;
+  padding: 4px 2px 2px;
+}
+
+.session-plan-review-header > span {
+  color: var(--desktop-cyan);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.session-plan-review-header > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-plan-review-header h2,
+.session-plan-review-header p {
+  margin: 0;
+}
+
+.session-plan-review-header h2 {
+  color: var(--desktop-text);
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.session-plan-review-header p {
+  color: var(--desktop-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.session-plan-task-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-plan-task-list li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 8px;
+  background: rgba(13, 19, 29, 0.68);
+}
+
+.session-plan-task-index {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(53, 211, 153, 0.3);
+  border-radius: 50%;
+  color: var(--desktop-green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.session-plan-task-list li > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-plan-task-list strong {
+  overflow-wrap: anywhere;
+  color: var(--desktop-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.session-plan-task-list small {
+  color: var(--desktop-faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.session-plan-task-list li > svg {
+  color: var(--desktop-green);
+}
+
+.session-plan-approval-card {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  border-radius: 9px;
+  background: rgba(8, 28, 37, 0.42);
+}
+
+.session-plan-approval-card > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.session-plan-approval-card > header > span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 7px;
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--desktop-cyan);
+}
+
+.session-plan-approval-card > header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-plan-approval-card > header strong {
+  color: var(--desktop-text);
+  font-size: 12px;
+}
+
+.session-plan-approval-card > header small,
+.session-plan-approval-authority {
+  color: var(--desktop-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.session-plan-approval-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 9px;
+}
+
+.session-plan-approval-fields label {
+  display: grid;
+  gap: 6px;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.session-plan-approval-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 33px;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 7px;
+  background: #0a111a;
+  color: var(--desktop-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.session-plan-approval-fields select:focus-visible {
+  outline: 2px solid var(--desktop-cyan);
+  outline-offset: 2px;
+}
+
+.session-plan-approval-card > .rt-Button {
+  width: 100%;
+}
+
+.session-plan-approved-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(53, 211, 153, 0.22);
+  border-radius: 8px;
+  background: rgba(53, 211, 153, 0.05);
+  color: var(--desktop-green);
+}
+
+.session-plan-approved-note > span {
+  display: grid;
+  gap: 3px;
+}
+
+.session-plan-approved-note strong {
+  color: var(--desktop-text);
+  font-size: 12px;
+}
+
+.session-plan-approved-note small {
+  color: var(--desktop-muted);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .review-plan-tree {

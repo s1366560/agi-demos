@@ -6,6 +6,7 @@ from src.domain.ports.repositories.base import (
     WriteRepositoryPort,
 )
 from src.domain.ports.repositories.agent_repository import (
+    AgentClientTurnRepository,
     AgentExecutionRepository,
     ConversationRepository,
     MessageRepository,
@@ -50,6 +51,7 @@ __all__ = [
     "ConversationRepository",
     "MessageRepository",
     "AgentExecutionRepository",
+    "AgentClientTurnRepository",
     "WorkflowPatternRepositoryPort",
     "ToolCompositionRepositoryPort",
     "SkillRepositoryPort",

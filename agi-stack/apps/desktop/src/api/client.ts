@@ -515,6 +515,23 @@ export class DesktopApiClient {
     );
   }
 
+  async supportsAgentPlanWorkflow(signal?: AbortSignal): Promise<boolean> {
+    try {
+      // Schema validation proves the mutation route exists without creating a conversation or plan.
+      await this.request<unknown>('/api/v1/agent/plan/mode', {
+        method: 'POST',
+        body: {},
+        signal,
+      });
+      return true;
+    } catch (error) {
+      if (!(error instanceof DesktopApiError)) throw error;
+      if (error.status === 422) return true;
+      if (error.status === 404 || error.status === 405 || error.status === 501) return false;
+      throw error;
+    }
+  }
+
   async switchPlanMode(
     conversationId: string,
     mode: AgentPlanMode,

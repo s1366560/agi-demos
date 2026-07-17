@@ -21,6 +21,25 @@ class MockAgentService(AgentService):
         """Return available tools."""
         return []
 
+
+class RecordingStreamAgentService(MockAgentService):
+    """Agent service double that records the execution message identity."""
+
+    started_message_id: str | None = None
+
+    async def _start_chat_actor(self, *args, **kwargs):
+        self.started_message_id = kwargs["message_id"]
+        return "actor-1"
+
+    async def connect_chat_stream(self, conversation_id: str, message_id: str):
+        assert conversation_id == "conv-1"
+        assert message_id == "execution-message-1"
+        yield {
+            "type": "complete",
+            "data": {"message_id": message_id},
+            "timestamp": datetime.now().isoformat(),
+        }
+
     async def get_conversation_context(self, conversation_id: str):
         """Get conversation context."""
         return []
@@ -489,3 +508,39 @@ class TestAgentServiceStreamChatAuthorization:
         assert len(events) == 1
         assert events[0]["type"] == "error"
         assert "permission" in events[0]["data"]["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_stream_chat_binds_client_message_id_to_event_and_actor(
+        self,
+        mock_repos,
+        mock_dependencies,
+        sample_conversation,
+    ):
+        mock_repos["conversation"].find_by_id.return_value = sample_conversation
+        mock_repos["agent_execution_event"].get_last_event_time.return_value = (0, 0)
+        mock_repos["agent_execution_event"].get_message_events.return_value = []
+        service = RecordingStreamAgentService(
+            conversation_repository=mock_repos["conversation"],
+            execution_repository=mock_repos["execution"],
+            graph_service=mock_dependencies["graph_service"],
+            llm=mock_dependencies["llm"],
+            neo4j_client=mock_dependencies["neo4j_client"],
+            agent_execution_event_repository=mock_repos["agent_execution_event"],
+        )
+
+        events = [
+            event
+            async for event in service.stream_chat_v2(
+                conversation_id="conv-1",
+                user_message="Plan the requested change",
+                project_id="proj-1",
+                user_id="user-1",
+                tenant_id="tenant-1",
+                execution_message_id="execution-message-1",
+            )
+        ]
+
+        saved_event = mock_repos["agent_execution_event"].save_and_commit.call_args.args[0]
+        assert saved_event.message_id == "execution-message-1"
+        assert events[0]["data"]["id"] == "execution-message-1"
+        assert service.started_message_id == "execution-message-1"

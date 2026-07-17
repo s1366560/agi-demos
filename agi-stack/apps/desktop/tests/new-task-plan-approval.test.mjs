@@ -15,6 +15,9 @@ const {
   legacyPlanMatchesPreview,
   planVersionIdentity,
 } = require('/tmp/agistack-desktop-test-dist/src/features/task/newTaskApprovalModel.js');
+const { planTaskSignature } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/task/newTaskPlanModel.js'
+);
 
 const draftPlan = {
   id: 'plan-version-2',
@@ -92,12 +95,19 @@ test('legacy approval rechecks the exact authoritative task signature', () => {
     total_count: 1,
     approval: { kind: 'legacy_mode_switch' },
   };
-  const reviewedSignature = `1:high:Inspect:2026-07-14T00:00:00Z`;
+  const reviewedSignature = planTaskSignature([task]);
 
   assert.equal(legacyPlanMatchesPreview(response, reviewedSignature), true);
   assert.equal(
     legacyPlanMatchesPreview(
       { ...response, tasks: [{ ...task, content: 'Inspect and verify' }] },
+      reviewedSignature,
+    ),
+    false,
+  );
+  assert.equal(
+    legacyPlanMatchesPreview(
+      { ...response, tasks: [{ ...task, id: 'replacement-task' }] },
       reviewedSignature,
     ),
     false,

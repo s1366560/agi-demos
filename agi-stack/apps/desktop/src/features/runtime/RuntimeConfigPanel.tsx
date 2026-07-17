@@ -5,6 +5,7 @@ import { LOCAL_DEV_SERVER_PRESETS } from '../../types';
 import type { ConnectionState, DesktopRuntimeConfig, RuntimeMode } from '../../types';
 import { useI18n } from '../../i18n';
 import {
+  applyRuntimeServerPreset,
   updateRuntimeConnectionConfig,
   type RuntimeConnectionField,
 } from './runtimeConfigModel';
@@ -85,8 +86,10 @@ export function RuntimeConfigPanel({
               type="button"
               variant="surface"
               color="gray"
-              aria-pressed={config.apiBaseUrl === preset.apiBaseUrl}
-              onClick={() => update('apiBaseUrl', preset.apiBaseUrl)}
+              aria-pressed={
+                config.apiBaseUrl === preset.apiBaseUrl && config.mode === preset.mode
+              }
+              onClick={() => onChange(applyRuntimeServerPreset(config, preset))}
             >
               {preset.label}
             </Button>
@@ -146,6 +149,17 @@ export function RuntimeConfigPanel({
           {wsConnected ? t('runtime.connected') : wsError ? t('runtime.error') : t('runtime.idle')}
         </Badge>
       </Flex>
+      {wsError ? (
+        <Text
+          size="1"
+          color="red"
+          className="runtime-live-error"
+          role="alert"
+          aria-atomic="true"
+        >
+          {t('runtime.liveUpdatesError', { message: wsError })}
+        </Text>
+      ) : null}
     </section>
   );
 }

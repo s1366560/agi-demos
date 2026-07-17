@@ -48,6 +48,94 @@ final result: passed
 
 ---
 
+# Desktop Plan-first Task and Recovery Design QA
+
+## Verdict
+
+- P0: none.
+- P1: none after the interactive select crash, transferred-checkpoint source controls, recovery-fork rollback, runtime credential invalidation, and cloud/local turn-replay races were fixed.
+- P2: none after capability preflight, two-stage session activation, unknown-delivery recovery, exact plan authority, scoped approval recovery, accessibility, and localization were verified.
+- P3: the approved prototype presents initial plan review as a full-screen creation step, while a recovered plan is intentionally reopened inside the conversation canvas. The hierarchy changes, but the plan version, persisted tasks, environment, permission, authority state, and primary action remain explicit.
+
+## Comparison setup
+
+- Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control`
+- Implementation URL: `http://127.0.0.1:5173/`
+- Viewport: `1280 × 720`.
+- Task definition comparison: `agi-stack/apps/desktop/qa/new-task-plan-20260716/comparison-task-define.jpg`
+- Agent planning comparison: `agi-stack/apps/desktop/qa/new-task-plan-20260716/comparison-task-planning.jpg`
+- Source review and recovered session review comparison: `agi-stack/apps/desktop/qa/new-task-plan-20260716/comparison-source-review-session-recovery.jpg`
+- Draft session review: `agi-stack/apps/desktop/qa/new-task-plan-20260716/session-plan-draft-1280.jpg`
+- Read-only session review: `agi-stack/apps/desktop/qa/new-task-plan-20260716/session-plan-readonly-1280.jpg`
+- Approved session review: `agi-stack/apps/desktop/qa/new-task-plan-20260716/session-plan-approved-1280.jpg`
+- Runtime recovery settings: `agi-stack/apps/desktop/qa/new-task-plan-20260716/runtime-recovery-settings-1280.jpg`
+
+The source and implementation captures were placed together at the same viewport before the final judgment. Task definition and planning preserve the source composition, typography, stepper, boundary rail, progress rhythm, cards, controls, and dark desktop treatment. The session recovery view keeps the established conversation canvas instead of introducing a second full-screen shell.
+
+## Primary interactions verified
+
+- Probe Agent Plan capability before creating a workspace, conversation, task list, or other server artifact; unsupported Python/cloud runtimes fail with localized guidance and a direct Settings recovery action.
+- Apply Rust-local and Python-cloud runtime presets as atomic URL-and-mode identities; crossing that identity boundary clears the in-memory Bearer and native trusted session before reconnecting.
+- Reject opaque or non-HTTP(S) runtime identities, and clear both the cloud API key and local launch token whenever the validated origin or runtime mode changes.
+- Persist a new task in the workspace catalog first, bind its workspace and Agent plan mode, deliver the Agent turn, and activate the session only after the dispatch path is established.
+- Register the WebSocket acknowledgement before sending. Timeout or disconnect is treated as an unknown outcome, reuses the stable planning message ID, and polls authority instead of blindly creating a duplicate turn.
+- Persist only an opaque, SHA-256-scoped approval recovery record with exact runtime, tenant, project, conversation, plan, message, schema, and 24-hour expiry authority; task content and credentials never enter local storage.
+- Bind a cloud WebSocket `message_id` to one canonical execution payload in a durable ledger. Conflicting reuse fails closed, concurrent accepts receive one execution claim, and a committed `STARTED` turn replays its authoritative acknowledgement without creating another task.
+- Commit the cloud ledger transition and first user event in one database transaction. A setup failure rolls the claim back to retryable `ACCEPTED`; a `STARTED` row without its durable user event requires manual reconciliation instead of guessing.
+- Bind each Rust-local HTTP fallback message to a durable `(conversation_id, message_id, payload_hash)` record before spawning. Exact sequential or concurrent replay returns the persisted admission without another Agent execution; conflicting reuse returns `MESSAGE_ID_CONFLICT`, and the same message ID remains isolated across conversations.
+- Editing the task definition, workspace, or task kind invalidates the prior planning session and prevents approval of its stale plan.
+- Recover cloud `agent_task_list` state after refresh or backgrounding as readable evidence, then recheck the exact task-list signature before opening guarded review.
+- Approve only the exact persisted plan ID and version with the selected execution environment and permission profile in one idempotent authority request.
+- Render draft, authority-read-only, and approved states distinctly. Read-only disables approval; approved removes the approval action while keeping the plan visible.
+- Change execution environment and permission selectors without losing the canvas. The browser-discovered synthetic-event lifetime crash is covered by a regression test.
+- Keep the conversation plan canvas scoped to its exact session projection or recovered task list; it never substitutes the workspace envelope `dataset.plan`.
+- Recover queued and running Rust runs after process restart without replaying work. Startup, terminalization, queued-input settlement, current-fork selection, and checkpoint quarantine fail closed.
+- Bind every checkpoint to run, plan, project, permission, environment, and generation lineage; a recovery fork transfers that authority explicitly.
+- Reject pause, resume, cancel, HITL response, review changes, and artifact-review resume before any core checkpoint side effect when the requested run is not the persisted checkpoint owner. An old source run cannot cancel or reopen its fork's checkpoint.
+- Reject a new recovery-fork key from a transferred source before claim, Git worktree preparation, run insertion, decision insertion, or timeline emission. Transfer or resume failures restore source authority and remove the created branch, worktree, run, decision, and event.
+- Hold one exclusive owner for the desktop SQLite store so a second process cannot concurrently recover the same runs.
+- Support keyboard navigation across the session canvas tabs, focus the newly available plan, restore focus after step editing, expose live planning progress, and keep command palette and recovery copy localized.
+
+## Verification
+
+- Desktop frontend tests: `308 passed`.
+- Production TypeScript and Vite build: passed; only the existing large-chunk advisory remains.
+- Rust formatting: passed.
+- Rust check and Clippy with warnings denied: passed.
+- Desktop Rust runtime tests: `126 passed`.
+- Python client-turn ledger, WebSocket acknowledgement, AgentService, preferred-language, use-case, and integration regressions: `39 passed`; the combined core suite was independently rerun with `37 passed`.
+- Targeted Ruff, Pyright, and gettext-literal checks: passed. Targeted Mypy was terminated by the local OS with exit `137` before emitting diagnostics; Pyright reported zero errors over the changed surface.
+- Alembic, using the current `.env` `DATABASE_URL`: `upgrade head`, `heads`, and `current` passed at `f9d99e5695ec (head)`.
+- Browser page identity, meaningful DOM, framework-overlay absence, default selection state, selector interaction, read-only state, approved state, and screenshot evidence: passed.
+- Browser console: no new error-level entries after the selector fix across the final draft, interaction, read-only, approved, login, and recovery-state navigation.
+- `git diff --check`: passed.
+
+## Comparison and hardening history
+
+1. Same-canvas comparison confirmed the task-description and planning screens closely match the approved prototype.
+2. Capability review moved plan support detection before every creating mutation and added an actionable Settings recovery path.
+3. Delivery review split catalog persistence from active-session adoption and made ambiguous WebSocket outcomes idempotently recoverable.
+4. Authority review removed the workspace-plan fallback and made draft approval depend on the exact persisted conversation plan version.
+5. Rendered interaction QA found a select-change crash that static rendering did not expose; both selectors now capture values before functional state updates.
+6. Crash-recovery review added checkpoint lineage, transaction-safe input settlement, fail-closed terminalization, current-fork recovery, and exclusive store ownership.
+7. Final adversarial review found that an old recovery source could still address a transferred fork checkpoint. All core checkpoint controls now verify exact run authority while holding the conversation claim, and dedicated cancel/resume regression tests prove the fork remains unchanged.
+8. Runtime review found that a malformed or cross-origin transition could retain credentials. Runtime identity is now HTTP(S)-only and clears both cloud and native credentials whenever origin or mode changes.
+9. Unknown approval delivery gained an opaque, versioned, runtime-scoped recovery record with an exact plan signature, stable message ID, and bounded expiry; accepted attempts cannot be replayed blindly.
+10. Accessibility review added the complete tab keyboard contract, plan announcements and focus handoff, editor focus restoration, busy/live states, and localized recovery and command copy.
+11. Cloud replay review added a durable client-turn ledger, payload conflict detection, a single transactional execution claim, and stable event identity so the same WebSocket turn cannot create a second agent task.
+12. Recovery-fork review moved source authority validation ahead of every side effect and added checked rollback across branch, worktree, run, decision, event, and source authority, including a real Git worktree regression.
+13. Final protocol review found the local HTTP fallback could still repeat a completed message after a lost response. A schema-versioned SQLite client-turn ledger now admits the message once, rejects payload conflicts, survives reopen, and is covered by lost-response, concurrent-replay, invalid-ID, and cross-conversation tests.
+
+The desktop run database, core checkpoint database, and Git worktree cannot participate in one physical transaction. Explicit failures now roll back every created resource and restore exact authority, while a rollback I/O failure is surfaced with its still-associated recovery resources. A process crash in the narrow database-commit/worktree-cleanup window can still leave a worktree that requires manual cleanup.
+
+The cloud ledger's `ACCEPTED -> STARTED` transition and first user event are atomic, and replay of a committed turn never spawns a second task. The later actor handoff is not physically exactly-once: a crash after the user event commit can require manual reconciliation, while a `STARTED` row without that event is rejected explicitly. These are documented durability boundaries, not silent duplicate-execution paths.
+
+The Rust-local client-turn admission is committed before its Tokio task is spawned, so replay is at-most-once across response loss and process reopen. A process crash in that narrow admission-to-spawn window can require manual reconciliation, but it cannot silently execute the same message twice.
+
+final result: passed
+
+---
+
 # Desktop Workspace Hierarchy Design QA
 
 ## Verdict

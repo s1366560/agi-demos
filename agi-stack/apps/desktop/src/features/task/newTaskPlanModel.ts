@@ -1,9 +1,35 @@
-import type { AgentPlanTask } from '../../types';
+import type { AgentPlanTask, DesktopRuntimeConfig } from '../../types';
+import { canonicalJsonSha256 } from '../session/canonicalJsonDigest';
 
 export type NewTaskKind = 'general' | 'programming';
 export type NewTaskContextSource = 'project_memory' | 'project_files' | 'web_research';
+export type NewTaskAgentTurnOutcome = 'acknowledged' | 'unknown_outcome';
+
+export type PlanningTurnAttempt = {
+  fingerprint: string;
+  messageId: string;
+};
+
+export type LegacyPlanApprovalRecovery = {
+  schemaVersion: 2;
+  conversationId: string;
+  runtimeScope: string;
+  planSignature: string;
+  messageId: string;
+  createdAt: number;
+  expiresAt: number;
+};
+
+export type LegacyPlanApprovalStorage = {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+};
 
 export const PLAN_EMPTY_POLL_RETRY_THRESHOLD = 8;
+export const LEGACY_PLAN_APPROVAL_TTL_MS = 24 * 60 * 60 * 1_000;
+
+const SHA256_SIGNATURE_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
 export type ReviewPlanStep = {
   id: string;
@@ -20,6 +46,230 @@ export type NewTaskDefinition = {
   workspaceRoot?: string;
   contextSources?: NewTaskContextSource[];
 };
+
+export function newTaskDefinitionSignature(
+  definition: NewTaskDefinition,
+  workspaceSelection: string,
+): string {
+  return JSON.stringify({
+    title: definition.title.trim(),
+    objective: definition.objective.trim(),
+    kind: definition.kind,
+    workspaceRoot: definition.workspaceRoot?.trim() ?? '',
+    contextSources: [...(definition.contextSources ?? [])].sort(),
+    workspaceSelection: workspaceSelection.trim(),
+  });
+}
+
+export function planningTurnAttempt(
+  current: PlanningTurnAttempt | null,
+  fingerprint: string,
+  createMessageId: () => string,
+): PlanningTurnAttempt {
+  if (current?.fingerprint === fingerprint) return current;
+  return { fingerprint, messageId: createMessageId() };
+}
+
+// Keep the original key namespace so schema-v1 records are rejected and removed in place.
+const LEGACY_PLAN_APPROVAL_RECOVERY_KEY_PREFIX =
+  'memstack.desktop.legacy-plan-approval.v1:';
+
+function legacyPlanApprovalRecoveryKey(conversationId: string): string {
+  return `${LEGACY_PLAN_APPROVAL_RECOVERY_KEY_PREFIX}${conversationId.trim()}`;
+}
+
+export function browserLegacyPlanApprovalStorage(): LegacyPlanApprovalStorage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function legacyPlanApprovalRuntimeScope(
+  config: Pick<
+    DesktopRuntimeConfig,
+    'apiBaseUrl' | 'mode' | 'tenantId' | 'projectId'
+  >,
+): string {
+  let normalizedApiBaseUrl: string;
+  try {
+    const url = new URL(config.apiBaseUrl.trim());
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      return '';
+    }
+    const path = url.pathname.replace(/\/+$/, '') || '/';
+    normalizedApiBaseUrl = `${url.origin.toLowerCase()}${path}`;
+  } catch {
+    return '';
+  }
+  const digest = canonicalJsonSha256({
+    apiBaseUrl: normalizedApiBaseUrl,
+    mode: config.mode,
+    tenantId: config.tenantId.trim(),
+    projectId: config.projectId.trim(),
+  });
+  return digest ? `sha256:${digest}` : '';
+}
+
+export function createLegacyPlanApprovalRecovery(
+  conversationId: string,
+  planSignature: string,
+  messageId: string,
+  runtimeScope: string,
+  createdAt = Date.now(),
+): LegacyPlanApprovalRecovery {
+  return {
+    schemaVersion: 2,
+    conversationId: conversationId.trim(),
+    runtimeScope,
+    planSignature,
+    messageId: messageId.trim(),
+    createdAt,
+    expiresAt: createdAt + LEGACY_PLAN_APPROVAL_TTL_MS,
+  };
+}
+
+export function writeLegacyPlanApprovalRecovery(
+  storage: LegacyPlanApprovalStorage | null,
+  recovery: LegacyPlanApprovalRecovery,
+): boolean {
+  if (
+    !storage ||
+    !recovery.conversationId ||
+    recovery.conversationId.length > 256 ||
+    !SHA256_SIGNATURE_PATTERN.test(recovery.runtimeScope) ||
+    !SHA256_SIGNATURE_PATTERN.test(recovery.planSignature) ||
+    !recovery.messageId ||
+    recovery.messageId.length > 255 ||
+    !Number.isSafeInteger(recovery.createdAt) ||
+    !Number.isSafeInteger(recovery.expiresAt) ||
+    recovery.expiresAt !== recovery.createdAt + LEGACY_PLAN_APPROVAL_TTL_MS
+  ) {
+    return false;
+  }
+  try {
+    const serialized = JSON.stringify(recovery);
+    const key = legacyPlanApprovalRecoveryKey(recovery.conversationId);
+    storage.setItem(key, serialized);
+    return storage.getItem(key) === serialized;
+  } catch {
+    return false;
+  }
+}
+
+export function readLegacyPlanApprovalRecovery(
+  storage: LegacyPlanApprovalStorage | null,
+  conversationId: string,
+  planSignature: string,
+  runtimeScope: string,
+  now = Date.now(),
+): LegacyPlanApprovalRecovery | null {
+  const scopedConversationId = conversationId.trim();
+  if (
+    !storage ||
+    !scopedConversationId ||
+    !SHA256_SIGNATURE_PATTERN.test(planSignature) ||
+    !SHA256_SIGNATURE_PATTERN.test(runtimeScope)
+  ) {
+    return null;
+  }
+  const key = legacyPlanApprovalRecoveryKey(scopedConversationId);
+  try {
+    const serialized = storage.getItem(key);
+    if (!serialized) return null;
+    const candidate = JSON.parse(serialized) as Partial<LegacyPlanApprovalRecovery>;
+    if (
+      candidate.schemaVersion !== 2 ||
+      candidate.conversationId !== scopedConversationId ||
+      candidate.runtimeScope !== runtimeScope ||
+      candidate.planSignature !== planSignature ||
+      typeof candidate.messageId !== 'string' ||
+      !candidate.messageId.trim() ||
+      candidate.messageId.length > 255 ||
+      !Number.isSafeInteger(candidate.createdAt) ||
+      !Number.isSafeInteger(candidate.expiresAt) ||
+      candidate.expiresAt !==
+        (candidate.createdAt as number) + LEGACY_PLAN_APPROVAL_TTL_MS ||
+      (candidate.expiresAt as number) <= now
+    ) {
+      storage.removeItem(key);
+      return null;
+    }
+    return createLegacyPlanApprovalRecovery(
+      scopedConversationId,
+      planSignature,
+      candidate.messageId,
+      runtimeScope,
+      candidate.createdAt as number,
+    );
+  } catch {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // Storage remains fail-closed when a corrupt record cannot be removed.
+    }
+    return null;
+  }
+}
+
+export function clearLegacyPlanApprovalRecovery(
+  storage: LegacyPlanApprovalStorage | null,
+  conversationId: string,
+): boolean {
+  const scopedConversationId = conversationId.trim();
+  if (!storage || !scopedConversationId) return false;
+  try {
+    const key = legacyPlanApprovalRecoveryKey(scopedConversationId);
+    storage.removeItem(key);
+    return storage.getItem(key) === null;
+  } catch {
+    return false;
+  }
+}
+
+export function canResumeLegacyPlanApproval(
+  currentMode: string,
+  hasAcceptedAttempt: boolean,
+  planSignature: string,
+  recovery: LegacyPlanApprovalRecovery | null,
+): boolean {
+  if (currentMode === 'plan') return true;
+  return Boolean(
+    currentMode === 'build' &&
+      !hasAcceptedAttempt &&
+      planSignature &&
+      recovery?.planSignature === planSignature,
+  );
+}
+
+export function isFreshPlanningPlan(
+  tasks: ReadonlyArray<unknown>,
+  signature: string,
+  baselineSignature: string,
+  versionChanged: boolean,
+): boolean {
+  return tasks.length > 0 && (versionChanged || signature !== baselineSignature);
+}
+
+export function canActivateNewTaskSession(
+  workspaceId: string,
+  conversationWorkspaceId: string | null | undefined,
+  outcome: NewTaskAgentTurnOutcome,
+): boolean {
+  return (
+    Boolean(workspaceId) &&
+    conversationWorkspaceId === workspaceId &&
+    (outcome === 'acknowledged' || outcome === 'unknown_outcome')
+  );
+}
 
 export function buildPlanningPrompt(definition: NewTaskDefinition): string {
   const codeContext =
@@ -146,10 +396,21 @@ export function planPriorityTranslationKey(priority: string): string {
 }
 
 export function planTaskSignature(tasks: AgentPlanTask[]): string {
-  return [...tasks]
-    .sort((left, right) => left.order_index - right.order_index)
-    .map((task) => `${task.order_index}:${task.priority}:${task.content}:${task.updated_at}`)
-    .join('|');
+  if (!tasks.length) return '';
+  const digest = canonicalJsonSha256(
+    [...tasks]
+      .sort((left, right) => left.order_index - right.order_index)
+      .map((task) => [
+        task.id,
+        task.conversation_id,
+        task.order_index,
+        task.status,
+        task.priority,
+        task.content,
+        task.updated_at || '',
+      ]),
+  );
+  return digest ? `sha256:${digest}` : '';
 }
 
 export function orderedPlanTasks(tasks: AgentPlanTask[]): AgentPlanTask[] {

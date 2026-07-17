@@ -1,20 +1,21 @@
 use std::{
     path::Path,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::{
     authority_store::{
         artifact_status_name, insert_plan_version, insert_run, insert_run_event,
-        query_conversation, query_latest_draft_plan, query_plan_version, query_run,
-        query_run_by_idempotency, recover_interrupted_runs, typed_rows,
-        update_conversation_in_transaction, update_plan_version, update_run, ApprovePlanOutcome,
-        DesktopArtifactDelivery, DesktopArtifactStatus, DesktopArtifactVersion,
+        is_recovered_unstarted_run, query_conversation, query_latest_draft_plan,
+        query_plan_version, query_run, query_run_by_idempotency, recover_interrupted_runs,
+        typed_rows, update_conversation_in_transaction, update_plan_version, update_run,
+        ApprovePlanOutcome, DesktopArtifactDelivery, DesktopArtifactStatus, DesktopArtifactVersion,
         DesktopAuthorityError, DesktopExecutionEnvironment, DesktopHitlRequest, DesktopHitlStatus,
         DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
         DesktopRunStatus,
@@ -30,6 +31,55 @@ use super::{
 pub(super) struct PreparedToolInvocation {
     pub(super) invocation: ToolInvocation,
     pub(super) existing: bool,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum DesktopClientTurnClaimError {
+    PayloadConflict,
+    Storage(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct DesktopCheckpointAuthority {
+    pub(super) conversation_id: String,
+    pub(super) run_id: String,
+    pub(super) project_id: String,
+    pub(super) plan_version_id: String,
+    pub(super) request_message: String,
+    pub(super) permission_profile: DesktopPermissionProfile,
+    pub(super) environment: Option<DesktopExecutionEnvironment>,
+    pub(super) generation_id: String,
+    pub(super) predecessor_generation_id: Option<String>,
+    pub(super) created_at: String,
+    pub(super) updated_at: String,
+}
+
+impl DesktopCheckpointAuthority {
+    fn from_run(run: &DesktopRun, now: &str, predecessor_generation_id: Option<String>) -> Self {
+        Self {
+            conversation_id: run.conversation_id.clone(),
+            run_id: run.id.clone(),
+            project_id: run.project_id.clone(),
+            plan_version_id: run.plan_version_id.clone(),
+            request_message: run.request_message.clone(),
+            permission_profile: run.permission_profile,
+            environment: run.environment.clone(),
+            generation_id: format!("checkpoint-generation-{}", Uuid::new_v4()),
+            predecessor_generation_id,
+            created_at: now.to_string(),
+            updated_at: now.to_string(),
+        }
+    }
+
+    pub(super) fn matches_run(&self, run: &DesktopRun) -> bool {
+        self.conversation_id == run.conversation_id
+            && self.run_id == run.id
+            && self.project_id == run.project_id
+            && self.plan_version_id == run.plan_version_id
+            && self.request_message == run.request_message
+            && self.permission_profile == run.permission_profile
+            && self.environment == run.environment
+    }
 }
 
 #[derive(Clone)]
@@ -125,7 +175,13 @@ pub(super) struct ConversationSessionSnapshot {
 impl DesktopSessionStore {
     pub(super) fn open(path: &Path) -> Result<Self, String> {
         let connection = Connection::open(path).map_err(|error| error.to_string())?;
-        Self::from_connection(connection)
+        Self::from_connection(connection).map_err(|error| {
+            if error.contains("database is locked") || error.contains("database is busy") {
+                "desktop session store is already owned by another local runtime".to_string()
+            } else {
+                error
+            }
+        })
     }
 
     #[cfg(test)]
@@ -135,9 +191,16 @@ impl DesktopSessionStore {
     }
 
     fn from_connection(connection: Connection) -> Result<Self, String> {
+        // This database is an execution authority, not a shared read model. Keep one SQLite
+        // connection in EXCLUSIVE locking mode for the store lifetime so a second desktop process
+        // fails before it can recover or execute the same run concurrently.
+        connection
+            .busy_timeout(Duration::ZERO)
+            .map_err(|error| error.to_string())?;
         connection
             .execute_batch(
                 "PRAGMA foreign_keys = ON;
+                 PRAGMA locking_mode = EXCLUSIVE;
                  PRAGMA journal_mode = WAL;
                  CREATE TABLE IF NOT EXISTS desktop_workspaces (
                    id TEXT PRIMARY KEY,
@@ -201,6 +264,15 @@ impl DesktopSessionStore {
                    created_at TEXT NOT NULL,
                    value_json TEXT NOT NULL,
                    UNIQUE(run_id, revision)
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_client_turns (
+                   conversation_id TEXT NOT NULL,
+                   message_id TEXT NOT NULL,
+                   payload_hash TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   PRIMARY KEY(conversation_id, message_id),
+                   FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id)
+                     ON DELETE CASCADE
                  );
                  CREATE TABLE IF NOT EXISTS desktop_run_inputs (
                    id TEXT PRIMARY KEY,
@@ -296,6 +368,15 @@ impl DesktopSessionStore {
                    finished_at_ms INTEGER,
                    value_json TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_checkpoint_authorities (
+                   conversation_id TEXT PRIMARY KEY,
+                   run_id TEXT NOT NULL,
+                   plan_version_id TEXT NOT NULL,
+                   generation_id TEXT NOT NULL UNIQUE,
+                   created_at TEXT NOT NULL,
+                   updated_at TEXT NOT NULL,
+                   value_json TEXT NOT NULL
+                 );
                  CREATE INDEX IF NOT EXISTS idx_desktop_workspaces_project
                    ON desktop_workspaces(project_id);
                  CREATE INDEX IF NOT EXISTS idx_desktop_conversations_scope
@@ -310,6 +391,8 @@ impl DesktopSessionStore {
                    ON desktop_runs(conversation_id, created_at DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_run_events_run
                    ON desktop_run_events(run_id, revision);
+                 CREATE INDEX IF NOT EXISTS idx_desktop_client_turns_conversation
+                   ON desktop_client_turns(conversation_id, created_at);
                  CREATE INDEX IF NOT EXISTS idx_desktop_run_inputs_run
                    ON desktop_run_inputs(run_id, sequence);
                  CREATE INDEX IF NOT EXISTS idx_desktop_run_inputs_pending
@@ -328,9 +411,19 @@ impl DesktopSessionStore {
                    ON desktop_tool_invocations(run_id, prepared_at_ms DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_status
                    ON desktop_tool_invocations(status, prepared_at_ms DESC);
-                 PRAGMA user_version = 8;",
+                 CREATE INDEX IF NOT EXISTS idx_desktop_checkpoint_authorities_run
+                   ON desktop_checkpoint_authorities(run_id);
+                 PRAGMA user_version = 10;",
             )
             .map_err(|error| error.to_string())?;
+        let locking_mode: String = connection
+            .query_row("PRAGMA locking_mode", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        if !locking_mode.eq_ignore_ascii_case("exclusive") {
+            return Err(format!(
+                "desktop session store requires exclusive SQLite ownership, got {locking_mode}"
+            ));
+        }
         super::auth_context::initialize_auth_context_schema(&connection)?;
         super::resource_registry::initialize_resource_registry(&connection)?;
         recover_inflight_tool_invocations(&connection, chrono::Utc::now().timestamp_millis())?;
@@ -1186,6 +1279,142 @@ impl DesktopSessionStore {
         Ok(run)
     }
 
+    pub(super) fn claim_client_turn(
+        &self,
+        conversation_id: &str,
+        message_id: &str,
+        payload_hash: &str,
+        now: &str,
+    ) -> Result<bool, DesktopClientTurnClaimError> {
+        let mut connection = self
+            .connection()
+            .map_err(DesktopClientTurnClaimError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| DesktopClientTurnClaimError::Storage(error.to_string()))?;
+        let existing = transaction
+            .query_row(
+                "SELECT payload_hash FROM desktop_client_turns
+                 WHERE conversation_id = ?1 AND message_id = ?2",
+                params![conversation_id, message_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| DesktopClientTurnClaimError::Storage(error.to_string()))?;
+        if let Some(existing) = existing {
+            if existing != payload_hash {
+                return Err(DesktopClientTurnClaimError::PayloadConflict);
+            }
+            transaction
+                .commit()
+                .map_err(|error| DesktopClientTurnClaimError::Storage(error.to_string()))?;
+            return Ok(false);
+        }
+        transaction
+            .execute(
+                "INSERT INTO desktop_client_turns(
+                   conversation_id, message_id, payload_hash, created_at
+                 ) VALUES (?1, ?2, ?3, ?4)",
+                params![conversation_id, message_id, payload_hash, now],
+            )
+            .map_err(|error| DesktopClientTurnClaimError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| DesktopClientTurnClaimError::Storage(error.to_string()))?;
+        Ok(true)
+    }
+
+    pub(super) fn checkpoint_authority(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<DesktopCheckpointAuthority>, String> {
+        let connection = self.connection()?;
+        query_checkpoint_authority(&connection, conversation_id)
+    }
+
+    pub(super) fn bind_checkpoint_authority(
+        &self,
+        run: &DesktopRun,
+        now: &str,
+    ) -> Result<DesktopCheckpointAuthority, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        if let Some(existing) = query_checkpoint_authority(&transaction, &run.conversation_id)? {
+            if existing.matches_run(run) {
+                transaction.commit().map_err(|error| error.to_string())?;
+                return Ok(existing);
+            }
+        }
+        let authority = DesktopCheckpointAuthority::from_run(run, now, None);
+        upsert_checkpoint_authority(&transaction, &authority)?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(authority)
+    }
+
+    pub(super) fn transfer_checkpoint_authority(
+        &self,
+        source: &DesktopRun,
+        target: &DesktopRun,
+        now: &str,
+    ) -> Result<DesktopCheckpointAuthority, String> {
+        if target.conversation_id != source.conversation_id
+            || target.project_id != source.project_id
+            || target.plan_version_id != source.plan_version_id
+            || target.request_message != source.request_message
+            || target.permission_profile != source.permission_profile
+            || target
+                .environment
+                .as_ref()
+                .and_then(|environment| environment.source_run_id.as_deref())
+                != Some(source.id.as_str())
+        {
+            return Err("recovery fork does not preserve source checkpoint authority".to_string());
+        }
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let existing = query_checkpoint_authority(&transaction, &source.conversation_id)?
+            .ok_or_else(|| "source checkpoint authority is missing".to_string())?;
+        if existing.matches_run(target) {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(existing);
+        }
+        if !existing.matches_run(source) {
+            return Err(
+                "source checkpoint authority does not match the recovery source".to_string(),
+            );
+        }
+        let authority =
+            DesktopCheckpointAuthority::from_run(target, now, Some(existing.generation_id.clone()));
+        upsert_checkpoint_authority(&transaction, &authority)?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(authority)
+    }
+
+    pub(super) fn clear_checkpoint_authority(
+        &self,
+        conversation_id: &str,
+        expected_run_id: Option<&str>,
+    ) -> Result<bool, String> {
+        let deleted = match expected_run_id {
+            Some(run_id) => self.connection()?.execute(
+                "DELETE FROM desktop_checkpoint_authorities
+                 WHERE conversation_id = ?1 AND run_id = ?2",
+                params![conversation_id, run_id],
+            ),
+            None => self.connection()?.execute(
+                "DELETE FROM desktop_checkpoint_authorities WHERE conversation_id = ?1",
+                [conversation_id],
+            ),
+        }
+        .map_err(|error| error.to_string())?;
+        Ok(deleted > 0)
+    }
+
+    #[cfg(test)]
     pub(super) fn fork_recovery_run(
         &self,
         source_run_id: &str,
@@ -1194,6 +1423,28 @@ impl DesktopSessionStore {
         environment: DesktopExecutionEnvironment,
         now: &str,
     ) -> Result<(DesktopRun, bool), String> {
+        self.fork_recovery_run_with_id(
+            source_run_id,
+            expected_revision,
+            idempotency_key,
+            &format!("local-run-{}", Uuid::new_v4()),
+            environment,
+            now,
+        )
+    }
+
+    pub(super) fn fork_recovery_run_with_id(
+        &self,
+        source_run_id: &str,
+        expected_revision: u64,
+        idempotency_key: &str,
+        run_id: &str,
+        environment: DesktopExecutionEnvironment,
+        now: &str,
+    ) -> Result<(DesktopRun, bool), String> {
+        if run_id.trim().is_empty() {
+            return Err("recovery run id is required".to_string());
+        }
         let mut connection = self.connection()?;
         let transaction = connection
             .transaction()
@@ -1226,7 +1477,6 @@ impl DesktopSessionStore {
             return Ok((existing, false));
         }
 
-        let run_id = format!("local-run-{}", Uuid::new_v4());
         let mut authorization_snapshot = source.authorization_snapshot.clone();
         authorization_snapshot["source_run_id"] = json!(source.id);
         authorization_snapshot["recovery"] = json!("fork");
@@ -1234,7 +1484,7 @@ impl DesktopSessionStore {
         authorization_snapshot["environment"] =
             serde_json::to_value(&environment).map_err(|error| error.to_string())?;
         let run = DesktopRun {
-            id: run_id.clone(),
+            id: run_id.to_string(),
             conversation_id: source.conversation_id.clone(),
             project_id: source.project_id.clone(),
             plan_version_id: source.plan_version_id.clone(),
@@ -1286,6 +1536,75 @@ impl DesktopSessionStore {
         Ok((run, true))
     }
 
+    pub(super) fn rollback_recovery_fork(
+        &self,
+        source: &DesktopRun,
+        forked: &DesktopRun,
+        now: &str,
+    ) -> Result<bool, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let Some(stored) =
+            query_run(&transaction, &forked.id).map_err(|error| error.to_string())?
+        else {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(false);
+        };
+        if stored.status != DesktopRunStatus::Queued
+            || stored.revision != 1
+            || stored.conversation_id != source.conversation_id
+            || stored.project_id != source.project_id
+            || stored.plan_version_id != source.plan_version_id
+            || stored.request_message != source.request_message
+            || stored.permission_profile != source.permission_profile
+            || stored.idempotency_key != forked.idempotency_key
+            || stored.environment != forked.environment
+            || stored.authorization_snapshot["recovery"].as_str() != Some("fork")
+            || stored.authorization_snapshot["source_run_id"].as_str() != Some(source.id.as_str())
+        {
+            return Err("recovery fork is no longer safe to roll back".to_string());
+        }
+        let authority = query_checkpoint_authority(&transaction, &source.conversation_id)?
+            .ok_or_else(|| {
+                "checkpoint authority is missing during recovery rollback".to_string()
+            })?;
+        if authority.matches_run(&stored) {
+            let restored = DesktopCheckpointAuthority::from_run(
+                source,
+                now,
+                Some(authority.generation_id.clone()),
+            );
+            upsert_checkpoint_authority(&transaction, &restored)?;
+        } else if !authority.matches_run(source) {
+            return Err("checkpoint authority changed during recovery rollback".to_string());
+        }
+        transaction
+            .execute(
+                "DELETE FROM desktop_decisions WHERE run_id = ?1",
+                [&stored.id],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "DELETE FROM desktop_run_events WHERE run_id = ?1",
+                [&stored.id],
+            )
+            .map_err(|error| error.to_string())?;
+        let deleted = transaction
+            .execute(
+                "DELETE FROM desktop_runs WHERE id = ?1 AND status = 'queued' AND revision = 1",
+                [&stored.id],
+            )
+            .map_err(|error| error.to_string())?;
+        if deleted != 1 {
+            return Err("recovery fork changed during rollback".to_string());
+        }
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(true)
+    }
+
     pub(super) fn prepare_run_for_execution(
         &self,
         run_id: &str,
@@ -1327,11 +1646,15 @@ impl DesktopSessionStore {
             transaction.commit().map_err(|error| error.to_string())?;
             return Ok(Some(run));
         }
+        let clears_recovery_error = is_recovered_unstarted_run(&run);
         run.status = DesktopRunStatus::Running;
         run.revision += 1;
         run.updated_at = now.to_string();
         run.started_at.get_or_insert_with(|| now.to_string());
         run.last_heartbeat_at = Some(now.to_string());
+        if clears_recovery_error {
+            run.error = None;
+        }
         update_run(&transaction, &run)?;
         insert_run_event(&transaction, &run, "running", now).map_err(|error| error.to_string())?;
         transaction.commit().map_err(|error| error.to_string())?;
@@ -1380,6 +1703,73 @@ impl DesktopSessionStore {
             now,
         )
         .map_err(|error| error.to_string())?;
+        settle_queued_run_inputs_in_transaction(&transaction, &run.id, run.status, now)?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(run)
+    }
+
+    pub(super) fn reconcile_recovered_run(
+        &self,
+        run_id: &str,
+        expected_revision: u64,
+        status: DesktopRunStatus,
+        error: Option<String>,
+        now: &str,
+    ) -> Result<DesktopRun, String> {
+        if !matches!(
+            status,
+            DesktopRunStatus::NeedsInput
+                | DesktopRunStatus::NeedsApproval
+                | DesktopRunStatus::Paused
+                | DesktopRunStatus::ReadyReview
+                | DesktopRunStatus::Failed
+                | DesktopRunStatus::Cancelled
+        ) {
+            return Err("checkpoint recovery target is not reconcilable".to_string());
+        }
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let mut run = query_run(&transaction, run_id)
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "run not found".to_string())?;
+        if run.revision != expected_revision {
+            return Err(format!(
+                "run revision conflict: expected {expected_revision}, found {}",
+                run.revision
+            ));
+        }
+        let started_recovery = matches!(
+            run.status,
+            DesktopRunStatus::Disconnected | DesktopRunStatus::Interrupted
+        ) && run.started_at.is_some();
+        let terminalized_unstarted_launch = is_recovered_unstarted_run(&run)
+            && matches!(
+                status,
+                DesktopRunStatus::ReadyReview
+                    | DesktopRunStatus::Failed
+                    | DesktopRunStatus::Cancelled
+            );
+        if !started_recovery && !terminalized_unstarted_launch {
+            return Err("run is outside the started recovery boundary".to_string());
+        }
+
+        run.status = status;
+        run.revision += 1;
+        run.updated_at = now.to_string();
+        run.last_heartbeat_at = Some(now.to_string());
+        run.completed_at = status.is_terminal().then(|| now.to_string());
+        run.error = error;
+        update_run(&transaction, &run)?;
+        insert_run_event(
+            &transaction,
+            &run,
+            super::authority_store::run_status_name(status),
+            now,
+        )
+        .map_err(|error| error.to_string())?;
+        settle_queued_run_inputs_in_transaction(&transaction, &run.id, run.status, now)?;
         transaction.commit().map_err(|error| error.to_string())?;
         Ok(run)
     }
@@ -1461,6 +1851,7 @@ impl DesktopSessionStore {
                 ],
             )
             .map_err(|error| error.to_string())?;
+        settle_queued_run_inputs_in_transaction(&transaction, &run.id, run.status, now)?;
         transaction.commit().map_err(|error| error.to_string())?;
         Ok((run, decision))
     }
@@ -1572,6 +1963,57 @@ impl DesktopSessionStore {
             )
             .map_err(|error| error.to_string())?;
         typed_rows(statement.query_map([conversation_id], |row| row.get::<_, String>(0)))
+    }
+
+    pub(super) fn list_recoverable_runs(&self) -> Result<Vec<DesktopRun>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT candidate.value_json
+                 FROM desktop_runs AS candidate
+                 WHERE candidate.status IN ('disconnected', 'interrupted')
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM desktop_runs AS newer
+                     WHERE newer.conversation_id = candidate.conversation_id
+                       AND newer.rowid > candidate.rowid
+                   )
+                 ORDER BY candidate.rowid ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        typed_rows(statement.query_map([], |row| row.get::<_, String>(0)))
+    }
+
+    pub(super) fn list_current_checkpoint_quarantines(
+        &self,
+        quarantine_error: &str,
+        recoverable_error_prefix: &str,
+    ) -> Result<Vec<DesktopRun>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT candidate.value_json
+                 FROM desktop_runs AS candidate
+                 WHERE candidate.status IN ('failed', 'disconnected')
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM desktop_runs AS newer
+                     WHERE newer.conversation_id = candidate.conversation_id
+                       AND newer.rowid > candidate.rowid
+                   )
+                 ORDER BY candidate.rowid ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let runs: Vec<DesktopRun> =
+            typed_rows(statement.query_map([], |row| row.get::<_, String>(0)))?;
+        Ok(runs
+            .into_iter()
+            .filter(|run| {
+                run.error.as_deref().is_some_and(|error| {
+                    error == quarantine_error || error.starts_with(recoverable_error_prefix)
+                })
+            })
+            .collect())
     }
 
     pub(super) fn list_project_attention_runs(
@@ -1801,31 +2243,11 @@ impl DesktopSessionStore {
         run_status: DesktopRunStatus,
         now: &str,
     ) -> Result<(), String> {
-        let next_status = match run_status {
-            DesktopRunStatus::Completed => RunInputStatus::Ready,
-            DesktopRunStatus::Failed | DesktopRunStatus::Cancelled => RunInputStatus::Blocked,
-            _ => return Ok(()),
-        };
         let mut connection = self.connection()?;
         let transaction = connection
             .transaction()
             .map_err(|error| error.to_string())?;
-        let inputs = {
-            let mut statement = transaction
-                .prepare(
-                    "SELECT value_json FROM desktop_run_inputs
-                     WHERE run_id = ?1 AND delivery = 'queue_next' AND status = 'queued'",
-                )
-                .map_err(|error| error.to_string())?;
-            let rows: Vec<DesktopRunInput> =
-                typed_rows(statement.query_map([run_id], |row| row.get::<_, String>(0)))?;
-            rows
-        };
-        for mut input in inputs {
-            input.status = next_status;
-            input.updated_at = now.to_string();
-            update_run_input(&transaction, &input)?;
-        }
+        settle_queued_run_inputs_in_transaction(&transaction, run_id, run_status, now)?;
         transaction.commit().map_err(|error| error.to_string())
     }
 
@@ -2407,6 +2829,84 @@ impl DesktopSessionStore {
             .lock()
             .map_err(|_| "desktop session store lock poisoned".to_string())
     }
+}
+
+fn query_checkpoint_authority(
+    connection: &Connection,
+    conversation_id: &str,
+) -> Result<Option<DesktopCheckpointAuthority>, String> {
+    let value_json = connection
+        .query_row(
+            "SELECT value_json FROM desktop_checkpoint_authorities WHERE conversation_id = ?1",
+            [conversation_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    value_json
+        .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+        .transpose()
+}
+
+fn upsert_checkpoint_authority(
+    connection: &Connection,
+    authority: &DesktopCheckpointAuthority,
+) -> Result<(), String> {
+    connection
+        .execute(
+            "INSERT INTO desktop_checkpoint_authorities(
+               conversation_id, run_id, plan_version_id, generation_id,
+               created_at, updated_at, value_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(conversation_id) DO UPDATE SET
+               run_id = excluded.run_id,
+               plan_version_id = excluded.plan_version_id,
+               generation_id = excluded.generation_id,
+               created_at = excluded.created_at,
+               updated_at = excluded.updated_at,
+               value_json = excluded.value_json",
+            params![
+                authority.conversation_id,
+                authority.run_id,
+                authority.plan_version_id,
+                authority.generation_id,
+                authority.created_at,
+                authority.updated_at,
+                serde_json::to_string(authority).map_err(|error| error.to_string())?,
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn settle_queued_run_inputs_in_transaction(
+    connection: &Connection,
+    run_id: &str,
+    run_status: DesktopRunStatus,
+    now: &str,
+) -> Result<(), String> {
+    let next_status = match run_status {
+        DesktopRunStatus::Completed => RunInputStatus::Ready,
+        DesktopRunStatus::Failed | DesktopRunStatus::Cancelled => RunInputStatus::Blocked,
+        _ => return Ok(()),
+    };
+    let inputs = {
+        let mut statement = connection
+            .prepare(
+                "SELECT value_json FROM desktop_run_inputs
+                 WHERE run_id = ?1 AND delivery = 'queue_next' AND status = 'queued'",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows: Vec<DesktopRunInput> =
+            typed_rows(statement.query_map([run_id], |row| row.get::<_, String>(0)))?;
+        rows
+    };
+    for mut input in inputs {
+        input.status = next_status;
+        input.updated_at = now.to_string();
+        update_run_input(connection, &input)?;
+    }
+    Ok(())
 }
 
 fn query_artifact_version(

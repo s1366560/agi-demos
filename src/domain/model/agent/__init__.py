@@ -32,6 +32,11 @@ from src.domain.model.agent.context_segment import ContextSegment
 
 # Conversation bounded context
 from src.domain.model.agent.conversation import (
+    AgentClientTurn,
+    AgentClientTurnClaim,
+    AgentClientTurnNotFoundError,
+    AgentClientTurnPayloadConflictError,
+    AgentClientTurnStatus,
     Conversation,
     ConversationStatus,
     Message,
@@ -97,6 +102,11 @@ __all__ = [
     # Multi-Agent System (L4 layer)
     "Agent",
     "AgentBinding",
+    "AgentClientTurn",
+    "AgentClientTurnClaim",
+    "AgentClientTurnNotFoundError",
+    "AgentClientTurnPayloadConflictError",
+    "AgentClientTurnStatus",
     "AgentEventType",
     "AgentExecution",
     "AgentExecutionEvent",

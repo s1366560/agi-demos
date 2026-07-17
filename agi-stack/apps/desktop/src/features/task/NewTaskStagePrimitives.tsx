@@ -1,4 +1,4 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, Ref } from 'react';
 import {
   ArrowLeftIcon,
   CheckCircledIcon,
@@ -34,16 +34,22 @@ export function StageHeading({
   title,
   description,
   compact = false,
+  headingRef,
+  headingTabIndex,
 }: {
   eyebrow: string;
   title: string;
   description?: string;
   compact?: boolean;
+  headingRef?: Ref<HTMLHeadingElement>;
+  headingTabIndex?: number;
 }) {
   return (
     <div className={`new-task-stage-heading ${compact ? 'compact' : ''}`}>
       <span className="new-task-eyebrow">{eyebrow}</span>
-      <h2>{title}</h2>
+      <h2 ref={headingRef} tabIndex={headingTabIndex}>
+        {title}
+      </h2>
       {description ? <p>{description}</p> : null}
     </div>
   );

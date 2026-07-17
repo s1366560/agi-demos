@@ -22,6 +22,8 @@
     "src/hooks/useTerminalProxy.ts",
     "src/features/session/sessionProjectionModel.ts",
     "src/features/session/sessionProjectionTypes.ts",
+    "src/features/session/sessionPlanApprovalModel.ts",
+    "src/features/session/SessionPlanReview.tsx",
     "src/features/session/sessionViewModel.ts",
     "src/features/session/sessionScope.ts",
     "src/features/session/sessionLayoutModel.ts",

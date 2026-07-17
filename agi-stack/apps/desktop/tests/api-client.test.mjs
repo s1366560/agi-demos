@@ -345,6 +345,63 @@ test('conversation session authority request preserves scoped identity without l
   }
 });
 
+test('plan workflow preflight proves route support without creating server artifacts', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  const responses = [
+    new Response(JSON.stringify({ detail: 'missing field `conversation_id`' }), {
+      status: 422,
+      headers: { 'content-type': 'application/json' },
+    }),
+    new Response('Not Found', {
+      status: 404,
+      headers: { 'content-type': 'text/plain' },
+    }),
+    new Response(JSON.stringify({ detail: 'Method Not Allowed' }), {
+      status: 405,
+      headers: { 'content-type': 'application/json' },
+    }),
+  ];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return responses.shift();
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+    });
+
+    assert.equal(await client.supportsAgentPlanWorkflow(), true);
+    assert.equal(await client.supportsAgentPlanWorkflow(), false);
+    assert.equal(await client.supportsAgentPlanWorkflow(), false);
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method ?? 'GET', call.init?.body]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/agent/plan/mode',
+          'POST',
+          '{}',
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/agent/plan/mode',
+          'POST',
+          '{}',
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/agent/plan/mode',
+          'POST',
+          '{}',
+        ],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('respondToHitl sends the authenticated unified HITL payload', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

@@ -79,21 +79,29 @@ impl WorktreeManager {
     }
 
     pub(super) fn cleanup(&self, environment: &DesktopExecutionEnvironment) {
+        let _ = self.cleanup_checked(environment);
+    }
+
+    pub(super) fn cleanup_checked(
+        &self,
+        environment: &DesktopExecutionEnvironment,
+    ) -> Result<(), String> {
         if environment.kind != DesktopExecutionEnvironmentKind::Worktree {
-            return;
+            return Ok(());
         }
         let Some(repository_root) = environment.repository_root.as_deref() else {
-            return;
+            return Err("execution worktree repository root is missing".to_string());
         };
         let Some(branch) = environment.branch.as_deref() else {
-            return;
+            return Err("execution worktree branch is missing".to_string());
         };
         let repository_root = Path::new(repository_root);
-        let _ = git_command(
+        git_command(
             repository_root,
             &["worktree", "remove", "--force", &environment.workspace_path],
-        );
-        let _ = git_command(repository_root, &["branch", "-D", branch]);
+        )?;
+        git_command(repository_root, &["branch", "-D", branch])?;
+        Ok(())
     }
 
     fn prepare_local(
@@ -287,8 +295,12 @@ mod tests {
             .validate(&forked.environment)
             .expect("validate fork");
 
-        manager.cleanup(&forked.environment);
-        manager.cleanup(&first.environment);
+        manager
+            .cleanup_checked(&forked.environment)
+            .expect("clean up recovery worktree");
+        manager
+            .cleanup_checked(&first.environment)
+            .expect("clean up source worktree");
         let worktree_parent = Path::new(&first.environment.workspace_path)
             .parent()
             .expect("worktree parent");

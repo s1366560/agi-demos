@@ -40,6 +40,7 @@ use futures_util::{SinkExt, StreamExt};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tokio::{
     net::TcpListener,
     sync::{broadcast, mpsc},
@@ -64,6 +65,13 @@ mod steering;
 mod tool_authority;
 mod worktree;
 
+const RECOVERED_CHECKPOINT_AUTHORITY_ERROR: &str =
+    "recovered checkpoint authority does not match the current run";
+const CHECKPOINT_TERMINALIZATION_RECOVERY_ERROR_PREFIX: &str =
+    "authoritative checkpoint terminalization failed; checkpoint quarantined";
+const CHECKPOINT_CONTROL_AUTHORITY_ERROR: &str =
+    "checkpoint authority does not match the requested run";
+
 use auth_context::{
     AuthContextError, AuthenticatedContext, ContextSwitchRequest, LocalSessionRequest,
     TrustedSessionResumeRequest,
@@ -76,7 +84,7 @@ use authority_store::{
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
 use resource_registry::{ManagedResourceKind, ResourceRegistryError};
-use session_store::DesktopSessionStore;
+use session_store::{DesktopClientTurnClaimError, DesktopSessionStore};
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
 use worktree::WorktreeManager;
 
@@ -106,6 +114,7 @@ impl LocalRuntimeService {
             api_token,
             session_store,
         )?);
+        state.reconcile_recovered_runs_from_checkpoints().await?;
 
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -422,7 +431,7 @@ struct LocalRuntimeState {
     api_token: String,
     workspace_root: Mutex<PathBuf>,
     tool_host: Mutex<LocalToolHost>,
-    checkpoints: Arc<SqliteCheckpointStore>,
+    checkpoints: Arc<dyn CheckpointStore>,
     clock: Arc<SystemClock>,
     config: Mutex<LocalRuntimeConfig>,
     provider_bindings: Mutex<HashMap<String, ProviderRuntimeBinding>>,
@@ -430,6 +439,12 @@ struct LocalRuntimeState {
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
+    #[cfg(test)]
+    agent_run_claim_attempts: AtomicU64,
+    #[cfg(test)]
+    agent_engine_attempts: AtomicU64,
+    #[cfg(test)]
+    recovery_fork_prepare_attempts: AtomicU64,
     events: broadcast::Sender<Value>,
 }
 
@@ -537,7 +552,7 @@ impl LocalRuntimeState {
     fn new(
         workspace_root: PathBuf,
         tool_host: LocalToolHost,
-        checkpoints: Arc<SqliteCheckpointStore>,
+        checkpoints: Arc<dyn CheckpointStore>,
         api_token: String,
         session_store: DesktopSessionStore,
     ) -> Result<Self, String> {
@@ -568,6 +583,12 @@ impl LocalRuntimeState {
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            agent_run_claim_attempts: AtomicU64::new(0),
+            #[cfg(test)]
+            agent_engine_attempts: AtomicU64::new(0),
+            #[cfg(test)]
+            recovery_fork_prepare_attempts: AtomicU64::new(0),
             events,
         })
     }
@@ -619,6 +640,8 @@ impl LocalRuntimeState {
         conversation_id: &str,
         run_id: Option<&str>,
     ) -> Option<Arc<LocalRunControl>> {
+        #[cfg(test)]
+        self.agent_run_claim_attempts.fetch_add(1, Ordering::SeqCst);
         let mut runs = self.agent_runs.lock().expect("local agent runs");
         if runs.contains_key(conversation_id) {
             return None;
@@ -639,6 +662,16 @@ impl LocalRuntimeState {
             .lock()
             .expect("local agent runs")
             .remove(conversation_id);
+    }
+
+    fn release_agent_run_if_control(&self, conversation_id: &str, control: &Arc<LocalRunControl>) {
+        let mut runs = self.agent_runs.lock().expect("local agent runs");
+        let owns_claim = runs
+            .get(conversation_id)
+            .is_some_and(|active| Arc::ptr_eq(&active.control, control));
+        if owns_claim {
+            runs.remove(conversation_id);
+        }
     }
 
     fn control_for_run(&self, run: &DesktopRun) -> Option<Arc<LocalRunControl>> {
@@ -680,6 +713,349 @@ impl LocalRuntimeState {
         self.append_timeline(&run.conversation_id, item);
     }
 
+    async fn ensure_authoritative_launch_checkpoint(
+        &self,
+        run: &DesktopRun,
+    ) -> Result<bool, String> {
+        let conversation_id = run.conversation_id.as_str();
+        // Persist round zero before exposing Running. A crash after the database transition can
+        // then use the ordinary disconnected-run resume path without repeating any agent work.
+        let existing = self
+            .checkpoints
+            .load(conversation_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        let authority = self.session_store.checkpoint_authority(conversation_id)?;
+        let needs_seed = match existing {
+            Some(checkpoint)
+                if matches!(
+                    checkpoint.status,
+                    SessionStatus::Finished | SessionStatus::Failed | SessionStatus::Cancelled
+                ) =>
+            {
+                if run.status == DesktopRunStatus::Queued {
+                    // A still-queued run has not launched yet, so a terminal checkpoint belongs to
+                    // the previous authoritative run and can be retired before seeding round zero.
+                    self.delete_checkpoint_and_authority(conversation_id, None)
+                        .await?;
+                    true
+                } else {
+                    return Err(
+                        "recovered launch checkpoint is already terminal and must be reconciled"
+                            .to_string(),
+                    );
+                }
+            }
+            Some(checkpoint)
+                if checkpoint.status == SessionStatus::Running
+                    && checkpoint_matches_run(&checkpoint, run)
+                    && authority
+                        .as_ref()
+                        .is_some_and(|authority| authority.matches_run(run)) =>
+            {
+                false
+            }
+            Some(checkpoint) => {
+                return Err(format!(
+                    "authoritative launch checkpoint conflicts with {:?} session state",
+                    checkpoint.status
+                ));
+            }
+            None => true,
+        };
+        if needs_seed {
+            let checkpoint = SessionState::new(
+                conversation_id,
+                run.request_message.as_str(),
+                Some(run.project_id.as_str()),
+            );
+            self.checkpoints
+                .save(&checkpoint)
+                .await
+                .map_err(|error| error.to_string())?;
+            if let Err(error) = self
+                .session_store
+                .bind_checkpoint_authority(run, &now_iso())
+            {
+                return match self
+                    .delete_checkpoint_and_authority(conversation_id, None)
+                    .await
+                {
+                    Ok(()) => Err(format!(
+                        "failed to persist authoritative checkpoint attribution: {error}"
+                    )),
+                    Err(cleanup_error) => Err(format!(
+                        "failed to persist authoritative checkpoint attribution: {error}; \
+                         failed to quarantine unattributed checkpoint: {cleanup_error}"
+                    )),
+                };
+            }
+        }
+        Ok(needs_seed)
+    }
+
+    async fn delete_checkpoint_and_authority(
+        &self,
+        conversation_id: &str,
+        expected_run_id: Option<&str>,
+    ) -> Result<(), String> {
+        self.checkpoints
+            .delete(conversation_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        self.session_store
+            .clear_checkpoint_authority(conversation_id, expected_run_id)?;
+        Ok(())
+    }
+
+    async fn load_authoritative_checkpoint_for_run(
+        &self,
+        run: &DesktopRun,
+    ) -> Result<Option<SessionState>, String> {
+        let authority = self
+            .session_store
+            .checkpoint_authority(&run.conversation_id)?;
+        if !authority
+            .as_ref()
+            .is_some_and(|authority| authority.matches_run(run))
+        {
+            return Ok(None);
+        }
+        let checkpoint = self
+            .checkpoints
+            .load(&run.conversation_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(checkpoint.filter(|checkpoint| checkpoint_matches_run(checkpoint, run)))
+    }
+
+    async fn terminalize_authoritative_checkpoint(
+        &self,
+        run: &DesktopRun,
+        status: SessionStatus,
+    ) -> Result<(), String> {
+        let Some(mut checkpoint) = self.load_authoritative_checkpoint_for_run(run).await? else {
+            return Err(
+                "authoritative launch checkpoint is missing or does not match the run".to_string(),
+            );
+        };
+        if checkpoint.status == status {
+            return Ok(());
+        }
+        if matches!(
+            checkpoint.status,
+            SessionStatus::Finished | SessionStatus::Failed | SessionStatus::Cancelled
+        ) {
+            return Err(format!(
+                "authoritative launch checkpoint is already {:?}, cannot commit {status:?}",
+                checkpoint.status
+            ));
+        }
+        checkpoint.status = status;
+        self.checkpoints
+            .save(&checkpoint)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    async fn has_terminal_authoritative_checkpoint(
+        &self,
+        run: &DesktopRun,
+    ) -> Result<bool, String> {
+        let checkpoint = self.load_authoritative_checkpoint_for_run(run).await?;
+        Ok(checkpoint.is_some_and(|checkpoint| {
+            matches!(
+                checkpoint.status,
+                SessionStatus::Finished | SessionStatus::Failed | SessionStatus::Cancelled
+            )
+        }))
+    }
+
+    async fn persist_authoritative_run_outcome(
+        &self,
+        run: &DesktopRun,
+        status: DesktopRunStatus,
+        error: Option<String>,
+        now: &str,
+    ) -> Result<DesktopRun, String> {
+        let checkpoint_status = match status {
+            DesktopRunStatus::ReadyReview => Some(SessionStatus::Finished),
+            DesktopRunStatus::Failed => Some(SessionStatus::Failed),
+            DesktopRunStatus::Cancelled => Some(SessionStatus::Cancelled),
+            _ => None,
+        };
+        if let Some(checkpoint_status) = checkpoint_status {
+            if let Err(checkpoint_error) = self
+                .terminalize_authoritative_checkpoint(run, checkpoint_status)
+                .await
+            {
+                let recovery_error = format!(
+                    "{CHECKPOINT_TERMINALIZATION_RECOVERY_ERROR_PREFIX}: {checkpoint_error}"
+                );
+                let disconnected = self.session_store.transition_run(
+                    &run.id,
+                    run.revision,
+                    DesktopRunStatus::Disconnected,
+                    Some(recovery_error.clone()),
+                    now,
+                );
+                if let Ok(disconnected) = disconnected.as_ref() {
+                    self.publish_run_status(disconnected);
+                }
+                let cleanup = self
+                    .delete_checkpoint_and_authority(&run.conversation_id, None)
+                    .await;
+                return match (disconnected, cleanup) {
+                    (Ok(_), Ok(())) => Err(recovery_error),
+                    (Ok(_), Err(cleanup_error)) => Err(format!(
+                        "{recovery_error}; failed to quarantine stale checkpoint: {cleanup_error}"
+                    )),
+                    (Err(transition_error), Ok(())) => Err(format!(
+                        "{recovery_error}; failed to preserve disconnected run: {transition_error}"
+                    )),
+                    (Err(transition_error), Err(cleanup_error)) => Err(format!(
+                        "{recovery_error}; failed to preserve disconnected run: {transition_error}; \
+                         failed to quarantine stale checkpoint: {cleanup_error}"
+                    )),
+                };
+            }
+        }
+        self.session_store
+            .transition_run(&run.id, run.revision, status, error, now)
+    }
+
+    async fn reconcile_recovered_runs_from_checkpoints(&self) -> Result<(), String> {
+        // The desktop run and the core checkpoint live in separate SQLite stores. A crash after
+        // persisting the quarantine but before deleting the checkpoint must retry cleanup on the
+        // next startup.
+        for quarantined in self.session_store.list_current_checkpoint_quarantines(
+            RECOVERED_CHECKPOINT_AUTHORITY_ERROR,
+            CHECKPOINT_TERMINALIZATION_RECOVERY_ERROR_PREFIX,
+        )? {
+            // This also repairs a database written by the pre-atomic implementation where the
+            // terminal quarantine committed before its queued inputs were settled.
+            self.session_store.settle_queued_run_inputs(
+                &quarantined.id,
+                quarantined.status,
+                &quarantined.updated_at,
+            )?;
+            self.delete_checkpoint_and_authority(&quarantined.conversation_id, None)
+                .await?;
+        }
+        for run in self.session_store.list_recoverable_runs()? {
+            let checkpoint = self
+                .checkpoints
+                .load(&run.conversation_id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let authority = self
+                .session_store
+                .checkpoint_authority(&run.conversation_id)?;
+            let Some(checkpoint) = checkpoint else {
+                if authority.is_some() {
+                    self.session_store
+                        .clear_checkpoint_authority(&run.conversation_id, None)?;
+                }
+                continue;
+            };
+            if !checkpoint_matches_run(&checkpoint, &run)
+                || !authority
+                    .as_ref()
+                    .is_some_and(|authority| authority.matches_run(&run))
+            {
+                // Checkpoints are conversation-scoped. Quarantine a stale or externally replaced
+                // checkpoint before serving routes so it cannot later inherit this run's tool
+                // authority through reconnect, fork, or cancel.
+                let reconciled = self.session_store.reconcile_recovered_run(
+                    &run.id,
+                    run.revision,
+                    DesktopRunStatus::Failed,
+                    Some(RECOVERED_CHECKPOINT_AUTHORITY_ERROR.to_string()),
+                    &now_iso(),
+                )?;
+                self.delete_checkpoint_and_authority(&run.conversation_id, None)
+                    .await?;
+                self.publish_run_status(&reconciled);
+                continue;
+            }
+            if checkpoint.status == SessionStatus::Running {
+                continue;
+            }
+            if run.started_at.is_none()
+                && !matches!(
+                    checkpoint.status,
+                    SessionStatus::Finished | SessionStatus::Failed | SessionStatus::Cancelled
+                )
+            {
+                continue;
+            }
+            if checkpoint.status == SessionStatus::AwaitingInput {
+                self.persist_pending_hitl(&run.conversation_id, Some(&run.id), &checkpoint)?;
+            }
+            let (status, error) = desktop_run_outcome(&checkpoint);
+            let reconciled = self.session_store.reconcile_recovered_run(
+                &run.id,
+                run.revision,
+                status,
+                error,
+                &now_iso(),
+            )?;
+            self.publish_run_status(&reconciled);
+        }
+        Ok(())
+    }
+
+    async fn prepare_authoritative_run_for_execution(
+        &self,
+        run_id: &str,
+        conversation_id: &str,
+        project_id: &str,
+        message: &str,
+        now: &str,
+    ) -> Result<Option<DesktopRun>, String> {
+        let Some(run) = self.session_store.run(run_id)? else {
+            return Ok(None);
+        };
+        if run.conversation_id != conversation_id
+            || run.project_id != project_id
+            || run.request_message != message
+        {
+            return Err("authoritative run request does not match persisted authority".to_string());
+        }
+        let needs_launch_checkpoint = run.started_at.is_none()
+            && matches!(
+                run.status,
+                DesktopRunStatus::Queued | DesktopRunStatus::Interrupted
+            );
+        let seeded_checkpoint = if needs_launch_checkpoint {
+            self.ensure_authoritative_launch_checkpoint(&run).await?
+        } else {
+            false
+        };
+        match self.session_store.prepare_run_for_execution(run_id, now) {
+            Ok(Some(prepared)) if prepared.status == DesktopRunStatus::Running => {
+                Ok(Some(prepared))
+            }
+            Ok(prepared) => {
+                if seeded_checkpoint {
+                    self.delete_checkpoint_and_authority(conversation_id, Some(&run.id))
+                        .await?;
+                }
+                Ok(prepared)
+            }
+            Err(error) => {
+                if seeded_checkpoint {
+                    self.delete_checkpoint_and_authority(conversation_id, Some(&run.id))
+                        .await
+                        .map_err(|cleanup_error| {
+                            format!("{error}; failed to clean launch checkpoint: {cleanup_error}")
+                        })?;
+                }
+                Err(error)
+            }
+        }
+    }
+
     async fn run_agent_message(
         self: Arc<Self>,
         conversation_id: String,
@@ -691,9 +1067,17 @@ impl LocalRuntimeState {
     ) {
         let conversation = match self.session_store.conversation(&conversation_id) {
             Ok(Some(conversation)) => conversation,
-            Ok(None) => return,
+            Ok(None) => {
+                if let Some(control) = claimed_control.as_ref() {
+                    self.release_agent_run_if_control(&conversation_id, control);
+                }
+                return;
+            }
             Err(error) => {
                 eprintln!("failed to read local conversation authority: {error}");
+                if let Some(control) = claimed_control.as_ref() {
+                    self.release_agent_run_if_control(&conversation_id, control);
+                }
                 return;
             }
         };
@@ -707,6 +1091,9 @@ impl LocalRuntimeState {
                 json!({ "error": "conversation project mismatch" }),
             );
             self.append_timeline(&conversation_id, item);
+            if let Some(control) = claimed_control.as_ref() {
+                self.release_agent_run_if_control(&conversation_id, control);
+            }
             return;
         }
         if conversation.current_mode == ConversationRunMode::Build && authoritative_run_id.is_none()
@@ -720,30 +1107,11 @@ impl LocalRuntimeState {
                 json!({ "error": "approved run required" }),
             );
             self.append_timeline(&conversation_id, item);
+            if let Some(control) = claimed_control.as_ref() {
+                self.release_agent_run_if_control(&conversation_id, control);
+            }
             return;
         }
-        let authoritative_run = if let Some(run_id) = authoritative_run_id.as_deref() {
-            match self
-                .session_store
-                .prepare_run_for_execution(run_id, &now_iso())
-            {
-                Ok(Some(run)) => {
-                    self.publish_run_status(&run);
-                    if run.status != DesktopRunStatus::Running {
-                        return;
-                    }
-                    Some(run)
-                }
-                Ok(None) => return,
-                Err(error) => {
-                    eprintln!("failed to prepare authoritative local run: {error}");
-                    return;
-                }
-            }
-        } else {
-            None
-        };
-        let authoritative_revision = authoritative_run.as_ref().map(|run| run.revision);
         let control = if let Some(control) = claimed_control {
             control
         } else {
@@ -763,6 +1131,39 @@ impl LocalRuntimeState {
             };
             control
         };
+        let authoritative_run = if let Some(run_id) = authoritative_run_id.as_deref() {
+            match self
+                .prepare_authoritative_run_for_execution(
+                    run_id,
+                    &conversation_id,
+                    &project_id,
+                    &message,
+                    &now_iso(),
+                )
+                .await
+            {
+                Ok(Some(run)) => {
+                    self.publish_run_status(&run);
+                    if run.status != DesktopRunStatus::Running {
+                        self.release_agent_run(&conversation_id);
+                        return;
+                    }
+                    Some(run)
+                }
+                Ok(None) => {
+                    self.release_agent_run(&conversation_id);
+                    return;
+                }
+                Err(error) => {
+                    eprintln!("failed to prepare authoritative local run: {error}");
+                    self.release_agent_run(&conversation_id);
+                    return;
+                }
+            }
+        } else {
+            None
+        };
+        let authoritative_revision = authoritative_run.as_ref().map(|run| run.revision);
 
         let user_item = self.timeline_item(
             "user_message",
@@ -791,14 +1192,19 @@ impl LocalRuntimeState {
                 );
                 self.append_timeline(&conversation_id, item);
                 if let Some(run) = authoritative_run.as_ref() {
-                    if let Ok(failed) = self.session_store.transition_run(
-                        &run.id,
-                        run.revision,
-                        DesktopRunStatus::Failed,
-                        Some("execution environment is unavailable".to_string()),
-                        &now_iso(),
-                    ) {
-                        self.publish_run_status(&failed);
+                    match self
+                        .persist_authoritative_run_outcome(
+                            run,
+                            DesktopRunStatus::Failed,
+                            Some("execution environment is unavailable".to_string()),
+                            &now_iso(),
+                        )
+                        .await
+                    {
+                        Ok(failed) => self.publish_run_status(&failed),
+                        Err(error) => {
+                            eprintln!("failed to persist authoritative launch failure: {error}")
+                        }
                     }
                 }
                 self.release_agent_run(&conversation_id);
@@ -812,7 +1218,9 @@ impl LocalRuntimeState {
                     SessionStatus::Finished | SessionStatus::Failed | SessionStatus::Cancelled
                 ) =>
             {
-                self.checkpoints.delete(&conversation_id).await
+                self.delete_checkpoint_and_authority(&conversation_id, None)
+                    .await
+                    .map_err(CoreError::Checkpoint)
             }
             Ok(_) => Ok(()),
             Err(error) => Err(error),
@@ -855,30 +1263,19 @@ impl LocalRuntimeState {
             eprintln!("failed to persist local HITL request: {error}");
             run_result = Err(format!("failed to persist HITL request: {error}"));
         }
-        if let (Some(run_id), Some(expected_revision)) =
-            (authoritative_run_id.as_deref(), authoritative_revision)
+        if let (Some(run), Some(expected_revision)) =
+            (authoritative_run.as_ref(), authoritative_revision)
         {
+            debug_assert_eq!(run.revision, expected_revision);
             let (status, error) = match run_result {
                 Ok(state) => desktop_run_outcome(&state),
                 Err(error) => (DesktopRunStatus::Failed, Some(error)),
             };
-            match self.session_store.transition_run(
-                run_id,
-                expected_revision,
-                status,
-                error,
-                &now_iso(),
-            ) {
-                Ok(run) => {
-                    if let Err(error) = self.session_store.settle_queued_run_inputs(
-                        &run.id,
-                        run.status,
-                        &run.updated_at,
-                    ) {
-                        eprintln!("failed to settle queued run inputs: {error}");
-                    }
-                    self.publish_run_status(&run);
-                }
+            match self
+                .persist_authoritative_run_outcome(run, status, error, &now_iso())
+                .await
+            {
+                Ok(run) => self.publish_run_status(&run),
                 Err(error) => {
                     eprintln!("failed to persist authoritative local run result: {error}");
                 }
@@ -901,6 +1298,8 @@ impl LocalRuntimeState {
         conversation: &LocalConversation,
         run: Option<&DesktopRun>,
     ) -> Result<ReActEngine, String> {
+        #[cfg(test)]
+        self.agent_engine_attempts.fetch_add(1, Ordering::SeqCst);
         let local_tool_host = match run.and_then(|run| run.environment.as_ref()) {
             Some(environment) => {
                 self.worktree_manager().validate(environment)?;
@@ -1021,14 +1420,19 @@ impl LocalRuntimeState {
                 );
                 self.append_timeline(&conversation_id, item);
                 if let Some(run) = authoritative_run {
-                    if let Ok(failed) = self.session_store.transition_run(
-                        &run.id,
-                        run.revision,
-                        DesktopRunStatus::Failed,
-                        Some("execution environment is unavailable".to_string()),
-                        &now_iso(),
-                    ) {
-                        self.publish_run_status(&failed);
+                    match self
+                        .persist_authoritative_run_outcome(
+                            &run,
+                            DesktopRunStatus::Failed,
+                            Some("execution environment is unavailable".to_string()),
+                            &now_iso(),
+                        )
+                        .await
+                    {
+                        Ok(failed) => self.publish_run_status(&failed),
+                        Err(error) => {
+                            eprintln!("failed to persist resumed launch failure: {error}")
+                        }
                     }
                 }
                 self.release_agent_run(&conversation_id);
@@ -1077,23 +1481,11 @@ impl LocalRuntimeState {
                 Ok(state) => desktop_run_outcome(&state),
                 Err(error) => (DesktopRunStatus::Failed, Some(error)),
             };
-            match self.session_store.transition_run(
-                &run.id,
-                run.revision,
-                status,
-                error,
-                &now_iso(),
-            ) {
-                Ok(run) => {
-                    if let Err(error) = self.session_store.settle_queued_run_inputs(
-                        &run.id,
-                        run.status,
-                        &run.updated_at,
-                    ) {
-                        eprintln!("failed to settle resumed queued run inputs: {error}");
-                    }
-                    self.publish_run_status(&run);
-                }
+            match self
+                .persist_authoritative_run_outcome(&run, status, error, &now_iso())
+                .await
+            {
+                Ok(run) => self.publish_run_status(&run),
                 Err(error) => eprintln!("failed to persist resumed local run result: {error}"),
             }
         }
@@ -1260,6 +1652,18 @@ fn desktop_run_outcome(state: &SessionState) -> (DesktopRunStatus, Option<String
         }
         SessionStatus::Cancelled => (DesktopRunStatus::Cancelled, None),
     }
+}
+
+fn checkpoint_matches_run(checkpoint: &SessionState, run: &DesktopRun) -> bool {
+    checkpoint.session_id == run.conversation_id
+        && checkpoint.goal == run.request_message
+        && checkpoint.project_id.as_deref() == Some(run.project_id.as_str())
+}
+
+fn has_checkpoint_terminalization_recovery_error(run: &DesktopRun) -> bool {
+    run.error
+        .as_deref()
+        .is_some_and(|error| error.starts_with(CHECKPOINT_TERMINALIZATION_RECOVERY_ERROR_PREFIX))
 }
 
 fn hitl_kind_name(kind: HitlKind) -> &'static str {
@@ -1493,6 +1897,45 @@ fn local_store_error(error: String) -> (StatusCode, Json<Value>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(json!({ "detail": "desktop session store unavailable" })),
     )
+}
+
+fn ensure_checkpoint_run_ownership(
+    state: &LocalRuntimeState,
+    run: &DesktopRun,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let authority = state
+        .session_store
+        .checkpoint_authority(&run.conversation_id)
+        .map_err(local_store_error)?;
+    if authority
+        .as_ref()
+        .is_some_and(|authority| !authority.matches_run(run))
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({ "detail": CHECKPOINT_CONTROL_AUTHORITY_ERROR })),
+        ));
+    }
+    Ok(())
+}
+
+async fn ensure_checkpoint_control_authority(
+    state: &LocalRuntimeState,
+    run: &DesktopRun,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    ensure_checkpoint_run_ownership(state, run)?;
+    if state
+        .load_authoritative_checkpoint_for_run(run)
+        .await
+        .map_err(local_store_error)?
+        .is_some()
+    {
+        return Ok(());
+    }
+    Err((
+        StatusCode::CONFLICT,
+        Json(json!({ "detail": CHECKPOINT_CONTROL_AUTHORITY_ERROR })),
+    ))
 }
 
 fn active_workspace_scope_error() -> (StatusCode, Json<Value>) {
@@ -3170,15 +3613,35 @@ struct RunConversationBody {
     project_id: Option<String>,
 }
 
+fn client_turn_payload_hash(conversation_id: &str, project_id: &str, message: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"agistack-local-client-turn:v1\0");
+    for value in [conversation_id, project_id, message] {
+        hasher.update((value.len() as u64).to_be_bytes());
+        hasher.update(value.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
 async fn run_conversation_message(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path(conversation_id): Path<String>,
     Json(body): Json<RunConversationBody>,
 ) -> LocalJsonResult {
-    let message_id = body
-        .message_id
-        .unwrap_or_else(|| format!("local-message-{}", Uuid::new_v4()));
+    let message_id = match body.message_id {
+        Some(message_id) if message_id.trim().is_empty() || message_id.chars().count() > 255 => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "code": "INVALID_MESSAGE_ID",
+                    "detail": "message_id must be a non-empty string of at most 255 characters",
+                })),
+            ));
+        }
+        Some(message_id) => message_id,
+        None => format!("local-message-{}", Uuid::new_v4()),
+    };
     let conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
     if let Some(project_id) = body.project_id.as_deref() {
         ensure_active_project(&authenticated, project_id)?;
@@ -3192,7 +3655,31 @@ async fn run_conversation_message(
             })),
         ));
     }
+    let payload_hash = client_turn_payload_hash(&conversation_id, &project_id, &body.message);
+    let created = state
+        .session_store
+        .claim_client_turn(&conversation_id, &message_id, &payload_hash, &now_iso())
+        .map_err(|error| match error {
+            DesktopClientTurnClaimError::PayloadConflict => (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "code": "MESSAGE_ID_CONFLICT",
+                    "detail": "message_id is already bound to a different request",
+                    "message_id": message_id,
+                })),
+            ),
+            DesktopClientTurnClaimError::Storage(error) => local_store_error(error),
+        })?;
+    if !created {
+        return Ok(Json(json!({
+            "queued": false,
+            "created": false,
+            "replayed": true,
+            "message_id": message_id,
+        })));
+    }
     let run_state = Arc::clone(&state);
+    let response_message_id = message_id.clone();
     tokio::spawn(async move {
         run_state
             .run_agent_message(
@@ -3205,7 +3692,12 @@ async fn run_conversation_message(
             )
             .await;
     });
-    Ok(Json(json!({ "queued": true })))
+    Ok(Json(json!({
+        "queued": true,
+        "created": true,
+        "replayed": false,
+        "message_id": response_message_id,
+    })))
 }
 
 #[derive(Deserialize)]
@@ -3851,6 +4343,7 @@ async fn review_artifact_version(
                 )
             })?;
             ensure_run_revision(&run, run_expected_revision)?;
+            ensure_checkpoint_run_ownership(&state, &run)?;
             if run.status != DesktopRunStatus::ReadyReview {
                 return Err((
                     StatusCode::CONFLICT,
@@ -3876,6 +4369,10 @@ async fn review_artifact_version(
                     Json(json!({ "detail": "conversation already running" })),
                 ));
             };
+            if let Err(error) = ensure_checkpoint_control_authority(&state, &run).await {
+                state.release_agent_run_if_control(&conversation.id, &control);
+                return Err(error);
+            }
             let accepted = match engine
                 .accept_review_changes(&conversation.id, &feedback)
                 .await
@@ -4276,6 +4773,12 @@ async fn respond_to_hitl(
             Json(json!({ "detail": "conversation already running" })),
         ));
     };
+    if let Some(run) = engine_run.as_ref() {
+        if let Err(error) = ensure_checkpoint_control_authority(&state, run).await {
+            state.release_agent_run_if_control(&conversation.id, &control);
+            return Err(error);
+        }
+    }
 
     let accepted = match engine
         .accept_human_response(&conversation.id, &request.id, &answer)
@@ -5436,8 +5939,81 @@ mod tests {
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
 
+    #[derive(Debug, PartialEq, Eq)]
+    struct CheckpointOperationCounts {
+        loads: u64,
+        saves: u64,
+        deletes: u64,
+    }
+
+    struct CountingCheckpointStore {
+        inner: Arc<dyn CheckpointStore>,
+        loads: AtomicU64,
+        saves: AtomicU64,
+        deletes: AtomicU64,
+    }
+
+    impl CountingCheckpointStore {
+        fn new(inner: Arc<dyn CheckpointStore>) -> Self {
+            Self {
+                inner,
+                loads: AtomicU64::new(0),
+                saves: AtomicU64::new(0),
+                deletes: AtomicU64::new(0),
+            }
+        }
+
+        fn reset(&self) {
+            self.loads.store(0, Ordering::SeqCst);
+            self.saves.store(0, Ordering::SeqCst);
+            self.deletes.store(0, Ordering::SeqCst);
+        }
+
+        fn operation_counts(&self) -> CheckpointOperationCounts {
+            CheckpointOperationCounts {
+                loads: self.loads.load(Ordering::SeqCst),
+                saves: self.saves.load(Ordering::SeqCst),
+                deletes: self.deletes.load(Ordering::SeqCst),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl CheckpointStore for CountingCheckpointStore {
+        async fn save(&self, state: &SessionState) -> CoreResult<()> {
+            self.saves.fetch_add(1, Ordering::SeqCst);
+            self.inner.save(state).await
+        }
+
+        async fn load(&self, session_id: &str) -> CoreResult<Option<SessionState>> {
+            self.loads.fetch_add(1, Ordering::SeqCst);
+            self.inner.load(session_id).await
+        }
+
+        async fn delete(&self, session_id: &str) -> CoreResult<()> {
+            self.deletes.fetch_add(1, Ordering::SeqCst);
+            self.inner.delete(session_id).await
+        }
+    }
+
     fn test_root() -> PathBuf {
         std::env::temp_dir().join(format!("agistack-local-runtime-{}", Uuid::new_v4()))
+    }
+
+    fn run_test_git(root: &FsPath, args: &[&str]) -> String {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .expect("run git test command");
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).expect("git output must be UTF-8")
     }
 
     fn test_state(token: &str) -> Arc<LocalRuntimeState> {
@@ -5468,6 +6044,62 @@ mod tests {
         state
     }
 
+    fn test_state_with_counting_checkpoints(
+        token: &str,
+    ) -> (Arc<LocalRuntimeState>, Arc<CountingCheckpointStore>) {
+        let root = test_root();
+        let tool_host = LocalToolHost::new(&root).expect("tool host");
+        let inner: Arc<dyn CheckpointStore> =
+            Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+        let checkpoints = Arc::new(CountingCheckpointStore::new(inner));
+        let checkpoint_store: Arc<dyn CheckpointStore> = checkpoints.clone();
+        let session_store = DesktopSessionStore::in_memory().expect("session store");
+        let state = Arc::new(
+            LocalRuntimeState::new(
+                root,
+                tool_host,
+                checkpoint_store,
+                token.to_string(),
+                session_store,
+            )
+            .expect("local runtime state"),
+        );
+        state.config.lock().expect("config").provider = "mock".to_string();
+        state
+            .session_store
+            .seed_test_session(token)
+            .expect("authenticated test session");
+        (state, checkpoints)
+    }
+
+    fn test_state_with_file_checkpoint(token: &str) -> (Arc<LocalRuntimeState>, PathBuf, PathBuf) {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create test root");
+        let checkpoint_path = root.join("checkpoints.db");
+        let tool_host = LocalToolHost::new(&root).expect("tool host");
+        let checkpoints = Arc::new(
+            SqliteCheckpointStore::open(&checkpoint_path.to_string_lossy())
+                .expect("file checkpoint store"),
+        );
+        let session_store = DesktopSessionStore::in_memory().expect("session store");
+        let state = Arc::new(
+            LocalRuntimeState::new(
+                root.clone(),
+                tool_host,
+                checkpoints,
+                token.to_string(),
+                session_store,
+            )
+            .expect("local runtime state"),
+        );
+        state.config.lock().expect("config").provider = "mock".to_string();
+        state
+            .session_store
+            .seed_test_session(token)
+            .expect("authenticated test session");
+        (state, checkpoint_path, root)
+    }
+
     fn authenticated_json_request(
         method: &str,
         uri: &str,
@@ -5482,6 +6114,66 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(body.to_string()))
             .expect("authenticated JSON request")
+    }
+
+    fn seed_plan_conversation(state: &LocalRuntimeState, conversation_id: &str) {
+        state
+            .session_store
+            .insert_conversation(&LocalConversation {
+                id: conversation_id.to_string(),
+                project_id: "local-project".to_string(),
+                tenant_id: "local".to_string(),
+                title: "Client turn idempotency".to_string(),
+                workspace_id: Some("local-workspace".to_string()),
+                capability_mode: ConversationCapabilityMode::Unavailable,
+                current_mode: ConversationRunMode::Plan,
+                created_at: now_iso(),
+                updated_at: now_iso(),
+            })
+            .expect("insert plan conversation");
+    }
+
+    fn conversation_message_request(
+        credential: &str,
+        conversation_id: &str,
+        message_id: &str,
+        message: &str,
+    ) -> Request<Body> {
+        authenticated_json_request(
+            "POST",
+            &format!("/api/v1/agent/conversations/{conversation_id}/messages"),
+            credential,
+            json!({
+                "project_id": "local-project",
+                "message": message,
+                "message_id": message_id,
+            }),
+        )
+    }
+
+    async fn wait_for_agent_message_completion(
+        state: &LocalRuntimeState,
+        conversation_id: &str,
+    ) -> Vec<Value> {
+        for _ in 0..200 {
+            let timeline = state
+                .session_store
+                .timeline(conversation_id, 100)
+                .expect("timeline");
+            let has_assistant = timeline
+                .iter()
+                .any(|event| event["type"] == "assistant_message");
+            let is_active = state
+                .agent_runs
+                .lock()
+                .expect("active agent runs")
+                .contains_key(conversation_id);
+            if has_assistant && !is_active {
+                return timeline;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("agent message did not finish");
     }
 
     async fn response_json(response: axum::response::Response) -> Value {
@@ -6336,6 +7028,193 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn lost_response_retry_replays_without_a_second_agent_execution() {
+        let state = test_state("client-turn-retry-secret");
+        let conversation_id = "conversation-client-turn-retry";
+        seed_plan_conversation(&state, conversation_id);
+        let app = local_router(Arc::clone(&state));
+
+        let first = app
+            .clone()
+            .oneshot(conversation_message_request(
+                "client-turn-retry-secret",
+                conversation_id,
+                "stable-client-message",
+                "prepare the release plan",
+            ))
+            .await
+            .expect("first response");
+        assert_eq!(first.status(), StatusCode::OK);
+        drop(first);
+
+        let timeline = wait_for_agent_message_completion(&state, conversation_id).await;
+        let initial_timeline_count = timeline.len();
+        assert_eq!(
+            timeline
+                .iter()
+                .filter(|event| event["type"] == "user_message")
+                .count(),
+            1
+        );
+        assert_eq!(
+            timeline
+                .iter()
+                .filter(|event| event["type"] == "assistant_message")
+                .count(),
+            1
+        );
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
+        assert!(state
+            .session_store
+            .list_runs(conversation_id)
+            .expect("runs")
+            .is_empty());
+
+        let replay = app
+            .clone()
+            .oneshot(conversation_message_request(
+                "client-turn-retry-secret",
+                conversation_id,
+                "stable-client-message",
+                "prepare the release plan",
+            ))
+            .await
+            .expect("replay response");
+        assert_eq!(replay.status(), StatusCode::OK);
+        let replay_payload = response_json(replay).await;
+        assert_eq!(replay_payload["queued"], false);
+        assert_eq!(replay_payload["created"], false);
+        assert_eq!(replay_payload["replayed"], true);
+        assert_eq!(replay_payload["message_id"], "stable-client-message");
+
+        let conflict = app
+            .oneshot(conversation_message_request(
+                "client-turn-retry-secret",
+                conversation_id,
+                "stable-client-message",
+                "prepare a different release plan",
+            ))
+            .await
+            .expect("conflict response");
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+        let conflict_payload = response_json(conflict).await;
+        assert_eq!(conflict_payload["code"], "MESSAGE_ID_CONFLICT");
+        assert_eq!(conflict_payload["message_id"], "stable-client-message");
+
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            state
+                .session_store
+                .timeline_count(conversation_id)
+                .expect("timeline count"),
+            initial_timeline_count
+        );
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
+        assert!(state
+            .session_store
+            .list_runs(conversation_id)
+            .expect("runs")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn concurrent_client_turn_replays_start_one_agent_execution() {
+        let state = test_state("client-turn-concurrent-secret");
+        let conversation_id = "conversation-client-turn-concurrent";
+        seed_plan_conversation(&state, conversation_id);
+        let app = local_router(Arc::clone(&state));
+
+        let first = app.clone().oneshot(conversation_message_request(
+            "client-turn-concurrent-secret",
+            conversation_id,
+            "concurrent-message",
+            "draft one plan",
+        ));
+        let second = app.oneshot(conversation_message_request(
+            "client-turn-concurrent-secret",
+            conversation_id,
+            "concurrent-message",
+            "draft one plan",
+        ));
+        let (first, second) = tokio::join!(first, second);
+        let first = first.expect("first concurrent response");
+        let second = second.expect("second concurrent response");
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(second.status(), StatusCode::OK);
+        let first_payload = response_json(first).await;
+        let second_payload = response_json(second).await;
+        assert_ne!(first_payload["created"], second_payload["created"]);
+        assert!(first_payload["created"] == true || second_payload["created"] == true);
+
+        let timeline = wait_for_agent_message_completion(&state, conversation_id).await;
+        assert_eq!(
+            timeline
+                .iter()
+                .filter(|event| event["type"] == "user_message")
+                .count(),
+            1
+        );
+        assert_eq!(
+            timeline
+                .iter()
+                .filter(|event| event["type"] == "assistant_message")
+                .count(),
+            1
+        );
+        assert!(!timeline.iter().any(|event| event["type"] == "error"));
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn invalid_client_message_ids_have_no_side_effects() {
+        let state = test_state("client-turn-validation-secret");
+        let conversation_id = "conversation-client-turn-validation";
+        seed_plan_conversation(&state, conversation_id);
+        let app = local_router(Arc::clone(&state));
+
+        for message_id in ["   ".to_string(), "x".repeat(256)] {
+            let response = app
+                .clone()
+                .oneshot(conversation_message_request(
+                    "client-turn-validation-secret",
+                    conversation_id,
+                    &message_id,
+                    "must not execute",
+                ))
+                .await
+                .expect("validation response");
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(response_json(response).await["code"], "INVALID_MESSAGE_ID");
+        }
+
+        assert_eq!(
+            state
+                .session_store
+                .timeline_count(conversation_id)
+                .expect("timeline count"),
+            0
+        );
+        let client_turn_count: i64 = state
+            .session_store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_client_turns WHERE conversation_id = ?1",
+                [conversation_id],
+                |row| row.get(0),
+            )
+            .expect("client turn count");
+        assert_eq!(client_turn_count, 0);
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 0);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
     async fn new_message_starts_after_cancelled_checkpoint() {
         let state = test_state("launch-secret");
         let conversation_id = "conversation-cancelled".to_string();
@@ -6437,6 +7316,14 @@ mod tests {
             store
                 .replace_agent_plan_tasks(&conversation.id, std::slice::from_ref(&plan_task))
                 .expect("store plan task");
+            assert!(store
+                .claim_client_turn(
+                    &conversation.id,
+                    "persistent-message-id",
+                    "payload-hash",
+                    &now_iso(),
+                )
+                .expect("claim client turn"));
         }
 
         let restored = DesktopSessionStore::open(&path).expect("reopen store");
@@ -6460,7 +7347,68 @@ mod tests {
             restored.list_agent_plan_tasks("conversation-1").unwrap(),
             vec![plan_task]
         );
+        assert!(!restored
+            .claim_client_turn(
+                "conversation-1",
+                "persistent-message-id",
+                "payload-hash",
+                &now_iso(),
+            )
+            .expect("replay durable client turn"));
+        assert_eq!(
+            restored.claim_client_turn(
+                "conversation-1",
+                "persistent-message-id",
+                "different-payload-hash",
+                &now_iso(),
+            ),
+            Err(DesktopClientTurnClaimError::PayloadConflict)
+        );
+        drop(restored);
+        let connection = rusqlite::Connection::open(&path).expect("inspect schema version");
+        let schema_version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("schema version");
+        assert_eq!(schema_version, 10);
+        drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn client_turn_message_ids_are_scoped_to_the_conversation() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        for conversation_id in ["conversation-a", "conversation-b"] {
+            store
+                .insert_conversation(&LocalConversation {
+                    id: conversation_id.to_string(),
+                    project_id: "local-project".to_string(),
+                    tenant_id: "local".to_string(),
+                    title: conversation_id.to_string(),
+                    workspace_id: Some("local-workspace".to_string()),
+                    capability_mode: ConversationCapabilityMode::Unavailable,
+                    current_mode: ConversationRunMode::Plan,
+                    created_at: now_iso(),
+                    updated_at: now_iso(),
+                })
+                .expect("insert conversation");
+        }
+
+        assert!(store
+            .claim_client_turn(
+                "conversation-a",
+                "shared-message-id",
+                "payload-a",
+                &now_iso(),
+            )
+            .expect("claim first conversation"));
+        assert!(store
+            .claim_client_turn(
+                "conversation-b",
+                "shared-message-id",
+                "payload-b",
+                &now_iso(),
+            )
+            .expect("claim second conversation"));
     }
 
     #[tokio::test]
@@ -7530,9 +8478,13 @@ mod tests {
 
         let restored = DesktopSessionStore::open(&path).expect("reopen store");
         let run = restored.run(&run_id).unwrap().expect("restored run");
-        assert_eq!(run.status, DesktopRunStatus::Queued);
-        assert_eq!(run.revision, 1);
-        assert_eq!(restored.run_events(&run_id).unwrap().len(), 1);
+        assert_eq!(run.status, DesktopRunStatus::Interrupted);
+        assert_eq!(run.revision, 2);
+        assert_eq!(
+            run.error.as_deref(),
+            Some(authority_store::QUEUED_RUN_RECOVERY_ERROR)
+        );
+        assert_eq!(restored.run_events(&run_id).unwrap().len(), 2);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
 
@@ -7880,6 +8832,95 @@ mod tests {
     }
 
     #[test]
+    fn reopening_marks_an_approved_unstarted_run_interrupted_exactly_once() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create test root");
+        let path = root.join("queued-run-recovery.db");
+        let conversation = LocalConversation {
+            id: "conversation-queued-recovery".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Recover queued run".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        let queued = {
+            let store = DesktopSessionStore::open(&path).expect("open store");
+            store
+                .insert_conversation(&conversation)
+                .expect("insert conversation");
+            store
+                .replace_agent_plan_tasks(
+                    &conversation.id,
+                    &[json!({
+                        "id": "queued-recovery-task",
+                        "conversation_id": conversation.id,
+                        "content": "Start this approved run after recovery",
+                        "status": "pending",
+                        "priority": "high",
+                        "order_index": 0,
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    })],
+                )
+                .expect("store plan");
+            store
+                .approve_plan_and_start(
+                    &conversation.id,
+                    "local-project",
+                    "queued-recovery-key",
+                    "queued-recovery-message",
+                    "Execute the recovered approved plan",
+                    &now_iso(),
+                )
+                .expect("approve plan")
+                .run
+        };
+        assert_eq!(queued.status, DesktopRunStatus::Queued);
+        assert_eq!(queued.revision, 1);
+        assert!(queued.started_at.is_none());
+
+        let restored = DesktopSessionStore::open(&path).expect("reopen store");
+        let interrupted = restored.run(&queued.id).unwrap().expect("restored run");
+        assert_eq!(interrupted.status, DesktopRunStatus::Interrupted);
+        assert_eq!(interrupted.revision, 2);
+        assert!(interrupted.started_at.is_none());
+        assert_eq!(
+            interrupted.error.as_deref(),
+            Some(authority_store::QUEUED_RUN_RECOVERY_ERROR)
+        );
+        assert_eq!(
+            restored
+                .run_events(&queued.id)
+                .expect("run events")
+                .iter()
+                .filter(|event| event["type"] == "interrupted")
+                .count(),
+            1
+        );
+        drop(restored);
+
+        let reopened = DesktopSessionStore::open(&path).expect("reopen store again");
+        let stable = reopened.run(&queued.id).unwrap().expect("stable run");
+        assert_eq!(stable.status, DesktopRunStatus::Interrupted);
+        assert_eq!(stable.revision, interrupted.revision);
+        assert_eq!(
+            reopened
+                .run_events(&queued.id)
+                .expect("run events")
+                .iter()
+                .filter(|event| event["type"] == "interrupted")
+                .count(),
+            1
+        );
+        drop(reopened);
+        std::fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
     fn recovery_fork_preserves_the_source_run_and_is_idempotent() {
         let store = DesktopSessionStore::in_memory().expect("session store");
         let conversation = LocalConversation {
@@ -8009,6 +9050,60 @@ mod tests {
             .expect("replay recovery fork");
         assert!(!created);
         assert_eq!(replayed.id, forked.id);
+
+        store
+            .bind_checkpoint_authority(&disconnected, &now_iso())
+            .expect("bind source checkpoint authority");
+        store
+            .transfer_checkpoint_authority(&disconnected, &forked, &now_iso())
+            .expect("transfer checkpoint authority");
+        assert!(store
+            .rollback_recovery_fork(&disconnected, &forked, &now_iso())
+            .expect("roll back recovery fork"));
+        assert!(store
+            .run(&forked.id)
+            .expect("load rolled back fork")
+            .is_none());
+        assert!(store
+            .run_events(&forked.id)
+            .expect("load rolled back fork events")
+            .is_empty());
+        let decision_count: i64 = store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_decisions WHERE run_id = ?1",
+                [&forked.id],
+                |row| row.get(0),
+            )
+            .expect("count rolled back decisions");
+        assert_eq!(decision_count, 0);
+        assert!(store
+            .checkpoint_authority(&conversation.id)
+            .expect("load restored checkpoint authority")
+            .is_some_and(|authority| authority.matches_run(&disconnected)));
+
+        let (recreated, created) = store
+            .fork_recovery_run(
+                &disconnected.id,
+                disconnected.revision,
+                "fork-recovery-key",
+                authority_store::DesktopExecutionEnvironment {
+                    id: "recreated-environment".to_string(),
+                    kind: DesktopExecutionEnvironmentKind::Worktree,
+                    label: "Recreated".to_string(),
+                    workspace_path: "/tmp/recreated".to_string(),
+                    repository_root: None,
+                    branch: None,
+                    base_commit: None,
+                    source_run_id: Some(disconnected.id.clone()),
+                    created_at: now_iso(),
+                },
+                &now_iso(),
+            )
+            .expect("recreate rolled back recovery fork");
+        assert!(created);
+        assert_ne!(recreated.id, forked.id);
     }
 
     #[tokio::test]
@@ -8793,6 +9888,10 @@ mod tests {
             .await
             .expect("save checkpoint");
         state
+            .session_store
+            .bind_checkpoint_authority(&running, &now_iso())
+            .expect("bind HITL checkpoint authority");
+        state
             .persist_pending_hitl(&conversation.id, Some(&running.id), &suspended)
             .expect("persist pending HITL");
         let needs_approval = state
@@ -9070,6 +10169,327 @@ mod tests {
         (conversation, running)
     }
 
+    fn seed_queued_authoritative_run(
+        state: &Arc<LocalRuntimeState>,
+        suffix: &str,
+    ) -> (LocalConversation, DesktopRun) {
+        let conversation = LocalConversation {
+            id: format!("conversation-queued-{suffix}"),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Queued authoritative run".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        state
+            .session_store
+            .replace_agent_plan_tasks(
+                &conversation.id,
+                &[json!({
+                    "id": format!("queued-task-{suffix}"),
+                    "conversation_id": conversation.id,
+                    "content": "Execute once after recovery",
+                    "status": "pending",
+                    "priority": "high",
+                    "order_index": 0,
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                })],
+            )
+            .expect("store plan");
+        let queued = state
+            .session_store
+            .approve_plan_and_start(
+                &conversation.id,
+                "local-project",
+                &format!("queued-key-{suffix}"),
+                &format!("queued-message-{suffix}"),
+                "Execute the recovered plan once",
+                &now_iso(),
+            )
+            .expect("approve plan")
+            .run;
+        (conversation, queued)
+    }
+
+    async fn seed_transferred_recovery_fork(
+        state: &Arc<LocalRuntimeState>,
+        suffix: &str,
+    ) -> (LocalConversation, DesktopRun, DesktopRun) {
+        let (conversation, queued_source) = seed_queued_authoritative_run(state, suffix);
+        let running_source = state
+            .prepare_authoritative_run_for_execution(
+                &queued_source.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_source.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare recovery source")
+            .expect("running recovery source");
+        let disconnected_source = state
+            .session_store
+            .transition_run(
+                &running_source.id,
+                running_source.revision,
+                DesktopRunStatus::Disconnected,
+                None,
+                &now_iso(),
+            )
+            .expect("disconnect recovery source");
+        let (forked, created) = state
+            .session_store
+            .fork_recovery_run(
+                &disconnected_source.id,
+                disconnected_source.revision,
+                &format!("transferred-fork-key-{suffix}"),
+                DesktopExecutionEnvironment {
+                    id: format!("transferred-fork-environment-{suffix}"),
+                    kind: DesktopExecutionEnvironmentKind::Worktree,
+                    label: format!("Transferred recovery fork {suffix}"),
+                    workspace_path: format!("/tmp/agistack-transferred-fork-{suffix}"),
+                    repository_root: None,
+                    branch: Some(format!("agistack/transferred-fork-{suffix}")),
+                    base_commit: None,
+                    source_run_id: Some(disconnected_source.id.clone()),
+                    created_at: now_iso(),
+                },
+                &now_iso(),
+            )
+            .expect("create recovery fork");
+        assert!(created);
+        state
+            .session_store
+            .transfer_checkpoint_authority(&disconnected_source, &forked, &now_iso())
+            .expect("transfer checkpoint authority");
+        assert!(state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load transferred checkpoint authority")
+            .is_some_and(|authority| authority.matches_run(&forked)));
+        (conversation, disconnected_source, forked)
+    }
+
+    async fn seed_transferred_unstarted_recovery_fork(
+        state: &Arc<LocalRuntimeState>,
+        suffix: &str,
+    ) -> (LocalConversation, DesktopRun, DesktopRun) {
+        let (conversation, queued_source) = seed_queued_authoritative_run(state, suffix);
+        assert!(state
+            .ensure_authoritative_launch_checkpoint(&queued_source)
+            .await
+            .expect("seed unstarted recovery checkpoint"));
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover queued source");
+        }
+        let interrupted_source = state
+            .session_store
+            .run(&queued_source.id)
+            .expect("load interrupted source")
+            .expect("interrupted source");
+        assert!(authority_store::is_recovered_unstarted_run(
+            &interrupted_source
+        ));
+        let (forked, created) = state
+            .session_store
+            .fork_recovery_run(
+                &interrupted_source.id,
+                interrupted_source.revision,
+                &format!("transferred-unstarted-fork-key-{suffix}"),
+                DesktopExecutionEnvironment {
+                    id: format!("transferred-unstarted-fork-environment-{suffix}"),
+                    kind: DesktopExecutionEnvironmentKind::Worktree,
+                    label: format!("Transferred unstarted recovery fork {suffix}"),
+                    workspace_path: format!("/tmp/agistack-transferred-unstarted-fork-{suffix}"),
+                    repository_root: None,
+                    branch: Some(format!("agistack/transferred-unstarted-fork-{suffix}")),
+                    base_commit: None,
+                    source_run_id: Some(interrupted_source.id.clone()),
+                    created_at: now_iso(),
+                },
+                &now_iso(),
+            )
+            .expect("create unstarted recovery fork");
+        assert!(created);
+        state
+            .session_store
+            .transfer_checkpoint_authority(&interrupted_source, &forked, &now_iso())
+            .expect("transfer unstarted checkpoint authority");
+        (conversation, interrupted_source, forked)
+    }
+
+    async fn assert_transferred_source_controls_stop_before_core(
+        state: &Arc<LocalRuntimeState>,
+        checkpoints: &CountingCheckpointStore,
+        conversation: &LocalConversation,
+        source: &DesktopRun,
+        forked: &DesktopRun,
+    ) {
+        let checkpoint_before = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load fork checkpoint")
+            .expect("fork checkpoint");
+        let authority_before = state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load fork checkpoint authority")
+            .expect("fork checkpoint authority");
+        assert!(authority_before.matches_run(forked));
+        let source_events_before = state
+            .session_store
+            .run_events(&source.id)
+            .expect("load source events")
+            .len();
+        let fork_events_before = state
+            .session_store
+            .run_events(&forked.id)
+            .expect("load fork events")
+            .len();
+        let timeline_before = state
+            .session_store
+            .timeline(&conversation.id, 100)
+            .expect("load timeline")
+            .len();
+        let event_counter_before = state.event_counter.load(Ordering::SeqCst);
+        checkpoints.reset();
+        state.agent_run_claim_attempts.store(0, Ordering::SeqCst);
+        state.agent_engine_attempts.store(0, Ordering::SeqCst);
+
+        for action in ["pause", "resume", "cancel"] {
+            let response = local_router(Arc::clone(state))
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/api/v1/agent/runs/{}/{action}", source.id))
+                        .header("authorization", "Bearer launch-secret")
+                        .header("content-type", "application/json")
+                        .body(Body::from(format!(
+                            r#"{{"expected_revision":{}}}"#,
+                            source.revision
+                        )))
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::CONFLICT, "{action}");
+            assert_eq!(
+                response_json(response).await["detail"],
+                CHECKPOINT_CONTROL_AUTHORITY_ERROR,
+                "{action}"
+            );
+        }
+
+        assert_eq!(
+            checkpoints.operation_counts(),
+            CheckpointOperationCounts {
+                loads: 0,
+                saves: 0,
+                deletes: 0,
+            }
+        );
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 0);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            state.event_counter.load(Ordering::SeqCst),
+            event_counter_before
+        );
+        assert!(state
+            .agent_runs
+            .lock()
+            .expect("local agent runs")
+            .is_empty());
+        assert_eq!(
+            state
+                .session_store
+                .run_events(&source.id)
+                .expect("reload source events")
+                .len(),
+            source_events_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .run_events(&forked.id)
+                .expect("reload fork events")
+                .len(),
+            fork_events_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .timeline(&conversation.id, 100)
+                .expect("reload timeline")
+                .len(),
+            timeline_before
+        );
+        let stored_source = state
+            .session_store
+            .run(&source.id)
+            .expect("load source")
+            .expect("source");
+        assert_eq!(stored_source.status, source.status);
+        assert_eq!(stored_source.revision, source.revision);
+        assert_eq!(stored_source.error, source.error);
+        let stored_fork = state
+            .session_store
+            .run(&forked.id)
+            .expect("load fork")
+            .expect("fork");
+        assert_eq!(stored_fork.status, forked.status);
+        assert_eq!(stored_fork.revision, forked.revision);
+        assert_eq!(stored_fork.error, forked.error);
+        assert_eq!(
+            state
+                .session_store
+                .checkpoint_authority(&conversation.id)
+                .expect("reload fork checkpoint authority")
+                .expect("fork checkpoint authority"),
+            authority_before
+        );
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("reload fork checkpoint")
+                .expect("fork checkpoint"),
+            checkpoint_before
+        );
+    }
+
+    fn queue_next_input(
+        state: &Arc<LocalRuntimeState>,
+        run: &DesktopRun,
+        suffix: &str,
+    ) -> steering::DesktopRunInput {
+        state
+            .session_store
+            .create_run_input(session_store::CreateRunInput {
+                run_id: &run.id,
+                expected_run_revision: run.revision,
+                message_id: &format!("queue-message-{suffix}"),
+                idempotency_key: &format!("queue-key-{suffix}"),
+                delivery: RunInputDelivery::QueueNext,
+                content: "Run this after the authoritative execution settles",
+                references: Vec::new(),
+                now: &now_iso(),
+            })
+            .expect("queue next input")
+            .0
+    }
+
     #[tokio::test]
     async fn review_approval_completes_the_same_authoritative_run() {
         let state = test_state("launch-secret");
@@ -9137,6 +10557,10 @@ mod tests {
             .save(&checkpoint)
             .await
             .expect("save paused checkpoint");
+        state
+            .session_store
+            .bind_checkpoint_authority(&paused, &now_iso())
+            .expect("bind paused checkpoint authority");
 
         let response = local_router(Arc::clone(&state))
             .oneshot(
@@ -9450,6 +10874,19 @@ mod tests {
     async fn pause_route_signals_the_attached_execution_without_faking_run_state() {
         let state = test_state("launch-secret");
         let (conversation, running) = seed_controlled_run(&state, "pause-attached");
+        state
+            .checkpoints
+            .save(&SessionState::new(
+                conversation.id.clone(),
+                running.request_message.clone(),
+                Some(running.project_id.as_str()),
+            ))
+            .await
+            .expect("save running checkpoint");
+        state
+            .session_store
+            .bind_checkpoint_authority(&running, &now_iso())
+            .expect("bind running checkpoint authority");
         let control = state
             .claim_agent_run(&conversation.id, Some(&running.id))
             .expect("attach execution");
@@ -9513,6 +10950,10 @@ mod tests {
             .await
             .expect("save paused checkpoint");
 
+        state
+            .session_store
+            .bind_checkpoint_authority(&paused, &now_iso())
+            .expect("bind resume checkpoint authority");
         let response = local_router(Arc::clone(&state))
             .oneshot(
                 Request::builder()
@@ -9554,6 +10995,824 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reconnect_starts_a_recovered_unstarted_run_once_with_the_original_authority() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) = seed_queued_authoritative_run(&state, "reconnect");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover queued run");
+        }
+        let interrupted = state
+            .session_store
+            .run(&queued.id)
+            .expect("load run")
+            .expect("recovered run");
+        assert_eq!(interrupted.status, DesktopRunStatus::Interrupted);
+        assert!(interrupted.started_at.is_none());
+
+        let recovery_projection = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{}/session?tenant_id=local&project_id=local-project&workspace_id=local-workspace",
+                        conversation.id
+                    ))
+                    .header("authorization", "Bearer launch-secret")
+                    .body(Body::empty())
+                    .expect("projection request"),
+            )
+            .await
+            .expect("projection response");
+        assert_eq!(recovery_projection.status(), StatusCode::OK);
+        let recovery_projection = response_json(recovery_projection).await;
+        assert_eq!(
+            recovery_projection["capabilities"]["run_actions"],
+            json!(["reconnect", "fork", "cancel"])
+        );
+        assert!(recovery_projection["capabilities"]["allowed_actions"]
+            .as_array()
+            .is_some_and(|actions| actions.iter().any(|action| action == "reconnect")));
+
+        let held_control = state
+            .claim_agent_run(&conversation.id, Some(&interrupted.id))
+            .expect("hold conversation execution claim");
+        Arc::clone(&state)
+            .run_agent_message(
+                conversation.id.clone(),
+                conversation.project_id.clone(),
+                interrupted.request_message.clone(),
+                interrupted.message_id.clone(),
+                Some(interrupted.id.clone()),
+                None,
+            )
+            .await;
+        let still_interrupted = state
+            .session_store
+            .run(&interrupted.id)
+            .expect("load run after rejected concurrent start")
+            .expect("run after rejected concurrent start");
+        assert_eq!(still_interrupted.status, DesktopRunStatus::Interrupted);
+        assert_eq!(still_interrupted.revision, interrupted.revision);
+        assert!(Arc::ptr_eq(
+            &held_control,
+            &state
+                .control_for_run(&interrupted)
+                .expect("original control remains attached")
+        ));
+        state.release_agent_run(&conversation.id);
+
+        let app = local_router(Arc::clone(&state));
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/resume", interrupted.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        interrupted.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(first.status(), StatusCode::OK);
+        let payload = response_json(first).await;
+        assert_eq!(payload["accepted"], true);
+        assert_eq!(payload["status"], "restart_requested");
+        assert_eq!(payload["run"]["id"], interrupted.id);
+
+        let replay = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/resume", interrupted.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        interrupted.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(replay.status(), StatusCode::CONFLICT);
+
+        let mut final_run = None;
+        for _ in 0..100 {
+            let run = state
+                .session_store
+                .run(&interrupted.id)
+                .expect("load run")
+                .expect("run");
+            if run.status == DesktopRunStatus::ReadyReview {
+                final_run = Some(run);
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        let completed = final_run.expect("restarted run reaches review");
+        assert_eq!(completed.id, interrupted.id);
+        assert_eq!(completed.plan_version_id, interrupted.plan_version_id);
+        assert_eq!(completed.idempotency_key, interrupted.idempotency_key);
+        let run_events = state
+            .session_store
+            .run_events(&interrupted.id)
+            .expect("run events");
+        let restarted = run_events
+            .iter()
+            .find(|event| event["type"] == "running")
+            .expect("running event after reconnect");
+        assert!(restarted["error"].is_null());
+        assert_eq!(
+            state
+                .session_store
+                .timeline(&conversation.id, 100)
+                .expect("timeline")
+                .iter()
+                .filter(|item| {
+                    item["type"] == "user_message" && item["message_id"] == interrupted.message_id
+                })
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn recovered_unstarted_run_cancels_without_a_core_checkpoint() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) = seed_queued_authoritative_run(&state, "cancel");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover queued run");
+        }
+        let interrupted = state
+            .session_store
+            .run(&queued.id)
+            .expect("load run")
+            .expect("recovered run");
+        assert_eq!(interrupted.status, DesktopRunStatus::Interrupted);
+        assert!(state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint")
+            .is_none());
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/cancel", interrupted.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        interrupted.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = response_json(response).await;
+        assert_eq!(payload["status"], "cancelled");
+        assert_eq!(payload["run"]["id"], interrupted.id);
+        assert_eq!(payload["run"]["status"], "cancelled");
+        assert_eq!(payload["run"]["revision"], interrupted.revision + 1);
+        assert!(payload["run"]["error"].is_null());
+        let checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint")
+            .expect("cancel checkpoint was seeded before the desktop commit");
+        assert_eq!(checkpoint.status, SessionStatus::Cancelled);
+        assert_eq!(checkpoint.goal, interrupted.request_message);
+    }
+
+    #[tokio::test]
+    async fn recovered_unstarted_run_cancels_a_seeded_launch_checkpoint() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) = seed_queued_authoritative_run(&state, "cancel-seeded");
+        assert!(state
+            .ensure_authoritative_launch_checkpoint(&queued)
+            .await
+            .expect("seed launch checkpoint"));
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover queued run");
+        }
+        let interrupted = state
+            .session_store
+            .run(&queued.id)
+            .expect("load run")
+            .expect("recovered run");
+        assert_eq!(interrupted.status, DesktopRunStatus::Interrupted);
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/cancel", interrupted.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        interrupted.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = response_json(response).await;
+        assert_eq!(payload["run"]["status"], "cancelled");
+        let checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint")
+            .expect("cancelled checkpoint");
+        assert_eq!(checkpoint.status, SessionStatus::Cancelled);
+        assert_eq!(checkpoint.goal, interrupted.request_message);
+    }
+
+    #[tokio::test]
+    async fn environment_validation_failure_terminalizes_the_seeded_launch_checkpoint() {
+        let state = test_state("launch-secret");
+        let conversation = LocalConversation {
+            id: "conversation-invalid-launch-environment".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Invalid launch environment".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        state
+            .session_store
+            .replace_agent_plan_tasks(
+                &conversation.id,
+                &[json!({
+                    "id": "invalid-launch-environment-task",
+                    "conversation_id": conversation.id,
+                    "content": "Validate the launch environment",
+                    "status": "pending",
+                    "priority": "high",
+                    "order_index": 0,
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                })],
+            )
+            .expect("store plan");
+        let plan = state
+            .session_store
+            .latest_draft_plan(&conversation.id)
+            .expect("load plan")
+            .expect("plan");
+        let queued = state
+            .session_store
+            .approve_plan_and_start_in_environment(session_store::ApprovePlanStartInput {
+                conversation_id: &conversation.id,
+                project_id: "local-project",
+                plan_version_id: &plan.id,
+                expected_plan_version: plan.version,
+                idempotency_key: "invalid-launch-environment-key",
+                message_id: "invalid-launch-environment-message",
+                request_message: "Execute with an invalid environment",
+                environment: Some(authority_store::DesktopExecutionEnvironment {
+                    id: "invalid-launch-environment".to_string(),
+                    kind: DesktopExecutionEnvironmentKind::Local,
+                    label: "Missing local workspace".to_string(),
+                    workspace_path: test_root().join("missing").to_string_lossy().into_owned(),
+                    repository_root: None,
+                    branch: None,
+                    base_commit: None,
+                    source_run_id: None,
+                    created_at: now_iso(),
+                }),
+                requested_environment_kind: DesktopExecutionEnvironmentKind::Local,
+                permission_profile: DesktopPermissionProfile::WorkspaceWrite,
+                now: &now_iso(),
+            })
+            .expect("approve run")
+            .run;
+
+        Arc::clone(&state)
+            .run_agent_message(
+                conversation.id.clone(),
+                conversation.project_id.clone(),
+                queued.request_message.clone(),
+                queued.message_id.clone(),
+                Some(queued.id.clone()),
+                None,
+            )
+            .await;
+
+        let failed = state
+            .session_store
+            .run(&queued.id)
+            .expect("load run")
+            .expect("failed run");
+        assert_eq!(failed.status, DesktopRunStatus::Failed);
+        let checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint")
+            .expect("failed checkpoint");
+        assert_eq!(checkpoint.status, SessionStatus::Failed);
+        assert_eq!(checkpoint.goal, queued.request_message);
+    }
+
+    #[tokio::test]
+    async fn preclaimed_control_is_released_when_agent_message_fails_authority_preflight() {
+        let state = test_state("launch-secret");
+        let missing_conversation_id = "missing-preclaimed-conversation";
+        let missing_control = state
+            .claim_agent_run(missing_conversation_id, Some("missing-run"))
+            .expect("claim missing conversation");
+        Arc::clone(&state)
+            .run_agent_message(
+                missing_conversation_id.to_string(),
+                "local-project".to_string(),
+                "Execute".to_string(),
+                "missing-message".to_string(),
+                Some("missing-run".to_string()),
+                Some(missing_control),
+            )
+            .await;
+        let reclaimed = state
+            .claim_agent_run(missing_conversation_id, Some("missing-run"))
+            .expect("missing conversation claim was released");
+        state.release_agent_run_if_control(missing_conversation_id, &reclaimed);
+
+        let conversation = LocalConversation {
+            id: "conversation-preflight-project-mismatch".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Project mismatch".to_string(),
+            workspace_id: Some("local-workspace".to_string()),
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        state
+            .session_store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        let mismatched_control = state
+            .claim_agent_run(&conversation.id, None)
+            .expect("claim mismatched conversation");
+        Arc::clone(&state)
+            .run_agent_message(
+                conversation.id.clone(),
+                "another-project".to_string(),
+                "Execute".to_string(),
+                "mismatched-message".to_string(),
+                None,
+                Some(mismatched_control),
+            )
+            .await;
+        let reclaimed = state
+            .claim_agent_run(&conversation.id, None)
+            .expect("project mismatch claim was released");
+        state.release_agent_run_if_control(&conversation.id, &reclaimed);
+    }
+
+    #[tokio::test]
+    async fn disconnect_after_running_commit_reconnects_from_seeded_launch_checkpoint() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) = seed_queued_authoritative_run(&state, "launch-checkpoint");
+        let running = state
+            .prepare_authoritative_run_for_execution(
+                &queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare authoritative run")
+            .expect("running run");
+        assert_eq!(running.status, DesktopRunStatus::Running);
+        let initial_checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load launch checkpoint")
+            .expect("launch checkpoint");
+        assert_eq!(initial_checkpoint.status, SessionStatus::Running);
+        assert_eq!(initial_checkpoint.round, 0);
+        assert_eq!(initial_checkpoint.goal, queued.request_message);
+
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover running launch");
+        }
+        let disconnected = state
+            .session_store
+            .run(&running.id)
+            .expect("load disconnected run")
+            .expect("disconnected run");
+        assert_eq!(disconnected.status, DesktopRunStatus::Disconnected);
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/resume", disconnected.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        disconnected.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = response_json(response).await;
+        assert_eq!(payload["run"]["id"], disconnected.id);
+        assert_eq!(payload["run"]["status"], "running");
+
+        let mut final_run = None;
+        for _ in 0..100 {
+            let run = state
+                .session_store
+                .run(&disconnected.id)
+                .expect("load run")
+                .expect("run");
+            if run.status == DesktopRunStatus::ReadyReview {
+                final_run = Some(run);
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            final_run.expect("reconnected launch reaches review").id,
+            disconnected.id
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_reconciles_terminal_core_checkpoints_into_desktop_runs() {
+        let state = test_state("launch-secret");
+        let cases = [
+            (
+                "terminal-failed",
+                SessionStatus::Failed,
+                DesktopRunStatus::Failed,
+            ),
+            (
+                "terminal-finished",
+                SessionStatus::Finished,
+                DesktopRunStatus::ReadyReview,
+            ),
+            (
+                "terminal-cancelled",
+                SessionStatus::Cancelled,
+                DesktopRunStatus::Cancelled,
+            ),
+        ];
+        let mut runs = Vec::with_capacity(cases.len());
+        for (suffix, checkpoint_status, expected_status) in cases {
+            let (conversation, queued) = seed_queued_authoritative_run(&state, suffix);
+            let running = state
+                .prepare_authoritative_run_for_execution(
+                    &queued.id,
+                    &conversation.id,
+                    &conversation.project_id,
+                    &queued.request_message,
+                    &now_iso(),
+                )
+                .await
+                .expect("prepare authoritative run")
+                .expect("running run");
+            let mut checkpoint = state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load checkpoint")
+                .expect("launch checkpoint");
+            checkpoint.status = checkpoint_status;
+            checkpoint.answer = (checkpoint_status == SessionStatus::Failed)
+                .then(|| "checkpoint failed before desktop settlement".to_string());
+            state
+                .checkpoints
+                .save(&checkpoint)
+                .await
+                .expect("save terminal checkpoint");
+            runs.push((running, expected_status));
+        }
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover running records");
+        }
+        for (run, _) in &runs {
+            assert_eq!(
+                state
+                    .session_store
+                    .run(&run.id)
+                    .expect("load disconnected run")
+                    .expect("disconnected run")
+                    .status,
+                DesktopRunStatus::Disconnected
+            );
+        }
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("reconcile recovered runs");
+
+        for (run, expected_status) in runs {
+            let reconciled = state
+                .session_store
+                .run(&run.id)
+                .expect("load reconciled run")
+                .expect("reconciled run");
+            assert_eq!(reconciled.status, expected_status);
+            assert_eq!(reconciled.revision, run.revision + 2);
+            if expected_status == DesktopRunStatus::Failed {
+                assert_eq!(
+                    reconciled.error.as_deref(),
+                    Some("checkpoint failed before desktop settlement")
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn startup_reconciles_only_the_current_recovery_fork() {
+        let state = test_state("launch-secret");
+        let (conversation, queued_source) =
+            seed_queued_authoritative_run(&state, "current-recovery-fork");
+        let running_source = state
+            .prepare_authoritative_run_for_execution(
+                &queued_source.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_source.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare source run")
+            .expect("running source run");
+        let disconnected_source = state
+            .session_store
+            .transition_run(
+                &running_source.id,
+                running_source.revision,
+                DesktopRunStatus::Disconnected,
+                None,
+                &now_iso(),
+            )
+            .expect("disconnect source run");
+        let (queued_fork, created) = state
+            .session_store
+            .fork_recovery_run(
+                &disconnected_source.id,
+                disconnected_source.revision,
+                "current-recovery-fork-key",
+                authority_store::DesktopExecutionEnvironment {
+                    id: "current-recovery-fork-environment".to_string(),
+                    kind: DesktopExecutionEnvironmentKind::Worktree,
+                    label: "Current recovery fork".to_string(),
+                    workspace_path: "/tmp/agistack-current-recovery-fork".to_string(),
+                    repository_root: Some("/tmp/agistack-current-recovery-source".to_string()),
+                    branch: Some("agistack/current-recovery-fork".to_string()),
+                    base_commit: Some("current-recovery-base".to_string()),
+                    source_run_id: Some(disconnected_source.id.clone()),
+                    created_at: now_iso(),
+                },
+                &now_iso(),
+            )
+            .expect("fork recovery run");
+        assert!(created);
+        state
+            .session_store
+            .transfer_checkpoint_authority(&disconnected_source, &queued_fork, &now_iso())
+            .expect("transfer checkpoint authority to recovery fork");
+        let running_fork = state
+            .prepare_authoritative_run_for_execution(
+                &queued_fork.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_fork.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare recovery fork")
+            .expect("running recovery fork");
+        let mut checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load recovery checkpoint")
+            .expect("recovery checkpoint");
+        checkpoint.status = SessionStatus::Finished;
+        checkpoint.answer = Some("recovery fork completed".to_string());
+        state
+            .checkpoints
+            .save(&checkpoint)
+            .await
+            .expect("save finished recovery checkpoint");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover running fork");
+        }
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("reconcile current recovery fork");
+
+        let stored_source = state
+            .session_store
+            .run(&disconnected_source.id)
+            .expect("load source run")
+            .expect("source run");
+        assert_eq!(stored_source.status, DesktopRunStatus::Disconnected);
+        assert_eq!(stored_source.revision, disconnected_source.revision);
+        let stored_fork = state
+            .session_store
+            .run(&running_fork.id)
+            .expect("load recovery fork")
+            .expect("recovery fork");
+        assert_eq!(stored_fork.status, DesktopRunStatus::ReadyReview);
+        assert_eq!(stored_fork.revision, running_fork.revision + 2);
+    }
+
+    #[tokio::test]
+    async fn startup_quarantines_checkpoint_authority_mismatch_before_reconnect() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) =
+            seed_queued_authoritative_run(&state, "checkpoint-authority-mismatch");
+        let running = state
+            .prepare_authoritative_run_for_execution(
+                &queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare authoritative run")
+            .expect("running authoritative run");
+        let mut mismatched_checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load launch checkpoint")
+            .expect("launch checkpoint");
+        mismatched_checkpoint.goal = "execute an unrelated stale checkpoint".to_string();
+        state
+            .checkpoints
+            .save(&mismatched_checkpoint)
+            .await
+            .expect("save mismatched checkpoint");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover running record");
+        }
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("quarantine mismatched checkpoint");
+
+        let failed = state
+            .session_store
+            .run(&running.id)
+            .expect("load quarantined run")
+            .expect("quarantined run");
+        assert_eq!(failed.status, DesktopRunStatus::Failed);
+        assert_eq!(
+            failed.error.as_deref(),
+            Some("recovered checkpoint authority does not match the current run")
+        );
+        assert!(state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load quarantined checkpoint")
+            .is_none());
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/resume", failed.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        failed.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn startup_retries_checkpoint_cleanup_after_quarantine_commit() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) =
+            seed_queued_authoritative_run(&state, "checkpoint-quarantine-retry");
+        let running = state
+            .prepare_authoritative_run_for_execution(
+                &queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare authoritative run")
+            .expect("running authoritative run");
+        let mut mismatched_checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load launch checkpoint")
+            .expect("launch checkpoint");
+        mismatched_checkpoint.project_id = Some("unrelated-project".to_string());
+        state
+            .checkpoints
+            .save(&mismatched_checkpoint)
+            .await
+            .expect("save mismatched checkpoint");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover running record");
+        }
+        let disconnected = state
+            .session_store
+            .run(&running.id)
+            .expect("load recovered run")
+            .expect("recovered run");
+        let quarantined = state
+            .session_store
+            .reconcile_recovered_run(
+                &disconnected.id,
+                disconnected.revision,
+                DesktopRunStatus::Failed,
+                Some(RECOVERED_CHECKPOINT_AUTHORITY_ERROR.to_string()),
+                &now_iso(),
+            )
+            .expect("commit quarantine before simulated crash");
+        assert!(state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint before retry")
+            .is_some());
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("retry checkpoint quarantine cleanup");
+
+        assert!(state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint after retry")
+            .is_none());
+        let stored = state
+            .session_store
+            .run(&quarantined.id)
+            .expect("load quarantined run")
+            .expect("quarantined run");
+        assert_eq!(stored.status, DesktopRunStatus::Failed);
+        assert_eq!(stored.revision, quarantined.revision);
+        assert_eq!(stored.error, quarantined.error);
+    }
+
+    #[tokio::test]
     async fn review_changes_reopens_the_same_run_with_human_feedback() {
         let state = test_state("launch-secret");
         let (conversation, running) = seed_controlled_run(&state, "review-changes");
@@ -9579,6 +11838,10 @@ mod tests {
             .save(&checkpoint)
             .await
             .expect("save review checkpoint");
+        state
+            .session_store
+            .bind_checkpoint_authority(&ready, &now_iso())
+            .expect("bind review checkpoint authority");
 
         let response = local_router(Arc::clone(&state))
             .oneshot(
@@ -9874,5 +12137,1701 @@ mod tests {
             .unwrap()
             .join("must-not-exist")
             .exists());
+    }
+
+    #[test]
+    fn desktop_session_store_rejects_a_second_same_file_owner() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create store root");
+        let path = root.join("exclusive-sessions.db");
+        let first = DesktopSessionStore::open(&path).expect("first store owner");
+
+        let error = match DesktopSessionStore::open(&path) {
+            Ok(_) => panic!("a second store owner must not open the same authority database"),
+            Err(error) => error,
+        };
+        assert!(error.contains("already owned"), "unexpected error: {error}");
+
+        drop(first);
+        let reopened = DesktopSessionStore::open(&path).expect("ownership released on drop");
+        drop(reopened);
+        std::fs::remove_dir_all(root).expect("remove store root");
+    }
+
+    #[test]
+    fn terminal_run_transition_and_queued_input_settlement_are_atomic() {
+        let state = test_state("launch-secret");
+        let (_conversation, running) = seed_controlled_run(&state, "atomic-transition");
+        let input = queue_next_input(&state, &running, "atomic-transition");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            connection
+                .execute_batch(
+                    "CREATE TEMP TRIGGER fail_terminal_input_settlement
+                     BEFORE UPDATE OF status ON desktop_run_inputs
+                     WHEN NEW.status = 'blocked'
+                     BEGIN
+                       SELECT RAISE(ABORT, 'forced queued input settlement failure');
+                     END;",
+                )
+                .expect("install settlement failure");
+        }
+
+        let error = state
+            .session_store
+            .transition_run(
+                &running.id,
+                running.revision,
+                DesktopRunStatus::Failed,
+                Some("forced run failure".to_string()),
+                &now_iso(),
+            )
+            .expect_err("terminal transaction must roll back when input settlement fails");
+        assert!(error.contains("forced queued input settlement failure"));
+        let unchanged = state
+            .session_store
+            .run(&running.id)
+            .expect("load run")
+            .expect("run");
+        assert_eq!(unchanged.status, DesktopRunStatus::Running);
+        assert_eq!(unchanged.revision, running.revision);
+        assert_eq!(
+            state
+                .session_store
+                .run_input(&input.id)
+                .expect("load queued input")
+                .expect("queued input")
+                .status,
+            RunInputStatus::Queued
+        );
+        assert!(!state
+            .session_store
+            .run_events(&running.id)
+            .expect("run events")
+            .iter()
+            .any(|event| event["type"] == "failed"));
+
+        {
+            let connection = state.session_store.connection().expect("connection");
+            connection
+                .execute_batch("DROP TRIGGER fail_terminal_input_settlement;")
+                .expect("remove settlement failure");
+        }
+        let failed = state
+            .session_store
+            .transition_run(
+                &running.id,
+                running.revision,
+                DesktopRunStatus::Failed,
+                Some("forced run failure".to_string()),
+                &now_iso(),
+            )
+            .expect("terminal transaction");
+        assert_eq!(failed.status, DesktopRunStatus::Failed);
+        assert_eq!(
+            state
+                .session_store
+                .run_input(&input.id)
+                .expect("load settled input")
+                .expect("settled input")
+                .status,
+            RunInputStatus::Blocked
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_reconcile_rolls_back_run_when_input_settlement_fails() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) = seed_queued_authoritative_run(&state, "atomic-reconcile");
+        let running = state
+            .prepare_authoritative_run_for_execution(
+                &queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare run")
+            .expect("running run");
+        let input = queue_next_input(&state, &running, "atomic-reconcile");
+        let mut checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint")
+            .expect("checkpoint");
+        checkpoint.status = SessionStatus::Failed;
+        checkpoint.answer = Some("checkpoint failed".to_string());
+        state
+            .checkpoints
+            .save(&checkpoint)
+            .await
+            .expect("save failed checkpoint");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover running run");
+            connection
+                .execute_batch(
+                    "CREATE TEMP TRIGGER fail_recovered_input_settlement
+                     BEFORE UPDATE OF status ON desktop_run_inputs
+                     WHEN NEW.status = 'blocked'
+                     BEGIN
+                       SELECT RAISE(ABORT, 'forced recovered input settlement failure');
+                     END;",
+                )
+                .expect("install recovered settlement failure");
+        }
+        let disconnected = state
+            .session_store
+            .run(&running.id)
+            .expect("load disconnected run")
+            .expect("disconnected run");
+
+        let error = state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect_err("reconciliation must roll back as one transaction");
+        assert!(error.contains("forced recovered input settlement failure"));
+        let unchanged = state
+            .session_store
+            .run(&running.id)
+            .expect("load unchanged run")
+            .expect("unchanged run");
+        assert_eq!(unchanged.status, DesktopRunStatus::Disconnected);
+        assert_eq!(unchanged.revision, disconnected.revision);
+        assert_eq!(
+            state
+                .session_store
+                .run_input(&input.id)
+                .expect("load unchanged input")
+                .expect("unchanged input")
+                .status,
+            RunInputStatus::Queued
+        );
+
+        {
+            let connection = state.session_store.connection().expect("connection");
+            connection
+                .execute_batch("DROP TRIGGER fail_recovered_input_settlement;")
+                .expect("remove recovered settlement failure");
+        }
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("retry reconciliation");
+        assert_eq!(
+            state
+                .session_store
+                .run(&running.id)
+                .expect("load reconciled run")
+                .expect("reconciled run")
+                .status,
+            DesktopRunStatus::Failed
+        );
+        assert_eq!(
+            state
+                .session_store
+                .run_input(&input.id)
+                .expect("load reconciled input")
+                .expect("reconciled input")
+                .status,
+            RunInputStatus::Blocked
+        );
+    }
+
+    #[tokio::test]
+    async fn checkpoint_terminalization_failure_keeps_run_recoverable_and_input_queued() {
+        let (state, checkpoint_path, root) = test_state_with_file_checkpoint("launch-secret");
+        let (conversation, queued) =
+            seed_queued_authoritative_run(&state, "checkpoint-save-failure");
+        let running = state
+            .prepare_authoritative_run_for_execution(
+                &queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare run")
+            .expect("running run");
+        let input = queue_next_input(&state, &running, "checkpoint-save-failure");
+        let checkpoint_connection =
+            rusqlite::Connection::open(&checkpoint_path).expect("checkpoint failure connection");
+        checkpoint_connection
+            .execute_batch(
+                "CREATE TRIGGER fail_checkpoint_terminalization
+                 BEFORE INSERT ON checkpoints
+                 BEGIN
+                   SELECT RAISE(ABORT, 'forced checkpoint terminalization failure');
+                 END;",
+            )
+            .expect("install checkpoint failure");
+
+        let error = state
+            .persist_authoritative_run_outcome(
+                &running,
+                DesktopRunStatus::Failed,
+                Some("engine failed".to_string()),
+                &now_iso(),
+            )
+            .await
+            .expect_err("desktop run must not terminal-commit");
+        assert!(error.contains(CHECKPOINT_TERMINALIZATION_RECOVERY_ERROR_PREFIX));
+        let recovered = state
+            .session_store
+            .run(&running.id)
+            .expect("load recoverable run")
+            .expect("recoverable run");
+        assert_eq!(recovered.status, DesktopRunStatus::Disconnected);
+        assert!(recovered.completed_at.is_none());
+        assert!(has_checkpoint_terminalization_recovery_error(&recovered));
+        assert_eq!(
+            state
+                .session_store
+                .run_input(&input.id)
+                .expect("load queued input")
+                .expect("queued input")
+                .status,
+            RunInputStatus::Queued
+        );
+        assert!(state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load quarantined checkpoint")
+            .is_none());
+        assert!(!state
+            .session_store
+            .run_events(&running.id)
+            .expect("run events")
+            .iter()
+            .any(|event| event["type"] == "failed"));
+
+        drop(checkpoint_connection);
+        drop(state);
+        std::fs::remove_dir_all(root).expect("remove checkpoint failure root");
+    }
+
+    #[tokio::test]
+    async fn startup_finishes_cancel_after_checkpoint_commit_before_run_commit() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) = seed_queued_authoritative_run(&state, "cancel-crash-window");
+        assert!(state
+            .ensure_authoritative_launch_checkpoint(&queued)
+            .await
+            .expect("seed launch checkpoint"));
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover queued run");
+        }
+        let interrupted = state
+            .session_store
+            .run(&queued.id)
+            .expect("load interrupted run")
+            .expect("interrupted run");
+        state
+            .terminalize_authoritative_checkpoint(&interrupted, SessionStatus::Cancelled)
+            .await
+            .expect("commit cancelled checkpoint before simulated crash");
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("finish cancellation during startup");
+        let cancelled = state
+            .session_store
+            .run(&queued.id)
+            .expect("load cancelled run")
+            .expect("cancelled run");
+        assert_eq!(cancelled.status, DesktopRunStatus::Cancelled);
+        assert!(cancelled.started_at.is_none());
+        assert!(cancelled.completed_at.is_some());
+        assert_eq!(cancelled.revision, interrupted.revision + 1);
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load cancelled checkpoint")
+                .expect("cancelled checkpoint")
+                .status,
+            SessionStatus::Cancelled
+        );
+    }
+
+    #[tokio::test]
+    async fn reconnect_never_restarts_a_terminalized_launch_checkpoint() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) =
+            seed_queued_authoritative_run(&state, "terminalized-reconnect");
+        assert!(state
+            .ensure_authoritative_launch_checkpoint(&queued)
+            .await
+            .expect("seed launch checkpoint"));
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover queued run");
+        }
+        let interrupted = state
+            .session_store
+            .run(&queued.id)
+            .expect("load interrupted run")
+            .expect("interrupted run");
+        state
+            .terminalize_authoritative_checkpoint(&interrupted, SessionStatus::Cancelled)
+            .await
+            .expect("terminalize launch checkpoint");
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/resume", interrupted.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        interrupted.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let stored = state
+            .session_store
+            .run(&interrupted.id)
+            .expect("load stored run")
+            .expect("stored run");
+        assert_eq!(stored.status, DesktopRunStatus::Interrupted);
+        assert_eq!(stored.revision, interrupted.revision);
+        assert!(!state
+            .session_store
+            .run_events(&stored.id)
+            .expect("run events")
+            .iter()
+            .any(|event| event["type"] == "running"));
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load checkpoint")
+                .expect("checkpoint")
+                .status,
+            SessionStatus::Cancelled
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_reconciles_latest_inserted_fork_when_clock_moves_backwards() {
+        let state = test_state("launch-secret");
+        let (conversation, queued_source) =
+            seed_queued_authoritative_run(&state, "clock-rollback-fork");
+        let running_source = state
+            .prepare_authoritative_run_for_execution(
+                &queued_source.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_source.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare source")
+            .expect("running source");
+        let disconnected_source = state
+            .session_store
+            .transition_run(
+                &running_source.id,
+                running_source.revision,
+                DesktopRunStatus::Disconnected,
+                None,
+                &now_iso(),
+            )
+            .expect("disconnect source");
+        let clock_moved_back = "2000-01-01T00:00:00Z";
+        let (queued_fork, created) = state
+            .session_store
+            .fork_recovery_run(
+                &disconnected_source.id,
+                disconnected_source.revision,
+                "clock-rollback-fork-key",
+                authority_store::DesktopExecutionEnvironment {
+                    id: "clock-rollback-environment".to_string(),
+                    kind: DesktopExecutionEnvironmentKind::Worktree,
+                    label: "Clock rollback fork".to_string(),
+                    workspace_path: "/tmp/agistack-clock-rollback-fork".to_string(),
+                    repository_root: Some("/tmp/agistack-clock-rollback-source".to_string()),
+                    branch: Some("agistack/clock-rollback-fork".to_string()),
+                    base_commit: Some("clock-rollback-base".to_string()),
+                    source_run_id: Some(disconnected_source.id.clone()),
+                    created_at: clock_moved_back.to_string(),
+                },
+                clock_moved_back,
+            )
+            .expect("fork recovery run");
+        assert!(created);
+        state
+            .session_store
+            .transfer_checkpoint_authority(&disconnected_source, &queued_fork, clock_moved_back)
+            .expect("transfer checkpoint authority to recovery fork");
+        assert!(queued_fork.created_at < disconnected_source.created_at);
+        let running_fork = state
+            .prepare_authoritative_run_for_execution(
+                &queued_fork.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_fork.request_message,
+                clock_moved_back,
+            )
+            .await
+            .expect("prepare fork")
+            .expect("running fork");
+        let mut checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load fork checkpoint")
+            .expect("fork checkpoint");
+        checkpoint.status = SessionStatus::Finished;
+        state
+            .checkpoints
+            .save(&checkpoint)
+            .await
+            .expect("finish fork checkpoint");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, "2000-01-01T00:00:01Z")
+                .expect("recover running fork");
+        }
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("reconcile latest inserted fork");
+        let stored_source = state
+            .session_store
+            .run(&disconnected_source.id)
+            .expect("load source")
+            .expect("source");
+        assert_eq!(stored_source.status, DesktopRunStatus::Disconnected);
+        assert_eq!(stored_source.revision, disconnected_source.revision);
+        let stored_fork = state
+            .session_store
+            .run(&running_fork.id)
+            .expect("load fork")
+            .expect("fork");
+        assert_eq!(stored_fork.status, DesktopRunStatus::ReadyReview);
+        assert_eq!(stored_fork.revision, running_fork.revision + 2);
+    }
+
+    #[tokio::test]
+    async fn startup_retry_settles_legacy_quarantine_before_checkpoint_cleanup() {
+        let state = test_state("launch-secret");
+        let (conversation, queued) =
+            seed_queued_authoritative_run(&state, "legacy-quarantine-settlement");
+        let running = state
+            .prepare_authoritative_run_for_execution(
+                &queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare run")
+            .expect("running run");
+        let input = queue_next_input(&state, &running, "legacy-quarantine-settlement");
+        let mut checkpoint = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint")
+            .expect("checkpoint");
+        checkpoint.goal = "mismatched checkpoint goal".to_string();
+        state
+            .checkpoints
+            .save(&checkpoint)
+            .await
+            .expect("save mismatched checkpoint");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover running run");
+        }
+        let disconnected = state
+            .session_store
+            .run(&running.id)
+            .expect("load disconnected run")
+            .expect("disconnected run");
+        let quarantined = state
+            .session_store
+            .reconcile_recovered_run(
+                &disconnected.id,
+                disconnected.revision,
+                DesktopRunStatus::Failed,
+                Some(RECOVERED_CHECKPOINT_AUTHORITY_ERROR.to_string()),
+                &now_iso(),
+            )
+            .expect("commit quarantine");
+        let mut legacy_input = state
+            .session_store
+            .run_input(&input.id)
+            .expect("load settled input")
+            .expect("settled input");
+        assert_eq!(legacy_input.status, RunInputStatus::Blocked);
+        legacy_input.status = RunInputStatus::Queued;
+        legacy_input.updated_at = now_iso();
+        {
+            let connection = state.session_store.connection().expect("connection");
+            connection
+                .execute(
+                    "UPDATE desktop_run_inputs
+                     SET status = 'queued', updated_at = ?2, value_json = ?3 WHERE id = ?1",
+                    rusqlite::params![
+                        legacy_input.id,
+                        legacy_input.updated_at,
+                        serde_json::to_string(&legacy_input).expect("serialize legacy input")
+                    ],
+                )
+                .expect("simulate pre-atomic quarantine database");
+        }
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("retry quarantine cleanup");
+        assert_eq!(
+            state
+                .session_store
+                .run_input(&input.id)
+                .expect("load repaired input")
+                .expect("repaired input")
+                .status,
+            RunInputStatus::Blocked
+        );
+        assert!(state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load cleaned checkpoint")
+            .is_none());
+        let stored = state
+            .session_store
+            .run(&quarantined.id)
+            .expect("load quarantined run")
+            .expect("quarantined run");
+        assert_eq!(stored.status, DesktopRunStatus::Failed);
+        assert_eq!(stored.revision, quarantined.revision);
+    }
+
+    #[tokio::test]
+    async fn transferred_started_source_controls_never_cross_the_core_checkpoint_boundary() {
+        let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
+        let (conversation, source, forked) =
+            seed_transferred_recovery_fork(&state, "started-control-preflight").await;
+
+        assert_transferred_source_controls_stop_before_core(
+            &state,
+            &checkpoints,
+            &conversation,
+            &source,
+            &forked,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn transferred_unstarted_source_controls_never_cross_the_core_checkpoint_boundary() {
+        let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
+        let (conversation, source, forked) =
+            seed_transferred_unstarted_recovery_fork(&state, "unstarted-control-preflight").await;
+
+        assert_transferred_source_controls_stop_before_core(
+            &state,
+            &checkpoints,
+            &conversation,
+            &source,
+            &forked,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn transferred_source_new_recovery_key_has_zero_prepare_db_or_event_side_effects() {
+        let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
+        let (conversation, source, forked) =
+            seed_transferred_recovery_fork(&state, "different-key-preflight").await;
+        let idempotency_key = "different-key-after-authority-transfer";
+        let run_ids_before: Vec<String> = state
+            .session_store
+            .list_runs(&conversation.id)
+            .expect("list runs before rejected fork")
+            .into_iter()
+            .map(|run| run.id)
+            .collect();
+        let source_events_before = state
+            .session_store
+            .run_events(&source.id)
+            .expect("source events before rejected fork")
+            .len();
+        let fork_events_before = state
+            .session_store
+            .run_events(&forked.id)
+            .expect("fork events before rejected fork")
+            .len();
+        let timeline_before = state
+            .session_store
+            .timeline_count(&conversation.id)
+            .expect("timeline count before rejected fork");
+        let decision_count_before: i64 = state
+            .session_store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_decisions WHERE conversation_id = ?1",
+                [&conversation.id],
+                |row| row.get(0),
+            )
+            .expect("decision count before rejected fork");
+        let authority_before = state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load authority before rejected fork")
+            .expect("checkpoint authority");
+        let checkpoint_before = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint before rejected fork")
+            .expect("checkpoint");
+        let event_counter_before = state.event_counter.load(Ordering::SeqCst);
+        checkpoints.reset();
+        state.agent_run_claim_attempts.store(0, Ordering::SeqCst);
+        state.agent_engine_attempts.store(0, Ordering::SeqCst);
+        state
+            .recovery_fork_prepare_attempts
+            .store(0, Ordering::SeqCst);
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/fork", source.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{},"idempotency_key":"{idempotency_key}"}}"#,
+                        source.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response_json(response).await["detail"],
+            CHECKPOINT_CONTROL_AUTHORITY_ERROR
+        );
+        assert_eq!(
+            checkpoints.operation_counts(),
+            CheckpointOperationCounts {
+                loads: 0,
+                saves: 0,
+                deletes: 0,
+            }
+        );
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 0);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            state.recovery_fork_prepare_attempts.load(Ordering::SeqCst),
+            0
+        );
+        assert!(state
+            .agent_runs
+            .lock()
+            .expect("local agent runs")
+            .is_empty());
+        assert!(state
+            .session_store
+            .run_by_idempotency_key(idempotency_key)
+            .expect("load rejected fork key")
+            .is_none());
+        assert_eq!(
+            state
+                .session_store
+                .list_runs(&conversation.id)
+                .expect("list runs after rejected fork")
+                .into_iter()
+                .map(|run| run.id)
+                .collect::<Vec<_>>(),
+            run_ids_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .run_events(&source.id)
+                .expect("source events after rejected fork")
+                .len(),
+            source_events_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .run_events(&forked.id)
+                .expect("fork events after rejected fork")
+                .len(),
+            fork_events_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .timeline_count(&conversation.id)
+                .expect("timeline count after rejected fork"),
+            timeline_before
+        );
+        let decision_count_after: i64 = state
+            .session_store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_decisions WHERE conversation_id = ?1",
+                [&conversation.id],
+                |row| row.get(0),
+            )
+            .expect("decision count after rejected fork");
+        assert_eq!(decision_count_after, decision_count_before);
+        assert_eq!(
+            state.event_counter.load(Ordering::SeqCst),
+            event_counter_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .checkpoint_authority(&conversation.id)
+                .expect("load authority after rejected fork")
+                .expect("checkpoint authority"),
+            authority_before
+        );
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load checkpoint after rejected fork")
+                .expect("checkpoint"),
+            checkpoint_before
+        );
+    }
+
+    #[tokio::test]
+    async fn busy_conversation_recovery_fork_claim_fails_before_prepare_or_insert() {
+        let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
+        let (conversation, queued_source) =
+            seed_queued_authoritative_run(&state, "busy-recovery-claim");
+        let running_source = state
+            .prepare_authoritative_run_for_execution(
+                &queued_source.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_source.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare source")
+            .expect("running source");
+        let source = state
+            .session_store
+            .transition_run(
+                &running_source.id,
+                running_source.revision,
+                DesktopRunStatus::Disconnected,
+                None,
+                &now_iso(),
+            )
+            .expect("disconnect source");
+        let blocker = state
+            .claim_agent_run(&conversation.id, Some("blocking-run"))
+            .expect("claim blocking run");
+        let idempotency_key = "busy-conversation-recovery-key";
+        let runs_before = state
+            .session_store
+            .list_runs(&conversation.id)
+            .expect("list runs before busy fork")
+            .len();
+        let source_events_before = state
+            .session_store
+            .run_events(&source.id)
+            .expect("source events before busy fork")
+            .len();
+        let timeline_before = state
+            .session_store
+            .timeline_count(&conversation.id)
+            .expect("timeline before busy fork");
+        let decision_count_before: i64 = state
+            .session_store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_decisions WHERE conversation_id = ?1",
+                [&conversation.id],
+                |row| row.get(0),
+            )
+            .expect("decisions before busy fork");
+        let event_counter_before = state.event_counter.load(Ordering::SeqCst);
+        checkpoints.reset();
+        state.agent_run_claim_attempts.store(0, Ordering::SeqCst);
+        state.agent_engine_attempts.store(0, Ordering::SeqCst);
+        state
+            .recovery_fork_prepare_attempts
+            .store(0, Ordering::SeqCst);
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/fork", source.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{},"idempotency_key":"{idempotency_key}"}}"#,
+                        source.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response_json(response).await["detail"],
+            "conversation already running"
+        );
+        assert_eq!(
+            checkpoints.operation_counts(),
+            CheckpointOperationCounts {
+                loads: 1,
+                saves: 0,
+                deletes: 0,
+            }
+        );
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            state.recovery_fork_prepare_attempts.load(Ordering::SeqCst),
+            0
+        );
+        assert!(state
+            .session_store
+            .run_by_idempotency_key(idempotency_key)
+            .expect("load busy fork key")
+            .is_none());
+        assert_eq!(
+            state
+                .session_store
+                .list_runs(&conversation.id)
+                .expect("list runs after busy fork")
+                .len(),
+            runs_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .run_events(&source.id)
+                .expect("source events after busy fork")
+                .len(),
+            source_events_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .timeline_count(&conversation.id)
+                .expect("timeline after busy fork"),
+            timeline_before
+        );
+        let decision_count_after: i64 = state
+            .session_store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_decisions WHERE conversation_id = ?1",
+                [&conversation.id],
+                |row| row.get(0),
+            )
+            .expect("decisions after busy fork");
+        assert_eq!(decision_count_after, decision_count_before);
+        assert_eq!(
+            state.event_counter.load(Ordering::SeqCst),
+            event_counter_before
+        );
+        state.release_agent_run_if_control(&conversation.id, &blocker);
+    }
+
+    #[tokio::test]
+    async fn recovery_fork_rollback_restores_source_authority_and_preserves_core_checkpoint() {
+        let state = test_state("launch-secret");
+        let (conversation, source, forked) =
+            seed_transferred_recovery_fork(&state, "rollback-authority").await;
+        let checkpoint_before = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint before rollback")
+            .expect("checkpoint");
+        assert!(state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load fork authority")
+            .is_some_and(|authority| authority.matches_run(&forked)));
+
+        assert!(state
+            .session_store
+            .rollback_recovery_fork(&source, &forked, &now_iso())
+            .expect("roll back recovery fork"));
+
+        assert!(state
+            .session_store
+            .run(&forked.id)
+            .expect("load rolled back fork")
+            .is_none());
+        assert!(state
+            .session_store
+            .run_events(&forked.id)
+            .expect("load rolled back events")
+            .is_empty());
+        assert!(state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load restored authority")
+            .is_some_and(|authority| authority.matches_run(&source)));
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load checkpoint after rollback")
+                .expect("checkpoint"),
+            checkpoint_before
+        );
+        let stored_source = state
+            .session_store
+            .run(&source.id)
+            .expect("load source after rollback")
+            .expect("source");
+        assert_eq!(stored_source.status, source.status);
+        assert_eq!(stored_source.revision, source.revision);
+    }
+
+    #[tokio::test]
+    async fn recovery_fork_cleanup_failure_is_reported_after_database_rollback() {
+        let state = test_state("launch-secret");
+        let (conversation, source, forked) =
+            seed_transferred_recovery_fork(&state, "rollback-cleanup-error").await;
+        let checkpoint_before = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load checkpoint before failed cleanup")
+            .expect("checkpoint");
+        let environment = forked.environment.as_ref().expect("fork environment");
+
+        let (status, detail) = run_control::rollback_created_recovery_fork(
+            &state,
+            &source,
+            &forked,
+            Some(environment),
+        )
+        .expect_err("missing repository root must report cleanup failure");
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            detail.0["detail"],
+            "recovery fork rolled back but its worktree cleanup failed"
+        );
+        assert!(state
+            .session_store
+            .run(&forked.id)
+            .expect("load rolled back fork")
+            .is_none());
+        assert!(state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load restored authority")
+            .is_some_and(|authority| authority.matches_run(&source)));
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load checkpoint after failed cleanup")
+                .expect("checkpoint"),
+            checkpoint_before
+        );
+    }
+
+    #[tokio::test]
+    async fn post_transfer_resume_failure_removes_created_worktree_run_and_events() {
+        let state = test_state("launch-secret");
+        let root = state.workspace_root.lock().expect("workspace root").clone();
+        run_test_git(&root, &["init"]);
+        run_test_git(
+            &root,
+            &["config", "user.email", "desktop-tests@example.invalid"],
+        );
+        run_test_git(&root, &["config", "user.name", "Desktop Tests"]);
+        std::fs::write(root.join("README.md"), "recovery rollback fixture\n")
+            .expect("write rollback fixture");
+        run_test_git(&root, &["add", "README.md"]);
+        run_test_git(&root, &["commit", "-m", "recovery rollback fixture"]);
+
+        let (conversation, queued_source) =
+            seed_queued_authoritative_run(&state, "post-transfer-rollback");
+        let running_source = state
+            .prepare_authoritative_run_for_execution(
+                &queued_source.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_source.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare source")
+            .expect("running source");
+        let source = state
+            .session_store
+            .transition_run(
+                &running_source.id,
+                running_source.revision,
+                DesktopRunStatus::Disconnected,
+                None,
+                &now_iso(),
+            )
+            .expect("disconnect source");
+        let mut checkpoint_before = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load source checkpoint")
+            .expect("source checkpoint");
+        checkpoint_before.status = SessionStatus::AwaitingInput;
+        state
+            .checkpoints
+            .save(&checkpoint_before)
+            .await
+            .expect("save non-resumable checkpoint");
+        let idempotency_key = "post-transfer-resume-failure";
+        let run_ids_before: Vec<String> = state
+            .session_store
+            .list_runs(&conversation.id)
+            .expect("list runs before failed recovery")
+            .into_iter()
+            .map(|run| run.id)
+            .collect();
+        let source_events_before = state
+            .session_store
+            .run_events(&source.id)
+            .expect("source events before failed recovery")
+            .len();
+        let timeline_before = state
+            .session_store
+            .timeline_count(&conversation.id)
+            .expect("timeline before failed recovery");
+        let decision_count_before: i64 = state
+            .session_store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_decisions WHERE conversation_id = ?1",
+                [&conversation.id],
+                |row| row.get(0),
+            )
+            .expect("decisions before failed recovery");
+        let event_counter_before = state.event_counter.load(Ordering::SeqCst);
+        state.agent_run_claim_attempts.store(0, Ordering::SeqCst);
+        state.agent_engine_attempts.store(0, Ordering::SeqCst);
+        state
+            .recovery_fork_prepare_attempts
+            .store(0, Ordering::SeqCst);
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/fork", source.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{},"idempotency_key":"{idempotency_key}"}}"#,
+                        source.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(response_json(response).await["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("AwaitingInput")));
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            state.recovery_fork_prepare_attempts.load(Ordering::SeqCst),
+            2
+        );
+        assert!(state
+            .agent_runs
+            .lock()
+            .expect("local agent runs")
+            .is_empty());
+        assert!(state
+            .session_store
+            .run_by_idempotency_key(idempotency_key)
+            .expect("load failed recovery key")
+            .is_none());
+        assert_eq!(
+            state
+                .session_store
+                .list_runs(&conversation.id)
+                .expect("list runs after failed recovery")
+                .into_iter()
+                .map(|run| run.id)
+                .collect::<Vec<_>>(),
+            run_ids_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .run_events(&source.id)
+                .expect("source events after failed recovery")
+                .len(),
+            source_events_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .timeline_count(&conversation.id)
+                .expect("timeline after failed recovery"),
+            timeline_before
+        );
+        let decision_count_after: i64 = state
+            .session_store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_decisions WHERE conversation_id = ?1",
+                [&conversation.id],
+                |row| row.get(0),
+            )
+            .expect("decisions after failed recovery");
+        assert_eq!(decision_count_after, decision_count_before);
+        assert_eq!(
+            state.event_counter.load(Ordering::SeqCst),
+            event_counter_before
+        );
+        assert!(state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load restored authority")
+            .is_some_and(|authority| authority.matches_run(&source)));
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load checkpoint after failed recovery")
+                .expect("checkpoint"),
+            checkpoint_before
+        );
+        let worktree_list = run_test_git(&root, &["worktree", "list", "--porcelain"]);
+        assert_eq!(
+            worktree_list
+                .lines()
+                .filter(|line| line.starts_with("worktree "))
+                .count(),
+            1
+        );
+        assert!(
+            !run_test_git(&root, &["branch", "--list", "agistack/local-environment-*"])
+                .lines()
+                .any(|line| !line.trim().is_empty())
+        );
+
+        let worktrees_root = root
+            .parent()
+            .expect("repository parent")
+            .join(".agistack-worktrees")
+            .join(root.file_name().expect("repository name"));
+        std::fs::remove_dir_all(worktrees_root).unwrap_or(());
+        std::fs::remove_dir_all(root).expect("remove rollback fixture");
+    }
+
+    #[tokio::test]
+    async fn transferred_source_same_queued_recovery_key_replays_without_source_preflight() {
+        let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
+        let (conversation, queued_source) =
+            seed_queued_authoritative_run(&state, "same-queued-key-replay");
+        let running_source = state
+            .prepare_authoritative_run_for_execution(
+                &queued_source.id,
+                &conversation.id,
+                &conversation.project_id,
+                &queued_source.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare source")
+            .expect("running source");
+        let source = state
+            .session_store
+            .transition_run(
+                &running_source.id,
+                running_source.revision,
+                DesktopRunStatus::Disconnected,
+                None,
+                &now_iso(),
+            )
+            .expect("disconnect source");
+        let workspace_path = state
+            .workspace_root
+            .lock()
+            .expect("workspace root")
+            .to_string_lossy()
+            .into_owned();
+        let idempotency_key = "same-queued-recovery-key";
+        let (forked, created) = state
+            .session_store
+            .fork_recovery_run(
+                &source.id,
+                source.revision,
+                idempotency_key,
+                DesktopExecutionEnvironment {
+                    id: "same-queued-recovery-environment".to_string(),
+                    kind: DesktopExecutionEnvironmentKind::Local,
+                    label: "Same queued recovery environment".to_string(),
+                    workspace_path,
+                    repository_root: None,
+                    branch: None,
+                    base_commit: None,
+                    source_run_id: Some(source.id.clone()),
+                    created_at: now_iso(),
+                },
+                &now_iso(),
+            )
+            .expect("create queued recovery fork");
+        assert!(created);
+        state
+            .session_store
+            .transfer_checkpoint_authority(&source, &forked, &now_iso())
+            .expect("transfer checkpoint authority");
+        checkpoints.reset();
+        state.agent_run_claim_attempts.store(0, Ordering::SeqCst);
+        state.agent_engine_attempts.store(0, Ordering::SeqCst);
+        state
+            .recovery_fork_prepare_attempts
+            .store(0, Ordering::SeqCst);
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/fork", source.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{},"idempotency_key":"{idempotency_key}"}}"#,
+                        source.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = response_json(response).await;
+        assert_eq!(payload["created"], false);
+        assert_eq!(payload["run"]["id"], forked.id);
+        assert_eq!(payload["run"]["status"], "running");
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            state.recovery_fork_prepare_attempts.load(Ordering::SeqCst),
+            0
+        );
+        assert!(state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load replay checkpoint authority")
+            .is_some_and(|authority| authority.matches_run(&forked)));
+    }
+
+    #[tokio::test]
+    async fn old_source_cancel_never_terminalizes_fork_checkpoint_after_authority_transfer() {
+        let state = test_state("launch-secret");
+        let (conversation, source, forked) =
+            seed_transferred_recovery_fork(&state, "old-source-cancel").await;
+        let checkpoint_before = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load fork checkpoint")
+            .expect("fork checkpoint");
+        let authority_before = state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load fork checkpoint authority")
+            .expect("fork checkpoint authority");
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/cancel", source.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        source.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response_json(response).await["detail"],
+            CHECKPOINT_CONTROL_AUTHORITY_ERROR
+        );
+        let stored_source = state
+            .session_store
+            .run(&source.id)
+            .expect("load source")
+            .expect("source");
+        assert_eq!(stored_source.status, DesktopRunStatus::Disconnected);
+        assert_eq!(stored_source.revision, source.revision);
+        let stored_fork = state
+            .session_store
+            .run(&forked.id)
+            .expect("load fork")
+            .expect("fork");
+        assert_eq!(stored_fork.status, DesktopRunStatus::Queued);
+        assert_eq!(stored_fork.revision, forked.revision);
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("reload fork checkpoint")
+                .expect("fork checkpoint"),
+            checkpoint_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .checkpoint_authority(&conversation.id)
+                .expect("reload fork checkpoint authority")
+                .expect("fork checkpoint authority"),
+            authority_before
+        );
+        let control = state
+            .claim_agent_run(&conversation.id, Some(&forked.id))
+            .expect("failed cancel released the conversation claim");
+        state.release_agent_run_if_control(&conversation.id, &control);
+    }
+
+    #[tokio::test]
+    async fn old_source_resume_never_reopens_fork_checkpoint_after_authority_transfer() {
+        let state = test_state("launch-secret");
+        let (conversation, source, forked) =
+            seed_transferred_recovery_fork(&state, "old-source-resume").await;
+        let checkpoint_before = state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load fork checkpoint")
+            .expect("fork checkpoint");
+        let authority_before = state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load fork checkpoint authority")
+            .expect("fork checkpoint authority");
+        let source_events_before = state
+            .session_store
+            .run_events(&source.id)
+            .expect("load source events")
+            .len();
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/agent/runs/{}/resume", source.id))
+                    .header("authorization", "Bearer launch-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"expected_revision":{}}}"#,
+                        source.revision
+                    )))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response_json(response).await["detail"],
+            CHECKPOINT_CONTROL_AUTHORITY_ERROR
+        );
+        let stored_source = state
+            .session_store
+            .run(&source.id)
+            .expect("load source")
+            .expect("source");
+        assert_eq!(stored_source.status, DesktopRunStatus::Disconnected);
+        assert_eq!(stored_source.revision, source.revision);
+        assert_eq!(
+            state
+                .session_store
+                .run_events(&source.id)
+                .expect("reload source events")
+                .len(),
+            source_events_before
+        );
+        let stored_fork = state
+            .session_store
+            .run(&forked.id)
+            .expect("load fork")
+            .expect("fork");
+        assert_eq!(stored_fork.status, DesktopRunStatus::Queued);
+        assert_eq!(stored_fork.revision, forked.revision);
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("reload fork checkpoint")
+                .expect("fork checkpoint"),
+            checkpoint_before
+        );
+        assert_eq!(
+            state
+                .session_store
+                .checkpoint_authority(&conversation.id)
+                .expect("reload fork checkpoint authority")
+                .expect("fork checkpoint authority"),
+            authority_before
+        );
+        let control = state
+            .claim_agent_run(&conversation.id, Some(&forked.id))
+            .expect("failed resume released the conversation claim");
+        state.release_agent_run_if_control(&conversation.id, &control);
+    }
+
+    #[tokio::test]
+    async fn fresh_queued_run_never_reuses_a_running_checkpoint() {
+        let state = test_state("launch-secret");
+        let (conversation, first_queued) =
+            seed_queued_authoritative_run(&state, "stale-running-checkpoint");
+        let first_running = state
+            .prepare_authoritative_run_for_execution(
+                &first_queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &first_queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare first run")
+            .expect("first run");
+        let disconnected = state
+            .session_store
+            .transition_run(
+                &first_running.id,
+                first_running.revision,
+                DesktopRunStatus::Disconnected,
+                Some("checkpoint requires inspection".to_string()),
+                &now_iso(),
+            )
+            .expect("disconnect first run");
+        state
+            .session_store
+            .replace_agent_plan_tasks(
+                &conversation.id,
+                &[json!({
+                    "id": "stale-running-checkpoint-second-task",
+                    "conversation_id": conversation.id,
+                    "content": "Repeat the same request under new authority",
+                    "status": "pending",
+                    "priority": "high",
+                    "order_index": 0,
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                })],
+            )
+            .expect("create second plan");
+        let second = state
+            .session_store
+            .approve_plan_and_start(
+                &conversation.id,
+                &conversation.project_id,
+                "stale-running-checkpoint-second-key",
+                "stale-running-checkpoint-second-message",
+                &first_running.request_message,
+                &now_iso(),
+            )
+            .expect("approve second plan")
+            .run;
+
+        let error = state
+            .prepare_authoritative_run_for_execution(
+                &second.id,
+                &conversation.id,
+                &conversation.project_id,
+                &second.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect_err("a fresh run must not inherit a prior running checkpoint");
+        assert!(error.contains("conflicts with Running session state"));
+        let unchanged = state
+            .session_store
+            .run(&second.id)
+            .expect("load second run")
+            .expect("second run");
+        assert_eq!(unchanged.status, DesktopRunStatus::Queued);
+        assert_eq!(unchanged.revision, second.revision);
+        assert_eq!(
+            state
+                .checkpoints
+                .load(&conversation.id)
+                .await
+                .expect("load prior checkpoint")
+                .expect("prior checkpoint")
+                .status,
+            SessionStatus::Running
+        );
+        assert_eq!(disconnected.status, DesktopRunStatus::Disconnected);
+        let authority = state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load checkpoint authority")
+            .expect("checkpoint authority");
+        assert_eq!(authority.run_id, disconnected.id);
+    }
+
+    #[tokio::test]
+    async fn recovered_fresh_run_never_reuses_prior_running_checkpoint() {
+        let state = test_state("launch-secret");
+        let (conversation, first_queued) =
+            seed_queued_authoritative_run(&state, "recovered-fresh-checkpoint");
+        let first_running = state
+            .prepare_authoritative_run_for_execution(
+                &first_queued.id,
+                &conversation.id,
+                &conversation.project_id,
+                &first_queued.request_message,
+                &now_iso(),
+            )
+            .await
+            .expect("prepare first run")
+            .expect("first run");
+        let disconnected = state
+            .session_store
+            .transition_run(
+                &first_running.id,
+                first_running.revision,
+                DesktopRunStatus::Disconnected,
+                Some("checkpoint requires inspection".to_string()),
+                &now_iso(),
+            )
+            .expect("disconnect first run");
+        state
+            .session_store
+            .replace_agent_plan_tasks(
+                &conversation.id,
+                &[json!({
+                    "id": "recovered-fresh-checkpoint-second-task",
+                    "conversation_id": conversation.id,
+                    "content": "Repeat the same request under new authority",
+                    "status": "pending",
+                    "priority": "high",
+                    "order_index": 0,
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                })],
+            )
+            .expect("create second plan");
+        let second = state
+            .session_store
+            .approve_plan_and_start(
+                &conversation.id,
+                &conversation.project_id,
+                "recovered-fresh-checkpoint-second-key",
+                "recovered-fresh-checkpoint-second-message",
+                &first_running.request_message,
+                &now_iso(),
+            )
+            .expect("approve second plan")
+            .run;
+        {
+            let connection = state.session_store.connection().expect("connection");
+            authority_store::recover_interrupted_runs(&connection, &now_iso())
+                .expect("recover second queued run");
+        }
+        let interrupted = state
+            .session_store
+            .run(&second.id)
+            .expect("load recovered second run")
+            .expect("recovered second run");
+        assert_eq!(interrupted.status, DesktopRunStatus::Interrupted);
+
+        state
+            .reconcile_recovered_runs_from_checkpoints()
+            .await
+            .expect("quarantine stale checkpoint attribution");
+
+        let failed = state
+            .session_store
+            .run(&second.id)
+            .expect("load quarantined second run")
+            .expect("quarantined second run");
+        assert_eq!(failed.status, DesktopRunStatus::Failed);
+        assert_eq!(
+            failed.error.as_deref(),
+            Some(RECOVERED_CHECKPOINT_AUTHORITY_ERROR)
+        );
+        assert!(!state
+            .session_store
+            .run_events(&second.id)
+            .expect("second run events")
+            .iter()
+            .any(|event| event["type"] == "running"));
+        assert_eq!(
+            state
+                .session_store
+                .run(&disconnected.id)
+                .expect("load first run")
+                .expect("first run")
+                .status,
+            DesktopRunStatus::Disconnected
+        );
+        assert!(state
+            .checkpoints
+            .load(&conversation.id)
+            .await
+            .expect("load quarantined checkpoint")
+            .is_none());
+        assert!(state
+            .session_store
+            .checkpoint_authority(&conversation.id)
+            .expect("load quarantined authority")
+            .is_none());
     }
 }

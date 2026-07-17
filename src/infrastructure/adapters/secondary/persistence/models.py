@@ -1117,6 +1117,47 @@ class Conversation(Base):
     )
 
 
+class AgentClientTurnModel(Base):
+    """Durable idempotency ledger for client-submitted agent turns."""
+
+    __tablename__ = "agent_client_turns"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    client_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    execution_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="accepted",
+        server_default="accepted",
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "client_message_id",
+            name="uq_agent_client_turns_conversation_message",
+        ),
+        Index(
+            "ix_agent_client_turns_conversation_status",
+            "conversation_id",
+            "status",
+        ),
+    )
+
+
 class Message(Base):
     """A single message in a conversation."""
 

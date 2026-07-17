@@ -81,6 +81,10 @@ import { markA2UIActionAnswered } from './features/chat/a2uiAction';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
+import {
+  SessionPlanReview,
+  SessionTaskListReview,
+} from './features/session/SessionPlanReview';
 import { SessionTerminalCanvas } from './features/session/SessionTerminalCanvas';
 import { SessionWorkspace } from './features/session/SessionWorkspace';
 import {
@@ -117,10 +121,19 @@ import {
   socketEventInvalidatesSessionProjectionForScope,
 } from './features/session/sessionProjectionModel';
 import {
+  canApproveSessionPlan,
+  normalizeSessionTaskListPlan,
+  sessionPlanApprovalIdentity,
+  sessionPlanApprovalRequest,
+  type SessionPlanApprovalSelection,
+} from './features/session/sessionPlanApprovalModel';
+import {
   emptySessionProjectionState,
   type ConversationSessionProjection,
   type SessionProjectionCapabilities,
   type SessionProjectionLoadState,
+  type SessionProjectionPlan,
+  type SessionProjectionTask,
 } from './features/session/sessionProjectionTypes';
 import {
   terminalBindingState,
@@ -143,6 +156,7 @@ import {
 } from './features/session/workspaceReviewPanelModel';
 import { socketEventMatchesSessionScope } from './features/session/sessionScope';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
+import { runtimeTransportIdentityChanged } from './features/runtime/runtimeConfigModel';
 import {
   myWorkConversationMatchesScope,
   myWorkRefreshScopeIsCurrent,
@@ -159,11 +173,19 @@ import { StatusPanel } from './features/status/StatusPanel';
 import {
   NewTaskFlow,
   type NewTaskAgentTurnInput,
+  type NewTaskResumeDraft,
   type NewTaskSession,
 } from './features/task/NewTaskFlow';
 import {
+  browserLegacyPlanApprovalStorage,
+  canResumeLegacyPlanApproval,
+  clearLegacyPlanApprovalRecovery,
+  legacyPlanApprovalRuntimeScope,
   newTaskAgentTurnResolution,
   newTaskAgentTurnTransport,
+  planTaskSignature,
+  readLegacyPlanApprovalRecovery,
+  type NewTaskAgentTurnOutcome,
 } from './features/task/newTaskPlanModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
@@ -1588,6 +1610,8 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskPreferredWorkspaceId, setNewTaskPreferredWorkspaceId] = useState('');
+  const [newTaskResumeDraft, setNewTaskResumeDraft] =
+    useState<NewTaskResumeDraft | null>(null);
   const [preferredTaskMode, setPreferredTaskMode] = useState<'work' | 'code'>('work');
   const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('account');
@@ -1628,6 +1652,7 @@ export function App() {
   const [promotingRunInputId, setPromotingRunInputId] = useState<string | null>(null);
   const [sessionRunActionPending, setSessionRunActionPending] =
     useState<SessionRunAction | null>(null);
+  const [sessionPlanApprovalPending, setSessionPlanApprovalPending] = useState(false);
   const [artifactActionPending, setArtifactActionPending] = useState<{
     versionId: string;
     action: ArtifactVersionAction;
@@ -1668,7 +1693,7 @@ export function App() {
         conversationId: string;
         messageId: string;
         timeoutId: number;
-        resolve: () => void;
+        resolve: (outcome: NewTaskAgentTurnOutcome) => void;
         reject: (error: Error) => void;
       }
     >(),
@@ -1697,6 +1722,10 @@ export function App() {
     signature: string;
     messageId: string;
     idempotencyKey: string;
+  } | null>(null);
+  const sessionPlanApprovalAttemptRef = useRef<{
+    identity: string;
+    requestId: string;
   } | null>(null);
   const terminalStartGenerationRef = useRef(0);
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
@@ -1892,6 +1921,42 @@ export function App() {
     sessionDisplayProjection?.conversation.id === scopedConversationId
       ? sessionDisplayProjection
       : null;
+  const sessionTaskListPlanRecovery = useMemo(() => {
+    if (sessionProjection?.planAuthority.kind !== 'agent_task_list') return null;
+    const tasks = normalizeSessionTaskListPlan(
+      sessionProjection.tasks,
+      sessionProjection.conversation.id,
+    );
+    if (!tasks) return null;
+    const signature = planTaskSignature(tasks);
+    const recovery = readLegacyPlanApprovalRecovery(
+      browserLegacyPlanApprovalStorage(),
+      sessionProjection.conversation.id,
+      signature,
+      legacyPlanApprovalRuntimeScope(config),
+    );
+    return {
+      tasks,
+      canResume: canResumeLegacyPlanApproval(
+        sessionProjection.conversation.current_mode ?? '',
+        sessionProjection.executionAuthority.currentAttempt !== null,
+        signature,
+        recovery,
+      ),
+    };
+  }, [config, sessionProjection]);
+  useEffect(() => {
+    if (
+      sessionProjection?.planAuthority.kind !== 'agent_task_list' ||
+      sessionProjection.executionAuthority.currentAttempt === null
+    ) {
+      return;
+    }
+    clearLegacyPlanApprovalRecovery(
+      browserLegacyPlanApprovalStorage(),
+      sessionProjection.conversation.id,
+    );
+  }, [sessionProjection]);
   const respondableHitlRequestIds = useMemo(
     () =>
       sessionProjection?.capabilities.canRespondToHitl &&
@@ -2326,7 +2391,7 @@ export function App() {
           if (!resolution) continue;
           window.clearTimeout(pending.timeoutId);
           pendingNewTaskAgentTurnsRef.current.delete(key);
-          if (resolution === 'acknowledged') pending.resolve();
+          if (resolution === 'acknowledged') pending.resolve('acknowledged');
           else pending.reject(new Error(update.detail));
         }
       }
@@ -2370,10 +2435,10 @@ export function App() {
     if (socket.connected) return;
     for (const [key, pending] of pendingNewTaskAgentTurnsRef.current) {
       window.clearTimeout(pending.timeoutId);
-      pending.reject(new Error(t('task.liveConnectionRequired')));
+      pending.resolve('unknown_outcome');
       pendingNewTaskAgentTurnsRef.current.delete(key);
     }
-  }, [socket.connected, t]);
+  }, [socket.connected]);
 
   useEffect(() => {
     const events = socketEventsSince(socket.events, sessionEventsHeadRef.current);
@@ -3386,15 +3451,35 @@ export function App() {
   };
 
   const handleConfigChange = (nextConfig: DesktopRuntimeConfig) => {
+    const previousConfig = configRef.current;
+    const transportIdentityChanged = runtimeTransportIdentityChanged(
+      previousConfig,
+      nextConfig,
+    );
+    const transportSafeConfig = transportIdentityChanged
+      ? { ...nextConfig, apiKey: '', localApiToken: '' }
+      : nextConfig;
     const resolvedConfig =
-      nextConfig.mode === 'local'
+      transportSafeConfig.mode === 'local'
         ? {
-            ...nextConfig,
-            tenantId: nextConfig.tenantId.trim() || 'local',
-            projectId: nextConfig.projectId.trim() || 'local-project',
+            ...transportSafeConfig,
+            tenantId: transportSafeConfig.tenantId.trim() || 'local',
+            projectId: transportSafeConfig.projectId.trim() || 'local-project',
           }
-        : nextConfig;
-    const requestScopeChanged = !isSameDesktopRequestScope(configRef.current, resolvedConfig);
+        : transportSafeConfig;
+    const requestScopeChanged = !isSameDesktopRequestScope(previousConfig, resolvedConfig);
+    if (transportIdentityChanged) {
+      const authAttemptRevision = ++authAttemptRevisionRef.current;
+      localResumeAttemptRef.current = '';
+      setAuth(emptyAuthState);
+      if (hasNativeTrustedSessionBroker()) {
+        void clearNativeTrustedSession().catch(() => {
+          if (authAttemptRevisionRef.current === authAttemptRevision) {
+            setError(t('login.persistenceUnavailable'));
+          }
+        });
+      }
+    }
     commitRuntimeConfig(resolvedConfig);
     if (requestScopeChanged) {
       resetProjectScopedState();
@@ -3618,7 +3703,10 @@ export function App() {
     }
   };
 
-  const openNewTask = (workspaceId = config.workspaceId) => {
+  const openNewTask = (
+    workspaceId = config.workspaceId,
+    resumeDraft: NewTaskResumeDraft | null = null,
+  ) => {
     setError(null);
     setLoginModalOpen(false);
     setCommandPaletteOpen(false);
@@ -3632,18 +3720,61 @@ export function App() {
     setSectionBackStack([]);
     setSectionForwardStack([]);
     setNewTaskPreferredWorkspaceId(workspaceId);
+    setNewTaskResumeDraft(resumeDraft);
     setNewTaskOpen(true);
   };
 
   const startNewSession = () => openNewTask();
 
-  const adoptNewTaskSession = (session: NewTaskSession) => {
+  const resumeSessionTaskListReview = () => {
+    const projection = sessionProjection;
+    if (
+      projection?.planAuthority.kind !== 'agent_task_list' ||
+      !sessionTaskListPlanRecovery?.canResume
+    ) {
+      setError(t('session.authorityActionUnavailable'));
+      return;
+    }
+    const conversation = projection.conversation;
+    const workspaceId = conversation.workspace_id?.trim() || config.workspaceId.trim();
+    const workspace = (
+      dataset.workspacesByProject[conversation.project_id] ?? dataset.workspaces
+    ).find((item) => item.id === workspaceId);
+    const tasks = sessionTaskListPlanRecovery.tasks;
+    if (!workspace || !workspaceId || !tasks) {
+      setError(t('session.authorityActionUnavailable'));
+      return;
+    }
+    const capabilityMode = conversation.agent_config?.capability_mode;
+    const kind =
+      capabilityMode === 'code' || conversation.conversation_mode === 'code'
+        ? 'programming'
+        : 'general';
+    const sessionConfig = {
+      ...config,
+      tenantId: conversation.tenant_id || config.tenantId,
+      projectId: conversation.project_id,
+      workspaceId,
+    };
+    const resumeDraft: NewTaskResumeDraft = {
+      session: { workspace, conversation, config: sessionConfig },
+      definition: {
+        title: conversation.title,
+        objective:
+          conversation.summary?.trim() ||
+          workspace.description?.trim() ||
+          conversation.title,
+        kind,
+        workspaceRoot: config.workspaceRoot,
+        contextSources: ['project_memory', 'project_files'],
+      },
+      tasks,
+    };
+    openNewTask(workspaceId, resumeDraft);
+  };
+
+  const persistNewTaskSession = (session: NewTaskSession) => {
     const { workspace, conversation, config: sessionConfig } = session;
-    commitRuntimeConfig(sessionConfig);
-    setAgentConversationSession({
-      scopeKey: agentConversationScopeKeyFor(sessionConfig.projectId, workspace.id),
-      conversation,
-    });
     setDataset((current) => ({
       ...current,
       workspaces: [workspace, ...current.workspaces.filter((item) => item.id !== workspace.id)],
@@ -3666,13 +3797,43 @@ export function App() {
         ],
       },
     }));
+  };
+
+  const activateNewTaskSession = (session: NewTaskSession) => {
+    const { workspace, conversation, config: sessionConfig } = session;
+    persistNewTaskSession(session);
+    commitRuntimeConfig(sessionConfig);
+    setAgentConversationSession({
+      scopeKey: agentConversationScopeKeyFor(sessionConfig.projectId, workspace.id),
+      conversation,
+    });
     setExpandedWorkspaceIds((current) => new Set([...current, workspace.id]));
     applySectionSideEffects('chat');
     void loadConversationTimeline(conversation, sessionConfig.projectId);
-    void refreshRuntime(sessionConfig);
   };
 
-  const runNewTaskAgentTurn = async (input: NewTaskAgentTurnInput) => {
+  const runNewTaskAgentTurn = async (
+    input: NewTaskAgentTurnInput,
+  ): Promise<NewTaskAgentTurnOutcome> => {
+    const acknowledgment = new Promise<NewTaskAgentTurnOutcome>((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        pendingNewTaskAgentTurnsRef.current.delete(input.messageId);
+        resolve('unknown_outcome');
+      }, 10_000);
+      pendingNewTaskAgentTurnsRef.current.set(input.messageId, {
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        timeoutId,
+        resolve,
+        reject,
+      });
+    });
+    const clearPendingAgentTurn = () => {
+      const pending = pendingNewTaskAgentTurnsRef.current.get(input.messageId);
+      if (!pending) return;
+      window.clearTimeout(pending.timeoutId);
+      pendingNewTaskAgentTurnsRef.current.delete(input.messageId);
+    };
     const queued = socket.sendAgentMessage({
       conversationId: input.conversationId,
       projectId: input.projectId,
@@ -3681,21 +3842,9 @@ export function App() {
     });
     const transport = newTaskAgentTurnTransport(input.config.mode, queued);
     if (transport === 'socket') {
-      await new Promise<void>((resolve, reject) => {
-        const timeoutId = window.setTimeout(() => {
-          pendingNewTaskAgentTurnsRef.current.delete(input.messageId);
-          reject(new Error(t('task.agentTurnAckTimeout')));
-        }, 10_000);
-        pendingNewTaskAgentTurnsRef.current.set(input.messageId, {
-          conversationId: input.conversationId,
-          messageId: input.messageId,
-          timeoutId,
-          resolve,
-          reject,
-        });
-      });
-      return;
+      return acknowledgment;
     }
+    clearPendingAgentTurn();
     if (transport === 'local_http') {
       const client = new DesktopApiClient(input.config);
       await client.runAgentMessage(
@@ -3704,7 +3853,7 @@ export function App() {
         input.messageId,
         input.projectId,
       );
-      return;
+      return 'acknowledged';
     }
     throw new Error(t('task.liveConnectionRequired'));
   };
@@ -4308,6 +4457,88 @@ export function App() {
       return changed ? { ...current, conversationsByWorkspace } : current;
     });
   }, []);
+  const approveSessionPlan = useCallback(
+    async (plan: SessionProjectionPlan, selection: SessionPlanApprovalSelection) => {
+      const authoritativeProjection = sessionProjection;
+      const authoritativePlan = authoritativeProjection?.currentPlan ?? null;
+      const capabilities = authoritativeProjection?.capabilities ?? null;
+      const conversation = authoritativeProjection?.conversation ?? null;
+      if (
+        authoritativeProjection?.planAuthority.kind !== 'desktop_plan_version' ||
+        !authoritativePlan ||
+        authoritativePlan.id !== plan.id ||
+        authoritativePlan.version !== plan.version ||
+        authoritativePlan.status !== plan.status ||
+        !conversation ||
+        !canApproveSessionPlan(authoritativePlan, capabilities)
+      ) {
+        setError(t('session.authorityActionUnavailable'));
+        return;
+      }
+
+      const identity = sessionPlanApprovalIdentity({
+        conversationId: conversation.id,
+        plan: authoritativePlan,
+        ...selection,
+      });
+      if (sessionPlanApprovalAttemptRef.current?.identity !== identity) {
+        sessionPlanApprovalAttemptRef.current = {
+          identity,
+          requestId: globalThis.crypto.randomUUID(),
+        };
+      }
+      const requestId = sessionPlanApprovalAttemptRef.current.requestId;
+      setSessionPlanApprovalPending(true);
+      setError(null);
+      try {
+        const outcome = await api.approvePlanAndStart(
+          sessionPlanApprovalRequest({
+            conversationId: conversation.id,
+            projectId: conversation.project_id,
+            plan: authoritativePlan,
+            requestId,
+            ...selection,
+          }),
+        );
+        const nextConversation = conversationWithAuthoritativeRun(
+          outcome.conversation,
+          outcome.run,
+        );
+        const workspaceId = nextConversation.workspace_id ?? config.workspaceId.trim();
+        if (workspaceId) {
+          selectConversation(
+            nextConversation.project_id,
+            workspaceId,
+            nextConversation,
+            'chat',
+          );
+        } else {
+          setAgentConversationSession((current) =>
+            current?.conversation.id === nextConversation.id
+              ? { ...current, conversation: nextConversation }
+              : current,
+          );
+          applySectionSideEffects('chat');
+          void loadConversationTimeline(nextConversation, nextConversation.project_id);
+        }
+        applyAuthoritativeRun(outcome.run);
+        invalidateSessionAuthority();
+      } catch (caught) {
+        setError(formatConnectionError(caught, config.apiBaseUrl));
+      } finally {
+        setSessionPlanApprovalPending(false);
+      }
+    },
+    [
+      api,
+      applyAuthoritativeRun,
+      config.apiBaseUrl,
+      config.workspaceId,
+      invalidateSessionAuthority,
+      sessionProjection,
+      t,
+    ],
+  );
   const handleSessionRunAction = useCallback(
     async (action: SessionRunAction, feedback?: string) => {
       const runId = sessionDetailViewModel?.runId;
@@ -4919,8 +5150,8 @@ export function App() {
   const commandItems: CommandPaletteItem[] = [
     {
       id: 'home',
-      label: 'Home',
-      description: 'Open the workspace overview.',
+      label: t('nav.home'),
+      description: t('commandPalette.homeDescription'),
       icon: <DashboardIcon />,
       onSelect: openWorkspaceOverview,
     },
@@ -4940,20 +5171,25 @@ export function App() {
     },
     {
       id: 'settings',
-      label: identityAuthenticated ? 'Settings' : 'Use API key manually',
+      label: identityAuthenticated
+        ? t('settings.title')
+        : t('commandPalette.useApiKey'),
       description: identityAuthenticated
-        ? 'Edit connection, account, project, and workspace settings.'
-        : 'Switch to the manual API key fallback without saving secrets.',
+        ? t('commandPalette.settingsDescription')
+        : t('commandPalette.apiKeyDescription'),
       icon: <GearIcon />,
       onSelect: identityAuthenticated ? openSidebarSettings : openConnectionSettings,
     },
     {
       id: 'sign-in',
-      label: auth.status === 'signed_in' ? 'Account' : 'Sign in to agi-stack',
+      label:
+        auth.status === 'signed_in'
+          ? t('settings.account')
+          : t('login.signInTitle'),
       description:
         auth.status === 'signed_in'
-          ? auth.user?.email ?? 'Review the signed-in account.'
-          : 'Open the email/password login dialog.',
+          ? auth.user?.email ?? t('commandPalette.accountDescription')
+          : t('commandPalette.signInDescription'),
       icon: <RocketIcon />,
       onSelect: () => {
         if (auth.status === 'signed_in') {
@@ -4968,8 +5204,8 @@ export function App() {
     },
     {
       id: 'refresh-runtime',
-      label: 'Refresh workspace',
-      description: runtimeDisabledReason ?? 'Reload chats, work items, plan, and sandbox.',
+      label: t('commandPalette.refreshWorkspace'),
+      description: runtimeDisabledReason ?? t('commandPalette.refreshDescription'),
       icon: <RocketIcon />,
       disabled: Boolean(runtimeDisabledReason) || connection === 'loading',
       onSelect: () => void refreshRuntime(),
@@ -5191,7 +5427,6 @@ export function App() {
   const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
     <WorkspaceReviewPanel
       activeTab={reviewTab}
-      dataset={sessionDataset}
       socketEvents={workspaceEventInputs}
       timelineItems={conversationTimeline.items}
       artifacts={workspaceArtifacts}
@@ -5211,7 +5446,18 @@ export function App() {
       terminalBusy={sandboxBusy}
       capabilityMode={sessionDetailViewModel?.capabilityMode ?? 'unavailable'}
       approvalRequests={displaySessionProjection?.pendingHitl ?? []}
+      currentPlan={displaySessionProjection?.currentPlan ?? null}
+      taskListPlanTasks={
+        displaySessionProjection?.planAuthority.kind === 'agent_task_list'
+          ? displaySessionProjection.tasks
+          : []
+      }
+      canResumeTaskListReview={
+        displaySessionProjection?.planAuthority.kind === 'agent_task_list' &&
+        sessionTaskListPlanRecovery?.canResume === true
+      }
       sessionCapabilities={sessionProjection?.capabilities ?? null}
+      sessionPlanApprovalPending={sessionPlanApprovalPending}
       respondableHitlRequestIds={respondableHitlRequestIds}
       sessionDataAvailable={displaySessionProjection !== null}
       authorityNotice={sessionAuthorityNotice}
@@ -5221,6 +5467,8 @@ export function App() {
       currentRunId={sessionDetailViewModel?.runId ?? null}
       sessionViewModel={sessionDetailViewModel}
       onRespondToHitl={respondToHitl}
+      onApprovePlan={approveSessionPlan}
+      onResumeTaskListReview={resumeSessionTaskListReview}
       onArtifactAction={handleArtifactAction}
       onStartTerminal={() => void startTerminal()}
       onRefreshChanges={() => void loadRunChanges()}
@@ -5393,12 +5641,22 @@ export function App() {
           open={newTaskOpen}
           config={config}
           workspaces={dataset.workspacesByProject[config.projectId] ?? []}
+          resumeDraft={newTaskResumeDraft}
           preferredWorkspaceId={newTaskPreferredWorkspaceId}
           preferredKind={preferredTaskMode === 'code' ? 'programming' : 'general'}
           disabledReason={newTaskDisabledReason}
-          onClose={() => setNewTaskOpen(false)}
-          onSessionReady={adoptNewTaskSession}
+          onClose={() => {
+            setNewTaskOpen(false);
+            setNewTaskResumeDraft(null);
+          }}
+          onSessionPersisted={persistNewTaskSession}
+          onSessionReady={activateNewTaskSession}
           onRunAgentTurn={runNewTaskAgentTurn}
+          onOpenRuntimeSettings={() => {
+            setNewTaskOpen(false);
+            setNewTaskResumeDraft(null);
+            openConnectionSettings();
+          }}
           onError={setError}
         />
         <SettingsWindow
@@ -5491,7 +5749,6 @@ function resolveSidebarProjects(
 
 function WorkspaceReviewPanel({
   activeTab,
-  dataset,
   socketEvents,
   timelineItems,
   artifacts,
@@ -5511,7 +5768,11 @@ function WorkspaceReviewPanel({
   terminalBusy,
   capabilityMode,
   approvalRequests,
+  currentPlan,
+  taskListPlanTasks,
+  canResumeTaskListReview,
   sessionCapabilities,
+  sessionPlanApprovalPending,
   respondableHitlRequestIds,
   sessionDataAvailable,
   authorityNotice,
@@ -5519,6 +5780,8 @@ function WorkspaceReviewPanel({
   currentRunId,
   sessionViewModel,
   onRespondToHitl,
+  onApprovePlan,
+  onResumeTaskListReview,
   onArtifactAction,
   onStartTerminal,
   onRefreshChanges,
@@ -5527,7 +5790,6 @@ function WorkspaceReviewPanel({
   sessionControls,
 }: {
   activeTab: ReviewTab;
-  dataset: RuntimeDataset;
   socketEvents: unknown[];
   timelineItems: AgentTimelineItem[];
   artifacts: WorkspaceArtifact[];
@@ -5547,7 +5809,11 @@ function WorkspaceReviewPanel({
   terminalBusy: boolean;
   capabilityMode: SessionCapabilityMode;
   approvalRequests: DesktopApprovalRequest[];
+  currentPlan: SessionProjectionPlan | null;
+  taskListPlanTasks: SessionProjectionTask[];
+  canResumeTaskListReview: boolean;
   sessionCapabilities: SessionProjectionCapabilities | null;
+  sessionPlanApprovalPending: boolean;
   respondableHitlRequestIds: readonly string[];
   sessionDataAvailable: boolean;
   authorityNotice: {
@@ -5560,6 +5826,11 @@ function WorkspaceReviewPanel({
   currentRunId: string | null;
   sessionViewModel: SessionDetailViewModel | null;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
+  onApprovePlan: (
+    plan: SessionProjectionPlan,
+    selection: SessionPlanApprovalSelection,
+  ) => Promise<void>;
+  onResumeTaskListReview: () => void;
   onArtifactAction: (
     version: DesktopArtifactVersion,
     action: ArtifactVersionAction,
@@ -5574,7 +5845,6 @@ function WorkspaceReviewPanel({
   const { t } = useI18n();
   const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<string | null>(null);
   const sessionTabListRef = useRef<HTMLElement>(null);
-  const planRows = dataset.plan ? buildPlanDisplayRows(dataset.plan) : [];
   const workspaceEvents = useMemo(() => buildWorkspaceEvents(socketEvents), [socketEvents]);
   const invocationLedger = useMemo(
     () =>
@@ -5642,9 +5912,32 @@ function WorkspaceReviewPanel({
     value: tabValue(tab.id),
   }));
   const panelClassName = 'review-panel review-panel-session';
+  const tabId = (tab: ReviewTab) => `session-canvas-tab-${tab}`;
+  const panelId = 'session-canvas-panel';
 
   const selectTab = (tab: ReviewTab) => {
     onTabChange(tab);
+  };
+  const handleTabKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    tab: ReviewTab,
+  ) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const currentIndex = reviewTabs.findIndex((candidate) => candidate.tab === tab);
+    if (currentIndex < 0 || reviewTabs.length < 2) return;
+    event.preventDefault();
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? reviewTabs.length - 1
+          : (currentIndex + (event.key === 'ArrowLeft' ? -1 : 1) + reviewTabs.length) %
+            reviewTabs.length;
+    const nextTab = reviewTabs[nextIndex];
+    selectTab(nextTab.tab);
+    sessionTabListRef.current
+      ?.querySelector<HTMLButtonElement>(`#${tabId(nextTab.tab)}`)
+      ?.focus();
   };
   useEffect(() => {
     const availableTabs = new Set(
@@ -5663,25 +5956,32 @@ function WorkspaceReviewPanel({
     }
   }, [activeTab, configuredCanvasTabs, onTabChange]);
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      sessionTabListRef.current
-        ?.querySelector<HTMLButtonElement>('.review-tab.selected')
-        ?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
   return (
     <aside className={panelClassName} aria-label={t('session.canvas')}>
       <div className="review-tabs" aria-label={t('session.canvas')}>
-        <nav className="review-tab-scroll" ref={sessionTabListRef}>
+        <nav
+          className="review-tab-scroll"
+          ref={sessionTabListRef}
+          role="tablist"
+          aria-label={t('session.canvas')}
+          aria-orientation="horizontal"
+        >
           {reviewTabs.map(({ tab, label, value }) => (
             <button
+              id={tabId(tab)}
               className={`review-tab ${activeTab === tab ? 'selected' : ''}`}
               type="button"
-              aria-label={`Open ${label} tab${value ? `, ${value}` : ''}`}
+              role="tab"
+              aria-selected={activeTab === tab}
+              aria-controls={panelId}
+              tabIndex={activeTab === tab ? 0 : -1}
+              aria-label={
+                value
+                  ? t('session.openCanvasTabWithValue', { label, value })
+                  : t('session.openCanvasTab', { label })
+              }
               key={tab}
+              onKeyDown={(event) => handleTabKeyDown(event, tab)}
               onClick={() => selectTab(tab)}
             >
               <span>{label}</span>
@@ -5731,7 +6031,13 @@ function WorkspaceReviewPanel({
         ) : null}
       </div>
 
-      <div className="review-content">
+      <div
+        className="review-content"
+        id={panelId}
+        role="tabpanel"
+        aria-labelledby={tabId(activeTab)}
+        tabIndex={0}
+      >
         {authorityNotice ? (
           <div
             className={`session-authority-notice review-authority-notice tone-${authorityNotice.tone}`}
@@ -5789,7 +6095,7 @@ function WorkspaceReviewPanel({
                   <strong>{t('session.canvasPlan')}</strong>
                   <small>
                     {sessionDataAvailable
-                      ? dataset.plan
+                      ? currentPlan || taskListPlanTasks.length > 0
                         ? t('session.planReady')
                         : t('session.noPlanShort')
                       : t('session.notAvailable')}
@@ -5879,39 +6185,20 @@ function WorkspaceReviewPanel({
 
         {activeTab === 'plan' ? (
           <div className="review-plan">
-            {dataset.plan ? (
-              <>
-                <div className="review-section-title">
-                  <Text size="1" weight="bold" color="gray">
-                    Active plan snapshot
-                  </Text>
-                  <Badge color="green" variant="soft">
-                    loaded
-                  </Badge>
-                </div>
-                <div
-                  className="review-plan-tree"
-                  aria-label={`Plan showing ${planRows.length} snapshot fields`}
-                >
-                  <div className="plan-node complete">
-                    <CheckCircledIcon />
-                    <span>Workspace plan snapshot</span>
-                  </div>
-                  <div className="plan-branch">
-                    {planRows.map((row) => (
-                      <div className="plan-node with-detail" key={row.key}>
-                        <CheckCircledIcon />
-                        <span>{row.label}</span>
-                        <small>{row.detail}</small>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <details className="plan-json-details">
-                  <summary>Raw snapshot</summary>
-                  <pre className="review-json">{JSON.stringify(dataset.plan, null, 2)}</pre>
-                </details>
-              </>
+            {currentPlan ? (
+              <SessionPlanReview
+                plan={currentPlan}
+                capabilities={sessionCapabilities}
+                capabilityMode={capabilityMode}
+                pending={sessionPlanApprovalPending}
+                onApprove={onApprovePlan}
+              />
+            ) : taskListPlanTasks.length > 0 ? (
+              <SessionTaskListReview
+                tasks={taskListPlanTasks}
+                canResumeReview={canResumeTaskListReview}
+                onResumeReview={onResumeTaskListReview}
+              />
             ) : (
               <ReviewEmpty
                 icon={<ActivityLogIcon />}
@@ -6624,58 +6911,6 @@ function ReviewDecisionPanel({
   );
 }
 
-function buildPlanDisplayRows(plan: PlanSnapshot) {
-  const orderedKeys = [
-    'root_goal',
-    'plan',
-    'iteration',
-    'delivery',
-    'blackboard',
-    'outbox',
-    'events',
-    'plan_history',
-    'iteration_runs',
-    'run_health',
-    'artifact_index',
-    'workspace_id',
-  ];
-  const seen = new Set<string>();
-  const rows = orderedKeys.flatMap((key) => {
-    if (!(key in plan)) return [];
-    seen.add(key);
-    return [buildPlanDisplayRow(key, plan[key])];
-  });
-  Object.keys(plan)
-    .filter((key) => !seen.has(key))
-    .slice(0, Math.max(0, 12 - rows.length))
-    .forEach((key) => rows.push(buildPlanDisplayRow(key, plan[key])));
-  return rows.slice(0, 12);
-}
-
-function buildPlanDisplayRow(key: string, value: unknown) {
-  return {
-    key,
-    label: humanizePlanKey(key),
-    detail: summarizePlanValue(value),
-  };
-}
-
-function humanizePlanKey(key: string) {
-  return key
-    .split('_')
-    .filter(Boolean)
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function summarizePlanValue(value: unknown) {
-  if (value === null || value === undefined) return 'Not loaded';
-  if (Array.isArray(value)) return value.length ? `${value.length} items` : 'No items';
-  if (typeof value === 'object') return `${Object.keys(value).length} fields`;
-  if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
-  return String(value);
-}
-
 function ReviewEmpty({
   icon,
   title,
@@ -6715,6 +6950,7 @@ function CommandPalette({
   onQueryChange: (query: string) => void;
   onClose: (restoreFocus?: boolean) => void;
 }) {
+  const { t } = useI18n();
   const paletteRef = useRef<HTMLElement>(null);
   const enabledItems = useMemo(() => items.filter((item) => !item.disabled), [items]);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
@@ -6789,17 +7025,17 @@ function CommandPalette({
         className="command-palette"
         role="dialog"
         aria-modal="true"
-        aria-label="Command palette"
+        aria-label={t('commandPalette.title')}
         onKeyDown={containTabFocus}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <label className="command-search">
-          <MagnifyingGlassIcon />
+          <MagnifyingGlassIcon aria-hidden="true" />
           <input
             ref={inputRef}
             value={query}
-            aria-label="Search commands"
-            placeholder="Search commands, sessions, tools..."
+            aria-label={t('commandPalette.search')}
+            placeholder={t('commandPalette.searchPlaceholder')}
             aria-activedescendant={activeOptionId}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={(event) => {
@@ -6830,9 +7066,15 @@ function CommandPalette({
             }}
           />
         </label>
-        <div className="command-list" role="listbox" aria-label="Command results">
+        <div
+          className="command-list"
+          role="listbox"
+          aria-label={t('commandPalette.results')}
+        >
           {items.length === 0 ? (
-            <div className="command-empty">No commands found.</div>
+            <div className="command-empty" role="status">
+              {t('commandPalette.empty')}
+            </div>
           ) : (
             items.map((item) => (
               <button
@@ -6852,7 +7094,9 @@ function CommandPalette({
                 }}
                 onClick={() => runItem(item)}
               >
-                <span className="command-icon">{item.icon}</span>
+                <span className="command-icon" aria-hidden="true">
+                  {item.icon}
+                </span>
                 <span className="command-copy">
                   <strong>{item.label}</strong>
                   <em>{item.description}</em>

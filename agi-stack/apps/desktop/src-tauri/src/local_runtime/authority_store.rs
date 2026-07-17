@@ -251,44 +251,48 @@ pub(super) struct ApprovePlanOutcome {
     pub created: bool,
 }
 
+pub(super) const QUEUED_RUN_RECOVERY_ERROR: &str =
+    "approved run was queued when the local runtime stopped";
+
+pub(super) fn is_recovered_unstarted_run(run: &DesktopRun) -> bool {
+    run.status == DesktopRunStatus::Interrupted
+        && run.started_at.is_none()
+        && run.error.as_deref() == Some(QUEUED_RUN_RECOVERY_ERROR)
+}
+
+/// Reclassifies unfinished runs after an exclusive local-runtime store open.
 pub(super) fn recover_interrupted_runs(connection: &Connection, now: &str) -> Result<(), String> {
-    let mut statement = connection
-        .prepare("SELECT value_json FROM desktop_runs WHERE status = 'running'")
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    let mut statement = transaction
+        .prepare(
+            "SELECT value_json FROM desktop_runs WHERE status IN ('queued', 'running')
+             ORDER BY created_at ASC, id ASC",
+        )
         .map_err(|error| error.to_string())?;
     let runs: Vec<DesktopRun> = typed_rows(statement.query_map([], |row| row.get::<_, String>(0)))?;
     drop(statement);
     for mut run in runs {
-        run.status = DesktopRunStatus::Disconnected;
+        let event_type = match run.status {
+            DesktopRunStatus::Queued => {
+                run.status = DesktopRunStatus::Interrupted;
+                run.error = Some(QUEUED_RUN_RECOVERY_ERROR.to_string());
+                "interrupted"
+            }
+            DesktopRunStatus::Running => {
+                run.status = DesktopRunStatus::Disconnected;
+                run.error = None;
+                "disconnected"
+            }
+            _ => continue,
+        };
         run.revision += 1;
         run.updated_at = now.to_string();
-        run.error = None;
-        let value_json = serde_json::to_string(&run).map_err(|error| error.to_string())?;
-        connection
-            .execute(
-                "UPDATE desktop_runs SET status = 'disconnected', revision = ?2, value_json = ?3
-                 WHERE id = ?1",
-                params![run.id, run.revision as i64, value_json],
-            )
-            .map_err(|error| error.to_string())?;
-        let created_at = now.to_string();
-        let event = run_event_value(&run, "disconnected", &created_at);
-        connection
-            .execute(
-                "INSERT OR IGNORE INTO desktop_run_events(
-                   id, run_id, revision, event_type, created_at, value_json
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    required_string(&event, "id")?,
-                    run.id,
-                    run.revision as i64,
-                    "disconnected",
-                    created_at,
-                    serde_json::to_string(&event).map_err(|error| error.to_string())?,
-                ],
-            )
-            .map_err(|error| error.to_string())?;
+        update_run(&transaction, &run)?;
+        insert_run_event(&transaction, &run, event_type, now).map_err(|error| error.to_string())?;
     }
-    Ok(())
+    transaction.commit().map_err(|error| error.to_string())
 }
 
 pub(super) fn insert_plan_version(

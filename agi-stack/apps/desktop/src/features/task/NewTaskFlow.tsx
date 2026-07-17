@@ -33,15 +33,27 @@ import {
   buildPlanReplacementPrompt,
   buildPlanningPrompt,
   buildRevisionPrompt,
+  browserLegacyPlanApprovalStorage,
+  canActivateNewTaskSession,
+  clearLegacyPlanApprovalRecovery,
+  createLegacyPlanApprovalRecovery,
   createReviewPlanDraft,
   enabledReviewPlanSteps,
   hasReviewPlanChanges,
+  isFreshPlanningPlan,
+  legacyPlanApprovalRuntimeScope,
+  newTaskDefinitionSignature,
   orderedPlanTasks,
   planTaskSignature,
+  planningTurnAttempt,
+  readLegacyPlanApprovalRecovery,
   shouldOfferPlanRetry,
+  writeLegacyPlanApprovalRecovery,
+  type NewTaskAgentTurnOutcome,
   type NewTaskContextSource,
   type NewTaskDefinition,
   type NewTaskKind,
+  type PlanningTurnAttempt,
   type ReviewPlanStep,
 } from './newTaskPlanModel';
 import {
@@ -69,17 +81,26 @@ export type NewTaskAgentTurnInput = {
   messageId: string;
 };
 
+export type NewTaskResumeDraft = {
+  session: NewTaskSession;
+  definition: NewTaskDefinition;
+  tasks: AgentPlanTask[];
+};
+
 type NewTaskFlowProps = {
   open: boolean;
   config: DesktopRuntimeConfig;
   workspaces: WorkspaceSummary[];
+  resumeDraft?: NewTaskResumeDraft | null;
   preferredWorkspaceId?: string;
   preferredKind?: NewTaskKind;
   disabledReason?: string | null;
   onClose: () => void;
+  onSessionPersisted: (session: NewTaskSession) => void;
   onSessionReady: (session: NewTaskSession) => void;
-  onRunAgentTurn: (input: NewTaskAgentTurnInput) => Promise<void>;
-  onError: (message: string) => void;
+  onRunAgentTurn: (input: NewTaskAgentTurnInput) => Promise<NewTaskAgentTurnOutcome>;
+  onOpenRuntimeSettings: () => void;
+  onError: (message: string | null) => void;
 };
 
 const NEW_WORKSPACE_VALUE = '__new_workspace__';
@@ -93,12 +114,15 @@ export function NewTaskFlow({
   open,
   config,
   workspaces,
+  resumeDraft = null,
   preferredWorkspaceId,
   preferredKind,
   disabledReason,
   onClose,
+  onSessionPersisted,
   onSessionReady,
   onRunAgentTurn,
+  onOpenRuntimeSettings,
   onError,
 }: NewTaskFlowProps) {
   const { t } = useI18n();
@@ -129,19 +153,27 @@ export function NewTaskFlow({
   const [revisionFeedback, setRevisionFeedback] = useState('');
   const [revisionComposerOpen, setRevisionComposerOpen] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const [runtimeRecoveryAvailable, setRuntimeRecoveryAvailable] = useState(false);
+  const [deliveryOutcomeUnknown, setDeliveryOutcomeUnknown] = useState(false);
   const [session, setSession] = useState<NewTaskSession | null>(null);
   const expectedPlanSignatureRef = useRef('');
   const displayedPlanSignatureRef = useRef('');
   const displayedPlanVersionRef = useRef<DesktopPlanVersion | null>(null);
   const lastPlanningPromptRef = useRef('');
+  const planningAttemptRef = useRef<PlanningTurnAttempt | null>(null);
+  const planningConversationIdRef = useRef('');
+  const sessionDefinitionSignatureRef = useRef('');
+  const sessionWorkspaceSelectionRef = useRef('');
   const emptyPlanPollCountRef = useRef(0);
   const flowEpochRef = useRef(0);
   const wasOpenRef = useRef(false);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
-  const approvalAttemptRef = useRef<{ identity: string; id: string } | null>(null);
+  const approvalAttemptRef = useRef<{ identity: string; messageId: string } | null>(null);
+  const legacyBuildRecoveryRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
   onCloseRef.current = onClose;
 
   const selectedWorkspace = useMemo(
@@ -184,20 +216,31 @@ export function NewTaskFlow({
     wasOpenRef.current = open;
     flowEpochRef.current += 1;
     if (!open) return;
-    const nextKind = preferredKind ?? 'general';
-    setPhase('define');
-    setTitle('');
-    setObjective('');
+    const recoveredDefinition = resumeDraft?.definition ?? null;
+    const recoveredTasks = resumeDraft ? orderedPlanTasks(resumeDraft.tasks) : [];
+    const nextKind = recoveredDefinition?.kind ?? preferredKind ?? 'general';
+    const nextWorkspaceSelection =
+      resumeDraft?.session.workspace.id ||
+      preferredWorkspaceId ||
+      config.workspaceId ||
+      NEW_WORKSPACE_VALUE;
+    const recoveredSignature = recoveredDefinition
+      ? newTaskDefinitionSignature(recoveredDefinition, nextWorkspaceSelection)
+      : '';
+    const recoveredPlanSignature = planTaskSignature(recoveredTasks);
+    setPhase(resumeDraft ? 'review' : 'define');
+    setTitle(recoveredDefinition?.title ?? '');
+    setObjective(recoveredDefinition?.objective ?? '');
     setKind(nextKind);
-    setContextSources(DEFAULT_CONTEXT_SOURCES);
+    setContextSources(recoveredDefinition?.contextSources ?? DEFAULT_CONTEXT_SOURCES);
     setEnvironmentKind(nextKind === 'programming' ? 'worktree' : 'local');
     setPermissionProfile(defaultPermissionProfile(nextKind));
-    setWorkspaceRoot(config.workspaceRoot);
-    setWorkspaceSelection(preferredWorkspaceId || config.workspaceId || NEW_WORKSPACE_VALUE);
-    setPlanTasks([]);
-    setReviewSteps([]);
+    setWorkspaceRoot(recoveredDefinition?.workspaceRoot ?? config.workspaceRoot);
+    setWorkspaceSelection(nextWorkspaceSelection);
+    setPlanTasks(recoveredTasks);
+    setReviewSteps(createReviewPlanDraft(recoveredTasks));
     setPlanVersion(null);
-    setPlanApproval(null);
+    setPlanApproval(resumeDraft ? { kind: 'legacy_mode_switch' } : null);
     setPlanRequiresReview(false);
     setRevisionAwaitingPlan(false);
     setManualPlanReviewRequired(false);
@@ -205,15 +248,54 @@ export function NewTaskFlow({
     setRevisionFeedback('');
     setRevisionComposerOpen(false);
     setFlowError(null);
-    setSession(null);
-    expectedPlanSignatureRef.current = '';
-    displayedPlanSignatureRef.current = '';
+    setRuntimeRecoveryAvailable(false);
+    setDeliveryOutcomeUnknown(false);
+    setSession(resumeDraft?.session ?? null);
+    expectedPlanSignatureRef.current = recoveredPlanSignature;
+    displayedPlanSignatureRef.current = recoveredPlanSignature;
     displayedPlanVersionRef.current = null;
     lastPlanningPromptRef.current = '';
+    planningAttemptRef.current = null;
+    planningConversationIdRef.current = '';
+    sessionDefinitionSignatureRef.current = recoveredSignature;
+    sessionWorkspaceSelectionRef.current = resumeDraft ? nextWorkspaceSelection : '';
     emptyPlanPollCountRef.current = 0;
-    approvalAttemptRef.current = null;
-    window.setTimeout(() => titleInputRef.current?.focus(), 0);
-  }, [config.workspaceId, config.workspaceRoot, open, preferredKind, preferredWorkspaceId]);
+    const recoveredApproval = resumeDraft
+      ? readLegacyPlanApprovalRecovery(
+          browserLegacyPlanApprovalStorage(),
+          resumeDraft.session.conversation.id,
+          recoveredPlanSignature,
+          legacyPlanApprovalRuntimeScope(resumeDraft.session.config),
+        )
+      : null;
+    approvalAttemptRef.current = recoveredApproval
+      ? {
+          identity: [
+            'legacy',
+            recoveredApproval.conversationId,
+            recoveredApproval.planSignature,
+          ].join(':'),
+          messageId: recoveredApproval.messageId,
+        }
+      : null;
+    legacyBuildRecoveryRef.current = Boolean(
+      recoveredApproval && resumeDraft?.session.conversation.current_mode === 'build',
+    );
+    window.setTimeout(() => {
+      if (!resumeDraft) {
+        titleInputRef.current?.focus();
+        return;
+      }
+      reviewHeadingRef.current?.focus();
+    }, 0);
+  }, [
+    config.workspaceId,
+    config.workspaceRoot,
+    open,
+    preferredKind,
+    preferredWorkspaceId,
+    resumeDraft,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -248,6 +330,12 @@ export function NewTaskFlow({
   }, [open]);
 
   useEffect(() => {
+    if (!open || phase !== 'review') return;
+    const frame = window.requestAnimationFrame(() => reviewHeadingRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, phase]);
+
+  useEffect(() => {
     if (!open || (phase !== 'planning' && phase !== 'review') || !session) return;
     const abortController = new AbortController();
     let stopped = false;
@@ -259,6 +347,13 @@ export function NewTaskFlow({
     };
 
     const loadPlan = async () => {
+      if (
+        phase === 'planning' &&
+        session.conversation.id !== planningConversationIdRef.current
+      ) {
+        scheduleNextPoll();
+        return;
+      }
       try {
         const client = new DesktopApiClient(session.config);
         const response = await client.listAgentPlanTasks(
@@ -280,7 +375,12 @@ export function NewTaskFlow({
         const tasksChanged = Boolean(previousSignature) && signature !== previousSignature;
         const isNewPlanningResult =
           phase === 'planning' &&
-          (versionChanged || signature !== expectedPlanSignatureRef.current);
+          isFreshPlanningPlan(
+            tasks,
+            signature,
+            expectedPlanSignatureRef.current,
+            versionChanged,
+          );
         const isNewReviewResult = phase === 'review' && (versionChanged || tasksChanged);
 
         if (tasks.length > 0) {
@@ -306,6 +406,7 @@ export function NewTaskFlow({
           setRevisionFeedback('');
           setRevisionComposerOpen(false);
           setFlowError(null);
+          setDeliveryOutcomeUnknown(false);
           setPhase('review');
         }
         scheduleNextPoll();
@@ -337,18 +438,42 @@ export function NewTaskFlow({
     onClose();
   };
 
+  const openRuntimeSettings = () => {
+    flowEpochRef.current += 1;
+    previousFocusRef.current = null;
+    onOpenRuntimeSettings();
+  };
+
   const runAgentTurn = async (
     targetSession: NewTaskSession,
     message: string,
     messageId: string,
-  ) => {
-    await onRunAgentTurn({
+  ): Promise<NewTaskAgentTurnOutcome> =>
+    onRunAgentTurn({
       config: targetSession.config,
       conversationId: targetSession.conversation.id,
       projectId: targetSession.config.projectId,
       message,
       messageId,
     });
+
+  const planningMessageId = (
+    targetSession: NewTaskSession,
+    prompt: string,
+    prefix: string,
+  ): string => {
+    const fingerprint = [
+      targetSession.conversation.id,
+      expectedPlanSignatureRef.current,
+      prompt,
+    ].join(':');
+    const attempt = planningTurnAttempt(
+      planningAttemptRef.current,
+      fingerprint,
+      () => `${prefix}-${crypto.randomUUID()}`,
+    );
+    planningAttemptRef.current = attempt;
+    return attempt.messageId;
   };
 
   const generatePlan = async () => {
@@ -356,6 +481,9 @@ export function NewTaskFlow({
     const operationEpoch = flowEpochRef.current;
     setPhase('planning');
     setFlowError(null);
+    setRuntimeRecoveryAvailable(false);
+    setDeliveryOutcomeUnknown(false);
+    onError(null);
     setRevisionAwaitingPlan(false);
     setManualPlanReviewRequired(false);
     setPlanRetryAvailable(false);
@@ -368,45 +496,108 @@ export function NewTaskFlow({
       contextSources,
     };
     const planningPrompt = buildPlanningPrompt(definition);
+    const definitionSignature = newTaskDefinitionSignature(definition, workspaceSelection);
     lastPlanningPromptRef.current = planningPrompt;
     try {
-      const baseClient = new DesktopApiClient(config);
-      const workspace =
-        selectedWorkspace ??
-        (await baseClient.createWorkspaceForProject(
-          config.projectId,
+      const sessionMatchesDefinition = Boolean(
+        session &&
+          sessionDefinitionSignatureRef.current === definitionSignature &&
+          sessionWorkspaceSelectionRef.current === workspaceSelection,
+      );
+      planningConversationIdRef.current = sessionMatchesDefinition
+        ? (session?.conversation.id ?? '')
+        : '';
+      if (sessionMatchesDefinition && planTasks.length > 0) {
+        setPhase('review');
+        return;
+      }
+      let readySession = sessionMatchesDefinition ? session : null;
+      if (!readySession) {
+        const baseClient = new DesktopApiClient(config);
+        try {
+          if (!(await baseClient.supportsAgentPlanWorkflow())) {
+            throw new Error(t('task.planRuntimeUnsupported'));
+          }
+        } catch (error) {
+          setRuntimeRecoveryAvailable(true);
+          throw error;
+        }
+        const reusableCreatedWorkspace =
+          workspaceSelection === NEW_WORKSPACE_VALUE &&
+          sessionWorkspaceSelectionRef.current === NEW_WORKSPACE_VALUE
+            ? session?.workspace
+            : null;
+        const workspace =
+          selectedWorkspace ??
+          reusableCreatedWorkspace ??
+          (await baseClient.createWorkspaceForProject(
+            config.projectId,
+            title.trim(),
+            objective.trim(),
+            config.tenantId,
+            {
+              useCase: kind,
+              collaborationMode: 'multi_agent_shared',
+              sandboxCodeRoot: kind === 'programming' ? workspaceRoot.trim() : undefined,
+            },
+          ));
+        const scopedConfig = { ...config, workspaceId: workspace.id };
+        const client = new DesktopApiClient(scopedConfig);
+        const created = await client.createAgentConversation(
           title.trim(),
-          objective.trim(),
-          config.tenantId,
-          {
-            useCase: kind,
-            collaborationMode: 'multi_agent_shared',
-            sandboxCodeRoot: kind === 'programming' ? workspaceRoot.trim() : undefined,
-          },
-        ));
-      const scopedConfig = { ...config, workspaceId: workspace.id };
-      const client = new DesktopApiClient(scopedConfig);
-      const created = await client.createAgentConversation(
-        title.trim(),
-        config.projectId,
-        kind === 'programming' ? 'code' : 'work',
-      );
-      const conversation = await client.updateAgentConversationMode(
-        created.id,
-        { workspace_id: workspace.id },
-        config.projectId,
-      );
-      await client.switchPlanMode(conversation.id, 'plan');
+          config.projectId,
+          kind === 'programming' ? 'code' : 'work',
+        );
+        readySession = { workspace, conversation: created, config: scopedConfig };
+        planningConversationIdRef.current = readySession.conversation.id;
+        onSessionPersisted(readySession);
+        if (flowEpochRef.current !== operationEpoch) return;
+        setSession(readySession);
+        setWorkspaceSelection(workspace.id);
+        sessionDefinitionSignatureRef.current = newTaskDefinitionSignature(
+          definition,
+          workspace.id,
+        );
+        sessionWorkspaceSelectionRef.current = workspace.id;
+        displayedPlanSignatureRef.current = '';
+        displayedPlanVersionRef.current = null;
+        expectedPlanSignatureRef.current = '';
+        setPlanTasks([]);
+        setReviewSteps([]);
+        setPlanVersion(null);
+        setPlanApproval(null);
+      }
+      const client = new DesktopApiClient(readySession.config);
+      if (readySession.conversation.workspace_id !== readySession.workspace.id) {
+        const conversation = await client.updateAgentConversationMode(
+          readySession.conversation.id,
+          { workspace_id: readySession.workspace.id },
+          readySession.config.projectId,
+        );
+        readySession = { ...readySession, conversation };
+        onSessionPersisted(readySession);
+        if (flowEpochRef.current !== operationEpoch) return;
+        setSession(readySession);
+      }
+      await client.switchPlanMode(readySession.conversation.id, 'plan');
       await client.sendMessage(objective.trim());
-      const readySession = { workspace, conversation, config: scopedConfig };
-      await runAgentTurn(
+      expectedPlanSignatureRef.current = displayedPlanSignatureRef.current;
+      const outcome = await runAgentTurn(
         readySession,
         planningPrompt,
-        `desktop-plan-${crypto.randomUUID()}`,
+        planningMessageId(readySession, planningPrompt, 'desktop-plan'),
       );
       if (flowEpochRef.current !== operationEpoch) return;
-      setSession(readySession);
-      onSessionReady(readySession);
+      setDeliveryOutcomeUnknown(outcome === 'unknown_outcome');
+      if (
+        canActivateNewTaskSession(
+          readySession.workspace.id,
+          readySession.conversation.workspace_id,
+          outcome,
+        )
+      ) {
+        onSessionReady(readySession);
+      }
     } catch (error) {
       if (flowEpochRef.current !== operationEpoch) return;
       const message = error instanceof Error ? error.message : String(error);
@@ -423,10 +614,12 @@ export function NewTaskFlow({
     if (!session || !prompt || !humanMessage) return;
     const operationEpoch = flowEpochRef.current;
     expectedPlanSignatureRef.current = planTaskSignature(planTasks);
+    planningConversationIdRef.current = session.conversation.id;
     lastPlanningPromptRef.current = prompt;
     setRevisionAwaitingPlan(true);
     setManualPlanReviewRequired(false);
     setPlanRetryAvailable(false);
+    setDeliveryOutcomeUnknown(false);
     emptyPlanPollCountRef.current = 0;
     setRevisionComposerOpen(false);
     setFlowError(null);
@@ -434,11 +627,13 @@ export function NewTaskFlow({
     try {
       const client = new DesktopApiClient(session.config);
       await client.sendMessage(humanMessage);
-      await runAgentTurn(
+      const outcome = await runAgentTurn(
         session,
         prompt,
-        `desktop-plan-revision-${crypto.randomUUID()}`,
+        planningMessageId(session, prompt, 'desktop-plan-revision'),
       );
+      if (flowEpochRef.current !== operationEpoch) return;
+      setDeliveryOutcomeUnknown(outcome === 'unknown_outcome');
     } catch (error) {
       if (flowEpochRef.current !== operationEpoch) return;
       const message = error instanceof Error ? error.message : String(error);
@@ -453,15 +648,19 @@ export function NewTaskFlow({
     const prompt = lastPlanningPromptRef.current;
     if (!session || !prompt) return;
     const operationEpoch = flowEpochRef.current;
+    planningConversationIdRef.current = session.conversation.id;
     setPlanRetryAvailable(false);
+    setDeliveryOutcomeUnknown(false);
     emptyPlanPollCountRef.current = 0;
     setFlowError(null);
     try {
-      await runAgentTurn(
+      const outcome = await runAgentTurn(
         session,
         prompt,
-        `desktop-plan-retry-${crypto.randomUUID()}`,
+        planningMessageId(session, prompt, 'desktop-plan-retry'),
       );
+      if (flowEpochRef.current !== operationEpoch) return;
+      setDeliveryOutcomeUnknown(outcome === 'unknown_outcome');
     } catch (error) {
       if (flowEpochRef.current !== operationEpoch) return;
       const message = error instanceof Error ? error.message : String(error);
@@ -505,20 +704,75 @@ export function NewTaskFlow({
     operationEpoch: number,
   ): Promise<boolean> => {
     const client = new DesktopApiClient(activeSession.config);
+    const recoveryStorage = browserLegacyPlanApprovalStorage();
+    const recoveryScope = legacyPlanApprovalRuntimeScope(activeSession.config);
+    if (!recoveryScope) {
+      throw new Error(t('task.approvalRecoveryUnavailable'));
+    }
+    if (
+      legacyBuildRecoveryRef.current &&
+      !readLegacyPlanApprovalRecovery(
+        recoveryStorage,
+        activeSession.conversation.id,
+        displayedPlanSignatureRef.current,
+        recoveryScope,
+      )
+    ) {
+      throw new Error(t('task.legacyApprovalReconcileRequired'));
+    }
     if (!(await refreshLegacyPlanBeforeApproval(operationEpoch))) return false;
     if (flowEpochRef.current !== operationEpoch) return false;
-    await client.switchPlanMode(activeSession.conversation.id, 'build');
+    const approvalIdentity = [
+      'legacy',
+      activeSession.conversation.id,
+      displayedPlanSignatureRef.current,
+    ].join(':');
+    if (approvalAttemptRef.current?.identity !== approvalIdentity) {
+      const recoveredApproval = readLegacyPlanApprovalRecovery(
+        recoveryStorage,
+        activeSession.conversation.id,
+        displayedPlanSignatureRef.current,
+        recoveryScope,
+      );
+      approvalAttemptRef.current = {
+        identity: approvalIdentity,
+        messageId: recoveredApproval?.messageId ?? `desktop-build-${crypto.randomUUID()}`,
+      };
+    }
+    const recovery = createLegacyPlanApprovalRecovery(
+      activeSession.conversation.id,
+      displayedPlanSignatureRef.current,
+      approvalAttemptRef.current.messageId,
+      recoveryScope,
+    );
+    if (!writeLegacyPlanApprovalRecovery(recoveryStorage, recovery)) {
+      throw new Error(t('task.approvalRecoveryUnavailable'));
+    }
+    let switchedThisAttempt = false;
+    if (!legacyBuildRecoveryRef.current) {
+      await client.switchPlanMode(activeSession.conversation.id, 'build');
+      legacyBuildRecoveryRef.current = true;
+      switchedThisAttempt = true;
+    }
     try {
-      await runAgentTurn(
+      const outcome = await runAgentTurn(
         activeSession,
         buildExecutionPrompt(),
-        `desktop-build-${crypto.randomUUID()}`,
+        approvalAttemptRef.current.messageId,
       );
+      if (outcome === 'unknown_outcome') {
+        setFlowError(t('task.agentTurnOutcomeUnknown'));
+        return false;
+      }
     } catch (error) {
-      try {
-        await client.switchPlanMode(activeSession.conversation.id, 'plan');
-      } catch {
-        throw new Error(t('task.legacyRollbackFailed'));
+      if (switchedThisAttempt) {
+        try {
+          await client.switchPlanMode(activeSession.conversation.id, 'plan');
+          legacyBuildRecoveryRef.current = false;
+          clearLegacyPlanApprovalRecovery(recoveryStorage, activeSession.conversation.id);
+        } catch {
+          throw new Error(t('task.legacyRollbackFailed'));
+        }
       }
       throw error;
     }
@@ -537,9 +791,12 @@ export function NewTaskFlow({
       environmentKind,
     ].join(':');
     if (approvalAttemptRef.current?.identity !== approvalIdentity) {
-      approvalAttemptRef.current = { identity: approvalIdentity, id: crypto.randomUUID() };
+      approvalAttemptRef.current = {
+        identity: approvalIdentity,
+        messageId: crypto.randomUUID(),
+      };
     }
-    const approvalId = approvalAttemptRef.current.id;
+    const approvalId = approvalAttemptRef.current.messageId;
     return client.approvePlanAndStart({
       conversationId: activeSession.conversation.id,
       projectId: activeSession.config.projectId,
@@ -642,6 +899,15 @@ export function NewTaskFlow({
             </button>
           </header>
 
+          <div
+            className="new-task-visually-hidden"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {phase === 'review' ? t('task.reviewReadyAnnouncement') : ''}
+          </div>
+
           <main className="new-task-content">
             {phase === 'define' ? (
               <NewTaskDefinitionStage
@@ -672,6 +938,7 @@ export function NewTaskFlow({
                 workspaceLabel={workspaceLabel}
                 contextCount={contextSources.length}
                 retryAvailable={planRetryAvailable}
+                deliveryOutcomeUnknown={deliveryOutcomeUnknown}
                 onRetry={() => void retryPlanning()}
               />
             ) : null}
@@ -692,6 +959,7 @@ export function NewTaskFlow({
                 revisionFeedback={revisionFeedback}
                 revisionComposerOpen={revisionComposerOpen}
                 launching={phase === 'launching'}
+                headingRef={reviewHeadingRef}
                 onAcknowledgeVersion={() => setPlanRequiresReview(false)}
                 onStopWaitingForRevision={stopWaitingForRevision}
                 onAcknowledgeCurrentPlan={() => setManualPlanReviewRequired(false)}
@@ -715,14 +983,21 @@ export function NewTaskFlow({
                 <span>
                   <MagicWandIcon /> {disabledReason ?? t('task.generatePlanHint')}
                 </span>
-                <button
-                  className="primary"
-                  type="button"
-                  disabled={!canGenerate}
-                  onClick={() => void generatePlan()}
-                >
-                  {t('task.generatePlan')} <ArrowRightIcon />
-                </button>
+                <div className="new-task-review-footer-actions">
+                  {runtimeRecoveryAvailable ? (
+                    <button type="button" onClick={openRuntimeSettings}>
+                      {t('task.openRuntimeSettings')}
+                    </button>
+                  ) : null}
+                  <button
+                    className="primary"
+                    type="button"
+                    disabled={!canGenerate}
+                    onClick={() => void generatePlan()}
+                  >
+                    {t('task.generatePlan')} <ArrowRightIcon />
+                  </button>
+                </div>
               </>
             ) : phase === 'planning' ? (
               <>
@@ -734,7 +1009,12 @@ export function NewTaskFlow({
             ) : (
               <>
                 <div className="new-task-review-footer-summary">
-                  <NewTaskFooterBackButton onClick={() => setPhase('define')} />
+                  <NewTaskFooterBackButton
+                    onClick={() => {
+                      expectedPlanSignatureRef.current = displayedPlanSignatureRef.current;
+                      setPhase('define');
+                    }}
+                  />
                   <span>{t('task.selectedSteps', { selected: enabledStepCount, total: reviewSteps.length })}</span>
                 </div>
                 <div className="new-task-review-footer-actions">

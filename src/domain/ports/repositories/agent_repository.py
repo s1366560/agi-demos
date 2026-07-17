@@ -9,6 +9,8 @@ This module defines the repository interfaces for agent domain entities:
 from abc import ABC, abstractmethod
 
 from src.domain.model.agent import (
+    AgentClientTurn,
+    AgentClientTurnClaim,
     AgentExecution,
     AgentExecutionEvent,
     Conversation,
@@ -133,6 +135,38 @@ class ConversationRepository(ABC):
             limit: Maximum number of results.
             offset: Number of results to skip.
         """
+
+
+class AgentClientTurnRepository(ABC):
+    """Persist and atomically claim client-supplied agent turn identities."""
+
+    @abstractmethod
+    async def find(
+        self,
+        conversation_id: str,
+        client_message_id: str,
+    ) -> AgentClientTurn | None:
+        """Find a previously accepted client turn."""
+
+    @abstractmethod
+    async def claim_and_commit(
+        self,
+        *,
+        conversation_id: str,
+        client_message_id: str,
+        payload_hash: str,
+    ) -> AgentClientTurnClaim:
+        """Durably accept a new turn or replay the existing exact binding."""
+
+    @abstractmethod
+    async def try_start(
+        self,
+        *,
+        conversation_id: str,
+        client_message_id: str,
+        payload_hash: str,
+    ) -> bool:
+        """Grant execution authority inside the caller's open transaction."""
 
 
 class MessageRepository(ABC):

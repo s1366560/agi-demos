@@ -15,6 +15,7 @@ MCP (Model Context Protocol) Support:
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import time as time_module
@@ -59,6 +60,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _background_tasks: set[asyncio.Task[Any]] = set()
+
+_AGENT_CLIENT_TURN_PAYLOAD_VERSION = b"memstack-agent-client-turn:v1\0"
+
+
+def canonical_agent_client_turn_payload_hash(payload: Mapping[str, Any]) -> str:
+    """Hash the exact structured execution input for client-turn idempotency."""
+    canonical_json = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(_AGENT_CLIENT_TURN_PAYLOAD_VERSION + canonical_json).hexdigest()
 
 
 class AgentService(AgentServicePort):
@@ -259,6 +274,7 @@ class AgentService(AgentServicePort):
         agent_id: str | None = None,
         mentions: list[str] | None = None,
         api_auth_token: str | None = None,
+        execution_message_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using Ray Actors.
@@ -302,7 +318,7 @@ class AgentService(AgentServicePort):
                 return
 
             # Create user message event (unified event timeline - no messages table)
-            user_msg_id = str(uuid.uuid4())
+            user_msg_id = execution_message_id or str(uuid.uuid4())
 
             # Generate correlation ID for this request (used to track all events from this request)
             correlation_id = f"req_{uuid.uuid4().hex[:12]}"

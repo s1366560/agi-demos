@@ -12,6 +12,13 @@ from src.domain.model.agent.conversation.attachment import (
     AttachmentPurpose,
     AttachmentStatus,
 )
+from src.domain.model.agent.conversation.client_turn import (
+    AgentClientTurn,
+    AgentClientTurnClaim,
+    AgentClientTurnNotFoundError,
+    AgentClientTurnPayloadConflictError,
+    AgentClientTurnStatus,
+)
 from src.domain.model.agent.conversation.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
 from src.domain.model.agent.conversation.errors import (
@@ -34,6 +41,11 @@ from src.domain.model.agent.conversation.message import (
 __all__ = [
     "LEGACY_AGENT_DEFINITION_ID_KEY",
     "SELECTED_AGENT_ID_KEY",
+    "AgentClientTurn",
+    "AgentClientTurnClaim",
+    "AgentClientTurnNotFoundError",
+    "AgentClientTurnPayloadConflictError",
+    "AgentClientTurnStatus",
     "Attachment",
     "AttachmentMetadata",
     "AttachmentPurpose",

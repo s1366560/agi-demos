@@ -1197,11 +1197,13 @@ export const LOCAL_DEV_SERVER_PRESETS = [
     id: 'agistack-rust',
     label: 'agi-stack desktop :8088',
     apiBaseUrl: 'http://127.0.0.1:8088',
+    mode: 'local',
   },
   {
     id: 'memstack-python',
     label: 'MemStack reference :8000',
     apiBaseUrl: 'http://127.0.0.1:8000',
+    mode: 'cloud',
   },
 ] as const;
 

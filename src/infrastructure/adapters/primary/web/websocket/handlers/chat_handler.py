@@ -17,6 +17,12 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, override
 
 from sqlalchemy import exists, select
 
+from src.application.services.agent_service import canonical_agent_client_turn_payload_hash
+from src.domain.model.agent import (
+    AgentClientTurn,
+    AgentClientTurnPayloadConflictError,
+    AgentClientTurnStatus,
+)
 from src.domain.model.agent.execution_backend import execution_backend_from_metadata
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -28,6 +34,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
@@ -38,6 +45,8 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+_CLIENT_MESSAGE_ID_MAX_LENGTH = 255
 
 
 class _RayCancelMethod(Protocol):
@@ -97,6 +106,19 @@ class _ExternalACPExecutionState:
     time_gen: EventTimeGenerator
     user_msg_id: str
     assistant_msg_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ClientTurnAdmission:
+    """Authoritative admission result for one WebSocket send_message request."""
+
+    payload_hash: str | None
+    turn: AgentClientTurn | None
+    created: bool = False
+
+    @property
+    def should_start(self) -> bool:
+        return self.turn is None or self.turn.status == AgentClientTurnStatus.ACCEPTED
 
 
 _CLIENT_APP_MODEL_CONTEXT_DENYLIST = frozenset(
@@ -213,6 +235,17 @@ class SendMessageHandler(WebSocketMessageHandler):
         assert isinstance(conversation_id, str)
         assert isinstance(user_message, str)
         assert isinstance(project_id, str)
+        if message_id is not None and (
+            not isinstance(message_id, str)
+            or not message_id.strip()
+            or len(message_id) > _CLIENT_MESSAGE_ID_MAX_LENGTH
+        ):
+            await context.send_error(
+                _("message_id must be a non-empty string of at most 255 characters"),
+                code="INVALID_MESSAGE_ID",
+                conversation_id=conversation_id,
+            )
+            return
         if preferred_language not in {"en-US", "zh-CN"}:
             preferred_language = None
 
@@ -220,6 +253,19 @@ class SendMessageHandler(WebSocketMessageHandler):
         # use the authenticated user's stored preference.
         if preferred_language is None:
             preferred_language = await _resolve_user_preferred_language(context)
+
+        client_execution_payload = {
+            "agent_id": agent_id,
+            "app_model_context": app_model_context,
+            "attachment_ids": attachment_ids,
+            "file_metadata": file_metadata,
+            "forced_skill_name": forced_skill_name,
+            "image_attachments": image_attachments,
+            "mentions": mentions,
+            "message": user_message,
+            "preferred_language": preferred_language,
+            "project_id": project_id,
+        }
 
         try:
             container = context.get_scoped_container()
@@ -243,42 +289,14 @@ class SendMessageHandler(WebSocketMessageHandler):
                 )
                 return
 
-            # Check for pending HITL requests
-            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-                SqlHITLRequestRepository,
-            )
-
-            hitl_repo = SqlHITLRequestRepository(context.db)
-            pending_hitl = await hitl_repo.get_pending_by_conversation(
+            admission = await _admit_client_turn(
+                context,
                 conversation_id=conversation_id,
-                tenant_id=context.tenant_id,
                 project_id=project_id,
-                exclude_expired=True,
+                message_id=message_id,
+                execution_payload=client_execution_payload,
             )
-
-            if pending_hitl:
-                from src.infrastructure.agent.hitl.utils import resolve_trusted_hitl_type
-
-                pending_types = [
-                    resolve_trusted_hitl_type(r) or r.request_type.value for r in pending_hitl
-                ]
-                await context.send_error(
-                    f"Agent is waiting for your response. Please complete the pending "
-                    f"{', '.join(pending_types)} request(s) before sending new messages.",
-                    code="HITL_PENDING",
-                    conversation_id=conversation_id,
-                    extra={
-                        "pending_requests": [
-                            {
-                                "request_id": r.id,
-                                "request_type": resolve_trusted_hitl_type(r)
-                                or r.request_type.value,
-                                "question": r.question,
-                            }
-                            for r in pending_hitl
-                        ]
-                    },
-                )
+            if admission is None:
                 return
 
             # Auto-subscribe this session to this conversation
@@ -288,25 +306,46 @@ class SendMessageHandler(WebSocketMessageHandler):
             ack_fields = {"conversation_id": conversation_id}
             if message_id is not None:
                 ack_fields["message_id"] = message_id
+                assert admission.turn is not None
+                ack_fields.update(
+                    {
+                        "outcome": "accepted",
+                        "replayed": not admission.created,
+                        "turn_status": admission.turn.status.value,
+                        "execution_message_id": admission.turn.execution_message_id,
+                    }
+                )
             await context.send_ack("send_message", **ack_fields)
 
-            task = asyncio.create_task(
-                stream_agent_to_websocket_with_fresh_session(
-                    context=context,
-                    conversation_id=conversation_id,
-                    user_message=user_message,
-                    project_id=project_id,
-                    preferred_language=preferred_language,
-                    attachment_ids=attachment_ids,
-                    file_metadata=file_metadata,
-                    forced_skill_name=forced_skill_name,
-                    app_model_context=app_model_context,
-                    image_attachments=image_attachments,
-                    agent_id=agent_id,
-                    mentions=mentions,
+            if admission.should_start:
+                task = asyncio.create_task(
+                    stream_agent_to_websocket_with_fresh_session(
+                        context=context,
+                        conversation_id=conversation_id,
+                        user_message=user_message,
+                        project_id=project_id,
+                        preferred_language=preferred_language,
+                        attachment_ids=attachment_ids,
+                        file_metadata=file_metadata,
+                        forced_skill_name=forced_skill_name,
+                        app_model_context=app_model_context,
+                        image_attachments=image_attachments,
+                        agent_id=agent_id,
+                        mentions=mentions,
+                        client_message_id=message_id,
+                        client_payload_hash=admission.payload_hash,
+                        execution_message_id=(
+                            admission.turn.execution_message_id
+                            if admission.turn is not None
+                            else None
+                        ),
+                    )
                 )
-            )
-            context.connection_manager.add_bridge_task(context.session_id, conversation_id, task)
+                context.connection_manager.add_bridge_task(
+                    context.session_id,
+                    conversation_id,
+                    task,
+                )
 
         except Exception as e:
             logger.error(f"[WS] Error handling send_message: {e}", exc_info=True)
@@ -434,6 +473,207 @@ async def _conversation_scope_is_active(
     )
     result = await context.db.execute(refresh_select_statement(statement))
     return result.scalar_one_or_none() is not None
+
+
+async def _client_turn_execution_is_materialized(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    execution_message_id: str,
+) -> bool:
+    """Confirm a STARTED ledger row has its atomically committed user event."""
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AgentExecutionEvent as DBAgentExecutionEvent,
+    )
+
+    result = await context.db.execute(
+        refresh_select_statement(
+            select(DBAgentExecutionEvent.id)
+            .where(
+                DBAgentExecutionEvent.conversation_id == conversation_id,
+                DBAgentExecutionEvent.message_id == execution_message_id,
+                DBAgentExecutionEvent.event_type == "user_message",
+            )
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _send_client_turn_conflict(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    message_id: str,
+) -> None:
+    await context.send_error(
+        _("message_id is already bound to a different request"),
+        code="MESSAGE_ID_CONFLICT",
+        conversation_id=conversation_id,
+        extra={"message_id": message_id},
+    )
+
+
+async def _send_unconfirmed_client_turn(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    message_id: str,
+    turn: AgentClientTurn,
+) -> None:
+    await context.send_error(
+        _("The accepted agent turn has no durable execution record"),
+        code="TURN_START_UNCONFIRMED",
+        conversation_id=conversation_id,
+        extra={
+            "message_id": message_id,
+            "turn_status": turn.status.value,
+            "recovery": "manual_reconciliation_required",
+        },
+    )
+
+
+async def _pending_hitl_requests(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    project_id: str,
+) -> list[Any]:
+    from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+        SqlHITLRequestRepository,
+    )
+
+    return await SqlHITLRequestRepository(context.db).get_pending_by_conversation(
+        conversation_id=conversation_id,
+        tenant_id=context.tenant_id,
+        project_id=project_id,
+        exclude_expired=True,
+    )
+
+
+async def _send_pending_hitl_error(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    pending_hitl: list[Any],
+) -> None:
+    from src.infrastructure.agent.hitl.utils import resolve_trusted_hitl_type
+
+    pending_types = [
+        resolve_trusted_hitl_type(request) or request.request_type.value for request in pending_hitl
+    ]
+    await context.send_error(
+        f"Agent is waiting for your response. Please complete the pending "
+        f"{', '.join(pending_types)} request(s) before sending new messages.",
+        code="HITL_PENDING",
+        conversation_id=conversation_id,
+        extra={
+            "pending_requests": [
+                {
+                    "request_id": request.id,
+                    "request_type": resolve_trusted_hitl_type(request)
+                    or request.request_type.value,
+                    "question": request.question,
+                }
+                for request in pending_hitl
+            ]
+        },
+    )
+
+
+async def _admit_client_turn(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    project_id: str,
+    message_id: str | None,
+    execution_payload: dict[str, Any],
+) -> _ClientTurnAdmission | None:
+    """Durably accept, replay, or reject one structured client turn."""
+    payload_hash = (
+        canonical_agent_client_turn_payload_hash(execution_payload)
+        if message_id is not None
+        else None
+    )
+    repository = None
+    turn = None
+
+    if message_id is not None:
+        from src.infrastructure.adapters.secondary.persistence.sql_agent_client_turn_repository import (
+            SqlAgentClientTurnRepository,
+        )
+
+        assert payload_hash is not None
+        repository = SqlAgentClientTurnRepository(context.db)
+        turn = await repository.find(conversation_id, message_id)
+        if turn is not None and turn.payload_hash != payload_hash:
+            await context.db.rollback()
+            await _send_client_turn_conflict(
+                context,
+                conversation_id=conversation_id,
+                message_id=message_id,
+            )
+            return None
+        if turn is not None and turn.status == AgentClientTurnStatus.STARTED:
+            materialized = await _client_turn_execution_is_materialized(
+                context,
+                conversation_id=conversation_id,
+                execution_message_id=turn.execution_message_id,
+            )
+            await context.db.rollback()
+            if not materialized:
+                await _send_unconfirmed_client_turn(
+                    context,
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    turn=turn,
+                )
+                return None
+        elif turn is not None:
+            await context.db.rollback()
+
+    if turn is None or turn.status == AgentClientTurnStatus.ACCEPTED:
+        pending_hitl = await _pending_hitl_requests(
+            context,
+            conversation_id=conversation_id,
+            project_id=project_id,
+        )
+        if pending_hitl:
+            await _send_pending_hitl_error(
+                context,
+                conversation_id=conversation_id,
+                pending_hitl=pending_hitl,
+            )
+            return None
+        if turn is not None:
+            await context.db.rollback()
+
+    if repository is not None and turn is None:
+        assert message_id is not None
+        assert payload_hash is not None
+        try:
+            claim = await repository.claim_and_commit(
+                conversation_id=conversation_id,
+                client_message_id=message_id,
+                payload_hash=payload_hash,
+            )
+        except AgentClientTurnPayloadConflictError:
+            await _send_client_turn_conflict(
+                context,
+                conversation_id=conversation_id,
+                message_id=message_id,
+            )
+            return None
+        return _ClientTurnAdmission(
+            payload_hash=payload_hash,
+            turn=claim.turn,
+            created=claim.created,
+        )
+
+    return _ClientTurnAdmission(
+        payload_hash=payload_hash,
+        turn=turn,
+    )
 
 
 async def _resolve_user_preferred_language(context: MessageContext) -> str | None:
@@ -758,6 +998,7 @@ async def _create_external_acp_user_event(
     conversation_id: str,
     user_message: str,
     agent: Agent,
+    execution_message_id: str | None = None,
 ) -> _ExternalACPExecutionState:
     from src.domain.model.agent.execution.event_time import EventTimeGenerator
     from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
@@ -767,7 +1008,7 @@ async def _create_external_acp_user_event(
     event_repo = SqlAgentExecutionEventRepository(context.db)
     last_time_us, last_counter = await event_repo.get_last_event_time(conversation_id)
     time_gen = EventTimeGenerator(last_time_us=last_time_us, last_counter=last_counter)
-    user_msg_id = str(uuid.uuid4())
+    user_msg_id = execution_message_id or str(uuid.uuid4())
     assistant_msg_id = str(uuid.uuid4())
 
     next_time_us, next_counter = time_gen.next()
@@ -1076,6 +1317,7 @@ async def _stream_external_acp_agent_definition(
     *,
     agent: Agent,
     backend: dict[str, Any],
+    execution_message_id: str | None = None,
 ) -> None:
     acp_agent_key = str(backend["acp_agent_key"])
     service = await _load_external_acp_service(context, acp_agent_key=acp_agent_key)
@@ -1089,6 +1331,7 @@ async def _stream_external_acp_agent_definition(
         conversation_id=conversation_id,
         user_message=user_message,
         agent=agent,
+        execution_message_id=execution_message_id,
     )
     assistant_text, live_events = await _run_external_acp_prompt(
         service,
@@ -1110,7 +1353,7 @@ async def _stream_external_acp_agent_definition(
     )
 
 
-async def stream_agent_to_websocket_with_fresh_session(
+async def stream_agent_to_websocket_with_fresh_session(  # noqa: PLR0913
     context: MessageContext,
     conversation_id: str,
     user_message: str,
@@ -1123,28 +1366,55 @@ async def stream_agent_to_websocket_with_fresh_session(
     image_attachments: list[str] | None = None,
     agent_id: str | None = None,
     mentions: list[str] | None = None,
+    client_message_id: str | None = None,
+    client_payload_hash: str | None = None,
+    execution_message_id: str | None = None,
 ) -> None:
     """Create a fresh DB-scoped agent service for the long-running stream."""
     async with context.fresh_db_context() as stream_context:
-        from src.configuration.factories import create_llm_client
+        client_turn_claimed = False
+        if client_message_id is not None:
+            if client_payload_hash is None or execution_message_id is None:
+                raise ValueError("Client turn authority is incomplete")
+            from src.infrastructure.adapters.secondary.persistence.sql_agent_client_turn_repository import (
+                SqlAgentClientTurnRepository,
+            )
 
-        llm = await create_llm_client(stream_context.tenant_id)
-        agent_service = stream_context.get_scoped_container().agent_service(llm)
-        await stream_agent_to_websocket(
-            agent_service=agent_service,
-            context=stream_context,
-            conversation_id=conversation_id,
-            user_message=user_message,
-            project_id=project_id,
-            preferred_language=preferred_language,
-            attachment_ids=attachment_ids,
-            file_metadata=file_metadata,
-            forced_skill_name=forced_skill_name,
-            app_model_context=_sanitize_client_app_model_context(app_model_context),
-            image_attachments=image_attachments,
-            agent_id=agent_id,
-            mentions=mentions,
-        )
+            turn_repo = SqlAgentClientTurnRepository(stream_context.db)
+            client_turn_claimed = await turn_repo.try_start(
+                conversation_id=conversation_id,
+                client_message_id=client_message_id,
+                payload_hash=client_payload_hash,
+            )
+            if not client_turn_claimed:
+                return
+
+        try:
+            from src.configuration.factories import create_llm_client
+
+            llm = await create_llm_client(stream_context.tenant_id)
+            agent_service = stream_context.get_scoped_container().agent_service(llm)
+            await stream_agent_to_websocket(
+                agent_service=agent_service,
+                context=stream_context,
+                conversation_id=conversation_id,
+                user_message=user_message,
+                project_id=project_id,
+                preferred_language=preferred_language,
+                attachment_ids=attachment_ids,
+                file_metadata=file_metadata,
+                forced_skill_name=forced_skill_name,
+                app_model_context=_sanitize_client_app_model_context(app_model_context),
+                image_attachments=image_attachments,
+                agent_id=agent_id,
+                mentions=mentions,
+                execution_message_id=execution_message_id,
+            )
+        finally:
+            # If setup failed before the user event commit, roll back the
+            # uncommitted ACCEPTED -> STARTED CAS so a replay can safely retry.
+            if client_turn_claimed and stream_context.db.in_transaction():
+                await stream_context.db.rollback()
 
 
 async def stream_agent_to_websocket(  # noqa: PLR0913
@@ -1161,6 +1431,7 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
     image_attachments: list[str] | None = None,
     agent_id: str | None = None,
     mentions: list[str] | None = None,
+    execution_message_id: str | None = None,
 ) -> None:
     """
     Stream agent events to WebSocket.
@@ -1195,6 +1466,7 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
                 project_id=project_id,
                 agent=agent,
                 backend=backend,
+                execution_message_id=execution_message_id,
             )
             return
 
@@ -1213,6 +1485,7 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
             agent_id=agent_id,
             mentions=mentions,
             api_auth_token=context.api_key,
+            execution_message_id=execution_message_id,
         ):
             event_count += 1
             event_type = event.get("type", "unknown")

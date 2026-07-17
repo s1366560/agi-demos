@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import {
   CheckCircledIcon,
   CodeIcon,
@@ -279,6 +279,7 @@ type PlanningStageProps = {
   workspaceLabel: string;
   contextCount: number;
   retryAvailable: boolean;
+  deliveryOutcomeUnknown: boolean;
   onRetry: () => void;
 };
 
@@ -289,6 +290,7 @@ export function NewTaskPlanningStage({
   workspaceLabel,
   contextCount,
   retryAvailable,
+  deliveryOutcomeUnknown,
   onRetry,
 }: PlanningStageProps) {
   const { t } = useI18n();
@@ -326,6 +328,13 @@ export function NewTaskPlanningStage({
             description={t('task.planningPacketDescription')}
           />
         </div>
+        {deliveryOutcomeUnknown ? (
+          <div className="new-task-planning-delay" role="status">
+            <span>
+              <strong>{t('task.agentTurnOutcomeUnknown')}</strong>
+            </span>
+          </div>
+        ) : null}
         {retryAvailable ? (
           <div className="new-task-planning-delay" role="status">
             <span>
@@ -377,6 +386,7 @@ type ReviewStageProps = {
   revisionFeedback: string;
   revisionComposerOpen: boolean;
   launching: boolean;
+  headingRef?: Ref<HTMLHeadingElement>;
   onAcknowledgeVersion: () => void;
   onStopWaitingForRevision: () => void;
   onAcknowledgeCurrentPlan: () => void;
@@ -403,6 +413,7 @@ export function NewTaskReviewStage({
   revisionFeedback,
   revisionComposerOpen,
   launching,
+  headingRef,
   onAcknowledgeVersion,
   onStopWaitingForRevision,
   onAcknowledgeCurrentPlan,
@@ -414,10 +425,22 @@ export function NewTaskReviewStage({
 }: ReviewStageProps) {
   const { t } = useI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const returnFocusStepIdRef = useRef<string | null>(null);
+  const stepEditButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 
   useEffect(() => {
     if (!reviewSteps.some((step) => step.id === editingId)) setEditingId(null);
   }, [editingId, reviewSteps]);
+
+  useEffect(() => {
+    if (editingId !== null || !returnFocusStepIdRef.current) return;
+    const stepId = returnFocusStepIdRef.current;
+    const frame = window.requestAnimationFrame(() => {
+      stepEditButtonRefs.current.get(stepId)?.focus();
+      returnFocusStepIdRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editingId]);
 
   const enabledCount = enabledReviewPlanSteps(reviewSteps).length;
   const isVersioned = approval?.kind === 'versioned_atomic';
@@ -429,6 +452,8 @@ export function NewTaskReviewStage({
             eyebrow={t('task.reviewEyebrow')}
             title={t('task.reviewTitle')}
             description={t('task.reviewDescription')}
+            headingRef={headingRef}
+            headingTabIndex={-1}
           />
           <span className="new-task-plan-ready">
             <CheckCircledIcon /> {t('task.planReady')}
@@ -494,8 +519,18 @@ export function NewTaskReviewStage({
               index={index}
               editing={editingId === step.id}
               disabled={launching}
+              editButtonRef={(node) => {
+                if (node) {
+                  stepEditButtonRefs.current.set(step.id, node);
+                } else {
+                  stepEditButtonRefs.current.delete(step.id);
+                }
+              }}
               onEdit={() => setEditingId(step.id)}
-              onCancel={() => setEditingId(null)}
+              onCancel={() => {
+                returnFocusStepIdRef.current = step.id;
+                setEditingId(null);
+              }}
               onChange={(nextStep) =>
                 onReviewStepsChange(
                   reviewSteps.map((candidate) =>
@@ -509,6 +544,7 @@ export function NewTaskReviewStage({
                     candidate.id === nextStep.id ? nextStep : candidate,
                   ),
                 );
+                returnFocusStepIdRef.current = step.id;
                 setEditingId(null);
               }}
             />
@@ -646,6 +682,7 @@ function ReviewPlanStepRow({
   index,
   editing,
   disabled,
+  editButtonRef,
   onEdit,
   onCancel,
   onChange,
@@ -655,6 +692,7 @@ function ReviewPlanStepRow({
   index: number;
   editing: boolean;
   disabled: boolean;
+  editButtonRef: (node: HTMLButtonElement | null) => void;
   onEdit: () => void;
   onCancel: () => void;
   onChange: (step: ReviewPlanStep) => void;
@@ -737,6 +775,7 @@ function ReviewPlanStepRow({
       </div>
       <time>{t('task.notProvided')}</time>
       <button
+        ref={editButtonRef}
         className="new-task-step-edit"
         type="button"
         disabled={disabled}
