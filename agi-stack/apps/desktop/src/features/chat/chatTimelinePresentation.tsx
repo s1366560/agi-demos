@@ -1,0 +1,393 @@
+import type { ReactNode } from 'react';
+import {
+  ActivityLogIcon,
+  ArchiveIcon,
+  CodeIcon,
+  DotsHorizontalIcon,
+} from '@radix-ui/react-icons';
+
+import { useI18n } from '../../i18n';
+import type {
+  AgentTimelineItem,
+  HitlType,
+  ToolDisplayData,
+  ToolFileMetadata,
+} from '../../types';
+
+export type TimelineKind = 'user' | 'agent' | 'runtime' | 'tool' | 'artifact';
+
+export type TimelineStatus = {
+  kind: 'ok' | 'error' | 'waiting';
+  label: string;
+  localized: boolean;
+};
+
+export function timelineHitlType(item: AgentTimelineItem): HitlType | null {
+  if (item.type === 'clarification_asked') return 'clarification';
+  if (item.type === 'decision_asked') return 'decision';
+  if (item.type === 'env_var_requested') return 'env_var';
+  if (item.type === 'permission_asked' || item.type === 'permission_requested') {
+    return 'permission';
+  }
+  if (item.type === 'a2ui_action_asked') return 'a2ui_action';
+  return null;
+}
+
+export function timelineHitlRequestId(item: AgentTimelineItem): string {
+  if (item.requestId) return item.requestId;
+  const direct = item.request_id;
+  if (typeof direct === 'string') return direct;
+  return stringPayloadField(item, 'request_id') ?? '';
+}
+
+export function timelineHitlQuestion(
+  item: AgentTimelineItem,
+  t: (key: string) => string,
+): string {
+  if (item.question) return item.question;
+  return (
+    stringPayloadField(item, 'question') ??
+    stringPayloadField(item, 'message') ??
+    item.reason ??
+    stringPayloadField(item, 'reason') ??
+    item.description ??
+    stringPayloadField(item, 'description') ??
+    t('chat.agentWaitingForInput')
+  );
+}
+
+export function timelineHitlOptions(
+  item: AgentTimelineItem,
+): Array<{ value: string; label: string; description?: string }> {
+  const payload = isRecord(item.payload) ? item.payload : {};
+  const source = Array.isArray(item.options)
+    ? item.options
+    : Array.isArray(payload.options)
+      ? payload.options
+      : [];
+  return source.flatMap((option) => {
+    if (typeof option === 'string') return [{ value: option, label: option }];
+    if (!isRecord(option)) return [];
+    const value = firstString(option, ['id', 'value', 'option_id', 'label']);
+    if (!value) return [];
+    return [
+      {
+        value,
+        label: firstString(option, ['label', 'title', 'name']) ?? value,
+        description: firstString(option, ['description', 'detail']) ?? undefined,
+      },
+    ];
+  });
+}
+
+export function timelineHitlFields(
+  item: AgentTimelineItem,
+): Array<{ name: string; label: string; required: boolean }> {
+  const payload = isRecord(item.payload) ? item.payload : {};
+  const source = Array.isArray(item.fields)
+    ? item.fields
+    : Array.isArray(payload.fields)
+      ? payload.fields
+      : [];
+  return source.flatMap((field) => {
+    if (typeof field === 'string') return [{ name: field, label: field, required: true }];
+    if (!isRecord(field)) return [];
+    const name = firstString(field, ['name', 'key', 'variable']);
+    if (!name) return [];
+    return [
+      {
+        name,
+        label: firstString(field, ['label', 'description']) ?? name,
+        required: field.required !== false,
+      },
+    ];
+  });
+}
+
+export function booleanPayloadField(item: AgentTimelineItem, key: string): boolean | null {
+  if (!isRecord(item.payload)) return null;
+  const value = item.payload[key];
+  return typeof value === 'boolean' ? value : null;
+}
+
+export function timelineKind(item: AgentTimelineItem): TimelineKind {
+  if (item.role === 'user' || item.type === 'user_message') return 'user';
+  if (item.role === 'assistant' || item.type === 'assistant_message') return 'agent';
+  if (item.type === 'act' || item.type === 'observe') return 'tool';
+  if (item.type.startsWith('artifact_')) return 'artifact';
+  return 'runtime';
+}
+
+export function timelineToolDisplay(item: AgentTimelineItem): ToolDisplayData | null {
+  if (isRecord(item.display)) return item.display as ToolDisplayData;
+  const output = isRecord(item.toolOutput) ? item.toolOutput : null;
+  const display = output?.display;
+  return isRecord(display) ? (display as ToolDisplayData) : null;
+}
+
+export function timelineFileMetadata(item: AgentTimelineItem): ToolFileMetadata | null {
+  if (isRecord(item.fileMetadata)) return item.fileMetadata as ToolFileMetadata;
+  const output = isRecord(item.toolOutput) ? item.toolOutput : null;
+  const metadata = output?.fileMetadata ?? output?.file_metadata;
+  return isRecord(metadata) ? (metadata as ToolFileMetadata) : null;
+}
+
+export function timelineTitle(item: AgentTimelineItem, t: (key: string) => string): string {
+  if (item.role === 'user' || item.type === 'user_message') return t('chat.you');
+  if (item.role === 'assistant' || item.type === 'assistant_message') return t('chat.agent');
+  const display = timelineToolDisplay(item);
+  if (display?.title) return display.title;
+  if (item.type === 'thought') return t('chat.thought');
+  if (item.type === 'act') return t('chat.toolCall');
+  if (item.type === 'observe') return t('chat.toolResult');
+  if (item.type === 'work_plan') return t('chat.workPlan');
+  if (item.type.startsWith('task_')) return t('chat.task');
+  if (item.type.startsWith('artifact_')) return t('chat.artifact');
+  if (timelineHitlType(item)) return t('chat.humanInput');
+  if (item.type.startsWith('subagent_')) return t('chat.subagent');
+  if (item.type.startsWith('chain_')) return t('chat.chain');
+  if (item.type.startsWith('agent_')) return t('chat.agentEvent');
+  return t('chat.event');
+}
+
+export function timelineIcon(kind: TimelineKind, item: AgentTimelineItem): ReactNode {
+  if (item.isError || item.error) return <DotsHorizontalIcon />;
+  if (kind === 'tool') return <CodeIcon />;
+  if (kind === 'artifact') return <ArchiveIcon />;
+  if (item.type === 'thought' || item.type === 'work_plan') return <ActivityLogIcon />;
+  return <DotsHorizontalIcon />;
+}
+
+export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
+  const kind = timelineKind(item);
+  if (kind === 'user' || kind === 'agent') return true;
+  if (timelineHitlType(item) && !item.answered) return true;
+  if (item.type === 'work_plan') return true;
+  return false;
+}
+
+export function timelineHasDetails(item: AgentTimelineItem, kind: TimelineKind): boolean {
+  if (kind === 'user' || kind === 'agent') return false;
+  if (timelineToolDisplay(item) || timelineFileMetadata(item)) return true;
+  if (timelineHitlType(item) || item.question || item.error || item.content) return true;
+  if (item.toolInput !== undefined || item.toolOutput !== undefined) return true;
+  if (item.payload !== undefined) return true;
+  if (item.filename || item.artifactId) return true;
+  return false;
+}
+
+export function timelineSummary(
+  item: AgentTimelineItem,
+  kind: TimelineKind,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  if (item.error) return item.error;
+  if (timelineHitlType(item)) return timelineHitlQuestion(item, t);
+  if (kind === 'artifact') return item.filename || item.artifactId || item.type;
+  if (kind === 'tool') {
+    const display = timelineToolDisplay(item);
+    if (display?.summary) return display.summary;
+    const fileSummary = timelineFileMetadataSummary(timelineFileMetadata(item), t);
+    if (fileSummary) {
+      return item.toolName ? `${item.toolName} ${fileSummary}` : fileSummary;
+    }
+    const source = item.toolOutput ?? item.toolInput ?? item.payload ?? item.content;
+    const summary = compactTimelineValue(source);
+    return item.toolName ? `${item.toolName}${summary ? ` ${summary}` : ''}` : summary || item.type;
+  }
+  if (item.content) return compactTimelineValue(item.content);
+  if (item.payload !== undefined) return compactTimelineValue(item.payload);
+  return item.type;
+}
+
+export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
+  if (item.isError || item.error) {
+    return { kind: 'error', label: 'chat.status.error', localized: true };
+  }
+  const displayStatus = timelineToolDisplay(item)?.status;
+  if (displayStatus) {
+    return {
+      kind: item.type === 'act' ? 'waiting' : 'ok',
+      label: displayStatus,
+      localized: false,
+    };
+  }
+  if (timelineHitlType(item)) {
+    return item.answered
+      ? { kind: 'ok', label: 'chat.status.answered', localized: true }
+      : { kind: 'waiting', label: 'chat.status.waiting', localized: true };
+  }
+  if (item.type === 'act') {
+    return { kind: 'waiting', label: 'chat.status.call', localized: true };
+  }
+  if (item.type === 'observe') {
+    return { kind: 'ok', label: 'chat.status.result', localized: true };
+  }
+  if (item.type === 'artifact_ready') {
+    return { kind: 'ok', label: 'chat.status.ready', localized: true };
+  }
+  return null;
+}
+
+export function timelineDetailLineCount(item: AgentTimelineItem, kind: TimelineKind): number {
+  const values: string[] = [];
+  if (item.content) values.push(item.content);
+  if (timelineToolDisplay(item)?.summary) values.push(timelineToolDisplay(item)?.summary ?? '');
+  if (timelineFileMetadata(item)) values.push(formatTimelineValue(timelineFileMetadata(item)));
+  if (item.toolInput !== undefined) values.push(formatTimelineValue(item.toolInput));
+  if (item.toolOutput !== undefined) values.push(formatTimelineValue(item.toolOutput));
+  if (item.payload !== undefined) values.push(formatTimelineValue(item.payload));
+  if (item.question) values.push(item.question);
+  if (item.error) values.push(item.error);
+  if (kind === 'artifact') values.push(item.filename || item.artifactId || '');
+  return values
+    .join('\n')
+    .split('\n')
+    .filter((line) => line.trim().length > 0).length;
+}
+
+export function formatTimelineTime(item: AgentTimelineItem): string {
+  const value =
+    typeof item.timestamp === 'number'
+      ? item.timestamp
+      : typeof item.eventTimeUs === 'number'
+        ? Math.floor(item.eventTimeUs / 1000)
+        : null;
+  if (!value) return '';
+  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+export function timelinePayloadPreview(item: AgentTimelineItem): string {
+  if (item.payload === undefined || item.payload === null) return item.type;
+  return formatTimelineValue(item.payload);
+}
+
+export function formatTimelineValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+export function ToolFileMetadataView({ metadata }: { metadata: ToolFileMetadata }) {
+  const { t } = useI18n();
+  const paths = Array.isArray(metadata.paths) ? metadata.paths : [];
+  const matches = Array.isArray(metadata.matches) ? metadata.matches : [];
+  return (
+    <div className="tool-file-metadata">
+      <div className="tool-file-metadata-head">
+        <span>{metadata.operation || t('chat.file')}</span>
+        {typeof metadata.matchCount === 'number' ? (
+          <em>{t('chat.matchCount', { count: metadata.matchCount })}</em>
+        ) : null}
+        {metadata.truncated ? <em>{t('chat.truncated')}</em> : null}
+      </div>
+      {metadata.diffStat ? (
+        <div className="tool-file-diffstat">
+          <span>{t('chat.fileCount', { count: metadata.diffStat.filesChanged ?? 0 })}</span>
+          <span>+{metadata.diffStat.additions ?? 0}</span>
+          <span>-{metadata.diffStat.deletions ?? 0}</span>
+        </div>
+      ) : null}
+      {paths.length ? (
+        <div className="tool-file-list">
+          {paths.slice(0, 8).map((path, index) => (
+            <div className="tool-file-row" key={`${path.path ?? path.relativePath ?? index}`}>
+              <CodeIcon />
+              <span>{path.relativePath || path.path || t('chat.file')}</span>
+              <em>{filePathMetaLabel(path, t)}</em>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {matches.length ? (
+        <div className="tool-file-matches">
+          {matches.slice(0, 6).map((match, index) => (
+            <div
+              className="tool-match-row"
+              key={`${match.path ?? 'match'}:${match.lineNumber ?? index}`}
+            >
+              <span>
+                {match.path}
+                {typeof match.lineNumber === 'number' ? `:${match.lineNumber}` : ''}
+              </span>
+              {match.preview ? <em>{match.preview}</em> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function stringPayloadField(item: AgentTimelineItem, key: string): string | null {
+  if (!isRecord(item.payload)) return null;
+  const value = item.payload[key];
+  return typeof value === 'string' && value ? value : null;
+}
+
+function firstString(record: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  return null;
+}
+
+function timelineFileMetadataSummary(
+  metadata: ToolFileMetadata | null,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  if (!metadata) return '';
+  const paths = Array.isArray(metadata.paths) ? metadata.paths : [];
+  const pathLabel =
+    paths.length === 1
+      ? paths[0].relativePath || paths[0].path
+      : paths.length > 1
+        ? t('chat.fileCount', { count: paths.length })
+        : '';
+  const matchLabel =
+    typeof metadata.matchCount === 'number'
+      ? t('chat.matchCount', { count: metadata.matchCount })
+      : '';
+  const truncated = metadata.truncated ? t('chat.truncated') : '';
+  return [metadata.operation, pathLabel, matchLabel, truncated].filter(Boolean).join(' · ');
+}
+
+function filePathMetaLabel(
+  path: NonNullable<ToolFileMetadata['paths']>[number],
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  const parts: string[] = [];
+  if (typeof path.lineStart === 'number' && typeof path.lineEnd === 'number') {
+    parts.push(
+      path.lineStart === path.lineEnd ? `L${path.lineStart}` : `L${path.lineStart}-${path.lineEnd}`,
+    );
+  } else if (typeof path.lineCount === 'number') {
+    parts.push(t('chat.lineCount', { count: path.lineCount }));
+  }
+  if (typeof path.bytesWritten === 'number') {
+    parts.push(t('chat.bytesWritten', { count: path.bytesWritten }));
+  }
+  if (typeof path.bytesRead === 'number') {
+    parts.push(t('chat.bytesRead', { count: path.bytesRead }));
+  }
+  if (path.created) parts.push(t('chat.created'));
+  if (path.changed) parts.push(t('chat.changed'));
+  if (path.deleted) parts.push(t('chat.deleted'));
+  return parts.join(' · ');
+}
+
+function compactTimelineValue(value: unknown, maxLength = 180): string {
+  if (value === undefined || value === null) return '';
+  const rendered = typeof value === 'string' ? value : formatTimelineValue(value);
+  const compacted = rendered.replace(/\s+/g, ' ').trim();
+  if (compacted.length <= maxLength) return compacted;
+  return `${compacted.slice(0, maxLength - 1)}…`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

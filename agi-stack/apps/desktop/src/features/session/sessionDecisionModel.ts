@@ -16,6 +16,19 @@ function hasText(value: unknown): value is string {
 }
 
 export function validateApprovalRequest(request: DesktopApprovalRequest): ApprovalValidation {
+  if (!request.decision && request.kind === 'permission' && request.permission) {
+    const permission = request.permission;
+    const missing: string[] = [];
+    if (!hasText(permission.tool_name)) missing.push('tool');
+    if (!hasText(permission.action)) missing.push('action');
+    if (!hasText(permission.description)) missing.push('description');
+    if (!['low', 'medium', 'high'].includes(permission.risk_level)) missing.push('risk');
+    return {
+      complete: missing.length === 0,
+      missing,
+      canApprove: missing.length === 0 && request.status === 'pending',
+    };
+  }
   const decision = request.decision;
   const missing: string[] = [];
   if (!decision || !hasText(decision.action?.name) || !hasText(decision.action?.label)) {
@@ -74,7 +87,7 @@ export function latestPendingApproval(
       .filter(
         (request) =>
           request.status === 'pending' &&
-          Boolean(request.decision) &&
+          Boolean(request.decision || request.permission) &&
           (!runId || request.run_id === runId),
       )
       .sort((left, right) => {

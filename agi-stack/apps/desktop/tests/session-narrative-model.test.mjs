@@ -57,6 +57,36 @@ test('activity summary uses the latest authoritative event and evidence counts',
 
   assert.equal(summary.title, 'Targeted tests');
   assert.equal(summary.detail, '18 tests passed');
-  assert.equal(summary.checkpoint, 'run_tests');
+  assert.equal(summary.checkpoint, '');
+  assert.equal(summary.checkpointKey, 'session.activityCheckpoint');
   assert.equal(summary.evidence, '2 artifacts · 4 tasks');
+});
+
+test('protocol event and tool identifiers map to localized activity copy', () => {
+  const summary = sessionActivitySummary({
+    items: [
+      { id: 'tool-1', type: 'observe', toolName: 'todowrite' },
+      { id: 'memory-1', type: 'memory_captured' },
+    ],
+    artifactCount: 0,
+    taskCount: 1,
+  });
+
+  assert.equal(summary.title, '');
+  assert.equal(summary.titleKey, 'session.activityMemoryCaptured');
+  assert.equal(summary.checkpoint, '');
+  assert.equal(summary.checkpointKey, 'session.activityPlan');
+});
+
+test('unknown protocol identifiers use localized fallbacks instead of leaking wire values', () => {
+  const summary = sessionActivitySummary({
+    items: [{ id: 'runtime-1', type: 'future_runtime_event', toolName: 'future_tool_call' }],
+    artifactCount: 0,
+    taskCount: 0,
+  });
+
+  assert.equal(summary.title, '');
+  assert.equal(summary.titleKey, 'session.activityUpdated');
+  assert.equal(summary.checkpoint, '');
+  assert.equal(summary.checkpointKey, 'session.activityCheckpoint');
 });

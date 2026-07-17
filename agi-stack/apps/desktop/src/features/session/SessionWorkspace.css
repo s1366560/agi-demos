@@ -4,13 +4,13 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 70px minmax(0, 1fr);
+  grid-template-rows: 76px minmax(0, 1fr);
   overflow: hidden;
   background: #080c12;
 }
 
 .session-workspace-shell.has-status-banner {
-  grid-template-rows: 70px minmax(50px, auto) minmax(0, 1fr);
+  grid-template-rows: 76px minmax(50px, auto) minmax(0, 1fr);
 }
 
 .session-workspace-header {
@@ -19,7 +19,7 @@
   grid-template-columns: minmax(260px, 1fr) auto auto;
   align-items: center;
   gap: 20px;
-  padding: 0 16px 0 20px;
+  padding: 0 18px 0 22px;
   border-bottom: 1px solid var(--desktop-border-soft);
   background: #0d131b;
 }
@@ -31,11 +31,19 @@
 }
 
 .session-workspace-identity > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   overflow: hidden;
   color: var(--desktop-faint);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-workspace-identity > span svg {
+  width: 9px;
+  height: 9px;
 }
 
 .session-workspace-identity > div {
@@ -113,6 +121,71 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+.session-workspace-more {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.session-workspace-more summary {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--desktop-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.session-workspace-more summary::-webkit-details-marker { display: none; }
+
+.session-workspace-more summary:hover,
+.session-workspace-more summary:focus-visible,
+.session-workspace-more[open] summary {
+  color: var(--desktop-text);
+  background: var(--desktop-panel-raised);
+  border-color: var(--desktop-border);
+  outline: none;
+}
+
+.session-workspace-more > div {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  width: 174px;
+  gap: 2px;
+  padding: 5px;
+  background: #0d141d;
+  border: 1px solid var(--desktop-border);
+  border-radius: 7px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+}
+
+.session-workspace-more button {
+  display: flex;
+  width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--desktop-muted);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+}
+
+.session-workspace-more button:hover,
+.session-workspace-more button:focus-visible { color: var(--desktop-text); background: #151d28; }
+.session-workspace-more button.danger { color: var(--red-9); }
+.session-workspace-more button:disabled { opacity: 0.42; }
 
 .session-workspace-header-runtime {
   display: flex;
@@ -320,11 +393,23 @@
 }
 
 .session-pane-label small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   overflow: hidden;
   color: var(--desktop-faint);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-pane-label small svg { width: 10px; height: 10px; }
+
+.session-pane-privacy {
+  padding: 2px 6px;
+  background: #121a24;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 999px;
 }
 
 .session-pane-label em {
@@ -334,13 +419,18 @@
 }
 
 .session-pane-label > button {
-  display: inline-grid;
+  display: inline-flex;
   flex: 0 0 auto;
-  width: 26px;
+  width: auto;
   height: 26px;
   margin-left: auto;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 7px;
   color: var(--desktop-faint);
+  font: inherit;
+  font-size: 9px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -363,7 +453,7 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 248px;
   overflow: hidden;
 }
 
@@ -388,6 +478,145 @@
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
+
+.session-context-rail {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 14px 14px 24px;
+  background: #0a1017;
+  border-left: 1px solid var(--desktop-border-soft);
+  scrollbar-width: thin;
+}
+
+.session-context-attention,
+.session-context-section {
+  display: grid;
+  gap: 9px;
+  padding: 0 0 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.session-context-attention {
+  --context-tone: var(--amber-9);
+  padding: 11px;
+  color: var(--context-tone);
+  background: color-mix(in srgb, var(--context-tone) 8%, #0d131b);
+  border: 1px solid color-mix(in srgb, var(--context-tone) 30%, var(--desktop-border-soft));
+  border-radius: 8px;
+}
+
+.session-context-attention.tone-danger { --context-tone: var(--red-9); }
+.session-context-attention.tone-success { --context-tone: var(--green-9); }
+.session-context-attention.tone-warning { --context-tone: var(--amber-9); }
+
+.session-context-attention header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-context-attention header svg { width: 13px; height: 13px; }
+.session-context-attention header strong { color: var(--desktop-text); font-size: 10px; }
+.session-context-attention p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.session-context-attention-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.session-context-feedback { display: grid; gap: 6px; }
+.session-context-feedback label {
+  color: var(--desktop-faint);
+  font-size: 9px;
+}
+.session-context-feedback textarea {
+  min-height: 66px;
+  resize: vertical;
+  padding: 7px;
+  color: var(--desktop-text);
+  font: inherit;
+  font-size: 9px;
+  background: #080d13;
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+}
+.session-context-feedback > div { display: flex; justify-content: flex-end; gap: 5px; }
+
+.session-context-section h2 {
+  margin: 0;
+  color: var(--desktop-faint);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.session-context-section dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 8px;
+  margin: 0;
+}
+
+.session-context-section dl > div { min-width: 0; }
+.session-context-section dl > div.wide { grid-column: 1 / -1; }
+.session-context-section dt { color: var(--desktop-faint); font-size: 8px; }
+.session-context-section dd {
+  overflow: hidden;
+  margin: 3px 0 0;
+  color: #c9d4e2;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-surfaces { gap: 4px; }
+.session-context-surfaces h2 { margin-bottom: 5px; }
+.session-context-surfaces > button {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: 15px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  color: var(--desktop-faint);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.session-context-surfaces > button:hover,
+.session-context-surfaces > button:focus-visible {
+  color: var(--cyan-9);
+  background: #101721;
+  border-color: var(--desktop-border-soft);
+  outline: none;
+}
+
+.session-context-surfaces > button > svg { width: 13px; height: 13px; }
+.session-context-surfaces > button > span { display: grid; min-width: 0; gap: 2px; }
+.session-context-surfaces strong { color: var(--desktop-text); font-size: 9px; }
+.session-context-surfaces small {
+  overflow: hidden;
+  color: var(--desktop-faint);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-evidence { margin-bottom: 0; border-bottom: 0; }
 .session-workspace-body.surface-split .session-workspace-thread {
   border-right: 1px solid var(--desktop-border-soft);
 }
@@ -443,12 +672,14 @@
   .session-workspace-header { grid-template-columns: minmax(260px, 1fr) auto; }
   .session-workspace-stages { display: none; }
   .session-workspace-header-runtime { display: none; }
+  .session-workspace-body { grid-template-columns: minmax(0, 1fr) 224px; }
   .session-workspace-body.surface-split {
     grid-template-columns: minmax(400px, 0.88fr) minmax(460px, 1.12fr);
   }
 }
 
 @media (max-width: 1100px) {
+  .session-workspace-body { grid-template-columns: minmax(0, 1fr) 208px; }
   .session-workspace-body.surface-split {
     grid-template-columns: minmax(380px, 0.9fr) minmax(420px, 1.1fr);
   }

@@ -21,6 +21,7 @@ export type SessionActivitySummary = {
   titleKey: string | null;
   detail: string;
   checkpoint: string;
+  checkpointKey: string | null;
   evidence: string;
 };
 
@@ -62,8 +63,8 @@ export function sessionActivitySummary(input: {
     .reverse()
     .find((item) => item.role !== 'user' && item.type !== 'user_message');
   const display = latest ? timelineDisplay(latest) : null;
-  const title = display?.title || latest?.toolName || latest?.type || '';
-  const titleKey = display?.title || latest?.toolName ? null : activityTitleKey(latest);
+  const titleKey = display?.title ? null : activityTitleKey(latest) ?? 'session.activityUpdated';
+  const title = display?.title || '';
   const detail =
     display?.summary ||
     compactText(latest?.content) ||
@@ -79,19 +80,15 @@ export function sessionActivitySummary(input: {
         Boolean(item.artifactId) ||
         item.type === 'work_plan',
     );
-  const checkpoint =
-    checkpointItem?.toolName ||
-    checkpointItem?.filename ||
-    checkpointItem?.artifactId ||
-    checkpointItem?.type ||
-    latest?.type ||
-    '';
+  const checkpointKey = checkpointTitleKey(checkpointItem) ?? 'session.activityCheckpoint';
+  const checkpoint = '';
 
   return {
     title,
     titleKey,
     detail,
     checkpoint,
+    checkpointKey,
     evidence: `${input.artifactCount} artifacts · ${input.taskCount} tasks`,
   };
 }
@@ -110,7 +107,16 @@ function activityTitleKey(item: AgentTimelineItem | undefined): string | null {
   }
   if (item.type === 'thought') return 'session.activityReasoning';
   if (item.type === 'work_plan') return 'session.activityPlan';
+  if (item.type === 'memory_captured') return 'session.activityMemoryCaptured';
+  if (item.type === 'task_list_updated' || item.type === 'task_updated') {
+    return 'session.activityPlan';
+  }
   if (item.type.startsWith('artifact_')) return 'session.activityArtifact';
+  return null;
+}
+
+function checkpointTitleKey(item: AgentTimelineItem | undefined): string | null {
+  if (item?.toolName === 'todowrite') return 'session.activityPlan';
   return null;
 }
 

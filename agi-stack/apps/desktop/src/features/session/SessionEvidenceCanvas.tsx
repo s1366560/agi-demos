@@ -112,7 +112,7 @@ export function SessionEvidenceCanvas({
                       {row.status ?? t('session.evidence.statusUnknown')}
                     </Badge>
                     <small>
-                      {row.filename} · v{row.version} · r{row.revision}
+                      {row.filename} · v{row.version}
                     </small>
                     <code title={row.artifactVersionId}>{row.artifactVersionId}</code>
                   </span>
@@ -146,7 +146,7 @@ export function SessionEvidenceCanvas({
                     {t('session.evidence.missing')}
                   </Badge>
                   <small>
-                    v{missing.version} · r{missing.revision}
+                    v{missing.version}
                   </small>
                   <code title={missing.artifactVersionId}>{missing.artifactVersionId}</code>
                 </span>

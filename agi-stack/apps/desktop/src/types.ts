@@ -860,6 +860,14 @@ export type DecisionContext = {
   }>;
 };
 
+export type PermissionRequestContext = {
+  tool_name: string;
+  action: string;
+  risk_level: DecisionRiskLevel;
+  description: string;
+  allow_remember: boolean;
+};
+
 export type DesktopApprovalRequest = {
   id: string;
   conversation_id: string;
@@ -870,6 +878,7 @@ export type DesktopApprovalRequest = {
   kind: HitlType;
   prompt: string;
   decision?: DecisionContext | null;
+  permission?: PermissionRequestContext | null;
   status: 'pending' | 'responded';
   created_at: string;
   expires_at?: string | null;

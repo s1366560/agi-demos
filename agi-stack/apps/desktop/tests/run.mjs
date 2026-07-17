@@ -46,6 +46,7 @@ const testFiles = [
   'auxiliary-view.test.mjs',
   'auth-context-model.test.mjs',
   'chat-composer-model.test.mjs',
+  'chat-narrative-presentation.test.mjs',
   'desktop-shell-fidelity.test.mjs',
   'desktop-a11y-i18n.test.mjs',
   'login-screen-fidelity.test.mjs',

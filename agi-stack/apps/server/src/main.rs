@@ -42,6 +42,7 @@ mod audit_api;
 mod auth;
 mod billing_api;
 mod channel_api;
+mod conversation_session_api;
 mod cron_api;
 mod cron_automation_runtime;
 mod cron_hitl_resume;
@@ -133,6 +134,7 @@ use crate::channel_api::{
     ChannelOutboxDeliveryWorker, ChannelOutboxDeliveryWorkerConfig, DevChannelService,
     FeishuWebhookDeliverer, PgChannelService, SharedChannelOutboxDeliveryWorker, SharedChannels,
 };
+use crate::conversation_session_api::PgConversationSessionProjectionService;
 use crate::cron_api::{DevCronJobService, PgCronJobService, SharedCronJobs};
 use crate::cron_scheduler::{build_pg_cron_scheduler, SharedCronScheduler};
 use crate::data_api::{DevDataStatsScopeService, PgDataStatsScopeService, SharedDataStats};
@@ -883,7 +885,8 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         Some(pool) => Arc::new(PgAgentConversationService::new(
             PgAgentConversationRepository::new(pool.clone()),
             PgAgentExecutionEventRepository::new(pool.clone()),
-            PgHitlRequestRepository::new(pool),
+            PgHitlRequestRepository::new(pool.clone()),
+            PgConversationSessionProjectionService::new(pool),
         )),
         None => Arc::new(DevAgentConversationService::new(Arc::clone(&events))),
     };

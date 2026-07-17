@@ -19,6 +19,7 @@ export type SessionExecutionMode = 'plan' | 'build' | 'explore' | 'unavailable';
 export type SessionDetailViewModel = {
   id: string;
   title: string;
+  summary: string | null;
   workspaceLabel: string | null;
   status: string;
   executionAuthorityKind:
@@ -29,6 +30,9 @@ export type SessionDetailViewModel = {
   capabilityMode: SessionCapabilityMode;
   executionMode: SessionExecutionMode;
   stage: SessionStage;
+  conversationMode: string | null;
+  participantCount: number | null;
+  linkedTaskId: string | null;
   environmentLabel: string | null;
   branchLabel: string | null;
   modelLabel: string | null;
@@ -38,6 +42,12 @@ export type SessionDetailViewModel = {
   taskCount: number;
   eventCount: number;
   hasPlan: boolean;
+  planStatus: string | null;
+  artifactCount: number | null;
+  sourceCount: number | null;
+  verificationCount: number | null;
+  toolActivityCount: number | null;
+  failedToolActivityCount: number | null;
   runId: string | null;
   runRevision: number | null;
   attemptNumber: number | null;
@@ -203,11 +213,31 @@ export function buildSessionDetailViewModel({
   const executionMode = projection ? stringValue(authorityConversation.current_mode) : null;
   const elapsedSeconds = run ? elapsedSecondsForRun(run) : null;
   const environment = recordValue(run?.environment);
+  const participantAgents = projection
+    ? stringArrayValue(authorityConversation.participant_agents)
+    : null;
+  const desktopEvidence = projection?.schemaVersion === 1 ? projection.evidenceSummary : null;
+  const cloudEvidence = projection?.schemaVersion === 2 ? projection.cloudEvidenceSummary : null;
+  const planStatus = projection
+    ? projection.planAuthority.kind === 'desktop_plan_version'
+      ? projection.currentPlan?.status ?? null
+      : projection.planAuthority.workspacePlanContext?.status ?? null
+    : null;
+  const failedDesktopActivityCount =
+    projection?.activityAuthority.kind === 'desktop_tool_invocations'
+      ? projection.activityAuthority.invocations.filter((item) => item.status === 'failed').length
+      : null;
 
   return {
     id: authorityConversation.id,
     title: authorityConversation.title || 'Untitled session',
-    workspaceLabel: workspace?.name ?? workspace?.title ?? workspace?.id ?? null,
+    summary: projection ? stringValue(authorityConversation.summary) : null,
+    workspaceLabel:
+      (projection ? stringValue(authorityConversation.workspace_name) : null) ??
+      workspace?.name ??
+      workspace?.title ??
+      workspace?.id ??
+      null,
     status: explicitStatus ?? 'unavailable',
     executionAuthorityKind: executionAuthority?.kind ?? 'unavailable',
     capabilityMode: capabilityModes.has(explicitMode ?? '')
@@ -218,6 +248,11 @@ export function buildSessionDetailViewModel({
         ? executionMode
         : 'unavailable',
     stage: 'unavailable',
+    conversationMode: projection ? stringValue(authorityConversation.conversation_mode) : null,
+    participantCount: participantAgents === null ? null : participantAgents.length + 1,
+    linkedTaskId: projection
+      ? stringValue(authorityConversation.linked_workspace_task_id)
+      : null,
     environmentLabel:
       stringValue(environment.label) ??
       stringValue(environment.kind) ??
@@ -233,6 +268,16 @@ export function buildSessionDetailViewModel({
       projection?.planAuthority.kind === 'desktop_plan_version'
         ? projection.currentPlan !== null
         : projection?.planAuthority.workspacePlanContext !== null && projection !== null,
+    planStatus,
+    artifactCount:
+      desktopEvidence?.artifactVersionCount ?? cloudEvidence?.artifactRecordCount ?? null,
+    sourceCount: desktopEvidence?.artifactSourceCount ?? null,
+    verificationCount:
+      desktopEvidence?.checks?.total ?? cloudEvidence?.candidateVerificationRefCount ?? null,
+    toolActivityCount:
+      desktopEvidence?.toolInvocationCount ?? cloudEvidence?.toolExecutionRecordCount ?? null,
+    failedToolActivityCount:
+      failedDesktopActivityCount ?? cloudEvidence?.failedToolExecutionCount ?? null,
     runId: run?.id ?? null,
     runRevision: run?.revision ?? null,
     attemptNumber: attempt?.attemptNumber ?? null,
@@ -325,6 +370,11 @@ function stringValue(value: unknown): string | null {
 
 function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function stringArrayValue(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
 }
 
 function formatDuration(totalSeconds: number): string {

@@ -413,6 +413,53 @@ test('cloud session projection preserves the explicit explore runtime mode', () 
   assert.equal(projection?.conversation.current_mode, 'explore');
 });
 
+test('cloud session projection preserves a pending HITL request without an expiry', () => {
+  const payload = validCloudProjection();
+  payload.pending_hitl[0].expires_at = null;
+
+  const projection = decodeConversationSessionProjection(payload, {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+  });
+
+  assert.equal(projection?.pendingHitl[0]?.expires_at, null);
+  assert.equal(projection?.capabilities.canRespondToHitl, true);
+});
+
+test('cloud session projection preserves only the structured permission review contract', () => {
+  const payload = validCloudProjection();
+  payload.pending_hitl[0] = {
+    ...payload.pending_hitl[0],
+    request_type: 'permission',
+    question: 'Allow the reviewed command?',
+    metadata: { hitl_type: 'permission' },
+    permission: {
+      tool_name: 'terminal.execute',
+      action: 'run the reviewed test command',
+      risk_level: 'medium',
+      description: 'Run the focused test suite',
+      allow_remember: false,
+      runtime_payload: { token: 'must-not-leak' },
+    },
+  };
+
+  const projection = decodeConversationSessionProjection(payload, 'conversation-1');
+
+  assert.deepEqual(projection?.pendingHitl[0]?.permission, {
+    tool_name: 'terminal.execute',
+    action: 'run the reviewed test command',
+    risk_level: 'medium',
+    description: 'Run the focused test suite',
+    allow_remember: false,
+  });
+  assert.equal(
+    Object.hasOwn(projection?.pendingHitl[0]?.permission ?? {}, 'runtime_payload'),
+    false,
+  );
+});
+
 test('cloud session projection rejects message capability while HITL blocks the turn', () => {
   const payload = validCloudProjection();
   payload.capabilities.can_send_message = true;

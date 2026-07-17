@@ -33,6 +33,10 @@ use agistack_core::ports::EventStream;
 
 use crate::agent_events_api::agent_stream_topic;
 use crate::auth::Identity;
+use crate::conversation_session_api::{
+    standalone_projection, ConversationSessionApiError, ConversationSessionProjectionResponse,
+    ConversationSessionQuery, PgConversationSessionProjectionService, StandaloneConversationSource,
+};
 use crate::AppState;
 
 const DEFAULT_CONVERSATION_LIMIT: i64 = 50;
@@ -140,12 +144,20 @@ pub(crate) trait AgentConversationApiService: Send + Sync {
         conversation_id: &str,
         query: ConversationMessagesQuery,
     ) -> Result<ConversationMessagesResponse, AgentConversationsApiError>;
+
+    async fn get_session_projection(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        query: ConversationSessionQuery,
+    ) -> Result<ConversationSessionProjectionResponse, ConversationSessionApiError>;
 }
 
 pub(crate) struct PgAgentConversationService {
     conversations: PgAgentConversationRepository,
     events: PgAgentExecutionEventRepository,
     hitl: PgHitlRequestRepository,
+    session_projection: PgConversationSessionProjectionService,
 }
 
 impl PgAgentConversationService {
@@ -153,11 +165,13 @@ impl PgAgentConversationService {
         conversations: PgAgentConversationRepository,
         events: PgAgentExecutionEventRepository,
         hitl: PgHitlRequestRepository,
+        session_projection: PgConversationSessionProjectionService,
     ) -> Self {
         Self {
             conversations,
             events,
             hitl,
+            session_projection,
         }
     }
 }
@@ -453,6 +467,18 @@ impl AgentConversationApiService for PgAgentConversationService {
             timeline,
         })
     }
+
+    async fn get_session_projection(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        query: ConversationSessionQuery,
+    ) -> Result<ConversationSessionProjectionResponse, ConversationSessionApiError> {
+        self.session_projection
+            .get_projection(user_id, conversation_id, &query)
+            .await?
+            .ok_or_else(ConversationSessionApiError::not_found)
+    }
 }
 
 impl PgAgentConversationService {
@@ -736,6 +762,58 @@ impl AgentConversationApiService for DevAgentConversationService {
             last_time_us: last.map(|item| item.event_time_us),
             last_counter: last.map(|item| item.event_counter),
             timeline,
+        })
+    }
+
+    async fn get_session_projection(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        query: ConversationSessionQuery,
+    ) -> Result<ConversationSessionProjectionResponse, ConversationSessionApiError> {
+        let conversation = self
+            .conversations
+            .lock()
+            .map_err(|_| ConversationSessionApiError::internal("conversation lock poisoned"))?
+            .get(conversation_id)
+            .filter(|conversation| {
+                conversation.user_id == user_id
+                    && conversation.tenant_id == query.tenant_id
+                    && conversation.project_id == query.project_id
+                    && conversation.workspace_id == query.workspace_id
+            })
+            .cloned()
+            .ok_or_else(ConversationSessionApiError::not_found)?;
+        let created_at = DateTime::parse_from_rfc3339(&conversation.created_at)
+            .map_err(ConversationSessionApiError::internal)?
+            .with_timezone(&Utc);
+        let updated_at = conversation
+            .updated_at
+            .as_deref()
+            .map(DateTime::parse_from_rfc3339)
+            .transpose()
+            .map_err(ConversationSessionApiError::internal)?
+            .map(|value| value.with_timezone(&Utc));
+        standalone_projection(StandaloneConversationSource {
+            id: conversation.id,
+            tenant_id: conversation.tenant_id,
+            project_id: conversation.project_id,
+            workspace_id: conversation.workspace_id,
+            linked_workspace_task_id: conversation.linked_workspace_task_id,
+            workspace_name: conversation.workspace_name,
+            user_id: conversation.user_id,
+            title: conversation.title,
+            summary: conversation.summary,
+            status: conversation.status,
+            current_mode: "build".to_string(),
+            conversation_mode: conversation.conversation_mode,
+            agent_config: conversation.agent_config,
+            message_count: conversation.message_count,
+            participant_agents: conversation.participant_agents,
+            coordinator_agent_id: conversation.coordinator_agent_id,
+            focused_agent_id: conversation.focused_agent_id,
+            created_at,
+            updated_at,
         })
     }
 }
@@ -2199,5 +2277,55 @@ mod tests {
                 .expect("non-owner stop access resolves"),
             ConversationSocketAccess::Denied
         );
+    }
+
+    #[tokio::test]
+    async fn dev_session_projection_requires_exact_tenant_project_workspace_scope() {
+        let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
+        let service = DevAgentConversationService::new(events);
+        let conversation = service
+            .create_conversation(
+                "dev-user",
+                CreateConversationRequest {
+                    project_id: "project-1".to_string(),
+                    title: Some("Scoped session".to_string()),
+                    agent_config: Some(json!({"capability_mode": "code"})),
+                },
+            )
+            .await
+            .expect("conversation must be created");
+        let query = ConversationSessionQuery {
+            tenant_id: "dev-tenant".to_string(),
+            project_id: "project-1".to_string(),
+            workspace_id: None,
+        };
+        let projection = service
+            .get_session_projection("dev-user", &conversation.id, query.clone())
+            .await
+            .expect("exact scope must project");
+        let payload = serde_json::to_value(projection).expect("projection must serialize");
+        assert_eq!(payload["schema_version"], 2);
+        assert_eq!(payload["conversation"]["current_mode"], "build");
+        assert_eq!(payload["conversation"]["capability_mode"], "code");
+
+        for denied_query in [
+            ConversationSessionQuery {
+                tenant_id: "wrong-tenant".to_string(),
+                ..query.clone()
+            },
+            ConversationSessionQuery {
+                project_id: "wrong-project".to_string(),
+                ..query.clone()
+            },
+            ConversationSessionQuery {
+                workspace_id: Some("wrong-workspace".to_string()),
+                ..query
+            },
+        ] {
+            assert!(service
+                .get_session_projection("dev-user", &conversation.id, denied_query)
+                .await
+                .is_err());
+        }
     }
 }

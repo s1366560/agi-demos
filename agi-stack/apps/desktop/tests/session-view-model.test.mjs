@@ -165,6 +165,10 @@ test('session view model reads only the scoped authority projection', () => {
   assert.equal(view.status, 'running');
   assert.equal(view.executionMode, 'build');
   assert.equal(view.stage, 'unavailable');
+  assert.equal(view.summary, null);
+  assert.equal(view.conversationMode, null);
+  assert.equal(view.participantCount, 1);
+  assert.equal(view.linkedTaskId, null);
   assert.equal(view.environmentLabel, 'Worktree · agistack/environment-1');
   assert.equal(view.branchLabel, 'agistack/environment-1');
   assert.equal(view.modelLabel, 'claude-sonnet-4.5');
@@ -174,6 +178,12 @@ test('session view model reads only the scoped authority projection', () => {
   assert.equal(view.taskCount, 1);
   assert.equal(view.eventCount, 1);
   assert.equal(view.hasPlan, true);
+  assert.equal(view.planStatus, 'approved');
+  assert.equal(view.artifactCount, 0);
+  assert.equal(view.sourceCount, 0);
+  assert.equal(view.verificationCount, null);
+  assert.equal(view.toolActivityCount, 0);
+  assert.equal(view.failedToolActivityCount, 0);
   assert.deepEqual(view.runActions, ['pause', 'cancel']);
 });
 
@@ -233,6 +243,13 @@ test('cloud workspace attempts remain visible without fabricated desktop runtime
       currentPlan: null,
       planHistory: [],
       tasks: [{ id: 'task-1', conversation_id: 'conversation-1' }],
+      cloudEvidenceSummary: {
+        candidateArtifactRefCount: 0,
+        candidateVerificationRefCount: 0,
+        artifactRecordCount: 0,
+        toolExecutionRecordCount: 0,
+        failedToolExecutionCount: 0,
+      },
       capabilities: {
         canSendMessage: true,
         canApprovePlan: false,
@@ -253,7 +270,12 @@ test('cloud workspace attempts remain visible without fabricated desktop runtime
   assert.equal(view.workerAgentId, 'agent-worker');
   assert.equal(view.leaderAgentId, 'agent-leader');
   assert.equal(view.hasPlan, true);
+  assert.equal(view.planStatus, 'active');
   assert.equal(view.taskCount, 1);
+  assert.equal(view.artifactCount, 0);
+  assert.equal(view.verificationCount, 0);
+  assert.equal(view.toolActivityCount, 0);
+  assert.equal(view.failedToolActivityCount, 0);
   assert.equal(view.runId, null);
   assert.equal(view.runRevision, null);
   assert.equal(view.environmentLabel, null);
@@ -308,6 +330,14 @@ test('session view model fails closed instead of reading authority from conversa
   assert.equal(view.status, 'unavailable');
   assert.equal(view.executionMode, 'unavailable');
   assert.equal(view.stage, 'unavailable');
+  assert.equal(view.participantCount, null);
+  assert.equal(view.linkedTaskId, null);
+  assert.equal(view.planStatus, null);
+  assert.equal(view.artifactCount, null);
+  assert.equal(view.sourceCount, null);
+  assert.equal(view.verificationCount, null);
+  assert.equal(view.toolActivityCount, null);
+  assert.equal(view.failedToolActivityCount, null);
   assert.equal(view.environmentLabel, null);
   assert.equal(view.modelLabel, null);
   assert.equal(view.permissionLabel, null);

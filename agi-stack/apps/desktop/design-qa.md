@@ -232,3 +232,47 @@ Blocked for the same reason. The workspace selector, current-context card, proje
 - Defer P3 polish until the blocking comparison pass is available.
 
 final result: blocked
+
+---
+
+# Session detail design QA
+
+Date: 2026-07-17
+
+Scope: authoritative conversation detail, narrative timeline, session controls, work canvases,
+context rail, and composer.
+
+## Visual sources
+
+- Prototype: `design-prototype/memstack-desktop-agent-mission-control/qa/session-detail-redesign-1565-final.png`
+- Implementation: `agi-stack/apps/desktop/qa/session-detail-mission-control-1565x900.jpg`
+- Side-by-side comparison: `agi-stack/apps/desktop/qa/session-detail-mission-control-comparison-1565x900.jpg`
+
+## Viewports and states
+
+- `1565 x 900`: conversation surface with authoritative PostgreSQL-backed session data.
+- `1100 x 800`: responsive conversation surface; document width and scroll width both 1100,
+  with no page-level horizontal or vertical overflow.
+- Tool and runtime groups are collapsed by default. Human input and plan review remain explicit.
+
+## Findings resolved
+
+- P0: none.
+- P1: removed default expansion of raw task/error payloads; localized activity and failure copy;
+  aligned the 76 px header, conversation/context split, context rail, and fixed composer.
+- P1: aligned session projection read access with replay access; kept mutation capabilities
+  fail-closed for read-only viewers; supported non-expiring pending HITL; redacted database errors.
+- P1: projected cloud permission requests through a strict structured contract so authorized
+  reviewers can inspect tool, action, risk, and description before approving once.
+- P2: localized workspace-attempt states and unknown protocol identifiers; linked the Open task
+  action to the exact authoritative task; removed governance identifiers from primary canvases.
+
+## Verification
+
+- Desktop tests: 340 passed.
+- Desktop type check and production build: passed.
+- Rust server tests: 636 passed.
+- Rust formatting and Clippy with warnings denied: passed.
+- Browser authority checks: no raw i18n keys, no raw task payload, no unavailable projection banner.
+
+final result: passed

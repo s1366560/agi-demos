@@ -60,10 +60,7 @@ export function SessionChangesCanvas({
           <span>{t('session.changesKicker')}</span>
           <strong>{t('session.changesTitle')}</strong>
           {snapshot ? (
-            <small>
-              {snapshot.branch ?? t('session.branchUnavailable')} · {snapshot.run_id.slice(0, 8)} · r
-              {snapshot.run_revision}
-            </small>
+            <small>{snapshot.branch ?? t('session.branchUnavailable')}</small>
           ) : null}
         </div>
         <div className="session-changes-actions">
@@ -152,7 +149,6 @@ function ChangeFileView({
       <header>
         <strong>{file.path}</strong>
         <span>{file.status}</span>
-        <code>{file.patch_digest.slice(0, 12)}</code>
       </header>
       {file.hunks.map((hunk, hunkIndex) => (
         <details open className="session-change-hunk" key={`${hunk.header}-${hunkIndex}`}>

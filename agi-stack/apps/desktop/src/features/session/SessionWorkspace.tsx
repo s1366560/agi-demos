@@ -2,14 +2,19 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertDialog, Badge, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
+  ArchiveIcon,
   CheckCircledIcon,
+  ChevronRightIcon,
   ClockIcon,
   CodeIcon,
   CommitIcon,
   DesktopIcon,
+  DotsHorizontalIcon,
   ExclamationTriangleIcon,
+  LockClosedIcon,
   PauseIcon,
   Pencil2Icon,
+  PersonIcon,
   PlayIcon,
   ReaderIcon,
   ReloadIcon,
@@ -48,6 +53,7 @@ type SessionWorkspaceProps = {
   liveConnected: boolean;
   liveError: string | null;
   onRunAction: (action: SessionRunAction, feedback?: string) => void;
+  onOpenTask?: () => void;
 };
 
 const stageLabels: Array<{ id: Exclude<SessionStage, 'unavailable'>; label: string }> = [
@@ -67,6 +73,7 @@ export function SessionWorkspace({
   liveConnected,
   liveError,
   onRunAction,
+  onOpenTask,
 }: SessionWorkspaceProps) {
   const { t } = useI18n();
   const hasCanvas = Boolean(canvas);
@@ -86,7 +93,9 @@ export function SessionWorkspace({
   const actionDisabled = runActionPending !== null || viewModel.runRevision === null;
 
   const panes = sessionSurfacePanes(surface, hasCanvas);
-  const showStatusBanner = statusPresentation !== null;
+  const showStatusBanner = statusPresentation !== null && surface !== 'conversation';
+  const conversationModePresentation = conversationModeLabel(viewModel.conversationMode, t);
+  const evidenceSurface = viewModel.capabilityMode === 'code' ? 'checks' : 'verification';
 
   const transitionSurface = (action: SessionSurfaceAction) => {
     setSurfaceState((current) => transitionSessionSurface(current, viewModel.id, action));
@@ -153,23 +162,14 @@ export function SessionWorkspace({
       <header className="session-workspace-header">
         <div className="session-workspace-identity">
           <span>
-            {viewModel.workspaceLabel ?? t('session.notAvailable')} / {t('session.session')}
+            {viewModel.workspaceLabel ?? t('session.notAvailable')} <ChevronRightIcon />{' '}
+            {t('session.session')}
           </span>
           <div>
             <h1>{viewModel.title}</h1>
             <Badge color={statusColor(viewModel.status)} variant="soft">
               {statusLabel(viewModel.status, t)}
             </Badge>
-            {viewModel.capabilityMode !== 'unavailable' ? (
-              <Badge color={viewModel.capabilityMode === 'code' ? 'cyan' : 'gray'} variant="soft">
-                {viewModel.capabilityMode === 'code' ? t('session.code') : t('session.work')}
-              </Badge>
-            ) : null}
-            {viewModel.executionMode !== 'unavailable' ? (
-              <Badge color={executionModeColor(viewModel.executionMode)} variant="soft">
-                {executionModeLabel(viewModel.executionMode, t)}
-              </Badge>
-            ) : null}
           </div>
         </div>
 
@@ -217,6 +217,11 @@ export function SessionWorkspace({
             >
               <PauseIcon />
               {runActionPending === 'pause' ? t('session.pausing') : t('session.pauseRun')}
+            </Button>
+          ) : null}
+          {viewModel.linkedTaskId && onOpenTask ? (
+            <Button size="2" variant="ghost" onClick={onOpenTask}>
+              {t('session.openTask')}
             </Button>
           ) : null}
           {runActions.includes('resume') ? (
@@ -325,18 +330,27 @@ export function SessionWorkspace({
               </AlertDialog.Content>
             </AlertDialog.Root>
           ) : null}
-          {runActions.includes('cancel') ? (
-            <Button
-              size="2"
-              color="red"
-              variant="soft"
-              disabled={actionDisabled}
-              onClick={() => onRunAction('cancel')}
-            >
-              <StopIcon />
-              {runActionPending === 'cancel' ? t('session.stopping') : t('session.stopRun')}
-            </Button>
-          ) : null}
+          <details className="session-workspace-more">
+            <summary aria-label={t('session.moreActions')} title={t('session.moreActions')}>
+              <DotsHorizontalIcon />
+            </summary>
+            <div>
+              <button type="button" onClick={() => openCanvas('overview')}>
+                <ReaderIcon /> {t('session.canvasOverview')}
+              </button>
+              {runActions.includes('cancel') ? (
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={actionDisabled}
+                  onClick={() => onRunAction('cancel')}
+                >
+                  <StopIcon />
+                  {runActionPending === 'cancel' ? t('session.stopping') : t('session.stopRun')}
+                </button>
+              ) : null}
+            </div>
+          </details>
         </div>
       </header>
 
@@ -426,8 +440,19 @@ export function SessionWorkspace({
           <section className="session-workspace-thread" aria-label={t('session.thread')}>
             <div className="session-pane-label">
               <span>
-                <ActivityLogIcon /> {t('session.thread')}
+                <ActivityLogIcon /> {t('session.sessionLog')}
               </span>
+              {conversationModePresentation ? (
+                <small className="session-pane-privacy">
+                  <LockClosedIcon /> {conversationModePresentation}
+                </small>
+              ) : null}
+              {viewModel.participantCount !== null ? (
+                <small>
+                  <PersonIcon />
+                  {t('session.participantCount', { count: viewModel.participantCount })}
+                </small>
+              ) : null}
               <em title={liveError ?? undefined}>
                 {liveConnected ? t('session.live') : t('session.liveReconnecting')}
               </em>
@@ -439,12 +464,225 @@ export function SessionWorkspace({
                   title={t('session.openCanvas')}
                   onClick={() => openCanvas()}
                 >
-                  <ReaderIcon />
+                  {t('session.openCanvas')} <ReaderIcon />
                 </button>
               ) : null}
             </div>
             {thread}
           </section>
+        ) : null}
+        {panes.contextRail ? (
+          <aside className="session-context-rail" aria-label={t('session.runContext')}>
+            {statusPresentation ? (
+              <section className={`session-context-attention tone-${statusPresentation.tone}`}>
+                <header>
+                  <ExclamationTriangleIcon />
+                  <strong>{t(statusPresentation.titleKey)}</strong>
+                </header>
+                <p>
+                  {statusPresentation.tone === 'danger' && viewModel.error
+                    ? viewModel.error
+                    : t(statusPresentation.descriptionKey)}
+                </p>
+                <div className="session-context-attention-actions">
+                  {runActions.includes('request_changes') ? (
+                    <Button
+                      size="1"
+                      variant="surface"
+                      disabled={actionDisabled}
+                      onClick={() => setReviewFeedbackOpen(true)}
+                    >
+                      <Pencil2Icon /> {t('session.requestChanges')}
+                    </Button>
+                  ) : null}
+                  {runActions.includes('approve') ? (
+                    <Button
+                      size="1"
+                      color="green"
+                      disabled={actionDisabled}
+                      onClick={() => onRunAction('approve')}
+                    >
+                      <CheckCircledIcon />
+                      {runActionPending === 'approve'
+                        ? t('session.approvingRun')
+                        : t('session.approveRun')}
+                    </Button>
+                  ) : null}
+                  {!runActions.includes('approve') && !runActions.includes('request_changes') ? (
+                    <Button size="1" variant="surface" onClick={() => openCanvas('plan')}>
+                      {t('session.reviewCanvas')}
+                    </Button>
+                  ) : null}
+                </div>
+                {reviewFeedbackOpen && runActions.includes('request_changes') ? (
+                  <form
+                    className="session-context-feedback"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const feedback = reviewFeedback.trim();
+                      if (!feedback) return;
+                      onRunAction('request_changes', feedback);
+                    }}
+                  >
+                    <label htmlFor="session-context-review-feedback">
+                      {t('session.changeRequestLabel')}
+                    </label>
+                    <textarea
+                      id="session-context-review-feedback"
+                      value={reviewFeedback}
+                      placeholder={t('session.changeRequestPlaceholder')}
+                      onChange={(event) => setReviewFeedback(event.target.value)}
+                    />
+                    <div>
+                      <Button
+                        size="1"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setReviewFeedbackOpen(false)}
+                      >
+                        {t('session.cancelAction')}
+                      </Button>
+                      <Button
+                        size="1"
+                        type="submit"
+                        disabled={!reviewFeedback.trim() || runActionPending !== null}
+                      >
+                        {runActionPending === 'request_changes'
+                          ? t('session.sendingChanges')
+                          : t('session.sendChanges')}
+                      </Button>
+                    </div>
+                  </form>
+                ) : null}
+              </section>
+            ) : null}
+
+            <section className="session-context-section">
+              <h2>{t('session.runSnapshot')}</h2>
+              <dl>
+                <div>
+                  <dt>{t('session.overviewStatus')}</dt>
+                  <dd>{statusLabel(viewModel.status, t)}</dd>
+                </div>
+                <div>
+                  <dt>{t('session.conversation')}</dt>
+                  <dd>
+                    {viewModel.capabilityMode === 'unavailable'
+                      ? t('session.notAvailable')
+                      : viewModel.capabilityMode === 'code'
+                        ? t('session.code')
+                        : t('session.work')}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('session.currentStage')}</dt>
+                  <dd>
+                    {viewModel.executionMode === 'unavailable'
+                      ? t('session.notAvailable')
+                      : executionModeLabel(viewModel.executionMode, t)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('session.elapsed')}</dt>
+                  <dd>{viewModel.elapsedLabel ?? t('session.notAvailable')}</dd>
+                </div>
+                {viewModel.environmentLabel ? (
+                  <div className="wide">
+                    <dt>{t('session.overviewEnvironment')}</dt>
+                    <dd title={viewModel.environmentLabel}>{viewModel.environmentLabel}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </section>
+
+            <section className="session-context-section session-context-surfaces">
+              <h2>{t('session.workSurfaces')}</h2>
+              <button
+                type="button"
+                data-session-canvas-trigger="plan"
+                onClick={() => openCanvas('plan')}
+              >
+                <ActivityLogIcon />
+                <span>
+                  <strong>{t('session.canvasPlan')}</strong>
+                  <small>{viewModel.hasPlan ? t('session.planReady') : t('session.noPlanShort')}</small>
+                </span>
+                <ChevronRightIcon />
+              </button>
+              <button
+                type="button"
+                data-session-canvas-trigger="output"
+                onClick={() =>
+                  openCanvas(viewModel.capabilityMode === 'code' ? 'changes' : 'artifacts')
+                }
+              >
+                {viewModel.capabilityMode === 'code' ? <CodeIcon /> : <ArchiveIcon />}
+                <span>
+                  <strong>
+                    {viewModel.capabilityMode === 'code'
+                      ? t('session.canvasChanges')
+                      : t('session.canvasArtifacts')}
+                  </strong>
+                  <small>
+                    {viewModel.artifactCount === null
+                      ? t('session.notAvailable')
+                      : t('session.evidence.recordCount', { count: viewModel.artifactCount })}
+                  </small>
+                </span>
+                <ChevronRightIcon />
+              </button>
+              <button
+                type="button"
+                data-session-canvas-trigger="evidence"
+                onClick={() => openCanvas(evidenceSurface)}
+              >
+                <CheckCircledIcon />
+                <span>
+                  <strong>
+                    {evidenceSurface === 'checks'
+                      ? t('session.canvasChecks')
+                      : t('session.canvasVerification')}
+                  </strong>
+                  <small>
+                    {viewModel.verificationCount === null
+                      ? t('session.notAvailable')
+                      : t('session.evidence.recordCount', {
+                          count: viewModel.verificationCount,
+                        })}
+                  </small>
+                </span>
+                <ChevronRightIcon />
+              </button>
+            </section>
+
+            <section className="session-context-section session-context-evidence">
+              <h2>{t('session.latestEvidence')}</h2>
+              <dl>
+                <div>
+                  <dt>{t('session.toolActivity')}</dt>
+                  <dd>
+                    {viewModel.toolActivityCount === null
+                      ? t('session.notAvailable')
+                      : viewModel.toolActivityCount}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('session.failedShort')}</dt>
+                  <dd>
+                    {viewModel.failedToolActivityCount === null
+                      ? t('session.notAvailable')
+                      : viewModel.failedToolActivityCount}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('session.canvasSources')}</dt>
+                  <dd>
+                    {viewModel.sourceCount === null ? t('session.notAvailable') : viewModel.sourceCount}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          </aside>
         ) : null}
         {panes.canvas && canvasContent ? (
           <aside className="session-workspace-canvas" aria-label={t('session.canvas')}>
@@ -456,12 +694,6 @@ export function SessionWorkspace({
   );
 }
 
-function executionModeColor(mode: Exclude<SessionDetailViewModel['executionMode'], 'unavailable'>) {
-  if (mode === 'plan') return 'amber' as const;
-  if (mode === 'explore') return 'gray' as const;
-  return 'green' as const;
-}
-
 function executionModeLabel(
   mode: Exclude<SessionDetailViewModel['executionMode'], 'unavailable'>,
   t: (key: string) => string,
@@ -471,33 +703,63 @@ function executionModeLabel(
   return t('session.buildMode');
 }
 
+function conversationModeLabel(
+  mode: string | null,
+  t: (key: string) => string,
+): string | null {
+  if (mode === 'single_agent' || mode === 'multi_agent_isolated') {
+    return t('session.privateConversation');
+  }
+  if (mode === 'multi_agent_shared') return t('session.sharedConversation');
+  if (mode === 'autonomous') return t('session.autonomousConversation');
+  return null;
+}
+
 function statusLabel(status: string, t: (key: string) => string): string {
   const normalized = status.trim().toLowerCase();
   const labels: Record<string, string> = {
     unavailable: 'session.notAvailable',
     active: 'session.statusActive',
     queued: 'session.statusQueued',
+    pending: 'session.statusQueued',
     running: 'session.statusRunning',
     completed: 'session.statusCompleted',
+    accepted: 'session.statusCompleted',
     blocked: 'session.statusBlocked',
     needs_input: 'session.statusNeedsInput',
     needs_approval: 'session.statusNeedsApproval',
+    awaiting_leader_adjudication: 'session.statusNeedsApproval',
     paused: 'session.statusPaused',
     ready_review: 'session.statusReadyReview',
     failed: 'session.statusFailed',
+    rejected: 'session.statusFailed',
     interrupted: 'session.statusInterrupted',
     disconnected: 'session.statusDisconnected',
     cancelled: 'session.statusCancelled',
   };
-  return labels[normalized] ? t(labels[normalized]) : status;
+  return t(labels[normalized] ?? 'session.notAvailable');
 }
 
 function statusColor(status: string): 'green' | 'amber' | 'gray' | 'red' {
-  if (status === 'active' || status === 'running') return 'green';
-  if (status === 'blocked' || status === 'needs_input' || status === 'needs_approval') return 'amber';
+  if (status === 'active' || status === 'running' || status === 'accepted') return 'green';
+  if (
+    status === 'blocked' ||
+    status === 'needs_input' ||
+    status === 'needs_approval' ||
+    status === 'awaiting_leader_adjudication'
+  ) {
+    return 'amber';
+  }
   if (status === 'paused') return 'amber';
   if (status === 'ready_review') return 'green';
-  if (status === 'failed' || status === 'error' || status === 'disconnected') return 'red';
+  if (
+    status === 'failed' ||
+    status === 'error' ||
+    status === 'disconnected' ||
+    status === 'rejected'
+  ) {
+    return 'red';
+  }
   return 'gray';
 }
 

@@ -13,6 +13,18 @@ const sessionWorkspaceSource = readFileSync(
   new URL('../src/features/session/SessionWorkspace.tsx', import.meta.url),
   'utf8'
 );
+const sessionChangesSource = readFileSync(
+  new URL('../src/features/session/SessionChangesCanvas.tsx', import.meta.url),
+  'utf8'
+);
+const sessionTerminalSource = readFileSync(
+  new URL('../src/features/session/SessionTerminalCanvas.tsx', import.meta.url),
+  'utf8'
+);
+const sessionEvidenceSource = readFileSync(
+  new URL('../src/features/session/SessionEvidenceCanvas.tsx', import.meta.url),
+  'utf8'
+);
 const runtimeConfigSource = readFileSync(
   new URL('../src/features/runtime/RuntimeConfigPanel.tsx', import.meta.url),
   'utf8'
@@ -252,9 +264,46 @@ test('connection recovery cannot bypass governed model or workspace settings', (
   assert.doesNotMatch(globalStyles, /\.settings-content \.runtime-panel/);
 });
 
-test('conversation attention states remain visible after the passive inspector is removed', () => {
-  assert.match(sessionWorkspaceSource, /const showStatusBanner = statusPresentation !== null/);
-  assert.doesNotMatch(sessionWorkspaceSource, /statusPresentation\.tone !== 'attention'/);
+test('conversation detail restores the mission-control context rail without duplicating authority', () => {
+  assert.match(sessionWorkspaceSource, /className="session-context-rail"/);
+  assert.match(sessionWorkspaceSource, /panes\.contextRail/);
+  assert.match(sessionWorkspaceSource, /session\.runSnapshot/);
+  assert.match(sessionWorkspaceSource, /session\.workSurfaces/);
+  assert.match(sessionWorkspaceSource, /session\.latestEvidence/);
+  assert.match(sessionStyles, /grid-template-columns:\s*minmax\(0, 1fr\) 248px/);
+  assert.match(sessionWorkspaceSource, /surface !== 'conversation'/);
+});
+
+test('conversation header and thread chrome follow the prototype hierarchy', () => {
+  assert.match(sessionStyles, /grid-template-rows:\s*76px minmax\(0, 1fr\)/);
+  assert.match(sessionWorkspaceSource, /session\.sessionLog/);
+  assert.match(sessionWorkspaceSource, /session\.openTask/);
+  assert.match(sessionWorkspaceSource, /session\.openCanvas/);
+  assert.match(sessionWorkspaceSource, /viewModel\.participantCount/);
+});
+
+test('conversation task navigation opens the exact linked task', () => {
+  assert.match(
+    appSource,
+    /onOpenTask=\{[\s\S]*?setSelectedTaskId\(sessionDetailViewModel\.linkedTaskId!\);[\s\S]*?switchSection\('board'\)/,
+  );
+});
+
+test('session status chrome localizes every workspace-attempt state', () => {
+  for (const status of ['pending', 'awaiting_leader_adjudication', 'accepted', 'rejected']) {
+    assert.match(sessionWorkspaceSource, new RegExp(`${status}: 'session\\.status`));
+  }
+  assert.doesNotMatch(sessionWorkspaceSource, /return labels\[normalized\] \? t\(labels\[normalized\]\) : status/);
+  assert.match(sessionWorkspaceSource, /status === 'accepted'[\s\S]*return 'green'/);
+  assert.match(sessionWorkspaceSource, /status === 'awaiting_leader_adjudication'[\s\S]*return 'amber'/);
+  assert.match(sessionWorkspaceSource, /status === 'rejected'[\s\S]*return 'red'/);
+});
+
+test('primary work canvases keep governance identifiers out of the user narrative', () => {
+  assert.doesNotMatch(sessionChangesSource, /run_id\.slice|patch_digest\.slice/);
+  assert.doesNotMatch(sessionTerminalSource, /terminal\.run_id|terminal\.environment_id/);
+  assert.doesNotMatch(sessionEvidenceSource, /· r\{(?:row|missing)\.revision\}/);
+  assert.doesNotMatch(appSource, /<code>\{selectedVersion\.source_artifact_id\}<\/code>/);
 });
 
 test('desktop styles remove standalone workspace drawer and pull-request chrome', () => {

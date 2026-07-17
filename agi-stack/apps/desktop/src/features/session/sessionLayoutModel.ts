@@ -11,6 +11,7 @@ export type SessionSurfaceAction =
 export type SessionSurfacePanes = {
   thread: boolean;
   canvas: boolean;
+  contextRail: boolean;
 };
 
 export type SessionSurfaceState = {
@@ -53,10 +54,10 @@ export function sessionSurfacePanes(
   hasCanvas: boolean,
 ): SessionSurfacePanes {
   if (!hasCanvas || surface === 'conversation') {
-    return { thread: true, canvas: false };
+    return { thread: true, canvas: false, contextRail: true };
   }
   if (surface === 'split') {
-    return { thread: true, canvas: true };
+    return { thread: true, canvas: true, contextRail: false };
   }
-  return { thread: false, canvas: true };
+  return { thread: false, canvas: true, contextRail: false };
 }

@@ -5647,6 +5647,14 @@ export function App() {
                 onRunAction={(action, feedback) =>
                   void handleSessionRunAction(action, feedback)
                 }
+                onOpenTask={
+                  sessionDetailViewModel.linkedTaskId
+                    ? () => {
+                        setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
+                        switchSection('board');
+                      }
+                    : undefined
+                }
               />
             ) : (
               <section className="workbench-layout">
@@ -6134,24 +6142,49 @@ function WorkspaceReviewPanel({
                 </span>
                 <ChevronRightIcon />
               </button>
-              <button type="button" onClick={() => selectTab('activity')}>
-                <DotsHorizontalIcon />
+              <button
+                type="button"
+                onClick={() =>
+                  selectTab(capabilityMode === 'code' ? 'changes' : 'artifacts')
+                }
+              >
+                {capabilityMode === 'code' ? <FileTextIcon /> : <ArchiveIcon />}
                 <span>
-                  <strong>{t('session.canvasActivity')}</strong>
-                  <small>{t('session.overviewEventCount', { count: workspaceEvents.length })}</small>
-                </span>
-                <ChevronRightIcon />
-              </button>
-              <button type="button" onClick={() => selectTab('artifacts')}>
-                <ArchiveIcon />
-                <span>
-                  <strong>{t('session.canvasArtifacts')}</strong>
+                  <strong>
+                    {capabilityMode === 'code'
+                      ? t('session.canvasChanges')
+                      : t('session.canvasArtifacts')}
+                  </strong>
                   <small>
                     {t('session.overviewArtifactCount', {
                       count: sessionDataAvailable
                         ? artifactVersions.length || artifacts.length
                         : t('session.notAvailable'),
                     })}
+                  </small>
+                </span>
+                <ChevronRightIcon />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  selectTab(capabilityMode === 'code' ? 'checks' : 'verification')
+                }
+              >
+                <CheckCircledIcon />
+                <span>
+                  <strong>
+                    {capabilityMode === 'code'
+                      ? t('session.canvasChecks')
+                      : t('session.canvasVerification')}
+                  </strong>
+                  <small>
+                    {sessionViewModel?.verificationCount === null ||
+                    sessionViewModel?.verificationCount === undefined
+                      ? t('session.notAvailable')
+                      : t('session.evidence.recordCount', {
+                          count: sessionViewModel.verificationCount,
+                        })}
                   </small>
                 </span>
                 <ChevronRightIcon />
@@ -6486,7 +6519,6 @@ function ArtifactLifecyclePanel({
               <span>
                 <small>{t('artifact.immutableVersion')}</small>
                 <strong>{selectedVersion.filename}</strong>
-                <code>{selectedVersion.source_artifact_id}</code>
               </span>
               <label>
                 <span>{t('artifact.version')}</span>
@@ -6525,10 +6557,6 @@ function ArtifactLifecyclePanel({
               <div>
                 <dt>{t('artifact.type')}</dt>
                 <dd>{selectedVersion.mime_type}</dd>
-              </div>
-              <div>
-                <dt>{t('artifact.revision')}</dt>
-                <dd>r{selectedVersion.revision}</dd>
               </div>
               <div>
                 <dt>{t('artifact.created')}</dt>

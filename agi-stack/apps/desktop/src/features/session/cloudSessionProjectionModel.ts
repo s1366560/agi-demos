@@ -2,6 +2,7 @@ import type {
   AgentConversation,
   AgentRuntimeMode,
   DesktopApprovalRequest,
+  PermissionRequestContext,
 } from '../../types';
 import type {
   CloudEvidenceSummary,
@@ -440,7 +441,9 @@ function readCloudHitl(
   const kind = nonEmptyString(request.request_type);
   const prompt = nonEmptyString(request.question);
   const createdAt = nonEmptyString(request.created_at);
-  const expiresAt = nonEmptyString(request.expires_at);
+  const expiresAt = request.expires_at === null ? null : nonEmptyString(request.expires_at);
+  const permission =
+    kind === 'permission' ? readCloudPermissionRequest(request.permission) : null;
   if (
     !id ||
     request.conversation_id !== scope.conversationId ||
@@ -449,7 +452,7 @@ function readCloudHitl(
     !prompt ||
     request.status !== 'pending' ||
     !createdAt ||
-    !expiresAt ||
+    (request.expires_at !== null && !expiresAt) ||
     !Object.hasOwn(request, 'message_id') ||
     !optionalString(request.message_id)
   ) {
@@ -466,6 +469,33 @@ function readCloudHitl(
     responded_at: null,
     message_id: (request.message_id as string | null) ?? null,
     expires_at: expiresAt,
+    ...(permission ? { permission } : {}),
+  };
+}
+
+function readCloudPermissionRequest(value: unknown): PermissionRequestContext | null {
+  const permission = recordValue(value);
+  if (!permission) return null;
+  const toolName = nonEmptyString(permission.tool_name);
+  const action = nonEmptyString(permission.action);
+  const description = nonEmptyString(permission.description);
+  const riskLevel = nonEmptyString(permission.risk_level);
+  if (
+    !toolName ||
+    !action ||
+    !description ||
+    !riskLevel ||
+    !['low', 'medium', 'high'].includes(riskLevel) ||
+    typeof permission.allow_remember !== 'boolean'
+  ) {
+    return null;
+  }
+  return {
+    tool_name: toolName,
+    action,
+    risk_level: riskLevel as PermissionRequestContext['risk_level'],
+    description,
+    allow_remember: permission.allow_remember,
   };
 }
 

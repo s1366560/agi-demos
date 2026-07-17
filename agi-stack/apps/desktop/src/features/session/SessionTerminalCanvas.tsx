@@ -89,22 +89,9 @@ export function SessionTerminalCanvas({
             : ''}
       </Text>
       {terminal ? (
-        <dl className="terminal-authority-facts">
-          <div>
-            <dt>{t('session.terminalRunIdentity')}</dt>
-            <dd>
-              {terminal.run_id ?? t('session.notAvailable')} · r{terminal.run_revision ?? '—'}
-            </dd>
-          </div>
-          <div>
-            <dt>{t('session.terminalEnvironmentIdentity')}</dt>
-            <dd>{terminal.environment_id ?? t('session.notAvailable')}</dd>
-          </div>
-          <div>
-            <dt>{t('session.terminalRecovery')}</dt>
-            <dd>{t('session.terminalNonResumable')}</dd>
-          </div>
-        </dl>
+        <Text size="1" color="gray">
+          {t('session.terminalNonResumable')}
+        </Text>
       ) : null}
       {currentRun?.permission_profile !== 'full_access' ? (
         <Text size="1" color="amber">
