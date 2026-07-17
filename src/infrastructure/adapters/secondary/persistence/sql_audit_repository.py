@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from datetime import datetime
 from typing import Any, override
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.domain.model.audit.audit_entry import AuditEntry
@@ -127,32 +127,70 @@ class SqlAuditRepository(AuditRepository):
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> dict[str, object]:
-        """Return aggregate counts for audit entries matching the filters."""
-        base: Select[Any] = select(AuditLog).where(self._tenant_scope(tenant_id))
-        filtered = self._apply_filters(
-            base,
-            action=action,
-            action_prefix=action_prefix,
-            resource_type=resource_type,
-            actor=actor,
-            detail_filters=detail_filters,
-            start_time=start_time,
-            end_time=end_time,
-        )
-        result = await self._session.execute(refresh_select_statement(filtered))
-        rows = result.scalars().all()
-        action_counts = Counter(row.action for row in rows)
-        executor_counts = Counter(self._detail_value(row, "executor_kind") for row in rows)
-        family_counts = Counter(self._detail_value(row, "hook_family") for row in rows)
-        isolation_counts = Counter(self._detail_value(row, "isolation_mode") for row in rows)
-        return {
-            "total": len(rows),
-            "action_counts": dict(action_counts),
-            "executor_counts": dict(executor_counts),
-            "family_counts": dict(family_counts),
-            "isolation_mode_counts": dict(isolation_counts),
-            "latest_timestamp": max((row.timestamp for row in rows), default=None),
+        """Return aggregate counts for audit entries matching the filters.
+
+        Aggregates in SQL instead of loading every matching row into memory:
+        audit tables grow unboundedly, so summary cost must stay proportional
+        to the number of distinct values, not to the number of rows.
+        """
+        filter_kwargs: dict[str, Any] = {
+            "action": action,
+            "action_prefix": action_prefix,
+            "resource_type": resource_type,
+            "actor": actor,
+            "detail_filters": detail_filters,
+            "start_time": start_time,
+            "end_time": end_time,
         }
+
+        total_stmt = self._apply_filters(
+            select(func.count(), func.max(AuditLog.timestamp))
+            .select_from(AuditLog)
+            .where(self._tenant_scope(tenant_id)),
+            **filter_kwargs,
+        )
+        total_row = (await self._session.execute(total_stmt)).one()
+
+        action_counts = await self._grouped_counts(AuditLog.action, tenant_id, filter_kwargs)
+        executor_counts = await self._grouped_counts(
+            self._detail_column("executor_kind"), tenant_id, filter_kwargs
+        )
+        family_counts = await self._grouped_counts(
+            self._detail_column("hook_family"), tenant_id, filter_kwargs
+        )
+        isolation_counts = await self._grouped_counts(
+            self._detail_column("isolation_mode"), tenant_id, filter_kwargs
+        )
+        return {
+            "total": int(total_row[0]),
+            "action_counts": action_counts,
+            "executor_counts": executor_counts,
+            "family_counts": family_counts,
+            "isolation_mode_counts": isolation_counts,
+            "latest_timestamp": total_row[1],
+        }
+
+    async def _grouped_counts(
+        self,
+        column: ColumnElement[Any] | InstrumentedAttribute[Any],
+        tenant_id: str,
+        filter_kwargs: dict[str, Any],
+    ) -> dict[str, int]:
+        """COUNT(*) grouped by one column/expression under the tenant scope."""
+        stmt = self._apply_filters(
+            select(column, func.count())
+            .select_from(AuditLog)
+            .where(self._tenant_scope(tenant_id))
+            .group_by(column),
+            **filter_kwargs,
+        )
+        result = await self._session.execute(stmt)
+        return {str(value): int(count) for value, count in result.all()}
+
+    @staticmethod
+    def _detail_column(key: str) -> ColumnElement[Any]:
+        """JSON detail extraction matching ``_detail_value``'s 'unknown' fallback."""
+        return func.coalesce(AuditLog.details[key].as_string(), "unknown")
 
     @staticmethod
     def _apply_filters(
@@ -186,11 +224,6 @@ class SqlAuditRepository(AuditRepository):
     def _tenant_scope(tenant_id: str) -> ColumnElement[bool]:
         """Include tenant-owned rows and legacy system rows without tenant scope."""
         return or_(AuditLog.tenant_id == tenant_id, AuditLog.tenant_id.is_(None))
-
-    @staticmethod
-    def _detail_value(row: AuditLog, key: str) -> str:
-        details: dict[str, Any] = row.details or {}
-        return str(details.get(key, "unknown"))
 
     @staticmethod
     def _to_domain(row: AuditLog) -> AuditEntry:

@@ -156,3 +156,41 @@ async def test_summary_includes_legacy_global_audit_rows(db_session: AsyncSessio
         "runtime_hook.started": 1,
         "runtime_hook.custom_execution_succeeded": 1,
     }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_summary_aggregates_detail_dimensions_in_sql(db_session: AsyncSession) -> None:
+    now = datetime.now(UTC)
+    older = _audit_log("audit-old", tenant_id="tenant-1", timestamp=now - timedelta(seconds=5))
+    newer = _audit_log("audit-new", tenant_id="tenant-1", timestamp=now)
+    missing_details = _audit_log(
+        "audit-missing-details", tenant_id="tenant-1", timestamp=now - timedelta(seconds=2)
+    )
+    missing_details.details = {"hook_name": "before_response"}
+    db_session.add_all([older, newer, missing_details])
+    await db_session.flush()
+
+    repo = SqlAuditRepository(db_session)
+    summary = await repo.summarize_by_tenant_filtered("tenant-1")
+
+    assert summary["total"] == 3
+    assert summary["action_counts"] == {"runtime_hook.custom_execution_succeeded": 3}
+    assert summary["executor_counts"] == {"script": 2, "unknown": 1}
+    assert summary["family_counts"] == {"mutating": 2, "unknown": 1}
+    assert summary["isolation_mode_counts"] == {"host": 2, "unknown": 1}
+    latest = summary["latest_timestamp"]
+    assert isinstance(latest, datetime)
+    assert latest.replace(tzinfo=None) == now.replace(tzinfo=None)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_summary_on_empty_scope_returns_zero_counts(db_session: AsyncSession) -> None:
+    repo = SqlAuditRepository(db_session)
+    summary = await repo.summarize_by_tenant_filtered("tenant-without-audit-rows")
+
+    assert summary["total"] == 0
+    assert summary["action_counts"] == {}
+    assert summary["executor_counts"] == {}
+    assert summary["latest_timestamp"] is None
