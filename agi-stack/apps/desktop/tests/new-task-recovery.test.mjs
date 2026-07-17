@@ -114,6 +114,27 @@ test('catalog persistence does not switch transport while activation selects the
   assert.doesNotMatch(activateSource, /refreshRuntime\(/);
 });
 
+test('opening and cancelling New Task preserves the active conversation until activation', () => {
+  const openSource =
+    appSource.match(
+      /const openNewTask = \([\s\S]*?\n  \};\n\n  const startNewSession/,
+    )?.[0] ?? '';
+  const activateSource =
+    appSource.match(
+      /const activateNewTaskSession = \(session: NewTaskSession\) => \{[\s\S]*?\n  \};\n\n  const runNewTaskAgentTurn/,
+    )?.[0] ?? '';
+
+  assert.notEqual(openSource, '');
+  assert.doesNotMatch(openSource, /setConversationTimeline\(/);
+  assert.doesNotMatch(openSource, /setAgentTaskSignals\(/);
+  assert.doesNotMatch(openSource, /setChatInput\(/);
+  assert.doesNotMatch(openSource, /setSelectedTaskId\(/);
+  assert.match(activateSource, /setConversationTimeline\(emptyConversationTimeline\)/);
+  assert.match(activateSource, /setAgentTaskSignals\(\[\]\)/);
+  assert.match(activateSource, /setChatInput\(''\)/);
+  assert.match(activateSource, /setSelectedTaskId\(''\)/);
+});
+
 test('cloud turn acknowledgment is registered before the socket can reply', () => {
   const registerIndex = runTurnSource.indexOf(
     'pendingNewTaskAgentTurnsRef.current.set(input.messageId',

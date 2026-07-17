@@ -3711,14 +3711,6 @@ export function App() {
     setLoginModalOpen(false);
     setCommandPaletteOpen(false);
     setCommandQuery('');
-    setChatInput('');
-    setSelectedTaskId('');
-    setConversationTimeline(emptyConversationTimeline);
-    setAgentTaskSignals([]);
-    setStatusTab('overview');
-    setReviewTab('plan');
-    setSectionBackStack([]);
-    setSectionForwardStack([]);
     setNewTaskPreferredWorkspaceId(workspaceId);
     setNewTaskResumeDraft(resumeDraft);
     setNewTaskOpen(true);
@@ -3801,6 +3793,14 @@ export function App() {
 
   const activateNewTaskSession = (session: NewTaskSession) => {
     const { workspace, conversation, config: sessionConfig } = session;
+    setChatInput('');
+    setSelectedTaskId('');
+    setConversationTimeline(emptyConversationTimeline);
+    setAgentTaskSignals([]);
+    setStatusTab('overview');
+    setReviewTab('plan');
+    setSectionBackStack([]);
+    setSectionForwardStack([]);
     persistNewTaskSession(session);
     commitRuntimeConfig(sessionConfig);
     setAgentConversationSession({
