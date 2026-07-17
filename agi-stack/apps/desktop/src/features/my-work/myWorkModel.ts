@@ -13,6 +13,27 @@ export const MY_WORK_GROUPS: MyWorkGroup[] = [
 ];
 
 export type MyWorkModeFilter = 'all' | AgentCapabilityMode;
+export type MyWorkDisplayGroup = 'needs_input' | 'running' | 'ready_review';
+
+export const MY_WORK_DISPLAY_GROUPS: readonly MyWorkDisplayGroup[] = Object.freeze([
+  'needs_input',
+  'running',
+  'ready_review',
+]);
+
+export const MY_WORK_DISPLAY_GROUP_BY_AUTHORITY_GROUP: Readonly<
+  Record<MyWorkGroup, MyWorkDisplayGroup>
+> = Object.freeze({
+  needs_input: 'needs_input',
+  needs_approval: 'needs_input',
+  running: 'running',
+  ready_review: 'ready_review',
+});
+
+export type MyWorkDisplayGroupItems = Readonly<{
+  group: MyWorkDisplayGroup;
+  items: ProjectWorkItem[];
+}>;
 
 export type MyWorkRefreshScope = Readonly<{
   contextRevision: number;
@@ -56,6 +77,19 @@ export function myWorkItemKey(
   return `${item.authority_kind}:${item.authority_id}`;
 }
 
+export function myWorkDisplayGroupForAuthorityGroup(
+  group: MyWorkGroup,
+): MyWorkDisplayGroup {
+  return MY_WORK_DISPLAY_GROUP_BY_AUTHORITY_GROUP[group];
+}
+
+export function myWorkItemMatchesMode(
+  item: Pick<ProjectWorkItem, 'capability_mode'>,
+  mode: MyWorkModeFilter,
+): boolean {
+  return mode === 'all' || item.capability_mode === null || item.capability_mode === mode;
+}
+
 export function filterMyWorkItems(
   items: ProjectWorkItem[],
   group: MyWorkGroup | 'all',
@@ -65,10 +99,7 @@ export function filterMyWorkItems(
   const normalizedQuery = query.trim().toLocaleLowerCase();
   return items
     .filter((item) => group === 'all' || item.group === group)
-    .filter(
-      (item) =>
-        mode === 'all' || item.capability_mode === null || item.capability_mode === mode,
-    )
+    .filter((item) => myWorkItemMatchesMode(item, mode))
     .filter(
       (item) =>
         !normalizedQuery || item.title.toLocaleLowerCase().includes(normalizedQuery),
@@ -78,6 +109,45 @@ export function filterMyWorkItems(
         Date.parse(right.updated_at || right.created_at) -
         Date.parse(left.updated_at || left.created_at),
     );
+}
+
+export function filterMyWorkDisplayItems(
+  items: ProjectWorkItem[],
+  group: MyWorkDisplayGroup | 'all' = 'all',
+  mode: MyWorkModeFilter = 'all',
+): ProjectWorkItem[] {
+  return filterMyWorkItems(items, 'all', mode).filter(
+    (item) =>
+      group === 'all' || myWorkDisplayGroupForAuthorityGroup(item.group) === group,
+  );
+}
+
+export function groupMyWorkDisplayItems(
+  items: ProjectWorkItem[],
+  mode: MyWorkModeFilter = 'all',
+): MyWorkDisplayGroupItems[] {
+  const visibleItems = filterMyWorkDisplayItems(items, 'all', mode);
+  return MY_WORK_DISPLAY_GROUPS.map((group) => ({
+    group,
+    items: visibleItems.filter(
+      (item) => myWorkDisplayGroupForAuthorityGroup(item.group) === group,
+    ),
+  }));
+}
+
+export function countMyWorkDisplayGroups(
+  items: ProjectWorkItem[],
+  mode: MyWorkModeFilter = 'all',
+): Record<MyWorkDisplayGroup, number> {
+  return filterMyWorkDisplayItems(items, 'all', mode).reduce<
+    Record<MyWorkDisplayGroup, number>
+  >(
+    (counts, item) => {
+      counts[myWorkDisplayGroupForAuthorityGroup(item.group)] += 1;
+      return counts;
+    },
+    { needs_input: 0, running: 0, ready_review: 0 },
+  );
 }
 
 export function describeMyWorkAuthority(

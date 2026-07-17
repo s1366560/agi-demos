@@ -32,6 +32,13 @@ copyFileSync(
   join(compiledNavigationDirectory, 'AuxiliaryView.css'),
 );
 
+const compiledMyWorkDirectory = join(compiledRoot, 'src', 'features', 'my-work');
+mkdirSync(compiledMyWorkDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'my-work', 'MyWorkQueue.css'),
+  join(compiledMyWorkDirectory, 'MyWorkQueue.css'),
+);
+
 const testFiles = [
   'a2ui-action.test.mjs',
   'api-client.test.mjs',
@@ -46,6 +53,7 @@ const testFiles = [
   'runtime-config-model.test.mjs',
   'trusted-session-broker.test.mjs',
   'local-runtime-status.test.mjs',
+  'my-work-mission-control.test.mjs',
   'my-work-model.test.mjs',
   'navigation-contract.test.mjs',
   'new-task-plan-model.test.mjs',

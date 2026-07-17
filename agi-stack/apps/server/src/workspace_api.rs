@@ -59,6 +59,7 @@ mod plan_actions;
 mod plan_dev_service;
 mod plan_pg_service;
 mod plan_snapshot;
+mod project_my_work;
 mod routes;
 mod service;
 mod shared;
@@ -85,9 +86,10 @@ use types::{
     BlackboardReplyCreatePayload, BlackboardReplyListView, BlackboardReplyUpdatePayload,
     BlackboardReplyView, BlackboardUpload, CopyFilePayload, DeleteFileQuery, DeletedView,
     LimitOffset, MessageListQuery, MessageListView, MessageMentionQuery, MessageView, MkdirPayload,
-    RenameOrMoveFilePayload, SendMessagePayload, TaskListQuery, TaskTransitionAction,
-    TopologyEdgeCreatePayload, TopologyEdgeUpdatePayload, TopologyEdgeView,
-    TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView,
+    MyWorkAuthorityKind, MyWorkCapabilityMode, MyWorkGroup, MyWorkRequiredAction, MyWorkStatus,
+    ProjectMyWorkResponse, ProjectWorkItem, RenameOrMoveFilePayload, SendMessagePayload,
+    TaskListQuery, TaskTransitionAction, TopologyEdgeCreatePayload, TopologyEdgeUpdatePayload,
+    TopologyEdgeView, TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView,
     WorkspaceAgentListQuery, WorkspaceAgentView, WorkspaceApiError, WorkspaceCreatePayload,
     WorkspaceDeliverySummaryView, WorkspaceListQuery, WorkspaceMemberView,
     WorkspacePlanActionCapabilityView, WorkspacePlanActionRequest, WorkspacePlanActionResultView,
@@ -99,6 +101,9 @@ use types::{
     WorkspacePlanView, WorkspaceReplyUpdateInput, WorkspaceTaskCreatePayload,
     WorkspaceTaskUpdatePayload, WorkspaceTaskView, WorkspaceUpdatePayload, WorkspaceView,
 };
+
+#[cfg(test)]
+use project_my_work::project_my_work_response;
 use views::{
     dedup_truncate, first_metadata_string, int_from_value, int_list_from_value, iso,
     metadata_string_values, object_or_empty, phase_label, string_from_value, string_values,

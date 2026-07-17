@@ -24,6 +24,17 @@ pub(in crate::workspace_api) async fn list_workspaces(
         .map(Json)
 }
 
+pub(in crate::workspace_api) async fn list_project_my_work(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(project_id): Path<String>,
+) -> Result<Json<ProjectMyWorkResponse>, WorkspaceApiError> {
+    app.workspaces
+        .list_project_my_work(&identity.user_id, &project_id)
+        .await
+        .map(Json)
+}
+
 pub(in crate::workspace_api) async fn get_workspace(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,

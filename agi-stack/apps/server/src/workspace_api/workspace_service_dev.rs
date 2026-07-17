@@ -24,6 +24,14 @@ impl WorkspaceService for DevWorkspaceService {
             .await
     }
 
+    async fn list_project_my_work(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<ProjectMyWorkResponse, WorkspaceApiError> {
+        self.dev_list_project_my_work(user_id, project_id).await
+    }
+
     async fn get_workspace(
         &self,
         user_id: &str,

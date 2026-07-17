@@ -87,3 +87,5 @@ mod tenant_webhooks;
 mod workspace;
 #[path = "pg_integration/workspace_context.rs"]
 mod workspace_context;
+#[path = "pg_integration/workspace_my_work.rs"]
+mod workspace_my_work;

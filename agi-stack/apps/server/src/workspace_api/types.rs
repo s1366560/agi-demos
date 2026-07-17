@@ -3,6 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -79,6 +80,77 @@ impl IntoResponse for WorkspaceApiError {
     fn into_response(self) -> Response {
         (self.status, Json(json!({ "detail": self.detail }))).into_response()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MyWorkAuthorityKind {
+    WorkspaceAttempt,
+    HitlRequest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MyWorkCapabilityMode {
+    Work,
+    Code,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MyWorkGroup {
+    NeedsInput,
+    NeedsApproval,
+    Running,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MyWorkStatus {
+    Running,
+    Failed,
+    NeedsInput,
+    NeedsApproval,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MyWorkRequiredAction {
+    ProvideInput,
+    ReviewApproval,
+    Observe,
+    InspectFailure,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct ProjectWorkItem {
+    pub(in crate::workspace_api) id: String,
+    pub(in crate::workspace_api) authority_kind: MyWorkAuthorityKind,
+    pub(in crate::workspace_api) authority_id: String,
+    pub(in crate::workspace_api) run_id: Option<String>,
+    pub(in crate::workspace_api) conversation_id: String,
+    pub(in crate::workspace_api) workspace_id: String,
+    pub(in crate::workspace_api) project_id: String,
+    pub(in crate::workspace_api) title: String,
+    pub(in crate::workspace_api) capability_mode: Option<MyWorkCapabilityMode>,
+    pub(in crate::workspace_api) group: MyWorkGroup,
+    pub(in crate::workspace_api) status: MyWorkStatus,
+    pub(in crate::workspace_api) required_action: MyWorkRequiredAction,
+    pub(in crate::workspace_api) revision: Option<u64>,
+    pub(in crate::workspace_api) permission_profile: Option<String>,
+    pub(in crate::workspace_api) environment: Option<Value>,
+    pub(in crate::workspace_api) error: Option<String>,
+    pub(in crate::workspace_api) attempt_number: Option<i32>,
+    pub(in crate::workspace_api) created_at: DateTime<Utc>,
+    pub(in crate::workspace_api) updated_at: DateTime<Utc>,
+    pub(in crate::workspace_api) last_heartbeat_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct ProjectMyWorkResponse {
+    pub(in crate::workspace_api) project_id: String,
+    pub(in crate::workspace_api) items: Vec<ProjectWorkItem>,
+    pub(in crate::workspace_api) total: usize,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

@@ -4,9 +4,15 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  countMyWorkDisplayGroups,
   countMyWorkGroups,
   describeMyWorkAuthority,
+  filterMyWorkDisplayItems,
   filterMyWorkItems,
+  groupMyWorkDisplayItems,
+  MY_WORK_DISPLAY_GROUP_BY_AUTHORITY_GROUP,
+  MY_WORK_DISPLAY_GROUPS,
+  myWorkDisplayGroupForAuthorityGroup,
   myWorkConversationMatchesScope,
   myWorkItemKey,
   myWorkRefreshScopeIsCurrent,
@@ -92,6 +98,99 @@ test('My Work counts preserve the four authoritative attention groups', () => {
     running: 1,
     ready_review: 1,
   });
+});
+
+test('My Work maps four authority groups into the source prototype display order', () => {
+  assert.deepEqual(MY_WORK_DISPLAY_GROUPS, ['needs_input', 'running', 'ready_review']);
+  assert.equal(Object.isFrozen(MY_WORK_DISPLAY_GROUPS), true);
+  assert.deepEqual(MY_WORK_DISPLAY_GROUP_BY_AUTHORITY_GROUP, {
+    needs_input: 'needs_input',
+    needs_approval: 'needs_input',
+    running: 'running',
+    ready_review: 'ready_review',
+  });
+  assert.equal(Object.isFrozen(MY_WORK_DISPLAY_GROUP_BY_AUTHORITY_GROUP), true);
+  assert.equal(myWorkDisplayGroupForAuthorityGroup('needs_input'), 'needs_input');
+  assert.equal(myWorkDisplayGroupForAuthorityGroup('needs_approval'), 'needs_input');
+  assert.equal(myWorkDisplayGroupForAuthorityGroup('running'), 'running');
+  assert.equal(myWorkDisplayGroupForAuthorityGroup('ready_review'), 'ready_review');
+});
+
+test('My Work display groups and counts combine input and approval authority structurally', () => {
+  assert.deepEqual(
+    groupMyWorkDisplayItems(items).map(({ group, items: groupItems }) => ({
+      group,
+      ids: groupItems.map((item) => item.id),
+    })),
+    [
+      { group: 'needs_input', ids: ['input', 'approval'] },
+      { group: 'running', ids: ['unclassified'] },
+      { group: 'ready_review', ids: ['review'] },
+    ]
+  );
+  assert.deepEqual(countMyWorkDisplayGroups(items), {
+    needs_input: 2,
+    running: 1,
+    ready_review: 1,
+  });
+});
+
+test('My Work display filtering uses explicit capability mode and keeps unclassified items visible', () => {
+  assert.deepEqual(
+    filterMyWorkDisplayItems(items, 'needs_input', 'code').map((item) => item.id),
+    ['approval']
+  );
+  assert.deepEqual(
+    groupMyWorkDisplayItems(items, 'code').map(({ group, items: groupItems }) => ({
+      group,
+      ids: groupItems.map((item) => item.id),
+    })),
+    [
+      { group: 'needs_input', ids: ['approval'] },
+      { group: 'running', ids: ['unclassified'] },
+      { group: 'ready_review', ids: ['review'] },
+    ]
+  );
+  assert.deepEqual(countMyWorkDisplayGroups(items, 'work'), {
+    needs_input: 1,
+    running: 1,
+    ready_review: 0,
+  });
+});
+
+test('My Work titles never infer or override the structured display group', () => {
+  const narrativeDecoys = [
+    {
+      ...items[0],
+      id: 'approval-called-running',
+      title: 'Running and ready to review',
+      group: 'needs_approval',
+    },
+    {
+      ...items[3],
+      id: 'running-called-input',
+      title: 'Needs input before approval',
+      group: 'running',
+    },
+    {
+      ...items[2],
+      id: 'ready-called-input',
+      title: 'Needs input while running',
+      group: 'ready_review',
+    },
+  ];
+
+  assert.deepEqual(
+    groupMyWorkDisplayItems(narrativeDecoys).map(({ group, items: groupItems }) => ({
+      group,
+      ids: groupItems.map((item) => item.id),
+    })),
+    [
+      { group: 'needs_input', ids: ['approval-called-running'] },
+      { group: 'running', ids: ['running-called-input'] },
+      { group: 'ready_review', ids: ['ready-called-input'] },
+    ]
+  );
 });
 
 test('My Work exposes desktop runtime facts only for desktop-run authority', () => {

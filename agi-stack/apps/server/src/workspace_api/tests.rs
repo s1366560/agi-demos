@@ -38,6 +38,7 @@ mod accept_review;
 mod autonomy;
 mod chat_mentions;
 mod goldens;
+mod my_work;
 mod workspace_lifecycle;
 
 #[test]

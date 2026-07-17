@@ -9,6 +9,10 @@ use crate::AppState;
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route(
+            "/api/v1/projects/:project_id/my-work",
+            get(list_project_my_work),
+        )
+        .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces",
             post(create_workspace).get(list_workspaces),
         )

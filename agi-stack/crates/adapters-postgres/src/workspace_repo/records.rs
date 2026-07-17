@@ -97,6 +97,38 @@ pub struct WorkspaceTaskSessionAttemptRecord {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+/// Latest persisted workspace attempt visible in a caller's complete My Work scope.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+pub struct ProjectMyWorkWorkspaceAttemptRecord {
+    pub authority_id: String,
+    pub conversation_id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub title: String,
+    pub status: String,
+    pub attempt_number: i32,
+    pub conversation_agent_config: Option<Value>,
+    pub workspace_metadata: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Pending persisted HITL request visible in a caller's complete My Work scope.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+pub struct ProjectMyWorkHitlAuthorityRecord {
+    pub authority_id: String,
+    pub request_type: String,
+    pub conversation_id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub title: String,
+    pub conversation_agent_config: Option<Value>,
+    pub request_metadata: Option<Value>,
+    pub workspace_metadata: Value,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceMessageRecord {
     pub id: String,

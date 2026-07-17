@@ -21,8 +21,9 @@ pub(super) use topology::{
 };
 pub(super) use workspace::{
     accept_plan_node_review, create_workspace, delete_workspace, get_plan_snapshot, get_workspace,
-    list_mentions, list_messages, list_workspace_agents, list_workspace_members, list_workspaces,
-    recover_stale_attempts, reopen_plan_node, request_delivery_contract_regeneration,
-    request_delivery_pipeline_run, request_plan_node_replan, retry_plan_outbox, send_message,
-    trigger_autonomy_tick, update_workspace,
+    list_mentions, list_messages, list_project_my_work, list_workspace_agents,
+    list_workspace_members, list_workspaces, recover_stale_attempts, reopen_plan_node,
+    request_delivery_contract_regeneration, request_delivery_pipeline_run,
+    request_plan_node_replan, retry_plan_outbox, send_message, trigger_autonomy_tick,
+    update_workspace,
 };

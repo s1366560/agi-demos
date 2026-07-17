@@ -24,6 +24,12 @@ pub(crate) trait WorkspaceService: Send + Sync {
         query: WorkspaceListQuery,
     ) -> Result<Vec<WorkspaceView>, WorkspaceApiError>;
 
+    async fn list_project_my_work(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<ProjectMyWorkResponse, WorkspaceApiError>;
+
     async fn get_workspace(
         &self,
         user_id: &str,

@@ -2285,6 +2285,14 @@ export function App() {
       if (event.defaultPrevented) return;
       const key = event.key.toLowerCase();
       if ((event.metaKey || event.ctrlKey) && key === 'k') {
+        if (activeSectionRef.current === 'board') {
+          const search = document.querySelector<HTMLInputElement>('input[name="my-work-search"]');
+          if (search) {
+            event.preventDefault();
+            search.focus();
+            return;
+          }
+        }
         event.preventDefault();
         openCommandPalette();
         return;

@@ -4,14 +4,16 @@ import {
   ArrowRightIcon,
   CheckCircledIcon,
   ChevronDownIcon,
+  CircleBackslashIcon,
   ClockIcon,
   CodeIcon,
   DesktopIcon,
+  DotsHorizontalIcon,
   ExclamationTriangleIcon,
+  FileIcon,
+  LockClosedIcon,
   MagnifyingGlassIcon,
-  ReloadIcon,
   RocketIcon,
-  StopIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -19,15 +21,15 @@ import type {
   AgentCapabilityMode,
   DesktopPermissionProfile,
   DesktopRunStatus,
-  MyWorkGroup,
   ProjectWorkItem,
 } from '../../types';
 import {
-  countMyWorkGroups,
-  describeMyWorkAuthority,
+  countMyWorkDisplayGroups,
   filterMyWorkItems,
-  MY_WORK_GROUPS,
+  groupMyWorkDisplayItems,
+  myWorkDisplayGroupForAuthorityGroup,
   myWorkItemKey,
+  type MyWorkDisplayGroup,
 } from './myWorkModel';
 import './MyWorkQueue.css';
 
@@ -42,14 +44,11 @@ type MyWorkQueueProps = {
   onOpenSession: (item: ProjectWorkItem) => void;
 };
 
-type MyWorkQueueFilter = 'all' | 'attention' | 'running' | 'ready_review';
-
 const groupIcons = {
   needs_input: ExclamationTriangleIcon,
-  needs_approval: StopIcon,
   running: ActivityLogIcon,
   ready_review: CheckCircledIcon,
-} satisfies Record<MyWorkGroup, typeof ActivityLogIcon>;
+} satisfies Record<MyWorkDisplayGroup, typeof ActivityLogIcon>;
 
 export function MyWorkQueue({
   items,
@@ -62,19 +61,22 @@ export function MyWorkQueue({
   onOpenSession,
 }: MyWorkQueueProps) {
   const { locale, t } = useI18n();
+  const shortcutLabel = isApplePlatform() ? '⌘ K' : 'Ctrl K';
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<MyWorkQueueFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<MyWorkGroup>>(new Set());
-  const modeItems = useMemo(
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<MyWorkDisplayGroup>>(new Set());
+  const visibleItems = useMemo(
     () => filterMyWorkItems(items, 'all', mode, query),
     [items, mode, query],
   );
-  const visibleItems = useMemo(
-    () => modeItems.filter((item) => queueFilterMatches(filter, item.group)),
-    [filter, modeItems],
+  const displayGroups = useMemo(
+    () => groupMyWorkDisplayItems(visibleItems),
+    [visibleItems],
   );
-  const counts = useMemo(() => countMyWorkGroups(visibleItems), [visibleItems]);
+  const counts = useMemo(
+    () => countMyWorkDisplayGroups(visibleItems),
+    [visibleItems],
+  );
   const selectedItem = error
     ? null
     : (visibleItems.find((item) => myWorkItemKey(item) === selectedId) ??
@@ -86,7 +88,7 @@ export function MyWorkQueue({
     if (selectedKey !== selectedId) setSelectedId(selectedKey);
   }, [selectedId, selectedItem]);
 
-  const toggleGroup = (group: MyWorkGroup) => {
+  const toggleGroup = (group: MyWorkDisplayGroup) => {
     setCollapsedGroups((current) => {
       const next = new Set(current);
       if (next.has(group)) next.delete(group);
@@ -95,26 +97,26 @@ export function MyWorkQueue({
     });
   };
 
+  const resetQueueView = () => {
+    setQuery('');
+    setCollapsedGroups(new Set());
+  };
+
   return (
-    <section
-      className="my-work-shell"
-      aria-busy={loading}
-      aria-label={t('myWork.title')}
-    >
+    <section className="my-work-shell" aria-busy={loading} aria-label={t('myWork.title')}>
       <aside className="my-work-queue">
         <header className="my-work-queue-header">
           <div>
-            <span>{t('myWork.eyebrow')}</span>
+            <span>{t(mode === 'code' ? 'myWork.codeEyebrow' : 'myWork.eyebrow')}</span>
             <h1>{t('myWork.title')}</h1>
           </div>
           <button
             type="button"
             className="my-work-icon-button"
-            aria-label={t('myWork.refresh')}
-            disabled={loading}
-            onClick={onRefresh}
+            aria-label={t('myWork.taskFilters')}
+            onClick={resetQueueView}
           >
-            <ReloadIcon className={loading ? 'spinning' : ''} />
+            <CircleBackslashIcon />
           </button>
         </header>
 
@@ -129,20 +131,30 @@ export function MyWorkQueue({
             autoComplete="off"
             spellCheck={false}
           />
+          <kbd>{shortcutLabel}</kbd>
         </label>
 
-        <div className="my-work-filter-row" aria-label={t('myWork.statusFilter')}>
-          {(['all', 'attention', 'running', 'ready_review'] as const).map((value) => (
-            <button
-              type="button"
-              className={filter === value ? 'active' : ''}
-              aria-pressed={filter === value}
-              key={value}
-              onClick={() => setFilter(value)}
-            >
-              {t(`myWork.filter.${value}`)}
-            </button>
-          ))}
+        <div className="my-work-filter-row" role="group" aria-label={t('myWork.statusFilter')}>
+          <button type="button" className="active" aria-pressed="true">
+            {t('myWork.filter.all')}
+          </button>
+          <button
+            type="button"
+            aria-disabled="true"
+            aria-describedby="my-work-filter-unavailable"
+          >
+            {t('myWork.filter.assigned')}
+          </button>
+          <button
+            type="button"
+            aria-disabled="true"
+            aria-describedby="my-work-filter-unavailable"
+          >
+            {t('myWork.filter.recent')}
+          </button>
+          <span id="my-work-filter-unavailable" className="my-work-visually-hidden">
+            {t('myWork.filterUnavailable')}
+          </span>
         </div>
 
         {error ? (
@@ -151,6 +163,9 @@ export function MyWorkQueue({
             <span>
               <strong>{t('myWork.unavailable')}</strong>
               <small>{error}</small>
+              <button type="button" disabled={loading} onClick={onRefresh}>
+                {t('myWork.refresh')}
+              </button>
             </span>
           </div>
         ) : null}
@@ -173,14 +188,8 @@ export function MyWorkQueue({
               <small>
                 {t(items.length === 0 ? 'myWork.emptyDescription' : 'myWork.noMatchesDescription')}
               </small>
-              {items.length > 0 && (query || filter !== 'all') ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery('');
-                    setFilter('all');
-                  }}
-                >
+              {items.length > 0 && query ? (
+                <button type="button" onClick={() => setQuery('')}>
                   {t('myWork.clearFilters')}
                 </button>
               ) : null}
@@ -190,12 +199,17 @@ export function MyWorkQueue({
 
         {!error && visibleItems.length > 0 ? (
           <div className="my-work-groups" aria-label={t('myWork.queue')}>
-            {MY_WORK_GROUPS.map((group) => {
+            {loading ? (
+              <div className="my-work-refreshing" role="status" aria-live="polite">
+                <ActivityLogIcon className="spinning" />
+                {t('myWork.updating')}
+              </div>
+            ) : null}
+            {displayGroups.map(({ group, items: groupItems }) => {
               const GroupIcon = groupIcons[group];
-              const groupItems = visibleItems.filter((item) => item.group === group);
               const expanded = !collapsedGroups.has(group);
               return (
-                <div className="my-work-group" key={group}>
+                <section className="my-work-group" key={group}>
                   <button
                     type="button"
                     className="my-work-group-heading"
@@ -203,7 +217,7 @@ export function MyWorkQueue({
                     onClick={() => toggleGroup(group)}
                   >
                     <GroupIcon />
-                    <span>{t(`myWork.group.${group}`)}</span>
+                    <span>{t(`myWork.displayGroup.${group}`)}</span>
                     <b>{counts[group]}</b>
                     <ChevronDownIcon className={expanded ? 'expanded' : ''} />
                   </button>
@@ -213,29 +227,58 @@ export function MyWorkQueue({
                         const isSelected = selectedItem
                           ? myWorkItemKey(selectedItem) === itemKey
                           : false;
+                        const needsAction =
+                          myWorkDisplayGroupForAuthorityGroup(item.group) === 'needs_input';
                         return (
-                          <button
-                            type="button"
+                          <article
+                            className={`my-work-task-card ${isSelected ? 'selected' : ''}`}
                             key={itemKey}
-                            className={`my-work-item ${isSelected ? 'selected' : ''}`}
-                            aria-current={isSelected ? 'true' : undefined}
-                            onClick={() => setSelectedId(itemKey)}
                           >
-                            <span className={`my-work-status status-${item.group}`} aria-hidden />
-                            <span>
-                              <strong>{item.title}</strong>
-                              <small>{t(`myWork.action.${item.required_action}`)}</small>
-                              <em>
-                                {t('myWork.updated', {
-                                  time: formatRelativeTime(item.updated_at, locale),
-                                })}
-                              </em>
-                            </span>
-                          </button>
+                            <button
+                              type="button"
+                              className="my-work-item"
+                              aria-current={isSelected ? 'true' : undefined}
+                              onClick={() => setSelectedId(itemKey)}
+                            >
+                              <span className={`my-work-status status-${item.group}`} aria-hidden />
+                              <span>
+                                <strong>{item.title}</strong>
+                                <small>{t(`myWork.action.${item.required_action}`)}</small>
+                                <em>
+                                  {t('myWork.updated', {
+                                    time: formatRelativeTime(item.updated_at, locale),
+                                  })}
+                                </em>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="my-work-task-menu"
+                              aria-label={t('myWork.openTaskActions', { title: item.title })}
+                              disabled={loading}
+                              onClick={() => onOpenSession(item)}
+                            >
+                              <DotsHorizontalIcon />
+                            </button>
+                            {needsAction ? (
+                              <button
+                                type="button"
+                                className="my-work-inline-action"
+                                disabled={loading}
+                                onClick={() => onOpenSession(item)}
+                              >
+                                {t(
+                                  item.group === 'needs_approval'
+                                    ? 'myWork.reviewApproval'
+                                    : 'myWork.provideInput',
+                                )}
+                              </button>
+                            ) : null}
+                          </article>
                         );
                       })
                     : null}
-                </div>
+                </section>
               );
             })}
           </div>
@@ -247,6 +290,9 @@ export function MyWorkQueue({
           <ExclamationTriangleIcon />
           <strong>{t('myWork.unavailable')}</strong>
           <small>{t('myWork.staleHidden')}</small>
+          <button type="button" disabled={loading} onClick={onRefresh}>
+            {t('myWork.refresh')}
+          </button>
         </section>
       ) : selectedItem ? (
         <MyWorkDetail
@@ -256,6 +302,7 @@ export function MyWorkQueue({
           workspaceLabel={
             selectedItem.workspace_id ? (workspaceLabels[selectedItem.workspace_id] ?? null) : null
           }
+          refreshing={loading}
           onOpenSession={() => onOpenSession(selectedItem)}
         />
       ) : (
@@ -274,12 +321,14 @@ function MyWorkDetail({
   locale,
   projectName,
   workspaceLabel,
+  refreshing,
   onOpenSession,
 }: {
   item: ProjectWorkItem;
   locale: string;
   projectName: string;
   workspaceLabel: string | null;
+  refreshing: boolean;
   onOpenSession: () => void;
 }) {
   const { t } = useI18n();
@@ -290,18 +339,18 @@ function MyWorkDetail({
         ? RocketIcon
         : ActivityLogIcon;
   const attention = item.group === 'needs_input' || item.group === 'needs_approval';
-  const authority = describeMyWorkAuthority(item);
-  const environmentLabel = authority.runtime?.environment
-    ? authority.runtime.environment.label || authority.runtime.environment.kind
-    : t('session.notAvailable');
-  const permissionLabel = authority.runtime?.permissionProfile
-    ? t(permissionTranslationKey(authority.runtime.permissionProfile))
-    : t('session.notAvailable');
+  const environmentLabel =
+    item.authority_kind === 'desktop_run' && item.environment
+      ? item.environment.label || item.environment.kind
+      : t('session.notAvailable');
+  const permissionLabel =
+    item.authority_kind === 'desktop_run'
+      ? t(permissionTranslationKey(item.permission_profile))
+      : t('session.notAvailable');
   const modeLabel =
     item.capability_mode === null
       ? t('myWork.modeUnclassified')
       : t(item.capability_mode === 'code' ? 'session.code' : 'session.work');
-
   return (
     <article className="my-work-detail">
       <header className="my-work-detail-topbar">
@@ -310,10 +359,12 @@ function MyWorkDetail({
           <ArrowRightIcon />
           <strong>{item.title}</strong>
         </div>
-        <time dateTime={item.updated_at}>
-          <ClockIcon />
-          {formatDateTime(item.updated_at, locale)}
-        </time>
+        {refreshing ? (
+          <span className="my-work-refreshing" role="status" aria-live="polite">
+            <ActivityLogIcon className="spinning" />
+            {t('myWork.updating')}
+          </span>
+        ) : null}
       </header>
 
       <div className="my-work-detail-content">
@@ -327,39 +378,39 @@ function MyWorkDetail({
               <h2>{item.title}</h2>
               <p>{t(`myWork.action.${item.required_action}`)}</p>
             </div>
-            <span className={`my-work-status-badge status-${item.group}`}>
-              <i /> {t(statusTranslationKey(item.status))}
+            <div className="my-work-progress-number">
+              <b>—</b>
+              <span>{t(statusTranslationKey(item.status))}</span>
+            </div>
+          </div>
+
+          <div className="my-work-progress-strip" aria-label={t('myWork.stagesUnavailable')}>
+            <span>
+              <ActivityLogIcon />
+            </span>
+            <div>
+              <strong>{t('myWork.stagesUnavailable')}</strong>
+              <small>{t('myWork.stagesUnavailableDescription')}</small>
+            </div>
+          </div>
+
+          <div className="my-work-run-facts">
+            <span>
+              <FileIcon /> {workspaceLabel ?? t('session.notAvailable')}
+            </span>
+            <span>
+              <DesktopIcon /> {environmentLabel}
             </span>
           </div>
 
-          <dl className="my-work-run-facts">
-            <div>
-              <dt>{t('myWork.workspace')}</dt>
-              <dd>{workspaceLabel ?? t('session.notAvailable')}</dd>
-            </div>
-            <div>
-              <dt>{t('myWork.authoritySource')}</dt>
-              <dd>
-                <ActivityLogIcon /> {t(authority.sourceKey)}
-              </dd>
-            </div>
-            <div>
-              <dt>{t('myWork.lastUpdated')}</dt>
-              <dd>
-                <ClockIcon /> {formatRelativeTime(item.updated_at, locale)}
-              </dd>
-            </div>
-          </dl>
-
-          {attention || item.group === 'ready_review' ? (
-            <div className={`my-work-action-banner ${attention ? 'attention' : 'review'}`}>
-              {attention ? <StopIcon /> : <CheckCircledIcon />}
+          {attention ? (
+            <div className="my-work-input-banner">
               <span>
-                <strong>{t(attention ? 'myWork.actionRequired' : 'myWork.reviewAvailable')}</strong>
-                <small>{t(`myWork.action.${item.required_action}`)}</small>
+                <strong>{t('myWork.actionRequired')}</strong>
+                {t(`myWork.action.${item.required_action}`)}
               </span>
-              <button type="button" onClick={onOpenSession}>
-                {t('myWork.openSession')} <ArrowRightIcon />
+              <button type="button" disabled={refreshing} onClick={onOpenSession}>
+                {t('myWork.openSession')}
               </button>
             </div>
           ) : null}
@@ -367,101 +418,79 @@ function MyWorkDetail({
 
         <section className="my-work-insight-grid">
           <article>
-            <span>{t('myWork.authorityId')}</span>
-            <strong translate="no">{authority.identifier}</strong>
-            <small>{t(authority.sourceKey)}</small>
+            <span>{t('myWork.progress')}</span>
+            <strong>{t('myWork.progressUnavailable')}</strong>
+            <small>{t('myWork.progressAuthorityDescription')}</small>
           </article>
           <article>
-            <span>{t('myWork.requiredAction')}</span>
+            <span>{t('myWork.executionContext')}</span>
+            <strong>{environmentLabel}</strong>
+            <small>
+              <LockClosedIcon /> {permissionLabel}
+            </small>
+          </article>
+          <article className={attention ? 'attention' : ''}>
+            <span>{t(attention ? 'myWork.blocker' : 'myWork.runStatus')}</span>
             <strong>{t(`myWork.group.${item.group}`)}</strong>
             <small>{t(`myWork.action.${item.required_action}`)}</small>
           </article>
-          <article>
-            <span>{t('myWork.lastUpdated')}</span>
-            <strong>{formatRelativeTime(item.updated_at, locale)}</strong>
-            <small>{t('myWork.persistedRecordOnly')}</small>
-          </article>
         </section>
 
-        <section className="my-work-authority-card">
+        <header className="my-work-artifact-heading">
+          <div>
+            <span>{t('myWork.latestEvidence')}</span>
+            <h3>{t(item.capability_mode === 'code' ? 'myWork.codeEvidence' : 'myWork.workEvidence')}</h3>
+          </div>
+          <span>
+            <ClockIcon />{' '}
+            {t('myWork.taskUpdated', { time: formatDateTime(item.updated_at, locale) })}
+          </span>
+        </header>
+
+        <section className="my-work-artifact-panel">
           <header>
-            <div>
-              <span>{t('myWork.authoritySource')}</span>
-              <h3>{t('myWork.currentAuthority')}</h3>
-            </div>
-            <span className={`my-work-status-badge status-${item.group}`}>
-              <i /> {t(statusTranslationKey(item.status))}
+            <span>
+              <FileIcon /> {t('myWork.scopedTaskEvidence')}
             </span>
           </header>
-          <p>{t(authority.descriptionKey)}</p>
-          <dl>
-            <div>
-              <dt>{t('myWork.authorityType')}</dt>
-              <dd>{t(authority.sourceKey)}</dd>
-            </div>
-            <div>
-              <dt>{t('myWork.authorityId')}</dt>
-              <dd translate="no">{authority.identifier}</dd>
-            </div>
-            {authority.sequence ? (
+          <div>
+            <span>{t('myWork.evidenceUnavailable')}</span>
+            <h3>{t('myWork.evidenceUnavailableTitle')}</h3>
+            <p>{t('myWork.evidenceUnavailableDescription')}</p>
+            <dl>
               <div>
-                <dt>{t(authority.sequence.labelKey)}</dt>
-                <dd>{authority.sequence.value}</dd>
+                <dt>{t('myWork.workspace')}</dt>
+                <dd>{workspaceLabel ?? t('session.notAvailable')}</dd>
               </div>
-            ) : null}
-            <div>
-              <dt>{t('myWork.recordStatus')}</dt>
-              <dd>{t(statusTranslationKey(item.status))}</dd>
-            </div>
-            <div>
-              <dt>{t('myWork.lastUpdated')}</dt>
-              <dd>{formatDateTime(item.updated_at, locale)}</dd>
-            </div>
-            {authority.runtime ? (
-              <>
-                <div>
-                  <dt>{t('session.overviewEnvironment')}</dt>
-                  <dd>{environmentLabel}</dd>
-                </div>
-                <div>
-                  <dt>{t('session.overviewPermission')}</dt>
-                  <dd>{permissionLabel}</dd>
-                </div>
-                <div>
-                  <dt>{t('myWork.lastHeartbeat')}</dt>
-                  <dd>
-                    {authority.runtime.lastHeartbeatAt
-                      ? formatDateTime(authority.runtime.lastHeartbeatAt, locale)
-                      : t('session.notAvailable')}
-                  </dd>
-                </div>
-              </>
-            ) : null}
-          </dl>
-          {!authority.runtime ? (
-            <div className="my-work-runtime-unavailable">
-              <DesktopIcon />
-              <span>
-                <strong>{t('myWork.desktopRuntimeUnavailable')}</strong>
-                <small>{t('myWork.desktopRuntimeUnavailableDescription')}</small>
-              </span>
-            </div>
-          ) : null}
-          {item.error ? (
-            <div className="my-work-run-error">
-              <ExclamationTriangleIcon /> {t('myWork.failureRecorded')}
-            </div>
-          ) : null}
+              <div>
+                <dt>{t('myWork.mode')}</dt>
+                <dd>{modeLabel}</dd>
+              </div>
+              <div>
+                <dt>{t('session.overviewEnvironment')}</dt>
+                <dd>{environmentLabel}</dd>
+              </div>
+            </dl>
+          </div>
         </section>
       </div>
 
       <footer className="my-work-action-dock">
-        <span>
-          <strong>{t('myWork.openSession')}</strong>
-          <small>{t('myWork.openSessionDescription')}</small>
-        </span>
-        <button type="button" onClick={onOpenSession}>
-          {t('myWork.openSession')} <ArrowRightIcon />
+        <div className="my-work-action-buttons">
+          <button type="button" className="primary" disabled={refreshing} onClick={onOpenSession}>
+            {t('myWork.openSession')}
+          </button>
+        </div>
+        <button
+          type="button"
+          className="my-work-steer-composer"
+          disabled={refreshing}
+          onClick={onOpenSession}
+        >
+          <span>{t('myWork.steeringInSession')}</span>
+          <span>
+            {modeLabel} · {t('myWork.agent')} <ArrowRightIcon />
+          </span>
         </button>
       </footer>
     </article>
@@ -491,10 +520,13 @@ function permissionTranslationKey(profile: DesktopPermissionProfile): string {
   return 'task.permissionFullAccess';
 }
 
-function queueFilterMatches(filter: MyWorkQueueFilter, group: MyWorkGroup): boolean {
-  if (filter === 'all') return true;
-  if (filter === 'attention') return group === 'needs_input' || group === 'needs_approval';
-  return group === filter;
+function isApplePlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    navigator.platform.startsWith('Mac') ||
+    navigator.platform === 'iPhone' ||
+    navigator.platform === 'iPad'
+  );
 }
 
 function formatRelativeTime(value: string, locale: string): string {

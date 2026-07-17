@@ -206,9 +206,10 @@ pub use workspace_context_repo::{
 };
 pub use workspace_repo::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
-    PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceAgentDetailRecord, WorkspaceAgentRecord, WorkspaceMemberRecord,
-    WorkspaceMessageRecord, WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
+    PgWorkspaceRepository, ProjectMyWorkHitlAuthorityRecord, ProjectMyWorkWorkspaceAttemptRecord,
+    TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess, WorkspaceAgentDetailRecord,
+    WorkspaceAgentRecord, WorkspaceMemberRecord, WorkspaceMessageRecord,
+    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
     WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
     WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
     WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,

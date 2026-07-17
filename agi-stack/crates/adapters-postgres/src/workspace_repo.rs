@@ -15,6 +15,7 @@ use agistack_core::ports::{CoreError, CoreResult};
 use crate::PgPool;
 
 mod blackboard;
+mod my_work;
 mod pipeline;
 mod plan;
 mod plan_outbox;
