@@ -65,6 +65,7 @@ const testFiles = [
   'session-plan-review.test.mjs',
   'session-view-model.test.mjs',
   'session-scope.test.mjs',
+  'session-selection-model.test.mjs',
   'session-layout-model.test.mjs',
   'workspace-review-panel-model.test.mjs',
   'session-canvas-model.test.mjs',

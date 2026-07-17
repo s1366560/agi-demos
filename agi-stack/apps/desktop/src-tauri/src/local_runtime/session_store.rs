@@ -676,6 +676,170 @@ impl DesktopSessionStore {
         transaction.commit().map_err(|error| error.to_string())
     }
 
+    pub(super) fn ensure_local_demo_session_content_seed(
+        &self,
+        seed_id: &str,
+        conversation_id: &str,
+        timeline: &[Value],
+        applied_at: &str,
+    ) -> Result<(), String> {
+        let seed_id = seed_id.trim();
+        let conversation_id = conversation_id.trim();
+        if seed_id.is_empty() {
+            return Err("local demo session content seed id is required".to_string());
+        }
+        if conversation_id.is_empty() || timeline.is_empty() {
+            return Err(
+                "local demo session content seed requires a conversation and timeline".to_string(),
+            );
+        }
+
+        let mut event_ids = HashSet::with_capacity(timeline.len());
+        for event in timeline {
+            let event_id = required_string(event, "id")?;
+            let event_conversation_id = required_string(event, "conversation_id")?;
+            if event_conversation_id != conversation_id {
+                return Err(format!(
+                    "local demo session content event scope conflict: {event_id}"
+                ));
+            }
+            if !event_ids.insert(event_id.clone()) {
+                return Err(format!(
+                    "duplicate local demo session content event id: {event_id}"
+                ));
+            }
+        }
+
+        let manifest = json!({
+            "seed_id": seed_id,
+            "kind": "local_demo_session_content",
+            "conversation_id": conversation_id,
+            "timeline": timeline,
+        });
+        let manifest_json = serde_json::to_string(&manifest).map_err(|error| error.to_string())?;
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let conversation_exists = transaction
+            .query_row(
+                "SELECT 1 FROM desktop_conversations WHERE id = ?1",
+                [conversation_id],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?
+            .is_some();
+        if !conversation_exists {
+            return Err(format!(
+                "local demo session content conversation is missing: {conversation_id}"
+            ));
+        }
+
+        let existing_marker = transaction
+            .query_row(
+                "SELECT seed_kind, value_json FROM desktop_seed_migrations WHERE seed_id = ?1",
+                [seed_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if let Some((seed_kind, existing_manifest)) = existing_marker.as_ref() {
+            if seed_kind != "local_demo_session_content" || existing_manifest != &manifest_json {
+                return Err(format!(
+                    "local demo session content manifest conflict: {seed_id}"
+                ));
+            }
+        }
+
+        let mut matching_event_count = 0_usize;
+        for event in timeline {
+            let event_id = required_string(event, "id")?;
+            let existing = transaction
+                .query_row(
+                    "SELECT conversation_id, value_json FROM desktop_timeline WHERE id = ?1",
+                    [&event_id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()
+                .map_err(|error| error.to_string())?;
+            let Some((stored_conversation_id, stored_json)) = existing else {
+                continue;
+            };
+            let stored: Value =
+                serde_json::from_str(&stored_json).map_err(|error| error.to_string())?;
+            if stored_conversation_id != conversation_id || stored != *event {
+                return Err(format!(
+                    "local demo session content event conflict: {event_id}"
+                ));
+            }
+            matching_event_count += 1;
+        }
+
+        if existing_marker.is_some() {
+            if matching_event_count != timeline.len() {
+                return Err(format!(
+                    "local demo seeded session content is incomplete: {conversation_id}"
+                ));
+            }
+            return transaction.commit().map_err(|error| error.to_string());
+        }
+
+        let existing_timeline_count: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_timeline WHERE conversation_id = ?1",
+                [conversation_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if existing_timeline_count > 0 && matching_event_count == 0 {
+            return transaction.commit().map_err(|error| error.to_string());
+        }
+        if matching_event_count != 0 && matching_event_count != timeline.len() {
+            return Err(format!(
+                "local demo seeded session content is partial: {conversation_id}"
+            ));
+        }
+
+        if matching_event_count == 0 {
+            let next_position: i64 = transaction
+                .query_row(
+                    "SELECT COALESCE(MAX(position), 0) + 1 FROM desktop_timeline
+                     WHERE conversation_id = ?1",
+                    [conversation_id],
+                    |row| row.get(0),
+                )
+                .map_err(|error| error.to_string())?;
+            for (position_offset, event) in timeline.iter().enumerate() {
+                let position_offset = i64::try_from(position_offset)
+                    .map_err(|_| "local demo session content position overflow".to_string())?;
+                let position = next_position
+                    .checked_add(position_offset)
+                    .ok_or_else(|| "local demo session content position overflow".to_string())?;
+                let event_id = required_string(event, "id")?;
+                let value_json = serde_json::to_string(event).map_err(|error| error.to_string())?;
+                transaction
+                    .execute(
+                        "INSERT INTO desktop_timeline(
+                           id, conversation_id, position, value_json
+                         ) VALUES (?1, ?2, ?3, ?4)",
+                        params![event_id, conversation_id, position, value_json],
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO desktop_seed_migrations(
+                   seed_id, seed_kind, applied_at, value_json
+                 ) VALUES (?1, 'local_demo_session_content', ?2, ?3)",
+                params![seed_id, applied_at, manifest_json],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
     pub(super) fn insert_workspace(&self, workspace: &Value) -> Result<(), String> {
         let id = required_string(workspace, "id")?;
         let project_id = required_string(workspace, "project_id")?;
@@ -731,6 +895,31 @@ impl DesktopSessionStore {
                 required_string(&workspace, "tenant_id")
             })
             .transpose()
+    }
+
+    pub(super) fn workspace_name(&self, workspace_id: &str) -> Result<Option<String>, String> {
+        let value_json = self
+            .connection()?
+            .query_row(
+                "SELECT value_json FROM desktop_workspaces WHERE id = ?1",
+                [workspace_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        value_json
+            .map(|raw| {
+                let workspace: Value =
+                    serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+                Ok(workspace
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string))
+            })
+            .transpose()
+            .map(Option::flatten)
     }
 
     pub(super) fn workspace_execution_snapshot(

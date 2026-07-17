@@ -84,6 +84,91 @@ final result: passed
 
 ---
 
+# Local workspace-to-session continuity design QA
+
+Date: 2026-07-17
+
+Scope: native local login, Settings tenant/project switch, workspace-to-session tree,
+conversation selection, persisted narrative content, and the current-activity summary.
+
+## Visual sources
+
+- Prototype initial conversation state:
+  `agi-stack/apps/desktop/qa/session-detail-source-1375x939.png`
+- Post-fix production-component capture:
+  `agi-stack/apps/desktop/qa/session-activity-structured-1375x939.png`
+- Exact `1375 x 939` prototype/focused comparison:
+  `agi-stack/apps/desktop/qa/session-detail-structured-comparison-1375x939.jpg`
+
+## Interaction evidence
+
+The rebuilt debug `.app` was exercised through the native UI. The verified route was:
+
+1. Continue with local workspace.
+2. Open Settings -> Workspace.
+3. Select Northstar Labs -> Desktop Client and apply the context switch.
+4. Confirm the two-workspace tree and three Desktop Client sessions.
+5. Open `Fix flaky data-pipeline test`.
+
+The selected session rendered the persisted user request, Agent plan, isolated-worktree event,
+four tool calls, root-cause message, and verification update. The real workspace name is projected
+as `Desktop Client`; no generic `Local workspace` label is substituted.
+
+## Same-viewport comparison
+
+The focused production-component capture and prototype were placed together at the exact
+`1375 x 939` viewport before final judgment. The current-activity card preserves the source's
+hierarchy while making the authority boundary explicit:
+
+- `Verifying the isolated fix`
+- `Patch applied`
+- `Live` only in the QA fixture's explicit running/connected state
+- `Agent reported · 18 tests · 50 race runs` for free-form verification copy
+
+The browser-reported viewport and document dimensions are both `1375 x 939`; horizontal overflow
+is false and the warning/error console is empty. The combined input was used to judge sidebar,
+conversation column, context rail, composer, message cards, and collapsed activity groups.
+
+## Findings resolved
+
+- P0: the native demo conversation previously opened with an empty timeline. A transactional,
+  idempotent Rust seed now persists 13 stable narrative events. Seed/event conflicts fail closed,
+  while an existing unrelated user timeline is never overwritten.
+- P1: selecting another conversation in the same tenant/project/workspace no longer reconnects the
+  whole runtime or tears down its live channel. Cross-workspace selection still performs the full
+  authority refresh.
+- P1: timeline requests use the target request configuration, so a selection cannot read through a
+  stale workspace scope during a context transition.
+- P1: initial and paginated timeline requests now validate both request generation and scope epoch;
+  resets invalidate outstanding requests before clearing visible state.
+- P1: conversation projection resolves the persisted workspace name instead of fabricating a
+  generic local label.
+- P2: the activity summary distinguishes validated projection counts from free-form event copy.
+  Only a running authoritative run with connected updates is labeled `Live`; event-owned evidence
+  is explicitly labeled `Agent reported`.
+
+## Intentional authority boundary
+
+The prototype capture includes an actively executing run with stage progression, elapsed time, and
+worktree authority. The local seed does not fabricate a live run. Until a real run exists, the
+native inspector truthfully shows unavailable run state and plan mode, while the conversation card
+uses `Latest activity` / `Recorded` and keeps Agent-reported evidence inspectable. This is an
+intentional runtime boundary, not a visual fallback.
+
+## Verification
+
+- Desktop tests: 366 passed.
+- Desktop TypeScript and production build: passed.
+- Rust library tests: 151 passed.
+- Rust formatting and Clippy with warnings denied: passed.
+- Native debug bundle: built and exercised through login -> settings -> hierarchy -> session.
+- Focused Browser QA: exact live/Agent-reported checkpoint state, no overflow, no console
+  warnings/errors.
+
+final result: passed
+
+---
+
 # Workspace hierarchy and overview design QA
 
 Date: 2026-07-17

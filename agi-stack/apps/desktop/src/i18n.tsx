@@ -1356,7 +1356,9 @@ const enUS: Record<string, string> = {
   'session.evidence.currentArtifactCount': '{count} current artifacts',
   'session.evidence.currentOnly': 'Current versions only · open an artifact to inspect history',
   'session.currentActivity': 'Current activity',
+  'session.latestActivity': 'Latest activity',
   'session.live': 'Live',
+  'session.recorded': 'Recorded',
   'session.waitingForActivity': 'Waiting for session activity',
   'session.latestCheckpoint': 'Latest checkpoint',
   'session.sessionEvidence': 'Session evidence',
@@ -1380,6 +1382,11 @@ const enUS: Record<string, string> = {
   'session.attach': 'Attach',
   'session.context': 'Context',
   'session.evidenceCount': '{artifactCount} artifacts · {taskCount} tasks',
+  'session.agentReportedEvidence': 'Agent reported · {evidence}',
+  'session.structuredActivityEvidenceCount':
+    '{artifactCount} artifacts · {toolActivityCount} tool activities',
+  'session.structuredEvidenceCount':
+    '{artifactCount} artifacts · {checkCount} checks · {toolActivityCount} tool activities',
   'session.loadingEarlierHistory': 'Loading earlier history…',
   'session.scrollForEarlierHistory': 'Scroll up for earlier history',
   'session.runActivity': 'Run activity',
@@ -2951,7 +2958,9 @@ const zhCN: Record<string, string> = {
   'session.evidence.currentArtifactCount': '{count} 个当前产物',
   'session.evidence.currentOnly': '仅显示当前版本 · 打开产物可查看历史版本',
   'session.currentActivity': '当前活动',
+  'session.latestActivity': '最近活动',
   'session.live': '实时',
+  'session.recorded': '已记录',
   'session.waitingForActivity': '等待会话活动',
   'session.latestCheckpoint': '最近检查点',
   'session.sessionEvidence': '会话证据',
@@ -2975,6 +2984,11 @@ const zhCN: Record<string, string> = {
   'session.attach': '附件',
   'session.context': '上下文',
   'session.evidenceCount': '{artifactCount} 个产物 · {taskCount} 个任务',
+  'session.agentReportedEvidence': '智能体报告 · {evidence}',
+  'session.structuredActivityEvidenceCount':
+    '{artifactCount} 个产物 · {toolActivityCount} 次工具活动',
+  'session.structuredEvidenceCount':
+    '{artifactCount} 个产物 · {checkCount} 项检查 · {toolActivityCount} 次工具活动',
   'session.loadingEarlierHistory': '正在加载更早记录…',
   'session.scrollForEarlierHistory': '向上滚动以加载更早记录',
   'session.runActivity': '运行活动',

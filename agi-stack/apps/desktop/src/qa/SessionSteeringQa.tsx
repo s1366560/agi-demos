@@ -19,6 +19,7 @@ import { I18nProvider } from '../i18n';
 import type {
   ChangeSnapshot,
   CodeRangeReference,
+  ConversationTimelineState,
   DesktopRunInput,
   RunInputDelivery,
   WorkspaceMessage,
@@ -127,6 +128,53 @@ const messages: WorkspaceMessage[] = [
   },
 ];
 
+const timelineState: ConversationTimelineState = {
+  conversationId: 'conversation-desktop-session',
+  items: [
+    {
+      id: 'message-user-goal',
+      type: 'user_message',
+      eventTimeUs: 1_784_282_041_000_000,
+      eventCounter: 1,
+      role: 'user',
+      content:
+        'Please reproduce the flaky pipeline test, isolate the race, and leave verification evidence.',
+    },
+    {
+      id: 'message-agent-result',
+      type: 'assistant_message',
+      eventTimeUs: 1_784_282_042_000_000,
+      eventCounter: 2,
+      role: 'assistant',
+      content:
+        'I scoped fixture ownership to the job ID and added concurrent regression coverage.',
+    },
+    {
+      id: 'verification-progress',
+      type: 'task_updated',
+      eventTimeUs: 1_784_282_043_000_000,
+      eventCounter: 3,
+      content: '18 tests passed · 50 race runs passed · static checks',
+      display: {
+        title: 'Verifying the isolated fix',
+        summary: '18 tests passed · 50 race runs passed · static checks',
+        checkpoint: 'Patch applied',
+        evidence: '18 tests · 50 race runs',
+      },
+    },
+  ],
+  approvalRequests: [],
+  artifactVersions: [],
+  artifactDeliveries: [],
+  toolInvocations: [],
+  loading: false,
+  loadingEarlier: false,
+  error: null,
+  hasMore: false,
+  firstCursor: null,
+  lastCursor: null,
+};
+
 function SessionSteeringQa() {
   const [input, setInput] = useState('Keep the public API stable and add the missing revision test.');
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
@@ -161,12 +209,14 @@ function SessionSteeringQa() {
           <div className="session-steering-qa-content">
             <ChatPanel
               messages={messages}
-              timelineState={null}
+              timelineState={timelineState}
               agentTaskSignals={[]}
               workflowCounts={{ changes: 2, plan: 'ready' }}
               sessionTitle="Conversation"
               scopeLabel="Current run narrative"
               composerVariant="session"
+              activityPresence="live"
+              activityStructuredEvidence={null}
               input={input}
               sending={false}
               disabledReason={null}

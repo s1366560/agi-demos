@@ -14,6 +14,10 @@ import {
 import { useI18n } from '../../i18n';
 import { sessionActivitySummary } from '../session/sessionNarrativeModel';
 import type {
+  SessionActivityPresence,
+  SessionActivityStructuredEvidence,
+} from '../session/sessionNarrativeModel';
+import type {
   AgentTimelineItem,
   ConversationTimelineState,
   HitlResponseSubmission,
@@ -46,6 +50,8 @@ type ChatPanelProps = {
   workflowCounts?: Partial<Record<ChatWorkflowTarget, number | string>>;
   sessionTitle: string;
   scopeLabel: string;
+  activityPresence: SessionActivityPresence;
+  activityStructuredEvidence: SessionActivityStructuredEvidence | null;
   composerVariant?: ChatComposerVariant;
   input: string;
   sending: boolean;
@@ -103,6 +109,8 @@ export function ChatPanel({
   workflowCounts,
   sessionTitle,
   scopeLabel,
+  activityPresence,
+  activityStructuredEvidence,
   composerVariant = 'workspace',
   input,
   sending,
@@ -153,28 +161,32 @@ export function ChatPanel({
   const timelineLastId = timelineState?.items[timelineItemCount - 1]?.id ?? '';
   const activitySummary = useMemo(() => {
     if (!timelineState?.items.length) return null;
-    const artifactCount = timelineState.items.filter((item) =>
-      item.type.startsWith('artifact_'),
-    ).length;
-    const taskCount =
-      timelineState.items.filter((item) => item.type.startsWith('task_')).length +
-      agentTaskSignals.length;
     return sessionActivitySummary({
       items: timelineState.items,
-      artifactCount,
-      taskCount,
+      structuredEvidence: activityStructuredEvidence,
     });
-  }, [agentTaskSignals.length, timelineState]);
+  }, [activityStructuredEvidence, timelineState]);
   const activityEvidence = useMemo(() => {
-    if (!timelineState) return '';
-    const artifactCount = timelineState.items.filter((item) =>
-      item.type.startsWith('artifact_'),
-    ).length;
-    const taskCount =
-      timelineState.items.filter((item) => item.type.startsWith('task_')).length +
-      agentTaskSignals.length;
-    return t('session.evidenceCount', { artifactCount, taskCount });
-  }, [agentTaskSignals.length, t, timelineState]);
+    if (!activitySummary) return '';
+    if (activitySummary.evidence.kind === 'structured') {
+      const { artifactCount, checkCount, toolActivityCount } = activitySummary.evidence;
+      if (checkCount === null) {
+        return t('session.structuredActivityEvidenceCount', {
+          artifactCount,
+          toolActivityCount,
+        });
+      }
+      return t('session.structuredEvidenceCount', {
+        artifactCount,
+        checkCount,
+        toolActivityCount,
+      });
+    }
+    if (activitySummary.evidence.kind === 'agent_reported') {
+      return t('session.agentReportedEvidence', { evidence: activitySummary.evidence.text });
+    }
+    return t('session.notAvailable');
+  }, [activitySummary, t]);
   const scrollToLatest = useCallback(() => {
     scrollAnchorRef.current?.scrollIntoView({ block: 'end' });
   }, []);
@@ -314,15 +326,21 @@ export function ChatPanel({
                       <ActivityLogIcon />
                     </span>
                     <span className="session-current-activity-copy">
-                      <small>{t('session.currentActivity')}</small>
+                      <small>
+                        {t(
+                          activityPresence === 'live'
+                            ? 'session.currentActivity'
+                            : 'session.latestActivity',
+                        )}
+                      </small>
                       <strong>
                         {activitySummary.titleKey
                           ? t(activitySummary.titleKey)
                           : activitySummary.title || t('session.waitingForActivity')}
                       </strong>
                     </span>
-                    <Badge color="cyan" variant="soft">
-                      {t('session.live')}
+                    <Badge color={activityPresence === 'live' ? 'cyan' : 'gray'} variant="soft">
+                      {t(activityPresence === 'live' ? 'session.live' : 'session.recorded')}
                     </Badge>
                   </div>
                   {activitySummary.detail ? <p>{activitySummary.detail}</p> : null}

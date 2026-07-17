@@ -129,7 +129,7 @@ test('opening and cancelling New Task preserves the active conversation until ac
   assert.doesNotMatch(openSource, /setAgentTaskSignals\(/);
   assert.doesNotMatch(openSource, /setChatInput\(/);
   assert.doesNotMatch(openSource, /setSelectedTaskId\(/);
-  assert.match(activateSource, /setConversationTimeline\(emptyConversationTimeline\)/);
+  assert.match(activateSource, /resetConversationTimeline\(\)/);
   assert.match(activateSource, /setAgentTaskSignals\(\[\]\)/);
   assert.match(activateSource, /setChatInput\(''\)/);
   assert.match(activateSource, /setSelectedTaskId\(''\)/);

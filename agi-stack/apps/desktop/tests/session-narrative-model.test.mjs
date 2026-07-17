@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { buildSessionNarrative, sessionActivitySummary } = require(
+const { buildSessionNarrative, sessionActivityPresence, sessionActivitySummary } = require(
   '/tmp/agistack-desktop-test-dist/src/features/session/sessionNarrativeModel.js'
 );
 
@@ -39,7 +39,7 @@ test('tool groups expose running and failed states from structural events', () =
   assert.equal(failed[0].status, 'failed');
 });
 
-test('activity summary uses the latest authoritative event and evidence counts', () => {
+test('activity summary uses the latest event and leaves missing evidence unavailable', () => {
   const summary = sessionActivitySummary({
     items: [
       { id: 'user-1', type: 'user_message', role: 'user', content: 'Do the work.' },
@@ -51,15 +51,68 @@ test('activity summary uses the latest authoritative event and evidence counts',
         display: { title: 'Targeted tests', summary: '18 tests passed' },
       },
     ],
-    artifactCount: 2,
-    taskCount: 4,
   });
 
   assert.equal(summary.title, 'Targeted tests');
   assert.equal(summary.detail, '18 tests passed');
   assert.equal(summary.checkpoint, '');
   assert.equal(summary.checkpointKey, 'session.activityCheckpoint');
-  assert.equal(summary.evidence, '2 artifacts · 4 tasks');
+  assert.deepEqual(summary.evidence, { kind: 'unavailable' });
+});
+
+test('free-form display evidence is explicitly presented as agent reported', () => {
+  const summary = sessionActivitySummary({
+    items: [
+      {
+        id: 'verification-1',
+        type: 'task_updated',
+        display: {
+          title: 'Verifying the isolated fix',
+          summary: '18 tests passed · 50 race runs passed',
+          checkpoint: 'Patch applied',
+          evidence: '18 tests · 50 race runs',
+        },
+      },
+    ],
+  });
+
+  assert.equal(summary.checkpoint, 'Patch applied');
+  assert.equal(summary.checkpointKey, null);
+  assert.deepEqual(summary.evidence, {
+    kind: 'agent_reported',
+    text: '18 tests · 50 race runs',
+  });
+});
+
+test('validated projection evidence takes priority over agent-reported display copy', () => {
+  const summary = sessionActivitySummary({
+    items: [
+      {
+        id: 'verification-1',
+        type: 'task_updated',
+        display: { evidence: '18 tests · 50 race runs' },
+      },
+    ],
+    structuredEvidence: {
+      artifactCount: 2,
+      checkCount: 18,
+      toolActivityCount: 4,
+    },
+  });
+
+  assert.deepEqual(summary.evidence, {
+    kind: 'structured',
+    artifactCount: 2,
+    checkCount: 18,
+    toolActivityCount: 4,
+  });
+});
+
+test('activity is live only for an authoritative running run with connected updates', () => {
+  assert.equal(sessionActivityPresence(null, true), 'recorded');
+  assert.equal(sessionActivityPresence('completed', true), 'recorded');
+  assert.equal(sessionActivityPresence('running', false), 'recorded');
+  assert.equal(sessionActivityPresence('running', true), 'live');
 });
 
 test('protocol event and tool identifiers map to localized activity copy', () => {
@@ -68,8 +121,6 @@ test('protocol event and tool identifiers map to localized activity copy', () =>
       { id: 'tool-1', type: 'observe', toolName: 'todowrite' },
       { id: 'memory-1', type: 'memory_captured' },
     ],
-    artifactCount: 0,
-    taskCount: 1,
   });
 
   assert.equal(summary.title, '');
@@ -81,8 +132,6 @@ test('protocol event and tool identifiers map to localized activity copy', () =>
 test('unknown protocol identifiers use localized fallbacks instead of leaking wire values', () => {
   const summary = sessionActivitySummary({
     items: [{ id: 'runtime-1', type: 'future_runtime_event', toolName: 'future_tool_call' }],
-    artifactCount: 0,
-    taskCount: 0,
   });
 
   assert.equal(summary.title, '');

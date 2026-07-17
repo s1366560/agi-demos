@@ -282,10 +282,13 @@ struct LocalConversation {
 }
 
 const LOCAL_DEMO_HIERARCHY_SEED_ID: &str = "northstar-desktop-client-local-demo-v1";
+const LOCAL_DEMO_SESSION_CONTENT_SEED_ID: &str =
+    "northstar-desktop-client-local-demo-session-content-v1";
 const LOCAL_DEMO_DESKTOP_WORKSPACE_ID: &str = "local-demo-desktop-client-main";
 const LOCAL_DEMO_RELIABILITY_WORKSPACE_ID: &str = "local-demo-release-reliability";
+const LOCAL_DEMO_PRIMARY_CONVERSATION_ID: &str = "local-demo-flaky-data-pipeline-test";
 const LOCAL_DEMO_CONVERSATION_IDS: &[&str] = &[
-    "local-demo-flaky-data-pipeline-test",
+    LOCAL_DEMO_PRIMARY_CONVERSATION_ID,
     "local-demo-auth-middleware-review",
     "local-demo-task-search-shortcuts",
     "local-demo-agent-sdk-upgrade",
@@ -294,6 +297,11 @@ const LOCAL_DEMO_CONVERSATION_IDS: &[&str] = &[
 struct LocalDemoHierarchySeed {
     workspaces: Vec<Value>,
     conversations: Vec<LocalConversation>,
+}
+
+struct LocalDemoSessionContentSeed {
+    conversation_id: &'static str,
+    timeline: Vec<Value>,
 }
 
 fn local_demo_hierarchy_seed(now: &str) -> LocalDemoHierarchySeed {
@@ -373,6 +381,242 @@ fn local_demo_hierarchy_seed(now: &str) -> LocalDemoHierarchySeed {
         workspaces,
         conversations,
     }
+}
+
+fn local_demo_session_content_seed() -> LocalDemoSessionContentSeed {
+    let conversation_id = LOCAL_DEMO_PRIMARY_CONVERSATION_ID;
+    let timeline = vec![
+        local_demo_timeline_event(
+            conversation_id,
+            "user-goal",
+            "user_message",
+            1,
+            Some("user"),
+            Some(
+                "Please reproduce the flaky pipeline test, isolate the race without changing \
+                 the public API, and leave verification evidence in this session.",
+            ),
+            json!({}),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "agent-plan",
+            "assistant_message",
+            2,
+            Some("assistant"),
+            Some(
+                "I’ll inspect the shared runner, reproduce the race in an isolated worktree, \
+                 then verify the smallest safe fix.\n\n- Inspect fixture ownership\n- Reproduce \
+                 concurrently\n- Patch and verify",
+            ),
+            json!({}),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "worktree-ready",
+            "sandbox_ready",
+            3,
+            None,
+            Some("Isolated worktree ready"),
+            json!({
+                "display": {
+                    "title": "Isolated worktree ready",
+                    "summary": "worktree/agent-fix · Local sandbox",
+                    "status": "Ready"
+                },
+                "environment": {
+                    "kind": "worktree",
+                    "label": "worktree/agent-fix"
+                }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "search-files-call",
+            "act",
+            4,
+            None,
+            None,
+            json!({
+                "toolName": "search_files",
+                "toolInput": { "query": "shared_runner", "path": "src/pipeline" },
+                "display": { "title": "Search files", "summary": "src/pipeline · shared_runner" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "search-files-result",
+            "observe",
+            5,
+            None,
+            None,
+            json!({
+                "toolName": "search_files",
+                "toolOutput": { "matches": 4 },
+                "display": { "title": "Search files", "summary": "4 results", "status": "Completed" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "read-code-call",
+            "act",
+            6,
+            None,
+            None,
+            json!({
+                "toolName": "read_code",
+                "toolInput": { "paths": ["runner.py", "shared.py", "test_pipeline.py"] },
+                "display": { "title": "Read code", "summary": "runner.py · shared.py · test_pipeline.py" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "read-code-result",
+            "observe",
+            7,
+            None,
+            None,
+            json!({
+                "toolName": "read_code",
+                "toolOutput": { "files": 3 },
+                "display": { "title": "Read code", "summary": "3 files", "status": "Completed" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "run-tests-call",
+            "act",
+            8,
+            None,
+            None,
+            json!({
+                "toolName": "run_tests",
+                "toolInput": { "command": "pytest --count=50" },
+                "display": { "title": "Run tests", "summary": "pytest --count=50" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "run-tests-result",
+            "observe",
+            9,
+            None,
+            None,
+            json!({
+                "toolName": "run_tests",
+                "toolOutput": { "result": "1 failure reproduced" },
+                "display": { "title": "Run tests", "summary": "1 failure reproduced", "status": "Completed" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "apply-patch-call",
+            "act",
+            10,
+            None,
+            None,
+            json!({
+                "toolName": "apply_patch",
+                "toolInput": { "scope": "Fixture ownership scoped to job ID" },
+                "display": { "title": "Apply patch", "summary": "Fixture ownership scoped to job ID" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "apply-patch-result",
+            "observe",
+            11,
+            None,
+            None,
+            json!({
+                "toolName": "apply_patch",
+                "toolOutput": { "files_changed": 4, "additions": 138, "deletions": 29 },
+                "display": { "title": "Apply patch", "summary": "+138 −29", "status": "Completed" }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "agent-result",
+            "assistant_message",
+            12,
+            Some("assistant"),
+            Some(
+                "I found the race: shared mutable state kept the previous job’s runner alive. \
+                 I scoped the fixture to the job ID and added concurrent regression coverage.",
+            ),
+            json!({
+                "display": {
+                    "title": "Review changed files",
+                    "summary": "4 files · +138 −29"
+                }
+            }),
+        ),
+        local_demo_timeline_event(
+            conversation_id,
+            "verification-progress",
+            "task_updated",
+            13,
+            None,
+            Some("18 tests passed · 50 race runs passed · static checks"),
+            json!({
+                "display": {
+                    "title": "Verifying the isolated fix",
+                    "summary": "18 tests passed · 50 race runs passed · static checks",
+                    "checkpoint": "Patch applied",
+                    "evidence": "18 tests · 50 race runs"
+                },
+                "progress": { "completed": 3, "total": 4 }
+            }),
+        ),
+    ];
+    LocalDemoSessionContentSeed {
+        conversation_id,
+        timeline,
+    }
+}
+
+fn local_demo_timeline_event(
+    conversation_id: &str,
+    suffix: &str,
+    event_type: &str,
+    event_counter: i64,
+    role: Option<&str>,
+    content: Option<&str>,
+    fields: Value,
+) -> Value {
+    const BASE_EVENT_TIME_US: i64 = 1_784_282_040_000_000;
+    let event_time_us = BASE_EVENT_TIME_US + event_counter * 1_000_000;
+    let payload = fields.clone();
+    let mut event = json!({
+        "id": format!("{conversation_id}:{suffix}"),
+        "type": event_type,
+        "event_type": event_type,
+        "conversation_id": conversation_id,
+        "eventTimeUs": event_time_us,
+        "eventCounter": event_counter,
+        "event_time_us": event_time_us,
+        "event_counter": event_counter,
+        "time_us": event_time_us,
+        "counter": event_counter,
+        "timestamp": event_time_us / 1_000,
+        "payload": payload,
+        "data": fields,
+    });
+    if let Some(role) = role {
+        event["role"] = json!(role);
+        event["data"]["role"] = json!(role);
+    }
+    if let Some(content) = content {
+        event["content"] = json!(content);
+        event["data"]["content"] = json!(content);
+    }
+    let additional_fields = event["payload"].as_object().cloned();
+    if let (Some(event_fields), Some(additional_fields)) =
+        (event.as_object_mut(), additional_fields)
+    {
+        event_fields.extend(additional_fields);
+    }
+    event
 }
 
 fn is_local_demo_conversation(conversation_id: &str) -> bool {
@@ -674,6 +918,13 @@ impl LocalRuntimeState {
             LOCAL_DEMO_HIERARCHY_SEED_ID,
             &local_demo_seed.workspaces,
             &local_demo_seed.conversations,
+            &now,
+        )?;
+        let local_demo_session_content = local_demo_session_content_seed();
+        session_store.ensure_local_demo_session_content_seed(
+            LOCAL_DEMO_SESSION_CONTENT_SEED_ID,
+            local_demo_session_content.conversation_id,
+            &local_demo_session_content.timeline,
             &now,
         )?;
         let mut provider_bindings = HashMap::new();
@@ -1739,6 +1990,15 @@ impl LocalRuntimeState {
             .and_then(|run| run.environment.as_ref())
             .and_then(|environment| serde_json::to_value(environment).ok())
             .unwrap_or_else(|| json!({ "kind": "local", "label": "Local runtime" }));
+        let workspace_name = conversation
+            .workspace_id
+            .as_deref()
+            .and_then(|workspace_id| {
+                self.session_store
+                    .workspace_name(workspace_id)
+                    .ok()
+                    .flatten()
+            });
         json!({
             "id": conversation.id,
             "project_id": conversation.project_id,
@@ -1767,7 +2027,7 @@ impl LocalRuntimeState {
             "current_mode": conversation.current_mode,
             "workspace_id": conversation.workspace_id,
             "linked_workspace_task_id": null,
-            "workspace_name": "Local workspace",
+            "workspace_name": workspace_name,
             "participant_agents": ["local-agent"],
             "coordinator_agent_id": "local-agent",
             "focused_agent_id": "local-agent",
@@ -9178,12 +9438,17 @@ mod tests {
                 ConversationCapabilityMode::Code
             );
             assert_eq!(conversation.current_mode, ConversationRunMode::Plan);
+            let expected_timeline_count = if conversation.id == LOCAL_DEMO_PRIMARY_CONVERSATION_ID {
+                13
+            } else {
+                0
+            };
             assert_eq!(
                 state
                     .session_store
                     .timeline_count(&conversation.id)
-                    .expect("empty demo timeline"),
-                0
+                    .expect("demo timeline count"),
+                expected_timeline_count
             );
             assert!(state
                 .session_store
@@ -9204,6 +9469,132 @@ mod tests {
             )
             .expect("local demo seed marker count");
         assert_eq!(seed_marker_count, 1);
+    }
+
+    #[test]
+    fn local_demo_session_content_seed_creates_authoritative_narrative_and_workspace_names() {
+        let state = test_state_without_session("local-demo-content-secret");
+        let timeline = state
+            .session_store
+            .timeline("local-demo-flaky-data-pipeline-test", 50)
+            .expect("seeded demo timeline");
+        assert_eq!(timeline.len(), 13);
+        assert_eq!(
+            timeline.first().and_then(|item| item["id"].as_str()),
+            Some("local-demo-flaky-data-pipeline-test:user-goal")
+        );
+        assert_eq!(
+            timeline.first().and_then(|item| item["role"].as_str()),
+            Some("user")
+        );
+        assert_eq!(
+            timeline.last().and_then(|item| item["id"].as_str()),
+            Some("local-demo-flaky-data-pipeline-test:verification-progress")
+        );
+        assert!(timeline.iter().any(|item| {
+            item["type"] == "assistant_message"
+                && item["content"]
+                    .as_str()
+                    .is_some_and(|content| content.contains("shared mutable state"))
+        }));
+        assert_eq!(
+            timeline.iter().filter(|item| item["type"] == "act").count(),
+            4
+        );
+
+        let desktop_conversation = state
+            .session_store
+            .conversation("local-demo-flaky-data-pipeline-test")
+            .expect("load desktop demo conversation")
+            .expect("desktop demo conversation");
+        assert_eq!(
+            state.conversation_value(&desktop_conversation)["workspace_name"],
+            "Desktop Client"
+        );
+        let reliability_conversation = state
+            .session_store
+            .conversation("local-demo-agent-sdk-upgrade")
+            .expect("load reliability demo conversation")
+            .expect("reliability demo conversation");
+        assert_eq!(
+            state.conversation_value(&reliability_conversation)["workspace_name"],
+            "Release Reliability"
+        );
+    }
+
+    #[test]
+    fn local_demo_session_content_seed_is_idempotent_after_reopen() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create local demo content root");
+        let path = root.join("desktop-sessions.db");
+
+        for token in ["local-demo-content-first", "local-demo-content-second"] {
+            let store = DesktopSessionStore::open(&path).expect("open local demo content store");
+            let tool_host = LocalToolHost::new(&root).expect("local demo content tool host");
+            let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+            let state = LocalRuntimeState::new(
+                root.clone(),
+                tool_host,
+                checkpoints,
+                token.to_string(),
+                store,
+            )
+            .expect("seed local demo content state");
+            let timeline = state
+                .session_store
+                .timeline("local-demo-flaky-data-pipeline-test", 50)
+                .expect("reopened local demo timeline");
+            assert_eq!(timeline.len(), 13);
+            assert_eq!(
+                timeline
+                    .iter()
+                    .filter(|item| {
+                        item["id"] == "local-demo-flaky-data-pipeline-test:user-goal"
+                    })
+                    .count(),
+                1
+            );
+        }
+
+        std::fs::remove_dir_all(root).expect("remove local demo content root");
+    }
+
+    #[test]
+    fn local_demo_session_content_seed_fails_closed_on_event_conflict() {
+        let store = DesktopSessionStore::in_memory().expect("local demo content conflict store");
+        let now = now_iso();
+        let hierarchy = local_demo_hierarchy_seed(&now);
+        store
+            .ensure_local_demo_hierarchy_seed(
+                LOCAL_DEMO_HIERARCHY_SEED_ID,
+                &hierarchy.workspaces,
+                &hierarchy.conversations,
+                &now,
+            )
+            .expect("seed hierarchy before content conflict");
+        store
+            .append_timeline(
+                "local-demo-flaky-data-pipeline-test",
+                &json!({
+                    "id": "local-demo-flaky-data-pipeline-test:user-goal",
+                    "type": "user_message",
+                    "conversation_id": "local-demo-flaky-data-pipeline-test",
+                    "role": "user",
+                    "content": "Conflicting user-authored local content",
+                }),
+            )
+            .expect("insert conflicting timeline event");
+        let root = test_root();
+        let error = LocalRuntimeState::new(
+            root.clone(),
+            LocalToolHost::new(&root).expect("content conflict tool host"),
+            Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
+            "local-demo-content-conflict".to_string(),
+            store,
+        )
+        .err()
+        .expect("local demo content conflict must fail startup");
+        assert!(error.contains("local demo session content event conflict"));
     }
 
     #[test]

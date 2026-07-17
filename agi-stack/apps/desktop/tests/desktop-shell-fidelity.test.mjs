@@ -45,6 +45,10 @@ const workspaceDockStyles = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.css', import.meta.url),
   'utf8'
 );
+const chatPanelSource = readFileSync(
+  new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
+  'utf8'
+);
 
 test('desktop shell mounts only the prototype sidebar and page-owned headers', () => {
   assert.doesNotMatch(appSource, /className="titlebar"/);
@@ -331,6 +335,28 @@ test('primary work canvases keep governance identifiers out of the user narrativ
   assert.doesNotMatch(sessionTerminalSource, /terminal\.run_id|terminal\.environment_id/);
   assert.doesNotMatch(sessionEvidenceSource, /· r\{(?:row|missing)\.revision\}/);
   assert.doesNotMatch(appSource, /<code>\{selectedVersion\.source_artifact_id\}<\/code>/);
+});
+
+test('session activity separates authoritative live state from recorded agent reports', () => {
+  assert.match(chatPanelSource, /activityPresence === 'live'/);
+  assert.match(chatPanelSource, /session\.agentReportedEvidence/);
+  assert.match(chatPanelSource, /session\.structuredEvidenceCount/);
+  assert.doesNotMatch(chatPanelSource, /activitySummary\.evidence \|\| activityEvidence/);
+  assert.match(
+    sessionWorkspaceSource,
+    /liveConnected \? t\('session\.liveConnected'\) : t\('session\.liveReconnecting'\)/,
+  );
+});
+
+test('timeline loaders reject deferred responses after request or scope authority changes', () => {
+  const timelineLoader =
+    appSource.match(
+      /const loadConversationTimeline = useCallback\([\s\S]*?const respondToHitl = useCallback/,
+    )?.[0] ?? '';
+
+  assert.match(timelineLoader, /sessionTimelineRequestIsCurrent/);
+  assert.match(timelineLoader, /scopeEpoch: configScopeEpochRef\.current/);
+  assert.match(appSource, /timelineRequestRef\.current \+= 1;[\s\S]*setConversationTimeline\(emptyConversationTimeline\)/);
 });
 
 test('desktop styles remove standalone workspace drawer and pull-request chrome', () => {

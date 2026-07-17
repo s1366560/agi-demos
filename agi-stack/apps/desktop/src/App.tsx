@@ -154,6 +154,11 @@ import {
   type SessionCanvasControls,
 } from './features/session/workspaceReviewPanelModel';
 import { socketEventMatchesSessionScope } from './features/session/sessionScope';
+import { sessionActivityPresence } from './features/session/sessionNarrativeModel';
+import {
+  sessionSelectionRequiresRuntimeRefresh,
+  sessionTimelineRequestIsCurrent,
+} from './features/session/sessionSelectionModel';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
 import { runtimeTransportIdentityChanged } from './features/runtime/runtimeConfigModel';
 import {
@@ -2114,22 +2119,42 @@ export function App() {
     });
   }, []);
 
+  const resetConversationTimeline = useCallback(() => {
+    timelineRequestRef.current += 1;
+    setConversationTimeline(emptyConversationTimeline);
+  }, []);
+
   const loadConversationTimeline = useCallback(
-    async (conversation: AgentConversation, projectId: string) => {
+    async (
+      conversation: AgentConversation,
+      projectId: string,
+      requestConfig: DesktopRuntimeConfig = configRef.current,
+    ) => {
       const requestId = timelineRequestRef.current + 1;
       timelineRequestRef.current = requestId;
+      const expectedRequest = {
+        requestId,
+        scopeEpoch: configScopeEpochRef.current,
+      };
+      const requestIsCurrent = () =>
+        sessionTimelineRequestIsCurrent(expectedRequest, {
+          requestId: timelineRequestRef.current,
+          scopeEpoch: configScopeEpochRef.current,
+        });
       setConversationTimeline({
         ...emptyConversationTimeline,
         conversationId: conversation.id,
         loading: true,
       });
       try {
-        const response = await api.getConversationMessages(conversation.id, projectId, {
+        const client = new DesktopApiClient(requestConfig);
+        const response = await client.getConversationMessages(conversation.id, projectId, {
           limit: 50,
         });
-        if (timelineRequestRef.current !== requestId) return;
+        if (!requestIsCurrent()) return;
         const responseItems = response.timeline ?? [];
         setConversationTimeline((current) => {
+          if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
           const items =
             current.conversationId === conversation.id
               ? mergeTimelineItems(responseItems, current.items)
@@ -2157,22 +2182,41 @@ export function App() {
           };
         });
       } catch (caught) {
-        if (timelineRequestRef.current !== requestId) return;
-        setConversationTimeline({
-          ...emptyConversationTimeline,
-          conversationId: conversation.id,
-          error: formatConnectionError(caught, config.apiBaseUrl),
-        });
+        if (!requestIsCurrent()) return;
+        setConversationTimeline((current) =>
+          requestIsCurrent() && current.conversationId === conversation.id
+            ? {
+                ...emptyConversationTimeline,
+                conversationId: conversation.id,
+                error: formatConnectionError(caught, requestConfig.apiBaseUrl),
+              }
+            : current,
+        );
       }
     },
-    [api, config.apiBaseUrl],
+    [],
   );
 
   const loadEarlierTimeline = useCallback(async () => {
-    const conversation = agentConversationSession?.conversation;
+    const conversation = scopedConversation;
     const cursor = conversationTimeline.firstCursor;
     if (!conversation || !cursor || conversationTimeline.loadingEarlier) return;
-    setConversationTimeline((current) => ({ ...current, loadingEarlier: true, error: null }));
+    const requestId = timelineRequestRef.current + 1;
+    timelineRequestRef.current = requestId;
+    const expectedRequest = {
+      requestId,
+      scopeEpoch: configScopeEpochRef.current,
+    };
+    const requestIsCurrent = () =>
+      sessionTimelineRequestIsCurrent(expectedRequest, {
+        requestId: timelineRequestRef.current,
+        scopeEpoch: configScopeEpochRef.current,
+      });
+    setConversationTimeline((current) =>
+      current.conversationId === conversation.id
+        ? { ...current, loadingEarlier: true, error: null }
+        : current,
+    );
     try {
       const response = await api.getConversationMessages(conversation.id, config.projectId, {
         limit: 50,
@@ -2180,7 +2224,7 @@ export function App() {
         beforeCounter: cursor.counter,
       });
       setConversationTimeline((current) => {
-        if (current.conversationId !== conversation.id) return current;
+        if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
         const items = mergeTimelineItems(response.timeline ?? [], current.items);
         return {
           ...current,
@@ -2199,19 +2243,23 @@ export function App() {
         };
       });
     } catch (caught) {
-      setConversationTimeline((current) => ({
-        ...current,
-        loadingEarlier: false,
-        error: formatConnectionError(caught, config.apiBaseUrl),
-      }));
+      setConversationTimeline((current) =>
+        requestIsCurrent() && current.conversationId === conversation.id
+          ? {
+              ...current,
+              loadingEarlier: false,
+              error: formatConnectionError(caught, config.apiBaseUrl),
+            }
+          : current,
+      );
     }
   }, [
-    agentConversationSession?.conversation,
     api,
     config.apiBaseUrl,
     config.projectId,
     conversationTimeline.firstCursor,
     conversationTimeline.loadingEarlier,
+    scopedConversation,
   ]);
 
   const respondToHitl = useCallback(
@@ -2656,7 +2704,7 @@ export function App() {
     setAgentConversationSession(null);
     setSessionProjectionState(emptySessionProjectionState);
     setSessionDisplayProjection(null);
-    setConversationTimeline(emptyConversationTimeline);
+    resetConversationTimeline();
     setAgentTaskSignals([]);
     setChangeSnapshot(null);
     setChangeSnapshotError(null);
@@ -3512,7 +3560,7 @@ export function App() {
     }
     setConnection('idle');
     setAgentConversationSession(null);
-    setConversationTimeline(emptyConversationTimeline);
+    resetConversationTimeline();
     setAgentTaskSignals([]);
   };
 
@@ -3589,7 +3637,7 @@ export function App() {
     };
     commitRuntimeConfig(nextConfig);
     setAgentConversationSession(null);
-    setConversationTimeline(emptyConversationTimeline);
+    resetConversationTimeline();
     setAgentTaskSignals([]);
     setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
@@ -3612,6 +3660,10 @@ export function App() {
       projectId,
       workspaceId,
     };
+    const requiresRuntimeRefresh = sessionSelectionRequiresRuntimeRefresh(
+      configRef.current,
+      nextConfig,
+    );
     commitRuntimeConfig(nextConfig);
     setAgentConversationSession({
       scopeKey: agentConversationScopeKeyFor(projectId, workspaceId),
@@ -3621,8 +3673,8 @@ export function App() {
     setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
     applySectionSideEffects(targetSection);
-    void loadConversationTimeline(conversation, projectId);
-    void refreshRuntime(nextConfig);
+    void loadConversationTimeline(conversation, projectId, nextConfig);
+    if (requiresRuntimeRefresh) void refreshRuntime(nextConfig);
   };
 
   const createWorkspace = async (projectId = config.projectId) => {
@@ -3654,7 +3706,7 @@ export function App() {
       };
       commitRuntimeConfig(nextConfig);
       setAgentConversationSession(null);
-      setConversationTimeline(emptyConversationTimeline);
+      resetConversationTimeline();
       setAgentTaskSignals([]);
       setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
       setExpandedWorkspaceIds((current) => new Set([...current, created.id]));
@@ -3816,7 +3868,7 @@ export function App() {
     const { workspace, conversation, config: sessionConfig } = session;
     setChatInput('');
     setSelectedTaskId('');
-    setConversationTimeline(emptyConversationTimeline);
+    resetConversationTimeline();
     setAgentTaskSignals([]);
     setStatusTab('overview');
     setReviewTab('plan');
@@ -4249,6 +4301,26 @@ export function App() {
   );
   const currentArtifactRun = sessionProjection?.currentRun ?? null;
   currentArtifactRunRef.current = currentArtifactRun;
+  const sessionActivityStructuredEvidence = useMemo(() => {
+    const summary = sessionProjection?.evidenceSummary;
+    if (
+      !currentArtifactRun ||
+      !summary ||
+      typeof summary.artifactVersionCount !== 'number' ||
+      typeof summary.toolInvocationCount !== 'number'
+    ) {
+      return null;
+    }
+    return {
+      artifactCount: summary.artifactVersionCount,
+      checkCount: summary.checks?.total ?? null,
+      toolActivityCount: summary.toolInvocationCount,
+    };
+  }, [currentArtifactRun, sessionProjection?.evidenceSummary]);
+  const sessionActivityState = sessionActivityPresence(
+    currentArtifactRun?.status ?? null,
+    socket.connected,
+  );
   const currentTerminalRunScopeKey = terminalRunScopeKey(currentArtifactRun);
   if (terminalRunScopeKeyRef.current !== currentTerminalRunScopeKey) {
     terminalRunScopeKeyRef.current = currentTerminalRunScopeKey;
@@ -5259,6 +5331,8 @@ export function App() {
           : 'Workspace conversation'
       }
       composerVariant={selectedConversation ? 'session' : 'workspace'}
+      activityPresence={sessionActivityState}
+      activityStructuredEvidence={sessionActivityStructuredEvidence}
       input={chatInput}
       sending={sending}
       disabledReason={sessionChatDisabledReason}

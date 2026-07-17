@@ -454,7 +454,7 @@ export function SessionWorkspace({
                 </small>
               ) : null}
               <em title={liveError ?? undefined}>
-                {liveConnected ? t('session.live') : t('session.liveReconnecting')}
+                {liveConnected ? t('session.liveConnected') : t('session.liveReconnecting')}
               </em>
               {surface === 'conversation' ? (
                 <button

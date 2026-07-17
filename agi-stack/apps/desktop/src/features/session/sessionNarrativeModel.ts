@@ -1,4 +1,4 @@
-import type { AgentTimelineItem, ToolDisplayData } from '../../types';
+import type { AgentTimelineItem, DesktopRunStatus, ToolDisplayData } from '../../types';
 
 export type SessionToolGroupStatus = 'running' | 'complete' | 'failed';
 
@@ -22,8 +22,28 @@ export type SessionActivitySummary = {
   detail: string;
   checkpoint: string;
   checkpointKey: string | null;
-  evidence: string;
+  evidence: SessionActivityEvidence;
 };
+
+export type SessionActivityPresence = 'live' | 'recorded';
+
+export type SessionActivityStructuredEvidence = {
+  artifactCount: number;
+  checkCount: number | null;
+  toolActivityCount: number;
+};
+
+export type SessionActivityEvidence =
+  | ({ kind: 'structured' } & SessionActivityStructuredEvidence)
+  | { kind: 'agent_reported'; text: string }
+  | { kind: 'unavailable' };
+
+export function sessionActivityPresence(
+  runStatus: DesktopRunStatus | null,
+  updatesConnected: boolean,
+): SessionActivityPresence {
+  return runStatus === 'running' && updatesConnected ? 'live' : 'recorded';
+}
 
 export function buildSessionNarrative(items: AgentTimelineItem[]): SessionNarrativeNode[] {
   const narrative: SessionNarrativeNode[] = [];
@@ -56,8 +76,7 @@ export function buildSessionNarrative(items: AgentTimelineItem[]): SessionNarrat
 
 export function sessionActivitySummary(input: {
   items: AgentTimelineItem[];
-  artifactCount: number;
-  taskCount: number;
+  structuredEvidence?: SessionActivityStructuredEvidence | null;
 }): SessionActivitySummary {
   const latest = [...input.items]
     .reverse()
@@ -80,8 +99,16 @@ export function sessionActivitySummary(input: {
         Boolean(item.artifactId) ||
         item.type === 'work_plan',
     );
-  const checkpointKey = checkpointTitleKey(checkpointItem) ?? 'session.activityCheckpoint';
-  const checkpoint = '';
+  const checkpoint = compactText(display?.checkpoint);
+  const checkpointKey = checkpoint
+    ? null
+    : checkpointTitleKey(checkpointItem) ?? 'session.activityCheckpoint';
+  const reportedEvidence = compactText(display?.evidence);
+  const evidence: SessionActivityEvidence = input.structuredEvidence
+    ? { kind: 'structured', ...input.structuredEvidence }
+    : reportedEvidence
+      ? { kind: 'agent_reported', text: reportedEvidence }
+      : { kind: 'unavailable' };
 
   return {
     title,
@@ -89,7 +116,7 @@ export function sessionActivitySummary(input: {
     detail,
     checkpoint,
     checkpointKey,
-    evidence: `${input.artifactCount} artifacts · ${input.taskCount} tasks`,
+    evidence,
   };
 }
 
