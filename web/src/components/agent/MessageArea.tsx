@@ -42,22 +42,13 @@ import {
 } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
 
 import { useVirtualizer, type VirtualItem, type Virtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, Loader2, Pin, PinOff } from 'lucide-react';
 
 import { usePinnedEventIds, useAgentHITLStore } from '../../stores/agent/hitlStore';
-import {
-  useStreamingAssistantContent,
-  useStreamingThought,
-  useIsThinkingStreaming,
-} from '../../stores/agent/streamingStore';
 
-import { useMarkdownPlugins } from './chat/markdownPlugins';
-import { safeMarkdownComponents } from './chat/safeMarkdownComponents';
 import { SuggestionChips } from './chat/SuggestionChips';
-import { ThinkingBlock } from './chat/ThinkingBlock';
 import { ConversationSummaryCardWrapper } from './message/ConversationSummaryCardWrapper';
 import { groupTimelineEvents } from './message/groupTimelineEvents';
 import { estimateGroupedItemHeight } from './message/heightEstimation';
@@ -77,7 +68,7 @@ import {
   ContentMarker,
   StreamingContentMarker,
 } from './message/markers';
-import { StreamingToolPreparation } from './message/StreamingToolPreparation';
+import { StreamingAssistantSection } from './message/StreamingAssistantSection';
 import { applyTurnCollapse, computeTurns, isTurnPlaceholder } from './message/turnFolding';
 import { TurnPlaceholderRow } from './message/TurnPlaceholderRow';
 import { useMessageAreaKeyboard } from './message/useMessageAreaKeyboard';
@@ -85,9 +76,6 @@ import { useMessageAreaScroll } from './message/useMessageAreaScroll';
 import { useTurnCollapse } from './message/useTurnCollapse';
 import { MessageBubble } from './MessageBubble';
 import {
-  ASSISTANT_AVATAR_CLASSES,
-  ASSISTANT_BUBBLE_CLASSES,
-  MARKDOWN_PROSE_CLASSES,
   MESSAGE_MAX_WIDTH_CLASSES,
   WIDE_MESSAGE_MAX_WIDTH_CLASSES,
 } from './styles';
@@ -145,10 +133,7 @@ interface _MessageAreaScrollState {
 
 interface _MessageAreaContextValue {
   timeline: TimelineEvent[];
-  streamingContent?: string | undefined;
-  streamingThought?: string | undefined;
   isStreaming: boolean;
-  isThinkingStreaming?: boolean | undefined;
   isLoading: boolean;
   hasEarlierMessages: boolean;
   onLoadEarlier?: (() => void) | undefined;
@@ -343,21 +328,13 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     onAgentSessionSelect,
     children,
   }) => {
-    // Subscribe to fast-changing streaming values directly from the store
-    // to avoid re-rendering the parent AgentChatContent on every token.
-    const storeStreamingContent = useStreamingAssistantContent();
-    const storeStreamingThought = useStreamingThought();
-    const storeIsThinkingStreaming = useIsThinkingStreaming();
-
-    const streamingContent = isStreaming ? storeStreamingContent : '';
-    const streamingThought = storeStreamingThought;
-    const isThinkingStreaming = storeIsThinkingStreaming;
-
+    // NOTE: fast-changing streaming values (assistant content, thought,
+    // thinking flag) are subscribed inside StreamingAssistantSection so that
+    // per-flush updates do not re-render the whole message area.
     const containerRef = useRef<HTMLDivElement>(null);
     const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
     const pinnedSectionId = useId();
     const { t } = useTranslation();
-    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(streamingContent);
 
     // Memoize grouped timeline items to avoid re-grouping on every render
     const groupedItems = useMemo(() => groupTimelineEvents(timeline), [timeline]);
@@ -474,10 +451,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       containerRef,
       timeline,
       isStreaming,
-      isThinkingStreaming,
       isLoading,
-      streamingContent,
-      streamingThought,
       hasEarlierMessages,
       onLoadEarlier,
       propIsLoadingEarlier,
@@ -497,10 +471,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const contextValue: _MessageAreaContextValue = useMemo(
       () => ({
         timeline,
-        streamingContent,
-        streamingThought,
         isStreaming,
-        isThinkingStreaming,
         isLoading,
         hasEarlierMessages,
         onLoadEarlier,
@@ -511,10 +482,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       }),
       [
         timeline,
-        streamingContent,
-        streamingThought,
         isStreaming,
-        isThinkingStreaming,
         isLoading,
         hasEarlierMessages,
         onLoadEarlier,
@@ -533,13 +501,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     const timelineLen = timeline.length;
     const lastEventIndex = timelineLen - 1;
-    const hasStreamingThought = streamingThought.trim().length > 0;
-    const hasStreamingText = streamingContent.trim().length > 0;
-    const effectiveIsThinkingStreaming = isThinkingStreaming && !hasStreamingText;
-    const shouldShowThinkingBlock =
-      includeStreamingContent &&
-      isStreaming &&
-      (effectiveIsThinkingStreaming || (hasStreamingThought && !hasStreamingText));
 
     // Virtualizer setup
     const estimateSize = useCallback(
@@ -1069,56 +1030,15 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   <SuggestionChips suggestions={suggestions} onSelect={onSuggestionSelect} />
                 )}
 
-                {/* Streaming thought indicator - ThinkingBlock (new design) */}
-                {shouldShowThinkingBlock && (
-                  <ThinkingBlock
-                    content={streamingThought || ''}
-                    isStreaming={effectiveIsThinkingStreaming}
+                {/* Streaming section - subscribes to streaming stores locally so
+                    per-token flushes only re-render this leaf, not MessageArea */}
+                {includeStreamingContent && isStreaming && (
+                  <StreamingAssistantSection
+                    containerRef={containerRef}
+                    userScrolledUpRef={userScrolledUpRef}
+                    isSwitchingConversationRef={isSwitchingConversationRef}
                   />
                 )}
-
-                {/* Streaming tool preparation indicator */}
-                {includeStreamingContent && isStreaming && <StreamingToolPreparation />}
-
-                {/* Streaming content indicator - matches MessageBubble.Assistant style */}
-                {includeStreamingContent &&
-                  isStreaming &&
-                  streamingContent &&
-                  !effectiveIsThinkingStreaming && (
-                    <div
-                      className="flex items-start gap-3 mb-2 animate-fade-in-up"
-                      aria-live="assertive"
-                    >
-                      <div className={ASSISTANT_AVATAR_CLASSES}>
-                        <svg
-                          className="w-4.5 h-4.5 text-primary"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={1.5}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z"
-                          />
-                        </svg>
-                      </div>
-                      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-                        <div className={ASSISTANT_BUBBLE_CLASSES}>
-                          <div className={MARKDOWN_PROSE_CLASSES}>
-                            <ReactMarkdown
-                              remarkPlugins={remarkPlugins}
-                              rehypePlugins={rehypePlugins}
-                              components={safeMarkdownComponents}
-                            >
-                              {streamingContent}
-                            </ReactMarkdown>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
               </div>
             </div>
           )}

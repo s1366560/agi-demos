@@ -21,10 +21,7 @@ export interface UseMessageAreaScrollParams {
   containerRef: React.RefObject<HTMLDivElement | null>;
   timeline: TimelineEvent[];
   isStreaming: boolean;
-  isThinkingStreaming: boolean;
   isLoading: boolean;
-  streamingContent: string | undefined;
-  streamingThought: string | undefined;
   hasEarlierMessages: boolean;
   onLoadEarlier?: (() => void) | undefined;
   propIsLoadingEarlier: boolean;
@@ -60,10 +57,7 @@ export function useMessageAreaScroll(
     containerRef,
     timeline,
     isStreaming,
-    isThinkingStreaming,
     isLoading,
-    streamingContent,
-    streamingThought,
     hasEarlierMessages,
     onLoadEarlier,
     propIsLoadingEarlier,
@@ -276,25 +270,9 @@ export function useMessageAreaScroll(
     // is not available inside this hook -- the component passes it in
   }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, containerRef]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: streamingContent and streamingThought are intentional trigger deps
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const hasStreamingContent = (streamingContent ?? '').trim().length > 0;
-    const hasStreamingThought = (streamingThought ?? '').trim().length > 0;
-    const thoughtOnlyStreaming = isThinkingStreaming && hasStreamingThought && !hasStreamingContent;
-
-    if (isStreaming && !userScrolledUpRef.current && !thoughtOnlyStreaming) {
-      isSwitchingConversationRef.current = false;
-
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight;
-        }
-      });
-    }
-  }, [streamingContent, streamingThought, isStreaming, isThinkingStreaming, containerRef]);
+  // NOTE: scroll-follow while streaming lives in StreamingAssistantSection,
+  // which subscribes to the per-token streaming stores locally so this hook's
+  // host component does not re-render on every flush.
 
   // Cleanup timeout on unmount
   useEffect(() => {
