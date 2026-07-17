@@ -1299,9 +1299,18 @@ class AgentService(AgentServicePort):
             return
         try:
             for prefix in ("conv_list:", "conv_count:"):
-                keys = await self._redis_client.keys(f"{prefix}{project_id}:*")
-                for key in keys:
-                    await self._redis_client.delete(key)
+                # SCAN is non-blocking (KEYS is O(N) and stalls Redis); delete
+                # in batches instead of one round trip per key.
+                batch: list[str] = []
+                async for key in self._redis_client.scan_iter(
+                    match=f"{prefix}{project_id}:*", count=100
+                ):
+                    batch.append(str(key))
+                    if len(batch) >= 100:
+                        await self._redis_client.delete(*batch)
+                        batch.clear()
+                if batch:
+                    await self._redis_client.delete(*batch)
         except Exception as e:
             logger.debug(f"Failed to invalidate conversation cache: {e}")
 

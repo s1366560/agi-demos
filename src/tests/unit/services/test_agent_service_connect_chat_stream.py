@@ -668,3 +668,45 @@ async def test_read_delayed_events_starts_near_cursor() -> None:
 
     assert result == []
     assert captured["last_id"] == "110000-0"
+
+
+class _FakeRedisForCacheInvalidation:
+    def __init__(self, keys: list[str]) -> None:
+        self._keys = keys
+        self.delete_calls: list[tuple[str, ...]] = []
+        self.keys_called = False
+
+    async def keys(self, *_args: Any, **_kwargs: Any) -> list[str]:
+        self.keys_called = True
+        raise AssertionError("KEYS must not be used for cache invalidation")
+
+    async def scan_iter(self, *, match: str, count: int = 10):
+        prefix = match.rstrip("*")
+        for key in self._keys:
+            if key.startswith(prefix):
+                yield key
+
+    async def delete(self, *keys: str) -> int:
+        self.delete_calls.append(tuple(keys))
+        return len(keys)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_invalidate_conv_cache_scans_and_deletes_in_batches() -> None:
+    service = _build_service()
+    redis = _FakeRedisForCacheInvalidation(
+        [
+            "conv_list:p1:all:0:50",
+            "conv_count:p1:all",
+            "conv_list:p2:all:0:50",  # other project must not be deleted
+        ]
+    )
+    service._redis_client = redis
+
+    await service._invalidate_conv_cache("p1")
+
+    assert not redis.keys_called
+    deleted = [key for call in redis.delete_calls for key in call]
+    assert sorted(deleted) == ["conv_count:p1:all", "conv_list:p1:all:0:50"]
+    assert all(len(call) <= 100 for call in redis.delete_calls)
