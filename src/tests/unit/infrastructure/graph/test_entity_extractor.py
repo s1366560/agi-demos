@@ -20,6 +20,9 @@ class MockEmbeddingService:
     async def find_most_similar(self, query_embedding, candidates, top_k=1):
         return [(0, 0.99)]
 
+    async def find_most_similar_batch(self, query_embeddings, candidates, top_k=1):
+        return [[(0, 0.99)] for _ in query_embeddings]
+
 
 class FailingEmbeddingService(MockEmbeddingService):
     """Mock embedding service that raises a provider-style error."""
@@ -289,6 +292,61 @@ class TestEntityDeduplication:
 
         assert unique == [extracted]
         assert duplicate_map == {}
+
+    async def test_deduplicate_entity_nodes_batches_vector_dedup_preserving_order(self):
+        class _BatchMock(MockEmbeddingService):
+            def __init__(self):
+                self.batch_calls = []
+
+            async def find_most_similar_batch(self, query_embeddings, candidates, top_k=1):
+                self.batch_calls.append((len(query_embeddings), len(candidates), top_k))
+                return [
+                    [(0, 0.99)],  # first entity duplicates the existing one
+                    [],  # second entity has no match -> unique
+                ]
+
+        service = _BatchMock()
+        batch_extractor = EntityExtractor(llm_client=MockLLMClient(), embedding_service=service)
+        existing = [
+            EntityNode(
+                uuid="e1",
+                name="Ada",
+                entity_type="Person",
+                summary="Researcher",
+                name_embedding=[0.1] * 768,
+            )
+        ]
+        duplicate = EntityNode(
+            uuid="n1",
+            name="Ada Lovelace",
+            entity_type="Person",
+            summary="Engineer",
+            name_embedding=[0.1] * 768,
+        )
+        unique_one = EntityNode(
+            uuid="n2",
+            name="Grace",
+            entity_type="Person",
+            summary="Engineer",
+            name_embedding=[0.2] * 768,
+        )
+        without_embedding = EntityNode(
+            uuid="n3",
+            name="NoEmbed",
+            entity_type="Person",
+            summary="Engineer",
+        )
+
+        unique, duplicate_map = await batch_extractor.deduplicate_entity_nodes(
+            new_entities=[duplicate, unique_one, without_embedding],
+            existing_entities=existing,
+        )
+
+        # One batched service call for both embedded entities.
+        assert service.batch_calls == [(2, 1, 1)]
+        # Unique entities keep their original encounter order.
+        assert [e.uuid for e in unique] == ["n2", "n3"]
+        assert duplicate_map == {"Ada Lovelace": "e1"}
 
 
 @pytest.mark.unit

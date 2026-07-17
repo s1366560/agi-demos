@@ -275,3 +275,61 @@ class TestEmbeddingService:
         dim2 = embedding_service.embedding_dim
 
         assert dim1 == dim2 == 768
+
+
+@pytest.mark.unit
+class TestFindMostSimilar:
+    """Tests for the vectorized top-k cosine similarity search."""
+
+    async def test_single_query_matches_pairwise_cosine(self, embedding_service):
+        query = [1.0, 0.0, 0.0]
+        candidates = [
+            [1.0, 0.0, 0.0],  # cosine 1.0
+            [0.0, 1.0, 0.0],  # cosine 0.0
+            [0.5, 0.5, 0.0],  # cosine ~0.707
+        ]
+
+        results = await embedding_service.find_most_similar(query, candidates, top_k=3)
+
+        assert [idx for idx, _ in results] == [0, 2, 1]
+        assert results[0][1] == pytest.approx(1.0)
+        assert results[1][1] == pytest.approx(2**0.5 / 2)
+        assert results[2][1] == pytest.approx(0.0)
+
+    async def test_ties_resolve_to_lower_candidate_index(self, embedding_service):
+        query = [1.0, 0.0]
+        candidates = [[1.0, 0.0], [2.0, 0.0], [1.0, 0.0]]
+
+        results = await embedding_service.find_most_similar(query, candidates, top_k=2)
+
+        assert [idx for idx, _ in results] == [0, 1]
+
+    async def test_zero_vectors_score_zero(self, embedding_service):
+        query = [0.0, 0.0]
+        candidates = [[0.0, 0.0], [1.0, 0.0]]
+
+        results = await embedding_service.find_most_similar(query, candidates, top_k=2)
+
+        assert all(score == 0.0 for _, score in results)
+
+    async def test_batch_matches_single_query_results(self, embedding_service):
+        candidates = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+        queries = [[1.0, 0.0], [0.0, 1.0]]
+
+        batch = await embedding_service.find_most_similar_batch(queries, candidates, top_k=1)
+        singles = [
+            await embedding_service.find_most_similar(q, candidates, top_k=1) for q in queries
+        ]
+
+        assert batch == singles
+        assert batch[0][0][0] == 0
+        assert batch[1][0][0] == 1
+
+    async def test_batch_without_candidates_returns_empty_lists(self, embedding_service):
+        batch = await embedding_service.find_most_similar_batch([[1.0], [2.0]], [], top_k=1)
+
+        assert batch == [[], []]
+
+    async def test_dimension_mismatch_raises(self, embedding_service):
+        with pytest.raises(ValueError, match="dimensions"):
+            await embedding_service.find_most_similar([1.0, 0.0], [[1.0]], top_k=1)

@@ -641,38 +641,41 @@ class EntityExtractor:
         if not existing_entities or not new_entities:
             return new_entities, {}
 
-        unique_entities = []
-        duplicate_map = {}  # new_entity_name -> existing_entity_uuid
+        duplicate_uuids_by_entity_id: dict[int, str] = {}
 
         existing_with_embeddings = [e for e in existing_entities if e.name_embedding]
         if not existing_with_embeddings:
             return new_entities, {}
 
+        # Group new entities by embedding dimension so each group is scored
+        # against its dimension-compatible candidates with one vectorized
+        # matrix multiply instead of per-entity Python loops.
+        new_by_dim: dict[int, list[EntityNode]] = {}
         for new_entity in new_entities:
             if not new_entity.name_embedding:
-                unique_entities.append(new_entity)
                 continue
+            new_by_dim.setdefault(len(new_entity.name_embedding), []).append(new_entity)
 
+        for dim, dim_new_entities in new_by_dim.items():
             compatible_existing = [
                 e
                 for e in existing_with_embeddings
-                if len(cast(list[float], e.name_embedding)) == len(new_entity.name_embedding)
+                if len(cast(list[float], e.name_embedding)) == dim
             ]
             if not compatible_existing:
-                unique_entities.append(new_entity)
                 continue
 
             existing_embeddings = [cast(list[float], e.name_embedding) for e in compatible_existing]
 
-            # Find most similar existing entity
-            similarities = await self._embedding_service.find_most_similar(
-                query_embedding=new_entity.name_embedding,
+            batch_results = await self._embedding_service.find_most_similar_batch(
+                query_embeddings=[cast(list[float], e.name_embedding) for e in dim_new_entities],
                 candidates=existing_embeddings,
                 top_k=1,
             )
 
-            if similarities and similarities[0][1] >= similarity_threshold:
-                # Found a duplicate
+            for new_entity, similarities in zip(dim_new_entities, batch_results, strict=True):
+                if not similarities or similarities[0][1] < similarity_threshold:
+                    continue
                 idx, score = similarities[0]
                 existing_entity = compatible_existing[idx]
                 existing_name = existing_entity.name
@@ -685,14 +688,15 @@ class EntityExtractor:
                         f"Entity '{new_entity.name}' matches '{existing_name}' "
                         f"(similarity: {score:.3f})"
                     )
-                    duplicate_map[new_entity.name] = existing_uuid
-                else:
-                    # Types don't match, treat as unique
-                    unique_entities.append(new_entity)
-            else:
-                # No match found, it's unique
-                unique_entities.append(new_entity)
+                    duplicate_uuids_by_entity_id[id(new_entity)] = existing_uuid
 
+        # Rebuild results in the original encounter order.
+        unique_entities = [e for e in new_entities if id(e) not in duplicate_uuids_by_entity_id]
+        duplicate_map = {
+            e.name: duplicate_uuids_by_entity_id[id(e)]
+            for e in new_entities
+            if id(e) in duplicate_uuids_by_entity_id
+        }
         return unique_entities, duplicate_map
 
     def _types_compatible(self, type1: str, type2: str) -> bool:

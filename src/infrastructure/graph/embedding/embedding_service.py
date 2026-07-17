@@ -15,6 +15,8 @@ import logging
 import math
 from typing import Any, Protocol, cast
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 
@@ -386,13 +388,66 @@ class EmbeddingService:
         Returns:
             List of (index, similarity) tuples sorted by similarity
         """
-        similarities = []
-        for i, candidate in enumerate(candidates):
-            sim = await self.compute_similarity(query_embedding, candidate)
-            similarities.append((i, sim))
+        batch = await self.find_most_similar_batch([query_embedding], candidates, top_k)
+        return batch[0]
 
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        return similarities[:top_k]
+    async def find_most_similar_batch(
+        self,
+        query_embeddings: list[list[float]],
+        candidates: list[list[float]],
+        top_k: int = 5,
+    ) -> list[list[tuple[int, float]]]:
+        """
+        Vectorized top-k cosine search for a batch of queries over one
+        candidate set (a single matrix multiply instead of per-pair Python
+        loops, which dominated CPU during entity deduplication).
+
+        Args:
+            query_embeddings: Query embeddings sharing the same dimension
+            candidates: Candidate embeddings with the same dimension
+            top_k: Number of top results per query
+
+        Returns:
+            One list of (index, similarity) tuples per query, sorted by
+            similarity; empty per-query lists when there are no candidates.
+        """
+        if not query_embeddings:
+            return []
+        if not candidates:
+            return [[] for _ in query_embeddings]
+
+        queries = np.asarray(query_embeddings, dtype=np.float64)
+        matrix = np.asarray(candidates, dtype=np.float64)
+        if queries.ndim != 2 or matrix.ndim != 2 or queries.shape[1] != matrix.shape[1]:
+            raise ValueError(
+                "Embedding dimensions don't match: "
+                f"{queries.shape[1] if queries.ndim == 2 else '?'} vs "
+                f"{matrix.shape[1] if matrix.ndim == 2 else '?'}"
+            )
+
+        query_norms = np.linalg.norm(queries, axis=1)
+        candidate_norms = np.linalg.norm(matrix, axis=1)
+        valid_candidates = candidate_norms >= 1e-6
+        # Divide only where the candidate norm is usable; zero vectors yield
+        # 0.0 similarity, matching compute_similarity.
+        safe_candidate_norms = np.where(valid_candidates, candidate_norms, 1.0)
+        scores = queries @ matrix.T
+
+        results: list[list[tuple[int, float]]] = []
+        for row_idx in range(queries.shape[0]):
+            if query_norms[row_idx] < 1e-6:
+                sims = np.zeros(matrix.shape[0])
+            else:
+                sims = np.where(
+                    valid_candidates,
+                    scores[row_idx] / (safe_candidate_norms * query_norms[row_idx]),
+                    0.0,
+                )
+            # Stable descending sort: ties resolve to the lower candidate
+            # index, matching the previous pairwise implementation.
+            order = np.argsort(-sims, kind="stable")[:top_k]
+            results.append([(int(i), float(sims[i])) for i in order])
+        return results
 
 
 class NullEmbeddingService:
