@@ -19,10 +19,6 @@ const governedConfig = {
   projectId: 'project-1',
   workspaceId: 'workspace-1',
   mode: 'local',
-  llmProvider: 'openai',
-  llmBaseUrl: 'https://llm.example/v1',
-  llmModel: 'model-1',
-  llmApiKey: 'provider-secret',
   workspaceRoot: '/workspace/root',
 };
 
@@ -71,10 +67,6 @@ test('connection recovery preserves governed settings while isolating transport 
       'tenantId',
       'projectId',
       'workspaceId',
-      'llmProvider',
-      'llmBaseUrl',
-      'llmModel',
-      'llmApiKey',
       'workspaceRoot',
     ]) {
       assert.equal(updated[governedField], governedConfig[governedField]);
@@ -91,7 +83,6 @@ test('server presets atomically select the compatible transport mode', () => {
   assert.equal(python.mode, 'cloud');
   assert.equal(python.localApiToken, '');
   assert.equal(python.apiKey, '');
-  assert.equal(python.llmApiKey, governedConfig.llmApiKey);
 
   const rust = applyRuntimeServerPreset(python, {
     apiBaseUrl: 'http://127.0.0.1:8088',

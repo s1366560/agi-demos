@@ -14,6 +14,7 @@ import { DesktopApiClient } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   DesktopRuntimeConfig,
+  LocalRuntimeProvider,
   LlmProviderCreateInput,
   LlmProviderMutationInput,
   LlmProviderTypeDescriptor,
@@ -35,8 +36,9 @@ import './ModelProviderWorkspace.css';
 
 type ModelProviderWorkspaceProps = {
   config: DesktopRuntimeConfig;
+  runtimeProvider: LocalRuntimeProvider | null;
   canManage: boolean;
-  onConfigChange: (config: DesktopRuntimeConfig) => void;
+  onRuntimeStatusRefresh: () => Promise<void>;
   onCountChange?: (count: number | null) => void;
 };
 
@@ -51,8 +53,9 @@ function endpointLabel(provider: ManagedLlmProvider, fallback: string): string {
 
 export function ModelProviderWorkspace({
   config,
+  runtimeProvider,
   canManage,
-  onConfigChange,
+  onRuntimeStatusRefresh,
   onCountChange,
 }: ModelProviderWorkspaceProps) {
   const { locale, t } = useI18n();
@@ -68,6 +71,12 @@ export function ModelProviderWorkspace({
   const [adding, setAdding] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  const clientRef = useRef(client);
+  clientRef.current = client;
+  const scopeKey = `${config.mode}\u0000${config.apiBaseUrl}\u0000${config.tenantId}`;
+  const scopeKeyRef = useRef(scopeKey);
+  scopeKeyRef.current = scopeKey;
 
   const showToast = useCallback((message: string) => {
     if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
@@ -75,22 +84,33 @@ export function ModelProviderWorkspace({
     toastTimer.current = window.setTimeout(() => setToast(null), 2800);
   }, []);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const loadProviders = useCallback(
     async (signal?: AbortSignal) => {
+      const requestScope = scopeKey;
+      const requestClient = client;
       setLoading(true);
       setError(null);
       try {
         const [items, types] = await Promise.all([
-          client.listLlmProviders(signal),
-          client.listLlmProviderTypes(signal).catch(() => []),
+          requestClient.listLlmProviders(signal),
+          requestClient.listLlmProviderTypes(signal).catch(() => []),
         ]);
+        if (
+          signal?.aborted ||
+          !mountedRef.current ||
+          clientRef.current !== requestClient ||
+          scopeKeyRef.current !== requestScope
+        ) {
+          return;
+        }
         const modelProviders = items.filter(
           (item) => !item.operation_type || item.operation_type === 'llm',
         );
@@ -103,16 +123,30 @@ export function ModelProviderWorkspace({
             : (modelProviders[0]?.id ?? null),
         );
       } catch (caught) {
-        if (signal?.aborted) return;
+        if (
+          signal?.aborted ||
+          !mountedRef.current ||
+          clientRef.current !== requestClient ||
+          scopeKeyRef.current !== requestScope
+        ) {
+          return;
+        }
         setProviders([]);
         setProviderTypes([]);
         onCountChange?.(null);
         setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
-        if (!signal?.aborted) setLoading(false);
+        if (
+          !signal?.aborted &&
+          mountedRef.current &&
+          clientRef.current === requestClient &&
+          scopeKeyRef.current === requestScope
+        ) {
+          setLoading(false);
+        }
       }
     },
-    [client, onCountChange],
+    [client, onCountChange, scopeKey],
   );
 
   useEffect(() => {
@@ -136,22 +170,78 @@ export function ModelProviderWorkspace({
     );
   }, []);
 
+  const refreshRuntimeProjection = useCallback(
+    async (requestScope: string, requestClient: DesktopApiClient): Promise<void> => {
+      if (
+        !mountedRef.current ||
+        clientRef.current !== requestClient ||
+        scopeKeyRef.current !== requestScope
+      ) {
+        return;
+      }
+      try {
+        await onRuntimeStatusRefresh();
+      } catch {
+        if (
+          mountedRef.current &&
+          clientRef.current === requestClient &&
+          scopeKeyRef.current === requestScope
+        ) {
+          showToast(t('providers.runtimeRefreshFailed'));
+        }
+      }
+    },
+    [onRuntimeStatusRefresh, showToast, t],
+  );
+
+  const updateProvider = useCallback(
+    async (
+      currentProvider: ManagedLlmProvider,
+      mutation: LlmProviderMutationInput,
+    ): Promise<ManagedLlmProvider> => {
+      const requestScope = scopeKey;
+      const requestClient = client;
+      const updated = await requestClient.updateLlmProvider(currentProvider.id, mutation);
+      if (
+        !mountedRef.current ||
+        clientRef.current !== requestClient ||
+        scopeKeyRef.current !== requestScope
+      ) {
+        throw new Error(t('providers.contextChanged'));
+      }
+      replaceProvider(updated);
+      showToast(t('providers.providerSaved', { provider: updated.name }));
+      return updated;
+    },
+    [client, replaceProvider, scopeKey, showToast, t],
+  );
+
   const saveProvider = useCallback(
     async (
       currentProvider: ManagedLlmProvider,
       mutation: LlmProviderMutationInput,
     ): Promise<ManagedLlmProvider> => {
-      const updated = await client.updateLlmProvider(currentProvider.id, mutation);
-      replaceProvider(updated);
-      showToast(t('providers.providerSaved', { provider: updated.name }));
+      const requestScope = scopeKey;
+      const requestClient = client;
+      const updated = await updateProvider(currentProvider, mutation);
+      await refreshRuntimeProjection(requestScope, requestClient);
       return updated;
     },
-    [client, replaceProvider, showToast, t],
+    [client, refreshRuntimeProjection, scopeKey, updateProvider],
   );
 
   const validateProvider = useCallback(
     async (providerId: string): Promise<LlmProviderValidationOutcome> => {
-      const outcome = await client.checkLlmProvider(providerId);
+      const requestScope = scopeKey;
+      const requestClient = client;
+      const outcome = await requestClient.checkLlmProvider(providerId);
+      if (
+        !mountedRef.current ||
+        clientRef.current !== requestClient ||
+        scopeKeyRef.current !== requestScope
+      ) {
+        throw new Error(t('providers.contextChanged'));
+      }
       if (outcome.provider) {
         replaceProvider(outcome.provider);
       } else {
@@ -171,16 +261,25 @@ export function ModelProviderWorkspace({
       }
       return outcome;
     },
-    [client, replaceProvider],
+    [client, replaceProvider, scopeKey, t],
   );
 
   const createProvider = useCallback(
     async (input: LlmProviderCreateInput) => {
-      const created = await client.createLlmProvider(input);
+      const requestScope = scopeKey;
+      const requestClient = client;
+      const created = await requestClient.createLlmProvider(input);
+      if (
+        !mountedRef.current ||
+        clientRef.current !== requestClient ||
+        scopeKeyRef.current !== requestScope
+      ) {
+        throw new Error(t('providers.contextChanged'));
+      }
       let connected = false;
       let checkedProvider = created;
       try {
-        const outcome = await client.checkLlmProvider(created.id);
+        const outcome = await requestClient.checkLlmProvider(created.id);
         connected = outcome.status === 'healthy';
         checkedProvider = {
           ...created,
@@ -192,6 +291,13 @@ export function ModelProviderWorkspace({
       } catch {
         checkedProvider = { ...created, health_status: null };
       }
+      if (
+        !mountedRef.current ||
+        clientRef.current !== requestClient ||
+        scopeKeyRef.current !== requestScope
+      ) {
+        throw new Error(t('providers.contextChanged'));
+      }
       setProviders((current) => [...current, checkedProvider]);
       onCountChange?.(providers.length + 1);
       setSelectedId(created.id);
@@ -202,9 +308,10 @@ export function ModelProviderWorkspace({
           provider: created.name,
         }),
       );
+      await refreshRuntimeProjection(requestScope, requestClient);
       return checkedProvider;
     },
-    [client, onCountChange, providers.length, showToast, t],
+    [client, onCountChange, providers.length, refreshRuntimeProjection, scopeKey, showToast, t],
   );
 
   const selectProvider = (providerId: string) => {
@@ -213,18 +320,38 @@ export function ModelProviderWorkspace({
   };
 
   const selectRuntimeProvider = useCallback(
-    (selectedProvider: ManagedLlmProvider) => {
+    async (selectedProvider: ManagedLlmProvider) => {
       if (config.mode !== 'local') return;
-      onConfigChange({
-        ...config,
-        llmProvider: selectedProvider.provider_type,
-        llmBaseUrl: selectedProvider.base_url ?? '',
-        llmModel: selectedProvider.llm_model ?? '',
-        llmApiKey: '',
-      });
+      const requestScope = scopeKey;
+      const requestClient = client;
+      const selected = await requestClient.selectLlmRuntimeProvider(
+        selectedProvider.id,
+        selectedProvider.revision ?? 0,
+      );
+      if (
+        !mountedRef.current ||
+        clientRef.current !== requestClient ||
+        scopeKeyRef.current !== requestScope
+      ) {
+        throw new Error(t('providers.contextChanged'));
+      }
+      replaceProvider(selected);
       showToast(t('providers.localRuntimeUpdated'));
+      await Promise.all([
+        loadProviders(),
+        refreshRuntimeProjection(requestScope, requestClient),
+      ]);
     },
-    [config, onConfigChange, showToast, t],
+    [
+      client,
+      config.mode,
+      loadProviders,
+      refreshRuntimeProjection,
+      replaceProvider,
+      scopeKey,
+      showToast,
+      t,
+    ],
   );
 
   const copyProviderId = async () => {
@@ -239,10 +366,9 @@ export function ModelProviderWorkspace({
 
   const providerRuntimeSelected = Boolean(
     provider &&
-    config.mode === 'local' &&
-    config.llmProvider === provider.provider_type &&
-    config.llmBaseUrl.replace(/\/$/, '') === (provider.base_url ?? '').replace(/\/$/, '') &&
-    config.llmModel === (provider.llm_model ?? ''),
+      (config.mode === 'local'
+        ? runtimeProvider?.provider_id === provider.id
+        : provider.runtime_selected === true),
   );
 
   return (
@@ -460,6 +586,7 @@ export function ModelProviderWorkspace({
                 <ProviderOverviewPanel
                   provider={provider}
                   mode={config.mode}
+                  runtimeSelected={providerRuntimeSelected}
                   onTabChange={setTab}
                 />
               ) : null}
@@ -487,7 +614,7 @@ export function ModelProviderWorkspace({
                   mode={config.mode}
                   runtimeSelected={providerRuntimeSelected}
                   canManage={canManage}
-                  onSave={saveProvider}
+                  onSave={updateProvider}
                   onRuntimeSelected={selectRuntimeProvider}
                 />
               ) : null}

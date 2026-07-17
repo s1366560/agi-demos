@@ -32,7 +32,7 @@ use axum::{
     },
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
     Json, Router,
 };
 use chrono::{Duration as ChronoDuration, Utc};
@@ -136,13 +136,43 @@ impl LocalRuntimeService {
     }
 
     pub fn status(&self) -> LocalRuntimeStatus {
-        let mut config = self
+        let config = self
             .state
             .config
             .lock()
             .expect("local runtime config")
             .clone();
-        config.api_key.clear();
+        let mut runtime_providers = {
+            let runtime = self
+                .state
+                .provider_runtime
+                .lock()
+                .expect("provider runtime state");
+            runtime
+                .selections
+                .iter()
+                .filter_map(|(tenant_id, provider_id)| {
+                    let key = ProviderRuntimeKey {
+                        tenant_id: tenant_id.clone(),
+                        provider_id: provider_id.clone(),
+                    };
+                    runtime
+                        .bindings
+                        .get(&key)
+                        .map(|binding| RuntimeProviderProjection {
+                            tenant_id: tenant_id.clone(),
+                            provider_id: provider_id.clone(),
+                            provider_type: binding.provider_type.clone(),
+                            model: binding.model.clone(),
+                            credential_configured: binding.auth_method == "none"
+                                || runtime.credentials.contains_key(&key),
+                        })
+                })
+                .collect::<Vec<_>>()
+        };
+        runtime_providers.sort_by(|left, right| {
+            (&left.tenant_id, &left.provider_id).cmp(&(&right.tenant_id, &right.provider_id))
+        });
         let workspace_root = self
             .state
             .workspace_root
@@ -164,6 +194,7 @@ impl LocalRuntimeService {
             tool_count: tools.len(),
             tools,
             config,
+            runtime_providers,
         }
     }
 
@@ -180,76 +211,30 @@ impl LocalRuntimeState {
             std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
             let root = root.canonicalize().map_err(|error| error.to_string())?;
             let host = LocalToolHost::new(&root).map_err(|error| error.to_string())?;
+            config.workspace_root = root.to_string_lossy().to_string();
             *self.workspace_root.lock().expect("local workspace root") = root;
             *self.tool_host.lock().expect("local tool host") = host;
         }
-        let submitted_credential = normalized_runtime_credential(&config.api_key);
-        let binding = if runtime_provider_supported(&config.provider)
-            && !config.base_url.trim().is_empty()
-            && !config.model.trim().is_empty()
-        {
-            let bindings = self
-                .provider_bindings
-                .lock()
-                .expect("provider runtime bindings");
-            let preserved_credential = bindings.get("local").and_then(|current| {
-                (current.provider_id == "local-runtime"
-                    && current.provider_type == config.provider
-                    && current.base_url == config.base_url)
-                    .then(|| current.credential.clone())
-                    .flatten()
-            });
-            Some(ProviderRuntimeBinding {
-                provider_id: "local-runtime".to_string(),
-                provider_type: config.provider.clone(),
-                base_url: config.base_url.clone(),
-                model: config.model.clone(),
-                auth_method: if submitted_credential.is_some() || preserved_credential.is_some() {
-                    "api_key".to_string()
-                } else {
-                    "none".to_string()
-                },
-                credential: submitted_credential.or(preserved_credential),
-            })
-        } else {
-            None
-        };
-        let mut bindings = self
-            .provider_bindings
-            .lock()
-            .expect("provider runtime bindings");
-        if let Some(binding) = binding {
-            bindings.insert("local".to_string(), binding);
-        } else {
-            bindings.remove("local");
-        }
-        config.api_key.clear();
         let mut current = self.config.lock().expect("local runtime config");
         *current = config;
         Ok(())
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalRuntimeConfig {
-    pub provider: String,
-    pub base_url: String,
-    pub model: String,
-    #[serde(default, skip_serializing)]
-    pub api_key: String,
+    #[serde(default)]
     pub workspace_root: String,
 }
 
-impl Default for LocalRuntimeConfig {
-    fn default() -> Self {
-        Self {
-            provider: "unconfigured".to_string(),
-            base_url: "http://127.0.0.1:11434/v1".to_string(),
-            model: String::new(),
-            api_key: String::new(),
-            workspace_root: String::new(),
-        }
-    }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RuntimeProviderProjection {
+    pub tenant_id: String,
+    pub provider_id: String,
+    pub provider_type: String,
+    pub model: String,
+    pub credential_configured: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -261,6 +246,7 @@ pub struct LocalRuntimeStatus {
     pub tool_count: usize,
     pub tools: Vec<String>,
     pub config: LocalRuntimeConfig,
+    pub runtime_providers: Vec<RuntimeProviderProjection>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -435,7 +421,7 @@ struct LocalRuntimeState {
     checkpoints: Arc<dyn CheckpointStore>,
     clock: Arc<SystemClock>,
     config: Mutex<LocalRuntimeConfig>,
-    provider_bindings: Mutex<HashMap<String, ProviderRuntimeBinding>>,
+    provider_runtime: Mutex<ProviderRuntimeState>,
     session_store: DesktopSessionStore,
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
@@ -446,17 +432,30 @@ struct LocalRuntimeState {
     agent_engine_attempts: AtomicU64,
     #[cfg(test)]
     recovery_fork_prepare_attempts: AtomicU64,
+    #[cfg(test)]
+    mock_llm_enabled: AtomicU8,
     events: broadcast::Sender<Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ProviderRuntimeKey {
+    tenant_id: String,
+    provider_id: String,
 }
 
 #[derive(Clone, Debug)]
 struct ProviderRuntimeBinding {
-    provider_id: String,
     provider_type: String,
     base_url: String,
     model: String,
     auth_method: String,
-    credential: Option<String>,
+}
+
+#[derive(Default)]
+struct ProviderRuntimeState {
+    bindings: HashMap<ProviderRuntimeKey, ProviderRuntimeBinding>,
+    credentials: HashMap<ProviderRuntimeKey, String>,
+    selections: HashMap<String, String>,
 }
 
 #[derive(Clone)]
@@ -572,6 +571,34 @@ impl LocalRuntimeState {
             "metadata": { "runtime": "local" },
         });
         session_store.ensure_workspace(&workspace)?;
+        let mut provider_bindings = HashMap::new();
+        for (tenant_id, provider) in session_store.list_runtime_provider_connections()? {
+            let Some(provider_id) = provider.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(binding) = runtime_binding_from_provider(&provider) else {
+                continue;
+            };
+            provider_bindings.insert(
+                ProviderRuntimeKey {
+                    tenant_id,
+                    provider_id: provider_id.to_string(),
+                },
+                binding,
+            );
+        }
+        let mut provider_selections = HashMap::new();
+        for (tenant_id, provider_id) in session_store.list_selected_llm_providers()? {
+            let key = ProviderRuntimeKey {
+                tenant_id: tenant_id.clone(),
+                provider_id: provider_id.clone(),
+            };
+            if provider_bindings.contains_key(&key) {
+                provider_selections.insert(tenant_id, provider_id);
+            } else {
+                session_store.clear_llm_provider_selection_if_matches(&tenant_id, &provider_id)?;
+            }
+        }
         Ok(Self {
             api_token,
             workspace_root: Mutex::new(workspace_root),
@@ -579,7 +606,11 @@ impl LocalRuntimeState {
             checkpoints,
             clock: Arc::new(SystemClock),
             config: Mutex::new(LocalRuntimeConfig::default()),
-            provider_bindings: Mutex::new(HashMap::new()),
+            provider_runtime: Mutex::new(ProviderRuntimeState {
+                bindings: provider_bindings,
+                credentials: HashMap::new(),
+                selections: provider_selections,
+            }),
             session_store,
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
@@ -590,6 +621,8 @@ impl LocalRuntimeState {
             agent_engine_attempts: AtomicU64::new(0),
             #[cfg(test)]
             recovery_fork_prepare_attempts: AtomicU64::new(0),
+            #[cfg(test)]
+            mock_llm_enabled: AtomicU8::new(0),
             events,
         })
     }
@@ -1494,14 +1527,29 @@ impl LocalRuntimeState {
     }
 
     fn llm(&self, tenant_id: &str) -> Arc<dyn LlmPort> {
-        let binding = self
-            .provider_bindings
-            .lock()
-            .expect("provider runtime bindings")
-            .get(tenant_id)
-            .cloned();
+        let (binding, credential) = {
+            let runtime = self
+                .provider_runtime
+                .lock()
+                .expect("provider runtime state");
+            let key = runtime
+                .selections
+                .get(tenant_id)
+                .map(|provider_id| ProviderRuntimeKey {
+                    tenant_id: tenant_id.to_string(),
+                    provider_id: provider_id.clone(),
+                });
+            key.as_ref()
+                .map(|key| {
+                    (
+                        runtime.bindings.get(key).cloned(),
+                        runtime.credentials.get(key).cloned(),
+                    )
+                })
+                .unwrap_or((None, None))
+        };
         if let Some(binding) = binding {
-            if binding.auth_method != "none" && binding.credential.is_none() {
+            if binding.auth_method != "none" && credential.is_none() {
                 return Arc::new(UnconfiguredLocalLlm);
             }
             if matches!(
@@ -1509,7 +1557,7 @@ impl LocalRuntimeState {
                 "openai" | "openai_compatible"
             ) {
                 let llm = HttpLlm::new(binding.base_url, binding.model);
-                let llm = if let Some(credential) = binding.credential {
+                let llm = if let Some(credential) = credential {
                     llm.with_api_key(credential)
                 } else {
                     llm
@@ -1518,7 +1566,7 @@ impl LocalRuntimeState {
             }
             if binding.provider_type == "anthropic" {
                 let llm = AnthropicLlm::new(binding.base_url, binding.model);
-                let llm = if let Some(credential) = binding.credential {
+                let llm = if let Some(credential) = credential {
                     llm.with_api_key(credential)
                 } else {
                     llm
@@ -1527,11 +1575,8 @@ impl LocalRuntimeState {
             }
         }
         #[cfg(test)]
-        {
-            let config = self.config.lock().expect("local runtime config").clone();
-            if config.provider == "mock" {
-                return Arc::new(MockLocalLlm);
-            }
+        if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+            return Arc::new(MockLocalLlm);
         }
         Arc::new(UnconfiguredLocalLlm)
     }
@@ -1708,6 +1753,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/llm-providers/test-connection",
             post(validate_llm_provider_draft),
+        )
+        .route(
+            "/api/v1/llm-providers/:provider_id/runtime-selection",
+            put(select_llm_provider_runtime),
         )
         .route(
             "/api/v1/llm-providers/:provider_id",
@@ -2480,22 +2529,36 @@ async fn list_llm_providers(
     Extension(authenticated): Extension<AuthenticatedContext>,
 ) -> LocalJsonResult {
     let tenant_id = &authenticated.workspace.tenant_id;
+    let runtime = state
+        .provider_runtime
+        .lock()
+        .map_err(|error| local_store_error(error.to_string()))?;
     let providers = state
         .session_store
         .list_managed_resources(ManagedResourceKind::Provider, "tenant", tenant_id)
         .map_err(local_store_error)?;
-    let binding = state
-        .provider_bindings
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?
-        .get(tenant_id)
-        .cloned();
-    Ok(Json(Value::Array(
-        providers
-            .into_iter()
-            .map(|provider| provider_with_runtime_state(provider, binding.as_ref()))
-            .collect(),
-    )))
+    let selected_provider_id = runtime.selections.get(tenant_id);
+    let providers = providers
+        .into_iter()
+        .map(|provider| {
+            let provider_id = provider
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let key = ProviderRuntimeKey {
+                tenant_id: tenant_id.clone(),
+                provider_id: provider_id.clone(),
+            };
+            provider_with_runtime_state(
+                provider,
+                selected_provider_id.map(String::as_str) == Some(provider_id.as_str()),
+                runtime.bindings.get(&key),
+                runtime.credentials.contains_key(&key),
+            )
+        })
+        .collect();
+    Ok(Json(Value::Array(providers)))
 }
 
 async fn create_llm_provider(
@@ -2522,6 +2585,66 @@ async fn update_llm_provider(
         ));
     }
     mutate_llm_provider(state, authenticated, provider_id, request, false)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeProviderSelectionRequest {
+    expected_revision: u64,
+}
+
+async fn select_llm_provider_runtime(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path(provider_id): Path<String>,
+    Json(request): Json<RuntimeProviderSelectionRequest>,
+) -> LocalJsonResult {
+    ensure_provider_manager(&authenticated)?;
+    let tenant_id = &authenticated.workspace.tenant_id;
+    let mut runtime = state
+        .provider_runtime
+        .lock()
+        .map_err(|error| local_store_error(error.to_string()))?;
+    let provider = state
+        .session_store
+        .managed_resource(
+            ManagedResourceKind::Provider,
+            "tenant",
+            tenant_id,
+            &provider_id,
+        )
+        .map_err(local_store_error)?
+        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
+    let binding = runtime_binding_from_provider(&provider).ok_or_else(|| {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "detail": "provider connection must be active and configured before runtime selection"
+            })),
+        )
+    })?;
+    let stored = state
+        .session_store
+        .select_llm_provider(
+            tenant_id,
+            &provider_id,
+            request.expected_revision,
+            Utc::now().timestamp_millis(),
+        )
+        .map_err(resource_registry_error)?;
+    let key = ProviderRuntimeKey {
+        tenant_id: tenant_id.clone(),
+        provider_id: provider_id.clone(),
+    };
+    runtime.bindings.insert(key.clone(), binding.clone());
+    runtime.selections.insert(tenant_id.clone(), provider_id);
+    let credential_configured = runtime.credentials.contains_key(&key);
+    Ok(Json(provider_with_runtime_state(
+        stored,
+        true,
+        Some(&binding),
+        credential_configured,
+    )))
 }
 
 fn mutate_llm_provider(
@@ -2652,53 +2775,36 @@ fn mutate_llm_provider(
     object.insert("credential_configured".to_string(), json!(false));
     object.insert("health_status".to_string(), json!("not_checked"));
 
-    let is_active = object
-        .get("is_active")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let is_active = object.get("is_active").and_then(Value::as_bool) == Some(true);
     let expected_revision = if creating { Some(0) } else { expected_revision };
-    let previous_binding = state
-        .provider_bindings
+    let key = ProviderRuntimeKey {
+        tenant_id: tenant_id.clone(),
+        provider_id: provider_id.clone(),
+    };
+    let mut runtime = state
+        .provider_runtime
         .lock()
-        .map_err(|error| local_store_error(error.to_string()))?
+        .map_err(|error| local_store_error(error.to_string()))?;
+    let previous_binding = runtime.bindings.get(&key).cloned();
+    let previous_credential = runtime.credentials.get(&key).cloned();
+    let was_selected = runtime
+        .selections
         .get(tenant_id)
-        .cloned();
+        .is_some_and(|selected| selected == &provider_id);
     let submitted_credential = api_key.as_deref().and_then(normalized_runtime_credential);
-    let provider_base_url = object
-        .get("base_url")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let provider_model = object
-        .get("llm_model")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let next_binding = if is_active && !provider_base_url.is_empty() && !provider_model.is_empty() {
-        let preserved_credential = previous_binding.as_ref().and_then(|current| {
-            (current.provider_id == provider_id
-                && current.provider_type == provider_type
-                && current.base_url == provider_base_url)
-                .then(|| current.credential.clone())
-                .flatten()
-        });
-        Some(ProviderRuntimeBinding {
-            provider_id: provider_id.clone(),
-            provider_type,
-            base_url: provider_base_url,
-            model: provider_model,
-            auth_method: auth_method.clone(),
-            credential: if auth_method == "none" {
-                None
-            } else {
-                submitted_credential.or(preserved_credential)
-            },
+    let next_binding = runtime_binding_from_provider(&provider);
+    let next_credential = if auth_method == "none" || next_binding.is_none() {
+        None
+    } else if submitted_credential.is_some() {
+        submitted_credential
+    } else if previous_binding.as_ref().is_some_and(|previous| {
+        next_binding.as_ref().is_some_and(|next| {
+            previous.provider_type == next.provider_type
+                && previous.base_url == next.base_url
+                && previous.auth_method == next.auth_method
         })
-    } else if previous_binding
-        .as_ref()
-        .is_some_and(|binding| binding.provider_id != provider_id)
-    {
-        previous_binding.clone()
+    }) {
+        previous_credential
     } else {
         None
     };
@@ -2715,41 +2821,29 @@ fn mutate_llm_provider(
             Utc::now().timestamp_millis(),
         )
         .map_err(resource_registry_error)?;
-    {
-        let mut bindings = state
-            .provider_bindings
-            .lock()
-            .map_err(|error| local_store_error(error.to_string()))?;
-        if let Some(binding) = next_binding.clone() {
-            bindings.insert(tenant_id.to_string(), binding);
-        } else {
-            bindings.remove(tenant_id);
-        }
+    if was_selected && next_binding.is_none() {
+        runtime.selections.remove(tenant_id);
     }
-    if tenant_id == "local" {
-        let mut runtime = state
-            .config
-            .lock()
-            .map_err(|error| local_store_error(error.to_string()))?;
-        runtime.api_key.clear();
-        if let Some(binding) = next_binding.as_ref() {
-            runtime.provider.clone_from(&binding.provider_type);
-            runtime.base_url.clone_from(&binding.base_url);
-            runtime.model.clone_from(&binding.model);
-        } else {
-            runtime.provider = "unconfigured".to_string();
-            runtime.model.clear();
-        }
+    if let Some(binding) = next_binding.clone() {
+        runtime.bindings.insert(key.clone(), binding);
+    } else {
+        runtime.bindings.remove(&key);
     }
-    let active_binding = state
-        .provider_bindings
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?
+    if let Some(credential) = next_credential {
+        runtime.credentials.insert(key.clone(), credential);
+    } else {
+        runtime.credentials.remove(&key);
+    }
+    let selected = runtime
+        .selections
         .get(tenant_id)
-        .cloned();
+        .is_some_and(|selected| selected == &provider_id);
+    let credential_configured = runtime.credentials.contains_key(&key);
     Ok(Json(provider_with_runtime_state(
         stored,
-        active_binding.as_ref(),
+        selected,
+        next_binding.as_ref(),
+        credential_configured,
     )))
 }
 
@@ -2760,6 +2854,10 @@ async fn validate_llm_provider(
 ) -> LocalJsonResult {
     ensure_provider_manager(&authenticated)?;
     let tenant_id = &authenticated.workspace.tenant_id;
+    let runtime = state
+        .provider_runtime
+        .lock()
+        .map_err(|error| local_store_error(error.to_string()))?;
     let provider = state
         .session_store
         .managed_resource(
@@ -2770,15 +2868,24 @@ async fn validate_llm_provider(
         )
         .map_err(local_store_error)?
         .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
-    let binding = state
-        .provider_bindings
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?
+    let key = ProviderRuntimeKey {
+        tenant_id: tenant_id.clone(),
+        provider_id: provider_id.clone(),
+    };
+    let binding = runtime.bindings.get(&key).cloned();
+    let credential_configured = runtime.credentials.contains_key(&key);
+    let selected = runtime
+        .selections
         .get(tenant_id)
-        .cloned();
-    let status = provider_configuration_status(&provider, binding.as_ref());
+        .is_some_and(|selected| selected == &provider_id);
+    let status = provider_configuration_status(&provider, binding.as_ref(), credential_configured);
     Ok(Json(json!({
-        "provider": provider_with_runtime_state(provider, binding.as_ref()),
+        "provider": provider_with_runtime_state(
+            provider,
+            selected,
+            binding.as_ref(),
+            credential_configured,
+        ),
         "status": status,
         "probed": false,
         "detail": "configuration validated locally; no external request was sent",
@@ -3127,6 +3234,34 @@ fn runtime_provider_supported(provider_type: &str) -> bool {
     matches!(provider_type, "openai" | "openai_compatible" | "anthropic")
 }
 
+fn runtime_binding_from_provider(provider: &Value) -> Option<ProviderRuntimeBinding> {
+    if provider.get("is_active").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let provider_type = provider.get("provider_type")?.as_str()?.trim();
+    let base_url = provider.get("base_url")?.as_str()?.trim();
+    let model = provider.get("llm_model")?.as_str()?.trim();
+    let auth_method = provider
+        .get("auth_method")
+        .and_then(Value::as_str)
+        .unwrap_or("api_key")
+        .trim();
+    if !runtime_provider_supported(provider_type)
+        || base_url.is_empty()
+        || model.is_empty()
+        || !matches!(auth_method, "api_key" | "none")
+        || validated_local_provider_base_url(base_url).is_err()
+    {
+        return None;
+    }
+    Some(ProviderRuntimeBinding {
+        provider_type: provider_type.to_string(),
+        base_url: base_url.to_string(),
+        model: model.to_string(),
+        auth_method: auth_method.to_string(),
+    })
+}
+
 fn ensure_provider_manager(
     authenticated: &AuthenticatedContext,
 ) -> Result<(), (StatusCode, Json<Value>)> {
@@ -3157,62 +3292,43 @@ fn ensure_managed_resource_manager(
 fn provider_configuration_status(
     provider: &Value,
     binding: Option<&ProviderRuntimeBinding>,
+    credential_configured: bool,
 ) -> &'static str {
     if provider.get("is_active").and_then(Value::as_bool) != Some(true) {
         return "disabled";
     }
-    let provider_id = provider
-        .get("id")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let provider_type = provider
-        .get("provider_type")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let base_url = provider
-        .get("base_url")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let model = provider
-        .get("llm_model")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if !runtime_provider_supported(provider_type) || base_url.is_empty() || model.is_empty() {
+    if runtime_binding_from_provider(provider).is_none() {
         return "not_configured";
     }
-    let Some(binding) = binding.filter(|binding| binding.provider_id == provider_id) else {
-        return "not_selected";
+    let Some(binding) = binding else {
+        return "not_configured";
     };
     let auth_method = provider
         .get("auth_method")
         .and_then(Value::as_str)
         .unwrap_or("api_key");
-    if auth_method != "none" && binding.credential.is_none() {
+    if auth_method != "none" && !credential_configured {
         return "needs_credentials";
     }
+    debug_assert_eq!(binding.auth_method, auth_method);
     "configuration_valid"
 }
 
 fn provider_with_runtime_state(
     mut provider: Value,
+    selected: bool,
     binding: Option<&ProviderRuntimeBinding>,
+    credential_configured: bool,
 ) -> Value {
-    let provider_id = provider
-        .get("id")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let selected_binding = binding.filter(|binding| binding.provider_id == provider_id);
-    let status = provider_configuration_status(&provider, binding);
+    let credential_configured =
+        binding.is_some_and(|binding| binding.auth_method == "none") || credential_configured;
+    let status = provider_configuration_status(&provider, binding, credential_configured);
     if let Some(object) = provider.as_object_mut() {
         object.insert(
             "credential_configured".to_string(),
-            json!(selected_binding.is_some_and(|binding| binding.credential.is_some())),
+            json!(credential_configured),
         );
-        object.insert(
-            "runtime_selected".to_string(),
-            json!(selected_binding.is_some()),
-        );
+        object.insert("runtime_selected".to_string(), json!(selected));
         object.insert("health_status".to_string(), json!(status));
     }
     provider
@@ -6236,7 +6352,7 @@ mod tests {
             )
             .expect("local runtime state"),
         );
-        state.config.lock().expect("config").provider = "mock".to_string();
+        state.mock_llm_enabled.store(1, Ordering::Release);
         state
     }
 
@@ -6260,7 +6376,7 @@ mod tests {
             )
             .expect("local runtime state"),
         );
-        state.config.lock().expect("config").provider = "mock".to_string();
+        state.mock_llm_enabled.store(1, Ordering::Release);
         state
             .session_store
             .seed_test_session(token)
@@ -6288,7 +6404,7 @@ mod tests {
             )
             .expect("local runtime state"),
         );
-        state.config.lock().expect("config").provider = "mock".to_string();
+        state.mock_llm_enabled.store(1, Ordering::Release);
         state
             .session_store
             .seed_test_session(token)
@@ -7213,6 +7329,19 @@ mod tests {
         assert_eq!(activated_b["credential_configured"], false);
         assert_eq!(activated_b["health_status"], "needs_credentials");
 
+        let select_a = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "provider-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("select provider A");
+        assert_eq!(select_a.status(), axum::http::StatusCode::OK);
+        assert_eq!(response_json(select_a).await["credential_configured"], true);
+
         let reactivate_a = app
             .clone()
             .oneshot(authenticated_json_request(
@@ -7228,8 +7357,9 @@ mod tests {
             .expect("reactivate provider A without a new credential");
         assert_eq!(reactivate_a.status(), axum::http::StatusCode::OK);
         let reactivated_a = response_json(reactivate_a).await;
-        assert_eq!(reactivated_a["credential_configured"], false);
-        assert_eq!(reactivated_a["health_status"], "needs_credentials");
+        assert_eq!(reactivated_a["credential_configured"], true);
+        assert_eq!(reactivated_a["health_status"], "configuration_valid");
+        assert_eq!(reactivated_a["runtime_selected"], true);
         assert_eq!(reactivated_a["revision"], 2);
 
         let validate = app
@@ -7245,7 +7375,7 @@ mod tests {
         assert_eq!(validate.status(), axum::http::StatusCode::OK);
         let validation = response_json(validate).await;
         assert_eq!(validation["probed"], false);
-        assert_eq!(validation["status"], "needs_credentials");
+        assert_eq!(validation["status"], "configuration_valid");
         assert_eq!(validation["provider"]["revision"], 2);
         assert!(validation.get("last_verified_at").is_none());
 
@@ -7261,16 +7391,20 @@ mod tests {
         assert_eq!(disable_a.status(), axum::http::StatusCode::OK);
         let disabled_a = response_json(disable_a).await;
         assert_eq!(disabled_a["health_status"], "disabled");
+        let runtime = state.provider_runtime.lock().expect("provider runtime");
+        let key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        assert!(!runtime.bindings.contains_key(&key));
+        assert!(!runtime.credentials.contains_key(&key));
+        assert!(!runtime.selections.contains_key("local"));
+        drop(runtime);
         assert!(state
-            .provider_bindings
-            .lock()
-            .expect("provider bindings")
-            .get("local")
-            .is_none());
-        assert_eq!(
-            state.config.lock().expect("config").provider,
-            "unconfigured"
-        );
+            .session_store
+            .list_selected_llm_providers()
+            .expect("persisted provider selections")
+            .is_empty());
 
         let persisted = state
             .session_store
@@ -7284,6 +7418,892 @@ mod tests {
             .expect("local runtime provider");
         assert!(!persisted.to_string().contains("provider-key-a"));
         assert!(persisted.get("api_key").is_none());
+    }
+
+    #[test]
+    fn local_runtime_config_accepts_only_workspace_root() {
+        let workspace_only = serde_json::from_value::<LocalRuntimeConfig>(json!({
+            "workspace_root": "/tmp/agistack-workspace"
+        }));
+        assert!(workspace_only.is_ok());
+
+        for legacy_field in ["provider", "base_url", "model", "api_key"] {
+            let mut value = json!({ "workspace_root": "/tmp/agistack-workspace" });
+            value[legacy_field] = json!("legacy-runtime-value");
+            assert!(
+                serde_json::from_value::<LocalRuntimeConfig>(value).is_err(),
+                "legacy runtime field must be rejected: {legacy_field}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_connection_update_requires_explicit_idempotent_runtime_selection() {
+        let state = test_state("explicit-provider-selection-secret");
+        let app = local_router(Arc::clone(&state));
+
+        let update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "explicit-provider-selection-secret",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "api_key",
+                    "llm_model": "model-a",
+                    "is_active": true,
+                    "api_key": "explicit-provider-key",
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("update provider connection");
+        assert_eq!(update.status(), axum::http::StatusCode::OK);
+        let updated = response_json(update).await;
+        assert_eq!(updated["runtime_selected"], false);
+        assert_eq!(updated["credential_configured"], true);
+
+        for _ in 0..2 {
+            let selection = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "PUT",
+                    "/api/v1/llm-providers/local-runtime/runtime-selection",
+                    "explicit-provider-selection-secret",
+                    json!({ "expected_revision": 1 }),
+                ))
+                .await
+                .expect("select provider runtime");
+            assert_eq!(selection.status(), axum::http::StatusCode::OK);
+            let selected = response_json(selection).await;
+            assert_eq!(selected["id"], "local-runtime");
+            assert_eq!(selected["runtime_selected"], true);
+            assert_eq!(selected["revision"], 1);
+        }
+        let stale_selection = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "explicit-provider-selection-secret",
+                json!({ "expected_revision": 0 }),
+            ))
+            .await
+            .expect("stale selection response");
+        assert_eq!(stale_selection.status(), axum::http::StatusCode::CONFLICT);
+
+        let create_other = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/",
+                "explicit-provider-selection-secret",
+                json!({
+                    "name": "Provider B",
+                    "provider_type": "openai",
+                    "base_url": "https://api-b.example.test/v1",
+                    "auth_method": "api_key",
+                    "api_key": "provider-b-key",
+                    "llm_model": "model-b",
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("create another active connection");
+        assert_eq!(create_other.status(), axum::http::StatusCode::OK);
+        let other = response_json(create_other).await;
+        assert_eq!(other["runtime_selected"], false);
+
+        let providers = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/",
+                "explicit-provider-selection-secret",
+                json!({}),
+            ))
+            .await
+            .expect("list providers");
+        let providers = response_json(providers).await;
+        let local = providers
+            .as_array()
+            .expect("provider array")
+            .iter()
+            .find(|provider| provider["id"] == "local-runtime")
+            .expect("selected provider");
+        assert_eq!(local["runtime_selected"], true);
+    }
+
+    #[tokio::test]
+    async fn runtime_status_is_sorted_and_never_exposes_provider_transport_or_credentials() {
+        let state = test_state("runtime-provider-projection-secret");
+        let app = local_router(Arc::clone(&state));
+
+        let local_update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "runtime-provider-projection-secret",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://local.example.test/v1",
+                    "auth_method": "api_key",
+                    "llm_model": "local-model",
+                    "is_active": true,
+                    "api_key": "local-projection-key",
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("configure local tenant provider");
+        assert_eq!(local_update.status(), axum::http::StatusCode::OK);
+        let local_selection = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "runtime-provider-projection-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("select local tenant provider");
+        assert_eq!(local_selection.status(), axum::http::StatusCode::OK);
+
+        let authenticated = state
+            .session_store
+            .validate_session_credential(
+                "runtime-provider-projection-secret",
+                Utc::now().timestamp_millis(),
+            )
+            .expect("validate session")
+            .expect("authenticated context");
+        state
+            .session_store
+            .switch_workspace_context(
+                &authenticated,
+                &ContextSwitchRequest {
+                    tenant_id: "northstar".to_string(),
+                    project_id: "desktop-client".to_string(),
+                    expected_revision: 0,
+                    idempotency_key: "runtime-provider-projection-switch".to_string(),
+                },
+                Utc::now().timestamp_millis(),
+            )
+            .expect("switch tenant context");
+
+        let northstar_update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "runtime-provider-projection-secret",
+                json!({
+                    "provider_type": "anthropic",
+                    "base_url": "https://northstar.example.test/v1",
+                    "auth_method": "api_key",
+                    "llm_model": "northstar-model",
+                    "is_active": true,
+                    "api_key": "northstar-projection-key",
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("configure northstar provider with the same provider id");
+        assert_eq!(northstar_update.status(), axum::http::StatusCode::OK);
+        let northstar_selection = app
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "runtime-provider-projection-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("select northstar tenant provider");
+        assert_eq!(northstar_selection.status(), axum::http::StatusCode::OK);
+
+        let service = LocalRuntimeService {
+            state,
+            api_base_url: "http://127.0.0.1:1".to_string(),
+        };
+        assert_eq!(
+            service
+                .state
+                .session_store
+                .list_selected_llm_providers()
+                .expect("tenant provider selections"),
+            vec![
+                ("local".to_string(), "local-runtime".to_string()),
+                ("northstar".to_string(), "local-runtime".to_string()),
+            ]
+        );
+        let status = serde_json::to_value(service.status()).expect("serialize runtime status");
+        assert_eq!(
+            status["runtime_providers"],
+            json!([
+                {
+                    "tenant_id": "local",
+                    "provider_id": "local-runtime",
+                    "provider_type": "openai",
+                    "model": "local-model",
+                    "credential_configured": true
+                },
+                {
+                    "tenant_id": "northstar",
+                    "provider_id": "local-runtime",
+                    "provider_type": "anthropic",
+                    "model": "northstar-model",
+                    "credential_configured": true
+                }
+            ])
+        );
+        let serialized = status["runtime_providers"].to_string();
+        for forbidden in [
+            "base_url",
+            "api_key",
+            "local-projection-key",
+            "northstar-projection-key",
+            "local.example.test",
+            "northstar.example.test",
+        ] {
+            assert!(
+                !serialized.contains(forbidden),
+                "runtime status leaked forbidden provider data: {forbidden}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn signout_preserves_runtime_selection_for_the_next_local_session() {
+        let state = test_state("selection-signout-secret");
+        let app = local_router(state);
+
+        let update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "selection-signout-secret",
+                json!({
+                    "provider_type": "openai_compatible",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "auth_method": "none",
+                    "llm_model": "local-model",
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("update provider");
+        assert_eq!(update.status(), axum::http::StatusCode::OK);
+        let select = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "selection-signout-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("select provider");
+        assert_eq!(select.status(), axum::http::StatusCode::OK);
+
+        let signout = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/auth/signout",
+                "selection-signout-secret",
+                json!({}),
+            ))
+            .await
+            .expect("sign out");
+        assert_eq!(signout.status(), axum::http::StatusCode::OK);
+
+        let next_session = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/local-session")
+                    .header("x-agistack-launch", "selection-signout-secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"trusted_device":false}"#))
+                    .expect("new local session request"),
+            )
+            .await
+            .expect("new local session");
+        assert_eq!(next_session.status(), axum::http::StatusCode::OK);
+        let next_session = response_json(next_session).await;
+        let next_credential = next_session["access_token"]
+            .as_str()
+            .expect("next session credential");
+        let providers = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/llm-providers/")
+                    .header("x-agistack-launch", "selection-signout-secret")
+                    .header("authorization", format!("Bearer {next_credential}"))
+                    .body(Body::empty())
+                    .expect("list providers request"),
+            )
+            .await
+            .expect("list providers in next session");
+        assert_eq!(providers.status(), axum::http::StatusCode::OK);
+        let providers = response_json(providers).await;
+        assert_eq!(
+            providers[0]["runtime_selected"], true,
+            "unexpected provider list: {providers}"
+        );
+    }
+
+    #[tokio::test]
+    async fn active_provider_connection_does_not_appear_in_runtime_status_before_selection() {
+        let state = test_state("unselected-runtime-status-secret");
+        let app = local_router(Arc::clone(&state));
+        let update = app
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "unselected-runtime-status-secret",
+                json!({
+                    "provider_type": "openai_compatible",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "auth_method": "none",
+                    "llm_model": "local-model",
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("enable provider connection");
+        assert_eq!(update.status(), axum::http::StatusCode::OK);
+
+        let service = LocalRuntimeService {
+            state,
+            api_base_url: "http://127.0.0.1:1".to_string(),
+        };
+        let status = serde_json::to_value(service.status()).expect("serialize runtime status");
+        assert_eq!(status["runtime_providers"], json!([]));
+        service.state.mock_llm_enabled.store(0, Ordering::Release);
+        let error = service
+            .state
+            .llm("local")
+            .decide("must remain unconfigured", 0, &[], &[])
+            .await
+            .expect_err("an unselected active connection must fail closed");
+        assert!(error.to_string().contains("model_unconfigured"));
+    }
+
+    #[tokio::test]
+    async fn stale_provider_update_cannot_clear_authoritative_runtime_selection() {
+        let state = test_state("stale-provider-selection-secret");
+        let app = local_router(Arc::clone(&state));
+        let update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "stale-provider-selection-secret",
+                json!({
+                    "provider_type": "openai_compatible",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "auth_method": "none",
+                    "llm_model": "local-model",
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("configure provider");
+        assert_eq!(update.status(), axum::http::StatusCode::OK);
+        let selection = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "stale-provider-selection-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("select provider");
+        assert_eq!(selection.status(), axum::http::StatusCode::OK);
+
+        let stale_disable = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "stale-provider-selection-secret",
+                json!({ "is_active": false, "expected_revision": 0 }),
+            ))
+            .await
+            .expect("stale disable response");
+        assert_eq!(stale_disable.status(), axum::http::StatusCode::CONFLICT);
+
+        assert_eq!(
+            state
+                .session_store
+                .list_selected_llm_providers()
+                .expect("persisted selections"),
+            vec![("local".to_string(), "local-runtime".to_string())]
+        );
+        {
+            let runtime = state.provider_runtime.lock().expect("provider runtime");
+            assert_eq!(
+                runtime.selections.get("local").map(String::as_str),
+                Some("local-runtime")
+            );
+        }
+
+        let providers = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/",
+                "stale-provider-selection-secret",
+                json!({}),
+            ))
+            .await
+            .expect("list providers");
+        let providers = response_json(providers).await;
+        assert_eq!(providers[0]["runtime_selected"], true);
+        assert_eq!(providers[0]["is_active"], true);
+    }
+
+    #[tokio::test]
+    async fn endpoint_change_atomically_drops_old_credential_until_replaced() {
+        let state = test_state("atomic-provider-credential-secret");
+        let app = local_router(Arc::clone(&state));
+        let update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "atomic-provider-credential-secret",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://old.example.test/v1",
+                    "auth_method": "api_key",
+                    "api_key": "old-provider-key",
+                    "llm_model": "model-a",
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("configure old endpoint");
+        assert_eq!(update.status(), axum::http::StatusCode::OK);
+        let selection = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "atomic-provider-credential-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("select provider");
+        assert_eq!(selection.status(), axum::http::StatusCode::OK);
+
+        let endpoint_change = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "atomic-provider-credential-secret",
+                json!({
+                    "base_url": "https://new.example.test/v1",
+                    "expected_revision": 1
+                }),
+            ))
+            .await
+            .expect("change endpoint without credential");
+        assert_eq!(endpoint_change.status(), axum::http::StatusCode::OK);
+        let endpoint_change = response_json(endpoint_change).await;
+        assert_eq!(endpoint_change["credential_configured"], false);
+        assert_eq!(endpoint_change["health_status"], "needs_credentials");
+        assert_eq!(endpoint_change["runtime_selected"], true);
+
+        let key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        {
+            let runtime = state.provider_runtime.lock().expect("provider runtime");
+            assert_eq!(
+                runtime
+                    .bindings
+                    .get(&key)
+                    .map(|binding| binding.base_url.as_str()),
+                Some("https://new.example.test/v1")
+            );
+            assert!(!runtime.credentials.contains_key(&key));
+        }
+
+        let replacement = app
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "atomic-provider-credential-secret",
+                json!({
+                    "api_key": "new-provider-key",
+                    "expected_revision": 2
+                }),
+            ))
+            .await
+            .expect("replace credential");
+        assert_eq!(replacement.status(), axum::http::StatusCode::OK);
+        let replacement = response_json(replacement).await;
+        assert_eq!(replacement["credential_configured"], true);
+        assert_eq!(replacement["health_status"], "configuration_valid");
+
+        let persisted = state
+            .session_store
+            .managed_resource(
+                ManagedResourceKind::Provider,
+                "tenant",
+                "local",
+                "local-runtime",
+            )
+            .expect("persisted provider")
+            .expect("provider");
+        assert!(!persisted.to_string().contains("old-provider-key"));
+        assert!(!persisted.to_string().contains("new-provider-key"));
+    }
+
+    #[tokio::test]
+    async fn runtime_selection_route_allows_tauri_put_preflight() {
+        let response = local_router(test_state("selection-cors-secret"))
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/llm-providers/local-runtime/runtime-selection")
+                    .header("origin", "tauri://localhost")
+                    .header("access-control-request-method", "PUT")
+                    .header(
+                        "access-control-request-headers",
+                        "authorization,content-type,x-agistack-launch",
+                    )
+                    .body(Body::empty())
+                    .expect("selection preflight request"),
+            )
+            .await
+            .expect("selection preflight response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert!(response
+            .headers()
+            .get("access-control-allow-methods")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|methods| methods.split(',').any(|method| method.trim() == "PUT")));
+    }
+
+    #[tokio::test]
+    async fn workspace_reconfigure_preserves_provider_credentials_and_selection_state() {
+        let state = test_state("workspace-config-provider-secret");
+        let app = local_router(Arc::clone(&state));
+        let update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "workspace-config-provider-secret",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "api_key",
+                    "api_key": "workspace-config-provider-key",
+                    "llm_model": "model-a",
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("configure provider connection");
+        assert_eq!(update.status(), axum::http::StatusCode::OK);
+
+        let key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        let before = {
+            let runtime = state.provider_runtime.lock().expect("provider runtime");
+            let binding = runtime.bindings.get(&key).expect("provider binding");
+            (
+                runtime.bindings.len(),
+                binding.provider_type.clone(),
+                binding.base_url.clone(),
+                binding.model.clone(),
+                runtime.credentials.contains_key(&key),
+                runtime.selections.clone(),
+            )
+        };
+
+        let workspace_root = test_root();
+        let config = serde_json::from_value::<LocalRuntimeConfig>(json!({
+            "workspace_root": workspace_root
+        }))
+        .expect("workspace-only runtime config");
+        state.configure(config).expect("reconfigure workspace");
+        let after = {
+            let runtime = state.provider_runtime.lock().expect("provider runtime");
+            let binding = runtime.bindings.get(&key).expect("provider binding");
+            (
+                runtime.bindings.len(),
+                binding.provider_type.clone(),
+                binding.base_url.clone(),
+                binding.model.clone(),
+                runtime.credentials.contains_key(&key),
+                runtime.selections.clone(),
+            )
+        };
+        assert_eq!(after, before);
+
+        let select = app
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime/runtime-selection",
+                "workspace-config-provider-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("select provider after workspace reconfigure");
+        assert_eq!(select.status(), axum::http::StatusCode::OK);
+        let selected = response_json(select).await;
+        assert_eq!(selected["credential_configured"], true);
+        assert_eq!(selected["runtime_selected"], true);
+    }
+
+    #[tokio::test]
+    async fn runtime_selection_id_survives_restart_but_provider_credential_does_not() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create restart test root");
+        let store_path = root.join("sessions.db");
+        let workspace_root = root.join("workspace");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace root");
+        let credential = "restart-provider-selection-secret";
+
+        {
+            let store = DesktopSessionStore::open(&store_path).expect("open session store");
+            let tool_host = LocalToolHost::new(&workspace_root).expect("tool host");
+            let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+            let state = Arc::new(
+                LocalRuntimeState::new(
+                    workspace_root.clone(),
+                    tool_host,
+                    checkpoints,
+                    credential.to_string(),
+                    store,
+                )
+                .expect("runtime state"),
+            );
+            state
+                .session_store
+                .seed_test_session(credential)
+                .expect("test session");
+            let app = local_router(state);
+            let update = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "PUT",
+                    "/api/v1/llm-providers/local-runtime",
+                    credential,
+                    json!({
+                        "provider_type": "openai",
+                        "base_url": "https://api.example.test/v1",
+                        "auth_method": "api_key",
+                        "api_key": "ephemeral-restart-key",
+                        "llm_model": "model-a",
+                        "is_active": true,
+                        "expected_revision": 0
+                    }),
+                ))
+                .await
+                .expect("configure provider");
+            assert_eq!(update.status(), axum::http::StatusCode::OK);
+            let select = app
+                .oneshot(authenticated_json_request(
+                    "PUT",
+                    "/api/v1/llm-providers/local-runtime/runtime-selection",
+                    credential,
+                    json!({ "expected_revision": 1 }),
+                ))
+                .await
+                .expect("select provider");
+            assert_eq!(select.status(), axum::http::StatusCode::OK);
+            let selected = response_json(select).await;
+            assert_eq!(selected["credential_configured"], true);
+        }
+
+        let store = DesktopSessionStore::open(&store_path).expect("reopen session store");
+        let tool_host = LocalToolHost::new(&workspace_root).expect("restored tool host");
+        let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+        let state = Arc::new(
+            LocalRuntimeState::new(
+                workspace_root,
+                tool_host,
+                checkpoints,
+                credential.to_string(),
+                store,
+            )
+            .expect("restored runtime state"),
+        );
+        let service = LocalRuntimeService {
+            state: Arc::clone(&state),
+            api_base_url: "http://127.0.0.1:1".to_string(),
+        };
+        let status = serde_json::to_value(service.status()).expect("restored status");
+        assert_eq!(status["runtime_providers"][0]["tenant_id"], "local");
+        assert_eq!(
+            status["runtime_providers"][0]["provider_id"],
+            "local-runtime"
+        );
+        assert_eq!(
+            status["runtime_providers"][0]["credential_configured"],
+            false
+        );
+        assert!(!status.to_string().contains("ephemeral-restart-key"));
+
+        let providers = local_router(state)
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/",
+                credential,
+                json!({}),
+            ))
+            .await
+            .expect("list restored providers");
+        assert_eq!(providers.status(), axum::http::StatusCode::OK);
+        let providers = response_json(providers).await;
+        assert_eq!(providers[0]["runtime_selected"], true);
+        assert_eq!(providers[0]["credential_configured"], false);
+        assert_eq!(providers[0]["health_status"], "needs_credentials");
+
+        drop(service);
+        std::fs::remove_dir_all(root).expect("remove restart test root");
+    }
+
+    #[tokio::test]
+    async fn active_provider_without_selection_row_is_not_inferred_as_runtime() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create inference test root");
+        let store_path = root.join("sessions.db");
+        let workspace_root = root.join("workspace");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace root");
+        let credential = "no-provider-selection-secret";
+        let store = DesktopSessionStore::open(&store_path).expect("open session store");
+        store
+            .put_managed_resource(
+                ManagedResourceKind::Provider,
+                "tenant",
+                "local",
+                "local-runtime",
+                "active",
+                Some(0),
+                json!({
+                    "id": "local-runtime",
+                    "name": "Active but unselected",
+                    "provider_type": "openai_compatible",
+                    "tenant_id": "local",
+                    "is_active": true,
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "auth_method": "none",
+                    "credential_source": "runtime_memory",
+                    "credential_configured": false,
+                    "llm_model": "local-model",
+                    "allowed_models": ["local-model"],
+                    "secondary_models": [],
+                    "health_status": "not_checked",
+                    "revision": 0
+                }),
+                Utc::now().timestamp_millis(),
+            )
+            .expect("enable provider directly without selection");
+        store
+            .seed_test_session(credential)
+            .expect("authenticated session");
+        drop(store);
+
+        let store = DesktopSessionStore::open(&store_path).expect("reopen session store");
+        let tool_host = LocalToolHost::new(&workspace_root).expect("tool host");
+        let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+        let state = Arc::new(
+            LocalRuntimeState::new(
+                workspace_root,
+                tool_host,
+                checkpoints,
+                credential.to_string(),
+                store,
+            )
+            .expect("runtime state"),
+        );
+        let service = LocalRuntimeService {
+            state: Arc::clone(&state),
+            api_base_url: "http://127.0.0.1:1".to_string(),
+        };
+        let status = serde_json::to_value(service.status()).expect("runtime status");
+        assert_eq!(status["runtime_providers"], json!([]));
+
+        let providers = local_router(state)
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/",
+                credential,
+                json!({}),
+            ))
+            .await
+            .expect("list providers");
+        let providers = response_json(providers).await;
+        assert_eq!(providers[0]["runtime_selected"], false);
+        assert_eq!(providers[0]["health_status"], "configuration_valid");
+
+        drop(service);
+        std::fs::remove_dir_all(root).expect("remove inference test root");
+    }
+
+    #[test]
+    fn session_store_migrates_provider_selection_schema_without_downgrading_future_versions() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create schema test root");
+        let old_path = root.join("old.db");
+        {
+            let connection = rusqlite::Connection::open(&old_path).expect("open old database");
+            connection
+                .execute_batch("PRAGMA user_version = 10;")
+                .expect("mark old schema version");
+        }
+        let migrated = DesktopSessionStore::open(&old_path).expect("migrate old store");
+        drop(migrated);
+        let connection = rusqlite::Connection::open(&old_path).expect("inspect migrated store");
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("migrated schema version");
+        assert_eq!(version, 11);
+        let selection_table: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'desktop_llm_provider_selections'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("provider selection table count");
+        assert_eq!(selection_table, 1);
+        drop(connection);
+
+        let future_path = root.join("future.db");
+        {
+            let connection =
+                rusqlite::Connection::open(&future_path).expect("open future database");
+            connection
+                .execute_batch("PRAGMA user_version = 12;")
+                .expect("mark future schema version");
+        }
+        let error = DesktopSessionStore::open(&future_path)
+            .err()
+            .expect("future schema must be rejected");
+        assert!(error.contains("newer than supported schema version 11"));
+
+        std::fs::remove_dir_all(root).expect("remove schema test root");
     }
 
     #[tokio::test]
@@ -7980,7 +9000,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 10);
+        assert_eq!(schema_version, 11);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -12690,14 +13710,34 @@ mod tests {
         assert!(first.len() >= 64);
 
         let state = test_state(&first);
-        state.config.lock().expect("config").api_key = "llm-secret".to_string();
+        let key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "provider-a".to_string(),
+        };
+        {
+            let mut runtime = state.provider_runtime.lock().expect("provider runtime");
+            runtime.bindings.insert(
+                key.clone(),
+                ProviderRuntimeBinding {
+                    provider_type: "openai".to_string(),
+                    base_url: "https://secret-endpoint.example.test/v1".to_string(),
+                    model: "model-a".to_string(),
+                    auth_method: "api_key".to_string(),
+                },
+            );
+            runtime.credentials.insert(key, "llm-secret".to_string());
+            runtime
+                .selections
+                .insert("local".to_string(), "provider-a".to_string());
+        }
         let service = LocalRuntimeService {
             state,
             api_base_url: "http://127.0.0.1:1".to_string(),
         };
         let status = service.status();
         assert_eq!(status.api_token, first);
-        assert!(status.config.api_key.is_empty());
+        assert_eq!(status.runtime_providers.len(), 1);
+        assert!(status.runtime_providers[0].credential_configured);
         assert!(!status
             .tools
             .iter()
@@ -12705,6 +13745,8 @@ mod tests {
         assert!(!status.tools.iter().any(|name| name == "plugin_tool_exec"));
         let serialized = serde_json::to_value(status).expect("serialized status");
         assert!(serialized["config"].get("api_key").is_none());
+        assert!(!serialized.to_string().contains("llm-secret"));
+        assert!(!serialized.to_string().contains("secret-endpoint"));
     }
 
     #[tokio::test]
@@ -12718,7 +13760,7 @@ mod tests {
 
     #[tokio::test]
     async fn unconfigured_runtime_never_fabricates_a_plan() {
-        assert_eq!(LocalRuntimeConfig::default().provider, "unconfigured");
+        assert!(LocalRuntimeConfig::default().workspace_root.is_empty());
         let error = UnconfiguredLocalLlm
             .decide(
                 "Implement an ambiguous product objective",

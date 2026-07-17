@@ -856,6 +856,21 @@ export class DesktopApiClient {
     return normalizeManagedLlmProvider(payload);
   }
 
+  async selectLlmRuntimeProvider(
+    providerId: string,
+    expectedRevision: number,
+  ): Promise<ManagedLlmProvider> {
+    const normalizedProviderId = requireValue(providerId, 'provider id');
+    const payload = await this.request<unknown>(
+      `/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}/runtime-selection`,
+      {
+        method: 'PUT',
+        body: { expected_revision: expectedRevision },
+      },
+    );
+    return normalizeManagedLlmProvider(payload);
+  }
+
   async checkLlmProvider(providerId: string): Promise<LlmProviderValidationOutcome> {
     const encodedProviderId = encodeURIComponent(providerId);
     const payload = await this.request<unknown>(

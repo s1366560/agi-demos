@@ -28,6 +28,8 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 11;
+
 pub(super) struct PreparedToolInvocation {
     pub(super) invocation: ToolInvocation,
     pub(super) existing: bool,
@@ -191,6 +193,14 @@ impl DesktopSessionStore {
     }
 
     fn from_connection(connection: Connection) -> Result<Self, String> {
+        let stored_schema_version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        if stored_schema_version > DESKTOP_SESSION_SCHEMA_VERSION {
+            return Err(format!(
+                "desktop session store schema version {stored_schema_version} is newer than supported schema version {DESKTOP_SESSION_SCHEMA_VERSION}"
+            ));
+        }
         // This database is an execution authority, not a shared read model. Keep one SQLite
         // connection in EXCLUSIVE locking mode for the store lifetime so a second desktop process
         // fails before it can recover or execute the same run concurrently.
@@ -412,8 +422,7 @@ impl DesktopSessionStore {
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_status
                    ON desktop_tool_invocations(status, prepared_at_ms DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_checkpoint_authorities_run
-                   ON desktop_checkpoint_authorities(run_id);
-                 PRAGMA user_version = 10;",
+                   ON desktop_checkpoint_authorities(run_id);",
             )
             .map_err(|error| error.to_string())?;
         let locking_mode: String = connection
@@ -426,6 +435,9 @@ impl DesktopSessionStore {
         }
         super::auth_context::initialize_auth_context_schema(&connection)?;
         super::resource_registry::initialize_resource_registry(&connection)?;
+        connection
+            .pragma_update(None, "user_version", DESKTOP_SESSION_SCHEMA_VERSION)
+            .map_err(|error| error.to_string())?;
         recover_inflight_tool_invocations(&connection, chrono::Utc::now().timestamp_millis())?;
         recover_interrupted_runs(&connection, &super::now_iso())?;
         Ok(Self {

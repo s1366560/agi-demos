@@ -143,8 +143,10 @@ The source capture is softer and records an earlier popup width. Production foll
 - Add Provider wizard: passed from Provider choice through credentials, declared probe or configuration-only validation, source-aware model selection, explicit active creation, selection of the new Provider, and success toast.
 - Secret handling: passed; the dummy QA credential never appears in a response or screenshot.
 - Browser console after a clean reload and core flow: no remaining runtime exception.
-- Automated desktop tests: 343 passed.
-- Desktop Rust library tests: 130 passed after adding CORS preflight, endpoint transport, catalog-source, and compatibility-route coverage.
+- Automated desktop tests: 346 passed.
+- Desktop Rust library tests: 142 passed after adding explicit runtime selection, tenant isolation,
+  restart recovery, credential redaction, schema migration, CORS preflight, and atomic endpoint/key
+  coverage.
 - Production TypeScript and Vite build: passed; only the existing large-chunk advisory remains.
 
 ## Comparison history
@@ -170,6 +172,22 @@ Post-fix overview, connection, routing, usage, model-save, and wizard checks sho
 Contract review found and resolved four defects that screenshot comparison alone could not expose: update payloads omitted the `expected_revision` required by the target Rust gateway route; local Rust lacked the Desktop client's canonical PUT, health, model, usage, and draft-validation routes; a PUT preflight was blocked because CORS did not allow PUT; and static fallback catalogs were described like live discovery. Local endpoint validation now rejects malformed URLs, userinfo, query/fragment data, and remote plaintext HTTP before draft acceptance or persistence. Unknown Provider types fail closed. The legacy Python route's non-CAS behavior is documented as compatibility behavior rather than being presented as revision protection.
 
 The existing same-canvas comparison remains current because the approved shell, hierarchy, geometry, and control layout did not change. A fresh in-app Browser pass confirmed five Provider rows, the overview tabs, API-key entry, successful declared cloud probe, and the third-step model choices. No actionable P0, P1, or P2 visual difference was introduced.
+
+### Iteration 4 — passed
+
+Runtime authority review removed the second LLM configuration source from Desktop config and Tauri
+IPC. Provider create/update now manages only the connection; local execution changes only through the
+explicit, revision-guarded runtime-selection action. Rust persists only `tenant_id → provider_id`,
+keeps credentials in process memory, restores the selected Provider without restoring its secret, and
+returns a sorted five-field redacted runtime projection. Provider binding, credential, and selection
+reads share one atomic snapshot, so an endpoint update cannot execute with the previous key.
+
+The final frontend scope guard now rejects a stale tenant/client before requesting a runtime status
+refresh. A fresh in-app Browser pass at the production QA URL confirmed the independent popup,
+five-row Provider catalog, overview geometry, and working Overview/Routing tab transition. The cloud
+routing state remains truthfully read-only; local routing uses an explicit “Save and use for local
+runtime” action. The approved visual hierarchy did not change, so the existing same-viewport combined
+comparison remains current. Final contract audit: P0 0, P1 0, P2 0.
 
 ## Copy differences from the visual prototype
 

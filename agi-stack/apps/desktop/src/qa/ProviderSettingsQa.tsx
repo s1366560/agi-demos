@@ -377,10 +377,6 @@ const qaConfig: DesktopRuntimeConfig = {
   projectId: QA_PROJECT_ID,
   workspaceId: 'workspace-desktop-client',
   mode: 'cloud',
-  llmProvider: 'openai',
-  llmBaseUrl: 'https://api.openai.com/v1',
-  llmModel: 'gpt-5.1',
-  llmApiKey: '',
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -636,12 +632,14 @@ function ProviderSettingsQa() {
       initialSection={initialSection}
       auth={qaAuth}
       config={config}
+      runtimeProvider={null}
       connection="ready"
       wsConnected
       wsError={null}
       runtimeDisabledReason={null}
       onClose={() => undefined}
       onConfigChange={setConfig}
+      onRuntimeStatusRefresh={async () => undefined}
       onRefreshRuntime={() => undefined}
       onContextChange={async () => undefined}
       onSignOut={() => undefined}

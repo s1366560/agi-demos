@@ -21,6 +21,7 @@ import type {
   AuthState,
   ConnectionState,
   DesktopRuntimeConfig,
+  LocalRuntimeProvider,
   ManagedAgentDefinition,
   ManagedPlugin,
   ManagedSkill,
@@ -65,12 +66,14 @@ type SettingsWindowProps = {
   initialSection?: SettingsSection;
   auth: AuthState;
   config: DesktopRuntimeConfig;
+  runtimeProvider: LocalRuntimeProvider | null;
   connection: ConnectionState;
   wsConnected: boolean;
   wsError: string | null;
   runtimeDisabledReason: string | null;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
+  onRuntimeStatusRefresh: () => Promise<void>;
   onRefreshRuntime: () => void;
   onContextChange: (tenantId: string, projectId: string) => Promise<void>;
   onSignOut: () => void | Promise<void>;
@@ -126,12 +129,14 @@ export function SettingsWindow({
   initialSection = 'account',
   auth,
   config,
+  runtimeProvider,
   connection,
   wsConnected,
   wsError,
   runtimeDisabledReason,
   onClose,
   onConfigChange,
+  onRuntimeStatusRefresh,
   onRefreshRuntime,
   onContextChange,
   onSignOut,
@@ -512,9 +517,11 @@ export function SettingsWindow({
 
               {section === 'models' ? (
                 <ModelProviderWorkspace
+                  key={`${config.mode}|${config.apiBaseUrl}|${config.tenantId}`}
                   config={config}
+                  runtimeProvider={runtimeProvider}
                   canManage={canManageProviders}
-                  onConfigChange={onConfigChange}
+                  onRuntimeStatusRefresh={onRuntimeStatusRefresh}
                   onCountChange={updateModelCount}
                 />
               ) : null}

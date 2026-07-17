@@ -43,6 +43,10 @@ const modelProviderWorkspaceSource = readFileSync(
   new URL('../src/features/settings/ModelProviderWorkspace.tsx', import.meta.url),
   'utf8',
 );
+const settingsWindowSource = readFileSync(
+  new URL('../src/features/settings/SettingsWindow.tsx', import.meta.url),
+  'utf8',
+);
 const providerSettingsQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
   'utf8',
@@ -388,8 +392,64 @@ test('provider routing and usage obey current runtime and request identity', () 
   assert.match(providerOverviewPanelsSource, /return \(\) => controller\.abort\(\)/);
   assert.match(
     modelProviderWorkspaceSource,
-    /config\.llmProvider === provider\.provider_type[\s\S]{0,220}config\.llmModel === \(provider\.llm_model \?\? ''\)/,
+    /config\.mode === 'local'[\s\S]{0,80}\? runtimeProvider\?\.provider_id === provider\.id[\s\S]{0,80}: provider\.runtime_selected === true/,
   );
+  assert.match(modelProviderWorkspaceSource, /provider\.runtime_selected === true/);
+  assert.doesNotMatch(
+    modelProviderWorkspaceSource,
+    /llmProvider|llmBaseUrl|llmModel|llmApiKey|onConfigChange/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /requestClient\.selectLlmRuntimeProvider\([\s\S]{0,120}selectedProvider\.revision/,
+  );
+  assert.match(providerOverviewPanelsSource, /await onRuntimeSelected\(updated\)/);
+  const updateProvider =
+    modelProviderWorkspaceSource.match(
+      /const updateProvider = useCallback\([\s\S]*?\n  \);\n\n  const saveProvider/,
+    )?.[0] ?? '';
+  const ordinarySave =
+    modelProviderWorkspaceSource.match(
+      /const saveProvider = useCallback\([\s\S]*?\n  \);\n\n  const validateProvider/,
+    )?.[0] ?? '';
+  assert.match(updateProvider, /requestClient\.updateLlmProvider/);
+  assert.doesNotMatch(updateProvider, /selectLlmRuntimeProvider|refreshRuntimeProjection/);
+  assert.match(ordinarySave, /updateProvider/);
+  assert.match(
+    ordinarySave,
+    /await refreshRuntimeProjection\(requestScope, requestClient\)/,
+  );
+  assert.doesNotMatch(ordinarySave, /selectLlmRuntimeProvider/);
+  assert.match(modelProviderWorkspaceSource, /onSave=\{updateProvider\}/);
+  assert.match(
+    modelProviderWorkspaceSource,
+    /const refreshRuntimeProjection = useCallback\([\s\S]{0,260}clientRef\.current !== requestClient[\s\S]{0,180}await onRuntimeStatusRefresh\(\)/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /catch \{[\s\S]{0,180}showToast\(t\('providers\.runtimeRefreshFailed'\)\)/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /const selected = await requestClient\.selectLlmRuntimeProvider[\s\S]{0,360}replaceProvider\(selected\)[\s\S]{0,320}refreshRuntimeProjection\(requestScope, requestClient\)/,
+  );
+  assert.match(
+    settingsWindowSource,
+    /key=\{`\$\{config\.mode\}\|\$\{config\.apiBaseUrl\}\|\$\{config\.tenantId\}`\}/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /!mountedRef\.current[\s\S]{0,100}scopeKeyRef\.current !== requestScope/,
+  );
+  assert.match(modelProviderWorkspaceSource, /const clientRef = useRef\(client\)/);
+  assert.equal(
+    (modelProviderWorkspaceSource.match(/const requestClient = client/g) ?? []).length >= 5,
+    true,
+  );
+  assert.match(modelProviderWorkspaceSource, /clientRef\.current !== requestClient/);
+  const scopeKeyDeclaration =
+    modelProviderWorkspaceSource.match(/const scopeKey = .*;/)?.[0] ?? '';
+  assert.doesNotMatch(scopeKeyDeclaration, /apiKey|localApiToken/);
   assert.match(
     modelProviderWorkspaceSource,
     /items\.filter\([\s\S]{0,120}!item\.operation_type \|\| item\.operation_type === 'llm'/,
@@ -406,6 +466,59 @@ test('provider settings QA records preserve the authoritative LLM operation cont
     providerSettingsQaSource,
     /provider_type:\s*'openai'[\s\S]{0,160}auth_methods:\s*\['api_key'\][\s\S]{0,120}probe_supported:\s*true/,
   );
+  assert.doesNotMatch(providerSettingsQaSource, /llmProvider|llmBaseUrl|llmModel|llmApiKey/);
+});
+
+test('runtime selection is an explicit revision-guarded provider action', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    const selected = String(input).endsWith('/runtime-selection');
+    return new Response(
+      JSON.stringify({
+        id: 'provider-local',
+        name: 'Local provider',
+        provider_type: 'openai',
+        runtime_selected: selected,
+        revision: selected ? 9 : 8,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const local = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-user-session',
+      localApiToken: 'launch-capability',
+    });
+    const mutation = {
+      name: 'Local provider',
+      providerType: 'openai',
+      authMethod: 'api_key',
+      baseUrl: 'https://llm.example.test/v1',
+      primaryModel: 'gpt-test',
+      allowedModels: ['gpt-test'],
+      active: true,
+      expectedRevision: 7,
+    };
+
+    const updated = await local.updateLlmProvider('provider-local', mutation);
+    assert.equal(updated.runtime_selected, false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.input.endsWith('/provider-local'), true);
+
+    const selected = await local.selectLlmRuntimeProvider('provider-local', updated.revision ?? 0);
+    assert.equal(selected.runtime_selected, true);
+    assert.equal(calls[1]?.input.endsWith('/provider-local/runtime-selection'), true);
+    assert.equal(calls[1]?.init?.method, 'PUT');
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { expected_revision: 8 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('provider adapters use PUT, Rust revision guards, and canonical health checks', async () => {

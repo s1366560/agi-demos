@@ -29,11 +29,15 @@ export type DesktopRuntimeConfig = {
   projectId: string;
   workspaceId: string;
   mode: RuntimeMode;
-  llmProvider: 'mock' | 'openai' | 'anthropic' | string;
-  llmBaseUrl: string;
-  llmModel: string;
-  llmApiKey: string;
   workspaceRoot: string;
+};
+
+export type LocalRuntimeProvider = {
+  tenant_id: string;
+  provider_id: string;
+  provider_type: string;
+  model: string;
+  credential_configured: boolean;
 };
 
 export type LocalRuntimeStatus = {
@@ -44,12 +48,20 @@ export type LocalRuntimeStatus = {
   tool_count: number;
   tools: string[];
   config: {
-    provider: string;
-    base_url: string;
-    model: string;
     workspace_root: string;
   };
+  runtime_providers: LocalRuntimeProvider[];
 };
+
+export function runtimeProviderForTenant(
+  status: LocalRuntimeStatus | null,
+  tenantId: string,
+): LocalRuntimeProvider | null {
+  if (!status || !tenantId) return null;
+  const matches =
+    status.runtime_providers?.filter((provider) => provider.tenant_id === tenantId) ?? [];
+  return matches.length === 1 ? matches[0] : null;
+}
 
 export function mergeLocalRuntimeStatus(
   config: DesktopRuntimeConfig,
@@ -61,11 +73,7 @@ export function mergeLocalRuntimeStatus(
     localApiToken: status.api_token,
     tenantId: config.tenantId.trim() || 'local',
     projectId: config.projectId.trim() || 'local-project',
-    workspaceRoot: config.workspaceRoot.trim() || status.workspace_root || config.workspaceRoot,
-    llmProvider: config.llmProvider || status.config.provider || 'unconfigured',
-    llmBaseUrl: config.llmBaseUrl || status.config.base_url || DEFAULT_CONFIG.llmBaseUrl,
-    llmModel: config.llmModel || status.config.model || '',
-    llmApiKey: config.llmApiKey,
+    workspaceRoot: status.workspace_root || config.workspaceRoot,
   };
 }
 
@@ -1226,9 +1234,5 @@ export const DEFAULT_CONFIG: DesktopRuntimeConfig = {
   projectId: '',
   workspaceId: '',
   mode: 'local',
-  llmProvider: 'unconfigured',
-  llmBaseUrl: 'http://127.0.0.1:11434/v1',
-  llmModel: '',
-  llmApiKey: '',
   workspaceRoot: '',
 };

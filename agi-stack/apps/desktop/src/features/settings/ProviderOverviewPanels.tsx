@@ -26,10 +26,16 @@ export type ProviderTab = 'overview' | 'connection' | 'models' | 'routing' | 'us
 type ProviderOverviewPanelProps = {
   provider: ManagedLlmProvider;
   mode: RuntimeMode;
+  runtimeSelected: boolean;
   onTabChange: (tab: ProviderTab) => void;
 };
 
-export function ProviderOverviewPanel({ provider, mode, onTabChange }: ProviderOverviewPanelProps) {
+export function ProviderOverviewPanel({
+  provider,
+  mode,
+  runtimeSelected,
+  onTabChange,
+}: ProviderOverviewPanelProps) {
   const { locale, t } = useI18n();
   const enabledModels = provider.allowed_models ?? [];
   const checkedAt = provider.health_last_check
@@ -133,7 +139,7 @@ export function ProviderOverviewPanel({ provider, mode, onTabChange }: ProviderO
             <span>{t('providers.defaultRole')}</span>
             <b>{provider.llm_model || t('providers.notConfigured')}</b>
             <em>
-              {mode === 'local' && provider.runtime_selected
+              {mode === 'local' && runtimeSelected
                 ? t('providers.localRuntimeSelected')
                 : t('providers.providerPrimaryModel')}
             </em>
@@ -166,7 +172,7 @@ type ProviderRoutingPanelProps = {
     provider: ManagedLlmProvider,
     mutation: LlmProviderMutationInput,
   ) => Promise<ManagedLlmProvider>;
-  onRuntimeSelected: (provider: ManagedLlmProvider) => void;
+  onRuntimeSelected: (provider: ManagedLlmProvider) => Promise<void>;
 };
 
 export function ProviderRoutingPanel({
@@ -185,19 +191,25 @@ export function ProviderRoutingPanel({
       ] as string[],
     [provider.allowed_models, provider.llm_model],
   );
-  const [defaultModel, setDefaultModel] = useState(provider.llm_model ?? availableModels[0] ?? '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDefaultModel(provider.llm_model ?? availableModels[0] ?? '');
-    setError(null);
-  }, [availableModels, provider.id, provider.llm_model]);
+  const initialDefaultModel = provider.llm_model ?? availableModels[0] ?? '';
+  const [routingDraft, setRoutingDraft] = useState({
+    providerId: provider.id,
+    defaultModel: initialDefaultModel,
+  });
+  const [savingProviderId, setSavingProviderId] = useState<string | null>(null);
+  const [providerError, setProviderError] = useState<{
+    providerId: string;
+    message: string;
+  } | null>(null);
+  const defaultModel =
+    routingDraft.providerId === provider.id ? routingDraft.defaultModel : initialDefaultModel;
+  const saving = savingProviderId === provider.id;
+  const error = providerError?.providerId === provider.id ? providerError.message : null;
 
   const localRoutingAvailable = mode === 'local';
   const saveDefaultRoute = async () => {
-    setSaving(true);
-    setError(null);
+    setSavingProviderId(provider.id);
+    setProviderError(null);
     try {
       const draft = providerDraftFromProvider(provider);
       draft.primaryModel = defaultModel;
@@ -206,11 +218,14 @@ export function ProviderRoutingPanel({
       enabled.add(defaultModel);
       draft.allowedModels = [...enabled].join('\n');
       const updated = await onSave(provider, providerMutationFromDraft(draft));
-      onRuntimeSelected(updated);
+      await onRuntimeSelected(updated);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setProviderError({
+        providerId: provider.id,
+        message: caught instanceof Error ? caught.message : String(caught),
+      });
     } finally {
-      setSaving(false);
+      setSavingProviderId((current) => (current === provider.id ? null : current));
     }
   };
 
@@ -256,7 +271,9 @@ export function ProviderRoutingPanel({
           <select
             value={defaultModel}
             disabled={!localRoutingAvailable || !canManage}
-            onChange={(event) => setDefaultModel(event.target.value)}
+            onChange={(event) =>
+              setRoutingDraft({ providerId: provider.id, defaultModel: event.target.value })
+            }
           >
             {availableModels.map((model) => (
               <option value={model} key={model}>

@@ -71,13 +71,118 @@ pub(super) fn initialize_resource_registry(connection: &Connection) -> Result<()
                PRIMARY KEY(kind, scope_kind, scope_id, id)
              );
              CREATE INDEX IF NOT EXISTS idx_desktop_managed_resources_scope
-               ON desktop_managed_resources(kind, scope_kind, scope_id, status);",
+               ON desktop_managed_resources(kind, scope_kind, scope_id, status);
+             CREATE TABLE IF NOT EXISTS desktop_llm_provider_selections (
+               tenant_id TEXT PRIMARY KEY,
+               provider_id TEXT NOT NULL,
+               selected_at_ms INTEGER NOT NULL
+             );",
         )
         .map_err(|error| error.to_string())?;
     seed_resource_registry(connection)
 }
 
 impl DesktopSessionStore {
+    pub(super) fn list_runtime_provider_connections(&self) -> Result<Vec<(String, Value)>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT scope_id, value_json FROM desktop_managed_resources
+                 WHERE kind = 'provider' AND scope_kind = 'tenant'
+                 ORDER BY scope_id ASC, id ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let providers = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| error.to_string())?
+            .map(|row| {
+                let (tenant_id, value_json) = row.map_err(|error| error.to_string())?;
+                let provider =
+                    serde_json::from_str(&value_json).map_err(|error| error.to_string())?;
+                Ok((tenant_id, provider))
+            })
+            .collect();
+        providers
+    }
+
+    pub(super) fn list_selected_llm_providers(&self) -> Result<Vec<(String, String)>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT tenant_id, provider_id FROM desktop_llm_provider_selections
+                 ORDER BY tenant_id ASC, provider_id ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let selections = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|error| error.to_string())?
+            .map(|row| row.map_err(|error| error.to_string()))
+            .collect();
+        selections
+    }
+
+    pub(super) fn select_llm_provider(
+        &self,
+        tenant_id: &str,
+        provider_id: &str,
+        expected_revision: u64,
+        now_ms: i64,
+    ) -> Result<Value, ResourceRegistryError> {
+        let mut connection = self.connection().map_err(ResourceRegistryError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        let provider = transaction
+            .query_row(
+                "SELECT revision, value_json FROM desktop_managed_resources
+                 WHERE kind = 'provider' AND scope_kind = 'tenant'
+                   AND scope_id = ?1 AND id = ?2",
+                params![tenant_id, provider_id],
+                |row| Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?
+            .ok_or(ResourceRegistryError::NotFound)?;
+        if provider.0 != expected_revision {
+            return Err(ResourceRegistryError::RevisionConflict {
+                expected: expected_revision,
+                actual: provider.0,
+            });
+        }
+        transaction
+            .execute(
+                "INSERT INTO desktop_llm_provider_selections(tenant_id, provider_id, selected_at_ms)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(tenant_id) DO UPDATE SET
+                   provider_id = excluded.provider_id,
+                   selected_at_ms = excluded.selected_at_ms",
+                params![tenant_id, provider_id, now_ms],
+            )
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        serde_json::from_str(&provider.1)
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))
+    }
+
+    pub(super) fn clear_llm_provider_selection_if_matches(
+        &self,
+        tenant_id: &str,
+        provider_id: &str,
+    ) -> Result<bool, String> {
+        self.connection()?
+            .execute(
+                "DELETE FROM desktop_llm_provider_selections
+                 WHERE tenant_id = ?1 AND provider_id = ?2",
+                params![tenant_id, provider_id],
+            )
+            .map(|changed| changed > 0)
+            .map_err(|error| error.to_string())
+    }
+
     pub(super) fn list_managed_resources(
         &self,
         kind: ManagedResourceKind,
@@ -139,6 +244,17 @@ impl DesktopSessionStore {
         mut value: Value,
         now_ms: i64,
     ) -> Result<Value, ResourceRegistryError> {
+        let clear_provider_selection = kind == ManagedResourceKind::Provider
+            && (status != "active"
+                || value.get("is_active").and_then(Value::as_bool) != Some(true)
+                || value
+                    .get("base_url")
+                    .and_then(Value::as_str)
+                    .map_or(true, |value| value.trim().is_empty())
+                || value
+                    .get("llm_model")
+                    .and_then(Value::as_str)
+                    .map_or(true, |value| value.trim().is_empty()));
         let mut connection = self.connection().map_err(ResourceRegistryError::Storage)?;
         let transaction = connection
             .transaction()
@@ -200,6 +316,15 @@ impl DesktopSessionStore {
                 ],
             )
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        if clear_provider_selection && scope_kind == "tenant" {
+            transaction
+                .execute(
+                    "DELETE FROM desktop_llm_provider_selections
+                     WHERE tenant_id = ?1 AND provider_id = ?2",
+                    params![scope_id, id],
+                )
+                .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        }
         transaction
             .commit()
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;

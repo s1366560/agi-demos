@@ -239,7 +239,7 @@ import type {
   WorkspaceSummary,
   WorkspaceTask,
 } from './types';
-import { DEFAULT_CONFIG, mergeLocalRuntimeStatus } from './types';
+import { DEFAULT_CONFIG, mergeLocalRuntimeStatus, runtimeProviderForTenant } from './types';
 
 const emptyDataset: RuntimeDataset = {
   workspaces: [],
@@ -505,10 +505,6 @@ function detectTauriShell(): boolean {
 
 function localRuntimeTauriConfig(config: DesktopRuntimeConfig) {
   return {
-    provider: config.llmProvider || 'mock',
-    base_url: config.llmBaseUrl,
-    model: config.llmModel,
-    api_key: config.llmApiKey,
     workspace_root: config.workspaceRoot,
   };
 }
@@ -1795,6 +1791,10 @@ export function App() {
     localRuntimeStatus,
     runsInTauri,
   );
+  const runtimeProvider =
+    config.mode === 'local'
+      ? runtimeProviderForTenant(localRuntimeStatus, config.tenantId)
+      : null;
 
   const syncLocalRuntimeConfig = useCallback(
     async (nextConfig: DesktopRuntimeConfig): Promise<DesktopRuntimeConfig> => {
@@ -1809,6 +1809,22 @@ export function App() {
     },
     [runsInTauri],
   );
+
+  const refreshLocalRuntimeStatus = useCallback(async (): Promise<void> => {
+    if (!runsInTauri || configRef.current.mode !== 'local') return;
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (!invoke) return;
+    try {
+      const status = await invoke<LocalRuntimeStatus>('local_runtime_status');
+      if (configRef.current.mode !== 'local') return;
+      setLocalRuntimeStatus(status);
+      commitRuntimeConfig(mergeLocalRuntimeStatus(configRef.current, status));
+    } catch (caught) {
+      const message = formatError(caught);
+      setError(message);
+      throw caught instanceof Error ? caught : new Error(message);
+    }
+  }, [commitRuntimeConfig, runsInTauri]);
 
   useEffect(() => {
     if (!localRuntimeMode) return;
@@ -3550,10 +3566,6 @@ export function App() {
       apiBaseUrl: config.apiBaseUrl,
       localApiToken: config.localApiToken,
       mode: config.mode,
-      llmProvider: config.llmProvider,
-      llmBaseUrl: config.llmBaseUrl,
-      llmModel: config.llmModel,
-      llmApiKey: config.llmApiKey,
       workspaceRoot: config.workspaceRoot,
     });
     resetProjectScopedState();
@@ -4698,18 +4710,18 @@ export function App() {
             ? 'waiting'
             : 'offline';
   const runtimeHealthLabel = runtimeHealthLabels[runtimeHealthState];
+  const localRuntimeProviderLabel =
+    runtimeProvider?.provider_type.trim() || t('providers.notAvailable');
+  const localRuntimeModelLabel =
+    runtimeProvider?.model.trim() || t('providers.notAvailable');
   const runtimeMonitorHealthMetrics = [
     {
       label: 'Provider',
-      value: localRuntimeMode
-        ? localRuntimeStatus?.config.provider || config.llmProvider || 'not configured'
-        : config.mode,
+      value: config.mode === 'local' ? localRuntimeProviderLabel : config.mode,
     },
     {
       label: 'Model',
-      value: localRuntimeMode
-        ? localRuntimeStatus?.config.model || config.llmModel || 'not configured'
-        : 'server managed',
+      value: config.mode === 'local' ? localRuntimeModelLabel : 'server managed',
     },
     {
       label: 'Tools',
@@ -5251,7 +5263,7 @@ export function App() {
       sending={sending}
       disabledReason={sessionChatDisabledReason}
       activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
-      modelLabel={config.llmModel.trim() || undefined}
+      modelLabel={config.mode === 'local' ? localRuntimeModelLabel : undefined}
       runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
       runtimeTargetOptions={runtimeTargetComposerOptions}
       runInputDelivery={effectiveRunInputDeliveryValue}
@@ -5703,12 +5715,14 @@ export function App() {
           initialSection={settingsInitialSection}
           auth={auth}
           config={config}
+          runtimeProvider={runtimeProvider}
           connection={connection}
           wsConnected={socket.connected}
           wsError={socket.error}
           runtimeDisabledReason={runtimeDisabledReason}
           onClose={() => setSettingsWindowOpen(false)}
           onConfigChange={handleConfigChange}
+          onRuntimeStatusRefresh={refreshLocalRuntimeStatus}
           onRefreshRuntime={() => void refreshRuntime()}
           onContextChange={applySettingsContext}
           onSignOut={() => void logout()}
