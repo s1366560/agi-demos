@@ -305,6 +305,97 @@ class Neo4jClient:
 
         await self.execute_query(query, **params)  # type: ignore[arg-type]
 
+    async def save_nodes_batch(
+        self,
+        nodes: list[dict[str, Any]],
+    ) -> None:
+        """
+        Save (MERGE) many nodes with one query per (labels, property keys) group.
+
+        Each item must provide ``labels`` (list[str]), ``uuid`` (str) and
+        ``properties`` (dict). Grouping keeps label interpolation static per
+        query while sending all rows of a group in a single UNWIND round trip,
+        instead of one round trip per node.
+
+        Args:
+            nodes: Items with keys "labels", "uuid", "properties".
+
+        Raises:
+            ValueError: If labels or property keys contain invalid characters
+        """
+        if not nodes:
+            return
+
+        groups: dict[tuple[tuple[str, ...], tuple[str, ...]], list[dict[str, Any]]] = {}
+        for node in nodes:
+            labels = list(node["labels"])
+            properties = {k: v for k, v in node["properties"].items() if k != "uuid"}
+            for label in labels:
+                _validate_identifier(label, "node label")
+            for key in properties:
+                _validate_identifier(key, "property key")
+            group_key = (tuple(labels), tuple(properties.keys()))
+            groups.setdefault(group_key, []).append(
+                {"uuid": node["uuid"], "properties": properties}
+            )
+
+        for (label_group, _property_keys), rows in groups.items():
+            labels_str = ":".join(label_group)
+            query = f"""
+                UNWIND $rows AS row
+                MERGE (n:{labels_str} {{uuid: row.uuid}})
+                SET n += row.properties
+            """
+            await self.execute_query(query, rows=rows)
+
+    async def save_edges_batch(
+        self,
+        edges: list[dict[str, Any]],
+    ) -> None:
+        """
+        Save (MERGE) many edges with one query per (type, property keys) group.
+
+        Each item must provide ``from_uuid``, ``to_uuid``, ``relationship_type``
+        and optional ``properties``. Same round-trip savings as
+        ``save_nodes_batch``.
+
+        Args:
+            edges: Items with keys "from_uuid", "to_uuid", "relationship_type"
+                and optional "properties".
+
+        Raises:
+            ValueError: If relationship types or property keys are invalid
+        """
+        if not edges:
+            return
+
+        groups: dict[tuple[str, tuple[str, ...]], list[dict[str, Any]]] = {}
+        for edge in edges:
+            relationship_type = str(edge["relationship_type"])
+            _validate_identifier(relationship_type, "relationship type")
+            properties = dict(edge.get("properties") or {})
+            for key in properties:
+                _validate_identifier(key, "property key")
+            group_key = (relationship_type, tuple(properties.keys()))
+            groups.setdefault(group_key, []).append(
+                {
+                    "from_uuid": edge["from_uuid"],
+                    "to_uuid": edge["to_uuid"],
+                    "properties": properties,
+                }
+            )
+
+        for (relationship_type, property_keys), rows in groups.items():
+            set_clause = "SET r += row.properties" if property_keys else ""
+            query = f"""
+                UNWIND $rows AS row
+                MATCH (from {{uuid: row.from_uuid}})
+                MATCH (to {{uuid: row.to_uuid}})
+                MERGE (from)-[r:{relationship_type}]->(to)
+                {set_clause}
+            """
+            await self.execute_query(query, rows=rows)
+
     async def delete_node(self, uuid: str) -> bool:
         """
         Delete a node by UUID (with DETACH to remove relationships).

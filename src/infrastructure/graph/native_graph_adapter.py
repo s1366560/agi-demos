@@ -648,31 +648,40 @@ class NativeGraphAdapter(GraphStorePort):
                 existing_entities=existing_entities,
             )
 
-            # 5. Save entities to Neo4j
-            entity_edges: list[EpisodicEdge] = []
-            for entity in unique_entities:
-                # Save entity node
-                await self._neo4j_client.save_node(
-                    labels=entity.get_labels(),
-                    uuid=entity.uuid,
-                    properties=entity.to_neo4j_properties(),
-                )
+            # 5. Save entities to Neo4j (one UNWIND query per label/property
+            # group instead of one round trip per entity).
+            await self._neo4j_client.save_nodes_batch(
+                [
+                    {
+                        "labels": entity.get_labels(),
+                        "uuid": entity.uuid,
+                        "properties": entity.to_neo4j_properties(),
+                    }
+                    for entity in unique_entities
+                ]
+            )
 
-            for entity in final_entities:
-                # Create MENTIONS edge from episode to entity
-                edge = EpisodicEdge(
+            # Create MENTIONS edges from episode to each mentioned entity
+            # (one UNWIND query for the whole batch).
+            entity_edges: list[EpisodicEdge] = [
+                EpisodicEdge(
                     source_uuid=episode_uuid,
                     target_uuid=entity.uuid,
                     relationship_type="MENTIONS",
                 )
-                entity_edges.append(edge)
-
-                await self._neo4j_client.save_edge(
-                    from_uuid=episode_uuid,
-                    to_uuid=entity.uuid,
-                    relationship_type="MENTIONS",
-                    properties=edge.to_neo4j_properties(),
-                )
+                for entity in final_entities
+            ]
+            await self._neo4j_client.save_edges_batch(
+                [
+                    {
+                        "from_uuid": edge.source_uuid,
+                        "to_uuid": edge.target_uuid,
+                        "relationship_type": "MENTIONS",
+                        "properties": edge.to_neo4j_properties(),
+                    }
+                    for edge in entity_edges
+                ]
+            )
 
             # 6. Extract relationships with edge type constraints
             relationship_extractor = self._get_relationship_extractor()
@@ -1571,8 +1580,11 @@ class NativeGraphAdapter(GraphStorePort):
                     entity_type=entity_type,
                     summary=props.get("summary", "") or "",
                     project_id=props.get("project_id"),
-                    extra={k: v for k, v in props.items()
-                           if k not in {"uuid", "name", "entity_type", "summary", "project_id"}},
+                    extra={
+                        k: v
+                        for k, v in props.items()
+                        if k not in {"uuid", "name", "entity_type", "summary", "project_id"}
+                    },
                 )
             )
         return out
@@ -1609,8 +1621,11 @@ class NativeGraphAdapter(GraphStorePort):
                     summary=props.get("summary", "") or "",
                     member_count=int(props.get("member_count", 0) or 0),
                     project_id=props.get("project_id"),
-                    extra={k: v for k, v in props.items()
-                           if k not in {"uuid", "name", "summary", "member_count", "project_id"}},
+                    extra={
+                        k: v
+                        for k, v in props.items()
+                        if k not in {"uuid", "name", "summary", "member_count", "project_id"}
+                    },
                 )
             )
         return out
@@ -1687,8 +1702,7 @@ class NativeGraphAdapter(GraphStorePort):
             scope = f"WHERE {label_filter} AND {cond_a} AND {cond_b}"
         elif tenant_id:
             scope = (
-                f"WHERE {label_filter} AND a.tenant_id = $tenant_id "
-                "AND b.tenant_id = $tenant_id"
+                f"WHERE {label_filter} AND a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id"
             )
         else:
             scope = f"WHERE {label_filter}"
@@ -1743,9 +1757,7 @@ class NativeGraphAdapter(GraphStorePort):
             else []
         )
         communities = (
-            await self._export_communities(
-                params, self._export_scope("c", project_id, tenant_id)
-            )
+            await self._export_communities(params, self._export_scope("c", project_id, tenant_id))
             if include_communities
             else []
         )
@@ -1866,7 +1878,9 @@ class NativeGraphAdapter(GraphStorePort):
             cond_b = self._project_node_scope_condition("b")
             scope = f"WHERE {label_filter} AND {cond_a} AND {cond_b}"
         elif tenant_id:
-            scope = f"WHERE {label_filter} AND a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id"
+            scope = (
+                f"WHERE {label_filter} AND a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id"
+            )
         else:
             scope = f"WHERE {label_filter}"
         rel_q = f"MATCH (a)-[r]->(b) {scope} RETURN count(r) AS count"
@@ -2224,7 +2238,10 @@ class NativeGraphAdapter(GraphStorePort):
             limit=limit,
         )
         return [
-            {"props": dict(r["props"]) if r.get("props") else {}, "labels": list(r.get("labels", []))}
+            {
+                "props": dict(r["props"]) if r.get("props") else {},
+                "labels": list(r.get("labels", [])),
+            }
             for r in res.records
             if r.get("props") is not None
         ]
@@ -2565,10 +2582,7 @@ class NativeGraphAdapter(GraphStorePort):
             ORDER BY entity_count DESC
         """
         res = await self._neo4j_client.execute_query(q, **params)
-        return [
-            {"entity_type": r["entity_type"], "count": r["entity_count"]}
-            for r in res.records
-        ]
+        return [{"entity_type": r["entity_type"], "count": r["entity_count"]} for r in res.records]
 
     async def get_entity(self, entity_uuid: str) -> dict[str, Any] | None:
         """Return an entity's props + labels by uuid, or None if absent."""
@@ -3171,9 +3185,7 @@ class NativeGraphAdapter(GraphStorePort):
             if not uuid:
                 failed += 1
                 continue
-            text = "\n".join(
-                part for part in (record.get("name"), record.get("summary")) if part
-            )
+            text = "\n".join(part for part in (record.get("name"), record.get("summary")) if part)
             try:
                 embedding = await _create_embedding_from_embedder(embedder, text)
                 await self._neo4j_client.execute_query(
@@ -3217,7 +3229,9 @@ class NativeGraphAdapter(GraphStorePort):
             res = await self._neo4j_client.execute_query(q)
         return int(res.records[0].get("cleared", 0) or 0) if res.records else 0
 
-    async def get_vector_index_dimension(self, index_name: str = "entity_name_vector") -> int | None:
+    async def get_vector_index_dimension(
+        self, index_name: str = "entity_name_vector"
+    ) -> int | None:
         """Return the dimension of an existing vector index, or None if absent."""
         return await self._neo4j_client.get_vector_index_dimension(index_name)
 
@@ -3352,9 +3366,7 @@ class NativeGraphAdapter(GraphStorePort):
             ]
             return entities, relationships
         except Exception as e:
-            logger.warning(
-                "Failed to load graph context for memory %s: %s", memory_id, e
-            )
+            logger.warning("Failed to load graph context for memory %s: %s", memory_id, e)
             return [], []
 
     async def count_episodes_by_age(

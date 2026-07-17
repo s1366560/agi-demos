@@ -25,6 +25,8 @@ def mock_neo4j_client():
     client.execute_query = AsyncMock()
     client.save_node = AsyncMock()
     client.save_edge = AsyncMock()
+    client.save_nodes_batch = AsyncMock()
+    client.save_edges_batch = AsyncMock()
     client.find_node_by_uuid = AsyncMock(return_value=None)
     client.driver = MagicMock()
     client.close = AsyncMock()
@@ -428,9 +430,11 @@ class TestNativeGraphAdapterProcessEpisode:
             )
 
         assert [node.uuid for node in result.nodes] == ["existing-ada"]
-        mock_neo4j_client.save_node.assert_not_awaited()
-        mock_neo4j_client.save_edge.assert_awaited_once()
-        assert mock_neo4j_client.save_edge.await_args.kwargs["to_uuid"] == "existing-ada"
+        # All existing entities deduped away -> no new nodes to save.
+        mock_neo4j_client.save_nodes_batch.assert_awaited_once_with([])
+        mock_neo4j_client.save_edges_batch.assert_awaited_once()
+        saved_edges = mock_neo4j_client.save_edges_batch.await_args.args[0]
+        assert [edge["to_uuid"] for edge in saved_edges] == ["existing-ada"]
         relationship_extractor.extract_from_entity_nodes.assert_awaited_once()
         rel_entities = relationship_extractor.extract_from_entity_nodes.await_args.kwargs[
             "entity_nodes"
@@ -484,8 +488,10 @@ class TestNativeGraphAdapterProcessEpisode:
                 user_id="user-1",
             )
 
-        mock_neo4j_client.save_node.assert_awaited_once()
-        assert mock_neo4j_client.save_node.await_args.kwargs["labels"] == [
+        mock_neo4j_client.save_nodes_batch.assert_awaited_once()
+        saved_nodes = mock_neo4j_client.save_nodes_batch.await_args.args[0]
+        assert [node["uuid"] for node in saved_nodes] == ["new-ada"]
+        assert saved_nodes[0]["labels"] == [
             "Entity",
             "Person",
             "Node",
