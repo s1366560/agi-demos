@@ -84,6 +84,80 @@ final result: passed
 
 ---
 
+# Workspace hierarchy and overview design QA
+
+Date: 2026-07-17
+
+Scope: workspace-to-conversation tree, workspace overview geometry, structured status presentation,
+and the native local hierarchy used to exercise the prototype's happy path.
+
+## Comparison target
+
+- Source: `agi-stack/apps/desktop/qa/hierarchy-workspace-authority-source-1565.png`
+- Implementation: `agi-stack/apps/desktop/qa/hierarchy-workspace-authority-implementation-1565.png`
+- Readability source: `agi-stack/apps/desktop/qa/hierarchy-workspace-authority-source-readable-1280.png`
+- Readability implementation:
+  `agi-stack/apps/desktop/qa/hierarchy-workspace-authority-implementation-readable-1280.png`
+- Viewports: `1565 x 1161` for the authority comparison and `1280 x 720` for the final
+  prototype/fixture readability comparison, device scale factor `1`
+- Source state: Northstar / Desktop Client with two workspaces and four conversations.
+- Implementation state: authenticated cloud workspace overview with authoritative tenant, project,
+  workspace, sandbox, memory, and member data.
+
+## Full-view and focused-region comparison
+
+The reference and implementation were inspected together at the same viewport. The implementation
+now uses the prototype-owned canvas origin (`x = 284`, `y = 34`), matching the source header and card
+anchors after removing the legacy eight-pixel pane inset. Summary, metric, system, and recent-session
+regions follow the source proportions and typography. The sidebar preserves the workspace-to-session
+tree while keeping status separate from descriptive copy.
+
+Content values differ deliberately: the implementation capture is connected to the current cloud
+authority, while the source capture contains prototype sample data. The native local runtime now
+seeds the Northstar / Desktop Client hierarchy transactionally so that the same happy path can be
+exercised without fabricating cloud state or run history.
+
+The final `1280 x 720` comparison uses the live prototype and the implementation's deterministic
+workspace QA fixture. Both surfaces were updated in lockstep to a 10-pixel minimum leaf-text size and
+the higher-contrast muted token. Browser-computed text never falls below 10 pixels, neither surface
+overflows horizontally, and the enlarged captions remain inside the approved card geometry. After
+normalizing the inherited Radix font metrics and QA sidebar width, header, summary, metric, system,
+and lower-grid anchors, widths, and heights match the live prototype at the subpixel level.
+
+## Findings resolved
+
+- P0: added a stable, idempotent Rust local hierarchy seed for two workspaces and four scoped
+  conversations; immutable scope conflicts fail closed and user-edited titles, modes, and timestamps
+  are preserved across reopen.
+- P1: seeded conversation workspace reassignment now fails at the mutation boundary, preventing a
+  valid PATCH from making the local runtime unstartable on its next launch.
+- P2: seed validation checks both serialized conversation scope and the SQLite project/workspace
+  columns so column/JSON divergence cannot hide sessions from scoped lists.
+- P1: aligned the workspace overview origin, width, grid proportions, card heights, spacing, and
+  typography with the source capture.
+- P1: replaced inherited 6.5–9 pixel low-contrast captions in both the design prototype and Desktop
+  implementation with readable 10–11 pixel captions while preserving the shared geometry.
+- P1: reduced workspace secondary copy to authoritative conversation counts or load state; status is
+  exposed through an accessible labeled dot.
+- P1: removed API connection inference from the environment card. Sandbox presentation now maps only
+  explicit structured sandbox status, covers the complete server/local lifecycle vocabulary, and
+  keeps missing status visibly unknown.
+- P2: conversation rows prefer structured display, environment, and progress metadata and never infer
+  semantics from conversation titles.
+
+## Verification
+
+- Desktop tests: 356 passed.
+- Desktop TypeScript and production build: passed.
+- Rust library tests: 148 passed.
+- Rust formatting: passed.
+- Final comparison: no actionable P0, P1, or P2 visual findings remain in the compared structural
+  state.
+
+final result: passed
+
+---
+
 # Provider settings design QA
 
 ## Comparison target

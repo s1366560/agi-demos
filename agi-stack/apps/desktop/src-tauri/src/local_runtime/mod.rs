@@ -281,6 +281,104 @@ struct LocalConversation {
     updated_at: String,
 }
 
+const LOCAL_DEMO_HIERARCHY_SEED_ID: &str = "northstar-desktop-client-local-demo-v1";
+const LOCAL_DEMO_DESKTOP_WORKSPACE_ID: &str = "local-demo-desktop-client-main";
+const LOCAL_DEMO_RELIABILITY_WORKSPACE_ID: &str = "local-demo-release-reliability";
+const LOCAL_DEMO_CONVERSATION_IDS: &[&str] = &[
+    "local-demo-flaky-data-pipeline-test",
+    "local-demo-auth-middleware-review",
+    "local-demo-task-search-shortcuts",
+    "local-demo-agent-sdk-upgrade",
+];
+
+struct LocalDemoHierarchySeed {
+    workspaces: Vec<Value>,
+    conversations: Vec<LocalConversation>,
+}
+
+fn local_demo_hierarchy_seed(now: &str) -> LocalDemoHierarchySeed {
+    let provenance = json!({
+        "kind": "local_demo_seed",
+        "seed_id": LOCAL_DEMO_HIERARCHY_SEED_ID,
+        "catalog_scope": "northstar/desktop-client",
+    });
+    let workspaces = vec![
+        json!({
+            "id": LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
+            "tenant_id": "northstar",
+            "project_id": "desktop-client",
+            "name": "Desktop Client",
+            "description": "Local demo workspace for application UX, frontend, and Rust runtime delivery.",
+            "status": "open",
+            "created_at": now,
+            "updated_at": now,
+            "metadata": {
+                "runtime": "local",
+                "demo": true,
+                "provenance": provenance,
+            },
+        }),
+        json!({
+            "id": LOCAL_DEMO_RELIABILITY_WORKSPACE_ID,
+            "tenant_id": "northstar",
+            "project_id": "desktop-client",
+            "name": "Release Reliability",
+            "description": "Local demo workspace for CI health, releases, and verification evidence.",
+            "status": "open",
+            "created_at": now,
+            "updated_at": now,
+            "metadata": {
+                "runtime": "local",
+                "demo": true,
+                "provenance": provenance,
+            },
+        }),
+    ];
+    let conversations = [
+        (
+            "local-demo-flaky-data-pipeline-test",
+            LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
+            "Fix flaky data-pipeline test",
+        ),
+        (
+            "local-demo-auth-middleware-review",
+            LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
+            "Review auth middleware refactor",
+        ),
+        (
+            "local-demo-task-search-shortcuts",
+            LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
+            "Add task search shortcuts",
+        ),
+        (
+            "local-demo-agent-sdk-upgrade",
+            LOCAL_DEMO_RELIABILITY_WORKSPACE_ID,
+            "Plan agent SDK upgrade",
+        ),
+    ]
+    .into_iter()
+    .map(|(id, workspace_id, title)| LocalConversation {
+        id: id.to_string(),
+        project_id: "desktop-client".to_string(),
+        tenant_id: "northstar".to_string(),
+        title: title.to_string(),
+        workspace_id: Some(workspace_id.to_string()),
+        capability_mode: ConversationCapabilityMode::Code,
+        current_mode: ConversationRunMode::Plan,
+        created_at: now.to_string(),
+        updated_at: now.to_string(),
+    })
+    .collect();
+    LocalDemoHierarchySeed {
+        workspaces,
+        conversations,
+    }
+}
+
+fn is_local_demo_conversation(conversation_id: &str) -> bool {
+    LOCAL_DEMO_CONVERSATION_IDS.contains(&conversation_id)
+}
+
 const PLAN_MODE_TOOL_NAMES: &[&str] = &[
     "read",
     "batch_read",
@@ -571,6 +669,13 @@ impl LocalRuntimeState {
             "metadata": { "runtime": "local" },
         });
         session_store.ensure_workspace(&workspace)?;
+        let local_demo_seed = local_demo_hierarchy_seed(&now);
+        session_store.ensure_local_demo_hierarchy_seed(
+            LOCAL_DEMO_HIERARCHY_SEED_ID,
+            &local_demo_seed.workspaces,
+            &local_demo_seed.conversations,
+            &now,
+        )?;
         let mut provider_bindings = HashMap::new();
         for (tenant_id, provider) in session_store.list_runtime_provider_connections()? {
             let Some(provider_id) = provider.get("id").and_then(Value::as_str) else {
@@ -3752,6 +3857,21 @@ async fn update_conversation_mode(
 ) -> LocalJsonResult {
     let value = {
         let mut conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
+        let changes_workspace_scope = match &body.workspace_id {
+            WorkspaceIdPatch::Missing => false,
+            WorkspaceIdPatch::Null => conversation.workspace_id.is_some(),
+            WorkspaceIdPatch::Value(workspace_id) => {
+                conversation.workspace_id.as_deref() != Some(workspace_id.as_str())
+            }
+        };
+        if is_local_demo_conversation(&conversation.id) && changes_workspace_scope {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "detail": "local demo conversation workspace scope is immutable"
+                })),
+            ));
+        }
         match body.workspace_id {
             WorkspaceIdPatch::Missing => {}
             WorkspaceIdPatch::Null => conversation.workspace_id = None,
@@ -8278,7 +8398,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -8295,13 +8415,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 12;")
+                .execute_batch("PRAGMA user_version = 13;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 11"));
+        assert!(error.contains("newer than supported schema version 12"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -9000,9 +9120,404 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 11);
+        assert_eq!(schema_version, 12);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn local_demo_hierarchy_seed_creates_the_expected_fresh_scope() {
+        let state = test_state_without_session("local-demo-fresh-secret");
+
+        let default_context = state
+            .session_store
+            .workspace_context("local-user")
+            .expect("default workspace context");
+        assert_eq!(default_context.tenant_id, "local");
+        assert_eq!(default_context.project_id, "local-project");
+
+        let workspaces = state
+            .session_store
+            .list_workspaces("desktop-client")
+            .expect("desktop client workspaces");
+        assert_eq!(workspaces.len(), 2);
+        assert_eq!(
+            workspaces
+                .iter()
+                .map(|workspace| workspace["id"].as_str().expect("workspace id"))
+                .collect::<Vec<_>>(),
+            vec![
+                "local-demo-desktop-client-main",
+                "local-demo-release-reliability",
+            ]
+        );
+        for workspace in &workspaces {
+            assert_eq!(workspace["tenant_id"], "northstar");
+            assert_eq!(workspace["project_id"], "desktop-client");
+            assert_eq!(
+                workspace["metadata"]["provenance"]["kind"],
+                "local_demo_seed"
+            );
+        }
+
+        let desktop_sessions = state
+            .session_store
+            .list_conversations("desktop-client", Some("local-demo-desktop-client-main"))
+            .expect("desktop client demo sessions");
+        let reliability_sessions = state
+            .session_store
+            .list_conversations("desktop-client", Some("local-demo-release-reliability"))
+            .expect("release reliability demo sessions");
+        assert_eq!(desktop_sessions.len(), 3);
+        assert_eq!(reliability_sessions.len(), 1);
+        for conversation in desktop_sessions.iter().chain(&reliability_sessions) {
+            assert_eq!(conversation.tenant_id, "northstar");
+            assert_eq!(conversation.project_id, "desktop-client");
+            assert_eq!(
+                conversation.capability_mode,
+                ConversationCapabilityMode::Code
+            );
+            assert_eq!(conversation.current_mode, ConversationRunMode::Plan);
+            assert_eq!(
+                state
+                    .session_store
+                    .timeline_count(&conversation.id)
+                    .expect("empty demo timeline"),
+                0
+            );
+            assert!(state
+                .session_store
+                .list_runs(&conversation.id)
+                .expect("empty demo run history")
+                .is_empty());
+        }
+        let seed_marker_count: i64 = state
+            .session_store
+            .connection()
+            .expect("seed marker connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_seed_migrations
+                 WHERE seed_id = 'northstar-desktop-client-local-demo-v1'
+                   AND seed_kind = 'local_demo_hierarchy'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("local demo seed marker count");
+        assert_eq!(seed_marker_count, 1);
+    }
+
+    #[test]
+    fn local_demo_hierarchy_seed_is_idempotent_across_reopen_without_overwrite() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create demo seed root");
+        let path = root.join("desktop-sessions.db");
+        let user_updated_at = "2042-05-06T07:08:09Z";
+
+        {
+            let store = DesktopSessionStore::open(&path).expect("open first demo store");
+            let tool_host = LocalToolHost::new(&root).expect("first demo tool host");
+            let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+            let state = LocalRuntimeState::new(
+                root.clone(),
+                tool_host,
+                checkpoints,
+                "first-demo-token".to_string(),
+                store,
+            )
+            .expect("seed first demo state");
+            let mut conversation = state
+                .session_store
+                .conversation("local-demo-flaky-data-pipeline-test")
+                .expect("load demo conversation")
+                .expect("seeded demo conversation");
+            conversation.title = "User renamed this local demo session".to_string();
+            conversation.current_mode = ConversationRunMode::Build;
+            conversation.updated_at = user_updated_at.to_string();
+            state
+                .session_store
+                .update_conversation(&conversation)
+                .expect("persist user demo changes");
+        }
+
+        {
+            let store = DesktopSessionStore::open(&path).expect("reopen demo store");
+            let tool_host = LocalToolHost::new(&root).expect("second demo tool host");
+            let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+            let state = LocalRuntimeState::new(
+                root.clone(),
+                tool_host,
+                checkpoints,
+                "second-demo-token".to_string(),
+                store,
+            )
+            .expect("reopen seeded demo state");
+            assert_eq!(
+                state
+                    .session_store
+                    .list_workspaces("desktop-client")
+                    .expect("reopened workspaces")
+                    .len(),
+                2
+            );
+            assert_eq!(
+                state
+                    .session_store
+                    .list_conversations("desktop-client", None)
+                    .expect("reopened conversations")
+                    .len(),
+                4
+            );
+            let conversation = state
+                .session_store
+                .conversation("local-demo-flaky-data-pipeline-test")
+                .expect("load reopened conversation")
+                .expect("reopened demo conversation");
+            assert_eq!(conversation.title, "User renamed this local demo session");
+            assert_eq!(conversation.current_mode, ConversationRunMode::Build);
+            assert_eq!(conversation.updated_at, user_updated_at);
+            let seed_marker_count: i64 = state
+                .session_store
+                .connection()
+                .expect("reopened seed marker connection")
+                .query_row(
+                    "SELECT COUNT(*) FROM desktop_seed_migrations
+                     WHERE seed_id = 'northstar-desktop-client-local-demo-v1'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("reopened local demo seed marker count");
+            assert_eq!(seed_marker_count, 1);
+        }
+
+        std::fs::remove_dir_all(root).expect("remove demo seed root");
+    }
+
+    #[test]
+    fn local_demo_hierarchy_seed_fails_closed_on_immutable_scope_conflicts() {
+        let workspace_store = DesktopSessionStore::in_memory().expect("workspace conflict store");
+        workspace_store
+            .insert_workspace(&json!({
+                "id": "local-demo-desktop-client-main",
+                "tenant_id": "orbital",
+                "project_id": "desktop-client",
+                "name": "Conflicting workspace",
+            }))
+            .expect("insert conflicting workspace");
+        let workspace_root = test_root();
+        let workspace_error = LocalRuntimeState::new(
+            workspace_root.clone(),
+            LocalToolHost::new(&workspace_root).expect("workspace conflict tool host"),
+            Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
+            "workspace-conflict-token".to_string(),
+            workspace_store,
+        )
+        .err()
+        .expect("workspace scope conflict must fail startup");
+        assert!(workspace_error.contains("local demo workspace scope conflict"));
+
+        let conversation_store =
+            DesktopSessionStore::in_memory().expect("conversation conflict store");
+        conversation_store
+            .insert_conversation(&LocalConversation {
+                id: "local-demo-flaky-data-pipeline-test".to_string(),
+                tenant_id: "northstar".to_string(),
+                project_id: "desktop-client".to_string(),
+                workspace_id: Some("local-demo-release-reliability".to_string()),
+                title: "Conflicting conversation".to_string(),
+                capability_mode: ConversationCapabilityMode::Code,
+                current_mode: ConversationRunMode::Plan,
+                created_at: now_iso(),
+                updated_at: now_iso(),
+            })
+            .expect("insert conflicting conversation");
+        let conversation_root = test_root();
+        let conversation_error = LocalRuntimeState::new(
+            conversation_root.clone(),
+            LocalToolHost::new(&conversation_root).expect("conversation conflict tool host"),
+            Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
+            "conversation-conflict-token".to_string(),
+            conversation_store,
+        )
+        .err()
+        .expect("conversation scope conflict must fail startup");
+        assert!(conversation_error.contains("local demo conversation scope conflict"));
+    }
+
+    #[test]
+    fn local_demo_hierarchy_seed_rejects_structural_column_scope_conflicts() {
+        let store = DesktopSessionStore::in_memory().expect("column conflict store");
+        let now = now_iso();
+        let seed = local_demo_hierarchy_seed(&now);
+        store
+            .ensure_local_demo_hierarchy_seed(
+                LOCAL_DEMO_HIERARCHY_SEED_ID,
+                &seed.workspaces,
+                &seed.conversations,
+                &now,
+            )
+            .expect("apply local demo seed");
+        store
+            .connection()
+            .expect("column conflict connection")
+            .execute(
+                "UPDATE desktop_conversations
+                 SET workspace_id = 'local-demo-release-reliability'
+                 WHERE id = 'local-demo-flaky-data-pipeline-test'",
+                [],
+            )
+            .expect("corrupt structural workspace column");
+
+        let error = store
+            .ensure_local_demo_hierarchy_seed(
+                LOCAL_DEMO_HIERARCHY_SEED_ID,
+                &seed.workspaces,
+                &seed.conversations,
+                &now,
+            )
+            .expect_err("structural scope conflict must fail closed");
+        assert!(error.contains("local demo conversation column scope conflict"));
+    }
+
+    #[tokio::test]
+    async fn local_demo_hierarchy_rejects_conversation_workspace_reassignment() {
+        let state = test_state("local-demo-reassignment-secret");
+        let authenticated = state
+            .session_store
+            .validate_session_credential(
+                "local-demo-reassignment-secret",
+                Utc::now().timestamp_millis(),
+            )
+            .expect("validate local demo session")
+            .expect("authenticated local demo session");
+        state
+            .session_store
+            .switch_workspace_context(
+                &authenticated,
+                &ContextSwitchRequest {
+                    tenant_id: "northstar".to_string(),
+                    project_id: "desktop-client".to_string(),
+                    expected_revision: 0,
+                    idempotency_key: "switch-local-demo-reassignment".to_string(),
+                },
+                Utc::now().timestamp_millis(),
+            )
+            .expect("switch to local demo hierarchy");
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                "/api/v1/agent/conversations/local-demo-flaky-data-pipeline-test/mode",
+                "local-demo-reassignment-secret",
+                json!({ "workspace_id": "local-demo-release-reliability" }),
+            ))
+            .await
+            .expect("seeded conversation reassignment response");
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        let conversation = state
+            .session_store
+            .conversation("local-demo-flaky-data-pipeline-test")
+            .expect("load seeded conversation")
+            .expect("seeded conversation");
+        assert_eq!(
+            conversation.workspace_id.as_deref(),
+            Some(LOCAL_DEMO_DESKTOP_WORKSPACE_ID)
+        );
+        let now = now_iso();
+        let seed = local_demo_hierarchy_seed(&now);
+        state
+            .session_store
+            .ensure_local_demo_hierarchy_seed(
+                LOCAL_DEMO_HIERARCHY_SEED_ID,
+                &seed.workspaces,
+                &seed.conversations,
+                &now,
+            )
+            .expect("reopen invariant remains valid after rejected patch");
+    }
+
+    #[tokio::test]
+    async fn local_demo_hierarchy_routes_follow_the_exact_switched_scope() {
+        let state = test_state("local-demo-route-secret");
+        let authenticated = state
+            .session_store
+            .validate_session_credential("local-demo-route-secret", Utc::now().timestamp_millis())
+            .expect("validate local demo session")
+            .expect("authenticated local demo session");
+        state
+            .session_store
+            .switch_workspace_context(
+                &authenticated,
+                &ContextSwitchRequest {
+                    tenant_id: "northstar".to_string(),
+                    project_id: "desktop-client".to_string(),
+                    expected_revision: 0,
+                    idempotency_key: "switch-local-demo-hierarchy".to_string(),
+                },
+                Utc::now().timestamp_millis(),
+            )
+            .expect("switch to local demo hierarchy");
+        let app = local_router(state);
+
+        let workspaces_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/tenants/northstar/projects/desktop-client/workspaces")
+                    .header("authorization", "Bearer local-demo-route-secret")
+                    .body(Body::empty())
+                    .expect("workspace list request"),
+            )
+            .await
+            .expect("workspace list response");
+        assert_eq!(workspaces_response.status(), StatusCode::OK);
+        let workspaces = response_json(workspaces_response).await;
+        assert_eq!(workspaces["items"].as_array().map(Vec::len), Some(2));
+
+        let conversations_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/agent/conversations?project_id=desktop-client&workspace_id=local-demo-desktop-client-main")
+                    .header("authorization", "Bearer local-demo-route-secret")
+                    .body(Body::empty())
+                    .expect("conversation list request"),
+            )
+            .await
+            .expect("conversation list response");
+        assert_eq!(conversations_response.status(), StatusCode::OK);
+        let conversations = response_json(conversations_response).await;
+        assert_eq!(conversations["items"].as_array().map(Vec::len), Some(3));
+        for conversation in conversations["items"]
+            .as_array()
+            .expect("conversation items")
+        {
+            assert_eq!(conversation["tenant_id"], "northstar");
+            assert_eq!(conversation["project_id"], "desktop-client");
+            assert_eq!(
+                conversation["workspace_id"],
+                "local-demo-desktop-client-main"
+            );
+        }
+
+        let projection_response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/agent/conversations/local-demo-flaky-data-pipeline-test/session?tenant_id=northstar&project_id=desktop-client&workspace_id=local-demo-desktop-client-main")
+                    .header("authorization", "Bearer local-demo-route-secret")
+                    .body(Body::empty())
+                    .expect("exact session projection request"),
+            )
+            .await
+            .expect("exact session projection response");
+        assert_eq!(projection_response.status(), StatusCode::OK);
+        let projection = response_json(projection_response).await;
+        assert_eq!(projection["conversation"]["tenant_id"], "northstar");
+        assert_eq!(projection["conversation"]["project_id"], "desktop-client");
+        assert_eq!(
+            projection["conversation"]["workspace_id"],
+            "local-demo-desktop-client-main"
+        );
     }
 
     #[test]

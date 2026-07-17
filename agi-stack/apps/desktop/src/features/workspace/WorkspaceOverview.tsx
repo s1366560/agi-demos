@@ -20,7 +20,6 @@ import {
 import { useI18n } from '../../i18n';
 import type {
   AgentConversation,
-  ConnectionState,
   PlanSnapshot,
   ProjectSummary,
   WorkspaceAgentBinding,
@@ -31,6 +30,7 @@ import type {
 } from '../../types';
 import {
   buildWorkspaceOverviewModel,
+  workspaceSandboxStatusPresentation,
   type WorkspaceSessionSummary,
 } from './workspaceOverviewModel';
 import {
@@ -48,7 +48,6 @@ type WorkspaceOverviewProps = {
   agents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
   plan: PlanSnapshot | null;
   sandboxStatus: string | null;
-  connection: ConnectionState;
   newTaskDisabledReason: string | null;
   onNewTask: () => void;
   onOpenConversation: (conversationId: string) => void;
@@ -64,7 +63,6 @@ export function WorkspaceOverview({
   agents,
   plan,
   sandboxStatus,
-  connection,
   newTaskDisabledReason,
   onNewTask,
   onOpenConversation,
@@ -79,8 +77,10 @@ export function WorkspaceOverview({
     agents,
     plan,
     sandboxStatus,
-    connection,
   });
+  const sandboxPresentation = workspaceSandboxStatusPresentation(
+    model.environment.sandboxStatus,
+  );
   const projectName = project?.name ?? project?.id ?? t('overview.none');
   const workspaceName = model.workspaceName ?? t('overview.none');
   const agentRosterCopy = describeAgentRoster(
@@ -245,14 +245,15 @@ export function WorkspaceOverview({
             icon={<CodeIcon />}
             title={t('overview.executionEnvironment')}
             subtitle={t('overview.projectSandbox')}
-            status={connectionLabel(model.environment.connection, t)}
+            status={t(sandboxPresentation.labelKey)}
+            statusState={sandboxPresentation.state}
           >
             <div className="workspace-design-environment">
-              <span>
-                <i data-state={model.environment.sandboxStatus ?? 'unknown'} />
-                {model.environment.sandboxStatus ?? t('overview.unavailable')}
+              <span data-state={sandboxPresentation.state}>
+                <i />
+                {t(sandboxPresentation.labelKey)}
               </span>
-              <b>{t('overview.sandboxReportedByRuntime')}</b>
+              <b>{t(sandboxPresentation.summaryKey)}</b>
               <small>{t('overview.runtimePolicySource')}</small>
             </div>
           </SystemCard>
@@ -473,13 +474,6 @@ function collaborationModeLabel(
   if (mode === 'multi_agent_shared') return t('overview.sharedMultiAgent');
   if (mode === 'single_agent') return t('overview.singleAgent');
   return mode ?? t('overview.unavailable');
-}
-
-function connectionLabel(
-  connection: ConnectionState,
-  t: (key: string, values?: Record<string, string | number>) => string,
-) {
-  return connection === 'ready' ? t('overview.connected') : t('overview.unavailable');
 }
 
 function rosterStatusLabel(

@@ -52,7 +52,7 @@ const conversations: AgentConversation[] = [
     project_id: 'northstar-project',
     tenant_id: 'northstar',
     user_id: 'alex',
-    title: 'Desktop session interaction redesign',
+    title: 'Fix flaky data-pipeline test',
     status: 'active',
     message_count: 24,
     created_at: now,
@@ -67,7 +67,7 @@ const conversations: AgentConversation[] = [
     project_id: 'northstar-project',
     tenant_id: 'northstar',
     user_id: 'alex',
-    title: 'Provider governance review',
+    title: 'Review auth middleware refactor',
     status: 'active',
     message_count: 12,
     created_at: now,
@@ -82,7 +82,7 @@ const conversations: AgentConversation[] = [
     project_id: 'northstar-project',
     tenant_id: 'northstar',
     user_id: 'alex',
-    title: 'Workspace overview evidence pass',
+    title: 'Add task search shortcuts',
     status: 'active',
     message_count: 8,
     created_at: now,
@@ -271,7 +271,7 @@ function WorkspaceExecutionQa() {
             project={{
               id: 'northstar-project',
               tenant_id: 'northstar',
-              name: 'Northstar Labs',
+              name: 'Desktop Client',
               stats: {
                 memory_count: 248,
                 node_count: 1842,
@@ -283,7 +283,7 @@ function WorkspaceExecutionQa() {
                 ],
               },
             }}
-            tenantName="Northstar"
+            tenantName="Northstar Labs"
             conversations={conversations}
             members={{
               status: 'ready',
@@ -336,7 +336,6 @@ function WorkspaceExecutionQa() {
               },
             }}
             sandboxStatus="connected"
-            connection="ready"
             newTaskDisabledReason={null}
             onNewTask={() => undefined}
             onOpenConversation={() => undefined}

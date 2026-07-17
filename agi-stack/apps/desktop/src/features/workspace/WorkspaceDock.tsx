@@ -19,6 +19,7 @@ import type {
 } from '../../types';
 import {
   buildWorkspaceTree,
+  conversationTreeMetadataSummary,
   conversationTreeStatusPresentation,
   conversationTreeStatusValue,
   isWorkspaceConversationSelected,
@@ -166,13 +167,12 @@ export function WorkspaceDock({
                       <CubeIcon />
                       <span>
                         <strong>{workspaceLabel(workspace)}</strong>
-                        <small>
-                          {sessionSummary} · {rootStatusLabel}
-                        </small>
+                        <small>{sessionSummary}</small>
                       </span>
                       <i
                         data-status={rootStatus.tone}
-                        aria-hidden="true"
+                        role="img"
+                        aria-label={rootStatusLabel}
                         title={rootStatusLabel}
                       />
                     </button>
@@ -212,6 +212,8 @@ export function WorkspaceDock({
                           const status = conversationTreeStatusValue(conversation);
                           const statusPresentation = conversationTreeStatusPresentation(status);
                           const statusLabel = t(statusPresentation.labelKey);
+                          const sessionSummary =
+                            conversationTreeMetadataSummary(conversation) ?? statusLabel;
                           const StatusIcon = conversationStatusIcon(statusPresentation.tone);
 
                           return (
@@ -227,7 +229,7 @@ export function WorkspaceDock({
                               <CapabilityIcon />
                               <span>
                                 <strong>{conversation.title || conversation.id}</strong>
-                                <small>{statusLabel}</small>
+                                <small>{sessionSummary}</small>
                               </span>
                               <StatusIcon
                                 data-status={statusPresentation.tone}

@@ -205,6 +205,30 @@ export function conversationTreeStatusValue(conversation: AgentConversation): st
   return conversationTreeRunStatusValue(conversation) ?? conversation.status.trim().toLowerCase();
 }
 
+export function conversationTreeMetadataSummary(
+  conversation: AgentConversation,
+): string | null {
+  const metadata = recordValue(conversation.metadata);
+  if (!metadata) return null;
+
+  const run = recordValue(metadata.run);
+  const displaySummary =
+    displayMetadataText(metadata.display) ?? displayMetadataText(run?.display);
+  if (displaySummary) return displaySummary;
+
+  const environmentSummary =
+    stringValue(run?.environment_label) ??
+    environmentMetadataText(run?.environment) ??
+    stringValue(metadata.environment_label) ??
+    environmentMetadataText(metadata.environment);
+  const progressSummary =
+    progressMetadataText(run?.progress) ?? progressMetadataText(metadata.progress);
+  const summaryParts = [environmentSummary, progressSummary].filter(
+    (value): value is string => Boolean(value),
+  );
+  return summaryParts.length > 0 ? summaryParts.join(' · ') : null;
+}
+
 function conversationTreeRunStatusValue(conversation: AgentConversation): string | null {
   const run = conversation.metadata?.run;
   if (run && typeof run === 'object' && !Array.isArray(run)) {
@@ -212,6 +236,57 @@ function conversationTreeRunStatusValue(conversation: AgentConversation): string
     if (typeof status === 'string' && status.trim()) return status.trim().toLowerCase();
   }
   return null;
+}
+
+function displayMetadataText(value: unknown): string | null {
+  const directValue = stringValue(value);
+  if (directValue) return directValue;
+  const display = recordValue(value);
+  return (
+    stringValue(display?.subtitle) ??
+    stringValue(display?.secondary_text) ??
+    stringValue(display?.secondaryText) ??
+    stringValue(display?.summary) ??
+    stringValue(display?.label)
+  );
+}
+
+function environmentMetadataText(value: unknown): string | null {
+  const directValue = stringValue(value);
+  if (directValue) return directValue;
+  const environment = recordValue(value);
+  return (
+    stringValue(environment?.label) ??
+    stringValue(environment?.display_name) ??
+    stringValue(environment?.displayName) ??
+    stringValue(environment?.name)
+  );
+}
+
+function progressMetadataText(value: unknown): string | null {
+  const directValue = stringValue(value);
+  if (directValue) return directValue;
+  const progress = recordValue(value);
+  if (!progress) return null;
+  const explicitValue =
+    stringValue(progress.label) ??
+    stringValue(progress.summary) ??
+    displayMetadataText(progress.display);
+  if (explicitValue) return explicitValue;
+  const percent = progress.percent;
+  return typeof percent === 'number' && Number.isFinite(percent) && percent >= 0 && percent <= 100
+    ? `${percent}%`
+    : null;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 export function conversationTreeStatusPresentation(

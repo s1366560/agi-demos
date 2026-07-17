@@ -335,6 +335,10 @@
   grid-row: 1;
 }
 
+.app-shell.hierarchy-shell .pane-stage.single-stage {
+  padding: 0;
+}
+
 @media (max-width: 1180px) {
   html:root {
     --desktop-sidebar-width: 200px;

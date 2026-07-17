@@ -5319,7 +5319,6 @@ export function App() {
         agents={dataset.workspaceAgents}
         plan={activeDataset.plan}
         sandboxStatus={dataset.sandbox?.status ?? null}
-        connection={connection}
         newTaskDisabledReason={newTaskDisabledReason}
         onNewTask={() => openNewTask(config.workspaceId)}
         onOpenConversation={(conversationId) => {

@@ -1,6 +1,6 @@
 .workspace-execution-qa-shell {
   display: grid;
-  grid-template-columns: 214px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   width: 100vw;
   height: 100vh;
   overflow: hidden;

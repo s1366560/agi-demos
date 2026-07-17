@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   beginWorkspaceConversationRequest,
   buildWorkspaceTree,
+  conversationTreeMetadataSummary,
   conversationTreeStatusPresentation,
   conversationTreeStatusValue,
   isWorkspaceConversationSelected,
@@ -302,6 +303,79 @@ test('conversation lifecycle activity remains distinct from an executing run', (
     tone: 'offline',
     labelKey: 'workspaceTree.offline',
   });
+});
+
+test('workspace root remains unknown when neither runtime nor loaded run metadata reports status', () => {
+  const lifecycleOnly = conversation(
+    'conversation-active',
+    'Active conversation',
+    '2026-07-14T09:30:00Z'
+  );
+
+  assert.deepEqual(workspaceTreeRootStatusPresentation(undefined, []), {
+    tone: 'unknown',
+    labelKey: 'workspaceTree.unknown',
+  });
+  assert.deepEqual(workspaceTreeRootStatusPresentation('', [lifecycleOnly]), {
+    tone: 'unknown',
+    labelKey: 'workspaceTree.unknown',
+  });
+});
+
+test('conversation tree summary prefers explicit structured display metadata', () => {
+  const item = conversation(
+    'conversation-display',
+    'Offline running task 99%',
+    '2026-07-14T09:30:00Z'
+  );
+  item.metadata = {
+    display: { subtitle: 'Reviewing verified changes' },
+    run: {
+      environment: { label: 'Worktree' },
+      progress: { percent: 72 },
+    },
+  };
+
+  assert.equal(conversationTreeMetadataSummary(item), 'Reviewing verified changes');
+});
+
+test('conversation tree summary composes explicit environment and progress metadata', () => {
+  const item = conversation(
+    'conversation-progress',
+    'A title must never drive the secondary text',
+    '2026-07-14T09:30:00Z'
+  );
+  item.metadata = {
+    run: {
+      environment: { label: 'Worktree' },
+      progress: { percent: 72 },
+    },
+  };
+
+  assert.equal(conversationTreeMetadataSummary(item), 'Worktree · 72%');
+});
+
+test('conversation tree summary ignores titles and malformed metadata', () => {
+  const titleOnly = conversation(
+    'conversation-title-only',
+    'Running in Worktree · 72%',
+    '2026-07-14T09:30:00Z'
+  );
+  const malformed = conversation(
+    'conversation-malformed',
+    'Needs approval',
+    '2026-07-14T09:30:00Z'
+  );
+  malformed.metadata = {
+    display: { subtitle: 42 },
+    run: {
+      environment: { label: false },
+      progress: { percent: '72' },
+    },
+  };
+
+  assert.equal(conversationTreeMetadataSummary(titleOnly), null);
+  assert.equal(conversationTreeMetadataSummary(malformed), null);
 });
 
 test('workspace root status escalates structured child attention before runtime health', () => {

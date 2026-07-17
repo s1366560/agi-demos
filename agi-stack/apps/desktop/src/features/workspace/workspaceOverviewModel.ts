@@ -1,7 +1,6 @@
 import type {
   AgentCapabilityMode,
   AgentConversation,
-  ConnectionState,
   DesktopRuntimeConfig,
   PlanSnapshot,
   ProjectSummary,
@@ -51,7 +50,6 @@ export type WorkspaceOverviewModel = {
   };
   environment: {
     sandboxStatus: string | null;
-    connection: ConnectionState;
   };
   recentSessions: WorkspaceSessionSummary[];
   recentActivity: WorkspaceActivitySummary[];
@@ -65,11 +63,94 @@ type BuildWorkspaceOverviewModelInput = {
   agents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
   plan: PlanSnapshot | null;
   sandboxStatus: string | null;
-  connection: ConnectionState;
+};
+
+export type WorkspaceSandboxStatusPresentation = {
+  state: WorkspaceAuthorityStatus;
+  labelKey: string;
+  summaryKey: string;
 };
 
 const ATTENTION_STATUSES = new Set(['needs_input', 'needs_approval']);
 const READY_STATUSES = new Set(['ready_review', 'completed']);
+const READY_SANDBOX_STATUSES = new Set(['ready', 'running', 'connected', 'healthy']);
+const PREPARING_SANDBOX_STATUSES = new Set([
+  'pending',
+  'starting',
+  'creating',
+  'connecting',
+  'provisioning',
+  'initializing',
+]);
+const FAILED_SANDBOX_STATUSES = new Set(['error', 'failed', 'unhealthy']);
+const STOPPED_SANDBOX_STATUSES = new Set(['stopped', 'paused', 'terminated']);
+
+export function workspaceSandboxStatusPresentation(
+  sandboxStatus: string | null | undefined,
+): WorkspaceSandboxStatusPresentation {
+  const status = sandboxStatus?.trim().toLowerCase() ?? '';
+  if (!status) {
+    return {
+      state: 'unavailable',
+      labelKey: 'overview.sandboxNotChecked',
+      summaryKey: 'overview.sandboxNotCheckedDescription',
+    };
+  }
+  if (READY_SANDBOX_STATUSES.has(status)) {
+    return {
+      state: 'ready',
+      labelKey: 'overview.sandboxReady',
+      summaryKey: 'overview.sandboxReadyDescription',
+    };
+  }
+  if (PREPARING_SANDBOX_STATUSES.has(status)) {
+    return {
+      state: 'loading',
+      labelKey: 'overview.sandboxPreparing',
+      summaryKey: 'overview.sandboxPreparingDescription',
+    };
+  }
+  if (FAILED_SANDBOX_STATUSES.has(status)) {
+    return {
+      state: 'error',
+      labelKey: 'overview.sandboxFailed',
+      summaryKey: 'overview.sandboxFailedDescription',
+    };
+  }
+  if (STOPPED_SANDBOX_STATUSES.has(status)) {
+    return {
+      state: 'unavailable',
+      labelKey: 'overview.sandboxStopped',
+      summaryKey: 'overview.sandboxStoppedDescription',
+    };
+  }
+  if (status === 'unavailable') {
+    return {
+      state: 'unavailable',
+      labelKey: 'overview.sandboxUnavailable',
+      summaryKey: 'overview.sandboxUnavailableDescription',
+    };
+  }
+  if (status === 'disconnected') {
+    return {
+      state: 'unavailable',
+      labelKey: 'overview.sandboxDisconnected',
+      summaryKey: 'overview.sandboxDisconnectedDescription',
+    };
+  }
+  if (status === 'orphan') {
+    return {
+      state: 'error',
+      labelKey: 'overview.sandboxOrphaned',
+      summaryKey: 'overview.sandboxOrphanedDescription',
+    };
+  }
+  return {
+    state: 'unavailable',
+    labelKey: 'overview.sandboxUnknown',
+    summaryKey: 'overview.sandboxUnknownDescription',
+  };
+}
 
 export function beginWorkspaceRuntimeTransition(dataset: RuntimeDataset): RuntimeDataset {
   return {
@@ -117,7 +198,6 @@ export function buildWorkspaceOverviewModel({
   agents,
   plan,
   sandboxStatus,
-  connection,
 }: BuildWorkspaceOverviewModelInput): WorkspaceOverviewModel {
   const sessions = conversations.map(projectConversation);
   const metadata = workspace?.metadata ?? null;
@@ -148,7 +228,7 @@ export function buildWorkspaceOverviewModel({
       graphNodes: numberValue(stats?.node_count),
       storageBytes: numberValue(stats?.storage_used),
     },
-    environment: { sandboxStatus, connection },
+    environment: { sandboxStatus },
     recentSessions: sessions.slice(0, 5),
     recentActivity: readRecentActivity(stats?.recent_activity),
   };

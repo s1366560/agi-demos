@@ -33,6 +33,10 @@ const sidebarSource = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
   'utf8'
 );
+const sidebarStyles = readFileSync(
+  new URL('../src/features/navigation/DesktopSidebar.css', import.meta.url),
+  'utf8'
+);
 const workspaceDockSource = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.tsx', import.meta.url),
   'utf8'
@@ -46,6 +50,13 @@ test('desktop shell mounts only the prototype sidebar and page-owned headers', (
   assert.doesNotMatch(appSource, /className="titlebar"/);
   assert.doesNotMatch(appSource, /className="copilot-sidebar"/);
   assert.equal((appSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
+});
+
+test('hierarchy pages remove the legacy pane inset around prototype-owned canvases', () => {
+  assert.match(
+    sidebarStyles,
+    /\.app-shell\.hierarchy-shell \.pane-stage\.single-stage\s*\{[\s\S]*?padding:\s*0\s*;/,
+  );
 });
 
 test('authenticated identities without a project remain inside the desktop shell', () => {
@@ -162,6 +173,22 @@ test('workspace hierarchy uses native navigation controls instead of an incomple
   assert.match(workspaceDockSource, /<nav[\s\S]*aria-label=\{t\('workspaceTree\.navigation'\)\}/);
   assert.match(workspaceDockSource, /className="workspace-tree-toggle"[\s\S]*aria-expanded=\{workspaceExpanded\}/);
   assert.doesNotMatch(workspaceDockSource, /role="(?:tree|treeitem|group)"/);
+});
+
+test('workspace tree keeps status out of subtitles while preserving an accessible status dot', () => {
+  assert.match(workspaceDockSource, /<small>\{sessionSummary\}<\/small>/);
+  assert.doesNotMatch(
+    workspaceDockSource,
+    /\{sessionSummary\}\s*·\s*\{rootStatusLabel\}/
+  );
+  assert.match(
+    workspaceDockSource,
+    /data-status=\{rootStatus\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{rootStatusLabel\}[\s\S]*title=\{rootStatusLabel\}/
+  );
+  assert.match(
+    workspaceDockSource,
+    /conversationTreeMetadataSummary\(conversation\) \?\? statusLabel/
+  );
 });
 
 test('workspace conversation loads remain project scoped while the selected workspace changes', () => {

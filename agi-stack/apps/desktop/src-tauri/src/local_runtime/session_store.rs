@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     path::Path,
     sync::{Arc, Mutex},
     time::Duration,
@@ -28,7 +29,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 11;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 12;
 
 pub(super) struct PreparedToolInvocation {
     pub(super) invocation: ToolInvocation,
@@ -215,6 +216,12 @@ impl DesktopSessionStore {
                  CREATE TABLE IF NOT EXISTS desktop_workspaces (
                    id TEXT PRIMARY KEY,
                    project_id TEXT NOT NULL,
+                   value_json TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_seed_migrations (
+                   seed_id TEXT PRIMARY KEY,
+                   seed_kind TEXT NOT NULL,
+                   applied_at TEXT NOT NULL,
                    value_json TEXT NOT NULL
                  );
                  CREATE TABLE IF NOT EXISTS desktop_workspace_messages (
@@ -457,6 +464,216 @@ impl DesktopSessionStore {
             )
             .map_err(|error| error.to_string())?;
         Ok(())
+    }
+
+    pub(super) fn ensure_local_demo_hierarchy_seed(
+        &self,
+        seed_id: &str,
+        workspaces: &[Value],
+        conversations: &[LocalConversation],
+        applied_at: &str,
+    ) -> Result<(), String> {
+        let seed_id = seed_id.trim();
+        if seed_id.is_empty() {
+            return Err("local demo seed id is required".to_string());
+        }
+        if workspaces.is_empty() || conversations.is_empty() {
+            return Err(
+                "local demo hierarchy seed requires workspaces and conversations".to_string(),
+            );
+        }
+
+        let mut workspace_ids = HashSet::with_capacity(workspaces.len());
+        let mut workspace_manifest = Vec::with_capacity(workspaces.len());
+        for workspace in workspaces {
+            let id = required_string(workspace, "id")?;
+            let tenant_id = required_string(workspace, "tenant_id")?;
+            let project_id = required_string(workspace, "project_id")?;
+            if !workspace_ids.insert(id.clone()) {
+                return Err(format!("duplicate local demo workspace id: {id}"));
+            }
+            workspace_manifest.push(json!({
+                "id": id,
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+            }));
+        }
+
+        let mut conversation_ids = HashSet::with_capacity(conversations.len());
+        let mut conversation_manifest = Vec::with_capacity(conversations.len());
+        for conversation in conversations {
+            if !conversation_ids.insert(conversation.id.clone()) {
+                return Err(format!(
+                    "duplicate local demo conversation id: {}",
+                    conversation.id
+                ));
+            }
+            let workspace_id = conversation.workspace_id.as_deref().ok_or_else(|| {
+                format!(
+                    "local demo conversation {} requires a workspace",
+                    conversation.id
+                )
+            })?;
+            if !workspace_ids.contains(workspace_id) {
+                return Err(format!(
+                    "local demo conversation {} references an unseeded workspace",
+                    conversation.id
+                ));
+            }
+            conversation_manifest.push(json!({
+                "id": conversation.id,
+                "tenant_id": conversation.tenant_id,
+                "project_id": conversation.project_id,
+                "workspace_id": workspace_id,
+            }));
+        }
+
+        let manifest = json!({
+            "seed_id": seed_id,
+            "kind": "local_demo_hierarchy",
+            "workspace_scopes": workspace_manifest,
+            "conversation_scopes": conversation_manifest,
+        });
+        let manifest_json = serde_json::to_string(&manifest).map_err(|error| error.to_string())?;
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let existing_marker = transaction
+            .query_row(
+                "SELECT seed_kind, value_json FROM desktop_seed_migrations WHERE seed_id = ?1",
+                [seed_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if let Some((seed_kind, existing_manifest)) = existing_marker.as_ref() {
+            if seed_kind != "local_demo_hierarchy" || existing_manifest != &manifest_json {
+                return Err(format!("local demo seed manifest conflict: {seed_id}"));
+            }
+        }
+        let seed_already_applied = existing_marker.is_some();
+
+        for workspace in workspaces {
+            let id = required_string(workspace, "id")?;
+            let expected_tenant_id = required_string(workspace, "tenant_id")?;
+            let expected_project_id = required_string(workspace, "project_id")?;
+            let existing = transaction
+                .query_row(
+                    "SELECT project_id, value_json FROM desktop_workspaces WHERE id = ?1",
+                    [&id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()
+                .map_err(|error| error.to_string())?;
+            if let Some((stored_project_id, stored_json)) = existing {
+                let stored: Value =
+                    serde_json::from_str(&stored_json).map_err(|error| error.to_string())?;
+                let stored_id = required_string(&stored, "id")?;
+                let stored_tenant_id = required_string(&stored, "tenant_id")?;
+                let stored_value_project_id = required_string(&stored, "project_id")?;
+                if stored_id != id
+                    || stored_project_id != expected_project_id
+                    || stored_value_project_id != expected_project_id
+                    || stored_tenant_id != expected_tenant_id
+                {
+                    return Err(format!("local demo workspace scope conflict: {id}"));
+                }
+                if stored.pointer("/metadata/provenance")
+                    != workspace.pointer("/metadata/provenance")
+                {
+                    return Err(format!("local demo workspace provenance conflict: {id}"));
+                }
+                continue;
+            }
+            if seed_already_applied {
+                return Err(format!("local demo seeded workspace is missing: {id}"));
+            }
+            transaction
+                .execute(
+                    "INSERT INTO desktop_workspaces(id, project_id, value_json)
+                     VALUES (?1, ?2, ?3)",
+                    params![
+                        id,
+                        expected_project_id,
+                        serde_json::to_string(workspace).map_err(|error| error.to_string())?
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+
+        for conversation in conversations {
+            let existing = transaction
+                .query_row(
+                    "SELECT project_id, workspace_id, value_json
+                     FROM desktop_conversations WHERE id = ?1",
+                    [&conversation.id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(|error| error.to_string())?;
+            if let Some((stored_project_id, stored_workspace_id, existing_json)) = existing {
+                let stored: LocalConversation =
+                    serde_json::from_str(&existing_json).map_err(|error| error.to_string())?;
+                if stored.id != conversation.id
+                    || stored.tenant_id != conversation.tenant_id
+                    || stored.project_id != conversation.project_id
+                    || stored.workspace_id != conversation.workspace_id
+                {
+                    return Err(format!(
+                        "local demo conversation scope conflict: {}",
+                        conversation.id
+                    ));
+                }
+                if stored_project_id != conversation.project_id
+                    || stored_workspace_id != conversation.workspace_id
+                {
+                    return Err(format!(
+                        "local demo conversation column scope conflict: {}",
+                        conversation.id
+                    ));
+                }
+                continue;
+            }
+            if seed_already_applied {
+                return Err(format!(
+                    "local demo seeded conversation is missing: {}",
+                    conversation.id
+                ));
+            }
+            transaction
+                .execute(
+                    "INSERT INTO desktop_conversations(
+                       id, project_id, workspace_id, updated_at, value_json
+                     ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        conversation.id,
+                        conversation.project_id,
+                        conversation.workspace_id,
+                        conversation.updated_at,
+                        serde_json::to_string(conversation).map_err(|error| error.to_string())?
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+
+        if !seed_already_applied {
+            transaction
+                .execute(
+                    "INSERT INTO desktop_seed_migrations(
+                       seed_id, seed_kind, applied_at, value_json
+                     ) VALUES (?1, 'local_demo_hierarchy', ?2, ?3)",
+                    params![seed_id, applied_at, manifest_json],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        transaction.commit().map_err(|error| error.to_string())
     }
 
     pub(super) fn insert_workspace(&self, workspace: &Value) -> Result<(), String> {

@@ -7,6 +7,7 @@ const {
   beginDesktopRuntimeScopeTransition,
   beginWorkspaceRuntimeTransition,
   buildWorkspaceOverviewModel,
+  workspaceSandboxStatusPresentation,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceOverviewModel.js'
 );
@@ -126,7 +127,7 @@ test('workspace overview projects only authoritative workspace and project field
   assert.deepEqual(model.recentActivity, [
     { title: 'Targeted test suite passed', detail: 'Code agent · 2 min ago' },
   ]);
-  assert.deepEqual(model.environment, { sandboxStatus: 'connected', connection: 'ready' });
+  assert.deepEqual(model.environment, { sandboxStatus: 'connected' });
 });
 
 test('workspace overview exposes unavailable values instead of inventing operational data', () => {
@@ -152,6 +153,59 @@ test('workspace overview exposes unavailable values instead of inventing operati
   });
   assert.deepEqual(model.recentSessions, []);
   assert.deepEqual(model.recentActivity, []);
+});
+
+test('workspace sandbox status never infers availability from the runtime API connection', () => {
+  assert.deepEqual(workspaceSandboxStatusPresentation(null), {
+    state: 'unavailable',
+    labelKey: 'overview.sandboxNotChecked',
+    summaryKey: 'overview.sandboxNotCheckedDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('running'), {
+    state: 'ready',
+    labelKey: 'overview.sandboxReady',
+    summaryKey: 'overview.sandboxReadyDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('pending'), {
+    state: 'loading',
+    labelKey: 'overview.sandboxPreparing',
+    summaryKey: 'overview.sandboxPreparingDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('connecting'), {
+    state: 'loading',
+    labelKey: 'overview.sandboxPreparing',
+    summaryKey: 'overview.sandboxPreparingDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('failed'), {
+    state: 'error',
+    labelKey: 'overview.sandboxFailed',
+    summaryKey: 'overview.sandboxFailedDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('stopped'), {
+    state: 'unavailable',
+    labelKey: 'overview.sandboxStopped',
+    summaryKey: 'overview.sandboxStoppedDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('unavailable'), {
+    state: 'unavailable',
+    labelKey: 'overview.sandboxUnavailable',
+    summaryKey: 'overview.sandboxUnavailableDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('disconnected'), {
+    state: 'unavailable',
+    labelKey: 'overview.sandboxDisconnected',
+    summaryKey: 'overview.sandboxDisconnectedDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('orphan'), {
+    state: 'error',
+    labelKey: 'overview.sandboxOrphaned',
+    summaryKey: 'overview.sandboxOrphanedDescription',
+  });
+  assert.deepEqual(workspaceSandboxStatusPresentation('future_state'), {
+    state: 'unavailable',
+    labelKey: 'overview.sandboxUnknown',
+    summaryKey: 'overview.sandboxUnknownDescription',
+  });
 });
 
 test('workspace overview distinguishes an authoritative empty roster from a failed load', () => {
