@@ -33,6 +33,25 @@ class WorkspaceTaskSessionAttemptRepository(ABC):
     ) -> list[WorkspaceTaskSessionAttempt]:
         """List attempts for a workspace task."""
 
+    async def find_by_workspace_task_ids(
+        self,
+        workspace_task_ids: list[str],
+        *,
+        limit_per_task: int = 3,
+    ) -> dict[str, list[WorkspaceTaskSessionAttempt]]:
+        """List the latest attempts per task for many tasks, keyed by task ID.
+
+        The default implementation issues one query per task; backends should
+        override it with a single window-function query to avoid N+1 reads.
+        """
+        attempts_by_task: dict[str, list[WorkspaceTaskSessionAttempt]] = {}
+        for workspace_task_id in workspace_task_ids:
+            attempts_by_task[workspace_task_id] = await self.find_by_workspace_task_id(
+                workspace_task_id,
+                limit=limit_per_task,
+            )
+        return attempts_by_task
+
     @abstractmethod
     async def find_active_by_workspace_task_id(
         self, workspace_task_id: str

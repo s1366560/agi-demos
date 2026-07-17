@@ -5,6 +5,7 @@ from typing import override
 
 from sqlalchemy import case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
@@ -77,6 +78,58 @@ class SqlWorkspaceTaskSessionAttemptRepository(
             refresh_select_statement(self._refresh_statement(stmt))
         )
         return [d for row in result.scalars().all() if (d := self._to_domain(row)) is not None]
+
+    @override
+    async def find_by_workspace_task_ids(
+        self,
+        workspace_task_ids: list[str],
+        *,
+        limit_per_task: int = 3,
+    ) -> dict[str, list[WorkspaceTaskSessionAttempt]]:
+        """List the latest attempts per task for many tasks in one query.
+
+        Uses a row_number window partitioned by task so the per-task LIMIT is
+        enforced in SQL instead of issuing one query per task.
+        """
+        if not workspace_task_ids:
+            return {}
+
+        row_number = (
+            func.row_number()
+            .over(
+                partition_by=WorkspaceTaskSessionAttemptModel.workspace_task_id,
+                order_by=(
+                    WorkspaceTaskSessionAttemptModel.attempt_number.desc(),
+                    WorkspaceTaskSessionAttemptModel.id.asc(),
+                ),
+            )
+            .label("rn")
+        )
+        ranked = (
+            select(WorkspaceTaskSessionAttemptModel, row_number)
+            .where(WorkspaceTaskSessionAttemptModel.workspace_task_id.in_(workspace_task_ids))
+            .subquery()
+        )
+        ranked_model = aliased(WorkspaceTaskSessionAttemptModel, ranked)
+        stmt = (
+            select(ranked_model)
+            .where(ranked.c.rn <= limit_per_task)
+            .order_by(
+                ranked_model.workspace_task_id.asc(),
+                ranked_model.attempt_number.desc(),
+                ranked_model.id.asc(),
+            )
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        attempts_by_task: dict[str, list[WorkspaceTaskSessionAttempt]] = {
+            task_id: [] for task_id in workspace_task_ids
+        }
+        for row in result.scalars().all():
+            if (domain := self._to_domain(row)) is not None:
+                attempts_by_task.setdefault(domain.workspace_task_id, []).append(domain)
+        return attempts_by_task
 
     @override
     async def find_active_by_workspace_task_id(

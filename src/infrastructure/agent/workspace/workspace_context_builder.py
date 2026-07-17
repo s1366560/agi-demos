@@ -139,11 +139,14 @@ async def build_workspace_context(
                 limit=_MAX_TASKS,
             )
             task_experience_summaries: dict[str, dict[str, Any]] = {}
+            attempts_by_task = await attempt_repo.find_by_workspace_task_ids(
+                [task.id for task in tasks],
+                limit_per_task=3,
+            )
             for task in tasks:
-                attempts = await attempt_repo.find_by_workspace_task_id(task.id, limit=3)
                 task_experience_summaries[task.id] = build_workspace_task_experience_summary(
                     task,
-                    attempts=attempts,
+                    attempts=attempts_by_task.get(task.id, []),
                 )
             objectives = await objective_repo.find_by_workspace(
                 workspace.id,

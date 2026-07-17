@@ -86,6 +86,17 @@ class _AttemptRepo:
         del statuses
         return self.attempts_by_task.get(workspace_task_id, [])[offset:limit]
 
+    async def find_by_workspace_task_ids(
+        self,
+        workspace_task_ids: list[str],
+        *,
+        limit_per_task: int = 3,
+    ) -> dict[str, list[WorkspaceTaskSessionAttempt]]:
+        return {
+            task_id: self.attempts_by_task.get(task_id, [])[:limit_per_task]
+            for task_id in workspace_task_ids
+        }
+
 
 class _ToolExecutionRepo:
     def __init__(self, records_by_conversation: dict[str, list[ToolExecutionRecord]]) -> None:

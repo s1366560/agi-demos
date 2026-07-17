@@ -182,12 +182,12 @@ class WorkspaceExecutionDiagnosticsService:
         recent_tool_failures: list[dict[str, Any]] = []
         active_attempts: list[dict[str, Any]] = []
 
+        attempts_by_task = await self._attempt_repo.find_by_workspace_task_ids(
+            [task.id for task in tasks],
+            limit_per_task=3,
+        )
         for task in tasks:
-            attempts = await self._attempt_repo.find_by_workspace_task_id(
-                task.id,
-                limit=3,
-                offset=0,
-            )
+            attempts = attempts_by_task.get(task.id, [])
             attempt_status_counts.update(attempt.status.value for attempt in attempts)
             active_attempts.extend(self._active_attempt_rows(task, attempts))
 
@@ -203,9 +203,7 @@ class WorkspaceExecutionDiagnosticsService:
             task_rows.append(task_row)
             if self._is_current_execution_task(task, active_plan_task_ids):
                 blockers.extend(self._blocking_rows(task, latest_attempt, tool_records))
-                pending_adjudications.extend(
-                    self._pending_adjudication_rows(task, latest_attempt)
-                )
+                pending_adjudications.extend(self._pending_adjudication_rows(task, latest_attempt))
                 gap = self._evidence_gap_row(task, latest_attempt, tool_records)
                 if gap is not None:
                     evidence_gaps.append(gap)
@@ -382,8 +380,7 @@ class WorkspaceExecutionDiagnosticsService:
         if task.status is WorkspaceTaskStatus.BLOCKED:
             return True
         return (
-            latest_attempt is not None
-            and latest_attempt.status in self._BLOCKING_ATTEMPT_STATUSES
+            latest_attempt is not None and latest_attempt.status in self._BLOCKING_ATTEMPT_STATUSES
         )
 
     def _pending_adjudication_rows(
@@ -451,8 +448,7 @@ class WorkspaceExecutionDiagnosticsService:
         task_ids = {
             task_id
             for node in plan.nodes.values()
-            if isinstance(task_id := getattr(node, "workspace_task_id", None), str)
-            and task_id
+            if isinstance(task_id := getattr(node, "workspace_task_id", None), str) and task_id
         }
         return task_ids or None
 
@@ -715,11 +711,7 @@ class WorkspaceExecutionDiagnosticsService:
             if getattr(completed, "event_type", None) != item_event_type:
                 continue
             completed_time = self._outbox_activity_time(completed)
-            if (
-                item_time is not None
-                and completed_time is not None
-                and completed_time <= item_time
-            ):
+            if item_time is not None and completed_time is not None and completed_time <= item_time:
                 continue
             completed_context = self._outbox_context(completed)
             if any(completed_context.get(key) == value for key, value in item_context.items()):
@@ -754,10 +746,7 @@ class WorkspaceExecutionDiagnosticsService:
             if lease_expires_at is None:
                 reason = "Processing outbox item has no lease expiry"
             elif lease_expires_at <= now:
-                reason = (
-                    "Processing outbox item lease expired at "
-                    f"{lease_expires_at.isoformat()}"
-                )
+                reason = f"Processing outbox item lease expired at {lease_expires_at.isoformat()}"
             else:
                 return None
             row_type = "outbox_stale_processing"
@@ -775,10 +764,7 @@ class WorkspaceExecutionDiagnosticsService:
             if age_seconds < self._PENDING_OUTBOX_GRACE_SECONDS:
                 return None
             row_type = "outbox_not_draining"
-            reason = (
-                f"Outbox item has been due for {int(age_seconds)}s "
-                "without being claimed"
-            )
+            reason = f"Outbox item has been due for {int(age_seconds)}s without being claimed"
         else:
             return None
 

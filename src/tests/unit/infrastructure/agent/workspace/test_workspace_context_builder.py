@@ -369,8 +369,8 @@ class TestBuildWorkspaceContext:
             mock_msg_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=messages)
             mock_bb_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=posts)
             mock_task_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=tasks)
-            mock_attempt_repo_cls.return_value.find_by_workspace_task_id = AsyncMock(
-                return_value=[]
+            mock_attempt_repo_cls.return_value.find_by_workspace_task_ids = AsyncMock(
+                return_value={}
             )
             mock_objective_repo_cls.return_value.find_by_workspace = AsyncMock(
                 return_value=objectives
