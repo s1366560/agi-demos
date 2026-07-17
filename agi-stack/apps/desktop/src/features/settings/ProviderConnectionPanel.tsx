@@ -23,7 +23,7 @@ import {
   providerDraftFromProvider,
   providerDraftIsValid,
   providerMutationFromDraft,
-  providerValidationSucceeded,
+  providerValidationAccepted,
   type ProviderEditorDraft,
 } from './providerManagementModel';
 
@@ -182,11 +182,11 @@ export function ProviderConnectionPanel({
     setBusy((current) => (current === 'test' ? null : current));
   };
 
-  const verified = providerValidationSucceeded(validation);
   const authMethods = providerTypeDescriptor?.authMethods ?? [];
   const authCapabilityAvailable = authMethods.includes(draft.authMethod);
   const probeSupported = providerTypeDescriptor?.probeSupported === true;
-  const connectionTestAvailable = authCapabilityAvailable && probeSupported;
+  const validationAccepted = providerValidationAccepted(validation, probeSupported);
+  const validationAvailable = authCapabilityAvailable;
   const credentialValue = editing
     ? draft.apiKey
     : provider.api_key_masked ||
@@ -264,10 +264,10 @@ export function ProviderConnectionPanel({
         ) : null}
         {providerTypeDescriptor && !probeSupported ? (
           <div className="provider-capability-note compact" role="status">
-            <ExclamationTriangleIcon />
+            <InfoCircledIcon />
             <span>
-              <b>{t('providers.probeUnsupported')}</b>
-              <small>{t('providers.probeUnsupportedDescription')}</small>
+              <b>{t('providers.configurationOnlyValidation')}</b>
+              <small>{t('providers.configurationOnlyValidationDescription')}</small>
             </span>
           </div>
         ) : null}
@@ -370,15 +370,13 @@ export function ProviderConnectionPanel({
 
       <div className="provider-test-row">
         <div
-          className={`provider-test-result ${verified ? 'success' : validation ? 'failed' : ''}`}
+          className={`provider-test-result ${validationAccepted ? 'success' : validation ? 'failed' : ''}`}
           role="status"
           aria-live="polite"
         >
-          {!probeSupported ? (
-            <ExclamationTriangleIcon />
-          ) : busy === 'test' ? (
+          {busy === 'test' ? (
             <ReloadIcon className="spin" />
-          ) : verified ? (
+          ) : validationAccepted ? (
             <CheckCircledIcon />
           ) : validation || error ? (
             <ExclamationTriangleIcon />
@@ -388,24 +386,32 @@ export function ProviderConnectionPanel({
           <span>
             <b>
               {t(
-                !probeSupported
-                  ? 'providers.probeUnsupported'
-                  : busy === 'test'
+                busy === 'test'
+                  ? probeSupported
                     ? 'providers.testingConnection'
-                  : verified
+                    : 'providers.validatingConfiguration'
+                  : validationAccepted
+                    ? probeSupported
                       ? 'providers.connectionVerified'
+                      : 'providers.configurationValidated'
                     : validation
-                      ? 'providers.connectionFailed'
-                        : 'providers.testBeforeSaving',
+                      ? probeSupported
+                        ? 'providers.connectionFailed'
+                        : 'providers.configurationValidationFailed'
+                      : probeSupported
+                        ? 'providers.testBeforeSaving'
+                        : 'providers.validateBeforeSaving',
               )}
             </b>
             <small>
-              {!probeSupported
-                ? t('providers.probeUnsupportedDescription')
-                : error ||
+              {error ||
                 validation?.errorMessage ||
-                  validation?.detail ||
-                  t('providers.connectionTestDescription')}
+                validation?.detail ||
+                t(
+                  probeSupported
+                    ? 'providers.connectionTestDescription'
+                    : 'providers.configurationValidationDescription',
+                )}
             </small>
           </span>
         </div>
@@ -414,20 +420,22 @@ export function ProviderConnectionPanel({
             type="button"
             disabled={
               busy !== null ||
-              !connectionTestAvailable ||
+              !validationAvailable ||
               credentialRequiredForDraft ||
               (editing && !providerDraftIsValid(draft))
             }
             onClick={() => void testConnection()}
           >
-            {t('providers.testConnection')}
+            {t(
+              probeSupported ? 'providers.testConnection' : 'providers.validateConfiguration',
+            )}
           </button>
         ) : null}
         {editing ? (
           <button
             className="primary"
             type="button"
-            disabled={!probeSupported || !verified || busy !== null}
+            disabled={!validationAccepted || busy !== null}
             onClick={() => void saveConnection()}
           >
             {t('providers.saveConnection')}

@@ -98,7 +98,7 @@ final result: passed
 - Interaction captures: `qa/provider-settings-connection-1440.png`, `qa/provider-settings-routing-1440.png`, and `qa/provider-settings-wizard-1440.png`
 - Viewports: `1440 × 1024` and `1100 × 782`, device scale factor `1`
 - State: Simplified Chinese, cloud administrator, tenant and project selected, five realistic Provider records, OpenAI selected
-- Render method: the production `SettingsWindow` and `ModelProviderWorkspace` were rendered by the Vite QA entry and exercised through Chrome DevTools Protocol. The in-app Browser control was unavailable to this session, so Chrome for Testing was used without Playwright.
+- Render method: the production `SettingsWindow` and `ModelProviderWorkspace` were rendered by the Vite QA entry. The saved same-viewport captures were produced through Chrome DevTools Protocol; the current five-Provider overview and complete three-step add flow were freshly re-exercised in the user-selected in-app Browser after the contract fixes.
 
 ## Same-canvas comparison evidence
 
@@ -124,11 +124,11 @@ The source capture is softer and records an earlier popup width. Production foll
 
 ## Real contract and fail-closed behavior
 
-- Local Rust supports Provider list, create, revision-protected update, and configuration-only validation. The UI labels local validation as configuration validation and never claims that an outbound probe occurred.
-- Cloud mode uses the real Provider type catalog, static model catalog, connection test, health check, update, create, and usage endpoints.
-- Local model discovery and usage return explicit unavailable states without making a network request.
+- Local Rust supports Provider type descriptors, list, create, revision-protected PUT/PATCH update, health aliases, source-attributed static model catalogs, tenant-checked empty usage, and configuration-only validation. The UI labels local validation as configuration validation and never claims that an outbound probe occurred.
+- Cloud mode uses the real Provider type catalog, static model catalog, connection test, health check, update, create, and usage endpoints. The Desktop always sends `expected_revision`; the target Rust strangler route enforces it, while a direct legacy Python route currently ignores that compatibility field and exposes no CAS revision.
+- Local catalogs identify built-in suggestions as `static-fallback`; an empty catalog without a source remains unavailable. No local `/models` network request is implied.
 - Fast, coding, vision, fallback, and cloud routing mutations remain read-only because the current service contract does not expose those writes.
-- A newly connected Provider is created inactive and is not silently made the runtime default.
+- A newly connected Provider is created active only after explicit validation and the final Add action; the UI does not claim unsupported per-role routing writes.
 - API keys are accepted only in write requests, cleared after use, and never hydrated from Provider responses. QA responses deliberately strip submitted secrets.
 - OAuth, environment-secret references, live `/models` discovery, invented success rates, and synthetic activity feeds were not implemented because the current backend cannot support them truthfully.
 
@@ -140,10 +140,11 @@ The source capture is softer and records an earlier popup width. Production foll
 - Model catalog load, search, enable switch, manual exact-ID entry, and explicit save: passed. Saving updates the Provider model count.
 - Routing: passed; cloud-only unavailable mutations are visibly disabled, while the existing assignments remain inspectable.
 - Usage: passed with authoritative request, token, latency, cost, and per-operation aggregates.
-- Add Provider wizard: passed from Provider choice through credentials, connection test, discovered-model selection, inactive creation, selection of the new Provider, and success toast.
+- Add Provider wizard: passed from Provider choice through credentials, declared probe or configuration-only validation, source-aware model selection, explicit active creation, selection of the new Provider, and success toast.
 - Secret handling: passed; the dummy QA credential never appears in a response or screenshot.
 - Browser console after a clean reload and core flow: no remaining runtime exception.
-- Automated desktop tests: 116 passed.
+- Automated desktop tests: 343 passed.
+- Desktop Rust library tests: 130 passed after adding CORS preflight, endpoint transport, catalog-source, and compatibility-route coverage.
 - Production TypeScript and Vite build: passed; only the existing large-chunk advisory remains.
 
 ## Comparison history
@@ -164,12 +165,19 @@ Browser QA found and fixed five implementation defects: a health refresh cleared
 
 Post-fix overview, connection, routing, usage, model-save, and wizard checks show no actionable P0, P1, or P2 difference in the approved desktop range.
 
+### Iteration 3 — passed
+
+Contract review found and resolved four defects that screenshot comparison alone could not expose: update payloads omitted the `expected_revision` required by the target Rust gateway route; local Rust lacked the Desktop client's canonical PUT, health, model, usage, and draft-validation routes; a PUT preflight was blocked because CORS did not allow PUT; and static fallback catalogs were described like live discovery. Local endpoint validation now rejects malformed URLs, userinfo, query/fragment data, and remote plaintext HTTP before draft acceptance or persistence. Unknown Provider types fail closed. The legacy Python route's non-CAS behavior is documented as compatibility behavior rather than being presented as revision protection.
+
+The existing same-canvas comparison remains current because the approved shell, hierarchy, geometry, and control layout did not change. A fresh in-app Browser pass confirmed five Provider rows, the overview tabs, API-key entry, successful declared cloud probe, and the third-step model choices. No actionable P0, P1, or P2 visual difference was introduced.
+
 ## Copy differences from the visual prototype
 
 - “Connection verified” becomes “Configuration valid” in local mode because no outbound request is made.
+- “Discovered models” becomes “Built-in catalog” or “Suggested models” when the backend marks the source as `static-fallback`.
 - Unsupported routing writes say that the current server contract is read-only instead of presenting working Save controls.
 - Usage cards show available raw server aggregates rather than prototype-only success-rate and recent-signal values.
-- Provider creation confirms the inactive state instead of implying immediate runtime activation.
+- Provider creation confirms the active connection without implying that unsupported per-role routing assignments were written.
 
 These differences are deliberate truthfulness constraints, not visual omissions.
 

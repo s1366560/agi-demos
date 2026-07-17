@@ -46,6 +46,7 @@ use tokio::{
     sync::{broadcast, mpsc},
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use url::{Host, Url};
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -1701,12 +1702,28 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route("/api/v1/llm-providers/types", get(list_llm_provider_types))
         .route(
+            "/api/v1/llm-providers/models/:provider_type",
+            get(list_llm_provider_models),
+        )
+        .route(
+            "/api/v1/llm-providers/test-connection",
+            post(validate_llm_provider_draft),
+        )
+        .route(
             "/api/v1/llm-providers/:provider_id",
-            patch(update_llm_provider),
+            patch(update_llm_provider).put(update_llm_provider),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/test",
             post(validate_llm_provider),
+        )
+        .route(
+            "/api/v1/llm-providers/:provider_id/health-check",
+            post(validate_llm_provider),
+        )
+        .route(
+            "/api/v1/llm-providers/:provider_id/usage",
+            get(get_llm_provider_usage),
         )
         .route("/api/v1/skills/", get(list_managed_skills))
         .route(
@@ -1881,7 +1898,7 @@ fn local_cors_layer() -> CorsLayer {
             HeaderValue::from_static("http://localhost:5173"),
             HeaderValue::from_static("http://127.0.0.1:5173"),
         ]))
-        .allow_methods([Method::GET, Method::POST, Method::PATCH])
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::PUT])
         .allow_headers([
             AUTHORIZATION,
             CONTENT_TYPE,
@@ -2370,26 +2387,92 @@ struct LlmProviderMutation {
 #[derive(Debug, Clone, Copy, Serialize)]
 struct LlmProviderTypeDescriptor {
     provider_type: &'static str,
+    operation_type: &'static str,
+    probe_supported: bool,
     auth_methods: &'static [&'static str],
 }
 
 const LOCAL_LLM_PROVIDER_TYPES: &[LlmProviderTypeDescriptor] = &[
     LlmProviderTypeDescriptor {
         provider_type: "openai",
+        operation_type: "llm",
+        probe_supported: false,
         auth_methods: &["api_key", "none"],
     },
     LlmProviderTypeDescriptor {
         provider_type: "anthropic",
+        operation_type: "llm",
+        probe_supported: false,
         auth_methods: &["api_key", "none"],
     },
     LlmProviderTypeDescriptor {
         provider_type: "openai_compatible",
+        operation_type: "llm",
+        probe_supported: false,
         auth_methods: &["api_key", "none"],
     },
 ];
 
+#[derive(Debug, Default, Serialize)]
+struct LocalLlmProviderModels {
+    chat: Vec<String>,
+    embedding: Vec<String>,
+    rerank: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalLlmProviderModelsResponse {
+    provider_type: String,
+    models: LocalLlmProviderModels,
+    source: Option<&'static str>,
+}
+
 async fn list_llm_provider_types() -> Json<Vec<LlmProviderTypeDescriptor>> {
     Json(LOCAL_LLM_PROVIDER_TYPES.to_vec())
+}
+
+async fn list_llm_provider_models(
+    Path(provider_type): Path<String>,
+) -> Result<Json<LocalLlmProviderModelsResponse>, (StatusCode, Json<Value>)> {
+    let provider_type = provider_type.trim().to_lowercase();
+    let (models, source) = match provider_type.as_str() {
+        "openai" => (
+            LocalLlmProviderModels {
+                chat: local_model_ids(&["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]),
+                embedding: local_model_ids(&["text-embedding-3-small", "text-embedding-3-large"]),
+                rerank: Vec::new(),
+            },
+            Some("static-fallback"),
+        ),
+        "anthropic" => (
+            LocalLlmProviderModels {
+                chat: local_model_ids(&[
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-opus-20240229",
+                ]),
+                embedding: Vec::new(),
+                rerank: Vec::new(),
+            },
+            Some("static-fallback"),
+        ),
+        "openai_compatible" => (LocalLlmProviderModels::default(), None),
+        _ => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({ "detail": "unsupported local provider type" })),
+            ));
+        }
+    };
+    Ok(Json(LocalLlmProviderModelsResponse {
+        provider_type,
+        models,
+        source,
+    }))
+}
+
+fn local_model_ids(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_string()).collect()
 }
 
 async fn list_llm_providers(
@@ -2507,15 +2590,6 @@ fn mutate_llm_provider(
     }
     if let Some(base_url) = base_url {
         let base_url = base_url.trim().trim_end_matches('/').to_string();
-        if !base_url.is_empty()
-            && !base_url.starts_with("http://")
-            && !base_url.starts_with("https://")
-        {
-            return Err((
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({ "detail": "provider base URL must use http or https" })),
-            ));
-        }
         object.insert(
             "base_url".to_string(),
             if base_url.is_empty() {
@@ -2569,6 +2643,10 @@ fn mutate_llm_provider(
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({ "detail": "unsupported local provider auth method" })),
         ));
+    }
+    if let Some(base_url) = object.get("base_url").and_then(Value::as_str) {
+        let base_url = validated_local_provider_base_url(base_url)?;
+        object.insert("base_url".to_string(), json!(base_url));
     }
     object.insert("credential_source".to_string(), json!("runtime_memory"));
     object.insert("credential_configured".to_string(), json!(false));
@@ -2704,6 +2782,78 @@ async fn validate_llm_provider(
         "status": status,
         "probed": false,
         "detail": "configuration validated locally; no external request was sent",
+    })))
+}
+
+async fn validate_llm_provider_draft(
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Json(request): Json<LlmProviderMutation>,
+) -> LocalJsonResult {
+    ensure_provider_manager(&authenticated)?;
+    required_provider_draft_field(request.name, "provider name")?;
+    let provider_type = required_provider_draft_field(request.provider_type, "provider type")?;
+    if !runtime_provider_supported(&provider_type) {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "unsupported local provider type" })),
+        ));
+    }
+
+    let base_url = required_provider_draft_field(request.base_url, "provider base URL")?;
+    validated_local_provider_base_url(&base_url)?;
+    required_provider_draft_field(request.llm_model, "provider model")?;
+
+    let auth_method = normalized_optional(request.auth_method, "auth method")?
+        .unwrap_or_else(|| "api_key".to_string());
+    if !matches!(auth_method.as_str(), "api_key" | "none") {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "unsupported local provider auth method" })),
+        ));
+    }
+    let has_credential = request
+        .api_key
+        .as_deref()
+        .and_then(normalized_runtime_credential)
+        .is_some();
+    let status = if auth_method == "api_key" && !has_credential {
+        "needs_credentials"
+    } else {
+        "configuration_valid"
+    };
+    let detail = if status == "needs_credentials" {
+        "configuration is structurally valid but requires credentials; no external request was sent"
+    } else {
+        "configuration validated locally; no external request was sent"
+    };
+    Ok(Json(json!({
+        "provider": null,
+        "status": status,
+        "probed": false,
+        "detail": detail,
+    })))
+}
+
+async fn get_llm_provider_usage(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path(provider_id): Path<String>,
+) -> LocalJsonResult {
+    let tenant_id = &authenticated.workspace.tenant_id;
+    state
+        .session_store
+        .managed_resource(
+            ManagedResourceKind::Provider,
+            "tenant",
+            tenant_id,
+            &provider_id,
+        )
+        .map_err(local_store_error)?
+        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
+    Ok(Json(json!({
+        "provider_id": provider_id,
+        "tenant_id": tenant_id,
+        "statistics": [],
     })))
 }
 
@@ -2911,6 +3061,52 @@ fn normalized_optional(
             }
         })
         .transpose()
+}
+
+fn required_provider_draft_field(
+    value: Option<String>,
+    label: &str,
+) -> Result<String, (StatusCode, Json<Value>)> {
+    normalized_optional(value, label)?.ok_or_else(|| {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": format!("{label} is required") })),
+        )
+    })
+}
+
+fn validated_local_provider_base_url(raw_url: &str) -> Result<String, (StatusCode, Json<Value>)> {
+    let raw_url = raw_url.trim().trim_end_matches('/');
+    let url = Url::parse(raw_url).map_err(|_| invalid_local_provider_base_url())?;
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.host_str().is_none()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || (url.scheme() == "http" && !local_provider_host(&url))
+    {
+        return Err(invalid_local_provider_base_url());
+    }
+    Ok(raw_url.to_string())
+}
+
+fn local_provider_host(url: &Url) -> bool {
+    match url.host() {
+        Some(Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
+        Some(Host::Ipv4(address)) => address.is_loopback(),
+        Some(Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
+}
+
+fn invalid_local_provider_base_url() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({
+            "detail": "provider base URL must be a valid HTTPS endpoint or a loopback HTTP endpoint without userinfo, query, or fragment"
+        })),
+    )
 }
 
 fn normalized_model_ids(models: Vec<String>) -> Vec<String> {
@@ -6557,17 +6753,391 @@ mod tests {
             json!([
                 {
                     "provider_type": "openai",
+                    "operation_type": "llm",
+                    "probe_supported": false,
                     "auth_methods": ["api_key", "none"]
                 },
                 {
                     "provider_type": "anthropic",
+                    "operation_type": "llm",
+                    "probe_supported": false,
                     "auth_methods": ["api_key", "none"]
                 },
                 {
                     "provider_type": "openai_compatible",
+                    "operation_type": "llm",
+                    "probe_supported": false,
                     "auth_methods": ["api_key", "none"]
                 }
             ])
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_model_catalog_is_static_structured_and_source_attributed() {
+        let state = test_state("provider-catalog-secret");
+        let app = local_router(state);
+
+        let response = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/models/openai",
+                "provider-catalog-secret",
+                json!({}),
+            ))
+            .await
+            .expect("provider catalog response");
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response_json(response).await,
+            json!({
+                "provider_type": "openai",
+                "models": {
+                    "chat": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+                    "embedding": ["text-embedding-3-small", "text-embedding-3-large"],
+                    "rerank": []
+                },
+                "source": "static-fallback"
+            })
+        );
+
+        let compatible = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/models/openai_compatible",
+                "provider-catalog-secret",
+                json!({}),
+            ))
+            .await
+            .expect("OpenAI-compatible catalog response");
+        assert_eq!(compatible.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response_json(compatible).await,
+            json!({
+                "provider_type": "openai_compatible",
+                "models": { "chat": [], "embedding": [], "rerank": [] },
+                "source": null
+            })
+        );
+
+        let unsupported = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/models/unknown-provider",
+                "provider-catalog-secret",
+                json!({}),
+            ))
+            .await
+            .expect("unsupported catalog response");
+        assert_eq!(
+            unsupported.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_put_health_and_usage_routes_match_desktop_client_contract() {
+        let state = test_state("provider-contract-secret");
+        state
+            .session_store
+            .put_managed_resource(
+                ManagedResourceKind::Provider,
+                "tenant",
+                "another-tenant",
+                "other-tenant-provider",
+                "active",
+                None,
+                json!({
+                    "id": "other-tenant-provider",
+                    "tenant_id": "another-tenant",
+                    "provider_type": "openai",
+                    "is_active": true,
+                    "revision": 0
+                }),
+                Utc::now().timestamp_millis(),
+            )
+            .expect("seed another tenant provider");
+        let app = local_router(state);
+
+        let update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "provider-contract-secret",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "api_key",
+                    "llm_model": "model-a",
+                    "is_active": true,
+                    "api_key": "provider-contract-key",
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("PUT provider response");
+        assert_eq!(update.status(), axum::http::StatusCode::OK);
+        let updated = response_json(update).await;
+        assert_eq!(updated["revision"], 1);
+        assert!(!updated.to_string().contains("provider-contract-key"));
+
+        let health = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/local-runtime/health-check",
+                "provider-contract-secret",
+                json!({}),
+            ))
+            .await
+            .expect("provider health response");
+        assert_eq!(health.status(), axum::http::StatusCode::OK);
+        let health = response_json(health).await;
+        assert_eq!(health["status"], "configuration_valid");
+        assert_eq!(health["probed"], false);
+        assert!(health.get("last_check").is_none());
+
+        let usage = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/local-runtime/usage",
+                "provider-contract-secret",
+                json!({}),
+            ))
+            .await
+            .expect("provider usage response");
+        assert_eq!(usage.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response_json(usage).await,
+            json!({
+                "provider_id": "local-runtime",
+                "tenant_id": "local",
+                "statistics": []
+            })
+        );
+
+        let unknown_usage = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/missing-provider/usage",
+                "provider-contract-secret",
+                json!({}),
+            ))
+            .await
+            .expect("unknown provider usage response");
+        assert_eq!(unknown_usage.status(), axum::http::StatusCode::NOT_FOUND);
+
+        let cross_tenant_usage = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/other-tenant-provider/usage",
+                "provider-contract-secret",
+                json!({}),
+            ))
+            .await
+            .expect("cross-tenant provider usage response");
+        assert_eq!(
+            cross_tenant_usage.status(),
+            axum::http::StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn draft_provider_validation_is_configuration_only_and_does_not_persist() {
+        let state = test_state("provider-draft-secret");
+        let app = local_router(state);
+
+        let valid = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-draft-secret",
+                json!({
+                    "name": "Draft provider",
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "api_key",
+                    "api_key": "draft-provider-key",
+                    "llm_model": "model-a",
+                    "allowed_models": ["model-a"],
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("valid draft response");
+        assert_eq!(valid.status(), axum::http::StatusCode::OK);
+        let validation = response_json(valid).await;
+        assert_eq!(validation["provider"], Value::Null);
+        assert_eq!(validation["status"], "configuration_valid");
+        assert_eq!(validation["probed"], false);
+        assert!(!validation.to_string().contains("draft-provider-key"));
+        assert!(validation.get("last_check").is_none());
+
+        let missing_credential = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-draft-secret",
+                json!({
+                    "name": "Draft provider",
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "api_key",
+                    "llm_model": "model-a",
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("missing credential draft response");
+        assert_eq!(missing_credential.status(), axum::http::StatusCode::OK);
+        let missing_credential = response_json(missing_credential).await;
+        assert_eq!(missing_credential["status"], "needs_credentials");
+        assert_eq!(missing_credential["probed"], false);
+
+        let invalid_endpoint = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-draft-secret",
+                json!({
+                    "name": "Draft provider",
+                    "provider_type": "openai",
+                    "base_url": "file:///tmp/not-an-http-endpoint",
+                    "auth_method": "api_key",
+                    "api_key": "draft-provider-key",
+                    "llm_model": "model-a",
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("invalid endpoint draft response");
+        assert_eq!(
+            invalid_endpoint.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        let providers = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/llm-providers/",
+                "provider-draft-secret",
+                json!({}),
+            ))
+            .await
+            .expect("provider list response");
+        assert_eq!(providers.status(), axum::http::StatusCode::OK);
+        let providers = response_json(providers).await;
+        assert_eq!(providers.as_array().map(Vec::len), Some(1));
+        assert!(!providers.to_string().contains("Draft provider"));
+    }
+
+    #[tokio::test]
+    async fn provider_endpoints_reject_invalid_or_unsafe_transport_before_persistence() {
+        let state = test_state("provider-endpoint-secret");
+        let app = local_router(state);
+
+        for invalid_base_url in [
+            "https://",
+            "https://user:password@example.test/v1",
+            "https://api.example.test/v1?token=secret",
+            "https://api.example.test/v1#fragment",
+            "http://api.example.test/v1",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "POST",
+                    "/api/v1/llm-providers/test-connection",
+                    "provider-endpoint-secret",
+                    json!({
+                        "name": "Unsafe draft",
+                        "provider_type": "openai",
+                        "base_url": invalid_base_url,
+                        "auth_method": "api_key",
+                        "api_key": "provider-endpoint-key",
+                        "llm_model": "model-a",
+                        "is_active": true
+                    }),
+                ))
+                .await
+                .expect("unsafe draft response");
+            assert_eq!(
+                response.status(),
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "unsafe endpoint should be rejected: {invalid_base_url}"
+            );
+            assert!(!response_json(response)
+                .await
+                .to_string()
+                .contains("provider-endpoint-key"));
+        }
+
+        let local_http = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-endpoint-secret",
+                json!({
+                    "name": "Local runtime",
+                    "provider_type": "openai_compatible",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "auth_method": "none",
+                    "llm_model": "local-model",
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("local HTTP draft response");
+        assert_eq!(local_http.status(), axum::http::StatusCode::OK);
+
+        let unsafe_update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "provider-endpoint-secret",
+                json!({
+                    "base_url": "https://user:password@example.test/v1",
+                    "auth_method": "api_key",
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("unsafe update response");
+        assert_eq!(
+            unsafe_update.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        let unsafe_create = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/",
+                "provider-endpoint-secret",
+                json!({
+                    "name": "Unsafe provider",
+                    "provider_type": "openai_compatible",
+                    "base_url": "http://api.example.test/v1",
+                    "auth_method": "none",
+                    "llm_model": "model-a",
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("unsafe create response");
+        assert_eq!(
+            unsafe_create.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
         );
     }
 
@@ -6920,6 +7490,47 @@ mod tests {
     #[tokio::test]
     async fn cors_allows_tauri_origin_and_rejects_web_origin() {
         let app = local_router(test_state("launch-secret"));
+        let provider_put_preflight = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/llm-providers/local-runtime")
+                    .header("origin", "tauri://localhost")
+                    .header("access-control-request-method", "PUT")
+                    .header(
+                        "access-control-request-headers",
+                        "authorization,content-type,x-agistack-launch",
+                    )
+                    .body(Body::empty())
+                    .expect("provider PUT preflight request"),
+            )
+            .await
+            .expect("provider PUT preflight response");
+        assert_eq!(provider_put_preflight.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            provider_put_preflight
+                .headers()
+                .get("access-control-allow-origin")
+                .and_then(|value| value.to_str().ok()),
+            Some("tauri://localhost")
+        );
+        assert!(provider_put_preflight
+            .headers()
+            .get("access-control-allow-methods")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|methods| methods.split(',').any(|method| method.trim() == "PUT")));
+        let allowed_headers = provider_put_preflight
+            .headers()
+            .get("access-control-allow-headers")
+            .and_then(|value| value.to_str().ok())
+            .expect("allowed provider PUT headers");
+        for expected in ["authorization", "content-type", "x-agistack-launch"] {
+            assert!(allowed_headers
+                .split(',')
+                .any(|header| header.trim().eq_ignore_ascii_case(expected)));
+        }
+
         let allowed = app
             .clone()
             .oneshot(

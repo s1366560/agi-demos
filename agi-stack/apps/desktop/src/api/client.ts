@@ -1472,10 +1472,12 @@ function normalizeProviderCatalog(payload: unknown, providerType: string): LlmPr
       models.push({ id, capability });
     }
   }
+  const source = typeof record.source === 'string' ? record.source.trim() || null : null;
+  if (models.length === 0 && source === null) return unavailableProviderCatalog(providerType);
   return {
     providerType,
     availability: 'available',
-    source: typeof record.source === 'string' ? record.source : null,
+    source,
     models,
   };
 }

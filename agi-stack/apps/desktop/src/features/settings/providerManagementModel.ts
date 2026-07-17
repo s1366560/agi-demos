@@ -207,6 +207,14 @@ export function providerValidationSucceeded(
   return outcome?.probed === true && outcome.status === 'healthy';
 }
 
+export function providerValidationAccepted(
+  outcome: LlmProviderValidationOutcome | null,
+  probeSupported: boolean,
+): boolean {
+  if (probeSupported) return providerValidationSucceeded(outcome);
+  return outcome?.probed === false && outcome.status === 'configuration_valid';
+}
+
 function normalizedModelIds(value: string): string[] {
   return normalizedModelSequence(value.split(/[\n,]/));
 }

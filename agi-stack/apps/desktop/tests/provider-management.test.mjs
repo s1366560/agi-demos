@@ -18,6 +18,7 @@ const {
   providerMutationForEnabledModels,
   providerMutationFromDraft,
   providerTypeDisplayName,
+  providerValidationAccepted,
   providerValidationSignal,
   providerValidationSucceeded,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings/providerManagementModel.js');
@@ -28,6 +29,10 @@ const addProviderDialogSource = readFileSync(
 );
 const providerConnectionPanelSource = readFileSync(
   new URL('../src/features/settings/ProviderConnectionPanel.tsx', import.meta.url),
+  'utf8',
+);
+const providerModelsPanelSource = readFileSync(
+  new URL('../src/features/settings/ProviderModelsPanel.tsx', import.meta.url),
   'utf8',
 );
 const providerOverviewPanelsSource = readFileSync(
@@ -42,6 +47,7 @@ const providerSettingsQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
   'utf8',
 );
+const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
 test('provider management permissions keep local owner and cloud admin boundaries explicit', () => {
   assert.equal(providerManagementAllowed('local', ['owner']), true);
@@ -284,6 +290,42 @@ test('provider validation distinguishes configuration-only results from real pro
     }),
     true,
   );
+  assert.equal(
+    providerValidationAccepted(
+      {
+        provider: null,
+        status: 'configuration_valid',
+        probed: false,
+        detail: 'No external request was sent',
+      },
+      false,
+    ),
+    true,
+  );
+  assert.equal(
+    providerValidationAccepted(
+      {
+        provider: null,
+        status: 'configuration_valid',
+        probed: false,
+        detail: 'No external request was sent',
+      },
+      true,
+    ),
+    false,
+  );
+  assert.equal(
+    providerValidationAccepted(
+      {
+        provider: null,
+        status: 'healthy',
+        probed: true,
+        detail: null,
+      },
+      true,
+    ),
+    true,
+  );
 });
 
 test('provider wizard creates only active providers with an enabled model', () => {
@@ -292,8 +334,13 @@ test('provider wizard creates only active providers with an enabled model', () =
   assert.match(addProviderDialogSource, /step === 3 && selectedModels\.size === 0/);
   assert.match(
     addProviderDialogSource,
-    /nextTypes\.filter\([\s\S]{0,160}descriptor\.operationType === 'llm' && descriptor\.probeSupported/,
+    /nextTypes\.filter\([\s\S]{0,120}descriptor\.operationType === 'llm'/,
   );
+  assert.doesNotMatch(
+    addProviderDialogSource,
+    /descriptor\.operationType === 'llm' && descriptor\.probeSupported/,
+  );
+  assert.match(addProviderDialogSource, /providerValidationAccepted\(validation, probeSupported\)/);
   assert.match(addProviderDialogSource, /if \(modelId === primaryModel\) return/);
   assert.match(addProviderDialogSource, /disabled=\{model\.id === primaryModel\}/);
   assert.match(addProviderDialogSource, /descriptor\.authMethods\.includes\('none'\)/);
@@ -319,9 +366,16 @@ test('provider editing preserves stored credentials only for the unchanged endpo
   );
   assert.match(
     providerConnectionPanelSource,
-    /connectionTestAvailable = authCapabilityAvailable && probeSupported/,
+    /validationAvailable = authCapabilityAvailable/,
   );
-  assert.match(providerConnectionPanelSource, /disabled=\{!probeSupported \|\| !verified/);
+  assert.match(
+    providerConnectionPanelSource,
+    /providerValidationAccepted\(validation, probeSupported\)/,
+  );
+  assert.doesNotMatch(
+    providerConnectionPanelSource,
+    /disabled=\{!probeSupported \|\| !verified/,
+  );
 });
 
 test('provider routing and usage obey current runtime and request identity', () => {
@@ -348,9 +402,13 @@ test('provider settings QA records preserve the authoritative LLM operation cont
     [...providerSettingsQaSource.matchAll(/operation_type:\s*'llm'/g)].length >= 6,
     true,
   );
+  assert.match(
+    providerSettingsQaSource,
+    /provider_type:\s*'openai'[\s\S]{0,160}auth_methods:\s*\['api_key'\][\s\S]{0,120}probe_supported:\s*true/,
+  );
 });
 
-test('provider API adapters share PUT and live health-check contracts', async () => {
+test('provider adapters use PUT, Rust revision guards, and canonical health checks', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -389,8 +447,8 @@ test('provider API adapters share PUT and live health-check contracts', async ()
               auth_method: 'api_key',
               credential_configured: true,
               runtime_selected: false,
-        revision: 8,
-      }),
+              revision: 8,
+            }),
       }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
@@ -879,6 +937,92 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('provider catalogs preserve static fallback provenance and reject empty unscoped catalogs', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith('/models/openai')) {
+      return new Response(
+        JSON.stringify({
+          provider_type: 'openai',
+          source: 'static-fallback',
+          models: {
+            chat: ['gpt-4o-mini'],
+            embedding: [],
+            rerank: [],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        provider_type: 'custom-cloud',
+        source: null,
+        models: {
+          chat: [],
+          embedding: [],
+          rerank: [],
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.example.test',
+      apiKey: 'cloud-user-session',
+    });
+
+    assert.deepEqual(await client.listLlmProviderModels('openai'), {
+      providerType: 'openai',
+      availability: 'available',
+      source: 'static-fallback',
+      models: [{ id: 'gpt-4o-mini', capability: 'chat' }],
+    });
+    assert.deepEqual(await client.listLlmProviderModels('custom-cloud'), {
+      providerType: 'custom-cloud',
+      availability: 'unavailable',
+      source: null,
+      models: [],
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('provider catalog UIs identify static fallback models as built-in suggestions', () => {
+  assert.match(providerModelsPanelSource, /catalog\?\.source === 'static-fallback'/);
+  assert.match(
+    providerModelsPanelSource,
+    /catalogIsStaticFallback \? 'staticFallback' : 'catalog'/,
+  );
+  assert.match(
+    providerModelsPanelSource,
+    /catalogIsStaticFallback[\s\S]{0,160}'providers\.staticModelCounts'/,
+  );
+  assert.match(addProviderDialogSource, /catalog\?\.source === 'static-fallback'/);
+  assert.match(
+    addProviderDialogSource,
+    /catalogIsStaticFallback[\s\S]{0,160}'providers\.enableSuggestedModels'/,
+  );
+  assert.doesNotMatch(addProviderDialogSource, /toggleDiscoveredModel/);
+
+  assert.match(
+    i18nSource,
+    /'providers\.staticCatalogDescription':\s*'Models from the built-in static catalog are suggestions, not live discovery\.'/,
+  );
+  assert.match(
+    i18nSource,
+    /'providers\.staticCatalogDescription': '模型来自内置静态目录，仅作为建议，并非实时发现。'/,
+  );
+  assert.match(i18nSource, /'providers\.source\.staticFallback': 'Built-in static catalog'/);
+  assert.match(i18nSource, /'providers\.source\.staticFallback': '内置静态目录'/);
 });
 
 test('draft connection tests probe both runtimes and preserve live failures', async () => {

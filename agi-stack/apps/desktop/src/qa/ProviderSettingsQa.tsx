@@ -26,6 +26,39 @@ const QA_TENANT_ID = 'tenant-northstar';
 const QA_PROJECT_ID = 'project-desktop-client';
 const NOW = '2026-07-14T09:40:00.000Z';
 
+const qaProviderTypes = [
+  {
+    provider_type: 'openai',
+    operation_type: 'llm',
+    auth_methods: ['api_key'],
+    probe_supported: true,
+  },
+  {
+    provider_type: 'anthropic',
+    operation_type: 'llm',
+    auth_methods: ['api_key'],
+    probe_supported: true,
+  },
+  {
+    provider_type: 'gemini',
+    operation_type: 'llm',
+    auth_methods: ['api_key'],
+    probe_supported: true,
+  },
+  {
+    provider_type: 'openrouter',
+    operation_type: 'llm',
+    auth_methods: ['api_key'],
+    probe_supported: true,
+  },
+  {
+    provider_type: 'ollama',
+    operation_type: 'llm',
+    auth_methods: ['none'],
+    probe_supported: true,
+  },
+] as const;
+
 const initialProviders: ManagedLlmProvider[] = [
   {
     id: 'provider-openai',
@@ -444,7 +477,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     return jsonResponse(providers);
   }
   if (method === 'GET' && path === '/api/v1/llm-providers/types') {
-    return jsonResponse({ types: ['openai', 'anthropic', 'gemini', 'openrouter', 'ollama'] });
+    return jsonResponse({ types: qaProviderTypes });
   }
 
   const catalogMatch = path.match(/^\/api\/v1\/llm-providers\/models\/([^/]+)$/);

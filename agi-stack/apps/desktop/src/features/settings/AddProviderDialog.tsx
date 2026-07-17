@@ -22,7 +22,7 @@ import type {
 import {
   providerAuthMethodSupported,
   providerTypeDisplayName,
-  providerValidationSucceeded,
+  providerValidationAccepted,
 } from './providerManagementModel';
 import { useModalDialog } from './useModalDialog';
 
@@ -101,7 +101,7 @@ export function AddProviderDialog({
       .then((nextTypes) => {
         if (cancelled) return;
         const chatProviderTypes = nextTypes.filter(
-          (descriptor) => descriptor.operationType === 'llm' && descriptor.probeSupported,
+          (descriptor) => descriptor.operationType === 'llm',
         );
         setTypes(chatProviderTypes);
         if (chatProviderTypes[0]) chooseType(chatProviderTypes[0]);
@@ -175,6 +175,9 @@ export function AddProviderDialog({
   );
 
   const selectedDescriptor = types.find((descriptor) => descriptor.providerType === selectedType);
+  const catalogIsStaticFallback = catalog?.source === 'static-fallback';
+  const catalogUnavailable = catalog?.availability === 'unavailable';
+  const probeSupported = selectedDescriptor?.probeSupported === true;
   const authCapabilityAvailable = selectedDescriptor
     ? providerAuthMethodSupported(selectedDescriptor, authMethod)
     : false;
@@ -187,7 +190,7 @@ export function AddProviderDialog({
       input.primaryModel &&
       (input.authMethod === 'none' || input.apiKey),
   );
-  const verified = providerValidationSucceeded(validation);
+  const validationAccepted = providerValidationAccepted(validation, probeSupported);
 
   const testDraft = async () => {
     const requestId = validationRequestId.current + 1;
@@ -220,7 +223,7 @@ export function AddProviderDialog({
     }
   };
 
-  const toggleDiscoveredModel = (modelId: string) => {
+  const toggleCatalogModel = (modelId: string) => {
     if (modelId === primaryModel) return;
     setSelectedModels((current) => {
       const next = new Set(current);
@@ -397,27 +400,33 @@ export function AddProviderDialog({
                   />
                 </label>
                 <button
-                  className={`provider-wizard-test ${verified ? 'success' : ''}`}
+                  className={`provider-wizard-test ${validationAccepted ? 'success' : ''}`}
                   type="button"
                   disabled={!formValid || busy !== null}
                   onClick={() => void testDraft()}
                 >
                   {busy === 'test' ? (
                     <ReloadIcon className="spin" />
-                  ) : verified ? (
+                  ) : validationAccepted ? (
                     <CheckCircledIcon />
                   ) : (
                     <LightningBoltIcon />
                   )}
                   {t(
                     busy === 'test'
-                      ? 'providers.testingConnection'
-                      : verified
-                        ? 'providers.connectionVerified'
-                          : 'providers.testConnection',
+                      ? probeSupported
+                        ? 'providers.testingConnection'
+                        : 'providers.validatingConfiguration'
+                      : validationAccepted
+                        ? probeSupported
+                          ? 'providers.connectionVerified'
+                          : 'providers.configurationValidated'
+                        : probeSupported
+                          ? 'providers.testConnection'
+                          : 'providers.validateConfiguration',
                   )}
                 </button>
-                {validation && !verified ? (
+                {validation && !validationAccepted ? (
                   <div className="provider-inline-error" role="alert">
                     <ExclamationTriangleIcon />
                     <span>{validation.errorMessage || validation.detail || validation.status}</span>
@@ -430,8 +439,24 @@ export function AddProviderDialog({
           {step === 3 ? (
             <section>
               <header>
-                <h3>{t('providers.enableModels')}</h3>
-                <p>{t('providers.enableModelsDescription')}</p>
+                <h3>
+                  {t(
+                    catalogIsStaticFallback
+                      ? 'providers.enableSuggestedModels'
+                      : catalogUnavailable
+                        ? 'providers.confirmManualModel'
+                        : 'providers.enableModels',
+                  )}
+                </h3>
+                <p>
+                  {t(
+                    catalogIsStaticFallback
+                      ? 'providers.enableSuggestedModelsDescription'
+                      : catalogUnavailable
+                        ? 'providers.confirmManualModelDescription'
+                        : 'providers.enableModelsDescription',
+                  )}
+                </p>
               </header>
               <div className="provider-wizard-models">
                 {(catalog?.models ?? []).length > 0 ? (
@@ -441,7 +466,7 @@ export function AddProviderDialog({
                         type="checkbox"
                         checked={selectedModels.has(model.id)}
                         disabled={model.id === primaryModel}
-                        onChange={() => toggleDiscoveredModel(model.id)}
+                        onChange={() => toggleCatalogModel(model.id)}
                       />
                       <CubeIcon />
                       <span>
@@ -464,8 +489,24 @@ export function AddProviderDialog({
               <div className="provider-capability-note">
                 <PlusIcon />
                 <span>
-                  <b>{t('providers.addMoreModelsLater')}</b>
-                  <small>{t('providers.addMoreModelsLaterDescription')}</small>
+                  <b>
+                    {t(
+                      catalogIsStaticFallback
+                        ? 'providers.addMoreSuggestedModelsLater'
+                        : catalogUnavailable
+                          ? 'providers.addMoreManualModelsLater'
+                          : 'providers.addMoreModelsLater',
+                    )}
+                  </b>
+                  <small>
+                    {t(
+                      catalogIsStaticFallback
+                        ? 'providers.addMoreSuggestedModelsLaterDescription'
+                        : catalogUnavailable
+                          ? 'providers.addMoreManualModelsLaterDescription'
+                          : 'providers.addMoreModelsLaterDescription',
+                    )}
+                  </small>
                 </span>
               </div>
             </section>
@@ -499,7 +540,7 @@ export function AddProviderDialog({
               disabled={
                 busy !== null ||
                 (step === 1 && !selectedType) ||
-                (step === 2 && !verified) ||
+                (step === 2 && !validationAccepted) ||
                 (step === 3 && selectedModels.size === 0)
               }
               onClick={

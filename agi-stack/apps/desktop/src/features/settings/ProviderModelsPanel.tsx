@@ -34,7 +34,7 @@ type ProviderModelsPanelProps = {
 type VisibleModel = {
   id: string;
   capability: 'chat' | 'embedding' | 'rerank';
-  source: 'catalog' | 'configured';
+  source: 'catalog' | 'staticFallback' | 'configured';
 };
 
 export function ProviderModelsPanel({
@@ -100,10 +100,15 @@ export function ProviderModelsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider.id]);
 
+  const catalogIsStaticFallback = catalog?.source === 'static-fallback';
+
   const models = useMemo<VisibleModel[]>(() => {
     const byId = new Map<string, VisibleModel>();
     for (const model of catalog?.models ?? []) {
-      byId.set(model.id, { ...model, source: 'catalog' });
+      byId.set(model.id, {
+        ...model,
+        source: catalogIsStaticFallback ? 'staticFallback' : 'catalog',
+      });
     }
     for (const id of provider.allowed_models ?? []) {
       if (!byId.has(id)) byId.set(id, { id, capability: 'chat', source: 'configured' });
@@ -119,7 +124,7 @@ export function ProviderModelsPanel({
       if (!byId.has(id)) byId.set(id, { id, capability: 'chat', source: 'configured' });
     }
     return [...byId.values()];
-  }, [catalog, enabled, provider.allowed_models, provider.llm_model]);
+  }, [catalog, catalogIsStaticFallback, enabled, provider.allowed_models, provider.llm_model]);
 
   const visibleModels = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -182,7 +187,13 @@ export function ProviderModelsPanel({
         <div>
           <span>{t('providers.modelCatalogEyebrow')}</span>
           <h3>{t('providers.modelCatalogTitle')}</h3>
-          <p>{t('providers.modelCatalogDescription')}</p>
+          <p>
+            {t(
+              catalogIsStaticFallback
+                ? 'providers.staticCatalogDescription'
+                : 'providers.modelCatalogDescription',
+            )}
+          </p>
         </div>
         {dirty ? (
           <button
@@ -197,7 +208,15 @@ export function ProviderModelsPanel({
         ) : (
           <button type="button" disabled={loading} onClick={() => void loadCatalog()}>
             <ReloadIcon className={loading ? 'spin' : ''} />
-            {t(loading ? 'providers.loadingModels' : 'providers.refreshModels')}
+            {t(
+              catalogIsStaticFallback
+                ? loading
+                  ? 'providers.loadingStaticCatalog'
+                  : 'providers.reloadStaticCatalog'
+                : loading
+                  ? 'providers.loadingModels'
+                  : 'providers.refreshModels',
+            )}
           </button>
         )}
       </header>
@@ -212,7 +231,15 @@ export function ProviderModelsPanel({
           />
         </label>
         <span>
-          {t('providers.modelCounts', { enabled: enabled.size, discovered: models.length })}
+          {catalogIsStaticFallback
+            ? t('providers.staticModelCounts', {
+                enabled: enabled.size,
+                suggested: catalog?.models.length ?? 0,
+              })
+            : t('providers.modelCounts', {
+                enabled: enabled.size,
+                discovered: catalog?.models.length ?? 0,
+              })}
         </span>
       </div>
 
@@ -274,6 +301,8 @@ export function ProviderModelsPanel({
             {t(
               catalogUnavailable
                 ? 'providers.discoveryUnavailable'
+                : catalogIsStaticFallback
+                  ? 'providers.noSuggestedModels'
                 : 'providers.noModelsReturned',
             )}
           </b>
@@ -281,6 +310,8 @@ export function ProviderModelsPanel({
             {t(
               catalogUnavailable
                 ? 'providers.discoveryUnavailableDescription'
+                : catalogIsStaticFallback
+                  ? 'providers.noSuggestedModelsDescription'
                 : 'providers.noModelsReturnedDescription',
             )}
           </span>
@@ -292,7 +323,13 @@ export function ProviderModelsPanel({
           <SewingPinIcon />
           <span>
             <b>{t('providers.addManualModel')}</b>
-            <small>{t('providers.addManualModelDescription')}</small>
+            <small>
+              {t(
+                catalogIsStaticFallback
+                  ? 'providers.addManualModelStaticDescription'
+                  : 'providers.addManualModelDescription',
+              )}
+            </small>
           </span>
         </div>
         <label>
