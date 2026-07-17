@@ -57,7 +57,6 @@ import {
   saveNativeTrustedSession,
   type NativeTrustedSession,
 } from './api/trustedSession';
-import { AutomationsPage } from './features/automations/AutomationsPage';
 import {
   findWorkspaceProject,
   isCurrentContextRevision,
@@ -158,11 +157,13 @@ import { socketEventMatchesSessionScope } from './features/session/sessionScope'
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
 import { runtimeTransportIdentityChanged } from './features/runtime/runtimeConfigModel';
 import {
+  countMyWorkGroups,
   myWorkConversationMatchesScope,
   myWorkRefreshScopeIsCurrent,
   socketEventInvalidatesMyWork,
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
+import { AuxiliaryView } from './features/navigation/AuxiliaryView';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import {
   settingsSectionForEntry,
@@ -4161,7 +4162,11 @@ export function App() {
   const memoryProjectId = config.projectId.trim() || 'desktop-local';
   const memoryAuthorId = auth.user?.user_id ?? 'desktop-user';
   const paneStageClassName =
-    activeSection === 'board' ? 'pane-stage single-stage my-work-stage' : 'pane-stage single-stage';
+    activeSection === 'board'
+      ? 'pane-stage single-stage my-work-stage'
+      : activeSection === 'home' || activeSection === 'automations' || activeSection === 'search'
+        ? 'pane-stage single-stage auxiliary-stage'
+        : 'pane-stage single-stage';
   const configuredProject = useMemo(
     () => projectSummaryFromConfig(config),
     [config.projectId, config.tenantId],
@@ -4181,6 +4186,17 @@ export function App() {
       null,
     [auth.projects, config.projectId, sidebarProjects],
   );
+  const myWorkCounts = useMemo(() => countMyWorkGroups(dataset.myWork), [dataset.myWork]);
+  const myWorkMetricStatus =
+    connection === 'loading' || myWorkRefreshing
+      ? 'loading'
+      : dataset.myWorkError
+        ? 'error'
+        : 'ready';
+  const auxiliaryUserName =
+    auth.user?.name?.trim().split(/\s+/)[0] ||
+    auth.user?.email?.split('@')[0] ||
+    t('sidebar.account');
   const myWorkWorkspaceLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -4998,14 +5014,6 @@ export function App() {
   const openWorkspaceSettings = () => openSettingsEntry('workspace_overview');
   const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
 
-  const openWorkspaceOverview = () => {
-    if (!selectedConversation || !config.workspaceId) {
-      switchSection('workspace');
-      return;
-    }
-    selectWorkspace(config.workspaceId, config.projectId);
-  };
-
   const openConnectionSettings = () => {
     if (!identityAuthenticated) {
       useApiKeyManually();
@@ -5153,7 +5161,7 @@ export function App() {
       label: t('nav.home'),
       description: t('commandPalette.homeDescription'),
       icon: <DashboardIcon />,
-      onSelect: openWorkspaceOverview,
+      onSelect: () => switchSection('home'),
     },
     {
       id: 'my-work',
@@ -5367,12 +5375,16 @@ export function App() {
     />
   );
 
-  const renderAutomationsPage = () => (
-    <AutomationsPage
-      api={api}
-      projectId={config.projectId}
-      projectName={auth.projects.find((project) => project.id === config.projectId)?.name}
-      onOpenConnection={openConnectionSettings}
+  const renderAuxiliaryView = (section: 'home' | 'automations' | 'search') => (
+    <AuxiliaryView
+      section={section}
+      userName={auxiliaryUserName}
+      runningCount={myWorkCounts.running}
+      needsInputCount={myWorkCounts.needs_input + myWorkCounts.needs_approval}
+      readyCount={myWorkCounts.ready_review}
+      metricStatus={myWorkMetricStatus}
+      onOpenMyWork={() => switchSection('board')}
+      onRetryMyWork={() => void refreshMyWork()}
     />
   );
 
@@ -5485,7 +5497,13 @@ export function App() {
     if (activeSection === 'workspace') return renderWorkspaceOverview();
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
-    if (activeSection === 'automations') return renderAutomationsPage();
+    if (
+      activeSection === 'home' ||
+      activeSection === 'automations' ||
+      activeSection === 'search'
+    ) {
+      return renderAuxiliaryView(activeSection);
+    }
     if (
       activeSection === 'status' ||
       activeSection === 'sandbox' ||
@@ -5523,7 +5541,7 @@ export function App() {
           runsInTauri ? 'tauri-window' : 'browser-window'
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
           activeSection === 'board' ? 'my-work-mode' : ''
-        } ${activeSection === 'automations' ? 'automations-mode' : ''}`}
+        }`}
       >
 
         <section className="desktop-body">
@@ -5531,8 +5549,10 @@ export function App() {
             activeSection={
               activeSection === 'board'
                 ? 'my-work'
-                : activeSection === 'automations'
-                  ? 'automations'
+                : activeSection === 'home' ||
+                    activeSection === 'automations' ||
+                    activeSection === 'search'
+                  ? activeSection
                   : null
             }
             mode={preferredTaskMode}
@@ -5560,12 +5580,15 @@ export function App() {
             }
             expandedWorkspaceIds={expandedWorkspaceIds}
             newTaskDisabledReason={newTaskDisabledReason}
-            onModeChange={setPreferredTaskMode}
+            onModeChange={(mode) => {
+              setPreferredTaskMode(mode);
+              switchSection('board');
+            }}
             onNavigate={(section) => {
-              if (section === 'home') openWorkspaceOverview();
+              if (section === 'home') switchSection('home');
               if (section === 'my-work') switchSection('board');
               if (section === 'automations') switchSection('automations');
-              if (section === 'search') openCommandPalette();
+              if (section === 'search') switchSection('search');
               if (section === 'notifications') openSettingsEntry('sidebar_notifications');
             }}
             onToggleWorkspace={toggleWorkspace}

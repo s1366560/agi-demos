@@ -1738,6 +1738,11 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   overflow: hidden;
 }
 
+.pane-stage.single-stage.auxiliary-stage {
+  padding: 0;
+  overflow: hidden;
+}
+
 .pane-stage.single-stage .pane-shell {
   min-height: 0;
 }

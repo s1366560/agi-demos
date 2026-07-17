@@ -42,6 +42,7 @@
     "src/features/settings/managedResourceModel.ts",
     "src/features/settings/providerManagementModel.ts",
     "src/features/my-work/myWorkModel.ts",
+    "src/features/navigation/AuxiliaryView.tsx",
     "src/features/runtime/runtimeConfigModel.ts",
     "src/features/task/NewTaskFlow.tsx",
     "src/features/task/newTaskPlanModel.ts",

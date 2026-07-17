@@ -10,7 +10,9 @@ export type CredentialKind = 'cloud_session' | 'manual_api_key' | 'local_session
 
 export type WorkbenchSection =
   | 'workspace'
+  | 'home'
   | 'automations'
+  | 'search'
   | 'chat'
   | 'board'
   | 'status'

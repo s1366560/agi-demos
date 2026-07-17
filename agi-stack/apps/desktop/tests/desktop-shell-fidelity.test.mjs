@@ -280,15 +280,6 @@ test('profile menu keeps account and workspace switching as distinct settings en
   assert.match(appSource, /openSettingsEntry\('profile_workspace_switch'\)/);
 });
 
-test('Home clears an open conversation through the workspace-overview transition', () => {
-  assert.match(
-    appSource,
-    /const openWorkspaceOverview = \(\) => \{[\s\S]*?selectWorkspace\(config\.workspaceId, config\.projectId\);/,
-  );
-  assert.match(appSource, /if \(section === 'home'\) openWorkspaceOverview\(\)/);
-  assert.match(appSource, /onSelect: openWorkspaceOverview/);
-});
-
 test('selected conversations are declarative socket state across workspace reconnects', () => {
   assert.match(
     appSource,

@@ -25,10 +25,18 @@ copyFileSync(
   join(compiledTaskDirectory, 'NewTaskPlanReview.css'),
 );
 
+const compiledNavigationDirectory = join(compiledRoot, 'src', 'features', 'navigation');
+mkdirSync(compiledNavigationDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'navigation', 'AuxiliaryView.css'),
+  join(compiledNavigationDirectory, 'AuxiliaryView.css'),
+);
+
 const testFiles = [
   'a2ui-action.test.mjs',
   'api-client.test.mjs',
   'automation-model.test.mjs',
+  'auxiliary-view.test.mjs',
   'auth-context-model.test.mjs',
   'chat-composer-model.test.mjs',
   'desktop-shell-fidelity.test.mjs',
@@ -39,6 +47,7 @@ const testFiles = [
   'trusted-session-broker.test.mjs',
   'local-runtime-status.test.mjs',
   'my-work-model.test.mjs',
+  'navigation-contract.test.mjs',
   'new-task-plan-model.test.mjs',
   'new-task-plan-approval.test.mjs',
   'new-task-recovery.test.mjs',
