@@ -7,6 +7,8 @@
 
 import { useEffect, useCallback } from 'react';
 
+import { useShallow } from 'zustand/react/shallow';
+
 import { useSandboxStore, isSandboxTool } from '../stores/sandbox';
 
 export interface UseSandboxDetectionOptions {
@@ -73,16 +75,29 @@ export function useSandboxDetection(
 ): SandboxDetectionResult {
   const { autoOpenPanel = true, autoSwitchToOutput = true, sandboxId } = options;
 
+  // Subscribe only to the fields this hook needs. A whole-store subscription
+  // here re-renders the entire chat workspace on every sandbox store update.
   const {
     currentTool,
-    toolExecutions,
+    executionCount,
     onToolStart,
     onToolEnd,
     openPanel,
     closePanel,
     setSandboxId,
     setActiveTab,
-  } = useSandboxStore();
+  } = useSandboxStore(
+    useShallow((state) => ({
+      currentTool: state.currentTool,
+      executionCount: state.toolExecutions.length,
+      onToolStart: state.onToolStart,
+      onToolEnd: state.onToolEnd,
+      openPanel: state.openPanel,
+      closePanel: state.closePanel,
+      setSandboxId: state.setSandboxId,
+      setActiveTab: state.setActiveTab,
+    }))
+  );
 
   // Set sandbox ID when provided
   useEffect(() => {
@@ -131,7 +146,7 @@ export function useSandboxDetection(
   return {
     isExecuting: currentTool !== null,
     currentTool: currentTool ? { name: currentTool.name, input: currentTool.input } : null,
-    executionCount: toolExecutions.length,
+    executionCount,
     handleToolStart,
     handleToolEnd,
     openPanel: handleOpenPanel,

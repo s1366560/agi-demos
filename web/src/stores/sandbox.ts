@@ -1017,18 +1017,23 @@ export const useSandboxStore = create<SandboxState>()(
       },
 
       onToolEnd: (callId, output, error, durationMs) => {
-        const currentTool = get().currentTool;
+        const state = get();
+        const currentTool = state.currentTool;
 
-        // Clear current tool if matches
-        if (currentTool?.callId === callId || !callId) {
+        // Clear current tool if it matches. Skip the update when there is no
+        // current tool, otherwise every unrelated observe event (empty callId)
+        // would notify all store subscribers with a no-op state change.
+        if (currentTool && (currentTool.callId === callId || !callId)) {
           set({ currentTool: null });
         }
 
-        // Update execution result
-        if (callId) {
+        // Update execution result. Guard on existence so observe events from
+        // tools that never registered an execution do not create a no-op
+        // toolExecutions array replacement.
+        if (callId && state.toolExecutions.some((exec) => exec.id === callId)) {
           // Get artifacts for this tool execution
-          const artifacts = get().getArtifactsByToolExecution(callId);
-          get().updateToolExecution(callId, {
+          const artifacts = state.getArtifactsByToolExecution(callId);
+          state.updateToolExecution(callId, {
             output,
             error,
             durationMs,
