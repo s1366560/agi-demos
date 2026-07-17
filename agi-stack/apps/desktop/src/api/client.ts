@@ -837,6 +837,7 @@ export class DesktopApiClient {
       llm_model: input.primaryModel,
       allowed_models: input.allowedModels,
       is_active: input.active,
+      expected_revision: input.expectedRevision,
       ...(input.apiKey ? { api_key: input.apiKey } : {}),
     };
     const local = this.config.mode === 'local';
@@ -848,7 +849,6 @@ export class DesktopApiClient {
           ? {
               ...commonBody,
               auth_method: input.authMethod,
-              expected_revision: input.expectedRevision,
             }
           : commonBody,
       },

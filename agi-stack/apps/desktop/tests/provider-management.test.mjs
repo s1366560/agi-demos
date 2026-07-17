@@ -38,6 +38,10 @@ const modelProviderWorkspaceSource = readFileSync(
   new URL('../src/features/settings/ModelProviderWorkspace.tsx', import.meta.url),
   'utf8',
 );
+const providerSettingsQaSource = readFileSync(
+  new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
+  'utf8',
+);
 
 test('provider management permissions keep local owner and cloud admin boundaries explicit', () => {
   assert.equal(providerManagementAllowed('local', ['owner']), true);
@@ -338,6 +342,14 @@ test('provider routing and usage obey current runtime and request identity', () 
   );
 });
 
+test('provider settings QA records preserve the authoritative LLM operation contract', () => {
+  assert.doesNotMatch(providerSettingsQaSource, /operation_type:\s*'chat'/);
+  assert.equal(
+    [...providerSettingsQaSource.matchAll(/operation_type:\s*'llm'/g)].length >= 6,
+    true,
+  );
+});
+
 test('provider API adapters share PUT and live health-check contracts', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -450,6 +462,7 @@ test('provider API adapters share PUT and live health-check contracts', async ()
       llm_model: 'gpt-test',
       allowed_models: ['gpt-test'],
       is_active: true,
+      expected_revision: 7,
     });
     assert.equal(cloudValidation.probed, true);
     assert.equal(cloudValidation.status, 'healthy');
