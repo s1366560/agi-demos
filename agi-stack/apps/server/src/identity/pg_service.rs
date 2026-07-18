@@ -258,6 +258,13 @@ impl IdentityService for PgIdentityService {
         self.pg_poll_device_token(device_code).await
     }
 
+    async fn cancel_device_code(
+        &self,
+        device_code: &str,
+    ) -> Result<DeviceCancelView, IdentityError> {
+        self.pg_cancel_device_code(device_code).await
+    }
+
     async fn list_tenants(
         &self,
         user_id: &str,

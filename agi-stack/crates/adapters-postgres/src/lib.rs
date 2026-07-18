@@ -198,7 +198,7 @@ pub use trust_repo::{
     DecisionRecordRecord, NewDecisionRecordRecord, NewTrustPolicyRecord, PgTrustRepository,
     TenantAccessStatus, TrustDecisionResolution, TrustPolicyRecord,
 };
-pub use user_store::{CurrentUserRecord, PgUserStore, UserAuthRecord};
+pub use user_store::{CurrentUserRecord, PgDeviceGrantTransition, PgUserStore, UserAuthRecord};
 pub use vector_index::PgVectorIndex;
 pub use workspace_context_repo::{
     PgWorkspaceContextRepository, WorkspaceContextAccessRecord, WorkspaceContextRepositoryError,

@@ -7,6 +7,7 @@ const clientModule = require(
   '/tmp/agistack-desktop-test-dist/src/api/client.js'
 );
 const {
+  classifyDeviceTokenError,
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
@@ -41,6 +42,275 @@ test('workspace context unavailable detection requires the structured server cod
     false,
   );
   assert.equal(isWorkspaceContextUnavailableError(new Error('workspace_context_unavailable')), false);
+});
+
+test('device authorization client preserves the exact unauthenticated server contract', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (calls.length === 3) {
+      return new Response(null, { status: 204 });
+    }
+    const payload =
+      calls.length === 1
+        ? {
+            device_code: 'device-secret',
+            user_code: 'ABCD2345',
+            verification_uri: '/device',
+            verification_uri_complete: '/device?user_code=ABCD2345',
+            expires_in: 600,
+            interval: 5,
+          }
+        : { access_token: 'ms_sk_session', token_type: 'Bearer' };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'must-not-be-sent',
+    });
+
+    assert.deepEqual(await client.createDeviceCode(), {
+      device_code: 'device-secret',
+      user_code: 'ABCD2345',
+      verification_uri: '/device',
+      verification_uri_complete: '/device?user_code=ABCD2345',
+      expires_in: 600,
+      interval: 5,
+    });
+    assert.deepEqual(await client.pollDeviceToken(' device-secret '), {
+      access_token: 'ms_sk_session',
+      token_type: 'bearer',
+    });
+    await client.cancelDeviceCode(' device-secret ');
+
+    assert.deepEqual(
+      calls.map(({ input, init }) => ({
+        url: input,
+        method: init?.method,
+        authorization: new Headers(init?.headers).get('authorization'),
+        body: JSON.parse(String(init?.body)),
+      })),
+      [
+        {
+          url: 'http://127.0.0.1:8088/api/v1/auth/device/code',
+          method: 'POST',
+          authorization: null,
+          body: {},
+        },
+        {
+          url: 'http://127.0.0.1:8088/api/v1/auth/device/token',
+          method: 'POST',
+          authorization: null,
+          body: { device_code: 'device-secret' },
+        },
+        {
+          url: 'http://127.0.0.1:8088/api/v1/auth/device/cancel',
+          method: 'POST',
+          authorization: null,
+          body: { device_code: 'device-secret' },
+        },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('device authorization client rejects malformed successful responses', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:8088',
+  });
+
+  try {
+    for (const payload of [
+      null,
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD2345',
+        verification_uri: 'https://evil.example/device',
+        verification_uri_complete: '/device?user_code=ABCD2345',
+        expires_in: 600,
+        interval: 5,
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD2345',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD2345',
+        expires_in: '600',
+        interval: 5,
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD2345',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD2345',
+        expires_in: 600,
+        interval: 0,
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD2345',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD2345',
+        expires_in: 600,
+        interval: 5,
+        status: 'pending',
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD1234',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD1234',
+        expires_in: 600,
+        interval: 5,
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD234',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD234',
+        expires_in: 600,
+        interval: 5,
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD2345',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD2345',
+        expires_in: 0,
+        interval: 5,
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD2345',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD2345',
+        expires_in: 601,
+        interval: 5,
+      },
+      {
+        device_code: 'device-secret',
+        user_code: 'ABCD2345',
+        verification_uri: '/device',
+        verification_uri_complete: '/device?user_code=ABCD2345',
+        expires_in: 600,
+        interval: 61,
+      },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.createDeviceCode(), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        assert.match(error.message, /Invalid device code response/);
+        assert.deepEqual(error.payload, { detail: 'invalid_device_code_response' });
+        return true;
+      });
+    }
+
+    for (const payload of [
+      {},
+      { access_token: '', token_type: 'bearer' },
+      { access_token: 'ms_sk_session', token_type: 1 },
+      { access_token: 'ms_sk_session', token_type: 'mac' },
+      { access_token: 'ms_sk_session', token_type: 'bearer', expires_in: 3600 },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.pollDeviceToken('device-secret'), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        assert.match(error.message, /Invalid device token response/);
+        assert.deepEqual(error.payload, { detail: 'invalid_device_token_response' });
+        return true;
+      });
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('device token polling preserves pending and expired errors for the caller', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:8088',
+  });
+
+  try {
+    for (const response of [
+      {
+        status: 428,
+        payload: { detail: { error: 'authorization_pending', interval: 5 } },
+      },
+      { status: 410, payload: { detail: 'expired_token' } },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(response.payload), {
+          status: response.status,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.pollDeviceToken('device-secret'), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, response.status);
+        assert.deepEqual(error.payload, response.payload);
+        assert.deepEqual(
+          classifyDeviceTokenError(error),
+          response.status === 428
+            ? { code: 'authorization_pending', interval: 5 }
+            : { code: 'expired_token' },
+        );
+        return true;
+      });
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('device token error classification rejects message and malformed payload guesses', () => {
+  assert.equal(
+    classifyDeviceTokenError(new Error('authorization_pending; retry in 5 seconds')),
+    null,
+  );
+  assert.equal(
+    classifyDeviceTokenError(
+      new DesktopApiError('authorization_pending', 428, {
+        detail: { error: 'authorization_pending', interval: '5' },
+      }),
+    ),
+    null,
+  );
+  assert.equal(
+    classifyDeviceTokenError(
+      new DesktopApiError('expired_token', 400, { detail: 'expired_token' }),
+    ),
+    null,
+  );
+  assert.deepEqual(
+    classifyDeviceTokenError(
+      new DesktopApiError('expired_token', 410, {
+        detail: { error: 'expired_token' },
+      }),
+    ),
+    { code: 'expired_token' },
+  );
 });
 
 test('conversation history requests preserve forward and backward cursor pairs', async () => {

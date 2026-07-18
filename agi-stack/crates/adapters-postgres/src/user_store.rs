@@ -20,7 +20,10 @@
 //! integration test; offline the login path uses the dev identity stub.
 
 use serde_json::Value;
-use sqlx::types::chrono::{DateTime, Utc};
+use sqlx::{
+    types::chrono::{DateTime, Utc},
+    Postgres, Transaction,
+};
 
 use agistack_core::ports::{CoreError, CoreResult};
 
@@ -58,9 +61,38 @@ pub struct PgUserStore {
     pool: PgPool,
 }
 
+/// A transaction-scoped, cross-process lock for one device-code grant.
+///
+/// PostgreSQL releases `pg_advisory_xact_lock` automatically on commit or
+/// rollback, including when this value is dropped after an error. Keeping the
+/// API-key mutation in the same transaction makes approval rollback atomic.
+pub struct PgDeviceGrantTransition {
+    transaction: Transaction<'static, Postgres>,
+}
+
 impl PgUserStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// Serialize approve, poll, and cancel for one device code across Rust
+    /// server processes. The two-argument advisory key gives this lock its own
+    /// namespace so it cannot collide with unrelated advisory-lock users.
+    pub async fn begin_device_grant_transition(
+        &self,
+        device_code: &str,
+    ) -> CoreResult<PgDeviceGrantTransition> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        sqlx::query("SELECT pg_advisory_xact_lock(1296388939, hashtext($1))")
+            .bind(device_code)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(PgDeviceGrantTransition { transaction })
     }
 
     /// Look up a user by email (the OAuth2 form `username`) for password
@@ -219,5 +251,75 @@ impl PgUserStore {
         .await
         .map_err(|e| CoreError::Storage(e.to_string()))?;
         Ok(())
+    }
+
+    /// Compensating revocation for a device approval that could not publish its
+    /// grant. The raw token is hashed before lookup and is never persisted.
+    pub async fn revoke_api_key_by_raw(&self, raw_key: &str) -> CoreResult<bool> {
+        let key_hash = crate::sha256_hex(raw_key);
+        let result = sqlx::query("DELETE FROM api_keys WHERE key_hash = $1")
+            .bind(&key_hash)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(result.rows_affected() > 0)
+    }
+}
+
+impl PgDeviceGrantTransition {
+    /// Persist a newly minted device-login key inside the lock transaction.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn insert_api_key(
+        &mut self,
+        id: &str,
+        plain_key: &str,
+        name: &str,
+        user_id: &str,
+        expires_at: Option<DateTime<Utc>>,
+        permissions: &[String],
+    ) -> CoreResult<()> {
+        let key_hash = crate::sha256_hex(plain_key);
+        let permissions_json =
+            serde_json::to_string(permissions).map_err(|e| CoreError::Storage(e.to_string()))?;
+        sqlx::query(
+            "INSERT INTO api_keys (id, key_hash, name, user_id, expires_at, is_active, permissions) \
+             VALUES ($1, $2, $3, $4, $5, true, $6::json)",
+        )
+        .bind(id)
+        .bind(&key_hash)
+        .bind(name)
+        .bind(user_id)
+        .bind(expires_at)
+        .bind(&permissions_json)
+        .execute(&mut *self.transaction)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Revoke exactly the server-stored grant token. Missing/already-revoked
+    /// keys are a successful no-op, which keeps cancellation idempotent.
+    pub async fn revoke_api_key_by_raw(&mut self, raw_key: &str) -> CoreResult<bool> {
+        let key_hash = crate::sha256_hex(raw_key);
+        let result = sqlx::query("DELETE FROM api_keys WHERE key_hash = $1")
+            .bind(&key_hash)
+            .execute(&mut *self.transaction)
+            .await
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn commit(self) -> CoreResult<()> {
+        self.transaction
+            .commit()
+            .await
+            .map_err(|e| CoreError::Storage(e.to_string()))
+    }
+
+    pub async fn rollback(self) -> CoreResult<()> {
+        self.transaction
+            .rollback()
+            .await
+            .map_err(|e| CoreError::Storage(e.to_string()))
     }
 }

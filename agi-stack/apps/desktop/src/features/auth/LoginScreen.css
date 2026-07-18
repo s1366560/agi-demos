@@ -364,8 +364,246 @@
   border: 0;
 }
 
+.desktop-device-auth-backdrop {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  padding: 32px;
+  background: rgb(3 7 12 / 76%);
+  backdrop-filter: blur(8px);
+  inset: 0;
+  place-items: center;
+}
+
+.desktop-device-auth-dialog {
+  position: relative;
+  width: min(430px, calc(100vw - 64px));
+  padding: 24px;
+  color: #e7edf6;
+  background: #0b1119;
+  border: 1px solid #344457;
+  border-radius: 10px;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 48%);
+  outline: 0;
+}
+
+.desktop-device-auth-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #6c7b8e;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  place-items: center;
+}
+
+.desktop-device-auth-close:hover,
+.desktop-device-auth-close:focus-visible {
+  color: #d5dfe9;
+  background: #111923;
+  border-color: #354457;
+  outline: 0;
+}
+
+.desktop-device-auth-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 17px;
+  color: #38d6ff;
+  background: #102832;
+  border: 1px solid #286a7d;
+  border-radius: 9px;
+  place-items: center;
+}
+
+.desktop-device-auth-dialog.expired .desktop-device-auth-icon {
+  color: #e5a54b;
+  background: #251d14;
+  border-color: #675033;
+}
+
+.desktop-device-auth-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.desktop-device-auth-dialog > header > span {
+  color: #38d6ff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.desktop-device-auth-dialog.expired > header > span {
+  color: #e5a54b;
+}
+
+.desktop-device-auth-dialog > header h2 {
+  margin: 8px 0 7px;
+  color: #edf4fa;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.desktop-device-auth-dialog > header p {
+  max-width: 360px;
+  margin: 0;
+  color: #7d8b9d;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.desktop-device-auth-code {
+  display: grid;
+  gap: 7px;
+  padding: 15px;
+  margin-top: 21px;
+  text-align: center;
+  background: #080d13;
+  border: 1px solid #2d3b4a;
+  border-radius: 8px;
+}
+
+.desktop-device-auth-code > span,
+.desktop-device-auth-code small > span {
+  color: #647386;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.desktop-device-auth-code > strong {
+  color: #eef8fb;
+  font: 700 25px/1.15 Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.18em;
+}
+
+.desktop-device-auth-code > small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  color: #6abdd1;
+  font-size: 8px;
+}
+
+.desktop-device-auth-status {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  margin-top: 10px;
+  color: #38d6ff;
+  background: #101e26;
+  border: 1px solid #285465;
+  border-radius: 7px;
+}
+
+.desktop-device-auth-status.expired {
+  color: #e5a54b;
+  background: #211a12;
+  border-color: #5a4930;
+}
+
+.desktop-device-auth-status > svg {
+  width: 17px;
+  height: 17px;
+  justify-self: center;
+}
+
+.desktop-device-auth-status > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.desktop-device-auth-status b {
+  color: #c6d8df;
+  font-size: 9px;
+}
+
+.desktop-device-auth-status small {
+  color: #718797;
+  font-size: 7px;
+}
+
+.desktop-device-auth-status.expired small {
+  color: #a78a5f;
+}
+
+.desktop-device-auth-error {
+  padding: 9px 10px;
+  margin-top: 10px;
+  color: #ef9aa3;
+  font-size: 8px;
+  line-height: 1.4;
+  background: #241419;
+  border: 1px solid #66333a;
+  border-radius: 6px;
+}
+
+.desktop-device-auth-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.desktop-device-auth-actions button {
+  display: inline-flex;
+  height: 35px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  color: #96a5b6;
+  font-size: 8px;
+  font-weight: 650;
+  background: #121923;
+  border: 1px solid #354153;
+  border-radius: 6px;
+}
+
+.desktop-device-auth-actions .primary {
+  color: white;
+  background: #146f87;
+  border-color: #2b8ea7;
+}
+
+.desktop-device-auth-actions button:hover,
+.desktop-device-auth-actions button:focus-visible {
+  color: white;
+  border-color: #477086;
+  outline: 0;
+}
+
+.desktop-device-auth-actions .primary:hover,
+.desktop-device-auth-actions .primary:focus-visible {
+  background: #177c96;
+}
+
+.desktop-device-auth-actions svg {
+  width: 13px;
+  height: 13px;
+}
+
 @media (max-height: 719px) {
   .desktop-login-screen {
     min-height: 0;
+  }
+
+  .desktop-device-auth-backdrop {
+    overflow-y: auto;
   }
 }

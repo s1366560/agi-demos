@@ -13,6 +13,7 @@
 
 use std::{
     path::{Path, PathBuf},
+    process::{Command, Stdio},
     sync::Arc,
 };
 
@@ -30,6 +31,7 @@ use tauri::{
 use trusted_session::{
     trusted_session_clear, trusted_session_load, trusted_session_save, TrustedSessionBroker,
 };
+use url::{Host, Position};
 
 /// Embedding width for the on-device hash embedding (toy; Wave F upgrades the
 /// vector path to sqlite-vec + a real embedding).
@@ -124,6 +126,201 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ApiBaseUrl(Url);
+
+impl ApiBaseUrl {
+    fn parse(raw_url: &str) -> Result<Self, String> {
+        if raw_url.chars().any(char::is_whitespace) {
+            return Err("API base URL must not include whitespace".to_string());
+        }
+        let url = Url::parse(raw_url).map_err(|_| "invalid API base URL".to_string())?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err("API base URL must use http or https".to_string());
+        }
+        if !is_secure_web_url(&url) {
+            return Err("API base URL must use https or loopback http".to_string());
+        }
+        if url.host_str().is_none() {
+            return Err("API base URL must include a host".to_string());
+        }
+        if raw_authority_has_userinfo(raw_url)
+            || !url[Position::BeforeUsername..Position::BeforeHost].is_empty()
+        {
+            return Err("API base URL must not include user info".to_string());
+        }
+        if url.fragment().is_some() {
+            return Err("API base URL must not include a fragment".to_string());
+        }
+        Ok(Self(url))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DeviceAuthorizationUrl(Url);
+
+impl DeviceAuthorizationUrl {
+    fn parse(
+        raw_url: &str,
+        api_base_url: &ApiBaseUrl,
+        expected_user_code: &str,
+    ) -> Result<Self, String> {
+        validate_device_user_code(expected_user_code)?;
+        if raw_url.chars().any(char::is_whitespace) {
+            return Err("device authorization URL must not include whitespace".to_string());
+        }
+        let url =
+            Url::parse(raw_url).map_err(|_| "invalid device authorization URL".to_string())?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err("device authorization URL must use http or https".to_string());
+        }
+        if !is_secure_web_url(&url) {
+            return Err("device authorization URL must use https or loopback http".to_string());
+        }
+        if url.host_str().is_none() {
+            return Err("device authorization URL must include a host".to_string());
+        }
+        if raw_authority_has_userinfo(raw_url)
+            || !url[Position::BeforeUsername..Position::BeforeHost].is_empty()
+        {
+            return Err("device authorization URL must not include user info".to_string());
+        }
+        if url.path() != "/device" {
+            return Err("device authorization URL path must be /device".to_string());
+        }
+        if url.fragment().is_some() {
+            return Err("device authorization URL must not include a fragment".to_string());
+        }
+        if url.origin() != api_base_url.0.origin() {
+            return Err("device authorization URL must use the API origin".to_string());
+        }
+
+        let mut query_pairs = url.query_pairs();
+        let Some((query_key, user_code)) = query_pairs.next() else {
+            return Err("device authorization URL must include user_code".to_string());
+        };
+        if query_key != "user_code"
+            || user_code != expected_user_code
+            || query_pairs.next().is_some()
+        {
+            return Err(
+                "device authorization URL must contain exactly the expected user_code".to_string(),
+            );
+        }
+
+        Ok(Self(url))
+    }
+
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+fn is_secure_web_url(url: &Url) -> bool {
+    if url.scheme() == "https" {
+        return true;
+    }
+    if url.scheme() != "http" {
+        return false;
+    }
+    match url.host() {
+        Some(Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+        Some(Host::Ipv4(address)) => address.is_loopback(),
+        Some(Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
+}
+
+fn validate_device_user_code(user_code: &str) -> Result<(), String> {
+    const DEVICE_USER_CODE_ALPHABET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    if user_code.len() == 8
+        && user_code
+            .chars()
+            .all(|character| DEVICE_USER_CODE_ALPHABET.contains(character))
+    {
+        Ok(())
+    } else {
+        Err("device user code does not match the expected protocol shape".to_string())
+    }
+}
+
+fn raw_authority_has_userinfo(raw_url: &str) -> bool {
+    let trimmed_url = raw_url.trim_matches(char::is_whitespace);
+    let Some((_, after_scheme)) = trimmed_url.split_once("://") else {
+        return false;
+    };
+    let authority = after_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    authority.contains('@')
+}
+
+// Every build uses one native variant, while unit tests exercise all three
+// specifications so cross-platform behavior stays reviewable on any host.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OpenerPlatform {
+    MacOs,
+    Windows,
+    Linux,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OpenerCommandSpec {
+    program: &'static str,
+    args: Vec<String>,
+}
+
+#[cfg(target_os = "macos")]
+const CURRENT_OPENER_PLATFORM: OpenerPlatform = OpenerPlatform::MacOs;
+#[cfg(target_os = "windows")]
+const CURRENT_OPENER_PLATFORM: OpenerPlatform = OpenerPlatform::Windows;
+#[cfg(target_os = "linux")]
+const CURRENT_OPENER_PLATFORM: OpenerPlatform = OpenerPlatform::Linux;
+
+fn opener_command_spec(
+    platform: OpenerPlatform,
+    authorization_url: &DeviceAuthorizationUrl,
+) -> OpenerCommandSpec {
+    let url = authorization_url.as_str().to_string();
+    match platform {
+        OpenerPlatform::MacOs => OpenerCommandSpec {
+            program: "open",
+            args: vec![url],
+        },
+        OpenerPlatform::Windows => OpenerCommandSpec {
+            // Avoid `cmd /C start`: cmd.exe would parse metacharacters in the
+            // user code even when std::process::Command passes separate args.
+            program: "rundll32.exe",
+            args: vec!["url.dll,FileProtocolHandler".to_string(), url],
+        },
+        OpenerPlatform::Linux => OpenerCommandSpec {
+            program: "xdg-open",
+            args: vec![url],
+        },
+    }
+}
+
+fn launch_device_authorization_url(
+    authorization_url: &DeviceAuthorizationUrl,
+) -> Result<(), String> {
+    let spec = opener_command_spec(CURRENT_OPENER_PLATFORM, authorization_url);
+    let mut child = Command::new(spec.program)
+        .args(spec.args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("failed to launch device authorization browser: {error}"))?;
+    let _ = std::thread::Builder::new()
+        .name("device-authorization-opener".to_string())
+        .spawn(move || {
+            let _ = child.wait();
+        });
+    Ok(())
+}
+
 // --- Tauri commands: thin shells over DesktopCore. ---
 
 #[tauri::command]
@@ -177,6 +374,18 @@ fn local_runtime_configure(
     config: LocalRuntimeConfig,
 ) -> Result<LocalRuntimeStatus, String> {
     runtime.configure(config)
+}
+
+#[tauri::command]
+fn open_device_authorization_url(
+    url: String,
+    api_base_url: String,
+    expected_user_code: String,
+) -> Result<(), String> {
+    let api_base_url = ApiBaseUrl::parse(&api_base_url)?;
+    let authorization_url =
+        DeviceAuthorizationUrl::parse(&url, &api_base_url, &expected_user_code)?;
+    launch_device_authorization_url(&authorization_url)
 }
 
 fn desktop_db_file_path(app_data_dir: &Path) -> PathBuf {
@@ -427,6 +636,7 @@ pub fn run() {
             frontend_ready,
             local_runtime_status,
             local_runtime_configure,
+            open_device_authorization_url,
             trusted_session_save,
             trusted_session_load,
             trusted_session_clear
@@ -473,6 +683,141 @@ mod tests {
         assert!(script.contains(".app-shell"));
         assert!(script.contains(".settings-window-dialog"));
         assert!(!script.contains(".signed-out-"));
+    }
+
+    #[test]
+    fn device_authorization_url_accepts_only_the_device_endpoint() {
+        for (api_base_url, raw_url) in [
+            (
+                "https://auth.example.com/api/v1",
+                "https://auth.example.com/device?user_code=ABCDEFGH",
+            ),
+            (
+                "http://127.0.0.1:8000/api/v1",
+                "http://127.0.0.1:8000/device?user_code=ABCD2345",
+            ),
+            (
+                "http://[::1]:8000/api/v1",
+                "http://[::1]:8000/device?user_code=ABCD2345",
+            ),
+            (
+                "https://auth.example.com:443/api/v1",
+                "https://auth.example.com/device?user_code=ABCDEFGH",
+            ),
+        ] {
+            let api_base_url = ApiBaseUrl::parse(api_base_url).expect("valid API base URL");
+            let expected_user_code = raw_url
+                .split("user_code=")
+                .nth(1)
+                .expect("test URL includes user code");
+            let authorization_url =
+                DeviceAuthorizationUrl::parse(raw_url, &api_base_url, expected_user_code)
+                    .expect("valid device authorization URL");
+
+            assert_eq!(authorization_url.as_str(), raw_url);
+        }
+    }
+
+    #[test]
+    fn device_authorization_url_rejects_unsafe_url_components() {
+        let api_base_url =
+            ApiBaseUrl::parse("https://auth.example.com/api/v1").expect("valid API base URL");
+        for raw_url in [
+            "file:///device",
+            "javascript:alert(1)",
+            "https://auth.example.com/",
+            "https://auth.example.com/device",
+            "https://auth.example.com/device?user_code=",
+            "https://auth.example.com/device/",
+            "https://auth.example.com/other/device",
+            "https://user@auth.example.com/device",
+            "https://:secret@auth.example.com/device",
+            "https://@auth.example.com/device",
+            "https:\t//@auth.example.com/device",
+            "https://auth.example.com/device#fragment",
+            "https://auth.example.com/device#",
+            "https://auth.example.com/device?redirect_uri=https%3A%2F%2Fevil.example",
+            "https://auth.example.com/device?user_code=ABCDEFGJ",
+            "https://auth.example.com/device?user_code=one&user_code=two",
+        ] {
+            assert!(
+                DeviceAuthorizationUrl::parse(raw_url, &api_base_url, "ABCDEFGH").is_err(),
+                "unsafe URL must be rejected: {raw_url}"
+            );
+        }
+    }
+
+    #[test]
+    fn device_authorization_url_rejects_a_different_origin() {
+        let api_base_url =
+            ApiBaseUrl::parse("https://auth.example.com:8443/api/v1").expect("valid API base URL");
+
+        for raw_url in [
+            "http://auth.example.com:8443/device",
+            "https://login.example.com:8443/device",
+            "https://auth.example.com:9443/device",
+        ] {
+            assert!(
+                DeviceAuthorizationUrl::parse(raw_url, &api_base_url, "ABCDEFGH").is_err(),
+                "cross-origin URL must be rejected: {raw_url}"
+            );
+        }
+    }
+
+    #[test]
+    fn api_base_url_rejects_unsafe_url_components() {
+        for raw_url in [
+            "file:///api/v1",
+            "javascript:alert(1)",
+            "https://user@auth.example.com/api/v1",
+            "https://@auth.example.com/api/v1",
+            "https:\t//@auth.example.com/api/v1",
+            "https://auth.example.com/api/v1#fragment",
+            "https://auth.example.com/api/v1#",
+            "http://auth.example.com/api/v1",
+        ] {
+            assert!(
+                ApiBaseUrl::parse(raw_url).is_err(),
+                "unsafe API base URL must be rejected: {raw_url}"
+            );
+        }
+    }
+
+    #[test]
+    fn opener_command_specs_are_cross_platform_and_shell_free() {
+        let api_base_url =
+            ApiBaseUrl::parse("https://auth.example.com/api/v1").expect("valid API base URL");
+        let authorization_url = DeviceAuthorizationUrl::parse(
+            "https://auth.example.com/device?user_code=ABCDEFGH",
+            &api_base_url,
+            "ABCDEFGH",
+        )
+        .expect("valid device authorization URL");
+
+        assert_eq!(
+            opener_command_spec(OpenerPlatform::MacOs, &authorization_url),
+            OpenerCommandSpec {
+                program: "open",
+                args: vec![authorization_url.as_str().to_string()],
+            }
+        );
+        assert_eq!(
+            opener_command_spec(OpenerPlatform::Linux, &authorization_url),
+            OpenerCommandSpec {
+                program: "xdg-open",
+                args: vec![authorization_url.as_str().to_string()],
+            }
+        );
+        assert_eq!(
+            opener_command_spec(OpenerPlatform::Windows, &authorization_url),
+            OpenerCommandSpec {
+                program: "rundll32.exe",
+                args: vec![
+                    "url.dll,FileProtocolHandler".to_string(),
+                    authorization_url.as_str().to_string(),
+                ],
+            }
+        );
     }
 
     #[test]

@@ -387,6 +387,104 @@ async fn login_and_tenant_reads_roundtrip_against_shared_schema() {
 }
 
 #[tokio::test]
+async fn device_grant_transition_rolls_back_and_revokes_only_the_grant_key() {
+    let Some(pool) =
+        pool_or_skip("device_grant_transition_rolls_back_and_revokes_only_the_grant_key").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    sqlx::query("DELETE FROM api_keys WHERE user_id = 'u_device_transition'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = 'u_device_transition'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO users (id, email, full_name, hashed_password, is_active, is_superuser, \
+         must_change_password, profile) VALUES \
+         ('u_device_transition', 'device-transition@memstack.ai', 'Device Transition', \
+          'unused', true, false, false, '{}')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let users = PgUserStore::new(pool.clone());
+    let keys = PgApiKeyStore::new(pool.clone());
+    let rolled_back_key = "ms_sk_device_transition_rolled_back";
+    let grant_key = "ms_sk_device_transition_grant";
+    let unrelated_key = "ms_sk_device_transition_unrelated";
+
+    let mut rolled_back = users
+        .begin_device_grant_transition("device-transition-code")
+        .await
+        .unwrap();
+    rolled_back
+        .insert_api_key(
+            "k_device_transition_rollback",
+            rolled_back_key,
+            "CLI device login rollback",
+            "u_device_transition",
+            None,
+            &["read".to_string()],
+        )
+        .await
+        .unwrap();
+    rolled_back.rollback().await.unwrap();
+    assert!(keys
+        .find_by_raw_key(rolled_back_key)
+        .await
+        .unwrap()
+        .is_none());
+
+    users
+        .insert_api_key(
+            "k_device_transition_grant",
+            grant_key,
+            "CLI device login grant",
+            "u_device_transition",
+            None,
+            &["read".to_string()],
+        )
+        .await
+        .unwrap();
+    users
+        .insert_api_key(
+            "k_device_transition_unrelated",
+            unrelated_key,
+            "Other session",
+            "u_device_transition",
+            None,
+            &["read".to_string()],
+        )
+        .await
+        .unwrap();
+
+    let mut cancelling = users
+        .begin_device_grant_transition("device-transition-code")
+        .await
+        .unwrap();
+    assert!(cancelling.revoke_api_key_by_raw(grant_key).await.unwrap());
+    cancelling.commit().await.unwrap();
+
+    assert!(keys.find_by_raw_key(grant_key).await.unwrap().is_none());
+    assert!(keys.find_by_raw_key(unrelated_key).await.unwrap().is_some());
+
+    sqlx::query("DELETE FROM api_keys WHERE user_id = 'u_device_transition'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = 'u_device_transition'")
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn invitations_roundtrip_against_shared_schema() {
     let Some(pool) = pool_or_skip("invitations_roundtrip_against_shared_schema").await else {
         return;

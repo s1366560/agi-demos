@@ -45,12 +45,25 @@ async fn assert_tenant_read_and_device_routes(ctx: &StranglerHttpContext) {
 
     for (path, body_in) in [
         ("/api/v1/auth/device/code", "{}"),
-        ("/api/v1/auth/device/approve", "{'user_code':'ABCDEFGH'}"),
         ("/api/v1/auth/device/token", "{'device_code':'dev'}"),
+        ("/api/v1/auth/device/cancel", "{'device_code':'dev'}"),
     ] {
-        let body = ctx.authed_body("POST", path, body_in).await;
-        assert_backend(&body, "rust", &format!("device-code {path} POST -> rust"));
+        let body = ctx.public_body("POST", path, body_in).await;
+        assert_backend(
+            &body,
+            "rust",
+            &format!("public device-code {path} POST -> rust"),
+        );
     }
+
+    let body = ctx
+        .authed_body(
+            "POST",
+            "/api/v1/auth/device/approve",
+            "{'user_code':'ABCDEFGH'}",
+        )
+        .await;
+    assert_backend(&body, "rust", "authenticated device-code approval -> rust");
 
     let body = ctx.public_body("GET", "/api/v1/auth/device/code", "").await;
     assert_backend(&body, "python", "device-code GET remains python");

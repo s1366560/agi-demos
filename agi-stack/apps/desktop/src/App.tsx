@@ -40,6 +40,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import {
+  classifyDeviceTokenError,
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
@@ -68,7 +69,14 @@ import {
   resolveSignOutDisposition,
   workspaceContextMatchesSelection,
 } from './features/auth/authContextModel';
-import { LoginScreen } from './features/auth/LoginScreen';
+import {
+  LoginScreen,
+  type WorkspaceSsoPresentation,
+} from './features/auth/LoginScreen';
+import {
+  normalizeDeviceAuthorizationInterval,
+  resolveDeviceAuthorizationUrl,
+} from './features/auth/loginScreenModel';
 import {
   ChatPanel,
   type AgentTaskSignal,
@@ -1606,6 +1614,36 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
   return Boolean(asRecordValue(value));
 }
 
+function waitForAbortableDelay(delayMs: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener('abort', cancel);
+      resolve(true);
+    }, delayMs);
+    const cancel = () => {
+      window.clearTimeout(timer);
+      resolve(false);
+    };
+    signal.addEventListener('abort', cancel, { once: true });
+  });
+}
+
+type WorkspaceSsoFlowErrorCode = 'credential_store' | 'invalid_url' | 'expired';
+
+class WorkspaceSsoFlowError extends Error {
+  readonly code: WorkspaceSsoFlowErrorCode;
+
+  constructor(code: WorkspaceSsoFlowErrorCode) {
+    super(code);
+    this.name = 'WorkspaceSsoFlowError';
+    this.code = code;
+  }
+}
+
 export function App() {
   const runsInTauri = detectTauriShell();
   const { t } = useI18n();
@@ -1633,6 +1671,7 @@ export function App() {
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(() => new Set());
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [workspaceSso, setWorkspaceSso] = useState<WorkspaceSsoPresentation | null>(null);
   const [dataset, setDataset] = useState<RuntimeDataset>(emptyDataset);
   const [connection, setConnection] = useState<ConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -1725,6 +1764,15 @@ export function App() {
   const workspaceExpansionScopeRef = useRef('');
   const localResumeAttemptRef = useRef('');
   const authAttemptRevisionRef = useRef(0);
+  const deviceAuthAttemptIdRef = useRef(0);
+  const deviceAuthAttemptRef = useRef<{
+    attemptId: number;
+    authRevision: number;
+    controller: AbortController;
+    authorizationUrl: string;
+    userCode: string;
+    openInFlight: boolean;
+  } | null>(null);
   const runInputRequestRef = useRef<{
     signature: string;
     messageId: string;
@@ -1746,6 +1794,14 @@ export function App() {
   useEffect(() => {
     expandedWorkspaceIdsRef.current = expandedWorkspaceIds;
   }, [expandedWorkspaceIds]);
+
+  useEffect(
+    () => () => {
+      deviceAuthAttemptRef.current?.controller.abort();
+      deviceAuthAttemptRef.current = null;
+    },
+    [],
+  );
 
   const updateDataset = useCallback((updater: (current: RuntimeDataset) => RuntimeDataset) => {
     setDataset((current) => {
@@ -3397,7 +3453,321 @@ export function App() {
     return true;
   };
 
+  const deviceAuthAttemptIsCurrent = (
+    attemptId: number,
+    authRevision: number,
+    controller: AbortController,
+  ): boolean => {
+    const current = deviceAuthAttemptRef.current;
+    return Boolean(
+      current?.attemptId === attemptId &&
+        current.authRevision === authRevision &&
+        authAttemptRevisionRef.current === authRevision &&
+        !controller.signal.aborted,
+    );
+  };
+
+  const supersedeWorkspaceSsoAttempt = (clearPresentation = true) => {
+    deviceAuthAttemptRef.current?.controller.abort();
+    deviceAuthAttemptRef.current = null;
+    if (clearPresentation) setWorkspaceSso(null);
+  };
+
+  const revokeUnadoptedDeviceToken = async (
+    accessToken: string,
+    runtimeConfig: DesktopRuntimeConfig,
+  ): Promise<void> => {
+    if (!accessToken) return;
+    try {
+      await new DesktopApiClient({ ...runtimeConfig, apiKey: accessToken }).signOut();
+    } catch {
+      // Best effort only. Device-grant cancellation below independently retries revocation.
+    }
+  };
+
+  const cancelIssuedDeviceCodeBestEffort = async (
+    deviceCode: string,
+    runtimeConfig: DesktopRuntimeConfig,
+  ): Promise<void> => {
+    if (!deviceCode) return;
+    const cancelController = new AbortController();
+    const timeoutId = window.setTimeout(() => cancelController.abort(), 3_000);
+    try {
+      const cancelClient = new DesktopApiClient({ ...runtimeConfig, apiKey: '' });
+      await cancelClient.cancelDeviceCode(deviceCode, cancelController.signal);
+    } catch {
+      // Best effort only. Pending grants expire, and an issued bearer is revoked separately above.
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  };
+
+  const openWorkspaceSsoUrl = async (
+    authorizationUrl: string,
+    expectedUserCode: string,
+    apiBaseUrl: string,
+    attemptId: number,
+    authRevision: number,
+  ): Promise<void> => {
+    const current = deviceAuthAttemptRef.current;
+    if (
+      current?.attemptId !== attemptId ||
+      current.authRevision !== authRevision ||
+      current.authorizationUrl !== authorizationUrl ||
+      current.userCode !== expectedUserCode ||
+      current.openInFlight
+    ) {
+      return;
+    }
+    current.openInFlight = true;
+    try {
+      const invoke = window.__TAURI__?.core?.invoke;
+      if (runsInTauri && invoke) {
+        await invoke('open_device_authorization_url', {
+          url: authorizationUrl,
+          apiBaseUrl,
+          expectedUserCode,
+        });
+      } else {
+        const opened = window.open('about:blank', '_blank');
+        if (!opened) throw new Error('popup_blocked');
+        try {
+          opened.opener = null;
+          opened.location.replace(authorizationUrl);
+        } catch (error) {
+          opened.close();
+          throw error;
+        }
+      }
+      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, current.controller)) return;
+      setWorkspaceSso((presentation) =>
+        presentation?.authorizationUrl === authorizationUrl
+          ? { ...presentation, openError: null }
+          : presentation,
+      );
+    } catch {
+      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, current.controller)) return;
+      setWorkspaceSso((presentation) =>
+        presentation?.authorizationUrl === authorizationUrl
+          ? { ...presentation, openError: t('login.deviceOpenFailed') }
+          : presentation,
+      );
+    } finally {
+      const activeAttempt = deviceAuthAttemptRef.current;
+      if (activeAttempt?.attemptId === attemptId) activeAttempt.openInFlight = false;
+    }
+  };
+
+  const openCurrentWorkspaceSso = () => {
+    const current = deviceAuthAttemptRef.current;
+    if (!current?.authorizationUrl) return;
+    void openWorkspaceSsoUrl(
+      current.authorizationUrl,
+      current.userCode,
+      configRef.current.apiBaseUrl,
+      current.attemptId,
+      current.authRevision,
+    );
+  };
+
+  const cancelWorkspaceSso = () => {
+    const current = deviceAuthAttemptRef.current;
+    if (!current) {
+      setWorkspaceSso(null);
+      return;
+    }
+    authAttemptRevisionRef.current += 1;
+    supersedeWorkspaceSsoAttempt();
+    setAuth(emptyAuthState);
+    setConnection('idle');
+    setError(null);
+  };
+
+  const loginWithWorkspaceSso = async (trustedDevice: boolean) => {
+    const runtimeConfig = configRef.current;
+    if (runtimeConfig.mode !== 'cloud') return;
+
+    const preserveExpiredPresentation = Boolean(
+      workspaceSso && workspaceSso.expiresAt <= Date.now(),
+    );
+    supersedeWorkspaceSsoAttempt(!preserveExpiredPresentation);
+    const authRevision = ++authAttemptRevisionRef.current;
+    const attemptId = ++deviceAuthAttemptIdRef.current;
+    const controller = new AbortController();
+    deviceAuthAttemptRef.current = {
+      attemptId,
+      authRevision,
+      controller,
+      authorizationUrl: '',
+      userCode: '',
+      openInFlight: false,
+    };
+    setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+    setConnection('loading');
+    setError(null);
+
+    let issuedDeviceCode = '';
+    let issuedAccessToken = '';
+    let tokenAdopted = false;
+    let keepExpiredPresentation = false;
+    try {
+      if (hasNativeTrustedSessionBroker()) {
+        try {
+          await clearNativeTrustedSession();
+        } catch {
+          throw new WorkspaceSsoFlowError('credential_store');
+        }
+        if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+      }
+
+      const loginClient = new DesktopApiClient({ ...runtimeConfig, apiKey: '' });
+      const deviceAuthorization = await loginClient.createDeviceCode(controller.signal);
+      issuedDeviceCode = deviceAuthorization.device_code;
+      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+
+      const authorizationUrl = resolveDeviceAuthorizationUrl(
+        runtimeConfig.apiBaseUrl,
+        deviceAuthorization.verification_uri_complete,
+        deviceAuthorization.user_code,
+      );
+      if (!authorizationUrl) throw new WorkspaceSsoFlowError('invalid_url');
+
+      const activeAttempt = deviceAuthAttemptRef.current;
+      if (!activeAttempt || activeAttempt.attemptId !== attemptId) return;
+      activeAttempt.authorizationUrl = authorizationUrl;
+      activeAttempt.userCode = deviceAuthorization.user_code;
+      const deadline = Date.now() + deviceAuthorization.expires_in * 1000;
+      setWorkspaceSso({
+        userCode: deviceAuthorization.user_code,
+        authorizationUrl,
+        expiresAt: deadline,
+        openError: null,
+      });
+      void openWorkspaceSsoUrl(
+        authorizationUrl,
+        deviceAuthorization.user_code,
+        runtimeConfig.apiBaseUrl,
+        attemptId,
+        authRevision,
+      );
+
+      let intervalSeconds = normalizeDeviceAuthorizationInterval(deviceAuthorization.interval);
+      while (deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+          throw new WorkspaceSsoFlowError('expired');
+        }
+        const waited = await waitForAbortableDelay(
+          Math.min(remainingMs, intervalSeconds * 1000),
+          controller.signal,
+        );
+        if (!waited || !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+
+        try {
+          const token = await loginClient.pollDeviceToken(
+            deviceAuthorization.device_code,
+            controller.signal,
+          );
+          issuedAccessToken = token.access_token;
+          if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+          setWorkspaceSso(null);
+
+          const hydrated = await hydrateCloudSession(
+            {
+              access_token: token.access_token,
+              token_type: token.token_type,
+              must_change_password: false,
+            },
+            runtimeConfig,
+            authRevision,
+          );
+          if (!hydrated || !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+
+          let persistenceWarning: string | null = null;
+          let persistedNativeSession = false;
+          if (trustedDevice && hasNativeTrustedSessionBroker()) {
+            try {
+              await saveNativeTrustedSession({
+                version: 1,
+                api_base_url: runtimeConfig.apiBaseUrl,
+                runtime_mode: 'cloud',
+                credential_kind: 'cloud_bearer',
+                credential: token.access_token,
+                expires_at: null,
+              });
+              persistedNativeSession = true;
+            } catch {
+              persistenceWarning = t('login.persistenceUnavailable');
+            }
+          }
+          if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) {
+            if (persistedNativeSession) {
+              try {
+                await clearNativeTrustedSession();
+              } catch {
+                // The issued cloud credential is revoked in finally, so a stale broker record
+                // cannot recover an authenticated session even if this best-effort clear fails.
+              }
+            }
+            return;
+          }
+          tokenAdopted = true;
+          deviceAuthAttemptRef.current = null;
+          controller.abort();
+          if (persistenceWarning) setError(persistenceWarning);
+          return;
+        } catch (caught) {
+          if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+          const deviceError = classifyDeviceTokenError(caught);
+          if (deviceError?.code === 'authorization_pending') {
+            intervalSeconds = normalizeDeviceAuthorizationInterval(deviceError.interval);
+            continue;
+          }
+          if (deviceError?.code === 'expired_token') {
+            throw new WorkspaceSsoFlowError('expired');
+          }
+          throw caught;
+        }
+      }
+    } catch (caught) {
+      if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+      if (caught instanceof WorkspaceSsoFlowError && caught.code === 'expired') {
+        keepExpiredPresentation = true;
+        setWorkspaceSso((presentation) =>
+          presentation ? { ...presentation, expiresAt: Date.now(), openError: null } : presentation,
+        );
+        setAuth(emptyAuthState);
+        setConnection('idle');
+        setError(null);
+        return;
+      }
+      const message =
+        caught instanceof WorkspaceSsoFlowError && caught.code === 'invalid_url'
+          ? t('login.deviceInvalidUrl')
+          : caught instanceof WorkspaceSsoFlowError && caught.code === 'credential_store'
+            ? t('login.credentialStoreUnavailable')
+            : t('login.workspaceSsoFailed');
+      setAuth({ ...emptyAuthState, error: message });
+      setConnection('error');
+      setError(message);
+    } finally {
+      if (issuedAccessToken && !tokenAdopted) {
+        await revokeUnadoptedDeviceToken(issuedAccessToken, runtimeConfig);
+      }
+      if (issuedDeviceCode && !tokenAdopted) {
+        await cancelIssuedDeviceCodeBestEffort(issuedDeviceCode, runtimeConfig);
+      }
+      const current = deviceAuthAttemptRef.current;
+      if (current?.attemptId === attemptId) {
+        current.controller.abort();
+        deviceAuthAttemptRef.current = null;
+        if (!keepExpiredPresentation) setWorkspaceSso(null);
+      }
+    }
+  };
+
   const login = async (trustedDevice: boolean) => {
+    supersedeWorkspaceSsoAttempt();
     const username = loginEmail.trim();
     if (!username || !loginPassword) return;
 
@@ -3515,6 +3885,7 @@ export function App() {
   };
 
   const loginLocalSession = async (trustedDevice: boolean) => {
+    supersedeWorkspaceSsoAttempt();
     if (!localRuntimeAuthorityReady) {
       setAuth((current) => ({
         ...current,
@@ -3598,6 +3969,7 @@ export function App() {
         : transportSafeConfig;
     const requestScopeChanged = !isSameDesktopRequestScope(previousConfig, resolvedConfig);
     if (transportIdentityChanged) {
+      supersedeWorkspaceSsoAttempt();
       const authAttemptRevision = ++authAttemptRevisionRef.current;
       localResumeAttemptRef.current = '';
       setAuth(emptyAuthState);
@@ -3629,6 +4001,7 @@ export function App() {
   };
 
   const logout = async () => {
+    supersedeWorkspaceSsoAttempt();
     const authAttemptRevision = ++authAttemptRevisionRef.current;
     localResumeAttemptRef.current = '';
     const authenticatedClient = api;
@@ -5590,6 +5963,10 @@ export function App() {
           onPasswordChange={setLoginPassword}
           onEmailLogin={(trustedDevice) => void login(trustedDevice)}
           onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
+          onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
+          workspaceSso={workspaceSso}
+          onOpenWorkspaceSso={openCurrentWorkspaceSso}
+          onCancelWorkspaceSso={cancelWorkspaceSso}
         />
       </Theme>
     );

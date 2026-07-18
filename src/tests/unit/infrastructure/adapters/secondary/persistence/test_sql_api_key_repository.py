@@ -257,6 +257,30 @@ class TestSqlAPIKeyRepositoryDelete:
         # Should not raise error
         await v2_api_key_repo.delete("non-existent")
 
+    @pytest.mark.asyncio
+    async def test_delete_by_hash_is_idempotent_and_does_not_delete_other_key(
+        self, v2_api_key_repo: SqlAPIKeyRepository
+    ):
+        """Deleting a bearer hash must not affect another key owned by the same user."""
+        for key_id, key_hash in (("key-current", "hash-current"), ("key-other", "hash-other")):
+            await v2_api_key_repo.save(
+                APIKey(
+                    id=key_id,
+                    user_id="user-test-1",
+                    key_hash=key_hash,
+                    name=key_id,
+                    is_active=True,
+                    permissions=["read"],
+                    created_at=datetime.now(UTC),
+                )
+            )
+
+        await v2_api_key_repo.delete_by_hash("hash-current")
+        await v2_api_key_repo.delete_by_hash("hash-current")
+
+        assert await v2_api_key_repo.find_by_id("key-current") is None
+        assert await v2_api_key_repo.find_by_id("key-other") is not None
+
 
 class TestSqlAPIKeyRepositoryUpdateLastUsed:
     """Tests for updating last_used_at."""

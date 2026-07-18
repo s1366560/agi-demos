@@ -193,32 +193,160 @@ impl RedisDeviceGrantStore {
             .transpose()
     }
 
-    pub async fn save_preserving_ttl(
+    /// Atomically replace one exact grant while preserving its remaining TTL.
+    ///
+    /// The comparison happens on decoded fields instead of serialized bytes so
+    /// Python and Rust writers can safely transition the same grant even though
+    /// their JSON whitespace and object-key ordering differ. A missing,
+    /// malformed, or concurrently changed grant is never recreated.
+    pub async fn compare_and_set(
         &self,
         device_code: &str,
-        grant: &DeviceGrant,
-        fallback_ttl_seconds: u64,
-    ) -> CoreResult<()> {
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> CoreResult<bool> {
+        if expected.user_code != replacement.user_code {
+            return Err(CoreError::Event(
+                "device grant CAS cannot change user code".to_string(),
+            ));
+        }
+        self.transition_exact(device_code, expected, Some(replacement), false)
+            .await
+    }
+
+    /// Atomically replace one exact grant and remove its still-matching
+    /// user-code index. Token redemption uses this to make the code single-use.
+    pub async fn compare_and_set_and_delete_index(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> CoreResult<bool> {
+        if expected.user_code != replacement.user_code {
+            return Err(CoreError::Event(
+                "device grant CAS cannot change user code".to_string(),
+            ));
+        }
+        self.transition_exact(device_code, expected, Some(replacement), true)
+            .await
+    }
+
+    /// Atomically remove one exact grant and its still-matching user-code
+    /// index. A stale reader cannot delete a concurrently approved grant.
+    pub async fn compare_and_delete_pair(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+    ) -> CoreResult<bool> {
+        self.transition_exact(device_code, expected, None, false)
+            .await
+    }
+
+    async fn transition_exact(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+        replacement: Option<&DeviceGrant>,
+        delete_index_after_set: bool,
+    ) -> CoreResult<bool> {
+        const TRANSITION_EXACT_GRANT: &str = r#"
+local current_raw = redis.call("GET", KEYS[1])
+if not current_raw then
+    return 0
+end
+
+local current_ok, current = pcall(cjson.decode, current_raw)
+local expected_ok, expected = pcall(cjson.decode, ARGV[1])
+if not current_ok or not expected_ok then
+    return redis.error_reply("invalid device grant JSON")
+end
+
+local function is_grant(value)
+    if type(value) ~= "table"
+        or type(value.user_code) ~= "string"
+        or type(value.status) ~= "string"
+        or value.approved_user_id == nil
+        or value.access_token == nil then
+        return false
+    end
+    if value.approved_user_id ~= cjson.null
+        and type(value.approved_user_id) ~= "string" then
+        return false
+    end
+    if value.access_token ~= cjson.null
+        and type(value.access_token) ~= "string" then
+        return false
+    end
+    for key, _ in pairs(value) do
+        if key ~= "user_code"
+            and key ~= "status"
+            and key ~= "approved_user_id"
+            and key ~= "access_token" then
+            return false
+        end
+    end
+    return true
+end
+
+local function optional_equal(left, right)
+    local left_is_null = left == nil or left == cjson.null
+    local right_is_null = right == nil or right == cjson.null
+    if left_is_null or right_is_null then
+        return left_is_null and right_is_null
+    end
+    return left == right
+end
+
+if not is_grant(current) or not is_grant(expected) then
+    return redis.error_reply("invalid device grant shape")
+end
+if current.user_code ~= expected.user_code
+    or current.status ~= expected.status
+    or not optional_equal(current.approved_user_id, expected.approved_user_id)
+    or not optional_equal(current.access_token, expected.access_token) then
+    return 0
+end
+
+if ARGV[4] == "set" or ARGV[4] == "set_delete_index" then
+    redis.call("SET", KEYS[1], ARGV[2], "KEEPTTL")
+    if ARGV[4] == "set_delete_index"
+        and redis.call("GET", KEYS[2]) == ARGV[3] then
+        redis.call("DEL", KEYS[2])
+    end
+elseif ARGV[4] == "delete" then
+    redis.call("DEL", KEYS[1])
+    if redis.call("GET", KEYS[2]) == ARGV[3] then
+        redis.call("DEL", KEYS[2])
+    end
+else
+    return redis.error_reply("invalid device grant transition")
+end
+return 1
+"#;
+
         let mut conn = self.conn.clone();
-        let ttl: i64 = redis::cmd("TTL")
-            .arg(device_code_key(device_code))
-            .query_async(&mut conn)
-            .await
-            .map_err(gerr)?;
-        let ttl_seconds = if ttl > 0 {
-            ttl as u64
-        } else {
-            fallback_ttl_seconds
+        let expected_payload = serde_json::to_string(expected).map_err(gerr)?;
+        let (replacement_payload, operation) = match replacement {
+            Some(grant) if delete_index_after_set => (
+                serde_json::to_string(grant).map_err(gerr)?,
+                "set_delete_index",
+            ),
+            Some(grant) => (serde_json::to_string(grant).map_err(gerr)?, "set"),
+            None => (String::new(), "delete"),
         };
-        let payload = serde_json::to_string(grant).map_err(gerr)?;
-        let _: () = redis::cmd("SETEX")
+        let changed: i64 = redis::cmd("EVAL")
+            .arg(TRANSITION_EXACT_GRANT)
+            .arg(2)
             .arg(device_code_key(device_code))
-            .arg(ttl_seconds)
-            .arg(payload)
+            .arg(device_user_code_key(&expected.user_code))
+            .arg(expected_payload)
+            .arg(replacement_payload)
+            .arg(device_code)
+            .arg(operation)
             .query_async(&mut conn)
             .await
             .map_err(gerr)?;
-        Ok(())
+        Ok(changed == 1)
     }
 
     pub async fn delete_pair(&self, device_code: &str, user_code: &str) -> CoreResult<()> {

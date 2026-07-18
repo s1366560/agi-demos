@@ -93,6 +93,11 @@ impl PgIdentityService {
             .await
             .map_err(IdentityError::internal)?
             .ok_or_else(|| IdentityError::not_found("user_code expired or unknown"))?;
+        let mut transition = self
+            .users
+            .begin_device_grant_transition(&device_code)
+            .await
+            .map_err(IdentityError::internal)?;
         let grant = self
             .device_grants
             .get(&device_code)
@@ -127,7 +132,7 @@ impl PgIdentityService {
         let key_id = try_generate_uuid_v4().map_err(IdentityError::internal)?;
         let name = format!("CLI device login ({user_code})");
         let expires_at = chrono::DateTime::from_timestamp_millis(now_ms + DEVICE_KEY_TTL_MS);
-        self.users
+        transition
             .insert_api_key(
                 &key_id,
                 &plain_key,
@@ -139,11 +144,60 @@ impl PgIdentityService {
             .await
             .map_err(IdentityError::internal)?;
 
-        let approved = DeviceGrant::approved(grant.user_code, user.id, plain_key);
-        self.device_grants
-            .save_preserving_ttl(&device_code, &approved, DEVICE_CODE_TTL_SECS)
+        let approved = DeviceGrant::approved(grant.user_code.clone(), user.id, plain_key.clone());
+        // Commit the credential before publishing it. Python pollers do not
+        // share this PostgreSQL advisory lock and must never observe a bearer
+        // that is still uncommitted.
+        if let Err(commit_error) = transition.commit().await {
+            let revoke_result = self.users.revoke_api_key_by_raw(&plain_key).await;
+            if let Err(error) = revoke_result {
+                return Err(IdentityError::internal(format!(
+                    "device approval commit failed and key rollback failed: {commit_error}; {error}"
+                )));
+            }
+            return Err(IdentityError::internal(commit_error));
+        }
+
+        match self
+            .device_grants
+            .compare_and_set(&device_code, &grant, &approved)
             .await
-            .map_err(IdentityError::internal)?;
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                self.users
+                    .revoke_api_key_by_raw(&plain_key)
+                    .await
+                    .map_err(|error| {
+                        IdentityError::internal(format!(
+                            "device approval lost its grant and key rollback failed: {error}"
+                        ))
+                    })?;
+                return Err(IdentityError::conflict(
+                    "Device code has already been handled",
+                ));
+            }
+            Err(publish_error) => {
+                let revoke_result = self.users.revoke_api_key_by_raw(&plain_key).await;
+                let restore_result = self
+                    .device_grants
+                    .compare_and_set(&device_code, &approved, &grant)
+                    .await;
+                if let Err(error) = revoke_result {
+                    return Err(IdentityError::internal(format!(
+                        "device approval publish failed and key rollback failed: \
+                         {publish_error}; {error}"
+                    )));
+                }
+                if let Err(error) = restore_result {
+                    return Err(IdentityError::internal(format!(
+                        "device approval publish failed and grant cleanup failed: \
+                         {publish_error}; {error}"
+                    )));
+                }
+                return Err(IdentityError::internal(publish_error));
+            }
+        }
 
         Ok(DeviceApproveView {
             status: "approved".to_string(),
@@ -154,6 +208,70 @@ impl PgIdentityService {
         &self,
         device_code: &str,
     ) -> Result<DeviceTokenView, IdentityError> {
+        let device_code = device_code.trim();
+        if device_code.is_empty() {
+            return Err(IdentityError::bad_request("device_code required"));
+        }
         poll_device_token_from_store(&*self.device_grants, device_code).await
+    }
+
+    pub(super) async fn pg_cancel_device_code(
+        &self,
+        device_code: &str,
+    ) -> Result<DeviceCancelView, IdentityError> {
+        let device_code = device_code.trim();
+        if device_code.is_empty() {
+            return Err(IdentityError::bad_request("device_code required"));
+        }
+        loop {
+            let mut transition = self
+                .users
+                .begin_device_grant_transition(device_code)
+                .await
+                .map_err(IdentityError::internal)?;
+            let Some(grant) = self
+                .device_grants
+                .get(device_code)
+                .await
+                .map_err(IdentityError::internal)?
+            else {
+                transition.commit().await.map_err(IdentityError::internal)?;
+                return Ok(DeviceCancelView { success: true });
+            };
+
+            if let Some(access_token) = grant.access_token.as_deref() {
+                transition
+                    .revoke_api_key_by_raw(access_token)
+                    .await
+                    .map_err(IdentityError::internal)?;
+                // Make the token unusable before removing its only server-side
+                // recovery record. A failed Redis operation remains retryable.
+                transition.commit().await.map_err(IdentityError::internal)?;
+            } else {
+                let deleted = self
+                    .device_grants
+                    .compare_and_delete_pair(device_code, &grant)
+                    .await
+                    .map_err(IdentityError::internal)?;
+                if deleted {
+                    transition.commit().await.map_err(IdentityError::internal)?;
+                    return Ok(DeviceCancelView { success: true });
+                }
+                transition
+                    .rollback()
+                    .await
+                    .map_err(IdentityError::internal)?;
+                continue;
+            }
+
+            if self
+                .device_grants
+                .compare_and_delete_pair(device_code, &grant)
+                .await
+                .map_err(IdentityError::internal)?
+            {
+                return Ok(DeviceCancelView { success: true });
+            }
+        }
     }
 }

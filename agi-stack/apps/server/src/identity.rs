@@ -64,12 +64,12 @@ use device_grants::{
 pub use device_grants::{DeviceGrantStore, InMemoryDeviceGrantStore, SharedDeviceGrantStore};
 pub use pg_service::{PgIdentityRepositories, PgIdentityService};
 pub use views::{
-    BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView,
-    InvitationListView, InvitationVerifyView, InvitationView, LoginOutcome, ProjectCreateInput,
-    ProjectListInput, ProjectMemberMutationView, ProjectMemberView, ProjectMembersView,
-    ProjectPage, ProjectStatsView, ProjectView, TenantMemberMutationView, TenantPage, TenantView,
-    WorkspaceContextResponseView, WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
-    WorkspaceContextView,
+    BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCancelView, DeviceCodeView,
+    DeviceTokenView, InvitationListView, InvitationVerifyView, InvitationView, LoginOutcome,
+    ProjectCreateInput, ProjectListInput, ProjectMemberMutationView, ProjectMemberView,
+    ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView, TenantMemberMutationView,
+    TenantPage, TenantView, WorkspaceContextResponseView, WorkspaceContextSwitchInput,
+    WorkspaceContextSwitchOutcomeView, WorkspaceContextView,
 };
 
 /// One day in milliseconds — the login key TTL (`expires_in_days=1` in Python).
@@ -212,6 +212,14 @@ pub trait IdentityService: Send + Sync {
     ) -> Result<DeviceApproveView, IdentityError>;
 
     async fn poll_device_token(&self, device_code: &str) -> Result<DeviceTokenView, IdentityError>;
+
+    /// Cancel a device grant using only its opaque device code. Implementations
+    /// must revoke any token stored in the grant and treat missing grants as an
+    /// idempotent success.
+    async fn cancel_device_code(
+        &self,
+        device_code: &str,
+    ) -> Result<DeviceCancelView, IdentityError>;
 
     /// List the tenants `user_id` belongs to (paginated, optional search).
     async fn list_tenants(

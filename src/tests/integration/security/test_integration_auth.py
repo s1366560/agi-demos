@@ -154,3 +154,150 @@ async def test_auth_key_routes_persist_created_key(integration_db_override):
             )
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_signout_revokes_only_authorization_bearer_and_is_idempotent(
+    integration_db_override,
+):
+    app.dependency_overrides[get_db] = integration_db_override
+    try:
+        test_email = f"integration_test_signout_{uuid4().hex}@memstack.ai"
+        async for session in integration_db_override():
+            await create_user(
+                session,
+                email=test_email,
+                name="Integration Signout Test User",
+                password="admin123",
+            )
+            await session.commit()
+            break
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+
+            async def login() -> str:
+                response = await client.post(
+                    "/api/v1/auth/token",
+                    data={"username": test_email, "password": "admin123"},
+                )
+                assert response.status_code == 200
+                return str(response.json()["access_token"])
+
+            current_token = await login()
+            other_token = await login()
+            current_headers = {"Authorization": f"Bearer {current_token}"}
+            other_headers = {"Authorization": f"Bearer {other_token}"}
+
+            signout_response = await client.post(
+                "/api/v1/auth/signout",
+                headers=current_headers,
+                json={"token": other_token},
+            )
+
+            assert signout_response.status_code == 200
+            assert signout_response.json() == {"success": True}
+            assert (await client.get("/api/v1/auth/me", headers=current_headers)).status_code == 401
+            assert (await client.get("/api/v1/auth/me", headers=other_headers)).status_code == 200
+
+            repeated_response = await client.post(
+                "/api/v1/auth/signout",
+                headers=current_headers,
+                json={"token": other_token},
+            )
+            assert repeated_response.status_code == 200
+            assert repeated_response.json() == {"success": True}
+            assert (await client.get("/api/v1/auth/me", headers=other_headers)).status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_device_cancel_revokes_bound_token_and_rejects_caller_token(
+    integration_db_override,
+):
+    app.dependency_overrides[get_db] = integration_db_override
+    try:
+        test_email = f"integration_test_device_cancel_{uuid4().hex}@memstack.ai"
+        async for session in integration_db_override():
+            await create_user(
+                session,
+                email=test_email,
+                name="Integration Device Cancel Test User",
+                password="admin123",
+            )
+            await session.commit()
+            break
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            login_response = await client.post(
+                "/api/v1/auth/token",
+                data={"username": test_email, "password": "admin123"},
+            )
+            assert login_response.status_code == 200
+            login_token = str(login_response.json()["access_token"])
+            login_headers = {"Authorization": f"Bearer {login_token}"}
+
+            code_response = await client.post("/api/v1/auth/device/code", json={})
+            assert code_response.status_code == 200
+            grant = code_response.json()
+            approve_response = await client.post(
+                "/api/v1/auth/device/approve",
+                headers=login_headers,
+                json={"user_code": grant["user_code"]},
+            )
+            assert approve_response.status_code == 200
+
+            token_response = await client.post(
+                "/api/v1/auth/device/token",
+                json={"device_code": grant["device_code"]},
+            )
+            assert token_response.status_code == 200
+            device_token = str(token_response.json()["access_token"])
+            device_headers = {"Authorization": f"Bearer {device_token}"}
+            assert (await client.get("/api/v1/auth/me", headers=device_headers)).status_code == 200
+
+            rejected_cancel = await client.post(
+                "/api/v1/auth/device/cancel",
+                json={
+                    "device_code": grant["device_code"],
+                    "access_token": login_token,
+                },
+            )
+            assert rejected_cancel.status_code == 422
+            assert (await client.get("/api/v1/auth/me", headers=device_headers)).status_code == 200
+            assert (await client.get("/api/v1/auth/me", headers=login_headers)).status_code == 200
+
+            cancel_response = await client.post(
+                "/api/v1/auth/device/cancel",
+                json={"device_code": grant["device_code"]},
+            )
+            assert cancel_response.status_code == 200
+            assert cancel_response.json() == {"success": True}
+            assert (await client.get("/api/v1/auth/me", headers=device_headers)).status_code == 401
+            assert (await client.get("/api/v1/auth/me", headers=login_headers)).status_code == 200
+
+            repeated_cancel = await client.post(
+                "/api/v1/auth/device/cancel",
+                json={"device_code": grant["device_code"]},
+            )
+            assert repeated_cancel.status_code == 200
+            assert repeated_cancel.json() == {"success": True}
+
+            pending_response = await client.post("/api/v1/auth/device/code", json={})
+            assert pending_response.status_code == 200
+            pending_grant = pending_response.json()
+            assert (
+                await client.post(
+                    "/api/v1/auth/device/cancel",
+                    json={"device_code": pending_grant["device_code"]},
+                )
+            ).status_code == 200
+            expired_response = await client.post(
+                "/api/v1/auth/device/token",
+                json={"device_code": pending_grant["device_code"]},
+            )
+            assert expired_response.status_code == 410
+    finally:
+        app.dependency_overrides.pop(get_db, None)

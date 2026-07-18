@@ -145,3 +145,79 @@ async fn api_key_and_project_stores_verify_and_scope() {
     assert!(projects.user_can_access("u_auth", &proj).await.unwrap()); // owner
     assert!(!projects.user_can_access("u_other", &proj).await.unwrap()); // no membership
 }
+
+#[tokio::test]
+async fn api_key_revoke_by_raw_key_is_idempotent_and_isolated() {
+    let Some(pool) = pool_or_skip("api_key_revoke_by_raw_key_is_idempotent_and_isolated").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+
+    use sha2::{Digest, Sha256};
+
+    let current_raw_key = "ms_sk_revoke_current_pg";
+    let other_raw_key = "ms_sk_revoke_other_pg";
+    let current_hash = format!("{:x}", Sha256::digest(current_raw_key.as_bytes()));
+    let other_hash = format!("{:x}", Sha256::digest(other_raw_key.as_bytes()));
+
+    let has_full_user_shape = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns \
+         WHERE table_schema = current_schema() AND table_name = 'users' \
+         AND column_name = 'hashed_password')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    if has_full_user_shape {
+        sqlx::query(
+            "INSERT INTO users (id, email, hashed_password, full_name, is_active, \
+             is_superuser, must_change_password, profile) VALUES \
+             ('u_revoke', 'revoke@x', 'unused', 'Revoke Test', true, false, false, '{}'::json) \
+             ON CONFLICT DO NOTHING",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    } else {
+        sqlx::query(
+            "INSERT INTO users (id, email) VALUES ('u_revoke', 'revoke@x') ON CONFLICT DO NOTHING",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    sqlx::query("DELETE FROM api_keys WHERE id IN ('k_revoke_current', 'k_revoke_other')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO api_keys (id, key_hash, name, user_id, is_active, permissions) VALUES \
+         ('k_revoke_current', $1, 'current', 'u_revoke', true, '[]'::json), \
+         ('k_revoke_other', $2, 'other', 'u_revoke', true, '[]'::json)",
+    )
+    .bind(&current_hash)
+    .bind(&other_hash)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let keys = PgApiKeyStore::new(pool.clone());
+    assert!(keys.revoke_by_raw_key(current_raw_key).await.unwrap());
+    assert!(!keys.revoke_by_raw_key(current_raw_key).await.unwrap());
+    assert!(keys
+        .find_by_raw_key(current_raw_key)
+        .await
+        .unwrap()
+        .is_none());
+    assert!(keys.find_by_raw_key(other_raw_key).await.unwrap().is_some());
+
+    sqlx::query("DELETE FROM api_keys WHERE id IN ('k_revoke_current', 'k_revoke_other')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = 'u_revoke'")
+        .execute(&pool)
+        .await
+        .unwrap();
+}

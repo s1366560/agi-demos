@@ -12,7 +12,7 @@
 
 use axum::{
     extract::{Form, Path, Query, State},
-    http::StatusCode,
+    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{delete, get, patch, post},
     Extension, Json, Router,
@@ -21,12 +21,12 @@ use serde_json::{json, Value};
 
 use agistack_adapters_postgres::{ProjectUpdatePatch, TenantUpdatePatch};
 
-use crate::auth::Identity;
+use crate::auth::{extract_raw_key, AuthRejection, Authenticator, Identity};
 use crate::identity::{
-    CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView, IdentityError,
-    InvitationListView, InvitationVerifyView, InvitationView, ProjectCreateInput, ProjectListInput,
-    ProjectMemberMutationView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
-    TenantMemberMutationView, TenantPage, TenantView, WorkspaceContextResponseView,
+    CurrentUserView, DeviceApproveView, DeviceCancelView, DeviceCodeView, DeviceTokenView,
+    IdentityError, InvitationListView, InvitationVerifyView, InvitationView, ProjectCreateInput,
+    ProjectListInput, ProjectMemberMutationView, ProjectMembersView, ProjectPage, ProjectStatsView,
+    ProjectView, TenantMemberMutationView, TenantPage, TenantView, WorkspaceContextResponseView,
     WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
 };
 use crate::AppState;
@@ -68,6 +68,33 @@ async fn login(
         .login(&form.username, &form.password, now_ms)
         .await?;
     Ok(Json(outcome))
+}
+
+// ---- POST /auth/signout --------------------------------------------------
+
+/// Revoke only the API key carried by the current Authorization header.
+///
+/// This route intentionally sits outside `require_api_key`: after the first
+/// deletion, the same bearer must still receive an idempotent success response.
+/// No body extractor is present, so a body-supplied token can never select the
+/// key being revoked.
+async fn sign_out(
+    State(app): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AuthRejection> {
+    let authorization = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+    revoke_authorization_key(app.auth.as_ref(), authorization).await?;
+    Ok(Json(json!({ "success": true })))
+}
+
+async fn revoke_authorization_key(
+    authenticator: &dyn Authenticator,
+    authorization: Option<&str>,
+) -> Result<(), AuthRejection> {
+    let raw_key = extract_raw_key(authorization)?;
+    authenticator.revoke_api_key(&raw_key).await
 }
 
 // ---- POST /auth/oauth/{provider}/callback (501 stub) ----------------------
@@ -156,6 +183,15 @@ async fn device_token(
 ) -> Result<Json<DeviceTokenView>, IdentityError> {
     Ok(Json(
         app.identity.poll_device_token(&body.device_code).await?,
+    ))
+}
+
+async fn cancel_device_code(
+    State(app): State<AppState>,
+    Json(body): Json<DeviceCancelRequest>,
+) -> Result<Json<DeviceCancelView>, IdentityError> {
+    Ok(Json(
+        app.identity.cancel_device_code(&body.device_code).await?,
     ))
 }
 
@@ -626,8 +662,10 @@ async fn accept_invitation(
 pub fn router_public() -> Router<AppState> {
     Router::new()
         .route("/api/v1/auth/token", post(login))
+        .route("/api/v1/auth/signout", post(sign_out))
         .route("/api/v1/auth/device/code", post(device_code))
         .route("/api/v1/auth/device/token", post(device_token))
+        .route("/api/v1/auth/device/cancel", post(cancel_device_code))
         .route(
             "/api/v1/auth/oauth/:provider/callback",
             post(oauth_callback),

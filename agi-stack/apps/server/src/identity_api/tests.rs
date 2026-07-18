@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use serde_json::json;
 
 use super::*;
+use crate::auth::DevAuthenticator;
 
 #[test]
 fn query_defaults_match_python() {
@@ -146,6 +147,25 @@ fn device_requests_default_missing_fields_like_python_dict_get() {
 }
 
 #[test]
+fn device_cancel_body_accepts_only_device_code() {
+    let request: DeviceCancelRequest = serde_json::from_value(json!({
+        "device_code": "device-opaque-code"
+    }))
+    .expect("device cancellation must accept the opaque device code");
+    assert_eq!(request.device_code, "device-opaque-code");
+
+    let missing: DeviceCancelRequest =
+        serde_json::from_value(json!({})).expect("service validates an empty device code");
+    assert!(missing.device_code.is_empty());
+
+    assert!(serde_json::from_value::<DeviceCancelRequest>(json!({
+        "device_code": "device-opaque-code",
+        "access_token": "body-must-never-select-a-key"
+    }))
+    .is_err());
+}
+
+#[test]
 fn workspace_context_switch_request_requires_revision_and_idempotency() {
     let request: WorkspaceContextSwitchRequest = serde_json::from_value(json!({
         "tenant_id": "tenant-1",
@@ -178,4 +198,22 @@ fn invitation_query_defaults_match_python() {
         .expect("populated invitation query must deserialize");
     assert_eq!(q2.limit, 25);
     assert_eq!(q2.offset, 10);
+}
+
+#[tokio::test]
+async fn sign_out_contract_uses_only_authorization_and_is_idempotent() {
+    let auth = DevAuthenticator::new("dev-user");
+    let current_key = "ms_sk_identity_signout_current";
+    let other_key = "ms_sk_identity_signout_other";
+    let authorization = format!("Bearer {current_key}");
+
+    revoke_authorization_key(&auth, Some(&authorization))
+        .await
+        .expect("current bearer should be revoked");
+    revoke_authorization_key(&auth, Some(&authorization))
+        .await
+        .expect("repeated signout should be a successful no-op");
+
+    assert!(auth.authenticate(current_key, 0).await.is_err());
+    assert!(auth.authenticate(other_key, 0).await.is_ok());
 }

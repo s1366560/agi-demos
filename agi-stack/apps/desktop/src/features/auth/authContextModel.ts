@@ -27,8 +27,10 @@ export function resolveSignOutDisposition(
   persistedCredentialCleared: boolean,
   credentialRevoked: boolean,
 ): SignOutDisposition {
-  if (!hasCredentialBroker || persistedCredentialCleared) return 'complete';
-  return credentialRevoked ? 'complete_with_persistence_warning' : 'blocked';
+  if (!credentialRevoked) return 'blocked';
+  return hasCredentialBroker && !persistedCredentialCleared
+    ? 'complete_with_persistence_warning'
+    : 'complete';
 }
 
 export function isIdentityAuthenticated(auth: AuthState): boolean {

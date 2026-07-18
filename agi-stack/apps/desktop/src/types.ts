@@ -101,6 +101,20 @@ export type LoginOutcome = {
   context?: WorkspaceContextSnapshot;
 };
 
+export type DeviceCodeView = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  expires_in: number;
+  interval: number;
+};
+
+export type DeviceTokenView = {
+  access_token: string;
+  token_type: 'bearer';
+};
+
 export type AuthSessionDescriptor = {
   session_id: string;
   auth_method: 'password' | 'workspace_sso' | 'api_key' | 'local' | string;

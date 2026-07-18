@@ -30,6 +30,16 @@ pub(super) struct DeviceTokenRequest {
     pub(super) device_code: String,
 }
 
+/// Device cancellation deliberately accepts only the opaque device code. This
+/// prevents a caller-supplied token from influencing which credential is
+/// revoked; the server reads that token exclusively from the stored grant.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DeviceCancelRequest {
+    #[serde(default)]
+    pub(super) device_code: String,
+}
+
 #[derive(Deserialize)]
 pub(super) struct WorkspaceContextSwitchRequest {
     pub(super) tenant_id: String,

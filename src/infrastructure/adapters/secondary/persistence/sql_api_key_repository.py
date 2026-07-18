@@ -5,7 +5,7 @@ V2 SQLAlchemy implementation of APIKeyRepository using BaseRepository.
 import logging
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.api_key import APIKey
@@ -66,6 +66,15 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
             await self._session.flush()
             return True
         return False
+
+    async def delete_by_hash(self, key_hash: str) -> None:
+        """Delete only the API key matching an exact bearer hash.
+
+        The operation is intentionally idempotent: deleting an unknown or
+        already-revoked hash succeeds without affecting any other key.
+        """
+        await self._session.execute(delete(DBAPIKey).where(DBAPIKey.key_hash == key_hash))
+        await self._session.flush()
 
     async def update_last_used(self, key_id: str, timestamp: datetime) -> None:
         """Update the last_used_at timestamp."""

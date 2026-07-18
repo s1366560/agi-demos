@@ -216,8 +216,10 @@ test('local session recovery binds the launch capability to the live native endp
 });
 
 test('sign out completes only after a stored credential is cleared or revoked', () => {
-  assert.equal(resolveSignOutDisposition(false, true, false), 'complete');
-  assert.equal(resolveSignOutDisposition(true, true, false), 'complete');
+  assert.equal(resolveSignOutDisposition(false, true, false), 'blocked');
+  assert.equal(resolveSignOutDisposition(true, true, false), 'blocked');
+  assert.equal(resolveSignOutDisposition(false, true, true), 'complete');
+  assert.equal(resolveSignOutDisposition(true, true, true), 'complete');
   assert.equal(
     resolveSignOutDisposition(true, false, true),
     'complete_with_persistence_warning',

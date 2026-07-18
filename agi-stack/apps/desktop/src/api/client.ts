@@ -20,6 +20,8 @@ import type {
   CreateTaskSessionResponse,
   CreateRunInputRequest,
   CurrentUser,
+  DeviceCodeView,
+  DeviceTokenView,
   DesktopRuntimeConfig,
   DesktopServiceResponse,
   ForkRecoveryOutcome,
@@ -87,6 +89,32 @@ export class DesktopApiError extends Error {
   }
 }
 
+export type DeviceTokenErrorClassification =
+  | { code: 'authorization_pending'; interval: number }
+  | { code: 'expired_token' };
+
+export function classifyDeviceTokenError(
+  error: unknown,
+): DeviceTokenErrorClassification | null {
+  if (!(error instanceof DesktopApiError) || !isRecord(error.payload)) return null;
+  const detail = error.payload.detail;
+  if (
+    error.status === 428 &&
+    isRecord(detail) &&
+    detail.error === 'authorization_pending' &&
+    isUnsignedSafeInteger(detail.interval)
+  ) {
+    return { code: 'authorization_pending', interval: detail.interval };
+  }
+  if (
+    error.status === 410 &&
+    (detail === 'expired_token' || (isRecord(detail) && detail.error === 'expired_token'))
+  ) {
+    return { code: 'expired_token' };
+  }
+  return null;
+}
+
 export function isWorkspaceContextUnavailableError(error: unknown): boolean {
   if (!(error instanceof DesktopApiError) || error.status !== 404) return false;
   if (!isRecord(error.payload)) return false;
@@ -110,6 +138,35 @@ export class DesktopApiClient {
       body,
       contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
       skipAuth: true,
+    });
+  }
+
+  async createDeviceCode(signal?: AbortSignal): Promise<DeviceCodeView> {
+    const payload = await this.request<unknown>('/api/v1/auth/device/code', {
+      method: 'POST',
+      body: {},
+      skipAuth: true,
+      signal,
+    });
+    return requireDeviceCodeView(payload);
+  }
+
+  async pollDeviceToken(deviceCode: string, signal?: AbortSignal): Promise<DeviceTokenView> {
+    const payload = await this.request<unknown>('/api/v1/auth/device/token', {
+      method: 'POST',
+      body: { device_code: requireValue(deviceCode, 'device code') },
+      skipAuth: true,
+      signal,
+    });
+    return requireDeviceTokenView(payload);
+  }
+
+  async cancelDeviceCode(deviceCode: string, signal?: AbortSignal): Promise<void> {
+    await this.request<unknown>('/api/v1/auth/device/cancel', {
+      method: 'POST',
+      body: { device_code: requireValue(deviceCode, 'device code') },
+      skipAuth: true,
+      signal,
     });
   }
 
@@ -1263,6 +1320,61 @@ function requireWorkspaceRosterPage<T>(
   throw new DesktopApiError(`Invalid ${label} response`, 502, payload);
 }
 
+const DEVICE_CODE_VIEW_KEYS = new Set([
+  'device_code',
+  'user_code',
+  'verification_uri',
+  'verification_uri_complete',
+  'expires_in',
+  'interval',
+]);
+
+const DEVICE_TOKEN_VIEW_KEYS = new Set(['access_token', 'token_type']);
+const DEVICE_USER_CODE_ALPHABET = new Set('ABCDEFGHJKLMNPQRSTUVWXYZ23456789');
+
+function requireDeviceCodeView(payload: unknown): DeviceCodeView {
+  if (
+    !isRecord(payload) ||
+    !hasExactKeys(payload, DEVICE_CODE_VIEW_KEYS) ||
+    !isNonEmptyString(payload.device_code) ||
+    !isDeviceUserCode(payload.user_code) ||
+    payload.verification_uri !== '/device' ||
+    !isNonEmptyString(payload.verification_uri_complete) ||
+    !isIntegerInRange(payload.expires_in, 1, 600) ||
+    !isIntegerInRange(payload.interval, 1, 60)
+  ) {
+    throw new DesktopApiError('Invalid device code response', 502, {
+      detail: 'invalid_device_code_response',
+    });
+  }
+  return {
+    device_code: payload.device_code,
+    user_code: payload.user_code,
+    verification_uri: payload.verification_uri,
+    verification_uri_complete: payload.verification_uri_complete,
+    expires_in: payload.expires_in,
+    interval: payload.interval,
+  };
+}
+
+function requireDeviceTokenView(payload: unknown): DeviceTokenView {
+  if (
+    !isRecord(payload) ||
+    !hasExactKeys(payload, DEVICE_TOKEN_VIEW_KEYS) ||
+    !isNonEmptyString(payload.access_token) ||
+    typeof payload.token_type !== 'string' ||
+    payload.token_type.toLowerCase() !== 'bearer'
+  ) {
+    throw new DesktopApiError('Invalid device token response', 502, {
+      detail: 'invalid_device_token_response',
+    });
+  }
+  return {
+    access_token: payload.access_token,
+    token_type: 'bearer',
+  };
+}
+
 function isWorkspaceMemberSummary(
   value: unknown,
   workspaceId: string,
@@ -1307,8 +1419,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function hasExactKeys(record: Record<string, unknown>, expected: ReadonlySet<string>): boolean {
+  const keys = Object.keys(record);
+  return keys.length === expected.size && keys.every((key) => expected.has(key));
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isDeviceUserCode(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length === 8 &&
+    Array.from(value).every((character) => DEVICE_USER_CODE_ALPHABET.has(character))
+  );
+}
+
+function isIntegerInRange(value: unknown, minimum: number, maximum: number): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= minimum &&
+    value <= maximum
+  );
+}
+
+function isUnsignedSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isOptionalString(value: unknown): value is string | undefined {

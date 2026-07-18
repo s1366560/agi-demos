@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use serde_json::json;
+use tokio::sync::Mutex as AsyncMutex;
 
 use agistack_adapters_postgres::{
     normalize_email, ProjectDashboardStatsRecord, ProjectUpdatePatch, TenantUpdatePatch,
@@ -11,6 +12,8 @@ use agistack_adapters_postgres::{
 };
 use agistack_adapters_redis::DeviceGrant;
 use agistack_adapters_secrets::try_generate_api_key;
+
+use crate::auth::DevApiKeyRevocations;
 
 use super::device_grants::{
     create_device_code_with_store, normalize_device_user_code, poll_device_token_from_store,
@@ -23,13 +26,13 @@ use super::{
     is_valid_project_member_role, is_valid_tenant_member_role, ms_to_datetime,
     normalize_backend_store_id, project_graph_config_for_write, project_memory_rules_for_write,
     sandbox_config, unprocessable, validate_workspace_context_input, workspace_context_error,
-    BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCodeView, DeviceTokenView,
-    IdentityError, IdentityService, InvitationListView, InvitationVerifyView, InvitationView,
-    LoginOutcome, ProjectCreateInput, ProjectListInput, ProjectMemberMutationView,
+    BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCancelView, DeviceCodeView,
+    DeviceTokenView, IdentityError, IdentityService, InvitationListView, InvitationVerifyView,
+    InvitationView, LoginOutcome, ProjectCreateInput, ProjectListInput, ProjectMemberMutationView,
     ProjectMemberView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
     SharedDeviceGrantStore, TenantMemberMutationView, TenantPage, TenantView,
     WorkspaceContextResponseView, WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
-    WorkspaceContextView, DEVICE_CODE_TTL_SECS,
+    WorkspaceContextView,
 };
 
 mod invitations;
@@ -43,6 +46,8 @@ mod tenant;
 pub struct DevIdentityService {
     dev_user_id: String,
     device_grants: SharedDeviceGrantStore,
+    device_grant_transition: AsyncMutex<()>,
+    api_key_revocations: DevApiKeyRevocations,
     workspace_context: Arc<Mutex<DevWorkspaceContextState>>,
 }
 
@@ -76,17 +81,22 @@ impl DevIdentityService {
         Self {
             dev_user_id: dev_user_id.into(),
             device_grants: Arc::new(InMemoryDeviceGrantStore::new()),
+            device_grant_transition: AsyncMutex::new(()),
+            api_key_revocations: DevApiKeyRevocations::new(),
             workspace_context: new_dev_workspace_context_state(),
         }
     }
 
-    pub fn with_device_grants(
+    pub(crate) fn with_device_grants(
         dev_user_id: impl Into<String>,
         device_grants: SharedDeviceGrantStore,
+        api_key_revocations: DevApiKeyRevocations,
     ) -> Self {
         Self {
             dev_user_id: dev_user_id.into(),
             device_grants,
+            device_grant_transition: AsyncMutex::new(()),
+            api_key_revocations,
             workspace_context: new_dev_workspace_context_state(),
         }
     }
@@ -277,6 +287,7 @@ impl IdentityService for DevIdentityService {
         user_code: &str,
         _now_ms: i64,
     ) -> Result<DeviceApproveView, IdentityError> {
+        let _transition = self.device_grant_transition.lock().await;
         let user_code = normalize_device_user_code(user_code);
         if user_code.is_empty() {
             return Err(IdentityError::bad_request("user_code required"));
@@ -299,22 +310,63 @@ impl IdentityService for DevIdentityService {
             ));
         }
 
-        let approved = DeviceGrant::approved(
-            grant.user_code,
-            user_id,
-            try_generate_api_key().map_err(IdentityError::internal)?,
-        );
-        self.device_grants
-            .save_preserving_ttl(&device_code, &approved, DEVICE_CODE_TTL_SECS)
+        let plain_key = try_generate_api_key().map_err(IdentityError::internal)?;
+        let approved = DeviceGrant::approved(grant.user_code.clone(), user_id, plain_key.clone());
+        let published = self
+            .device_grants
+            .compare_and_set(&device_code, &grant, &approved)
             .await
             .map_err(IdentityError::internal)?;
+        if !published {
+            self.api_key_revocations
+                .revoke(&plain_key)
+                .map_err(IdentityError::internal)?;
+            return Err(IdentityError::conflict(
+                "Device code has already been handled",
+            ));
+        }
         Ok(DeviceApproveView {
             status: "approved".to_string(),
         })
     }
 
     async fn poll_device_token(&self, device_code: &str) -> Result<DeviceTokenView, IdentityError> {
+        let _transition = self.device_grant_transition.lock().await;
         poll_device_token_from_store(&*self.device_grants, device_code).await
+    }
+
+    async fn cancel_device_code(
+        &self,
+        device_code: &str,
+    ) -> Result<DeviceCancelView, IdentityError> {
+        let _transition = self.device_grant_transition.lock().await;
+        let device_code = device_code.trim();
+        if device_code.is_empty() {
+            return Err(IdentityError::bad_request("device_code required"));
+        }
+        loop {
+            let Some(grant) = self
+                .device_grants
+                .get(device_code)
+                .await
+                .map_err(IdentityError::internal)?
+            else {
+                return Ok(DeviceCancelView { success: true });
+            };
+            if let Some(access_token) = grant.access_token.as_deref() {
+                self.api_key_revocations
+                    .revoke(access_token)
+                    .map_err(IdentityError::internal)?;
+            }
+            if self
+                .device_grants
+                .compare_and_delete_pair(device_code, &grant)
+                .await
+                .map_err(IdentityError::internal)?
+            {
+                return Ok(DeviceCancelView { success: true });
+            }
+        }
     }
 
     async fn list_tenants(

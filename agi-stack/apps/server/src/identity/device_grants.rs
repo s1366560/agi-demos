@@ -28,13 +28,23 @@ pub trait DeviceGrantStore: Send + Sync {
     ) -> Result<(), String>;
     async fn device_code_for_user_code(&self, user_code: &str) -> Result<Option<String>, String>;
     async fn get(&self, device_code: &str) -> Result<Option<DeviceGrant>, String>;
-    async fn save_preserving_ttl(
+    async fn compare_and_set(
         &self,
         device_code: &str,
-        grant: &DeviceGrant,
-        fallback_ttl_seconds: u64,
-    ) -> Result<(), String>;
-    async fn delete_pair(&self, device_code: &str, user_code: &str) -> Result<(), String>;
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> Result<bool, String>;
+    async fn compare_and_set_and_delete_index(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> Result<bool, String>;
+    async fn compare_and_delete_pair(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+    ) -> Result<bool, String>;
 }
 
 pub type SharedDeviceGrantStore = Arc<dyn DeviceGrantStore>;
@@ -70,19 +80,39 @@ impl DeviceGrantStore for RedisDeviceGrantStore {
             .map_err(|e| e.to_string())
     }
 
-    async fn save_preserving_ttl(
+    async fn compare_and_set(
         &self,
         device_code: &str,
-        grant: &DeviceGrant,
-        fallback_ttl_seconds: u64,
-    ) -> Result<(), String> {
-        RedisDeviceGrantStore::save_preserving_ttl(self, device_code, grant, fallback_ttl_seconds)
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> Result<bool, String> {
+        RedisDeviceGrantStore::compare_and_set(self, device_code, expected, replacement)
             .await
             .map_err(|e| e.to_string())
     }
 
-    async fn delete_pair(&self, device_code: &str, user_code: &str) -> Result<(), String> {
-        RedisDeviceGrantStore::delete_pair(self, device_code, user_code)
+    async fn compare_and_set_and_delete_index(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> Result<bool, String> {
+        RedisDeviceGrantStore::compare_and_set_and_delete_index(
+            self,
+            device_code,
+            expected,
+            replacement,
+        )
+        .await
+        .map_err(|e| e.to_string())
+    }
+
+    async fn compare_and_delete_pair(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+    ) -> Result<bool, String> {
+        RedisDeviceGrantStore::compare_and_delete_pair(self, device_code, expected)
             .await
             .map_err(|e| e.to_string())
     }
@@ -172,38 +202,72 @@ impl DeviceGrantStore for InMemoryDeviceGrantStore {
             .map(|entry| entry.grant.clone()))
     }
 
-    async fn save_preserving_ttl(
+    async fn compare_and_set(
         &self,
         device_code: &str,
-        grant: &DeviceGrant,
-        fallback_ttl_seconds: u64,
-    ) -> Result<(), String> {
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> Result<bool, String> {
         let now_ms = chrono::Utc::now().timestamp_millis();
         let mut state = self.inner.lock().map_err(|e| e.to_string())?;
         Self::purge_expired(&mut state, now_ms);
-        let expires_at_ms = state
-            .device
-            .get(device_code)
-            .map(|entry| entry.expires_at_ms)
-            .unwrap_or(now_ms + fallback_ttl_seconds as i64 * 1000);
-        state.device.insert(
-            device_code.to_string(),
-            InMemoryDeviceGrantEntry {
-                grant: grant.clone(),
-                expires_at_ms,
-            },
-        );
-        state
-            .user_code
-            .insert(grant.user_code.clone(), device_code.to_string());
-        Ok(())
+        let Some(entry) = state.device.get_mut(device_code) else {
+            return Ok(false);
+        };
+        if entry.grant != *expected {
+            return Ok(false);
+        }
+        if expected.user_code != replacement.user_code {
+            return Err("device grant CAS cannot change user code".to_string());
+        }
+        entry.grant = replacement.clone();
+        Ok(true)
     }
 
-    async fn delete_pair(&self, device_code: &str, user_code: &str) -> Result<(), String> {
+    async fn compare_and_set_and_delete_index(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+        replacement: &DeviceGrant,
+    ) -> Result<bool, String> {
+        let now_ms = chrono::Utc::now().timestamp_millis();
         let mut state = self.inner.lock().map_err(|e| e.to_string())?;
+        Self::purge_expired(&mut state, now_ms);
+        let Some(entry) = state.device.get_mut(device_code) else {
+            return Ok(false);
+        };
+        if entry.grant != *expected {
+            return Ok(false);
+        }
+        if expected.user_code != replacement.user_code {
+            return Err("device grant CAS cannot change user code".to_string());
+        }
+        entry.grant = replacement.clone();
+        if state.user_code.get(&expected.user_code).map(String::as_str) == Some(device_code) {
+            state.user_code.remove(&expected.user_code);
+        }
+        Ok(true)
+    }
+
+    async fn compare_and_delete_pair(
+        &self,
+        device_code: &str,
+        expected: &DeviceGrant,
+    ) -> Result<bool, String> {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let mut state = self.inner.lock().map_err(|e| e.to_string())?;
+        Self::purge_expired(&mut state, now_ms);
+        let Some(entry) = state.device.get(device_code) else {
+            return Ok(false);
+        };
+        if entry.grant != *expected {
+            return Ok(false);
+        }
         state.device.remove(device_code);
-        state.user_code.remove(user_code);
-        Ok(())
+        if state.user_code.get(&expected.user_code).map(String::as_str) == Some(device_code) {
+            state.user_code.remove(&expected.user_code);
+        }
+        Ok(true)
     }
 }
 
@@ -270,15 +334,23 @@ pub(super) async fn poll_device_token_from_store(
                 .access_token
                 .clone()
                 .ok_or_else(|| IdentityError::internal("approved but no token stored"))?;
-            store
-                .delete_pair(device_code, &grant.user_code)
+            let consumed = DeviceGrant {
+                status: "consumed".to_string(),
+                ..grant.clone()
+            };
+            let consumed_grant = store
+                .compare_and_set_and_delete_index(device_code, &grant, &consumed)
                 .await
                 .map_err(IdentityError::internal)?;
+            if !consumed_grant {
+                return Err(IdentityError::gone("expired_token"));
+            }
             Ok(DeviceTokenView {
                 access_token,
                 token_type: "bearer".to_string(),
             })
         }
+        "consumed" => Err(IdentityError::gone("expired_token")),
         _ => Err(IdentityError::gone("device code was not approved")),
     }
 }

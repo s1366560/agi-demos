@@ -1655,6 +1655,11 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         match_kind: MethodMatchKind::Exact,
     },
     MethodRule {
+        method: "POST",
+        path: "/api/v1/auth/device/cancel",
+        match_kind: MethodMatchKind::Exact,
+    },
+    MethodRule {
         method: "GET",
         path: "/api/v1/invitations",
         match_kind: MethodMatchKind::FixedChildWithGrandchild { child: "verify" },

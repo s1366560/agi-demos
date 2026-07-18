@@ -898,6 +898,39 @@ button.primary, .action-buttons button.primary { border-color: #2692ad; backgrou
 .login-legal { margin: 13px 0 0; color: #536173; font-size: 7px; line-height: 1.5; text-align: center; }
 .login-help { display: flex; align-items: center; gap: 5px; margin-top: 20px; color: #657487; font-size: 8px; }
 .login-help button { padding: 0; border: 0; background: transparent; color: #6abdd1; font-size: 8px; }
+.login-device-auth-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; padding: 32px; place-items: center; background: rgb(3 7 12 / .76); backdrop-filter: blur(8px); }
+.login-device-auth-dialog { position: relative; width: min(430px, calc(100vw - 64px)); padding: 24px; border: 1px solid #344457; border-radius: 10px; outline: 0; background: #0b1119; box-shadow: 0 22px 70px rgb(0 0 0 / .48); }
+.login-device-auth-close { position: absolute; top: 12px; right: 12px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #6c7b8e; }
+.login-device-auth-close:hover, .login-device-auth-close:focus-visible { border-color: #354457; background: #111923; color: #d8e2ec; outline: 0; }
+.login-device-auth-icon { display: grid; width: 40px; height: 40px; margin-bottom: 17px; place-items: center; border: 1px solid #286a7d; border-radius: 9px; background: #102832; color: var(--cyan); }
+.login-device-auth-dialog.expired .login-device-auth-icon { border-color: #675033; background: #251d14; color: var(--amber); }
+.login-device-auth-icon svg { width: 19px; height: 19px; }
+.login-device-auth-dialog > header > span { color: var(--cyan); font-size: 8px; font-weight: 800; letter-spacing: .16em; }
+.login-device-auth-dialog.expired > header > span { color: var(--amber); }
+.login-device-auth-dialog > header h2 { margin: 8px 0 7px; color: #edf4fa; font-size: 22px; letter-spacing: -.04em; }
+.login-device-auth-dialog > header p { max-width: 360px; margin: 0; color: #7d8b9d; font-size: 9px; line-height: 1.55; }
+.login-device-auth-code { display: grid; gap: 7px; margin-top: 21px; padding: 15px; border: 1px solid #2d3b4a; border-radius: 8px; background: #080d13; text-align: center; }
+.login-device-auth-code > span, .login-device-auth-code small > span { color: #647386; font-size: 7px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.login-device-auth-code strong { color: #eef8fb; font: 700 25px/1.15 Menlo, Monaco, Consolas, monospace; letter-spacing: .18em; }
+.login-device-auth-code small { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px 8px; color: #6abdd1; font-size: 8px; }
+.login-device-auth-status { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 10px; margin-top: 10px; padding: 10px 11px; border: 1px solid #285465; border-radius: 7px; background: #101e26; color: var(--cyan); }
+.login-device-auth-status.expired { border-color: #5a4930; background: #211a12; color: var(--amber); }
+.login-device-auth-status > svg { width: 17px; height: 17px; justify-self: center; }
+.login-device-auth-status > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.login-device-auth-status b { color: #c6d8df; font-size: 9px; }
+.login-device-auth-status small { color: #718797; font-size: 7px; }
+.login-device-auth-status.expired small { color: #a78a5f; }
+.login-device-auth-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-top: 18px; }
+.login-device-auth-actions > button, .login-device-auth-actions > a { display: inline-flex; align-items: center; justify-content: center; height: 35px; gap: 6px; padding: 0 12px; border: 1px solid #354153; border-radius: 6px; background: #121923; color: #96a5b6; font-size: 8px; font-weight: 650; text-decoration: none; }
+.login-device-auth-actions > a, .login-device-auth-actions > .primary { border-color: #2b8ea7; background: #146f87; color: white; }
+.login-device-auth-actions > button:hover, .login-device-auth-actions > button:focus-visible, .login-device-auth-actions > a:hover, .login-device-auth-actions > a:focus-visible { border-color: #477086; outline: 0; color: white; }
+.login-device-auth-actions > a:hover, .login-device-auth-actions > a:focus-visible, .login-device-auth-actions > .primary:hover, .login-device-auth-actions > .primary:focus-visible { background: #177c96; }
+.login-device-auth-actions svg { width: 13px; height: 13px; }
+
+@media (max-height: 719px) {
+  .login-screen { min-height: 0; }
+  .login-device-auth-backdrop { overflow-y: auto; }
+}
 
 /* Context-aware sidebar profile */
 .sidebar-tenant-label { display: flex; align-items: baseline; justify-content: space-between; gap: 7px; }

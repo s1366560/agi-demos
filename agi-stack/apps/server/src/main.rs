@@ -128,7 +128,7 @@ use crate::agent_events_api::{
 use crate::artifacts_api::{DevArtifactService, PgArtifactService, SharedArtifacts};
 use crate::attachments_api::{DevAttachmentService, PgAttachmentService, SharedAttachments};
 use crate::audit_api::{DevAuditLogService, PgAuditLogService, SharedAuditLogs};
-use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
+use crate::auth::{DevApiKeyRevocations, DevAuthenticator, PgAuthenticator, SharedAuthenticator};
 use crate::billing_api::{DevBillingService, PgBillingService, SharedBilling};
 use crate::channel_api::{
     ChannelOutboxDeliveryWorker, ChannelOutboxDeliveryWorkerConfig, DevChannelService,
@@ -632,10 +632,15 @@ async fn build_memory_and_auth(
                 .with_vectors(Arc::new(InMemoryVectorIndex::new())),
             );
             let checkpoint: Arc<dyn CheckpointStore> = Arc::new(InMemoryCheckpointStore::new());
-            let authenticator: SharedAuthenticator = Arc::new(DevAuthenticator::new("dev-user"));
+            let api_key_revocations = DevApiKeyRevocations::new();
+            let authenticator: SharedAuthenticator = Arc::new(DevAuthenticator::with_revocations(
+                "dev-user",
+                api_key_revocations.clone(),
+            ));
             let identity: SharedIdentity = Arc::new(DevIdentityService::with_device_grants(
                 "dev-user",
                 device_grants,
+                api_key_revocations,
             ));
             let shares: SharedShares = Arc::new(DevShareService::new("dev-user"));
             let trust: SharedTrust = Arc::new(DevTrustService::new("dev-user"));

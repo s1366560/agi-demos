@@ -129,6 +129,13 @@ pub struct DeviceApproveView {
     pub status: String,
 }
 
+/// `POST /auth/device/cancel` response. Repeated cancellation is a successful
+/// no-op, so callers can retry after a lost response.
+#[derive(Debug, Serialize)]
+pub struct DeviceCancelView {
+    pub success: bool,
+}
+
 /// `POST /auth/device/token` successful response.
 #[derive(Debug, Serialize)]
 pub struct DeviceTokenView {

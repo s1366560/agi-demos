@@ -26,7 +26,8 @@
 //! lookup + arithmetic expiry — the deterministic protocol facts the top-level
 //! rule explicitly keeps out of the agent. No semantics are inferred.
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::{
@@ -38,6 +39,7 @@ use axum::{
     Json,
 };
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 use agistack_adapters_postgres::{PgApiKeyStore, PgProjectStore};
 
@@ -96,6 +98,10 @@ pub trait Authenticator: Send + Sync {
     /// Resolve a raw `ms_sk_...` key to an [`Identity`], or reject. `now_ms` is
     /// injected (no ambient clock) so expiry is testable/deterministic.
     async fn authenticate(&self, raw_key: &str, now_ms: i64) -> Result<Identity, AuthRejection>;
+
+    /// Revoke exactly the API key represented by `raw_key`. Implementations
+    /// must treat an absent/already-revoked key as success.
+    async fn revoke_api_key(&self, raw_key: &str) -> Result<(), AuthRejection>;
 
     /// Whether `user_id` may read within `project_id` (owner / public / member).
     async fn can_access_project(&self, user_id: &str, project_id: &str) -> Result<bool, String>;
@@ -162,6 +168,17 @@ impl Authenticator for PgAuthenticator {
             user_id: record.user_id,
             _api_key_id: record.id,
         })
+    }
+
+    async fn revoke_api_key(&self, raw_key: &str) -> Result<(), AuthRejection> {
+        self.keys
+            .revoke_by_raw_key(raw_key)
+            .await
+            .map(|_| ())
+            .map_err(|error| AuthRejection {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                detail: error.to_string(),
+            })
     }
 
     async fn can_access_project(&self, user_id: &str, project_id: &str) -> Result<bool, String> {
@@ -245,19 +262,61 @@ impl Authenticator for PgAuthenticator {
     }
 }
 
+/// Shared dev-mode revocation registry used by both device-grant cancellation
+/// and request authentication.
+#[derive(Clone, Default)]
+pub(crate) struct DevApiKeyRevocations {
+    revoked_key_hashes: Arc<Mutex<HashSet<[u8; 32]>>>,
+}
+
+impl DevApiKeyRevocations {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn contains(&self, raw_key: &str) -> Result<bool, String> {
+        self.revoked_key_hashes
+            .lock()
+            .map_err(|_| "API key revocation state unavailable".to_string())
+            .map(|hashes| hashes.contains(&api_key_fingerprint(raw_key)))
+    }
+
+    pub(crate) fn revoke(&self, raw_key: &str) -> Result<(), String> {
+        self.revoked_key_hashes
+            .lock()
+            .map_err(|_| "API key revocation state unavailable".to_string())?
+            .insert(api_key_fingerprint(raw_key));
+        Ok(())
+    }
+}
+
 /// Isolated-test authenticator: accepts any well-formed `ms_sk_` key, maps it to
-/// a fixed dev user, and permits every project. Native server startup never
-/// selects it because repository-root `.env` database configuration is required.
+/// a fixed dev user, and permits every project unless the shared registry has
+/// revoked it.
 pub struct DevAuthenticator {
     dev_user_id: String,
+    revocations: DevApiKeyRevocations,
 }
 
 impl DevAuthenticator {
+    #[cfg(test)]
     pub fn new(dev_user_id: impl Into<String>) -> Self {
+        Self::with_revocations(dev_user_id, DevApiKeyRevocations::new())
+    }
+
+    pub(crate) fn with_revocations(
+        dev_user_id: impl Into<String>,
+        revocations: DevApiKeyRevocations,
+    ) -> Self {
         Self {
             dev_user_id: dev_user_id.into(),
+            revocations,
         }
     }
+}
+
+fn api_key_fingerprint(raw_key: &str) -> [u8; 32] {
+    Sha256::digest(raw_key.as_bytes()).into()
 }
 
 #[async_trait]
@@ -270,10 +329,29 @@ impl Authenticator for DevAuthenticator {
                 "Invalid API key format. API keys should start with 'ms_sk_'",
             ));
         }
+        let is_revoked = self
+            .revocations
+            .contains(raw_key)
+            .map_err(|detail| AuthRejection {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                detail,
+            })?;
+        if is_revoked {
+            return Err(AuthRejection::unauthorized("Invalid API key"));
+        }
         Ok(Identity {
             user_id: self.dev_user_id.clone(),
             _api_key_id: format!("dev_{}", &raw_key[..raw_key.len().min(14)]),
         })
+    }
+
+    async fn revoke_api_key(&self, raw_key: &str) -> Result<(), AuthRejection> {
+        self.revocations
+            .revoke(raw_key)
+            .map_err(|detail| AuthRejection {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                detail,
+            })
     }
 
     async fn can_access_project(&self, _user_id: &str, _project_id: &str) -> Result<bool, String> {
@@ -308,7 +386,7 @@ impl Authenticator for DevAuthenticator {
 
 /// Extract the raw key from an `Authorization` header value, applying the same
 /// prefix rules as the Python `get_api_key_from_header`.
-fn extract_raw_key(authorization: Option<&str>) -> Result<String, AuthRejection> {
+pub(crate) fn extract_raw_key(authorization: Option<&str>) -> Result<String, AuthRejection> {
     let Some(authorization) = authorization else {
         return Err(AuthRejection::unauthorized(
             "Missing API key. Please provide an API key in the Authorization header.",
@@ -446,6 +524,22 @@ mod unit {
                 .status,
             StatusCode::UNAUTHORIZED
         );
+    }
+
+    #[tokio::test]
+    async fn dev_revoke_is_idempotent_and_does_not_revoke_other_key() {
+        let auth = DevAuthenticator::new("dev-user");
+        let current_key = "ms_sk_dev_revoke_current";
+        let other_key = "ms_sk_dev_revoke_other";
+
+        assert!(auth.authenticate(current_key, 0).await.is_ok());
+        assert!(auth.authenticate(other_key, 0).await.is_ok());
+
+        auth.revoke_api_key(current_key).await.unwrap();
+        auth.revoke_api_key(current_key).await.unwrap();
+
+        assert!(auth.authenticate(current_key, 0).await.is_err());
+        assert!(auth.authenticate(other_key, 0).await.is_ok());
     }
 
     #[test]

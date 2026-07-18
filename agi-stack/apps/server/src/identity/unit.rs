@@ -5,6 +5,8 @@ use agistack_adapters_postgres::{
     ProjectReadRecord, TenantRecord,
 };
 
+use crate::auth::{Authenticator, DevApiKeyRevocations, DevAuthenticator};
+
 #[test]
 fn html_escape_covers_text_and_attribute_metacharacters() {
     assert_eq!(
@@ -773,6 +775,159 @@ async fn dev_device_code_flow_matches_python_states() {
     let consumed = svc.poll_device_token(&code.device_code).await.unwrap_err();
     assert_eq!(consumed.status, StatusCode::GONE);
     assert_eq!(consumed.detail, "expired_token");
+}
+
+#[tokio::test]
+async fn dev_device_cancel_is_idempotent_for_pending_and_approved_grants() {
+    let svc = DevIdentityService::new("dev-user");
+
+    let pending = svc.create_device_code().await.unwrap();
+    assert!(
+        svc.cancel_device_code(&pending.device_code)
+            .await
+            .unwrap()
+            .success
+    );
+    assert!(
+        svc.cancel_device_code(&pending.device_code)
+            .await
+            .unwrap()
+            .success
+    );
+    assert_eq!(
+        svc.poll_device_token(&pending.device_code)
+            .await
+            .unwrap_err()
+            .status,
+        StatusCode::GONE
+    );
+
+    let approved = svc.create_device_code().await.unwrap();
+    svc.approve_device_code("dev-user", &approved.user_code, 0)
+        .await
+        .unwrap();
+    assert!(
+        svc.cancel_device_code(&approved.device_code)
+            .await
+            .unwrap()
+            .success
+    );
+    assert_eq!(
+        svc.poll_device_token(&approved.device_code)
+            .await
+            .unwrap_err()
+            .status,
+        StatusCode::GONE
+    );
+}
+
+#[tokio::test]
+async fn dev_device_cancel_revokes_consumed_bearer_without_touching_other_keys() {
+    let revocations = DevApiKeyRevocations::new();
+    let auth = DevAuthenticator::with_revocations("dev-user", revocations.clone());
+    let svc = DevIdentityService::with_device_grants(
+        "dev-user",
+        Arc::new(InMemoryDeviceGrantStore::new()),
+        revocations,
+    );
+    let code = svc.create_device_code().await.unwrap();
+    svc.approve_device_code("dev-user", &code.user_code, 0)
+        .await
+        .unwrap();
+    let token = svc.poll_device_token(&code.device_code).await.unwrap();
+    auth.authenticate(&token.access_token, 0).await.unwrap();
+
+    svc.cancel_device_code(&code.device_code).await.unwrap();
+
+    assert!(auth.authenticate(&token.access_token, 0).await.is_err());
+    assert!(auth
+        .authenticate("ms_sk_unrelated_dev_key", 0)
+        .await
+        .is_ok());
+}
+
+#[tokio::test]
+async fn dev_device_approve_cancel_race_cannot_republish_a_cancelled_grant() {
+    let svc = Arc::new(DevIdentityService::new("dev-user"));
+    let code = svc.create_device_code().await.unwrap();
+    let barrier = Arc::new(tokio::sync::Barrier::new(3));
+
+    let approving = {
+        let svc = Arc::clone(&svc);
+        let barrier = Arc::clone(&barrier);
+        let user_code = code.user_code.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            svc.approve_device_code("dev-user", &user_code, 0).await
+        })
+    };
+    let cancelling = {
+        let svc = Arc::clone(&svc);
+        let barrier = Arc::clone(&barrier);
+        let device_code = code.device_code.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            svc.cancel_device_code(&device_code).await
+        })
+    };
+    barrier.wait().await;
+
+    let approval = approving.await.unwrap();
+    let cancellation = cancelling.await.unwrap().unwrap();
+    assert!(cancellation.success);
+    if let Err(error) = approval {
+        assert!(matches!(
+            error.status,
+            StatusCode::NOT_FOUND | StatusCode::GONE | StatusCode::CONFLICT
+        ));
+    }
+    assert_eq!(
+        svc.poll_device_token(&code.device_code)
+            .await
+            .unwrap_err()
+            .status,
+        StatusCode::GONE
+    );
+}
+
+#[tokio::test]
+async fn dev_device_poll_cancel_race_leaves_no_pollable_grant() {
+    let svc = Arc::new(DevIdentityService::new("dev-user"));
+    let code = svc.create_device_code().await.unwrap();
+    svc.approve_device_code("dev-user", &code.user_code, 0)
+        .await
+        .unwrap();
+    let barrier = Arc::new(tokio::sync::Barrier::new(3));
+
+    let polling = {
+        let svc = Arc::clone(&svc);
+        let barrier = Arc::clone(&barrier);
+        let device_code = code.device_code.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            svc.poll_device_token(&device_code).await
+        })
+    };
+    let cancelling = {
+        let svc = Arc::clone(&svc);
+        let barrier = Arc::clone(&barrier);
+        let device_code = code.device_code.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            svc.cancel_device_code(&device_code).await
+        })
+    };
+    barrier.wait().await;
+
+    let _ = polling.await.unwrap();
+    assert!(cancelling.await.unwrap().unwrap().success);
+    assert_eq!(
+        svc.poll_device_token(&code.device_code)
+            .await
+            .unwrap_err()
+            .status,
+        StatusCode::GONE
+    );
 }
 
 #[test]

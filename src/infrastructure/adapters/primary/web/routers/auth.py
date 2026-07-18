@@ -2,15 +2,19 @@
 Authentication router.
 """
 
+from __future__ import annotations
+
 import json as _json
 import logging
 import secrets
-from typing import Any
+from collections.abc import AsyncIterator, Awaitable
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -27,14 +31,18 @@ from src.application.schemas.auth import (
 from src.application.use_cases.auth.list_api_keys import ListAPIKeysQuery, ListAPIKeysUseCase
 from src.infrastructure.adapters.primary.web.dependencies import (
     create_api_key,
+    get_api_key_from_header,
     get_current_user,
+    hash_api_key,
     verify_password,
 )
+from src.infrastructure.adapters.secondary.cache.redis_lock import RedisDistributedLock
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     APIKey as DBAPIKey,
     Project as DBProject,
+    Role,
     Tenant,
     User as DBUser,
     UserProject,
@@ -46,6 +54,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository im
 )
 from src.infrastructure.i18n import gettext as _
 
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Authentication"])
@@ -55,6 +66,14 @@ class OAuthCallbackRequest(BaseModel):
     code: str
     state: str | None = None
     redirect_uri: str | None = None
+
+
+class DeviceCodeCancelRequest(BaseModel):
+    """Device-code cancellation request; caller-supplied token fields are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    device_code: str
 
 
 def _user_profile(user: DBUser) -> dict[str, Any]:
@@ -199,6 +218,23 @@ async def login_for_access_token(
         "token_type": "bearer",
         "must_change_password": bool(user.must_change_password),
     }
+
+
+@router.post("/auth/signout")
+async def sign_out(
+    api_key: str = Depends(get_api_key_from_header),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    """Revoke only the API key supplied by the Authorization header.
+
+    The route deliberately does not bind a request body. Looking up by the
+    bearer hash makes repeated sign-out calls successful without authenticating
+    a key that may already have been deleted.
+    """
+    repository = SqlAPIKeyRepository(db)
+    await repository.delete_by_hash(hash_api_key(api_key))
+    await db.commit()
+    return {"success": True}
 
 
 @router.post("/auth/oauth/{provider}/callback", status_code=status.HTTP_501_NOT_IMPLEMENTED)
@@ -405,15 +441,18 @@ async def update_user_me(
 #      Returns: 428 Precondition Required while pending,
 #               200 {access_token, token_type} once approved,
 #               410 Gone once expired.
+#   4. CLI  → POST /auth/device/cancel {device_code} when abandoning the flow.
+#      This revokes a bound token, including one returned during a cancellation race.
 #
 # Storage: Redis key `memstack:device_code:{device_code}` → JSON
-#   {"user_code": str, "status": "pending|approved|expired",
+#   {"user_code": str, "status": "pending|approved|consumed|expired",
 #    "approved_user_id": str|null, "access_token": str|null}
 # Additional index `memstack:device_user_code:{user_code}` → device_code.
 # TTL: 600 seconds (10 minutes).
 
 _DEVICE_CODE_TTL = 600
 _DEVICE_CODE_INTERVAL = 5
+_DEVICE_SESSION_LOCK_TTL = 60
 _USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I,O,0,1 ambiguity
 _USER_CODE_LEN = 8
 
@@ -428,6 +467,108 @@ def _device_key(device_code: str) -> str:
 
 def _user_code_key(user_code: str) -> str:
     return f"memstack:device_user_code:{user_code}"
+
+
+@asynccontextmanager
+async def _device_session_lock(
+    redis_client: Redis,
+    device_code: str,
+) -> AsyncIterator[RedisDistributedLock]:
+    """Serialize approval, token redemption, and cancellation without logging the secret."""
+    lock = RedisDistributedLock(
+        redis_client,
+        hash_api_key(device_code),
+        ttl=_DEVICE_SESSION_LOCK_TTL,
+        retry_interval=0.05,
+        max_retries=100,
+        namespace="memstack:device-lock",
+    )
+    if not await lock.acquire(timeout=5):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Device authorization is busy; retry shortly"),
+        )
+    try:
+        yield lock
+    finally:
+        await lock.release()
+
+
+async def _compare_and_set_device_grant(
+    redis_client: Redis,
+    lock: RedisDistributedLock,
+    device_code: str,
+    expected: str,
+    replacement: str,
+    *,
+    remove_user_code: str | None = None,
+) -> bool:
+    """Replace a grant only while this request still owns the matching lease."""
+    script = """
+    if redis.call("GET", KEYS[1]) ~= ARGV[1] then
+        return 0
+    end
+    if redis.call("GET", KEYS[2]) ~= ARGV[2] then
+        return 0
+    end
+    redis.call("SET", KEYS[2], ARGV[3], "KEEPTTL")
+    if #KEYS == 3 and redis.call("GET", KEYS[3]) == ARGV[4] then
+        redis.call("DEL", KEYS[3])
+    end
+    return 1
+    """
+    keys = [lock.key, _device_key(device_code)]
+    if remove_user_code is not None:
+        keys.append(_user_code_key(remove_user_code))
+    result = await cast(
+        Awaitable[int],
+        redis_client.eval(
+            script,
+            len(keys),
+            *keys,
+            lock.owner,
+            expected,
+            replacement,
+            device_code,
+        ),
+    )
+    return result == 1
+
+
+async def _compare_and_delete_device_grant(
+    redis_client: Redis,
+    lock: RedisDistributedLock,
+    device_code: str,
+    expected: str,
+    user_code: str,
+) -> int:
+    """Delete one exact grant and its still-matching user-code index."""
+    script = """
+    if redis.call("GET", KEYS[1]) ~= ARGV[1] then
+        return -1
+    end
+    if redis.call("GET", KEYS[2]) ~= ARGV[2] then
+        return 0
+    end
+    redis.call("DEL", KEYS[2])
+    if redis.call("GET", KEYS[3]) == ARGV[3] then
+        redis.call("DEL", KEYS[3])
+    end
+    return 1
+    """
+    return await cast(
+        Awaitable[int],
+        redis_client.eval(
+            script,
+            3,
+            lock.key,
+            _device_key(device_code),
+            _user_code_key(user_code),
+            lock.owner,
+            expected,
+            device_code,
+        ),
+    )
 
 
 @router.post("/auth/device/code")
@@ -498,32 +639,70 @@ async def device_code_approve(
         device_code_raw.decode() if isinstance(device_code_raw, bytes) else device_code_raw
     )
 
-    raw = await redis_client.get(_device_key(device_code))
-    if raw is None:
-        raise HTTPException(status_code=410, detail=_("device code expired"))
-    session = _json.loads(raw)
-    if session.get("status") != "pending":
-        raise HTTPException(status_code=409, detail=_("Device code has already been handled"))
+    async with _device_session_lock(redis_client, device_code) as device_lock:
+        raw = await redis_client.get(_device_key(device_code))
+        if raw is None:
+            raise HTTPException(status_code=410, detail=_("device code expired"))
+        original = raw.decode() if isinstance(raw, bytes) else str(raw)
+        session = _json.loads(original)
+        if session.get("status") != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail=_("Device code has already been handled"),
+            )
 
-    # Determine permissions like /auth/token does.
-    is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    permissions = ["read", "write"] + (["admin"] if is_admin else [])
+        # Determine permissions like /auth/token does without async lazy loading.
+        role_result = await db.execute(
+            refresh_select_statement(
+                select(Role.name)
+                .join(UserRole, UserRole.role_id == Role.id)
+                .where(UserRole.user_id == current_user.id)
+            )
+        )
+        is_admin = "admin" in role_result.scalars().all()
+        permissions = ["read", "write"] + (["admin"] if is_admin else [])
 
-    plain_key, _api_key = await create_api_key(
-        db,
-        user_id=current_user.id,
-        name=f"CLI device login ({user_code})",
-        permissions=permissions,
-        expires_in_days=30,
-    )
-    await db.commit()
+        plain_key, _api_key = await create_api_key(
+            db,
+            user_id=current_user.id,
+            name=f"CLI device login ({user_code})",
+            permissions=permissions,
+            expires_in_days=30,
+        )
+        session["status"] = "approved"
+        session["approved_user_id"] = current_user.id
+        session["access_token"] = plain_key
+        approved = _json.dumps(session)
+        try:
+            await db.commit()
+        except BaseException:
+            await db.rollback()
+            repository = SqlAPIKeyRepository(db)
+            await repository.delete_by_hash(hash_api_key(plain_key))
+            await db.commit()
+            raise
 
-    session["status"] = "approved"
-    session["approved_user_id"] = current_user.id
-    session["access_token"] = plain_key
-    ttl = await redis_client.ttl(_device_key(device_code))
-    ttl_seconds = ttl if ttl and ttl > 0 else _DEVICE_CODE_TTL
-    await redis_client.setex(_device_key(device_code), ttl_seconds, _json.dumps(session))
+        try:
+            published = await _compare_and_set_device_grant(
+                redis_client,
+                device_lock,
+                device_code,
+                original,
+                approved,
+            )
+        except BaseException:
+            repository = SqlAPIKeyRepository(db)
+            await repository.delete_by_hash(hash_api_key(plain_key))
+            await db.commit()
+            raise
+        if not published:
+            repository = SqlAPIKeyRepository(db)
+            await repository.delete_by_hash(hash_api_key(plain_key))
+            await db.commit()
+            raise HTTPException(
+                status_code=409,
+                detail=_("Device code has already been handled"),
+            )
 
     return {"status": "approved"}
 
@@ -538,29 +717,89 @@ async def device_code_token(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=_("device_code required"))
 
     redis_client = await get_redis_client()
-    raw = await redis_client.get(_device_key(device_code))
-    if raw is None:
-        raise HTTPException(status_code=410, detail=_("expired_token"))
-    session = _json.loads(raw)
-    status_val = session.get("status", "pending")
-    if status_val == "pending":
-        # RFC 8628 uses 400 + error=authorization_pending. We use 428 so that
-        # HTTP-generic retry logic can distinguish "not ready" from "bad".
-        raise HTTPException(
-            status_code=428,
-            detail={"error": "authorization_pending", "interval": _DEVICE_CODE_INTERVAL},
+    async with _device_session_lock(redis_client, device_code) as device_lock:
+        raw = await redis_client.get(_device_key(device_code))
+        if raw is None:
+            raise HTTPException(status_code=410, detail=_("expired_token"))
+        original = raw.decode() if isinstance(raw, bytes) else str(raw)
+        session = _json.loads(original)
+        status_val = session.get("status", "pending")
+        if status_val == "pending":
+            # RFC 8628 uses 400 + error=authorization_pending. We use 428 so that
+            # HTTP-generic retry logic can distinguish "not ready" from "bad".
+            raise HTTPException(
+                status_code=428,
+                detail={"error": "authorization_pending", "interval": _DEVICE_CODE_INTERVAL},
+            )
+        if status_val != "approved":
+            raise HTTPException(status_code=410, detail=_("device code was not approved"))
+
+        access_token = session.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=500, detail=_("approved but no token stored"))
+
+        # Mark single-use without dropping the server-bound token immediately.
+        # A racing client cancellation can still revoke it until this grant expires.
+        session["status"] = "consumed"
+        user_code = session.get("user_code")
+        consumed = await _compare_and_set_device_grant(
+            redis_client,
+            device_lock,
+            device_code,
+            original,
+            _json.dumps(session),
+            remove_user_code=user_code if isinstance(user_code, str) else None,
         )
-    if status_val != "approved":
-        raise HTTPException(status_code=410, detail=_("device code was not approved"))
+        if not consumed:
+            raise HTTPException(status_code=410, detail=_("expired_token"))
 
-    access_token = session.get("access_token")
-    if not access_token:
-        raise HTTPException(status_code=500, detail=_("approved but no token stored"))
+        return {"access_token": access_token, "token_type": "bearer"}
 
-    # Single-use: delete the device code + user_code index.
-    await redis_client.delete(_device_key(device_code))
-    user_code = session.get("user_code")
-    if user_code:
-        await redis_client.delete(_user_code_key(user_code))
 
-    return {"access_token": access_token, "token_type": "bearer"}
+@router.post("/auth/device/cancel")
+async def device_code_cancel(
+    request: DeviceCodeCancelRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    """Idempotently abandon a device grant and revoke only its server-bound token."""
+    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+    device_code = request.device_code.strip()
+    if not device_code:
+        raise HTTPException(status_code=400, detail=_("device_code required"))
+
+    redis_client = await get_redis_client()
+    async with _device_session_lock(redis_client, device_code) as device_lock:
+        while True:
+            raw = await redis_client.get(_device_key(device_code))
+            if raw is None:
+                return {"success": True}
+
+            original = raw.decode() if isinstance(raw, bytes) else str(raw)
+            session = _json.loads(original)
+            access_token = session.get("access_token")
+            if isinstance(access_token, str) and access_token:
+                repository = SqlAPIKeyRepository(db)
+                await repository.delete_by_hash(hash_api_key(access_token))
+                await db.commit()
+
+            user_code = session.get("user_code")
+            if not isinstance(user_code, str) or not user_code:
+                raise HTTPException(
+                    status_code=500,
+                    detail=_("device authorization record is invalid"),
+                )
+            deleted = await _compare_and_delete_device_grant(
+                redis_client,
+                device_lock,
+                device_code,
+                original,
+                user_code,
+            )
+            if deleted == 1:
+                return {"success": True}
+            if deleted == -1:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=_("Device authorization is busy; retry shortly"),
+                )

@@ -1,16 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRightIcon,
   CheckCircledIcon,
+  ClockIcon,
+  Cross2Icon,
+  ExclamationTriangleIcon,
+  ExternalLinkIcon,
   EyeClosedIcon,
   EyeOpenIcon,
   LockClosedIcon,
   MixerHorizontalIcon,
   ReaderIcon,
+  ReloadIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import type { AuthState, RuntimeMode } from '../../types';
+import { useModalDialog } from '../settings/useModalDialog';
 import {
   resolveWorkspaceContinueLabelKey,
   resolveWorkspaceSsoAction,
@@ -28,7 +34,42 @@ type LoginScreenProps = {
   onPasswordChange: (value: string) => void;
   onEmailLogin: (trustedDevice: boolean) => void;
   onLocalSession: (trustedDevice: boolean) => void;
+  onWorkspaceSso: (trustedDevice: boolean) => void;
+  workspaceSso: WorkspaceSsoPresentation | null;
+  onOpenWorkspaceSso: () => void;
+  onCancelWorkspaceSso: () => void;
 };
+
+export type WorkspaceSsoPresentation = {
+  userCode: string;
+  authorizationUrl: string;
+  expiresAt: number;
+  openError: string | null;
+};
+
+function formatDeviceUserCode(userCode: string): string {
+  return userCode.length === 8 ? `${userCode.slice(0, 4)} ${userCode.slice(4)}` : userCode;
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function secondsUntil(expiresAt: number | null): number {
+  return expiresAt === null ? 0 : Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+}
+
+function verificationAddress(authorizationUrl: string): string {
+  try {
+    const url = new URL(authorizationUrl);
+    url.search = '';
+    return url.toString().replace(/\/$/u, '');
+  } catch {
+    return authorizationUrl;
+  }
+}
 
 export function LoginScreen({
   auth,
@@ -40,12 +81,46 @@ export function LoginScreen({
   onPasswordChange,
   onEmailLogin,
   onLocalSession,
+  onWorkspaceSso,
+  workspaceSso,
+  onOpenWorkspaceSso,
+  onCancelWorkspaceSso,
 }: LoginScreenProps) {
   const { t } = useI18n();
   const [showPassword, setShowPassword] = useState(false);
   const [trustedDevice, setTrustedDevice] = useState(true);
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const busy = auth.status === 'signing_in';
+  const ssoExpiresAt = workspaceSso?.expiresAt ?? null;
+  const [countdown, setCountdown] = useState(() => ({
+    expiresAt: ssoExpiresAt,
+    remainingSeconds: secondsUntil(ssoExpiresAt),
+  }));
+  const remainingSeconds =
+    countdown.expiresAt === ssoExpiresAt
+      ? countdown.remainingSeconds
+      : secondsUntil(ssoExpiresAt);
+  const ssoExpired = workspaceSso !== null && remainingSeconds === 0;
+  const deviceDialogRef = useModalDialog({
+    active: workspaceSso !== null,
+    onClose: onCancelWorkspaceSso,
+  });
+
+  useEffect(() => {
+    if (ssoExpiresAt === null) {
+      setCountdown({ expiresAt: null, remainingSeconds: 0 });
+      return undefined;
+    }
+    const updateRemainingTime = () => {
+      setCountdown({
+        expiresAt: ssoExpiresAt,
+        remainingSeconds: secondsUntil(ssoExpiresAt),
+      });
+    };
+    updateRemainingTime();
+    const timer = window.setInterval(updateRemainingTime, 1000);
+    return () => window.clearInterval(timer);
+  }, [ssoExpiresAt]);
 
   const continueWithWorkspace = () => {
     setInteractionError(null);
@@ -54,18 +129,22 @@ export function LoginScreen({
       onLocalSession(action.trustedDevice);
       return;
     }
-    setInteractionError(
-      action.capability === 'local_workspace'
-        ? t('login.localWorkspaceUnavailable')
-        : t('login.workspaceSsoUnavailable'),
-    );
+    if (action.kind === 'workspace_sso') {
+      onWorkspaceSso(trustedDevice);
+      return;
+    }
+    setInteractionError(t('login.localWorkspaceUnavailable'));
   };
 
   const visibleError = interactionError ?? auth.error;
 
   return (
     <main className="desktop-login-screen">
-      <section className="desktop-login-story">
+      <section
+        className="desktop-login-story"
+        inert={workspaceSso ? true : undefined}
+        aria-hidden={workspaceSso ? true : undefined}
+      >
         <header className="desktop-login-brand">
           <img src="/icon-192.png" alt="MemStack" />
           <div>
@@ -106,7 +185,11 @@ export function LoginScreen({
         </footer>
       </section>
 
-      <section className="desktop-login-form-side">
+      <section
+        className="desktop-login-form-side"
+        inert={workspaceSso ? true : undefined}
+        aria-hidden={workspaceSso ? true : undefined}
+      >
         <form
           className="desktop-login-card"
           noValidate
@@ -211,6 +294,94 @@ export function LoginScreen({
           <button type="button">{t('login.requestWorkspaceAccess')}</button>
         </div>
       </section>
+
+      {workspaceSso ? (
+        <div className="desktop-device-auth-backdrop">
+          <section
+            ref={deviceDialogRef}
+            className={`desktop-device-auth-dialog ${ssoExpired ? 'expired' : 'waiting'}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="desktop-device-auth-title"
+            aria-describedby="desktop-device-auth-description"
+            tabIndex={-1}
+          >
+            <button
+              className="desktop-device-auth-close"
+              type="button"
+              onClick={onCancelWorkspaceSso}
+              aria-label={t('login.deviceCancel')}
+            >
+              <Cross2Icon />
+            </button>
+            <div className="desktop-device-auth-icon">
+              {ssoExpired ? <ExclamationTriangleIcon /> : <ExternalLinkIcon />}
+            </div>
+            <header>
+              <span>{t('login.deviceEyebrow')}</span>
+              <h2 id="desktop-device-auth-title">
+                {t(ssoExpired ? 'login.deviceExpiredTitle' : 'login.deviceTitle')}
+              </h2>
+              <p id="desktop-device-auth-description">
+                {t(ssoExpired ? 'login.deviceExpiredDescription' : 'login.deviceDescription')}
+              </p>
+            </header>
+            <div className="desktop-device-auth-code">
+              <span>{t('login.deviceCode')}</span>
+              <strong>{formatDeviceUserCode(workspaceSso.userCode)}</strong>
+              <small>
+                <span>{t('login.deviceVerificationAddress')}</span>
+                {verificationAddress(workspaceSso.authorizationUrl)}
+              </small>
+            </div>
+            <div
+              className={`desktop-device-auth-status ${ssoExpired ? 'expired' : 'waiting'}`}
+              role={ssoExpired ? 'alert' : undefined}
+            >
+              {ssoExpired ? (
+                <ExclamationTriangleIcon aria-hidden="true" />
+              ) : (
+                <ClockIcon aria-hidden="true" />
+              )}
+              <span>
+                <b role={ssoExpired ? undefined : 'status'}>
+                  {t(ssoExpired ? 'login.deviceExpiredStatus' : 'login.deviceWaiting')}
+                </b>
+                <small>
+                  {t(ssoExpired ? 'login.deviceExpiredDetail' : 'login.deviceExpiresCountdown', {
+                    time: formatCountdown(remainingSeconds),
+                  })}
+                </small>
+              </span>
+            </div>
+            {workspaceSso.openError ? (
+              <div className="desktop-device-auth-error" role="alert">
+                {workspaceSso.openError}
+              </div>
+            ) : null}
+            <div className="desktop-device-auth-actions">
+              <button type="button" onClick={onCancelWorkspaceSso}>
+                {t('login.deviceCancel')}
+              </button>
+              {ssoExpired ? (
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => onWorkspaceSso(trustedDevice)}
+                >
+                  <ReloadIcon />
+                  {t('login.deviceRequestNewCode')}
+                </button>
+              ) : (
+                <button className="primary" type="button" onClick={onOpenWorkspaceSso}>
+                  <ExternalLinkIcon />
+                  {t('login.deviceOpenBrowser')}
+                </button>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

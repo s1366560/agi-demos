@@ -138,6 +138,28 @@ async fn del_keys(keys: &[String]) {
     }
 }
 
+async fn set_raw_with_ttl(key: &str, value: &str, ttl_millis: u64) {
+    let client = redis::Client::open(redis_uri()).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    let _: () = redis::cmd("PSETEX")
+        .arg(key)
+        .arg(ttl_millis)
+        .arg(value)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+}
+
+async fn pttl(key: &str) -> i64 {
+    let client = redis::Client::open(redis_uri()).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    redis::cmd("PTTL")
+        .arg(key)
+        .query_async(&mut conn)
+        .await
+        .unwrap()
+}
+
 async fn ttl(key: &str) -> Option<i64> {
     let uri = redis_uri();
     let client = redis::Client::open(uri).ok()?;
@@ -292,18 +314,101 @@ async fn redis_device_grants_match_python_keys_and_lifecycle() {
         store.device_code_for_user_code(user_code).await.unwrap(),
         Some(device_code.clone())
     );
-    assert_eq!(store.get(&device_code).await.unwrap(), Some(pending));
+    assert_eq!(
+        store.get(&device_code).await.unwrap(),
+        Some(pending.clone())
+    );
+
+    // Python json.dumps emits different whitespace and may use a different
+    // object-key order. Rust compares decoded fields rather than raw bytes.
+    set_raw_with_ttl(
+        &device_code_key(&device_code),
+        r#"{ "access_token": null, "status": "pending", "user_code": "ABCDEFGH", "approved_user_id": null }"#,
+        900,
+    )
+    .await;
 
     let approved = DeviceGrant::approved(user_code, "user-1", "ms_sk_test");
+    assert!(store
+        .compare_and_set(&device_code, &pending, &approved)
+        .await
+        .unwrap());
+    let remaining_ttl = pttl(&device_code_key(&device_code)).await;
+    assert!(
+        (1..=900).contains(&remaining_ttl),
+        "CAS must keep a sub-second TTL, got {remaining_ttl}ms"
+    );
+    assert!(!store
+        .compare_and_set(&device_code, &pending, &approved)
+        .await
+        .unwrap());
+    assert_eq!(
+        store.get(&device_code).await.unwrap(),
+        Some(approved.clone())
+    );
+
+    let consumed = DeviceGrant {
+        status: "consumed".to_string(),
+        ..approved.clone()
+    };
+    assert!(store
+        .compare_and_set_and_delete_index(&device_code, &approved, &consumed)
+        .await
+        .unwrap());
+    assert!(!store.user_code_exists(user_code).await.unwrap());
+    assert!(!store
+        .compare_and_delete_pair(&device_code, &approved)
+        .await
+        .unwrap());
+    assert!(store
+        .compare_and_delete_pair(&device_code, &consumed)
+        .await
+        .unwrap());
+    assert_eq!(store.get(&device_code).await.unwrap(), None);
+
+    // Missing grants are never recreated by either transition.
+    assert!(!store
+        .compare_and_set(&device_code, &pending, &approved)
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn redis_device_grant_approval_and_cancel_have_one_atomic_winner() {
+    let Some(store) = redis_grants_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("device-grant-race").replace(':', "-");
+    let device_code = format!("device-{suffix}");
+    let user_code = "BCDEFGHJ";
+    let keys = vec![
+        device_code_key(&device_code),
+        device_user_code_key(user_code),
+    ];
+    del_keys(&keys).await;
+
+    let pending = DeviceGrant::pending(user_code);
+    let approved = DeviceGrant::approved(user_code, "user-race", "ms_sk_race");
     store
-        .save_preserving_ttl(&device_code, &approved, 600)
+        .create_pending(&device_code, &pending, 600)
         .await
         .unwrap();
-    assert_eq!(store.get(&device_code).await.unwrap(), Some(approved));
+
+    let approving_store = store.clone();
+    let cancelling_store = store.clone();
+    let (approved_won, cancel_won) = tokio::join!(
+        approving_store.compare_and_set(&device_code, &pending, &approved),
+        cancelling_store.compare_and_delete_pair(&device_code, &pending),
+    );
+    let approved_won = approved_won.unwrap();
+    let cancel_won = cancel_won.unwrap();
+    assert_ne!(approved_won, cancel_won, "exactly one transition must win");
+    assert_eq!(
+        store.get(&device_code).await.unwrap(),
+        approved_won.then_some(approved)
+    );
 
     store.delete_pair(&device_code, user_code).await.unwrap();
-    assert!(!store.user_code_exists(user_code).await.unwrap());
-    assert_eq!(store.get(&device_code).await.unwrap(), None);
 }
 
 #[tokio::test]

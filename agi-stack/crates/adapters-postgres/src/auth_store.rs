@@ -1,4 +1,4 @@
-//! Read-only stores over the **Python-owned** `api_keys` and `projects` tables —
+//! Authentication stores over the **Python-owned** `api_keys` and `projects` tables —
 //! the data source for the production auth + multi-tenancy middleware (Foundation
 //! F2, plan.md Section 14.2).
 //!
@@ -38,8 +38,9 @@ impl ApiKeyRecord {
     }
 }
 
-/// Read-only lookup over the Python `api_keys` table. `Clone` is cheap (the
-/// pool is `Arc`'d internally) so callers can hand a copy to a spawned task.
+/// Lookup and current-key revocation over the Python `api_keys` table. `Clone`
+/// is cheap (the pool is `Arc`'d internally) so callers can hand a copy to a
+/// spawned task.
 #[derive(Clone)]
 pub struct PgApiKeyStore {
     pool: PgPool,
@@ -85,6 +86,21 @@ impl PgApiKeyStore {
             .await
             .map_err(|e| CoreError::Storage(e.to_string()))?;
         Ok(())
+    }
+
+    /// Revoke exactly the key represented by `raw_key`.
+    ///
+    /// The raw token is never persisted or interpolated into SQL: it is hashed
+    /// with the same SHA-256 contract used for authentication. A missing row is
+    /// a successful no-op so repeated sign-out requests remain idempotent.
+    pub async fn revoke_by_raw_key(&self, raw_key: &str) -> CoreResult<bool> {
+        let key_hash = sha256_hex(raw_key);
+        let result = sqlx::query("DELETE FROM api_keys WHERE key_hash = $1")
+            .bind(&key_hash)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(result.rows_affected() > 0)
     }
 }
 
