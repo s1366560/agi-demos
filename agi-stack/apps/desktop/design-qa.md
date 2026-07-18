@@ -69,10 +69,7 @@ Post-fix full-view and focused comparisons at both native sizes show no actionab
 ## Findings
 
 - Credential persistence P0: resolved in Iteration 5.
-- [P1] Real outbound connection probing and automatic model discovery remain unimplemented.
 - [P1] The full Provider/authentication matrix and advanced connection fields remain incomplete.
-- [P1] Routing is still tenant-scoped instead of the researched workspace policy scope; Fast and
-  Vision workloads remain unavailable.
 - [P1] Usage statistics and Provider mutation audit events still lack authoritative runtime data.
 
 ## Intentional product constraints
@@ -294,26 +291,22 @@ final result: passed for the hierarchy authority slice; overall desktop reconstr
 
 ---
 
-# Tenant model-routing policy design QA
+# Workspace model-routing policy design QA
 
 Date: 2026-07-18
 
 Scope: Settings -> Models -> OpenAI -> Routing, executable workload-role assignment, ordered
-fallback editing, timeout failover, save/conflict feedback, local-runtime compatibility, and tenant
-scope.
+fallback editing, timeout failover, save/conflict feedback, local-runtime compatibility, and exact
+tenant -> project -> workspace scope.
 
 ## Visual truth and implementation evidence
 
-- Source visual truth:
-  `agi-stack/apps/desktop/qa/routing-policy-source-final.png`
-- Implementation screenshot:
-  `agi-stack/apps/desktop/qa/routing-policy-implementation-final.png`
-- Focused source region:
-  `agi-stack/apps/desktop/qa/routing-policy-source-focused.png`
-- Focused implementation region:
-  `agi-stack/apps/desktop/qa/routing-policy-implementation-focused.png`
-- Viewport: browser content reports `1325 x 939`, device scale factor `1`; both in-app Browser
-  captures use the same `1325 x 745` visible page region after browser chrome.
+- Current source visual truth: `agi-stack/apps/desktop/qa/workspace-routing/source-1280x720.jpg`
+- Pre-fix implementation: `agi-stack/apps/desktop/qa/workspace-routing/before-1280x720.jpg`
+- Current clean implementation: `agi-stack/apps/desktop/qa/workspace-routing/after-1280x720.jpg`
+- Current edited implementation with the primary action active:
+  `agi-stack/apps/desktop/qa/workspace-routing/after-dirty-1280x720.jpg`
+- Viewport: `1280 x 720`, device scale factor `1`, captured from the user-selected in-app Browser.
 - State: Simplified Chinese, dark theme, Settings modal, Models selected, OpenAI selected, Routing
   tab selected. The implementation uses the local QA authority with OpenAI, Anthropic, and an
   OpenAI-compatible local gateway.
@@ -325,12 +318,11 @@ settings frame, 183-pixel section rail, 292-pixel provider list, provider detail
 five-tab strip, two-column role grid, fallback card, dark palette, border density, and vertical
 rhythm align at the same visible crop. No persistent control is hidden by viewport overflow.
 
-The implementation intentionally shows three locally executable provider types instead of the
-source's five-provider cloud catalog. It labels the authority as tenant routing because the SQLite
-policy is tenant-scoped and shared by that tenant's projects and workspaces. Fast and Vision remain
-visible in the four-role contract but are disabled with an explicit local-runtime limitation;
-Default and Coding are the two roles with structured production callers. These are truthful product
-constraints, not accidental layout drift.
+The implementation intentionally shows three authoritative local Provider records instead of the
+source's five-row illustrative cloud catalog, and it preserves the exact runtime model IDs returned
+by those records. The authority label, detail scope, role descriptions, two-by-two selector grid,
+and fallback rows now match the source's Workspace Routing design. Default, Fast, Coding, and
+Vision are all enabled and persisted for the selected workspace.
 
 ## Focused-region comparison evidence
 
@@ -343,10 +335,10 @@ following surfaces remain readable at native scale:
 - two-by-two role geometry, labels, helper copy, select height, radii, and borders;
 - fallback order numbering, select geometry, and row controls.
 
-The implementation adds explicit up/down/remove controls, disables Save until the policy is dirty,
-and marks Fast/Vision as unavailable. Those differences expose real ordered mutation, prevent no-op
-writes, and avoid claiming runtime capabilities that do not yet exist; they do not alter the
-approved composition.
+The previous up/down icon group has been removed. Each fallback row now matches the source's
+number + selector + localized Remove action, while the numbered selectors themselves define the
+ordered sequence. Save remains disabled only in a clean state and becomes the source-visible cyan
+primary action after any role or fallback change.
 
 ## Required fidelity surfaces
 
@@ -356,35 +348,34 @@ approved composition.
   tab rhythm, two-column role grid, card padding, fallback rows, and radii match the source. The
   shorter provider list is an intentional local-runtime data difference.
 - Colors and visual tokens: flat near-black surfaces, slate borders, muted labels, green
-  configuration-valid state, amber reserved-role limits, and cyan selection/action tokens remain
+  configuration-valid state, and cyan selection/action tokens remain
   consistent. No gradient or invented elevation was introduced.
 - Image quality and asset fidelity: the existing MemStack and provider raster/icon assets are
   retained; no visible source asset was replaced with CSS art, text glyphs, or placeholder boxes.
-- Copy and content: role names, descriptions, fallback rationale, provider context, and model IDs
-  are localized. `Tenant routing` replaces the source's `Workspace routing` so the UI states the
-  actual persistence boundary. Local validation says `Configured` and never fabricates an external
-  connectivity probe.
-- Accessibility: the provider tabs use the tab pattern; role and fallback selectors have semantic
-  labels; fallback move/remove actions have localized accessible names; errors use alerts and save
+- Copy and content: Workspace Routing, all four role names/descriptions, fallback rationale,
+  Provider context, and success feedback use the source copy in English and Simplified Chinese.
+  Exact model IDs remain authoritative runtime data. Local validation says `Configured` and never
+  fabricates an external connectivity probe.
+- Accessibility: the Provider tabs use the tab pattern; role and fallback selectors have semantic
+  labels; fallback removal has a localized accessible name; errors use alerts and save
   confirmation uses a status region.
 
 ## Interaction verification
 
 - Changed the Coding route from Anthropic to OpenAI: passed; Save became available.
-- Fast and Vision selectors: passed; both are visibly disabled and explain that the current local
-  runtime cannot execute them.
-- Added a third fallback, moved it upward, and removed it again: passed; duplicate choices stayed
-  disabled and row numbering/actions updated.
+- Fast and Vision selectors: passed; both are enabled, preserve their structured targets, and never
+  depend on message-text heuristics.
+- Removed and added a fallback: passed; duplicate choices stayed disabled and row numbering updated.
 - Saved the policy: passed; the dirty state reset, Save became disabled, and the localized
-  `Tenant routing policy saved` status appeared.
+  `Workspace routing policy saved` status appeared.
 - Candidate authority: passed; only providers projected by the local API as
   `configuration_valid` are selectable. Persisted unavailable targets remain visible but disabled.
 - Failover execution: passed in Rust tests; each candidate has a 45-second bound, timeout advances
   to the next target, and a single candidate is also bounded.
 - Conflict recovery: passed in source and automated contract tests; a 409 reloads both provider
   roster and policy, then refreshes the runtime projection under the original scope guard.
-- Legacy runtime selection: passed in Rust and client tests; mutation requires both the provider
-  revision and routing-policy revision, so it cannot overwrite a newer policy silently.
+- Legacy runtime selection: passed in Rust tests; it remains a tenant compatibility baseline and
+  cannot overwrite an initialized workspace policy or leak one workspace's choice into another.
 - All-candidates-unavailable state: passed in component contract tests; the warning supplements the
   persisted role/fallback editor instead of hiding authoritative targets.
 - Current-page console: no warning or error entries after the final QA navigation and interaction;
@@ -426,12 +417,35 @@ local configuration-only response with `probed: false`.
 Legacy selection now requires both optimistic revisions, and an unavailable-candidate warning no
 longer suppresses the authoritative editor.
 
-### Iteration 3 — passed
+### Iteration 3 — passed for tenant-scoped runtime truth
 
 The post-fix full-view and focused comparisons show no actionable P0, P1, or P2 visual findings.
 The remaining differences are the explicit tenant scope, locally supported provider roster, exact
 runtime model IDs, disabled reserved roles, dirty-save state, and usable reorder controls described
 above.
+
+### Iteration 4 — passed for workspace authority and four executable roles
+
+- Added a non-destructive workspace routing table keyed by tenant, project, and workspace.
+- GET and PUT validate the active hierarchy; frontend responses are rejected when any returned scope
+  differs from the selected workspace.
+- The four role selectors are enabled and use the same source-visible copy and geometry.
+- The Provider workspace resets Radix's inherited line height to the source's normal line box;
+  measured identity height is `140.9 px` in the source and `139.4 px` in production, with the tab
+  strip and routing canvas landing within two pixels at the same viewport.
+- Explicit snake_case `workload_role` selects Fast or Vision without parsing user text. The role is
+  included in the client-turn idempotency hash, so a changed role cannot replay another execution.
+- A saved workspace route does not update the tenant selection or write its model into a shared
+  Provider binding. A later workspace therefore inherits only the original tenant baseline.
+- Provider compatibility validation covers all workspace policies, the legacy tenant policy, and
+  the selection-derived pre-migration baseline.
+- Current same-viewport comparison found no actionable P0, P1, or P2 geometry, hierarchy, copy,
+  control, focus, clipping, or overflow difference. Provider roster size and exact model IDs remain
+  authoritative-data differences.
+- Browser interaction changed Vision, activated Save, persisted the policy, restored the clean
+  state, and exposed the localized success status. Browser logs contain no warning or error.
+- Verification: 402 frontend tests, TypeScript/Vite production build, 201 Rust tests, Rustfmt, and
+  Clippy with warnings denied all passed.
 
 ## Findings
 
@@ -439,9 +453,8 @@ No actionable P0, P1, or P2 findings remain.
 
 ## Follow-up polish
 
-- [P3] A future structured metadata-generation contract can activate Fast. A separate attachment
-  contract plus multimodal adapters can activate Vision. Until then, the current conversation
-  contract explicitly routes Work to Default and Code to Coding without guessing intent from text.
+- [P3] Add authoritative per-workspace usage and Provider mutation audit projections when the
+  runtime exposes those records; do not synthesize them in the UI.
 
 final result: passed
 
@@ -845,9 +858,9 @@ production build passed. The existing Vite large-chunk advisory remains unchange
 
 ## Copy differences from the visual prototype
 
-- “Connection verified” becomes “Configuration valid” in local mode because no outbound request is made.
-- “Discovered models” becomes “Built-in catalog” or “Suggested models” when the backend marks the source as `static-fallback`.
-- Unsupported routing writes say that the current server contract is read-only instead of presenting working Save controls.
+- Configuration-only fallback results remain explicitly labeled when an outbound probe is unavailable.
+- “Discovered models” becomes “Built-in catalog” or “Suggested models” only when the backend marks the source as `static-fallback`.
+- Cloud routing writes remain read-only when the server contract omits mutation; local workspace routing is editable.
 - Usage cards show available raw server aggregates rather than prototype-only success-rate and recent-signal values.
 - Provider creation confirms the active connection without implying that unsupported per-role routing assignments were written.
 
@@ -855,13 +868,9 @@ These differences are deliberate truthfulness constraints, not visual omissions.
 
 ## Remaining Provider-management findings
 
-- [P1] Connection validation is configuration-only in the local runtime; implement a real outbound
-  probe with redacted diagnostics and explicit timeout authority.
-- [P1] Model discovery still uses a static fallback; implement authoritative Provider catalog refresh.
 - [P1] OAuth, environment-backed credentials, advanced request policy, and the complete Provider/auth
   compatibility matrix remain unavailable rather than simulated.
-- [P1] Workspace-scoped routing, executable Fast/Vision role selection, authoritative usage data, and
-  Provider audit events remain to be implemented.
+- [P1] Authoritative workspace usage data and Provider audit events remain to be implemented.
 
 ## Follow-up polish
 

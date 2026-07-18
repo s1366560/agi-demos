@@ -3,9 +3,6 @@ import {
   ActivityLogIcon,
   ArrowRightIcon,
   CheckCircledIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  Cross2Icon,
   CubeIcon,
   ExclamationTriangleIcon,
   InfoCircledIcon,
@@ -171,7 +168,7 @@ export function ProviderOverviewPanel({
             <b>{defaultRoute || t('providers.notConfigured')}</b>
             <em>
               {policyBacked
-                ? t('providers.tenantRoutingPolicy')
+                ? t('providers.workspaceRoutingPolicy')
                 : mode === 'local' && runtimeSelected
                   ? t('providers.localRuntimeSelected')
                   : t('providers.providerPrimaryModel')}
@@ -179,18 +176,12 @@ export function ProviderOverviewPanel({
           </div>
           <div>
             <span>{t('providers.fastRole')}</span>
-            <b>
-              {mode === 'local'
-                ? t('providers.notConfigured')
-                : fastRoute || t('providers.notConfigured')}
-            </b>
+            <b>{fastRoute || t('providers.notConfigured')}</b>
             <em>
               {t(
-                mode === 'local'
-                  ? 'providers.roleRuntimeUnavailable'
-                  : policyBacked
-                    ? 'providers.tenantRoutingPolicy'
-                    : 'providers.readOnlyFromServer',
+                policyBacked
+                  ? 'providers.workspaceRoutingPolicy'
+                  : 'providers.readOnlyFromServer',
               )}
             </em>
           </div>
@@ -198,7 +189,11 @@ export function ProviderOverviewPanel({
             <span>{t('providers.fallbackRole')}</span>
             <b>{fallbackRoute || t('providers.notConfigured')}</b>
             <em>
-              {t(policyBacked ? 'providers.tenantRoutingPolicy' : 'providers.readOnlyFromServer')}
+              {t(
+                policyBacked
+                  ? 'providers.workspaceRoutingPolicy'
+                  : 'providers.readOnlyFromServer',
+              )}
             </em>
           </div>
         </div>
@@ -218,14 +213,16 @@ type ProviderRoutingPanelProps = {
   loadError: string | null;
   mode: RuntimeMode;
   canManage: boolean;
-  onSave: (
-    mutation: LlmProviderRoutingPolicyMutationInput,
-  ) => Promise<LlmProviderRoutingPolicy>;
+  onSave: (mutation: RoutingPolicyDraftMutation) => Promise<LlmProviderRoutingPolicy>;
 };
 
 const ROUTING_ROLES: LlmRoutingRole[] = ['default', 'fast', 'coding', 'vision'];
-const CONFIGURABLE_LOCAL_ROUTING_ROLES = new Set<LlmRoutingRole>(['default', 'coding']);
 const MAX_ROUTING_FALLBACKS = 8;
+
+type RoutingPolicyDraftMutation = Omit<
+  LlmProviderRoutingPolicyMutationInput,
+  'projectId' | 'workspaceId'
+>;
 
 type RoutingDraft = {
   policyKey: string;
@@ -280,6 +277,8 @@ function cloudRoutingProjection(provider: ManagedLlmProvider): LlmProviderRoutin
     modelId ? { provider_id: provider.id, model_id: modelId } : null;
   return {
     tenant_id: 'cloud-read-only',
+    project_id: 'cloud-read-only',
+    workspace_id: 'cloud-read-only',
     revision: provider.revision ?? 0,
     roles: {
       default: route(provider.llm_model),
@@ -314,6 +313,8 @@ export function ProviderRoutingPanel({
     ? [
         mode,
         effectivePolicy.tenant_id,
+        effectivePolicy.project_id,
+        effectivePolicy.workspace_id,
         String(effectivePolicy.revision),
         JSON.stringify(effectivePolicy.roles),
         JSON.stringify(effectivePolicy.fallbacks),
@@ -380,13 +381,7 @@ export function ProviderRoutingPanel({
       : effectivePolicy
         ? routingDraftFromPolicy(policyKey, effectivePolicy)
         : null;
-  const draft =
-    storedOrPolicyDraft && mode === 'local'
-      ? {
-          ...storedOrPolicyDraft,
-          roles: { ...storedOrPolicyDraft.roles, fast: null, vision: null },
-        }
-      : storedOrPolicyDraft;
+  const draft = storedOrPolicyDraft;
   const saving = savingKey === policyKey;
   const error = saveError?.policyKey === policyKey ? saveError.message : null;
   const dirty = Boolean(effectivePolicy && draft && routingDraftChanged(effectivePolicy, draft));
@@ -425,21 +420,6 @@ export function ProviderRoutingPanel({
           currentIndex === index ? target : item,
         ),
       };
-    });
-  };
-
-  const moveFallback = (index: number, offset: -1 | 1) => {
-    if (!effectivePolicy) return;
-    setStoredDraft((current) => {
-      const base =
-        current?.policyKey === policyKey
-          ? current
-          : routingDraftFromPolicy(policyKey, effectivePolicy);
-      const destination = index + offset;
-      if (destination < 0 || destination >= base.fallbacks.length) return base;
-      const fallbacks = [...base.fallbacks];
-      [fallbacks[index], fallbacks[destination]] = [fallbacks[destination], fallbacks[index]];
-      return { ...base, fallbacks };
     });
   };
 
@@ -554,20 +534,15 @@ export function ProviderRoutingPanel({
           <div className="provider-role-grid">
             {ROUTING_ROLES.map((role) => {
               const selectedTarget = draft.roles[role];
-              const runtimeSupported =
-                mode !== 'local' || CONFIGURABLE_LOCAL_ROUTING_ROLES.has(role);
               return (
                 <label key={role}>
                   <span>
                     <b>{t(`providers.${role}Model`)}</b>
                     <small>{t(`providers.${role}ModelDescription`)}</small>
-                    {!runtimeSupported ? (
-                      <em>{t('providers.roleRuntimeUnavailable')}</em>
-                    ) : null}
                   </span>
                   <select
                     value={selectedTarget ? routeTargetKey(selectedTarget) : ''}
-                    disabled={!editable || !runtimeSupported}
+                    disabled={!editable}
                     onChange={(event) => updateRole(role, event.target.value)}
                   >
                     <option value="" disabled={role === 'default'}>
@@ -619,31 +594,13 @@ export function ProviderRoutingPanel({
                       ))}
                     </select>
                     {editable ? (
-                      <div className="provider-fallback-actions">
-                        <button
-                          type="button"
-                          disabled={index === 0}
-                          aria-label={t('providers.moveFallbackUp', { count: index + 1 })}
-                          onClick={() => moveFallback(index, -1)}
-                        >
-                          <ChevronUpIcon />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={index === draft.fallbacks.length - 1}
-                          aria-label={t('providers.moveFallbackDown', { count: index + 1 })}
-                          onClick={() => moveFallback(index, 1)}
-                        >
-                          <ChevronDownIcon />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={t('providers.removeFallback', { count: index + 1 })}
-                          onClick={() => removeFallback(index)}
-                        >
-                          <Cross2Icon />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        aria-label={t('providers.removeFallback', { count: index + 1 })}
+                        onClick={() => removeFallback(index)}
+                      >
+                        {t('providers.remove')}
+                      </button>
                     ) : (
                       <em>{t('providers.readOnly')}</em>
                     )}

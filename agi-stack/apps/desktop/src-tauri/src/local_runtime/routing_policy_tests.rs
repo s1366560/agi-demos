@@ -9,6 +9,9 @@ use uuid::Uuid;
 
 use super::*;
 
+const LOCAL_ROUTING_POLICY_URI: &str =
+    "/api/v1/llm-providers/routing-policy?project_id=local-project&workspace_id=local-workspace";
+
 struct RecordingLlm {
     label: &'static str,
     succeeds: bool,
@@ -217,6 +220,8 @@ fn policy_body(
     fallbacks: Value,
 ) -> Value {
     json!({
+        "project_id": "local-project",
+        "workspace_id": "local-workspace",
         "expected_revision": expected_revision,
         "roles": {
             "default": {

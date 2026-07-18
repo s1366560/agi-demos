@@ -54,6 +54,43 @@ test('conversation history requests preserve forward and backward cursor pairs',
   }
 });
 
+test('conversation execution carries an explicit structured workload role', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    return new Response(JSON.stringify({ queued: true }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      projectId: 'project-1',
+    });
+    await client.runAgentMessage(
+      'conversation-1',
+      'Analyze the attached image.',
+      'message-1',
+      'project-1',
+      'vision',
+    );
+
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+      project_id: 'project-1',
+      message: 'Analyze the attached image.',
+      message_id: 'message-1',
+      workload_role: 'vision',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace context requests preserve the authoritative revision contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

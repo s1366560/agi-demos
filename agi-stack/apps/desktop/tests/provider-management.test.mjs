@@ -52,6 +52,10 @@ const modelProviderWorkspaceSource = readFileSync(
   new URL('../src/features/settings/ModelProviderWorkspace.tsx', import.meta.url),
   'utf8',
 );
+const modelProviderWorkspaceCss = readFileSync(
+  new URL('../src/features/settings/ModelProviderWorkspace.css', import.meta.url),
+  'utf8',
+);
 const settingsWindowSource = readFileSync(
   new URL('../src/features/settings/SettingsWindow.tsx', import.meta.url),
   'utf8',
@@ -553,6 +557,8 @@ test('provider editing preserves stored credentials only for the unchanged endpo
 });
 
 test('provider routing is policy-backed, cross-provider, and context safe', () => {
+  assert.match(modelProviderWorkspaceCss, /\.model-provider-workspace\s*\{[\s\S]*line-height:\s*normal/);
+  assert.match(modelProviderWorkspaceSource, /routingScope\s*\?\s*t\('providers\.workspaceScope'\)/);
   assert.match(providerOverviewPanelsSource, /const controller = new AbortController\(\)/);
   assert.match(providerOverviewPanelsSource, /onLoadUsage\(provider\.id, controller\.signal\)/);
   assert.match(providerOverviewPanelsSource, /return \(\) => controller\.abort\(\)/);
@@ -560,6 +566,9 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
     providerOverviewPanelsSource,
     /const ROUTING_ROLES: LlmRoutingRole\[\] = \['default', 'fast', 'coding', 'vision'\]/,
   );
+  assert.doesNotMatch(providerOverviewPanelsSource, /CONFIGURABLE_LOCAL_ROUTING_ROLES/);
+  assert.doesNotMatch(providerOverviewPanelsSource, /roleRuntimeUnavailable/);
+  assert.doesNotMatch(providerOverviewPanelsSource, /fast: null, vision: null/);
   assert.match(
     providerOverviewPanelsSource,
     /mode === 'local'[\s\S]{0,100}localRuntimeRoutingModelIds\(item\)[\s\S]{0,100}providerEnabledModelIds\(item\)/,
@@ -575,9 +584,13 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
     providerOverviewPanelsSource,
     /expectedRevision: policy\.revision/,
   );
-  assert.match(providerOverviewPanelsSource, /moveFallback\(index, -1\)/);
-  assert.match(providerOverviewPanelsSource, /moveFallback\(index, 1\)/);
+  assert.doesNotMatch(providerOverviewPanelsSource, /const moveFallback|\bmoveFallback\(index/);
+  assert.doesNotMatch(providerOverviewPanelsSource, /provider-fallback-actions/);
   assert.match(providerOverviewPanelsSource, /removeFallback\(index\)/);
+  assert.match(
+    modelProviderWorkspaceCss,
+    /provider-fallback-editor > div \{[^}]*grid-template-columns: 22px minmax\(0, 1fr\) 58px/,
+  );
   assert.match(providerOverviewPanelsSource, /const MAX_ROUTING_FALLBACKS = 8/);
   assert.match(providerOverviewPanelsSource, /const MAX_ROUTING_FALLBACKS = 8/);
   assert.match(providerOverviewPanelsSource, /routingFallbackCanAdd\(/);
@@ -596,15 +609,39 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
     /!outcome\.probed && outcome\.status === 'configuration_valid'[\s\S]{0,1200}'providers\.providerConfigured'/,
   );
   assert.match(i18nSource, /'providers\.providerConfigured': '\{provider\} configuration is ready'/);
+  assert.match(
+    i18nSource,
+    /'providers\.identityDescription':[\s\S]{0,120}'Provider credentials, endpoint health, available models, and workspace routing are managed independently\.'/,
+  );
+  assert.match(
+    i18nSource,
+    /'providers\.routingDescription':[\s\S]{0,120}'Routing is separate from provider credentials and can be changed without reconnecting\.'/,
+  );
+  assert.match(
+    i18nSource,
+    /'providers\.fastModelDescription': 'Titles, summaries, and lightweight transforms'/,
+  );
+  assert.match(
+    i18nSource,
+    /'providers\.visionModelDescription': 'Screenshots, diagrams, and visual QA'/,
+  );
   assert.doesNotMatch(
     modelProviderWorkspaceSource,
     /llmProvider|llmBaseUrl|llmModel|llmApiKey|onConfigChange/,
   );
-  assert.match(modelProviderWorkspaceSource, /getLlmProviderRoutingPolicy\(signal\)/);
+  assert.match(
+    modelProviderWorkspaceSource,
+    /getLlmProviderRoutingPolicy\([\s\S]{0,120}routingScope\.projectId,[\s\S]{0,80}routingScope\.workspaceId,[\s\S]{0,80}signal/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /config\.tenantId\.trim\(\)[\s\S]{0,220}config\.projectId\.trim\(\)[\s\S]{0,220}config\.workspaceId\.trim\(\)/,
+  );
+  assert.match(modelProviderWorkspaceSource, /providers\.routingScopeRequired/);
   assert.match(modelProviderWorkspaceSource, /Promise\.all\(\[/);
   assert.match(
     modelProviderWorkspaceSource,
-    /requestClient\.updateLlmProviderRoutingPolicy\(mutation\)/,
+    /requestClient\.updateLlmProviderRoutingPolicy\([\s\S]{0,180}projectId:\s*routingScope\.projectId[\s\S]{0,100}workspaceId:\s*routingScope\.workspaceId/,
   );
   assert.match(modelProviderWorkspaceSource, /setRoutingPolicy\(updated\)/);
   const updateProvider =
@@ -640,11 +677,11 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
   assert.match(routingSave, /scopeKeyRef\.current !== requestScope/);
   assert.match(
     routingSave,
-    /caught instanceof DesktopApiError[\s\S]{0,100}caught\.status !== 409[\s\S]{0,180}getLlmProviderRoutingPolicy\(\)/,
+    /caught instanceof DesktopApiError[\s\S]{0,100}caught\.status !== 409[\s\S]{0,260}getLlmProviderRoutingPolicy\([\s\S]{0,160}routingScope\.workspaceId/,
   );
   assert.match(
     routingSave,
-    /Promise\.all\(\[[\s\S]{0,180}listLlmProviders\(\)[\s\S]{0,180}getLlmProviderRoutingPolicy\(\)/,
+    /Promise\.all\(\[[\s\S]{0,180}listLlmProviders\(\)[\s\S]{0,260}getLlmProviderRoutingPolicy\([\s\S]{0,160}routingScope\.workspaceId/,
   );
   assert.match(routingSave, /setProviders\(modelProviders\)/);
   assert.match(
@@ -653,7 +690,7 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
   );
   assert.match(
     settingsWindowSource,
-    /key=\{`\$\{config\.mode\}\|\$\{config\.apiBaseUrl\}\|\$\{config\.tenantId\}`\}/,
+    /key=\{`\$\{config\.mode\}\|\$\{config\.apiBaseUrl\}\|\$\{config\.tenantId\}\|\$\{config\.projectId\}\|\$\{config\.workspaceId\}`\}/,
   );
   assert.match(
     modelProviderWorkspaceSource,
@@ -668,6 +705,8 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
   const scopeKeyDeclaration =
     modelProviderWorkspaceSource.match(/const scopeKey = .*;/)?.[0] ?? '';
   assert.doesNotMatch(scopeKeyDeclaration, /apiKey|localApiToken/);
+  assert.match(scopeKeyDeclaration, /config\.projectId/);
+  assert.match(scopeKeyDeclaration, /config\.workspaceId/);
   assert.match(
     modelProviderWorkspaceSource,
     /items\.filter\([\s\S]{0,120}!item\.operation_type \|\| item\.operation_type === 'llm'/,
@@ -696,8 +735,12 @@ test('provider settings QA records preserve the authoritative LLM operation cont
     /path === '\/api\/v1\/llm-providers\/routing-policy'/,
   );
   assert.match(providerSettingsQaSource, /draft\.expected_revision !== routingPolicy\.revision/);
-  assert.match(providerSettingsQaSource, /draft\.roles\.fast !== null/);
-  assert.match(providerSettingsQaSource, /draft\.roles\.vision !== null/);
+  assert.doesNotMatch(providerSettingsQaSource, /draft\.roles\.fast !== null/);
+  assert.doesNotMatch(providerSettingsQaSource, /draft\.roles\.vision !== null/);
+  assert.match(providerSettingsQaSource, /url\.searchParams\.get\('project_id'\)/);
+  assert.match(providerSettingsQaSource, /url\.searchParams\.get\('workspace_id'\)/);
+  assert.match(providerSettingsQaSource, /draft\.project_id !== QA_PROJECT_ID/);
+  assert.match(providerSettingsQaSource, /draft\.workspace_id !== QA_WORKSPACE_ID/);
   assert.match(providerSettingsQaSource, /status: configured \? 'healthy'/);
   assert.match(providerSettingsQaSource, /probed: true/);
   assert.match(providerSettingsQaSource, /models\\\/discover/);
@@ -712,12 +755,14 @@ test('routing policy client normalizes targets and sends optimistic revisions', 
     return new Response(
       JSON.stringify({
         tenant_id: ' tenant-a ',
+        project_id: ' project-a ',
+        workspace_id: ' workspace-a ',
         revision,
         roles: {
           default: { provider_id: ' provider-openai ', model_id: ' gpt-5 ' },
-          fast: null,
+          fast: { provider_id: 'provider-openai', model_id: 'gpt-5-mini' },
           coding: { provider_id: 'provider-anthropic', model_id: 'claude-code' },
-          vision: null,
+          vision: { provider_id: 'provider-google', model_id: 'gemini-vision' },
         },
         fallbacks: [{ provider_id: ' provider-anthropic ', model_id: ' claude-fast ' }],
         updated_at: '2026-07-18T00:00:00.000Z',
@@ -733,28 +778,37 @@ test('routing policy client normalizes targets and sends optimistic revisions', 
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'local-user-session',
     });
-    const policy = await local.getLlmProviderRoutingPolicy();
+    const policy = await local.getLlmProviderRoutingPolicy('project-a', 'workspace-a');
     assert.deepEqual(policy, {
       tenant_id: 'tenant-a',
+      project_id: 'project-a',
+      workspace_id: 'workspace-a',
       revision: 7,
       roles: {
         default: { provider_id: 'provider-openai', model_id: 'gpt-5' },
-        fast: null,
+        fast: { provider_id: 'provider-openai', model_id: 'gpt-5-mini' },
         coding: { provider_id: 'provider-anthropic', model_id: 'claude-code' },
-        vision: null,
+        vision: { provider_id: 'provider-google', model_id: 'gemini-vision' },
       },
       fallbacks: [{ provider_id: 'provider-anthropic', model_id: 'claude-fast' }],
       updated_at: '2026-07-18T00:00:00.000Z',
     });
     const updated = await local.updateLlmProviderRoutingPolicy({
+      projectId: 'project-a',
+      workspaceId: 'workspace-a',
       roles: policy.roles,
       fallbacks: policy.fallbacks,
       expectedRevision: policy.revision,
     });
     assert.equal(updated.revision, 8);
-    assert.equal(calls[0]?.input, 'http://127.0.0.1:8088/api/v1/llm-providers/routing-policy');
+    assert.equal(
+      calls[0]?.input,
+      'http://127.0.0.1:8088/api/v1/llm-providers/routing-policy?project_id=project-a&workspace_id=workspace-a',
+    );
     assert.equal(calls[1]?.init?.method, 'PUT');
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
+      project_id: 'project-a',
+      workspace_id: 'workspace-a',
       roles: policy.roles,
       fallbacks: policy.fallbacks,
       expected_revision: 7,

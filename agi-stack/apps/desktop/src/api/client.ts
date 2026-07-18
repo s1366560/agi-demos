@@ -33,6 +33,7 @@ import type {
   LlmProviderProbeInput,
   LlmProviderRoutingPolicy,
   LlmProviderRoutingPolicyMutationInput,
+  LlmRoutingRole,
   LlmProviderTypeDescriptor,
   LlmProviderUsage,
   LlmProviderUsageStatistic,
@@ -512,6 +513,7 @@ export class DesktopApiClient {
     message: string,
     messageId?: string,
     projectId = this.config.projectId,
+    workloadRole?: LlmRoutingRole,
   ): Promise<{ queued: boolean }> {
     const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<{ queued: boolean }>(
@@ -522,6 +524,7 @@ export class DesktopApiClient {
           project_id: requiredProjectId,
           message,
           message_id: messageId,
+          ...(workloadRole ? { workload_role: workloadRole } : {}),
         },
       },
     );
@@ -765,10 +768,19 @@ export class DesktopApiClient {
     );
   }
 
-  async getLlmProviderRoutingPolicy(signal?: AbortSignal): Promise<LlmProviderRoutingPolicy> {
-    const payload = await this.request<unknown>('/api/v1/llm-providers/routing-policy', {
-      signal,
+  async getLlmProviderRoutingPolicy(
+    projectId: string,
+    workspaceId: string,
+    signal?: AbortSignal,
+  ): Promise<LlmProviderRoutingPolicy> {
+    const params = new URLSearchParams({
+      project_id: requireValue(projectId, 'project id'),
+      workspace_id: requireValue(workspaceId, 'workspace id'),
     });
+    const payload = await this.request<unknown>(
+      `/api/v1/llm-providers/routing-policy?${params.toString()}`,
+      { signal },
+    );
     return normalizeLlmProviderRoutingPolicy(payload);
   }
 
@@ -778,6 +790,8 @@ export class DesktopApiClient {
     const payload = await this.request<unknown>('/api/v1/llm-providers/routing-policy', {
       method: 'PUT',
       body: {
+        project_id: requireValue(input.projectId, 'project id'),
+        workspace_id: requireValue(input.workspaceId, 'workspace id'),
         roles: input.roles,
         fallbacks: input.fallbacks,
         expected_revision: input.expectedRevision,
@@ -1412,13 +1426,17 @@ function normalizeLlmProviderRoutingPolicy(payload: unknown): LlmProviderRouting
     throw new DesktopApiError('Invalid provider routing policy response', 502, payload);
   }
   const tenantId = readCompatString(payload, 'tenant_id', 'tenantId');
+  const projectId = readCompatString(payload, 'project_id', 'projectId');
+  const workspaceId = readCompatString(payload, 'workspace_id', 'workspaceId');
   const revision = readCompatInteger(payload, 'revision');
   const updatedAt = readCompatString(payload, 'updated_at', 'updatedAt');
-  if (!tenantId || revision == null || revision < 0 || !updatedAt) {
+  if (!tenantId || !projectId || !workspaceId || revision == null || revision < 0 || !updatedAt) {
     throw new DesktopApiError('Invalid provider routing policy response', 502, payload);
   }
   return {
     tenant_id: tenantId,
+    project_id: projectId,
+    workspace_id: workspaceId,
     revision,
     roles: {
       default: normalizeLlmRouteTarget(payload.roles.default, payload),

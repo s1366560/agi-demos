@@ -9,7 +9,12 @@ async fn routing_policy_persists_published_role_targets_and_builds_ordered_workl
         "local",
         "primary-provider",
         "default-model",
-        &["default-model", "coding-model"],
+        &[
+            "default-model",
+            "fast-model",
+            "coding-model",
+            "vision-model",
+        ],
     );
     seed_active_provider(
         &state,
@@ -30,21 +35,29 @@ async fn routing_policy_persists_published_role_targets_and_builds_ordered_workl
     let saved = app
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             json!({
+                "project_id": "local-project",
+                "workspace_id": "local-workspace",
                 "expected_revision": 0,
                 "roles": {
                     "default": {
                         "provider_id": "primary-provider",
                         "model_id": "default-model"
                     },
-                    "fast": null,
+                    "fast": {
+                        "provider_id": "primary-provider",
+                        "model_id": "fast-model"
+                    },
                     "coding": {
                         "provider_id": "primary-provider",
                         "model_id": "coding-model"
                     },
-                    "vision": null
+                    "vision": {
+                        "provider_id": "primary-provider",
+                        "model_id": "vision-model"
+                    }
                 },
                 "fallbacks": [
                     {"provider_id": "fallback-provider", "model_id": "fallback-a"},
@@ -59,9 +72,9 @@ async fn routing_policy_persists_published_role_targets_and_builds_ordered_workl
 
     for (role, expected_primary) in [
         (LlmWorkloadRole::Default, "default-model"),
-        (LlmWorkloadRole::Fast, "default-model"),
+        (LlmWorkloadRole::Fast, "fast-model"),
         (LlmWorkloadRole::Coding, "coding-model"),
-        (LlmWorkloadRole::Vision, "default-model"),
+        (LlmWorkloadRole::Vision, "vision-model"),
     ] {
         let targets = routing_targets_for_role(&saved, role).expect("valid workload route plan");
         assert_eq!(targets.len(), 3);

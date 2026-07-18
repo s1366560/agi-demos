@@ -26,6 +26,7 @@ declare global {
 const QA_API_ORIGIN = 'https://qa.memstack.invalid';
 const QA_TENANT_ID = 'tenant-northstar';
 const QA_PROJECT_ID = 'project-desktop-client';
+const QA_WORKSPACE_ID = 'workspace-desktop-client';
 const NOW = '2026-07-14T09:40:00.000Z';
 
 const qaProviderTypes = [
@@ -120,12 +121,14 @@ const initialProviders: ManagedLlmProvider[] = [
 
 const initialRoutingPolicy: LlmProviderRoutingPolicy = {
   tenant_id: QA_TENANT_ID,
+  project_id: QA_PROJECT_ID,
+  workspace_id: QA_WORKSPACE_ID,
   revision: 4,
   roles: {
     default: { provider_id: 'provider-openai', model_id: 'gpt-5.1' },
-    fast: null,
+    fast: { provider_id: 'provider-openai', model_id: 'gpt-5.1-mini' },
     coding: { provider_id: 'provider-anthropic', model_id: 'claude-sonnet-4-5' },
-    vision: null,
+    vision: { provider_id: 'provider-openai', model_id: 'gpt-4.1' },
   },
   fallbacks: [
     { provider_id: 'provider-anthropic', model_id: 'claude-sonnet-4-5' },
@@ -336,7 +339,7 @@ const qaConfig: DesktopRuntimeConfig = {
   apiKey: 'qa-session-placeholder',
   tenantId: QA_TENANT_ID,
   projectId: QA_PROJECT_ID,
-  workspaceId: 'workspace-desktop-client',
+  workspaceId: QA_WORKSPACE_ID,
   mode: 'local',
 };
 
@@ -417,7 +420,7 @@ function routingTargetAvailable(target: LlmRouteTarget): boolean {
   const models = new Set([provider.llm_model, ...(provider.allowed_models ?? [])].filter(Boolean));
   return Boolean(
     supportedProvider &&
-      provider.health_status === 'configuration_valid' &&
+      ['configuration_valid', 'healthy'].includes(provider.health_status ?? '') &&
       provider.is_active === true &&
       provider.is_enabled !== false &&
       provider.base_url?.trim() &&
@@ -494,7 +497,15 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     return jsonResponse(providers);
   }
   if (path === '/api/v1/llm-providers/routing-policy') {
-    if (method === 'GET') return jsonResponse(routingPolicy);
+    if (method === 'GET') {
+      if (
+        url.searchParams.get('project_id') !== QA_PROJECT_ID ||
+        url.searchParams.get('workspace_id') !== QA_WORKSPACE_ID
+      ) {
+        return jsonResponse({ detail: 'Workspace routing scope is required.' }, 422);
+      }
+      return jsonResponse(routingPolicy);
+    }
     if (method === 'PUT') {
       const draft = readJsonBody(body);
       if (draft.expected_revision !== routingPolicy.revision) {
@@ -505,8 +516,8 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         !Array.isArray(draft.fallbacks) ||
         !draft.fallbacks.every(isRouteTarget) ||
         draft.roles.default === null ||
-        draft.roles.fast !== null ||
-        draft.roles.vision !== null ||
+        draft.project_id !== QA_PROJECT_ID ||
+        draft.workspace_id !== QA_WORKSPACE_ID ||
         draft.fallbacks.length > 8
       ) {
         return jsonResponse({ detail: 'Invalid routing policy.' }, 422);

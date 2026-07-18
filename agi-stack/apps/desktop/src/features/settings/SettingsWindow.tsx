@@ -517,7 +517,7 @@ export function SettingsWindow({
 
               {section === 'models' ? (
                 <ModelProviderWorkspace
-                  key={`${config.mode}|${config.apiBaseUrl}|${config.tenantId}`}
+                  key={`${config.mode}|${config.apiBaseUrl}|${config.tenantId}|${config.projectId}|${config.workspaceId}`}
                   config={config}
                   runtimeProvider={runtimeProvider}
                   canManage={canManageProviders}

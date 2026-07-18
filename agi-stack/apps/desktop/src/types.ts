@@ -751,6 +751,8 @@ export type LlmProviderRoutingRoles = Record<LlmRoutingRole, LlmRouteTarget | nu
 
 export type LlmProviderRoutingPolicy = {
   tenant_id: string;
+  project_id: string;
+  workspace_id: string;
   revision: number;
   roles: LlmProviderRoutingRoles;
   fallbacks: LlmRouteTarget[];
@@ -758,6 +760,8 @@ export type LlmProviderRoutingPolicy = {
 };
 
 export type LlmProviderRoutingPolicyMutationInput = {
+  projectId: string;
+  workspaceId: string;
   roles: LlmProviderRoutingRoles;
   fallbacks: LlmRouteTarget[];
   expectedRevision: number;

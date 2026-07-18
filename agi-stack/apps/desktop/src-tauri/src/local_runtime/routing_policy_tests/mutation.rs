@@ -17,7 +17,7 @@ async fn routing_policy_rejects_stale_revision_without_changing_selection() {
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(0, "local-runtime", "primary-model", json!([])),
         ))
@@ -28,7 +28,7 @@ async fn routing_policy_rejects_stale_revision_without_changing_selection() {
     let stale = app
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(0, "provider-removed", "model-removed", json!([])),
         ))
@@ -40,13 +40,62 @@ async fn routing_policy_rejects_stale_revision_without_changing_selection() {
         .is_some_and(|detail| detail.contains("expected 0, found 1")));
     let persisted = state
         .session_store
-        .llm_routing_policy("local", Utc::now().timestamp_millis())
+        .workspace_llm_routing_policy(
+            "local",
+            "local-project",
+            "local-workspace",
+            Utc::now().timestamp_millis(),
+        )
         .expect("persisted routing policy");
     assert_eq!(persisted["revision"], 1);
 }
 
 #[tokio::test]
-async fn legacy_runtime_selection_atomically_updates_existing_policy_default() {
+async fn routing_policy_rejects_workspace_scope_outside_the_active_hierarchy_without_writes() {
+    let credential = "routing-scope-secret";
+    let state = test_state(credential);
+    let app = local_router(Arc::clone(&state));
+
+    let read = app
+        .clone()
+        .oneshot(authenticated_json_request(
+            "GET",
+            "/api/v1/llm-providers/routing-policy?project_id=local-project&workspace_id=local-demo-desktop-client-main",
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("cross-scope read");
+    assert_eq!(read.status(), StatusCode::FORBIDDEN);
+
+    let mut mutation = policy_body(0, "local-runtime", "local-model", json!([]));
+    mutation["workspace_id"] = json!("local-demo-desktop-client-main");
+    let write = app
+        .oneshot(authenticated_json_request(
+            "PUT",
+            LOCAL_ROUTING_POLICY_URI,
+            credential,
+            mutation,
+        ))
+        .await
+        .expect("cross-scope write");
+    assert_eq!(write.status(), StatusCode::FORBIDDEN);
+
+    let policy_count: i64 = state
+        .session_store
+        .connection()
+        .expect("session connection")
+        .query_row(
+            "SELECT COUNT(*) FROM desktop_llm_workspace_routing_policies",
+            [],
+            |row| row.get(0),
+        )
+        .expect("workspace routing policy count");
+    assert_eq!(policy_count, 0);
+}
+
+#[tokio::test]
+async fn legacy_runtime_selection_does_not_overwrite_workspace_policy() {
     let credential = "routing-legacy-selection-secret";
     let state = test_state(credential);
     seed_active_provider(
@@ -68,7 +117,7 @@ async fn legacy_runtime_selection_atomically_updates_existing_policy_default() {
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(
                 0,
@@ -81,7 +130,7 @@ async fn legacy_runtime_selection_atomically_updates_existing_policy_default() {
         .expect("initial routing policy save");
     assert_eq!(saved.status(), StatusCode::OK);
 
-    let stale_selection = app
+    let selected = app
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
@@ -93,28 +142,13 @@ async fn legacy_runtime_selection_atomically_updates_existing_policy_default() {
             }),
         ))
         .await
-        .expect("stale legacy runtime selection");
-    assert_eq!(stale_selection.status(), StatusCode::CONFLICT);
-
-    let selected = app
-        .clone()
-        .oneshot(authenticated_json_request(
-            "PUT",
-            "/api/v1/llm-providers/fallback-provider/runtime-selection",
-            credential,
-            json!({
-                "expected_revision": fallback_revision,
-                "expected_policy_revision": 1
-            }),
-        ))
-        .await
         .expect("legacy runtime selection");
     assert_eq!(selected.status(), StatusCode::OK);
 
     let policy = app
         .oneshot(authenticated_json_request(
             "GET",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             json!({}),
         ))
@@ -122,10 +156,10 @@ async fn legacy_runtime_selection_atomically_updates_existing_policy_default() {
         .expect("routing policy after legacy selection");
     assert_eq!(policy.status(), StatusCode::OK);
     let policy = response_json(policy).await;
-    assert_eq!(policy["revision"], 2);
+    assert_eq!(policy["revision"], 1);
     assert_eq!(
         policy["roles"]["default"],
-        json!({"provider_id": "fallback-provider", "model_id": "fallback-model"})
+        json!({"provider_id": "local-runtime", "model_id": "coding-model"})
     );
     assert_eq!(
         policy["fallbacks"],
@@ -162,7 +196,7 @@ async fn provider_update_cannot_invalidate_selected_default_route() {
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(0, "local-runtime", "coding-model", json!([])),
         ))
@@ -211,7 +245,12 @@ async fn provider_update_cannot_invalidate_selected_default_route() {
     assert_eq!(
         state
             .session_store
-            .llm_routing_policy("local", Utc::now().timestamp_millis())
+            .workspace_llm_routing_policy(
+                "local",
+                "local-project",
+                "local-workspace",
+                Utc::now().timestamp_millis(),
+            )
             .expect("routing policy")["roles"]["default"]["model_id"],
         "coding-model"
     );
@@ -220,7 +259,69 @@ async fn provider_update_cannot_invalidate_selected_default_route() {
         tenant_id: "local".to_string(),
         provider_id: "local-runtime".to_string(),
     };
-    assert_eq!(runtime.bindings[&key].model, "coding-model");
+    assert_eq!(runtime.bindings[&key].model, "primary-model");
+}
+
+#[tokio::test]
+async fn provider_update_cannot_invalidate_the_unmaterialized_legacy_workspace_baseline() {
+    let credential = "routing-legacy-baseline-protection-secret";
+    let state = test_state(credential);
+    let provider_revision = seed_active_provider(
+        &state,
+        "local",
+        "legacy-provider",
+        "legacy-model",
+        &["legacy-model"],
+    );
+    state
+        .session_store
+        .connection()
+        .expect("session connection")
+        .execute(
+            "INSERT INTO desktop_llm_provider_selections(tenant_id, provider_id, selected_at_ms)
+             VALUES ('local', 'legacy-provider', ?1)",
+            [Utc::now().timestamp_millis()],
+        )
+        .expect("legacy provider selection");
+    let policy_count: i64 = state
+        .session_store
+        .connection()
+        .expect("session connection")
+        .query_row(
+            "SELECT COUNT(*) FROM desktop_llm_workspace_routing_policies",
+            [],
+            |row| row.get(0),
+        )
+        .expect("workspace routing policy count");
+    assert_eq!(policy_count, 0);
+    let app = local_router(Arc::clone(&state));
+
+    let rejected = app
+        .oneshot(authenticated_json_request(
+            "PUT",
+            "/api/v1/llm-providers/legacy-provider",
+            credential,
+            json!({
+                "is_active": false,
+                "expected_revision": provider_revision,
+            }),
+        ))
+        .await
+        .expect("legacy baseline invalidation response");
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response_json(rejected).await["detail"]
+        .as_str()
+        .is_some_and(|detail| detail.contains("invalidate routing policy")));
+    assert!(state
+        .session_store
+        .workspace_llm_routing_policy(
+            "local",
+            "local-project",
+            "local-workspace",
+            Utc::now().timestamp_millis(),
+        )
+        .expect("protected workspace baseline")["roles"]["default"]
+        .is_object());
 }
 
 #[tokio::test]
@@ -239,7 +340,7 @@ async fn disabling_unreferenced_provider_clears_runtime_material_but_preserves_i
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(0, "primary-provider", "primary-model", json!([])),
         ))
@@ -300,14 +401,16 @@ async fn disabling_unreferenced_provider_clears_runtime_material_but_preserves_i
         assert!(!runtime.bindings.contains_key(&spare_key));
         assert!(!runtime.credentials.contains_key(&spare_key));
         assert!(runtime.configured_credentials.contains(&spare_key));
-        assert_eq!(
-            runtime.selections.get("local").map(String::as_str),
-            Some("primary-provider")
-        );
+        assert_eq!(runtime.selections.get("local"), None);
     }
     let policy = state
         .session_store
-        .llm_routing_policy("local", Utc::now().timestamp_millis())
+        .workspace_llm_routing_policy(
+            "local",
+            "local-project",
+            "local-workspace",
+            Utc::now().timestamp_millis(),
+        )
         .expect("unchanged policy");
     assert_eq!(policy["revision"], 1);
     assert_eq!(
@@ -358,7 +461,7 @@ async fn routing_policy_is_tenant_isolated_and_rejects_cross_tenant_targets() {
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(0, "northstar-only", "northstar-model", json!([])),
         ))
@@ -370,7 +473,7 @@ async fn routing_policy_is_tenant_isolated_and_rejects_cross_tenant_targets() {
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(0, "local-runtime", "local-model", json!([])),
         ))
@@ -388,7 +491,7 @@ async fn routing_policy_is_tenant_isolated_and_rejects_cross_tenant_targets() {
     let northstar = app
         .oneshot(authenticated_json_request(
             "GET",
-            "/api/v1/llm-providers/routing-policy",
+            "/api/v1/llm-providers/routing-policy?project_id=desktop-client&workspace_id=local-demo-desktop-client-main",
             credential,
             json!({}),
         ))
@@ -401,7 +504,12 @@ async fn routing_policy_is_tenant_isolated_and_rejects_cross_tenant_targets() {
     assert_eq!(
         state
             .session_store
-            .llm_routing_policy("local", Utc::now().timestamp_millis())
+            .workspace_llm_routing_policy(
+                "local",
+                "local-project",
+                "local-workspace",
+                Utc::now().timestamp_millis(),
+            )
             .expect("local routing policy")["revision"],
         1
     );
@@ -458,7 +566,7 @@ async fn routing_policy_validates_default_models_and_fallback_constraints() {
         .clone()
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            LOCAL_ROUTING_POLICY_URI,
             credential,
             policy_body(
                 0,
@@ -474,35 +582,17 @@ async fn routing_policy_validates_default_models_and_fallback_constraints() {
         StatusCode::UNPROCESSABLE_ENTITY
     );
 
-    for role in ["fast", "vision"] {
-        let mut body = policy_body(0, "local-runtime", "primary-model", json!([]));
-        body["roles"][role] = json!({
-            "provider_id": "local-runtime",
-            "model_id": "alternate-model",
-        });
-        let response = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "PUT",
-                "/api/v1/llm-providers/routing-policy",
-                credential,
-                body,
-            ))
-            .await
-            .expect("unsupported workload routing response");
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        assert!(response_json(response).await["detail"]
-            .as_str()
-            .is_some_and(|detail| detail.contains(&format!("{role} routing target"))));
-    }
-
     for body in [
         json!({
+            "project_id": "local-project",
+            "workspace_id": "local-workspace",
             "expected_revision": 0,
             "roles": {"default": null, "fast": null, "coding": null, "vision": null},
             "fallbacks": []
         }),
         json!({
+            "project_id": "local-project",
+            "workspace_id": "local-workspace",
             "expected_revision": 0,
             "roles": {
                 "default": {"provider_id": "local-runtime", "model_id": "primary-model"},
@@ -512,6 +602,8 @@ async fn routing_policy_validates_default_models_and_fallback_constraints() {
             "fallbacks": []
         }),
         json!({
+            "project_id": "local-project",
+            "workspace_id": "local-workspace",
             "expected_revision": 0,
             "roles": {
                 "default": {
@@ -556,7 +648,7 @@ async fn routing_policy_validates_default_models_and_fallback_constraints() {
             .clone()
             .oneshot(authenticated_json_request(
                 "PUT",
-                "/api/v1/llm-providers/routing-policy",
+                LOCAL_ROUTING_POLICY_URI,
                 credential,
                 body,
             ))
@@ -577,6 +669,15 @@ async fn routing_policy_allows_member_reads_but_requires_manager_for_mutation() 
         "member-model",
         &["member-model"],
     );
+    state
+        .session_store
+        .insert_workspace(&json!({
+            "id": "orbital-evals-workspace",
+            "tenant_id": "orbital",
+            "project_id": "agent-evals",
+            "name": "Agent evals",
+        }))
+        .expect("orbital workspace");
     switch_context(
         &state,
         credential,
@@ -591,7 +692,7 @@ async fn routing_policy_allows_member_reads_but_requires_manager_for_mutation() 
         .clone()
         .oneshot(authenticated_json_request(
             "GET",
-            "/api/v1/llm-providers/routing-policy",
+            "/api/v1/llm-providers/routing-policy?project_id=agent-evals&workspace_id=orbital-evals-workspace",
             credential,
             json!({}),
         ))
@@ -599,12 +700,15 @@ async fn routing_policy_allows_member_reads_but_requires_manager_for_mutation() 
         .expect("member routing policy read");
     assert_eq!(read.status(), StatusCode::OK);
 
+    let mut member_policy = policy_body(0, "local-runtime", "member-model", json!([]));
+    member_policy["project_id"] = json!("agent-evals");
+    member_policy["workspace_id"] = json!("orbital-evals-workspace");
     let mutation = app
         .oneshot(authenticated_json_request(
             "PUT",
-            "/api/v1/llm-providers/routing-policy",
+            "/api/v1/llm-providers/routing-policy?project_id=agent-evals&workspace_id=orbital-evals-workspace",
             credential,
-            policy_body(0, "local-runtime", "member-model", json!([])),
+            member_policy,
         ))
         .await
         .expect("member routing policy mutation");

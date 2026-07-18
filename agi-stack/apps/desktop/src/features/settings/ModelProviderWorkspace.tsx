@@ -50,6 +50,35 @@ type ModelProviderWorkspaceProps = {
   onCountChange?: (count: number | null) => void;
 };
 
+type RoutingPolicyDraftMutation = Omit<
+  LlmProviderRoutingPolicyMutationInput,
+  'projectId' | 'workspaceId'
+>;
+
+type RoutingScope = {
+  tenantId: string;
+  projectId: string;
+  workspaceId: string;
+};
+
+function activeRoutingScope(config: DesktopRuntimeConfig): RoutingScope | null {
+  const tenantId = config.tenantId.trim();
+  const projectId = config.projectId.trim();
+  const workspaceId = config.workspaceId.trim();
+  return tenantId && projectId && workspaceId ? { tenantId, projectId, workspaceId } : null;
+}
+
+function routingPolicyMatchesScope(
+  policy: LlmProviderRoutingPolicy,
+  scope: RoutingScope,
+): boolean {
+  return (
+    policy.tenant_id === scope.tenantId &&
+    policy.project_id === scope.projectId &&
+    policy.workspace_id === scope.workspaceId
+  );
+}
+
 function endpointLabel(provider: ManagedLlmProvider, fallback: string): string {
   if (!provider.base_url) return fallback;
   try {
@@ -68,10 +97,16 @@ export function ModelProviderWorkspace({
 }: ModelProviderWorkspaceProps) {
   const { locale, t } = useI18n();
   const client = useMemo(() => new DesktopApiClient(config), [config]);
+  const routingScope = useMemo(
+    () => activeRoutingScope(config),
+    [config.projectId, config.tenantId, config.workspaceId],
+  );
   const [providers, setProviders] = useState<ManagedLlmProvider[]>([]);
   const [providerTypes, setProviderTypes] = useState<LlmProviderTypeDescriptor[]>([]);
   const [routingPolicy, setRoutingPolicy] = useState<LlmProviderRoutingPolicy | null>(null);
-  const [routingLoading, setRoutingLoading] = useState(config.mode === 'local');
+  const [routingLoading, setRoutingLoading] = useState(
+    config.mode === 'local' && routingScope !== null,
+  );
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<ProviderTab>('overview');
@@ -85,7 +120,7 @@ export function ModelProviderWorkspace({
   const mountedRef = useRef(true);
   const clientRef = useRef(client);
   clientRef.current = client;
-  const scopeKey = `${config.mode}\u0000${config.apiBaseUrl}\u0000${config.tenantId}`;
+  const scopeKey = `${config.mode}\u0000${config.apiBaseUrl}\u0000${config.tenantId}\u0000${config.projectId}\u0000${config.workspaceId}`;
   const scopeKeyRef = useRef(scopeKey);
   scopeKeyRef.current = scopeKey;
 
@@ -109,19 +144,35 @@ export function ModelProviderWorkspace({
       const requestClient = client;
       setLoading(true);
       setError(null);
-      setRoutingLoading(config.mode === 'local');
-      setRoutingError(null);
+      setRoutingLoading(config.mode === 'local' && routingScope !== null);
+      setRoutingError(
+        config.mode === 'local' && !routingScope ? t('providers.routingScopeRequired') : null,
+      );
       try {
         const policyRequest =
-          config.mode === 'local'
+          config.mode === 'local' && routingScope
             ? requestClient
-                .getLlmProviderRoutingPolicy(signal)
+                .getLlmProviderRoutingPolicy(
+                  routingScope.projectId,
+                  routingScope.workspaceId,
+                  signal,
+                )
+                .then((policy) => {
+                  if (!routingPolicyMatchesScope(policy, routingScope)) {
+                    throw new Error(t('providers.routingScopeMismatch'));
+                  }
+                  return policy;
+                })
                 .then((policy) => ({ policy, error: null }))
                 .catch((caught: unknown) => ({
                   policy: null,
                   error: caught instanceof Error ? caught.message : String(caught),
                 }))
-            : Promise.resolve({ policy: null, error: null });
+            : Promise.resolve({
+                policy: null,
+                error:
+                  config.mode === 'local' ? t('providers.routingScopeRequired') : null,
+              });
         const [items, types, policyOutcome] = await Promise.all([
           requestClient.listLlmProviders(signal),
           requestClient.listLlmProviderTypes(signal).catch(() => []),
@@ -175,7 +226,7 @@ export function ModelProviderWorkspace({
         }
       }
     },
-    [client, config.mode, onCountChange, scopeKey],
+    [client, config.mode, onCountChange, routingScope, scopeKey, t],
   );
 
   useEffect(() => {
@@ -260,19 +311,25 @@ export function ModelProviderWorkspace({
   );
 
   const saveRoutingPolicy = useCallback(
-    async (
-      mutation: LlmProviderRoutingPolicyMutationInput,
-    ): Promise<LlmProviderRoutingPolicy> => {
+    async (mutation: RoutingPolicyDraftMutation): Promise<LlmProviderRoutingPolicy> => {
+      if (!routingScope) throw new Error(t('providers.routingScopeRequired'));
       const requestScope = scopeKey;
       const requestClient = client;
       let updated: LlmProviderRoutingPolicy;
       try {
-        updated = await requestClient.updateLlmProviderRoutingPolicy(mutation);
+        updated = await requestClient.updateLlmProviderRoutingPolicy({
+          ...mutation,
+          projectId: routingScope.projectId,
+          workspaceId: routingScope.workspaceId,
+        });
       } catch (caught) {
         if (!(caught instanceof DesktopApiError) || caught.status !== 409) throw caught;
         const [latestItems, latestPolicy] = await Promise.all([
           requestClient.listLlmProviders(),
-          requestClient.getLlmProviderRoutingPolicy(),
+          requestClient.getLlmProviderRoutingPolicy(
+            routingScope.projectId,
+            routingScope.workspaceId,
+          ),
         ]);
         if (
           !mountedRef.current ||
@@ -280,6 +337,9 @@ export function ModelProviderWorkspace({
           scopeKeyRef.current !== requestScope
         ) {
           throw new Error(t('providers.contextChanged'));
+        }
+        if (!routingPolicyMatchesScope(latestPolicy, routingScope)) {
+          throw new Error(t('providers.routingScopeMismatch'));
         }
         const modelProviders = latestItems.filter(
           (item) => !item.operation_type || item.operation_type === 'llm',
@@ -304,13 +364,16 @@ export function ModelProviderWorkspace({
       ) {
         throw new Error(t('providers.contextChanged'));
       }
+      if (!routingPolicyMatchesScope(updated, routingScope)) {
+        throw new Error(t('providers.routingScopeMismatch'));
+      }
       setRoutingPolicy(updated);
       setRoutingError(null);
       showToast(t('providers.routingSaved'));
       await refreshRuntimeProjection(requestScope, requestClient);
       return updated;
     },
-    [client, onCountChange, refreshRuntimeProjection, scopeKey, showToast, t],
+    [client, onCountChange, refreshRuntimeProjection, routingScope, scopeKey, showToast, t],
   );
 
   const validateProvider = useCallback(
@@ -534,9 +597,11 @@ export function ModelProviderWorkspace({
           <div>
             <span className="detail-scope">
               <LockClosedIcon />
-              {config.mode === 'local'
-                ? t('providers.localScope')
-                : t('providers.globalProviderScope')}
+              {routingScope
+                ? t('providers.workspaceScope')
+                : config.mode === 'local'
+                  ? t('providers.localScope')
+                  : t('providers.globalProviderScope')}
             </span>
             {provider ? (
               <button

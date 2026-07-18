@@ -1584,6 +1584,29 @@ impl LocalRuntimeState {
         authoritative_run_id: Option<String>,
         claimed_control: Option<Arc<LocalRunControl>>,
     ) {
+        self.run_agent_message_for_role(
+            conversation_id,
+            project_id,
+            message,
+            message_id,
+            None,
+            authoritative_run_id,
+            claimed_control,
+        )
+        .await;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn run_agent_message_for_role(
+        self: Arc<Self>,
+        conversation_id: String,
+        project_id: String,
+        message: String,
+        message_id: String,
+        workload_role: Option<LlmWorkloadRole>,
+        authoritative_run_id: Option<String>,
+        claimed_control: Option<Arc<LocalRunControl>>,
+    ) {
         let conversation = match self.session_store.conversation(&conversation_id) {
             Ok(Some(conversation)) => conversation,
             Ok(None) => {
@@ -1698,7 +1721,11 @@ impl LocalRuntimeState {
             state: Arc::clone(&self),
             conversation_id: conversation_id.clone(),
         });
-        let engine = match self.agent_engine(&conversation, authoritative_run.as_ref()) {
+        let engine = match self.agent_engine_for_role(
+            &conversation,
+            authoritative_run.as_ref(),
+            workload_role,
+        ) {
             Ok(engine) => engine,
             Err(error) => {
                 let item = self.timeline_item(
@@ -1817,6 +1844,15 @@ impl LocalRuntimeState {
         conversation: &LocalConversation,
         run: Option<&DesktopRun>,
     ) -> Result<ReActEngine, String> {
+        self.agent_engine_for_role(conversation, run, None)
+    }
+
+    fn agent_engine_for_role(
+        &self,
+        conversation: &LocalConversation,
+        run: Option<&DesktopRun>,
+        workload_role: Option<LlmWorkloadRole>,
+    ) -> Result<ReActEngine, String> {
         #[cfg(test)]
         self.agent_engine_attempts.fetch_add(1, Ordering::SeqCst);
         let local_tool_host = match run.and_then(|run| run.environment.as_ref()) {
@@ -1841,13 +1877,14 @@ impl LocalRuntimeState {
                 })?,
             )),
         };
-        Ok(ReActEngine::new(
-            self.llm_for_capability(&conversation.tenant_id, conversation.capability_mode),
-            tool_host,
-            self.checkpoints.clone(),
-            self.clock.clone(),
+        let llm = workload_role.map_or_else(
+            || self.llm_for_capability(conversation),
+            |role| self.llm_for_role(conversation, role),
+        );
+        Ok(
+            ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
+                .with_max_rounds(8),
         )
-        .with_max_rounds(8))
     }
 
     fn persist_pending_hitl(
@@ -2013,46 +2050,65 @@ impl LocalRuntimeState {
 
     #[cfg(test)]
     fn llm(&self, tenant_id: &str) -> Arc<dyn LlmPort> {
-        self.llm_for_role(tenant_id, LlmWorkloadRole::Default)
+        self.llm_for_scope(
+            tenant_id,
+            "local-project",
+            "local-workspace",
+            LlmWorkloadRole::Default,
+        )
     }
 
-    fn llm_for_capability(
+    fn llm_for_capability(&self, conversation: &LocalConversation) -> Arc<dyn LlmPort> {
+        self.llm_for_role(
+            conversation,
+            workload_role_for_capability(conversation.capability_mode),
+        )
+    }
+
+    fn llm_for_role(
+        &self,
+        conversation: &LocalConversation,
+        role: LlmWorkloadRole,
+    ) -> Arc<dyn LlmPort> {
+        let Some(workspace_id) = conversation.workspace_id.as_deref() else {
+            #[cfg(test)]
+            if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+                return Arc::new(MockLocalLlm);
+            }
+            return Arc::new(UnconfiguredLocalLlm);
+        };
+        self.llm_for_scope(
+            &conversation.tenant_id,
+            &conversation.project_id,
+            workspace_id,
+            role,
+        )
+    }
+
+    fn llm_for_scope(
         &self,
         tenant_id: &str,
-        capability: ConversationCapabilityMode,
+        project_id: &str,
+        workspace_id: &str,
+        role: LlmWorkloadRole,
     ) -> Arc<dyn LlmPort> {
-        self.llm_for_role(tenant_id, workload_role_for_capability(capability))
-    }
-
-    fn llm_for_role(&self, tenant_id: &str, role: LlmWorkloadRole) -> Arc<dyn LlmPort> {
         let runtime = self
             .provider_runtime
             .lock()
             .expect("provider runtime state");
-        let policy = match self
-            .session_store
-            .llm_routing_policy(tenant_id, Utc::now().timestamp_millis())
-        {
+        let policy = match self.session_store.workspace_llm_routing_policy(
+            tenant_id,
+            project_id,
+            workspace_id,
+            Utc::now().timestamp_millis(),
+        ) {
             Ok(policy) => policy,
             Err(_) => return Arc::new(UnconfiguredLocalLlm),
         };
-        let mut targets = match routing_targets_for_role(&policy, role) {
+        let targets = match routing_targets_for_role(&policy, role) {
             Ok(targets) => targets,
             Err(_) => return Arc::new(UnconfiguredLocalLlm),
         };
-        if targets.is_empty() {
-            if let Some(provider_id) = runtime.selections.get(tenant_id) {
-                if let Some(binding) = runtime.bindings.get(&ProviderRuntimeKey {
-                    tenant_id: tenant_id.to_string(),
-                    provider_id: provider_id.clone(),
-                }) {
-                    targets.push(LlmRouteTarget {
-                        provider_id: provider_id.clone(),
-                        model_id: binding.model.clone(),
-                    });
-                }
-            }
-        }
         let candidates = targets
             .into_iter()
             .filter_map(|target| {
@@ -2992,9 +3048,18 @@ struct LlmRoutingRoles {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LlmRoutingPolicyMutation {
+    project_id: String,
+    workspace_id: String,
     expected_revision: u64,
     roles: LlmRoutingRolesMutation,
     fallbacks: Vec<LlmRouteTarget>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmRoutingPolicyScope {
+    project_id: String,
+    workspace_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3006,12 +3071,24 @@ struct LlmRoutingRolesMutation {
     vision: Value,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 enum LlmWorkloadRole {
     Default,
     Fast,
     Coding,
     Vision,
+}
+
+impl LlmWorkloadRole {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Fast => "fast",
+            Self::Coding => "coding",
+            Self::Vision => "vision",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -3146,11 +3223,21 @@ async fn list_llm_providers(
 async fn get_llm_routing_policy(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    Query(scope): Query<LlmRoutingPolicyScope>,
 ) -> LocalJsonResult {
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        &authenticated.workspace.tenant_id,
+        &scope.project_id,
+        &scope.workspace_id,
+    )?;
     state
         .session_store
-        .llm_routing_policy(
+        .workspace_llm_routing_policy(
             &authenticated.workspace.tenant_id,
+            &scope.project_id,
+            &scope.workspace_id,
             Utc::now().timestamp_millis(),
         )
         .map(Json)
@@ -3164,19 +3251,29 @@ async fn put_llm_routing_policy(
 ) -> LocalJsonResult {
     ensure_provider_manager(&authenticated)?;
     let tenant_id = &authenticated.workspace.tenant_id;
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        tenant_id,
+        &request.project_id,
+        &request.workspace_id,
+    )?;
+    let project_id = request.project_id.clone();
+    let workspace_id = request.workspace_id.clone();
     let expected_revision = request.expected_revision;
     let (roles, fallbacks) = normalized_routing_policy(request)?;
-    let default_target = roles
-        .default
-        .as_ref()
-        .ok_or_else(|| routing_policy_validation_error("default routing target is required"))?;
     let mut runtime = state
         .provider_runtime
         .lock()
         .map_err(|error| local_store_error(error.to_string()))?;
     let current_policy = state
         .session_store
-        .llm_routing_policy(tenant_id, Utc::now().timestamp_millis())
+        .workspace_llm_routing_policy(
+            tenant_id,
+            &project_id,
+            &workspace_id,
+            Utc::now().timestamp_millis(),
+        )
         .map_err(resource_registry_error)?;
     let actual_revision = current_policy
         .get("revision")
@@ -3190,7 +3287,6 @@ async fn put_llm_routing_policy(
             },
         ));
     }
-    let mut default_binding = None;
     for target in [
         LlmWorkloadRole::Default,
         LlmWorkloadRole::Fast,
@@ -3222,34 +3318,30 @@ async fn put_llm_routing_policy(
                 target.provider_id
             )));
         }
-        if target == default_target {
-            default_binding = Some(binding);
-        }
+        let provider_binding = runtime_binding_from_provider(&provider).ok_or_else(|| {
+            routing_policy_validation_error(format!(
+                "provider {} must be active and configured",
+                target.provider_id
+            ))
+        })?;
+        runtime.bindings.entry(key).or_insert(provider_binding);
     }
-    let default_binding = default_binding
-        .ok_or_else(|| routing_policy_validation_error("default routing target is required"))?;
     let roles_json =
         serde_json::to_value(&roles).map_err(|error| local_store_error(error.to_string()))?;
     let fallbacks_json =
         serde_json::to_value(&fallbacks).map_err(|error| local_store_error(error.to_string()))?;
     let policy = state
         .session_store
-        .put_llm_routing_policy(
+        .put_workspace_llm_routing_policy(
             tenant_id,
+            &project_id,
+            &workspace_id,
             expected_revision,
             roles_json,
             fallbacks_json,
             Utc::now().timestamp_millis(),
         )
         .map_err(resource_registry_error)?;
-    let key = ProviderRuntimeKey {
-        tenant_id: tenant_id.clone(),
-        provider_id: default_target.provider_id.clone(),
-    };
-    runtime.bindings.insert(key, default_binding);
-    runtime
-        .selections
-        .insert(tenant_id.clone(), default_target.provider_id.clone());
     Ok(Json(policy))
 }
 
@@ -3270,16 +3362,6 @@ fn normalized_routing_policy(
     if roles.default.is_none() {
         return Err(routing_policy_validation_error(
             "default routing target is required",
-        ));
-    }
-    if roles.fast.is_some() {
-        return Err(routing_policy_validation_error(
-            "fast routing target is not supported by the current conversation protocol",
-        ));
-    }
-    if roles.vision.is_some() {
-        return Err(routing_policy_validation_error(
-            "vision routing target is not supported by the current conversation protocol",
         ));
     }
     let mut seen = HashSet::with_capacity(request.fallbacks.len());
@@ -5428,12 +5510,24 @@ struct RunConversationBody {
     message: String,
     message_id: Option<String>,
     project_id: Option<String>,
+    #[serde(default)]
+    workload_role: Option<LlmWorkloadRole>,
 }
 
-fn client_turn_payload_hash(conversation_id: &str, project_id: &str, message: &str) -> String {
+fn client_turn_payload_hash(
+    conversation_id: &str,
+    project_id: &str,
+    message: &str,
+    workload_role: Option<LlmWorkloadRole>,
+) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"agistack-local-client-turn:v1\0");
-    for value in [conversation_id, project_id, message] {
+    hasher.update(b"agistack-local-client-turn:v2\0");
+    for value in [
+        conversation_id,
+        project_id,
+        message,
+        workload_role.map_or("auto", LlmWorkloadRole::as_str),
+    ] {
         hasher.update((value.len() as u64).to_be_bytes());
         hasher.update(value.as_bytes());
     }
@@ -5472,7 +5566,12 @@ async fn run_conversation_message(
             })),
         ));
     }
-    let payload_hash = client_turn_payload_hash(&conversation_id, &project_id, &body.message);
+    let payload_hash = client_turn_payload_hash(
+        &conversation_id,
+        &project_id,
+        &body.message,
+        body.workload_role,
+    );
     let created = state
         .session_store
         .claim_client_turn(&conversation_id, &message_id, &payload_hash, &now_iso())
@@ -5499,11 +5598,12 @@ async fn run_conversation_message(
     let response_message_id = message_id.clone();
     tokio::spawn(async move {
         run_state
-            .run_agent_message(
+            .run_agent_message_for_role(
                 conversation_id,
                 project_id,
                 body.message,
                 message_id,
+                body.workload_role,
                 None,
                 None,
             )
@@ -8052,15 +8152,35 @@ mod tests {
         message_id: &str,
         message: &str,
     ) -> Request<Body> {
+        conversation_message_request_for_role(
+            credential,
+            conversation_id,
+            message_id,
+            message,
+            None,
+        )
+    }
+
+    fn conversation_message_request_for_role(
+        credential: &str,
+        conversation_id: &str,
+        message_id: &str,
+        message: &str,
+        workload_role: Option<LlmWorkloadRole>,
+    ) -> Request<Body> {
+        let mut body = json!({
+            "project_id": "local-project",
+            "message": message,
+            "message_id": message_id,
+        });
+        if let Some(workload_role) = workload_role {
+            body["workload_role"] = json!(workload_role);
+        }
         authenticated_json_request(
             "POST",
             &format!("/api/v1/agent/conversations/{conversation_id}/messages"),
             credential,
-            json!({
-                "project_id": "local-project",
-                "message": message,
-                "message_id": message_id,
-            }),
+            body,
         )
     }
 
@@ -10826,6 +10946,43 @@ mod tests {
             .list_runs(conversation_id)
             .expect("runs")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn client_turn_idempotency_distinguishes_structured_workload_roles() {
+        let state = test_state("client-turn-role-secret");
+        let conversation_id = "conversation-client-turn-role";
+        seed_plan_conversation(&state, conversation_id);
+        let app = local_router(Arc::clone(&state));
+
+        let first = app
+            .clone()
+            .oneshot(conversation_message_request_for_role(
+                "client-turn-role-secret",
+                conversation_id,
+                "stable-role-message",
+                "summarize the workspace",
+                Some(LlmWorkloadRole::Fast),
+            ))
+            .await
+            .expect("fast workload response");
+        assert_eq!(first.status(), StatusCode::OK);
+        wait_for_agent_message_completion(&state, conversation_id).await;
+
+        let conflict = app
+            .oneshot(conversation_message_request_for_role(
+                "client-turn-role-secret",
+                conversation_id,
+                "stable-role-message",
+                "summarize the workspace",
+                Some(LlmWorkloadRole::Vision),
+            ))
+            .await
+            .expect("role conflict response");
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+        assert_eq!(response_json(conflict).await["code"], "MESSAGE_ID_CONFLICT");
+        assert_eq!(state.agent_run_claim_attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
