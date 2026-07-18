@@ -6,7 +6,7 @@
 //! revision, environment, tool, target, and input; no semantic or keyword-based authorization is
 //! performed here.
 
-use std::{collections::BTreeSet, error::Error, fmt};
+use std::{borrow::Borrow, collections::BTreeSet, error::Error, fmt};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -443,11 +443,14 @@ pub(crate) fn canonical_json_digest(value: &Value) -> Result<String, AuthorityEr
 /// The explicit set is intentional: tool metadata, rather than a text heuristic, determines what
 /// is sensitive. Object and array shape is preserved for audit usability.
 #[must_use]
-pub(crate) fn redact_sensitive_fields(value: &Value, sensitive_fields: &BTreeSet<String>) -> Value {
+pub(crate) fn redact_sensitive_fields<S>(value: &Value, sensitive_fields: &BTreeSet<S>) -> Value
+where
+    S: Borrow<str> + Ord,
+{
     match value {
         Value::Object(object) => {
             let redacted = object.iter().map(|(key, child)| {
-                let value = if sensitive_fields.contains(key) {
+                let value = if sensitive_fields.contains(key.as_str()) {
                     Value::String(REDACTED_VALUE.to_string())
                 } else {
                     redact_sensitive_fields(child, sensitive_fields)

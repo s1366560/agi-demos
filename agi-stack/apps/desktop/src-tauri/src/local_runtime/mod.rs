@@ -6047,9 +6047,11 @@ async fn get_run_changes(
             })),
         ));
     }
+    let snapshot = tokio::task::spawn_blocking(move || GitChangesInspector::inspect(&run, &now_iso()))
+        .await
+        .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
     Ok(Json(
-        serde_json::to_value(GitChangesInspector::inspect(&run, &now_iso()))
-            .map_err(|error| local_store_error(error.to_string()))?,
+        serde_json::to_value(snapshot).map_err(|error| local_store_error(error.to_string()))?,
     ))
 }
 
@@ -6143,7 +6145,12 @@ async fn create_run_input(
         ));
     }
     if !body.references.is_empty() {
-        let snapshot = GitChangesInspector::inspect(&run, &now_iso());
+        let run_for_inspection = run.clone();
+        let snapshot = tokio::task::spawn_blocking(move || {
+            GitChangesInspector::inspect(&run_for_inspection, &now_iso())
+        })
+        .await
+        .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
         validate_run_input_references(&snapshot, &body.references).map_err(|detail| {
             (
                 StatusCode::CONFLICT,

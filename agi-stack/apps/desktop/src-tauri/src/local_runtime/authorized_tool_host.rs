@@ -1,6 +1,6 @@
 //! Fail-closed, run-scoped tool execution for the local desktop runtime.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::LazyLock};
 
 use agistack_adapters_local_tools::LocalToolHost;
 use agistack_core::ports::{CoreError, CoreResult, ToolHost};
@@ -75,9 +75,7 @@ impl ToolHost for AuthorizedRunToolHost {
         self.inner
             .list_tools()
             .into_iter()
-            .filter(|tool| {
-                tool_metadata(tool).is_some_and(|metadata| self.allows(tool, metadata.effect))
-            })
+            .filter(|tool| tool_effect(tool).is_some_and(|effect| self.allows(tool, effect)))
             .collect()
     }
 
@@ -192,40 +190,37 @@ fn authority_error(error: impl std::fmt::Display) -> CoreError {
     CoreError::Tool(error.to_string())
 }
 
-pub(super) fn tool_metadata(tool: &str) -> Option<ToolMetadata> {
-    let effect = if READ_ONLY_TOOLS.contains(&tool) {
-        ToolEffect::Read
+fn tool_effect(tool: &str) -> Option<ToolEffect> {
+    if READ_ONLY_TOOLS.contains(&tool) {
+        Some(ToolEffect::Read)
     } else if MUTATING_TOOLS.contains(&tool) {
-        ToolEffect::Mutate
+        Some(ToolEffect::Mutate)
     } else {
-        return None;
-    };
+        None
+    }
+}
+
+pub(super) fn tool_metadata(tool: &str) -> Option<ToolMetadata> {
     Some(ToolMetadata {
         name: tool.to_string(),
-        effect,
-        sensitive_input_fields: BTreeSet::from([
-            "access_token".to_string(),
-            "api_key".to_string(),
-            "authorization".to_string(),
-            "credential".to_string(),
-            "password".to_string(),
-            "refresh_token".to_string(),
-            "secret".to_string(),
-            "token".to_string(),
-        ]),
+        effect: tool_effect(tool)?,
+        sensitive_input_fields: SENSITIVE_INPUT_FIELDS
+            .iter()
+            .map(|field| (*field).to_string())
+            .collect(),
     })
 }
 
 pub(super) fn redact_tool_payload(tool: &str, payload: &str) -> String {
-    let Some(metadata) = tool_metadata(tool) else {
+    if tool_effect(tool).is_none() {
         return "[UNAVAILABLE]".to_string();
-    };
+    }
     let Ok(value) = serde_json::from_str::<Value>(payload) else {
         return "[UNPARSEABLE]".to_string();
     };
     serde_json::to_string(&super::tool_authority::redact_sensitive_fields(
         &value,
-        &metadata.sensitive_input_fields,
+        &SENSITIVE_INPUT_FIELDS,
     ))
     .unwrap_or_else(|_| "[UNAVAILABLE]".to_string())
 }
@@ -233,6 +228,19 @@ pub(super) fn redact_tool_payload(tool: &str, payload: &str) -> String {
 fn is_workspace_write_tool(tool: &str) -> bool {
     WORKSPACE_WRITE_TOOLS.contains(&tool)
 }
+
+static SENSITIVE_INPUT_FIELDS: LazyLock<BTreeSet<&'static str>> = LazyLock::new(|| {
+    BTreeSet::from([
+        "access_token",
+        "api_key",
+        "authorization",
+        "credential",
+        "password",
+        "refresh_token",
+        "secret",
+        "token",
+    ])
+});
 
 const READ_ONLY_TOOLS: &[&str] = &[
     "read",
