@@ -1704,6 +1704,7 @@ export function App() {
   const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
   const agentTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const sessionEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const authoritativeRunEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const myWorkRequestRef = useRef(0);
   const myWorkAbortRef = useRef<AbortController | null>(null);
   const myWorkRefreshTimerRef = useRef<number | null>(null);
@@ -2572,6 +2573,9 @@ export function App() {
   );
 
   useEffect(() => {
+    const events = socketEventsSince(socket.events, authoritativeRunEventsHeadRef.current);
+    authoritativeRunEventsHeadRef.current = socket.events[0] ?? null;
+    if (!authoritativeRunsFromSocketEvents(events).length) return;
     const runs = authoritativeRunsFromSocketEvents(socket.events);
     if (!runs.length) return;
     setAgentConversationSession((current) => {
