@@ -1644,7 +1644,6 @@ export function App() {
   const [runtimeTarget, setRuntimeTarget] = useState<RuntimeTarget>('local');
   const [runLiveMode, setRunLiveMode] = useState(true);
   const [myWorkRefreshing, setMyWorkRefreshing] = useState(false);
-  const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
   const [changeSnapshot, setChangeSnapshot] = useState<ChangeSnapshot | null>(null);
   const [changeSnapshotLoading, setChangeSnapshotLoading] = useState(false);
@@ -2735,7 +2734,6 @@ export function App() {
     setConnection('idle');
     setError(null);
     setLastSync('never');
-    setChatInput('');
     setSelectedSidebarRunId('');
     setRunStateById({});
     setRunControlState('running');
@@ -3825,7 +3823,6 @@ export function App() {
 
   const activateNewTaskSession = (session: NewTaskSession) => {
     const { workspace, conversation, config: sessionConfig } = session;
-    setChatInput('');
     setSelectedTaskId('');
     resetConversationTimeline();
     setAgentTaskSignals([]);
@@ -4114,9 +4111,14 @@ export function App() {
     }
   };
 
-  const sendMessage = async () => {
-    await sendMessageContent(chatInput, () => setChatInput(''));
-  };
+  const sendMessageContentRef = useRef(sendMessageContent);
+  sendMessageContentRef.current = sendMessageContent;
+  const sendChatMessage = useCallback(
+    (content: string, onWorkspaceMessageSaved?: () => void) => {
+      void sendMessageContentRef.current(content, onWorkspaceMessageSaved);
+    },
+    [],
+  );
 
   const ensureSandbox = async () => {
     await runSandboxAction(async () => {
@@ -5182,7 +5184,7 @@ export function App() {
     switchSection('terminal');
   };
 
-  const selectChatWorkflowTarget = (target: ChatWorkflowTarget) => {
+  const selectChatWorkflowTarget = useCallback((target: ChatWorkflowTarget) => {
     setReviewPanelOpen(true);
     if (target === 'changes') {
       setReviewTab('changes');
@@ -5201,7 +5203,30 @@ export function App() {
       return;
     }
     setReviewTab('plan');
-  };
+  }, []);
+
+  const handleChatRemoveReference = useCallback((reference: CodeRangeReference) => {
+    setRunInputReferences((current) => toggleRunInputReference(current, reference));
+  }, []);
+
+  const handleChatRefresh = useCallback(() => {
+    if (selectedConversation) {
+      void loadConversationTimeline(selectedConversation, config.projectId);
+      invalidateSessionAuthority();
+      return;
+    }
+    void refreshRuntime();
+  }, [
+    config.projectId,
+    invalidateSessionAuthority,
+    loadConversationTimeline,
+    refreshRuntime,
+    selectedConversation,
+  ]);
+
+  const handleChatRuntimeTargetChange = useCallback((value: string) => {
+    setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local');
+  }, []);
 
   const commandItems: CommandPaletteItem[] = [
     {
@@ -5287,9 +5312,9 @@ export function App() {
           : 'Workspace conversation'
       }
       composerVariant={selectedConversation ? 'session' : 'workspace'}
+      composerResetKey={selectedConversation?.id ?? config.workspaceId}
       activityPresence={sessionActivityState}
       activityStructuredEvidence={sessionActivityStructuredEvidence}
-      input={chatInput}
       sending={sending}
       disabledReason={sessionChatDisabledReason}
       activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
@@ -5304,22 +5329,12 @@ export function App() {
       promotingRunInputId={promotingRunInputId}
       runInputAuthorityRunId={currentArtifactRun?.id ?? null}
       references={runInputReferences}
-      onInputChange={setChatInput}
       onRunInputDeliveryChange={setRunInputDelivery}
-      onPromoteRunInput={(input) => void promoteQueuedRunInput(input)}
-      onRemoveReference={(reference) =>
-        setRunInputReferences((current) => toggleRunInputReference(current, reference))
-      }
-      onSend={() => void sendMessage()}
-      onRefresh={() => {
-        if (selectedConversation) {
-          void loadConversationTimeline(selectedConversation, config.projectId);
-          invalidateSessionAuthority();
-          return;
-        }
-        void refreshRuntime();
-      }}
-      onLoadEarlier={() => void loadEarlierTimeline()}
+      onPromoteRunInput={promoteQueuedRunInput}
+      onRemoveReference={handleChatRemoveReference}
+      onSend={sendChatMessage}
+      onRefresh={handleChatRefresh}
+      onLoadEarlier={loadEarlierTimeline}
       onRespondToHitl={respondToHitl}
       respondableHitlRequestIds={respondableHitlRequestIds}
       authorityNotice={sessionAuthorityNotice}
@@ -5327,9 +5342,7 @@ export function App() {
         sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
       }
       onWorkflowSelect={selectChatWorkflowTarget}
-      onRuntimeTargetChange={(value) =>
-        setRuntimeTarget(value === runtimeTargetLabels.staging ? 'staging' : 'local')
-      }
+      onRuntimeTargetChange={handleChatRuntimeTargetChange}
       onOpenCommands={openCommandPalette}
     />
   );

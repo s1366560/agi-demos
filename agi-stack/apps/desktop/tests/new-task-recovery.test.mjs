@@ -199,12 +199,16 @@ test('opening and cancelling New Task preserves the active conversation until ac
   assert.notEqual(openSource, '');
   assert.doesNotMatch(openSource, /setConversationTimeline\(/);
   assert.doesNotMatch(openSource, /setAgentTaskSignals\(/);
-  assert.doesNotMatch(openSource, /setChatInput\(/);
   assert.doesNotMatch(openSource, /setSelectedTaskId\(/);
   assert.match(activateSource, /resetConversationTimeline\(\)/);
   assert.match(activateSource, /setAgentTaskSignals\(\[\]\)/);
-  assert.match(activateSource, /setChatInput\(''\)/);
   assert.match(activateSource, /setSelectedTaskId\(''\)/);
+  assert.match(activateSource, /setAgentConversationSession\(/);
+  assert.doesNotMatch(appSource, /setChatInput\(/);
+  assert.match(
+    appSource,
+    /composerResetKey=\{selectedConversation\?\.id \?\? config\.workspaceId\}/,
+  );
 });
 
 test('cloud turn acknowledgment is registered before the socket can reply', () => {

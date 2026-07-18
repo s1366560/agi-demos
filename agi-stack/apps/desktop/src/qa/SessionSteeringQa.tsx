@@ -207,7 +207,6 @@ const concurrentTailItem: ConversationTimelineState['items'][number] = {
 
 function SessionSteeringQa() {
   const historyMode = new URLSearchParams(window.location.search).get('history');
-  const [input, setInput] = useState('Keep the public API stable and add the missing revision test.');
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -304,9 +303,10 @@ function SessionSteeringQa() {
               sessionTitle="Conversation"
               scopeLabel="Current run narrative"
               composerVariant="session"
+              composerResetKey="qa-session-steering"
+              initialInput="Keep the public API stable and add the missing revision test."
               activityPresence="live"
               activityStructuredEvidence={null}
-              input={input}
               sending={false}
               disabledReason={null}
               activeWorkflowTarget="changes"
@@ -322,7 +322,6 @@ function SessionSteeringQa() {
               runInputAuthorityRunId="run-desktop-session-42"
               respondableHitlRequestIds={[]}
               references={references}
-              onInputChange={setInput}
               onRunInputDeliveryChange={setDelivery}
               onPromoteRunInput={(input) =>
                 setRunInputs((current) =>

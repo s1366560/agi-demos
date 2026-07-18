@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Flex, Heading, ScrollArea, Text, TextArea } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
@@ -50,6 +50,13 @@ import './ChatPanel.css';
 
 export type { ChatWorkflowTarget } from './ChatWorkflowStrip';
 
+type ChatAuthorityNotice = {
+  tone: 'loading' | 'warning' | 'error';
+  title: string;
+  description: string;
+  actionLabel?: string;
+} | null;
+
 type ChatPanelProps = {
   messages: WorkspaceMessage[];
   timelineState: ConversationTimelineState | null;
@@ -60,7 +67,8 @@ type ChatPanelProps = {
   activityPresence: SessionActivityPresence;
   activityStructuredEvidence: SessionActivityStructuredEvidence | null;
   composerVariant?: ChatComposerVariant;
-  input: string;
+  composerResetKey: string;
+  initialInput?: string;
   sending: boolean;
   disabledReason: string | null;
   activeWorkflowTarget: ChatWorkflowTarget;
@@ -75,21 +83,15 @@ type ChatPanelProps = {
   promotingRunInputId: string | null;
   runInputAuthorityRunId: string | null;
   references: CodeRangeReference[];
-  onInputChange: (value: string) => void;
   onRunInputDeliveryChange: (delivery: RunInputDelivery) => void;
   onPromoteRunInput: (input: DesktopRunInput) => void;
   onRemoveReference: (reference: CodeRangeReference) => void;
-  onSend: () => void;
+  onSend: (content: string, onWorkspaceMessageSaved?: () => void) => void;
   onRefresh: () => void;
   onLoadEarlier: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
-  authorityNotice?: {
-    tone: 'loading' | 'warning' | 'error';
-    title: string;
-    description: string;
-    actionLabel?: string;
-  } | null;
+  authorityNotice?: ChatAuthorityNotice;
   onAuthorityAction?: () => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
   onRuntimeTargetChange?: (value: string) => void;
@@ -130,7 +132,7 @@ function timelineAnchorMemberIds(anchor: HTMLElement): string[] {
   }
 }
 
-export function ChatPanel({
+export const ChatPanel = memo(function ChatPanel({
   messages,
   timelineState,
   agentTaskSignals,
@@ -140,7 +142,8 @@ export function ChatPanel({
   activityPresence,
   activityStructuredEvidence,
   composerVariant = 'workspace',
-  input,
+  composerResetKey,
+  initialInput,
   sending,
   disabledReason,
   activeWorkflowTarget,
@@ -155,7 +158,6 @@ export function ChatPanel({
   promotingRunInputId,
   runInputAuthorityRunId,
   references,
-  onInputChange,
   onRunInputDeliveryChange,
   onPromoteRunInput,
   onRemoveReference,
@@ -172,7 +174,6 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const { t } = useI18n();
   const disabled = Boolean(disabledReason);
-  const canSend = !disabled && !sending && Boolean(input.trim());
   const composerPresentation = chatComposerPresentation(composerVariant);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
@@ -182,7 +183,6 @@ export function ChatPanel({
   const earlierScrollRef = useRef<EarlierTimelineScrollAnchor | null>(null);
   const [expandedTimelineItems, setExpandedTimelineItems] = useState<Record<string, boolean>>({});
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
   const signalStateKey = useMemo(
     () => agentTaskSignals.map((signal) => `${signal.id}:${signal.status}`).join('|'),
     [agentTaskSignals],
@@ -450,13 +450,15 @@ export function ChatPanel({
     return () => window.removeEventListener('resize', handleResize);
   }, [scrollToLatest]);
 
-  const handleSend = useCallback(() => {
-    if (!canSend) return;
-    pinnedToLatestRef.current = true;
-    setShowJumpToLatest(false);
-    onSend();
-    window.requestAnimationFrame(scrollToLatest);
-  }, [canSend, onSend, scrollToLatest]);
+  const handleComposerSend = useCallback(
+    (content: string, onWorkspaceMessageSaved?: () => void) => {
+      pinnedToLatestRef.current = true;
+      setShowJumpToLatest(false);
+      onSend(content, onWorkspaceMessageSaved);
+      window.requestAnimationFrame(scrollToLatest);
+    },
+    [onSend, scrollToLatest],
+  );
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
       const currentValue = current[item.id] ?? isImportantTimelineItem(item);
@@ -615,259 +617,360 @@ export function ChatPanel({
           {t('session.jumpToLatest')}
         </Button>
       ) : null}
-      <form
-        className="composer chat-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          handleSend();
-        }}
-      >
-        {composerPresentation.showWorkflowStrip ? (
-          <ChatWorkflowStrip
-            activeTarget={activeWorkflowTarget}
-            workflowCounts={workflowCounts}
-            onSelect={onWorkflowSelect}
-          />
-        ) : null}
-        {composerPresentation.showQueueHandoff &&
-        (runInputsLoading || runInputsError || queuedRunInputs.length) ? (
-          <section className="run-input-queue" aria-label={t('session.queueHandoffRegion')}>
-            <div className="run-input-queue-header">
-              <span>
-                <strong>{t('session.queueHandoffTitle')}</strong>
-                {queuedRunInputs.length ? (
-                  <small>
-                    {t('session.queueHandoffCount', { count: queuedRunInputs.length })}
-                  </small>
-                ) : null}
-              </span>
-              {runInputsLoading ? <small>{t('session.queueLoading')}</small> : null}
-            </div>
-            {runInputsError ? (
-              <p className="run-input-queue-error">{t('session.queueLoadError')}</p>
-            ) : null}
-            {queuedRunInputs.map((queuedInput) => {
-              const handoffState = queuedRunInputHandoffState(queuedInput);
-              if (!handoffState) return null;
-              const statusLabel =
-                handoffState === 'waiting'
-                  ? t('session.queueHandoffWaiting')
-                  : handoffState === 'ready'
-                    ? t('session.queueHandoffReady')
-                    : handoffState === 'blocked'
-                      ? t('session.queueHandoffBlocked')
-                      : t('session.queueHandoffPromoted');
-              const statusBody =
-                handoffState === 'waiting'
-                  ? t('session.queueHandoffWaitingBody')
-                  : handoffState === 'ready'
-                    ? t('session.queueHandoffReadyBody')
-                    : handoffState === 'blocked'
-                      ? t('session.queueHandoffBlockedBody')
-                      : t('session.queueHandoffPromotedBody');
-              return (
-                <article
-                  className={`run-input-queue-item is-${handoffState}`}
-                  key={queuedInput.id}
-                >
-                  <div className="run-input-queue-copy">
-                    <div>
-                      <Badge color={handoffState === 'ready' ? 'cyan' : 'gray'}>
-                        {statusLabel}
-                      </Badge>
-                      <small>
-                        {t('session.queuePosition', {
-                          position: queuedInput.queue_position ?? '—',
-                        })}
-                      </small>
-                    </div>
-                    <strong>{queuedInput.content}</strong>
-                    <p>{statusBody}</p>
-                  </div>
-                  {handoffState === 'ready' ? (
-                    <Button
-                      type="button"
-                      size="1"
-                      color="cyan"
-                      loading={promotingRunInputId === queuedInput.id}
-                      disabled={
-                        Boolean(promotingRunInputId) ||
-                        queuedInput.run_id !== runInputAuthorityRunId
-                      }
-                      title={
-                        queuedInput.run_id === runInputAuthorityRunId
-                          ? undefined
-                          : t('session.authorityActionUnavailable')
-                      }
-                      onClick={() => onPromoteRunInput(queuedInput)}
-                    >
-                      <RocketIcon />
-                      {promotingRunInputId === queuedInput.id
-                        ? t('session.startingPlanTurn')
-                        : t('session.startPlanTurn')}
-                    </Button>
-                  ) : null}
-                </article>
-              );
-            })}
-          </section>
-        ) : null}
-        {authorityNotice ? (
-          <div
-            className={`session-authority-notice tone-${authorityNotice.tone}`}
-            role={authorityNotice.tone === 'error' ? 'alert' : 'status'}
-            aria-live="polite"
-          >
-            <ReloadIcon aria-hidden="true" />
+      <ChatComposer
+        key={composerResetKey}
+        composerVariant={composerVariant}
+        initialInput={initialInput}
+        sending={sending}
+        disabledReason={disabledReason}
+        activeWorkflowTarget={activeWorkflowTarget}
+        workflowCounts={workflowCounts}
+        runInputDelivery={runInputDelivery}
+        runInputDeliveryOptions={runInputDeliveryOptions}
+        runInputs={runInputs}
+        runInputsLoading={runInputsLoading}
+        runInputsError={runInputsError}
+        promotingRunInputId={promotingRunInputId}
+        runInputAuthorityRunId={runInputAuthorityRunId}
+        references={references}
+        modelLabel={modelLabel}
+        runtimeTargetLabel={runtimeTargetLabel}
+        runtimeTargetOptions={runtimeTargetOptions}
+        authorityNotice={authorityNotice}
+        onAuthorityAction={onAuthorityAction}
+        onRunInputDeliveryChange={onRunInputDeliveryChange}
+        onPromoteRunInput={onPromoteRunInput}
+        onRemoveReference={onRemoveReference}
+        onWorkflowSelect={onWorkflowSelect}
+        onRuntimeTargetChange={onRuntimeTargetChange}
+        onOpenCommands={onOpenCommands}
+        onSend={handleComposerSend}
+      />
+    </section>
+  );
+});
+
+type ChatComposerProps = {
+  composerVariant: ChatComposerVariant;
+  initialInput?: string;
+  sending: boolean;
+  disabledReason: string | null;
+  activeWorkflowTarget: ChatWorkflowTarget;
+  workflowCounts?: Partial<Record<ChatWorkflowTarget, number | string>>;
+  runInputDelivery: RunInputDelivery | null;
+  runInputDeliveryOptions: RunInputDelivery[];
+  runInputs: DesktopRunInput[];
+  runInputsLoading: boolean;
+  runInputsError: string | null;
+  promotingRunInputId: string | null;
+  runInputAuthorityRunId: string | null;
+  references: CodeRangeReference[];
+  modelLabel?: string;
+  runtimeTargetLabel?: string;
+  runtimeTargetOptions?: string[];
+  authorityNotice?: ChatAuthorityNotice;
+  onAuthorityAction?: () => void;
+  onRunInputDeliveryChange: (delivery: RunInputDelivery) => void;
+  onPromoteRunInput: (input: DesktopRunInput) => void;
+  onRemoveReference: (reference: CodeRangeReference) => void;
+  onWorkflowSelect: (target: ChatWorkflowTarget) => void;
+  onRuntimeTargetChange?: (value: string) => void;
+  onOpenCommands: (trigger?: HTMLElement | null) => void;
+  onSend: (content: string, onWorkspaceMessageSaved?: () => void) => void;
+};
+
+function ChatComposer({
+  composerVariant,
+  initialInput = '',
+  sending,
+  disabledReason,
+  activeWorkflowTarget,
+  workflowCounts,
+  runInputDelivery,
+  runInputDeliveryOptions,
+  runInputs,
+  runInputsLoading,
+  runInputsError,
+  promotingRunInputId,
+  runInputAuthorityRunId,
+  references,
+  modelLabel,
+  runtimeTargetLabel,
+  runtimeTargetOptions,
+  authorityNotice,
+  onAuthorityAction,
+  onRunInputDeliveryChange,
+  onPromoteRunInput,
+  onRemoveReference,
+  onWorkflowSelect,
+  onRuntimeTargetChange,
+  onOpenCommands,
+  onSend,
+}: ChatComposerProps) {
+  const { t } = useI18n();
+  const [input, setInput] = useState(initialInput);
+  const disabled = Boolean(disabledReason);
+  const canSend = !disabled && !sending && Boolean(input.trim());
+  const composerPresentation = chatComposerPresentation(composerVariant);
+  const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
+  const handleSend = useCallback(() => {
+    if (!canSend) return;
+    onSend(input, () => setInput(''));
+  }, [canSend, input, onSend]);
+
+  return (
+    <form
+      className="composer chat-composer"
+      onSubmit={(event) => {
+        event.preventDefault();
+        handleSend();
+      }}
+    >
+      {composerPresentation.showWorkflowStrip ? (
+        <ChatWorkflowStrip
+          activeTarget={activeWorkflowTarget}
+          workflowCounts={workflowCounts}
+          onSelect={onWorkflowSelect}
+        />
+      ) : null}
+      {composerPresentation.showQueueHandoff &&
+      (runInputsLoading || runInputsError || queuedRunInputs.length) ? (
+        <section className="run-input-queue" aria-label={t('session.queueHandoffRegion')}>
+          <div className="run-input-queue-header">
             <span>
-              <strong>{authorityNotice.title}</strong>
-              <small>{authorityNotice.description}</small>
+              <strong>{t('session.queueHandoffTitle')}</strong>
+              {queuedRunInputs.length ? (
+                <small>
+                  {t('session.queueHandoffCount', { count: queuedRunInputs.length })}
+                </small>
+              ) : null}
             </span>
-            {authorityNotice.actionLabel && onAuthorityAction ? (
-              <Button type="button" size="1" variant="soft" onClick={onAuthorityAction}>
-                {authorityNotice.actionLabel}
-              </Button>
-            ) : null}
+            {runInputsLoading ? <small>{t('session.queueLoading')}</small> : null}
           </div>
-        ) : null}
-        <div className="session-composer-editor">
-          {references.length ? (
-            <div className="composer-reference-chips" aria-label={t('session.attachedReferences')}>
-              {references.map((reference) => (
-                <span key={`${reference.snapshot_id}:${runInputReferenceLabel(reference)}`}>
-                  <CodeIcon aria-hidden="true" />
-                  <strong>{runInputReferenceLabel(reference)}</strong>
-                  <button
+          {runInputsError ? (
+            <p className="run-input-queue-error">{t('session.queueLoadError')}</p>
+          ) : null}
+          {queuedRunInputs.map((queuedInput) => {
+            const handoffState = queuedRunInputHandoffState(queuedInput);
+            if (!handoffState) return null;
+            const statusLabel =
+              handoffState === 'waiting'
+                ? t('session.queueHandoffWaiting')
+                : handoffState === 'ready'
+                  ? t('session.queueHandoffReady')
+                  : handoffState === 'blocked'
+                    ? t('session.queueHandoffBlocked')
+                    : t('session.queueHandoffPromoted');
+            const statusBody =
+              handoffState === 'waiting'
+                ? t('session.queueHandoffWaitingBody')
+                : handoffState === 'ready'
+                  ? t('session.queueHandoffReadyBody')
+                  : handoffState === 'blocked'
+                    ? t('session.queueHandoffBlockedBody')
+                    : t('session.queueHandoffPromotedBody');
+            return (
+              <article
+                className={`run-input-queue-item is-${handoffState}`}
+                key={queuedInput.id}
+              >
+                <div className="run-input-queue-copy">
+                  <div>
+                    <Badge color={handoffState === 'ready' ? 'cyan' : 'gray'}>
+                      {statusLabel}
+                    </Badge>
+                    <small>
+                      {t('session.queuePosition', {
+                        position: queuedInput.queue_position ?? '—',
+                      })}
+                    </small>
+                  </div>
+                  <strong>{queuedInput.content}</strong>
+                  <p>{statusBody}</p>
+                </div>
+                {handoffState === 'ready' ? (
+                  <Button
                     type="button"
-                    aria-label={t('session.removeReference', {
-                      reference: runInputReferenceLabel(reference),
-                    })}
-                    onClick={() => onRemoveReference(reference)}
+                    size="1"
+                    color="cyan"
+                    loading={promotingRunInputId === queuedInput.id}
+                    disabled={
+                      Boolean(promotingRunInputId) ||
+                      queuedInput.run_id !== runInputAuthorityRunId
+                    }
+                    title={
+                      queuedInput.run_id === runInputAuthorityRunId
+                        ? undefined
+                        : t('session.authorityActionUnavailable')
+                    }
+                    onClick={() => onPromoteRunInput(queuedInput)}
                   >
-                    <Cross2Icon />
-                  </button>
-                </span>
-              ))}
-            </div>
+                    <RocketIcon />
+                    {promotingRunInputId === queuedInput.id
+                      ? t('session.startingPlanTurn')
+                      : t('session.startPlanTurn')}
+                  </Button>
+                ) : null}
+              </article>
+            );
+          })}
+        </section>
+      ) : null}
+      {authorityNotice ? (
+        <div
+          className={`session-authority-notice tone-${authorityNotice.tone}`}
+          role={authorityNotice.tone === 'error' ? 'alert' : 'status'}
+          aria-live="polite"
+        >
+          <ReloadIcon aria-hidden="true" />
+          <span>
+            <strong>{authorityNotice.title}</strong>
+            <small>{authorityNotice.description}</small>
+          </span>
+          {authorityNotice.actionLabel && onAuthorityAction ? (
+            <Button type="button" size="1" variant="soft" onClick={onAuthorityAction}>
+              {authorityNotice.actionLabel}
+            </Button>
           ) : null}
-          <TextArea
-            className="chat-composer-input"
-            value={input}
-            disabled={disabled}
-            onChange={(event) => onInputChange(event.target.value)}
-            placeholder={
-              disabledReason ??
-              (composerPresentation.placeholderKey
-                ? t(composerPresentation.placeholderKey)
-                : t('chat.taskComposerPlaceholder'))
-            }
-            onKeyDown={(event) => {
-              if (
-                event.key === 'Enter' &&
-                !event.shiftKey &&
-                (runInputDeliveryOptions.length === 0 || event.metaKey || event.ctrlKey)
-              ) {
-                event.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-          <Flex
-            align="center"
-            justify="between"
-            className="chat-composer-footer"
-          >
-          {composerVariant === 'session' ? (
-            <div className="session-composer-context-actions">
-              <button
-                type="button"
-                onClick={(event) => onOpenCommands(event.currentTarget)}
-              >
-                <Link2Icon aria-hidden="true" />
-                {t('session.attach')}
-              </button>
-              <button
-                type="button"
-                onClick={(event) => onOpenCommands(event.currentTarget)}
-              >
-                <MixerHorizontalIcon aria-hidden="true" />
-                {t('session.context')}
-              </button>
-            </div>
-          ) : null}
-          {composerPresentation.showCommands ? (
-            <button
-              className="composer-slash-button"
-              type="button"
-              aria-label={t('chat.slashCommands')}
-              title={t('chat.slashCommands')}
-              onClick={(event) => onOpenCommands(event.currentTarget)}
-            >
-              /
-            </button>
-          ) : null}
-          {runInputDeliveryOptions.length ? (
-            <div className="composer-delivery-switch" aria-label={t('session.deliveryMode')}>
-              {runInputDeliveryOptions.map((delivery) => (
+        </div>
+      ) : null}
+      <div className="session-composer-editor">
+        {references.length ? (
+          <div className="composer-reference-chips" aria-label={t('session.attachedReferences')}>
+            {references.map((reference) => (
+              <span key={`${reference.snapshot_id}:${runInputReferenceLabel(reference)}`}>
+                <CodeIcon aria-hidden="true" />
+                <strong>{runInputReferenceLabel(reference)}</strong>
                 <button
                   type="button"
-                  className={runInputDelivery === delivery ? 'is-active' : ''}
-                  aria-pressed={runInputDelivery === delivery}
-                  onClick={() => onRunInputDeliveryChange(delivery)}
-                  key={delivery}
+                  aria-label={t('session.removeReference', {
+                    reference: runInputReferenceLabel(reference),
+                  })}
+                  onClick={() => onRemoveReference(reference)}
                 >
-                  {delivery === 'steer_now'
-                    ? t('session.steerNow')
-                    : t('session.queueNext')}
+                  <Cross2Icon />
                 </button>
-              ))}
-            </div>
-          ) : null}
-          {composerPresentation.showRuntimeControls &&
-          runtimeTargetLabel &&
-          runtimeTargetOptions?.length &&
-          onRuntimeTargetChange ? (
-            <ComposerControls
-              disabledHint={disabledReason}
-              modelLabel={modelLabel}
-              runtimeTargetLabel={runtimeTargetLabel}
-              runtimeTargetOptions={runtimeTargetOptions}
-              onRuntimeTargetChange={onRuntimeTargetChange}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <TextArea
+          className="chat-composer-input"
+          value={input}
+          disabled={disabled}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder={
+            disabledReason ??
+            (composerPresentation.placeholderKey
+              ? t(composerPresentation.placeholderKey)
+              : t('chat.taskComposerPlaceholder'))
+          }
+          onKeyDown={(event) => {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              (runInputDeliveryOptions.length === 0 || event.metaKey || event.ctrlKey)
+            ) {
+              event.preventDefault();
+              handleSend();
+            }
+          }}
+        />
+        <Flex
+          align="center"
+          justify="between"
+          className="chat-composer-footer"
+        >
+        {composerVariant === 'session' ? (
+          <div className="session-composer-context-actions">
+            <button
+              type="button"
+              onClick={(event) => onOpenCommands(event.currentTarget)}
+            >
+              <Link2Icon aria-hidden="true" />
+              {t('session.attach')}
+            </button>
+            <button
+              type="button"
+              onClick={(event) => onOpenCommands(event.currentTarget)}
+            >
+              <MixerHorizontalIcon aria-hidden="true" />
+              {t('session.context')}
+            </button>
+          </div>
+        ) : null}
+        {composerPresentation.showCommands ? (
+          <button
+            className="composer-slash-button"
+            type="button"
+            aria-label={t('chat.slashCommands')}
+            title={t('chat.slashCommands')}
+            onClick={(event) => onOpenCommands(event.currentTarget)}
+          >
+            /
+          </button>
+        ) : null}
+        {runInputDeliveryOptions.length ? (
+          <div className="composer-delivery-switch" aria-label={t('session.deliveryMode')}>
+            {runInputDeliveryOptions.map((delivery) => (
+              <button
+                type="button"
+                className={runInputDelivery === delivery ? 'is-active' : ''}
+                aria-pressed={runInputDelivery === delivery}
+                onClick={() => onRunInputDeliveryChange(delivery)}
+                key={delivery}
+              >
+                {delivery === 'steer_now'
+                  ? t('session.steerNow')
+                  : t('session.queueNext')}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {composerPresentation.showRuntimeControls &&
+        runtimeTargetLabel &&
+        runtimeTargetOptions?.length &&
+        onRuntimeTargetChange ? (
+          <ComposerControls
+            disabledHint={disabledReason}
+            modelLabel={modelLabel}
+            runtimeTargetLabel={runtimeTargetLabel}
+            runtimeTargetOptions={runtimeTargetOptions}
+            onRuntimeTargetChange={onRuntimeTargetChange}
+          />
+        ) : null}
+        <Flex align="center" gap="2" className="composer-right-actions">
+          {composerPresentation.showRuntimeStatus ? (
+            <span
+              className={`composer-status-button composer-status-dot ${
+                disabledReason ? 'is-blocked' : 'is-connected'
+              }`}
+              aria-label={disabledReason ?? t('session.runtimeAvailable')}
+              title={disabledReason ?? t('session.runtimeAvailable')}
             />
           ) : null}
-          <Flex align="center" gap="2" className="composer-right-actions">
-            {composerPresentation.showRuntimeStatus ? (
-              <span
-                className={`composer-status-button composer-status-dot ${
-                  disabledReason ? 'is-blocked' : 'is-connected'
-                }`}
-                aria-label={disabledReason ?? t('session.runtimeAvailable')}
-                title={disabledReason ?? t('session.runtimeAvailable')}
-              />
-            ) : null}
-            <Button
-              size="2"
-              color="green"
-              className="send-pill"
-              type="submit"
-              aria-label={
-                runInputDelivery === 'steer_now'
-                  ? t('session.sendSteering')
-                  : runInputDelivery === 'queue_next'
-                    ? t('session.sendQueuedInput')
-                    : t('session.sendMessage')
-              }
-              title={runInputDeliveryOptions.length ? t('session.sendShortcut') : undefined}
-              loading={sending}
-              disabled={!canSend}
-            >
-              <ArrowUpIcon />
-            </Button>
-          </Flex>
-          </Flex>
-        </div>
-      </form>
-    </section>
+          <Button
+            size="2"
+            color="green"
+            className="send-pill"
+            type="submit"
+            aria-label={
+              runInputDelivery === 'steer_now'
+                ? t('session.sendSteering')
+                : runInputDelivery === 'queue_next'
+                  ? t('session.sendQueuedInput')
+                  : t('session.sendMessage')
+            }
+            title={runInputDeliveryOptions.length ? t('session.sendShortcut') : undefined}
+            loading={sending}
+            disabled={!canSend}
+          >
+            <ArrowUpIcon />
+          </Button>
+        </Flex>
+        </Flex>
+      </div>
+    </form>
   );
 }
 
