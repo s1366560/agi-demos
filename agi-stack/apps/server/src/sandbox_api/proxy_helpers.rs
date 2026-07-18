@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use super::*;
 
 pub(super) fn proxy_auth_cookie_secure(headers: &HeaderMap) -> bool {
@@ -238,8 +240,11 @@ pub(super) fn rewrite_http_service_content(
     let ws_proxy_prefix = build_http_path_preview_ws_proxy_url(project_id, service_id);
     let mut content = String::from_utf8_lossy(content).into_owned();
 
-    let attr_re = regex::Regex::new(r#"(href|src|action)=(["'])/([^/"'][^"']*)"#)
-        .expect("BUG: static http service attribute rewrite regex must compile");
+    static ATTR_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let attr_re = ATTR_RE.get_or_init(|| {
+        regex::Regex::new(r#"(href|src|action)=(["'])/([^/"'][^"']*)"#)
+            .expect("BUG: static http service attribute rewrite regex must compile")
+    });
     content = attr_re
         .replace_all(&content, |caps: &regex::Captures<'_>| {
             let proxied = append_proxy_token(&format!("{}{}", proxy_prefix, &caps[3]), token_param);
@@ -247,8 +252,11 @@ pub(super) fn rewrite_http_service_content(
         })
         .into_owned();
 
-    let url_re = regex::Regex::new(r#"url\((['"]?)/([^/'")][^)'"]*)['"]?\)"#)
-        .expect("BUG: static http service url() rewrite regex must compile");
+    static URL_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let url_re = URL_RE.get_or_init(|| {
+        regex::Regex::new(r#"url\((['"]?)/([^/'")][^)'"]*)['"]?\)"#)
+            .expect("BUG: static http service url() rewrite regex must compile")
+    });
     content = url_re
         .replace_all(&content, |caps: &regex::Captures<'_>| {
             let quote = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
@@ -257,8 +265,11 @@ pub(super) fn rewrite_http_service_content(
         })
         .into_owned();
 
-    let browser_call_re = regex::Regex::new(r#"\b(fetch|EventSource)\((['"])/([^/'"][^'"]*)"#)
-        .expect("BUG: static http service browser call rewrite regex must compile");
+    static BROWSER_CALL_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let browser_call_re = BROWSER_CALL_RE.get_or_init(|| {
+        regex::Regex::new(r#"\b(fetch|EventSource)\((['"])/([^/'"][^'"]*)"#)
+            .expect("BUG: static http service browser call rewrite regex must compile")
+    });
     content = browser_call_re
         .replace_all(&content, |caps: &regex::Captures<'_>| {
             let proxied = append_proxy_token(&format!("{}{}", proxy_prefix, &caps[3]), token_param);
@@ -275,8 +286,11 @@ pub(super) fn rewrite_http_service_content(
         &format!("wss://\" + location.host + \"{ws_proxy_prefix}"),
     );
 
-    let websocket_re = regex::Regex::new(r#"new WebSocket\((['"])/([^/'"][^'"]*)"#)
-        .expect("BUG: static http service websocket rewrite regex must compile");
+    static WEBSOCKET_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let websocket_re = WEBSOCKET_RE.get_or_init(|| {
+        regex::Regex::new(r#"new WebSocket\((['"])/([^/'"][^'"]*)"#)
+            .expect("BUG: static http service websocket rewrite regex must compile")
+    });
     content = websocket_re
         .replace_all(&content, |caps: &regex::Captures<'_>| {
             let proxied =
@@ -313,8 +327,11 @@ pub(super) fn rewrite_desktop_content(
 
     let proxy_prefix = build_desktop_path_proxy_url(project_id);
     let mut content = String::from_utf8_lossy(content).into_owned();
-    let attr_re = regex::Regex::new(r#"(href|src)=(["'])/([^"']*)"#)
-        .expect("BUG: static desktop attribute rewrite regex must compile");
+    static ATTR_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let attr_re = ATTR_RE.get_or_init(|| {
+        regex::Regex::new(r#"(href|src)=(["'])/([^"']*)"#)
+            .expect("BUG: static desktop attribute rewrite regex must compile")
+    });
     content = attr_re
         .replace_all(&content, |caps: &regex::Captures<'_>| {
             let proxied = append_proxy_token(&format!("{}{}", proxy_prefix, &caps[3]), token_param);

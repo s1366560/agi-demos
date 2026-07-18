@@ -1,6 +1,36 @@
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use super::*;
+
+fn build_proxy_client(timeout: Duration) -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .danger_accept_invalid_certs(true)
+        .no_proxy()
+        .build()
+}
+
+fn desktop_proxy_client() -> SandboxApiResult<&'static reqwest::Client> {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client);
+    }
+    let client = build_proxy_client(Duration::from_secs(30))
+        .map_err(|_| SandboxApiError::bad_gateway("Failed to connect to desktop service"))?;
+    Ok(CLIENT.get_or_init(|| client))
+}
+
+fn http_service_proxy_client() -> SandboxApiResult<&'static reqwest::Client> {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client);
+    }
+    let client = build_proxy_client(Duration::from_secs(3))
+        .map_err(|_| SandboxApiError::bad_gateway("Failed to connect to HTTP service"))?;
+    Ok(CLIENT.get_or_init(|| client))
+}
 
 pub(super) fn desktop_upstream_headers(
     request_headers: &HeaderMap,
@@ -29,13 +59,7 @@ pub(super) async fn proxy_project_desktop_response(
         SandboxApiError::service_unavailable("Sandbox runtime authentication is unavailable")
     })?;
     let target_url = build_upstream_desktop_http_url(desktop_url, path, raw_query)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::none())
-        .danger_accept_invalid_certs(true)
-        .no_proxy()
-        .build()
-        .map_err(|_| SandboxApiError::bad_gateway("Failed to connect to desktop service"))?;
+    let client = desktop_proxy_client()?;
     let upstream_headers = desktop_upstream_headers(&request_headers, runtime_auth_token)?;
     let upstream = client
         .get(target_url)
@@ -108,13 +132,7 @@ pub(super) async fn proxy_http_service_response(
         ));
     }
     let target_url = build_upstream_http_url(&service_info.service_url, path, raw_query)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .redirect(reqwest::redirect::Policy::none())
-        .danger_accept_invalid_certs(true)
-        .no_proxy()
-        .build()
-        .map_err(|_| SandboxApiError::bad_gateway("Failed to connect to HTTP service"))?;
+    let client = http_service_proxy_client()?;
     let upstream = client
         .request(method, target_url)
         .headers(filter_proxy_headers(&request_headers))
@@ -235,13 +253,7 @@ pub(super) async fn proxy_http_service_preview_host_response(
     }
 
     let target_url = build_upstream_preview_http_url(&service_info.service_url, path, raw_query)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .redirect(reqwest::redirect::Policy::none())
-        .danger_accept_invalid_certs(true)
-        .no_proxy()
-        .build()
-        .map_err(|_| SandboxApiError::bad_gateway("Failed to connect to HTTP service"))?;
+    let client = http_service_proxy_client()?;
     let upstream = client
         .request(method, target_url)
         .headers(filter_proxy_headers(&request_headers))
