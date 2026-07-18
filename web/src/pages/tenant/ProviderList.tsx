@@ -157,9 +157,16 @@ export const ProviderList: React.FC = () => {
   const handleCheckHealth = async (providerId: string) => {
     setCheckingHealth(providerId);
     try {
-      await providerAPI.checkHealth(providerId);
-      await loadProviders();
-      await loadSystemStatus();
+      const validation = await providerAPI.checkHealth(providerId);
+      await Promise.all([loadProviders(), loadSystemStatus()]);
+      if (validation.probed === false && validation.status === 'configuration_valid') {
+        message.success(
+          t('tenant.providers.connectionTest.configurationValid', {
+            defaultValue:
+              'Configuration validated. Network probing is not supported for this provider.',
+          })
+        );
+      }
     } catch (err) {
       console.error('Health check failed:', err);
       message.error(t('tenant.providers.healthCheckError'));
@@ -255,13 +262,14 @@ export const ProviderList: React.FC = () => {
         case 'health': {
           const healthOrder: Record<string, number> = {
             healthy: 0,
-            degraded: 1,
-            unhealthy: 2,
-            unknown: 3,
+            configuration_valid: 1,
+            degraded: 2,
+            unhealthy: 3,
+            unknown: 4,
           };
           comparison =
-            (healthOrder[a.health_status || 'unknown'] || 3) -
-            (healthOrder[b.health_status || 'unknown'] || 3);
+            (healthOrder[a.health_status || 'unknown'] ?? 4) -
+            (healthOrder[b.health_status || 'unknown'] ?? 4);
           break;
         }
         case 'responseTime':
@@ -668,7 +676,8 @@ export const ProviderList: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <span
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                                provider.health_status === 'healthy'
+                                provider.health_status === 'healthy' ||
+                                provider.health_status === 'configuration_valid'
                                   ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
                                   : provider.health_status === 'degraded'
                                     ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
@@ -679,7 +688,8 @@ export const ProviderList: React.FC = () => {
                             >
                               <span
                                 className={`h-2 w-2 rounded-full ${
-                                  provider.health_status === 'healthy'
+                                  provider.health_status === 'healthy' ||
+                                  provider.health_status === 'configuration_valid'
                                     ? 'bg-emerald-500'
                                     : provider.health_status === 'degraded'
                                       ? 'bg-amber-500'
@@ -688,7 +698,15 @@ export const ProviderList: React.FC = () => {
                                         : 'bg-slate-400'
                                 }`}
                               />
-                              {provider.health_status || t('common.status.unknown')}
+                              {provider.health_status === 'configuration_valid'
+                                ? t('common.status.configurationValid', {
+                                    defaultValue: 'Configuration validated',
+                                  })
+                                : provider.health_status
+                                  ? t(`common.status.${provider.health_status}`, {
+                                      defaultValue: provider.health_status,
+                                    })
+                                  : t('common.status.unknown')}
                             </span>
                           </div>
                         </td>
@@ -792,15 +810,14 @@ export const ProviderList: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'assignments' && (
-        tenantId ? (
+      {activeTab === 'assignments' &&
+        (tenantId ? (
           <ModelAssignment tenantId={tenantId} providers={providers} />
         ) : (
           <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
             {t('common.noTenant')}
           </div>
-        )
-      )}
+        ))}
 
       {/* Modals */}
       <ProviderConfigModal

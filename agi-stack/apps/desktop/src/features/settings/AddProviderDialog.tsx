@@ -29,18 +29,16 @@ import {
 } from './providerManagementModel';
 import { useModalDialog } from './useModalDialog';
 
-const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = [
-  'oauth',
-  'api_key',
-  'environment',
-  'none',
-];
+const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = ['oauth', 'api_key', 'environment', 'none'];
 
 type AddProviderDialogProps = {
   onClose: () => void;
   onLoadTypes: () => Promise<LlmProviderTypeDescriptor[]>;
   onValidateDraft: (input: LlmProviderProbeInput) => Promise<LlmProviderValidationOutcome>;
-  onCreate: (input: LlmProviderCreateInput) => Promise<ManagedLlmProvider>;
+  onCreate: (
+    input: LlmProviderCreateInput,
+    validation: LlmProviderValidationOutcome,
+  ) => Promise<ManagedLlmProvider>;
 };
 
 const providerDefaults: Record<string, { baseUrl: string }> = {
@@ -48,7 +46,7 @@ const providerDefaults: Record<string, { baseUrl: string }> = {
     baseUrl: 'https://api.openai.com/v1',
   },
   anthropic: {
-    baseUrl: 'https://api.anthropic.com/v1',
+    baseUrl: 'https://api.anthropic.com',
   },
   openai_compatible: {
     baseUrl: 'http://127.0.0.1:11434/v1',
@@ -129,8 +127,7 @@ export function AddProviderDialog({
     const defaults = providerDefaults[descriptor.providerType] ?? {
       baseUrl: '',
     };
-    const nextAuth =
-      descriptor.authMethods[0] ?? descriptor.unavailableAuthMethods[0] ?? 'api_key';
+    const nextAuth = descriptor.authMethods[0] ?? descriptor.unavailableAuthMethods[0] ?? 'api_key';
     setSelectedType(descriptor.providerType);
     setName(providerTypeDisplayName(descriptor.providerType));
     setAuthMethod(nextAuth);
@@ -200,18 +197,21 @@ export function AddProviderDialog({
     selectedDescriptor?.authMethods.includes(method) !== true;
   const catalogIsStaticFallback = catalog?.source === 'static-fallback';
   const catalogUnavailable = !catalog || catalog.availability === 'unavailable';
-  const probeSupported = selectedDescriptor?.probeSupported === true;
+  const probeSupported = selectedDescriptor?.probeSupported !== false;
   const authCapabilityAvailable = selectedDescriptor
     ? providerAuthMethodSupported(selectedDescriptor, authMethod)
     : false;
 
   const formValid = authCapabilityAvailable && providerProbeInputIsValid(probeInput);
   const validationAccepted = providerValidationAccepted(validation, probeSupported);
-  const environmentSecretStatus = validation?.probed === true
-    ? 'available'
-    : validation?.probed === false
-      ? 'unavailable'
-      : 'unknown';
+  const environmentSecretStatus =
+    validation?.probed === true
+      ? 'available'
+      : validation?.probed === false && validation.status === 'configuration_valid'
+        ? 'available'
+        : validation?.probed === false
+          ? 'unavailable'
+          : 'unknown';
   const environmentSecretStatusKey =
     environmentSecretStatus === 'available'
       ? 'providers.environmentSecretAvailable'
@@ -248,10 +248,11 @@ export function AddProviderDialog({
   };
 
   const createProvider = async () => {
+    if (!validation || !validationAccepted) return;
     setBusy('create');
     setError(null);
     try {
-      await onCreate(input);
+      await onCreate(input, validation);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setBusy(null);

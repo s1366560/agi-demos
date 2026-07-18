@@ -68,10 +68,7 @@ function activeRoutingScope(config: DesktopRuntimeConfig): RoutingScope | null {
   return tenantId && projectId && workspaceId ? { tenantId, projectId, workspaceId } : null;
 }
 
-function routingPolicyMatchesScope(
-  policy: LlmProviderRoutingPolicy,
-  scope: RoutingScope,
-): boolean {
+function routingPolicyMatchesScope(policy: LlmProviderRoutingPolicy, scope: RoutingScope): boolean {
   return (
     policy.tenant_id === scope.tenantId &&
     policy.project_id === scope.projectId &&
@@ -170,8 +167,7 @@ export function ModelProviderWorkspace({
                 }))
             : Promise.resolve({
                 policy: null,
-                error:
-                  config.mode === 'local' ? t('providers.routingScopeRequired') : null,
+                error: config.mode === 'local' ? t('providers.routingScopeRequired') : null,
               });
         const [items, types, policyOutcome] = await Promise.all([
           requestClient.listLlmProviders(signal),
@@ -236,8 +232,12 @@ export function ModelProviderWorkspace({
   }, [loadProviders]);
 
   const filteredProviders = useMemo(
-    () => filterProviders(providers, query, filter),
-    [filter, providers, query],
+    () => filterProviders(providers, query, filter, providerTypes),
+    [filter, providerTypes, providers, query],
+  );
+  const providerProbeSupport = useMemo(
+    () => new Map(providerTypes.map((item) => [item.providerType, item.probeSupported])),
+    [providerTypes],
   );
   const provider = providers.find((item) => item.id === selectedId) ?? providers[0] ?? null;
   const providerTypeDescriptor = providerTypes.find(
@@ -377,10 +377,7 @@ export function ModelProviderWorkspace({
   );
 
   const validateProvider = useCallback(
-    async (
-      providerId: string,
-      expectedRevision: number,
-    ): Promise<LlmProviderValidationOutcome> => {
+    async (providerId: string, expectedRevision: number): Promise<LlmProviderValidationOutcome> => {
       const requestScope = scopeKey;
       const requestClient = client;
       const outcome = await requestClient.checkLlmProvider(providerId, expectedRevision);
@@ -422,7 +419,7 @@ export function ModelProviderWorkspace({
   );
 
   const createProvider = useCallback(
-    async (input: LlmProviderCreateInput) => {
+    async (input: LlmProviderCreateInput, draftValidation: LlmProviderValidationOutcome) => {
       const requestScope = scopeKey;
       const requestClient = client;
       const created = await requestClient.createLlmProvider(input);
@@ -435,23 +432,32 @@ export function ModelProviderWorkspace({
       }
       let validationState: 'connected' | 'configured' | 'attention' = 'attention';
       let checkedProvider = created;
-      try {
-        const outcome = await requestClient.checkLlmProvider(created.id, created.revision ?? 0);
-        validationState =
-          outcome.probed && outcome.status === 'healthy'
-            ? 'connected'
-            : !outcome.probed && outcome.status === 'configuration_valid'
-              ? 'configured'
-              : 'attention';
+      const configurationOnlyValidated =
+        !draftValidation.probed && draftValidation.status === 'configuration_valid';
+      if (configurationOnlyValidated) {
+        validationState = 'configured';
         checkedProvider = {
           ...created,
-          health_status: outcome.status,
-          health_last_check: outcome.lastChecked ?? null,
-          response_time_ms: outcome.responseTimeMs ?? null,
-          error_message: outcome.errorMessage ?? null,
+          health_status: draftValidation.status,
+          health_last_check: draftValidation.lastChecked ?? null,
+          response_time_ms: null,
+          error_message: null,
         };
-      } catch {
-        checkedProvider = { ...created, health_status: null };
+      } else {
+        try {
+          const outcome = await requestClient.checkLlmProvider(created.id, created.revision ?? 0);
+          validationState =
+            outcome.probed && outcome.status === 'healthy' ? 'connected' : 'attention';
+          checkedProvider = {
+            ...created,
+            health_status: outcome.status,
+            health_last_check: outcome.lastChecked ?? null,
+            response_time_ms: outcome.responseTimeMs ?? null,
+            error_message: outcome.errorMessage ?? null,
+          };
+        } catch {
+          checkedProvider = { ...created, health_status: null };
+        }
       }
       if (
         !mountedRef.current ||
@@ -498,9 +504,9 @@ export function ModelProviderWorkspace({
 
   const providerRuntimeSelected = Boolean(
     provider &&
-      (config.mode === 'local'
-        ? runtimeProvider?.provider_id === provider.id
-        : provider.runtime_selected === true),
+    (config.mode === 'local'
+      ? runtimeProvider?.provider_id === provider.id
+      : provider.runtime_selected === true),
   );
 
   return (
@@ -567,7 +573,10 @@ export function ModelProviderWorkspace({
                     count: providerModelsFromProvider(item).length,
                   })}
                 </small>
-                <ProviderStatusBadge provider={item} />
+                <ProviderStatusBadge
+                  provider={item}
+                  probeSupported={providerProbeSupport.get(item.provider_type) !== false}
+                />
               </span>
               <ArrowRightIcon />
             </button>
@@ -667,7 +676,10 @@ export function ModelProviderWorkspace({
                 <h1>{provider.name || provider.provider_type}</h1>
                 <p>{t('providers.identityDescription')}</p>
                 <div>
-                  <ProviderStatusBadge provider={provider} />
+                  <ProviderStatusBadge
+                    provider={provider}
+                    probeSupported={providerTypeDescriptor?.probeSupported !== false}
+                  />
                   <span className="provider-auth-badge">
                     <LockClosedIcon />
                     {t(`providers.auth.${provider.auth_method ?? 'api_key'}`)}
@@ -694,16 +706,16 @@ export function ModelProviderWorkspace({
               })}
             >
               {(['overview', 'connection', 'models', 'routing', 'usage'] as const).map((value) => (
-                  <button
-                    className={tab === value ? 'active' : ''}
-                    type="button"
+                <button
+                  className={tab === value ? 'active' : ''}
+                  type="button"
                   role="tab"
                   aria-selected={tab === value}
-                    key={value}
-                    onClick={() => setTab(value)}
-                  >
-                    {t(`providers.tab.${value}`)}
-                  </button>
+                  key={value}
+                  onClick={() => setTab(value)}
+                >
+                  {t(`providers.tab.${value}`)}
+                </button>
               ))}
             </nav>
             <div className="provider-tab-content">

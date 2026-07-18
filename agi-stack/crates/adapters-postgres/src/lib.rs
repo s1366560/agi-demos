@@ -153,9 +153,9 @@ pub use invitation_repo::{
     normalize_email, InvitationRecord, PgInvitationRepository, TenantAdminStatus,
 };
 pub use llm_provider_repo::{
-    decrypt_provider_api_key_for_mask, LlmProviderCreateRecord, LlmProviderRecord,
-    LlmProviderUpdateRecord, PgLlmProviderRepository, ProviderHealthRecord,
-    TenantProviderMappingRecord, UsageStatisticRecord, UsageStatisticsQuery,
+    decrypt_provider_api_key_for_mask, LlmProviderCreateRecord, LlmProviderMutationError,
+    LlmProviderMutationResult, LlmProviderRecord, LlmProviderUpdateRecord, PgLlmProviderRepository,
+    ProviderHealthRecord, TenantProviderMappingRecord, UsageStatisticRecord, UsageStatisticsQuery,
 };
 pub use memory_repo::PgMemoryRepository;
 pub use notification_repo::{

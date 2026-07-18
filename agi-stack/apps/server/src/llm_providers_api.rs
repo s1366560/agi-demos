@@ -30,8 +30,8 @@ use tokio::sync::Mutex;
 use url::Url;
 
 use agistack_adapters_postgres::{
-    decrypt_provider_api_key_for_mask, LlmProviderCreateRecord, LlmProviderRecord,
-    LlmProviderUpdateRecord, PgLlmProviderRepository, ProviderHealthRecord,
+    decrypt_provider_api_key_for_mask, LlmProviderCreateRecord, LlmProviderMutationError,
+    LlmProviderRecord, LlmProviderUpdateRecord, PgLlmProviderRepository, ProviderHealthRecord,
     TenantProviderMappingRecord, UsageStatisticRecord, UsageStatisticsQuery,
 };
 
@@ -81,8 +81,21 @@ const OPERATION_TYPES: &[&str] = &["llm", "embedding", "rerank"];
 const API_KEY_AUTH_METHODS: &[&str] = &["api_key"];
 const API_KEY_OR_ENVIRONMENT_AUTH_METHODS: &[&str] = &["api_key", "environment"];
 const NO_AUTH_METHODS: &[&str] = &["none"];
+const NO_AVAILABLE_AUTH_METHODS: &[&str] = &[];
 const NO_UNAVAILABLE_AUTH_METHODS: &[&str] = &[];
 const OAUTH_UNAVAILABLE_AUTH_METHODS: &[&str] = &["oauth"];
+const UNSUPPORTED_STRUCTURED_AUTH_METHODS: &[&str] = &["api_key", "oauth"];
+const SAFE_CUSTOM_PROVIDER_BASE_PATHS: &[&str] = &[
+    "/",
+    "/v1",
+    "/api/v1",
+    "/api",
+    "/openai/v1",
+    "/compatible-mode/v1",
+    "/api/paas/v4",
+    "/api/v3",
+    "/v1beta",
+];
 
 pub(crate) type SharedLlmProviderHealth = Arc<dyn LlmProviderHealthService>;
 pub(crate) type SharedLlmProviders = Arc<dyn LlmProviderCatalogService>;
@@ -94,7 +107,6 @@ const AUTH_METHOD_CONFIG_KEY: &str = "auth_method";
 const ENVIRONMENT_VARIABLE_CONFIG_KEY: &str = "environment_variable";
 const ENVIRONMENT_CREDENTIAL_MISSING: &str = "Environment credential is not configured";
 const ENVIRONMENT_CREDENTIAL_INVALID: &str = "Environment credential configuration is invalid";
-
 #[async_trait]
 pub(crate) trait LlmProviderCatalogService: Send + Sync {
     async fn list_providers(
@@ -204,7 +216,7 @@ impl LlmProviderCatalogService for PgLlmProviderCatalogService {
             .repo
             .create_provider(&record)
             .await
-            .map_err(LlmProvidersApiError::internal)?;
+            .map_err(map_provider_mutation_error)?;
         self.record_to_response(created).await
     }
 
@@ -227,7 +239,7 @@ impl LlmProviderCatalogService for PgLlmProviderCatalogService {
             .repo
             .update_provider(provider_id, &update)
             .await
-            .map_err(LlmProvidersApiError::internal)?;
+            .map_err(map_provider_mutation_error)?;
         let Some(updated) = updated else {
             return Err(LlmProvidersApiError::conflict(
                 "Provider configuration changed; reload and try again",
@@ -687,12 +699,16 @@ async fn list_provider_types() -> Json<Vec<ProviderTypeDescriptor>> {
                 probe_supported: provider_probe_supported(provider_type),
                 auth_methods: if matches!(provider_type, "ollama" | "lmstudio") {
                     NO_AUTH_METHODS
+                } else if !provider_supports_persisted_auth(provider_type) {
+                    NO_AVAILABLE_AUTH_METHODS
                 } else if provider_supports_environment(provider_type) {
                     API_KEY_OR_ENVIRONMENT_AUTH_METHODS
                 } else {
                     API_KEY_AUTH_METHODS
                 },
-                unavailable_auth_methods: if matches!(provider_type, "openai" | "anthropic") {
+                unavailable_auth_methods: if !provider_supports_persisted_auth(provider_type) {
+                    UNSUPPORTED_STRUCTURED_AUTH_METHODS
+                } else if matches!(provider_type, "openai" | "anthropic") {
                     OAUTH_UNAVAILABLE_AUTH_METHODS
                 } else {
                     NO_UNAVAILABLE_AUTH_METHODS
@@ -841,8 +857,15 @@ where
 {
     let config = ProviderProbeConfig::from_probe_request_with(request, lookup)?;
     if !provider_probe_supported(&config.provider_type) {
-        return Err(LlmProvidersApiError::bad_request(
-            "Provider health check is not supported for this provider type",
+        validate_persisted_provider_base_url(&config.provider_type, config.base_url.as_deref())
+            .map_err(LlmProvidersApiError::unprocessable)?;
+        if let Some(detail) = config.credential_error {
+            return Ok(ProviderValidationResponse::from_credential_error(
+                &config, detail,
+            ));
+        }
+        return Ok(ProviderValidationResponse::from_configuration_validation(
+            &config,
         ));
     }
     if let Some(detail) = config.credential_error {
@@ -907,19 +930,29 @@ async fn get_provider_health(
     Extension(identity): Extension<Identity>,
     Path(provider_id): Path<String>,
 ) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
-    let provider_id = validate_provider_id(&provider_id)?;
-    let config = app
-        .llm_providers
-        .provider_probe_config(&identity.user_id, &provider_id)
+    Ok(Json(
+        read_persisted_provider_health(
+            &app.llm_providers,
+            &app.llm_provider_health,
+            &identity.user_id,
+            &provider_id,
+        )
+        .await?,
+    ))
+}
+
+async fn read_persisted_provider_health(
+    providers: &SharedLlmProviders,
+    health_service: &SharedLlmProviderHealth,
+    user_id: &str,
+    provider_id: &str,
+) -> Result<ProviderHealthResponse, LlmProvidersApiError> {
+    let provider_id = validate_provider_id(provider_id)?;
+    let config = providers
+        .provider_probe_config(user_id, &provider_id)
         .await?
         .ok_or_else(|| LlmProvidersApiError::not_found("Provider not found"))?;
-    if !provider_probe_supported(&config.provider_type) {
-        return Err(LlmProvidersApiError::bad_request(
-            "Provider health check is not supported for this provider type",
-        ));
-    }
-    let health = app
-        .llm_provider_health
+    let health = health_service
         .latest_health(&provider_id)
         .await?
         .ok_or_else(|| {
@@ -930,13 +963,16 @@ async fn get_provider_health(
             "No health data available for the current provider configuration",
         ));
     }
-    Ok(Json(health))
+    Ok(health)
 }
 
 fn provider_health_matches_config(
     health: &ProviderHealthResponse,
     config: &ProviderProbeConfig,
 ) -> bool {
+    if !provider_probe_supported(&config.provider_type) && health.status != "configuration_valid" {
+        return false;
+    }
     let Some(revision) = config.revision else {
         return false;
     };
@@ -979,6 +1015,7 @@ struct ProviderListQuery {
 }
 
 #[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ProviderCreateRequest {
     name: String,
     provider_type: String,
@@ -1004,24 +1041,11 @@ pub(crate) struct ProviderCreateRequest {
     secondary_models: Option<Vec<String>>,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProviderProbeRequest {
     name: String,
     provider_type: String,
-    auth_method: Option<String>,
-    environment_variable: Option<String>,
-    api_key: Option<String>,
-    base_url: Option<String>,
-    operation_type: Option<String>,
-    is_active: Option<bool>,
-}
-
-#[derive(Clone, Default, Deserialize)]
-pub(crate) struct ProviderUpdateRequest {
-    expected_revision: i64,
-    name: Option<String>,
-    provider_type: Option<String>,
     operation_type: Option<String>,
     auth_method: Option<String>,
     environment_variable: Option<String>,
@@ -1042,6 +1066,55 @@ pub(crate) struct ProviderUpdateRequest {
     pool_enabled: Option<bool>,
     model_tier: Option<String>,
     secondary_models: Option<Vec<String>>,
+}
+
+#[derive(Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ProviderUpdateRequest {
+    expected_revision: i64,
+    name: Option<String>,
+    provider_type: Option<String>,
+    operation_type: Option<String>,
+    auth_method: Option<String>,
+    environment_variable: Option<String>,
+    api_key: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_present_nullable_string")]
+    base_url: Option<Option<String>>,
+    llm_model: Option<String>,
+    llm_small_model: Option<String>,
+    embedding_model: Option<String>,
+    embedding_config: Option<Value>,
+    reranker_model: Option<String>,
+    config: Option<Value>,
+    is_active: Option<bool>,
+    is_default: Option<bool>,
+    is_enabled: Option<bool>,
+    allowed_models: Option<Vec<String>>,
+    blocked_models: Option<Vec<String>>,
+    pool_weight: Option<f64>,
+    pool_enabled: Option<bool>,
+    model_tier: Option<String>,
+    secondary_models: Option<Vec<String>>,
+}
+
+fn deserialize_present_nullable_string<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(Some)
+}
+
+impl ProviderUpdateRequest {
+    fn normalized_base_url_update(&self) -> Option<Option<&str>> {
+        self.base_url.as_ref().map(|value| {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1135,6 +1208,7 @@ struct EnvDetectionResponse {
 pub(crate) struct ProviderHealthResponse {
     provider_id: String,
     status: String,
+    probed: bool,
     last_check: String,
     error_message: Option<String>,
     response_time_ms: Option<i32>,
@@ -1176,6 +1250,8 @@ impl ProviderProbeConfig {
     {
         let _name = normalize_required_name(request.name)?;
         let provider_type = normalize_provider_type(request.provider_type)?;
+        validate_persisted_provider_base_url(&provider_type, request.base_url.as_deref())
+            .map_err(LlmProvidersApiError::unprocessable)?;
         let _operation_type = effective_operation_type(&provider_type, request.operation_type)?;
         let auth_method = validate_provider_auth_method(
             &provider_type,
@@ -1211,6 +1287,14 @@ impl ProviderProbeConfig {
                 }
                 let environment_variable =
                     validate_environment_variable(&provider_type, request.environment_variable)?;
+                if !environment_credential_endpoint_is_official(
+                    &provider_type,
+                    request.base_url.as_deref(),
+                ) {
+                    return Err(LlmProvidersApiError::unprocessable(
+                        "Environment credentials require the official provider endpoint",
+                    ));
+                }
                 let api_key = environment_credential_with(&environment_variable, lookup);
                 let credential_error = api_key.is_none().then_some(ENVIRONMENT_CREDENTIAL_MISSING);
                 (Some(environment_variable), api_key, credential_error)
@@ -1229,14 +1313,30 @@ impl ProviderProbeConfig {
                 ));
             }
         };
-        let _is_active = request.is_active;
+        let llm_model = request.llm_model;
+        let _compatibility_fields = (
+            request.llm_small_model,
+            request.embedding_model,
+            request.embedding_config,
+            request.reranker_model,
+            request.config,
+            request.is_active,
+            request.is_default,
+            request.is_enabled,
+            request.allowed_models,
+            request.blocked_models,
+            request.pool_weight,
+            request.pool_enabled,
+            request.model_tier,
+            request.secondary_models,
+        );
         Ok(Self {
             provider_id: uuid::Uuid::new_v4().to_string(),
             provider_type,
             auth_method,
             environment_variable,
             base_url: request.base_url,
-            llm_model: None,
+            llm_model,
             api_key,
             credential_error,
             revision: None,
@@ -1262,12 +1362,18 @@ impl ProviderProbeConfig {
             configured_environment_variable(&record.provider_type, &record.config);
         let (api_key, credential_error) = match auth_method {
             "environment" => match environment_variable.as_deref() {
-                Some(environment_variable) => {
+                Some(environment_variable)
+                    if environment_credential_endpoint_is_official(
+                        &record.provider_type,
+                        record.base_url.as_deref(),
+                    ) =>
+                {
                     let api_key = environment_credential_with(environment_variable, lookup);
                     let credential_error =
                         api_key.is_none().then_some(ENVIRONMENT_CREDENTIAL_MISSING);
                     (api_key, credential_error)
                 }
+                Some(_) => (None, Some(ENVIRONMENT_CREDENTIAL_INVALID)),
                 None => (None, Some(ENVIRONMENT_CREDENTIAL_INVALID)),
             },
             "api_key" => (usable_probe_api_key(api_key), None),
@@ -1362,6 +1468,7 @@ fn build_provider_probe_request(
         .ok_or("Provider base URL is required")?;
     let base_url = validated_probe_base_url(raw_base_url)?;
     validate_probe_transport(&base_url, &provider_type)?;
+    validate_provider_base_url_path(&provider_type, &base_url)?;
 
     let request = match provider_type.as_str() {
         "gemini" => {
@@ -1448,6 +1555,94 @@ fn validated_probe_base_url(raw_url: &str) -> Result<Url, &'static str> {
     Ok(url)
 }
 
+fn validate_persisted_provider_base_url(
+    provider_type: &str,
+    raw_url: Option<&str>,
+) -> Result<(), &'static str> {
+    let Some(raw_url) = raw_url.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    let provider_type = catalog_provider_key(provider_type);
+    let url = validated_probe_base_url(raw_url)?;
+    validate_probe_transport(&url, &provider_type)?;
+    validate_provider_base_url_path(&provider_type, &url)
+}
+
+fn validate_provider_base_url_path(provider_type: &str, url: &Url) -> Result<(), &'static str> {
+    if let Some(default_url) = provider_probe_default_base_url(provider_type) {
+        let default_url = validated_probe_base_url(default_url)?;
+        if provider_url_has_same_origin(url, &default_url) {
+            return official_provider_base_path_is_allowed(
+                provider_type,
+                url.path(),
+                default_url.path(),
+            )
+            .then_some(())
+            .ok_or("Provider base URL must use the exact official API path");
+        }
+    }
+    SAFE_CUSTOM_PROVIDER_BASE_PATHS
+        .contains(&normalized_provider_base_path(url.path()))
+        .then_some(())
+        .ok_or("Provider base URL path is not allowed")
+}
+
+fn environment_credential_endpoint_is_official(provider_type: &str, raw_url: Option<&str>) -> bool {
+    let provider_type = catalog_provider_key(provider_type);
+    let Some(default_url) = provider_probe_default_base_url(&provider_type) else {
+        return false;
+    };
+    let raw_url = raw_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(default_url);
+    let (Ok(url), Ok(default_url)) = (
+        validated_probe_base_url(raw_url),
+        validated_probe_base_url(default_url),
+    ) else {
+        return false;
+    };
+    if validate_probe_transport(&url, &provider_type).is_err()
+        || validate_provider_base_url_path(&provider_type, &url).is_err()
+    {
+        return false;
+    }
+    provider_url_has_same_origin(&url, &default_url)
+        && official_provider_base_path_is_allowed(&provider_type, url.path(), default_url.path())
+}
+
+fn official_provider_base_path_is_allowed(
+    provider_type: &str,
+    path: &str,
+    default_path: &str,
+) -> bool {
+    let path = normalized_provider_base_path(path);
+    match provider_type {
+        "anthropic" => matches!(path, "/" | "/v1"),
+        "gemini" => matches!(path, "/" | "/v1beta"),
+        "ollama" => matches!(path, "/" | "/api"),
+        _ => path == normalized_provider_base_path(default_path),
+    }
+}
+
+fn provider_url_has_same_origin(url: &Url, expected: &Url) -> bool {
+    url.scheme() == expected.scheme()
+        && url
+            .host_str()
+            .zip(expected.host_str())
+            .is_some_and(|(host, expected_host)| host.eq_ignore_ascii_case(expected_host))
+        && url.port_or_known_default() == expected.port_or_known_default()
+}
+
+fn normalized_provider_base_path(path: &str) -> &str {
+    let normalized = path.trim_end_matches('/');
+    if normalized.is_empty() {
+        "/"
+    } else {
+        normalized
+    }
+}
+
 fn validate_probe_transport(url: &Url, provider_type: &str) -> Result<(), &'static str> {
     if provider_requires_api_key(provider_type) {
         return (url.scheme() == "https")
@@ -1470,12 +1665,23 @@ fn is_local_probe_host(url: &Url) -> bool {
 }
 
 fn append_probe_url_segments(mut url: Url, segments: &[&str]) -> Result<Url, &'static str> {
+    let overlap = {
+        let existing = url
+            .path_segments()
+            .ok_or("Invalid provider base URL")?
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>();
+        (0..=existing.len().min(segments.len()))
+            .rev()
+            .find(|&overlap| existing[existing.len() - overlap..] == segments[..overlap])
+            .unwrap_or(0)
+    };
     {
         let mut path = url
             .path_segments_mut()
             .map_err(|_| "Invalid provider base URL")?;
         path.pop_if_empty();
-        for segment in segments {
+        for segment in &segments[overlap..] {
             path.push(segment);
         }
     }
@@ -1517,6 +1723,7 @@ pub(crate) struct ProviderConfigResponse {
     model_tier: Option<String>,
     secondary_models: Vec<String>,
     auth_method: String,
+    credential_source: String,
     environment_variable: Option<String>,
     credential_configured: bool,
     api_key_masked: String,
@@ -1601,9 +1808,11 @@ impl From<TenantProviderMappingRecord> for TenantProviderMappingResponse {
 
 impl From<ProviderHealthRecord> for ProviderHealthResponse {
     fn from(record: ProviderHealthRecord) -> Self {
+        let probed = record.status != "configuration_valid";
         Self {
             provider_id: record.provider_id,
             status: record.status,
+            probed,
             last_check: record
                 .last_check
                 .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
@@ -1655,27 +1864,62 @@ impl ProviderValidationResponse {
             catalog: None,
         }
     }
+
+    fn from_configuration_validation(config: &ProviderProbeConfig) -> Self {
+        Self {
+            provider: None,
+            provider_id: config.provider_id.clone(),
+            status: "configuration_valid".to_string(),
+            probed: false,
+            environment_variable: (config.auth_method == "environment")
+                .then(|| config.environment_variable.clone())
+                .flatten(),
+            detail: Some(
+                "Connection probing is not supported for this provider type; configuration validation passed"
+                    .to_string(),
+            ),
+            last_check: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+            response_time_ms: None,
+            error_message: None,
+            catalog: None,
+        }
+    }
 }
 
 fn provider_response_from_record(
-    mut record: LlmProviderRecord,
+    record: LlmProviderRecord,
     health: Option<ProviderHealthRecord>,
 ) -> ProviderConfigResponse {
+    let probe_supported = provider_probe_supported(&record.provider_type);
     let health = health.filter(|value| {
-        provider_probe_supported(&record.provider_type) && value.last_check >= record.updated_at
+        value.last_check >= record.updated_at
+            && (probe_supported || value.status == "configuration_valid")
     });
-    let embedding_config = extract_embedding_config(&record.config);
     let auth_method = configured_provider_auth_method(&record.provider_type, &record.config);
     let environment_variable =
         configured_environment_variable(&record.provider_type, &record.config);
     let encrypted_api_key = record.api_key_encrypted.trim();
+    let credential_source = match auth_method {
+        "api_key" => "encrypted_store",
+        "environment" => "environment",
+        "none" => "not_required",
+        _ => "unknown",
+    };
     let credential_configured = match auth_method {
         "api_key" => {
             !encrypted_api_key.is_empty() && encrypted_api_key != LOCAL_NO_API_KEY_SENTINEL
         }
-        "environment" => environment_variable.as_deref().is_some_and(|name| {
-            environment_credential_with(name, &|name| std::env::var(name).ok()).is_some()
-        }),
+        "environment"
+            if environment_credential_endpoint_is_official(
+                &record.provider_type,
+                record.base_url.as_deref(),
+            ) =>
+        {
+            environment_variable.as_deref().is_some_and(|name| {
+                environment_credential_with(name, &|name| std::env::var(name).ok()).is_some()
+            })
+        }
+        "none" => true,
         _ => false,
     };
     let api_key_masked = if auth_method == "api_key" {
@@ -1683,7 +1927,15 @@ fn provider_response_from_record(
     } else {
         String::new()
     };
-    remove_provider_auth_metadata(&mut record.config);
+    let public_config = public_provider_config(&record.config);
+    let embedding_config = extract_embedding_config(&public_config);
+    let public_base_url = record
+        .base_url
+        .as_deref()
+        .filter(|base_url| {
+            validate_persisted_provider_base_url(&record.provider_type, Some(base_url)).is_ok()
+        })
+        .map(ToOwned::to_owned);
     let health_last_check = health.as_ref().map(|value| {
         value
             .last_check
@@ -1695,13 +1947,13 @@ fn provider_response_from_record(
         name: record.name,
         provider_type: record.provider_type,
         operation_type: record.operation_type,
-        base_url: record.base_url,
+        base_url: public_base_url,
         llm_model: record.llm_model,
         llm_small_model: record.llm_small_model,
         embedding_model: record.embedding_model,
         embedding_config,
         reranker_model: record.reranker_model,
-        config: record.config,
+        config: public_config,
         is_active: record.is_active,
         is_default: record.is_default,
         is_enabled: record.is_enabled,
@@ -1712,6 +1964,7 @@ fn provider_response_from_record(
         model_tier: record.model_tier,
         secondary_models: record.secondary_models,
         auth_method: auth_method.to_string(),
+        credential_source: credential_source.to_string(),
         environment_variable,
         credential_configured,
         api_key_masked,
@@ -1728,6 +1981,412 @@ fn provider_response_from_record(
         error_message: health.and_then(|value| value.error_message),
         resilience: default_resilience_status(),
     }
+}
+
+fn public_provider_config(config: &Value) -> Value {
+    let Some(config) = config.as_object() else {
+        return json!({});
+    };
+    let mut public = serde_json::Map::new();
+    copy_public_number_fields(
+        config,
+        &mut public,
+        &[
+            "temperature",
+            "max_tokens",
+            "top_p",
+            "timeout",
+            "timeout_seconds",
+            "request_timeout_seconds",
+            "connect_timeout_seconds",
+            "frequency_penalty",
+            "presence_penalty",
+            "seed",
+            "max_retries",
+        ],
+    );
+    if let Some(region) = config
+        .get("region")
+        .and_then(Value::as_str)
+        .filter(|region| {
+            !region.is_empty()
+                && region.len() <= 64
+                && region
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        })
+    {
+        public.insert("region".to_string(), json!(region));
+    }
+    if let Some(retries) = project_public_number_object(
+        config.get("retries"),
+        &["max_attempts", "base_delay", "max_delay", "backoff_factor"],
+    ) {
+        public.insert("retries".to_string(), retries);
+    }
+    if let Some(transport) = project_public_number_object(
+        config.get("transport"),
+        &[
+            "connect_timeout_seconds",
+            "request_timeout_seconds",
+            "idle_timeout_seconds",
+        ],
+    ) {
+        public.insert("transport".to_string(), transport);
+    }
+    if let Some(embedding) = project_public_embedding_config(config.get("embedding")) {
+        public.insert("embedding".to_string(), embedding);
+    }
+    Value::Object(public)
+}
+
+fn copy_public_number_fields(
+    source: &serde_json::Map<String, Value>,
+    target: &mut serde_json::Map<String, Value>,
+    keys: &[&str],
+) {
+    for key in keys {
+        if let Some(value) = source.get(*key).filter(|value| value.is_number()) {
+            target.insert((*key).to_string(), value.clone());
+        }
+    }
+}
+
+fn project_public_number_object(value: Option<&Value>, keys: &[&str]) -> Option<Value> {
+    let source = value?.as_object()?;
+    let mut public = serde_json::Map::new();
+    copy_public_number_fields(source, &mut public, keys);
+    (!public.is_empty()).then_some(Value::Object(public))
+}
+
+fn project_public_embedding_config(value: Option<&Value>) -> Option<Value> {
+    let source = value?.as_object()?;
+    let mut public = serde_json::Map::new();
+    copy_public_number_fields(source, &mut public, &["dimensions", "timeout"]);
+    for key in ["model", "user"] {
+        if let Some(value) = source.get(key).and_then(Value::as_str).filter(|value| {
+            !value.is_empty() && value.len() <= 512 && !value.chars().any(char::is_control)
+        }) {
+            public.insert(key.to_string(), json!(value));
+        }
+    }
+    if let Some(value @ ("float" | "base64")) =
+        source.get("encoding_format").and_then(Value::as_str)
+    {
+        public.insert("encoding_format".to_string(), json!(value));
+    }
+    if let Some(provider_options) =
+        project_public_embedding_provider_options(source.get("provider_options"))
+    {
+        public.insert("provider_options".to_string(), provider_options);
+    }
+    (!public.is_empty()).then_some(Value::Object(public))
+}
+
+fn project_public_embedding_provider_options(value: Option<&Value>) -> Option<Value> {
+    let source = value?.as_object()?;
+    let mut public = serde_json::Map::new();
+    if let Some(batch_size) = source
+        .get("batch_size")
+        .and_then(Value::as_u64)
+        .filter(|batch_size| (1..=2048).contains(batch_size))
+    {
+        public.insert("batch_size".to_string(), json!(batch_size));
+    }
+    if let Some(
+        input_type @ ("search_document" | "search_query" | "classification" | "clustering"),
+    ) = source.get("input_type").and_then(Value::as_str)
+    {
+        public.insert("input_type".to_string(), json!(input_type));
+    }
+    if let Some(truncate @ ("NONE" | "START" | "END")) =
+        source.get("truncate").and_then(Value::as_str)
+    {
+        public.insert("truncate".to_string(), json!(truncate));
+    }
+    (!public.is_empty()).then_some(Value::Object(public))
+}
+
+fn validate_writable_provider_config(config: &Value) -> Result<Value, LlmProvidersApiError> {
+    const NUMBER_FIELDS: &[&str] = &[
+        "temperature",
+        "max_tokens",
+        "top_p",
+        "timeout",
+        "timeout_seconds",
+        "request_timeout_seconds",
+        "connect_timeout_seconds",
+        "frequency_penalty",
+        "presence_penalty",
+        "seed",
+        "max_retries",
+    ];
+    let source = config
+        .as_object()
+        .ok_or_else(unsupported_provider_config_error)?;
+    let mut validated = serde_json::Map::new();
+    for (key, value) in source {
+        let safe_value = match key.as_str() {
+            key if NUMBER_FIELDS.contains(&key) && writable_provider_number_is_safe(key, value) => {
+                value.clone()
+            }
+            "region"
+                if value.as_str().is_some_and(|region| {
+                    !region.is_empty()
+                        && region.len() <= 64
+                        && region
+                            .chars()
+                            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+                }) =>
+            {
+                value.clone()
+            }
+            "retries" => validate_writable_number_object(
+                value,
+                &["max_attempts", "base_delay", "max_delay", "backoff_factor"],
+            )?,
+            "transport" => validate_writable_number_object(
+                value,
+                &[
+                    "connect_timeout_seconds",
+                    "request_timeout_seconds",
+                    "idle_timeout_seconds",
+                ],
+            )?,
+            "embedding" => validate_writable_embedding_config(value)?,
+            _ => return Err(unsupported_provider_config_error()),
+        };
+        validated.insert(key.clone(), safe_value);
+    }
+    Ok(Value::Object(validated))
+}
+
+fn validate_writable_number_object(
+    value: &Value,
+    allowed_fields: &[&str],
+) -> Result<Value, LlmProvidersApiError> {
+    let source = value
+        .as_object()
+        .ok_or_else(unsupported_provider_config_error)?;
+    if source.iter().any(|(key, value)| {
+        !allowed_fields.contains(&key.as_str()) || !writable_provider_number_is_safe(key, value)
+    }) {
+        return Err(unsupported_provider_config_error());
+    }
+    Ok(Value::Object(source.clone()))
+}
+
+fn validate_writable_embedding_config(value: &Value) -> Result<Value, LlmProvidersApiError> {
+    let source = value
+        .as_object()
+        .ok_or_else(unsupported_provider_config_error)?;
+    let mut validated = serde_json::Map::new();
+    for (key, value) in source {
+        let is_safe = match key.as_str() {
+            "dimensions" => value.as_u64().is_some_and(|value| value >= 1),
+            "timeout" => numeric_in_range(value, f64::EPSILON, 86_400.0),
+            "model" | "user" => value.as_str().is_some_and(|value| {
+                !value.is_empty() && value.len() <= 512 && !value.chars().any(char::is_control)
+            }),
+            "encoding_format" => matches!(value.as_str(), Some("float" | "base64")),
+            "provider_options" => {
+                validated.insert(
+                    key.clone(),
+                    validate_writable_embedding_provider_options(value)?,
+                );
+                continue;
+            }
+            _ => false,
+        };
+        if !is_safe {
+            return Err(unsupported_provider_config_error());
+        }
+        validated.insert(key.clone(), value.clone());
+    }
+    Ok(Value::Object(validated))
+}
+
+fn validate_writable_embedding_provider_options(
+    value: &Value,
+) -> Result<Value, LlmProvidersApiError> {
+    let source = value
+        .as_object()
+        .ok_or_else(unsupported_provider_config_error)?;
+    for (key, value) in source {
+        let is_safe = match key.as_str() {
+            "batch_size" => value
+                .as_u64()
+                .is_some_and(|batch_size| (1..=2048).contains(&batch_size)),
+            "input_type" => matches!(
+                value.as_str(),
+                Some("search_document" | "search_query" | "classification" | "clustering")
+            ),
+            "truncate" => matches!(value.as_str(), Some("NONE" | "START" | "END")),
+            _ => false,
+        };
+        if !is_safe {
+            return Err(unsupported_provider_config_error());
+        }
+    }
+    Ok(Value::Object(source.clone()))
+}
+
+fn writable_provider_number_is_safe(key: &str, value: &Value) -> bool {
+    match key {
+        "temperature" => numeric_in_range(value, 0.0, 2.0),
+        "max_tokens" => value.as_u64().is_some_and(|value| value >= 1),
+        "top_p" => numeric_in_range(value, 0.0, 1.0),
+        "timeout" | "timeout_seconds" | "request_timeout_seconds" | "connect_timeout_seconds" => {
+            numeric_in_range(value, f64::EPSILON, 3600.0)
+        }
+        "frequency_penalty" | "presence_penalty" => numeric_in_range(value, -2.0, 2.0),
+        "seed" => value.as_i64().is_some() || value.as_u64().is_some(),
+        "max_retries" | "max_attempts" => value.as_u64().is_some_and(|value| value <= 20),
+        "base_delay" => numeric_in_range(value, 0.0, 300.0),
+        "max_delay" => numeric_in_range(value, 0.0, 3600.0),
+        "backoff_factor" => numeric_in_range(value, 0.0, 100.0),
+        "idle_timeout_seconds" => numeric_in_range(value, f64::EPSILON, 86_400.0),
+        _ => false,
+    }
+}
+
+fn numeric_in_range(value: &Value, minimum: f64, maximum: f64) -> bool {
+    value
+        .as_f64()
+        .is_some_and(|value| value >= minimum && value <= maximum)
+}
+
+const WRITABLE_PROVIDER_SCALAR_FIELDS: &[&str] = &[
+    "temperature",
+    "max_tokens",
+    "top_p",
+    "timeout",
+    "timeout_seconds",
+    "request_timeout_seconds",
+    "connect_timeout_seconds",
+    "frequency_penalty",
+    "presence_penalty",
+    "seed",
+    "max_retries",
+    "region",
+];
+const WRITABLE_RETRY_FIELDS: &[&str] =
+    &["max_attempts", "base_delay", "max_delay", "backoff_factor"];
+const WRITABLE_TRANSPORT_FIELDS: &[&str] = &[
+    "connect_timeout_seconds",
+    "request_timeout_seconds",
+    "idle_timeout_seconds",
+];
+const WRITABLE_EMBEDDING_FIELDS: &[&str] =
+    &["dimensions", "timeout", "model", "user", "encoding_format"];
+const WRITABLE_EMBEDDING_PROVIDER_OPTION_FIELDS: &[&str] =
+    &["batch_size", "input_type", "truncate"];
+
+fn merge_writable_provider_config(
+    existing: &Value,
+    submitted: Option<Value>,
+) -> Result<Value, LlmProvidersApiError> {
+    let Some(submitted) = submitted else {
+        return Ok(existing.clone());
+    };
+    let validated = validate_writable_provider_config(&submitted)?;
+    let mut merged = existing.as_object().cloned().unwrap_or_default();
+    for key in WRITABLE_PROVIDER_SCALAR_FIELDS {
+        merged.remove(*key);
+    }
+    strip_writable_nested_fields(&mut merged, "retries", WRITABLE_RETRY_FIELDS);
+    strip_writable_nested_fields(&mut merged, "transport", WRITABLE_TRANSPORT_FIELDS);
+    strip_writable_embedding_fields(&mut merged);
+    for (key, value) in validated
+        .as_object()
+        .expect("validated provider config is an object")
+    {
+        if matches!(key.as_str(), "retries" | "transport" | "embedding") {
+            let mut nested = merged
+                .get(key)
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            for (nested_key, nested_value) in value
+                .as_object()
+                .expect("validated nested provider config is an object")
+            {
+                if key == "embedding" && nested_key == "provider_options" {
+                    let mut provider_options = nested
+                        .get(nested_key)
+                        .and_then(Value::as_object)
+                        .cloned()
+                        .unwrap_or_default();
+                    for (option_key, option_value) in nested_value
+                        .as_object()
+                        .expect("validated embedding provider options are an object")
+                    {
+                        provider_options.insert(option_key.clone(), option_value.clone());
+                    }
+                    nested.insert(nested_key.clone(), Value::Object(provider_options));
+                } else {
+                    nested.insert(nested_key.clone(), nested_value.clone());
+                }
+            }
+            merged.insert(key.clone(), Value::Object(nested));
+        } else {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    Ok(Value::Object(merged))
+}
+
+fn strip_writable_nested_fields(
+    config: &mut serde_json::Map<String, Value>,
+    key: &str,
+    safe_fields: &[&str],
+) {
+    let remove_container = match config.get_mut(key) {
+        Some(Value::Object(nested)) => {
+            for safe_field in safe_fields {
+                nested.remove(*safe_field);
+            }
+            nested.is_empty()
+        }
+        Some(_) => true,
+        None => false,
+    };
+    if remove_container {
+        config.remove(key);
+    }
+}
+
+fn strip_writable_embedding_fields(config: &mut serde_json::Map<String, Value>) {
+    let remove_embedding = match config.get_mut("embedding") {
+        Some(Value::Object(embedding)) => {
+            for safe_field in WRITABLE_EMBEDDING_FIELDS {
+                embedding.remove(*safe_field);
+            }
+            let remove_provider_options = match embedding.get_mut("provider_options") {
+                Some(Value::Object(provider_options)) => {
+                    for safe_field in WRITABLE_EMBEDDING_PROVIDER_OPTION_FIELDS {
+                        provider_options.remove(*safe_field);
+                    }
+                    provider_options.is_empty()
+                }
+                Some(_) => true,
+                None => false,
+            };
+            if remove_provider_options {
+                embedding.remove("provider_options");
+            }
+            embedding.is_empty()
+        }
+        Some(_) => true,
+        None => false,
+    };
+    if remove_embedding {
+        config.remove("embedding");
+    }
+}
+
+fn unsupported_provider_config_error() -> LlmProvidersApiError {
+    LlmProvidersApiError::unprocessable("Provider config contains unsupported fields")
 }
 
 fn provider_record_from_create_for_dev(
@@ -1777,8 +2436,8 @@ fn apply_update_to_dev_record(record: &mut LlmProviderRecord, update: LlmProvide
     if let Some(value) = update.api_key_plaintext {
         record.api_key_encrypted = value;
     }
-    if update.base_url.is_some() {
-        record.base_url = update.base_url;
+    if let Some(value) = update.base_url {
+        record.base_url = value;
     }
     if replace_model_fields || update.llm_model.is_some() {
         record.llm_model = update.llm_model;
@@ -1846,6 +2505,7 @@ struct EnvProviderView {
     operation_type: String,
     credential_source: &'static str,
     credential_configured: bool,
+    environment_variable: Option<String>,
     base_url: Option<String>,
     llm_model: Option<String>,
     llm_small_model: Option<String>,
@@ -1853,19 +2513,27 @@ struct EnvProviderView {
     reranker_model: Option<String>,
 }
 
-impl From<EnvProviderConfig> for EnvProviderView {
-    fn from(config: EnvProviderConfig) -> Self {
-        let credential_configured = config
-            .api_key
-            .as_deref()
-            .is_some_and(|api_key| !api_key.is_empty());
-
+impl EnvProviderView {
+    fn from_detected(config: EnvProviderConfig, environment_variable: &str) -> Self {
+        let provider_type = catalog_provider_key(&config.provider_type);
+        let endpoint_is_official_safe =
+            environment_credential_endpoint_is_official(&provider_type, config.base_url.as_deref());
+        let credential_configured = provider_requires_api_key(&provider_type)
+            && endpoint_is_official_safe
+            && config
+                .api_key
+                .as_deref()
+                .is_some_and(|api_key| !api_key.is_empty());
+        let base_url = endpoint_is_official_safe
+            .then_some(config.base_url)
+            .flatten();
         Self {
             provider_type: config.provider_type,
             operation_type: config.operation_type,
             credential_source: "environment",
             credential_configured,
-            base_url: config.base_url,
+            environment_variable: credential_configured.then(|| environment_variable.to_string()),
+            base_url,
             llm_model: config.llm_model,
             llm_small_model: config.llm_small_model,
             embedding_model: config.embedding_model,
@@ -2216,6 +2884,8 @@ fn provider_create_record(
 ) -> Result<LlmProviderCreateRecord, LlmProvidersApiError> {
     let name = normalize_required_name(request.name)?;
     let provider_type = normalize_provider_type(request.provider_type)?;
+    validate_persisted_provider_base_url(&provider_type, request.base_url.as_deref())
+        .map_err(LlmProvidersApiError::unprocessable)?;
     let operation_type = effective_operation_type(&provider_type, request.operation_type)?;
     let api_key_plaintext = storable_api_key(&provider_type, request.api_key)?;
     validate_required_model(
@@ -2313,6 +2983,14 @@ fn provider_create_record_with_auth(
             }
             let environment_variable =
                 validate_environment_variable(&provider_type, request.environment_variable.take())?;
+            if !environment_credential_endpoint_is_official(
+                &provider_type,
+                request.base_url.as_deref(),
+            ) {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "Environment credentials require the official provider endpoint",
+                ));
+            }
             request.api_key = Some(LOCAL_NO_API_KEY_SENTINEL.to_string());
             Some(environment_variable)
         }
@@ -2331,7 +3009,17 @@ fn provider_create_record_with_auth(
             ));
         }
     };
-    let mut config = request.config.take().unwrap_or_else(|| json!({}));
+    let mut config = request
+        .config
+        .take()
+        .map(|config| validate_writable_provider_config(&config))
+        .transpose()?
+        .unwrap_or_else(|| json!({}));
+    request.embedding_config = request
+        .embedding_config
+        .take()
+        .map(|config| validate_writable_embedding_config(&config))
+        .transpose()?;
     apply_provider_auth_metadata(&mut config, auth_method, environment_variable.as_deref());
     request.config = Some(config);
     provider_create_record(request)
@@ -2393,6 +3081,15 @@ fn provider_update_record_with_auth(
             });
             let environment_variable =
                 validate_environment_variable(&provider_type, environment_variable)?;
+            let effective_base_url = match request.normalized_base_url_update() {
+                Some(value) => value,
+                None => existing.base_url.as_deref(),
+            };
+            if !environment_credential_endpoint_is_official(&provider_type, effective_base_url) {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "Environment credentials require the official provider endpoint",
+                ));
+            }
             request.api_key = Some(LOCAL_NO_API_KEY_SENTINEL.to_string());
             Some(environment_variable)
         }
@@ -2411,10 +3108,12 @@ fn provider_update_record_with_auth(
             ));
         }
     };
-    let mut config = request
-        .config
+    let mut config = merge_writable_provider_config(&existing.config, request.config.take())?;
+    request.embedding_config = request
+        .embedding_config
         .take()
-        .unwrap_or_else(|| existing.config.clone());
+        .map(|config| validate_writable_embedding_config(&config))
+        .transpose()?;
     apply_provider_auth_metadata(&mut config, auth_method, environment_variable.as_deref());
     request.config = Some(config);
     provider_update_record(existing, request)
@@ -2435,11 +3134,17 @@ fn provider_update_record(
         Some(value) => normalize_provider_type(value.clone())?,
         None => existing.provider_type.clone(),
     };
+    let base_url_update = request
+        .normalized_base_url_update()
+        .map(|value| value.map(ToOwned::to_owned));
+    if let Some(Some(base_url)) = &base_url_update {
+        validate_persisted_provider_base_url(&provider_type, Some(base_url))
+            .map_err(LlmProvidersApiError::unprocessable)?;
+    }
     let provider_type_changed = provider_type != existing.provider_type;
-    let base_url_changed = request
-        .base_url
+    let base_url_changed = base_url_update
         .as_ref()
-        .is_some_and(|base_url| existing.base_url.as_ref() != Some(base_url));
+        .is_some_and(|base_url| existing.base_url.as_ref() != base_url.as_ref());
     let api_key_submitted = request
         .api_key
         .as_deref()
@@ -2454,14 +3159,14 @@ fn provider_update_record(
     }
     let operation_type = effective_operation_type(&provider_type, request.operation_type.clone())?;
     let mut config = request.config.unwrap_or_else(|| existing.config.clone());
+    let replace_embedding_public_config = request.embedding_config.is_some();
     let embedding_payload = match request.embedding_config.as_ref() {
         Some(_) => build_embedding_payload(
             request.embedding_model.as_deref(),
             request.embedding_config.as_ref(),
         ),
         None if request.embedding_model.is_some() => {
-            let mut existing_embedding = existing
-                .config
+            let mut existing_embedding = config
                 .get("embedding")
                 .and_then(Value::as_object)
                 .map(|object| Value::Object(object.clone()))
@@ -2471,9 +3176,14 @@ fn provider_update_record(
             }
             Some(existing_embedding)
         }
-        None => extract_embedding_config(&existing.config),
+        None => extract_embedding_config(&config),
     };
-    apply_embedding_payload(&operation_type, &mut config, embedding_payload.as_ref());
+    apply_embedding_update(
+        &operation_type,
+        &mut config,
+        embedding_payload.as_ref(),
+        replace_embedding_public_config,
+    );
     let (
         llm_model,
         llm_small_model,
@@ -2521,7 +3231,7 @@ fn provider_update_record(
         provider_type: Some(provider_type),
         operation_type: Some(operation_type),
         api_key_plaintext,
-        base_url: request.base_url,
+        base_url: base_url_update,
         llm_model,
         llm_small_model,
         embedding_model,
@@ -2720,12 +3430,60 @@ fn apply_embedding_payload(operation_type: &str, config: &mut Value, payload: Op
         *config = json!({});
     }
     if operation_type == "embedding" {
-        if let Some(payload) = payload {
-            config["embedding"] = payload.clone();
+        if let Some(payload) = payload.and_then(Value::as_object) {
+            let config = config
+                .as_object_mut()
+                .expect("provider config was normalized to an object");
+            let embedding = config
+                .entry("embedding".to_string())
+                .or_insert_with(|| json!({}));
+            if !embedding.is_object() {
+                *embedding = json!({});
+            }
+            let embedding = embedding
+                .as_object_mut()
+                .expect("embedding config was normalized to an object");
+            for (key, value) in payload {
+                if key == "provider_options" {
+                    let Some(submitted_options) = value.as_object() else {
+                        continue;
+                    };
+                    let mut provider_options = embedding
+                        .get(key)
+                        .and_then(Value::as_object)
+                        .cloned()
+                        .unwrap_or_default();
+                    for (option_key, option_value) in submitted_options {
+                        provider_options.insert(option_key.clone(), option_value.clone());
+                    }
+                    embedding.insert(key.clone(), Value::Object(provider_options));
+                } else {
+                    embedding.insert(key.clone(), value.clone());
+                }
+            }
         }
     } else if let Some(object) = config.as_object_mut() {
         object.remove("embedding");
     }
+}
+
+fn apply_embedding_update(
+    operation_type: &str,
+    config: &mut Value,
+    payload: Option<&Value>,
+    replace_public_fields: bool,
+) {
+    if operation_type == "embedding" && replace_public_fields {
+        if !config.is_object() {
+            *config = json!({});
+        }
+        strip_writable_embedding_fields(
+            config
+                .as_object_mut()
+                .expect("provider config was normalized to an object"),
+        );
+    }
+    apply_embedding_payload(operation_type, config, payload);
 }
 
 fn extract_embedding_config(config: &Value) -> Option<Value> {
@@ -2806,7 +3564,10 @@ where
         {
             continue;
         }
-        detected_providers.insert((*provider_name).to_string(), config.into());
+        detected_providers.insert(
+            (*provider_name).to_string(),
+            EnvProviderView::from_detected(config, env_var),
+        );
         seen_providers.insert(*provider_name);
     }
 
@@ -2915,7 +3676,7 @@ where
             provider_type: provider_name.to_string(),
             operation_type: "llm".to_string(),
             api_key: env_nonempty(lookup, "DEEPSEEK_API_KEY"),
-            base_url: env_default(lookup, "DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            base_url: env_default(lookup, "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
             llm_model: env_default(lookup, "DEEPSEEK_MODEL", "deepseek-chat"),
             llm_small_model: env_default(lookup, "DEEPSEEK_SMALL_MODEL", "deepseek-v4-flash"),
             embedding_model: None,
@@ -2925,11 +3686,7 @@ where
             provider_type: provider_name.to_string(),
             operation_type: "llm".to_string(),
             api_key: env_nonempty(lookup, "MINIMAX_API_KEY"),
-            base_url: env_default(
-                lookup,
-                "MINIMAX_BASE_URL",
-                "https://api.minimax.io/anthropic/v1",
-            ),
+            base_url: env_default(lookup, "MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
             llm_model: env_default(lookup, "MINIMAX_MODEL", "MiniMax-M2.5"),
             llm_small_model: env_default(lookup, "MINIMAX_SMALL_MODEL", "MiniMax-M2.5-highspeed"),
             embedding_model: env_default(lookup, "MINIMAX_EMBEDDING_MODEL", "embo-01"),
@@ -3042,6 +3799,13 @@ fn provider_supports_environment(provider_name: &str) -> bool {
     !provider_environment_variables(provider_name).is_empty()
 }
 
+fn provider_supports_persisted_auth(provider_name: &str) -> bool {
+    !matches!(
+        catalog_provider_key(provider_name).as_str(),
+        "bedrock" | "vertex"
+    )
+}
+
 fn provider_auth_method(provider_name: &str) -> &'static str {
     if provider_requires_api_key(&catalog_provider_key(provider_name)) {
         "api_key"
@@ -3055,6 +3819,11 @@ fn validate_provider_auth_method(
     requested: Option<&str>,
     fallback: &'static str,
 ) -> Result<&'static str, LlmProvidersApiError> {
+    if !provider_supports_persisted_auth(provider_name) {
+        return Err(LlmProvidersApiError::unprocessable(
+            "Authentication is unavailable until structured credential storage is configured",
+        ));
+    }
     let method = requested
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -3139,13 +3908,6 @@ fn apply_provider_auth_metadata(
                 Value::String(environment_variable.to_string()),
             );
         }
-    }
-}
-
-fn remove_provider_auth_metadata(config: &mut Value) {
-    if let Some(object) = config.as_object_mut() {
-        object.remove(AUTH_METHOD_CONFIG_KEY);
-        object.remove(ENVIRONMENT_VARIABLE_CONFIG_KEY);
     }
 }
 
@@ -3393,6 +4155,15 @@ async fn ensure_admin_access(app: &AppState, user_id: &str) -> Result<(), LlmPro
     }
 }
 
+fn map_provider_mutation_error(error: LlmProviderMutationError) -> LlmProvidersApiError {
+    match error {
+        LlmProviderMutationError::NameConflict => {
+            LlmProvidersApiError::conflict("Provider name already exists")
+        }
+        LlmProviderMutationError::Storage(error) => LlmProvidersApiError::internal(error),
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct LlmProvidersApiError {
     status: StatusCode,
@@ -3591,6 +4362,42 @@ mod tests {
         }
     }
 
+    async fn unguarded_persisted_health_read_route(
+        State(state): State<TestHealthCheckState>,
+        Path(provider_id): Path<String>,
+    ) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+        read_persisted_provider_health(&state.providers, &state.health, "dev-user", &provider_id)
+            .await
+            .map(Json)
+    }
+
+    async fn spawn_persisted_health_read_api(
+        providers: SharedLlmProviders,
+        health: SharedLlmProviderHealth,
+    ) -> MockApiServer {
+        let app = Router::new()
+            .route(
+                "/api/v1/llm-providers/:provider_id/health",
+                get(unguarded_persisted_health_read_route),
+            )
+            .with_state(TestHealthCheckState { providers, health });
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("test persisted health read API binds");
+        let address = listener
+            .local_addr()
+            .expect("test persisted health read API has address");
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("test persisted health read API serves requests");
+        });
+        MockApiServer {
+            base_url: format!("http://{address}"),
+            task,
+        }
+    }
+
     async fn post_test_connection(api: &MockApiServer, payload: Value) -> (StatusCode, Value) {
         let response = reqwest::Client::new()
             .post(format!(
@@ -3626,6 +4433,23 @@ mod tests {
             .json::<Value>()
             .await
             .expect("persisted health check response is JSON");
+        (status, body)
+    }
+
+    async fn get_persisted_health(api: &MockApiServer, provider_id: &str) -> (StatusCode, Value) {
+        let response = reqwest::Client::new()
+            .get(format!(
+                "{}/api/v1/llm-providers/{provider_id}/health",
+                api.base_url
+            ))
+            .send()
+            .await
+            .expect("persisted health read request succeeds");
+        let status = response.status();
+        let body = response
+            .json::<Value>()
+            .await
+            .expect("persisted health read response is JSON");
         (status, body)
     }
 
@@ -3674,6 +4498,132 @@ mod tests {
     }
 
     #[test]
+    fn provider_name_conflict_maps_to_http_409_without_storage_details() {
+        let error = map_provider_mutation_error(LlmProviderMutationError::NameConflict);
+        assert_eq!(error.status, StatusCode::CONFLICT);
+        assert_eq!(error.detail, "Provider name already exists");
+    }
+
+    #[tokio::test]
+    async fn pg_provider_service_maps_name_conflicts_and_preserves_hidden_config() {
+        const PROVIDER_NAME: &str = "llm_provider_server_security_contract";
+        let Ok(database_url) = std::env::var("DATABASE_URL") else {
+            eprintln!(
+                "[skip] pg_provider_service_maps_name_conflicts_and_preserves_hidden_config: \
+                 DATABASE_URL unset"
+            );
+            return;
+        };
+        if std::env::var("LLM_ENCRYPTION_KEY").is_err() {
+            eprintln!(
+                "[skip] pg_provider_service_maps_name_conflicts_and_preserves_hidden_config: \
+                 LLM_ENCRYPTION_KEY unset"
+            );
+            return;
+        }
+        let pool = agistack_adapters_postgres::connect(&database_url)
+            .await
+            .expect("test database connection succeeds");
+        sqlx::query("DELETE FROM llm_providers WHERE name = $1")
+            .bind(PROVIDER_NAME)
+            .execute(&pool)
+            .await
+            .expect("clean provider server security fixture");
+        let service = PgLlmProviderCatalogService::new(PgLlmProviderRepository::new(pool.clone()));
+        let request = || {
+            serde_json::from_value::<ProviderCreateRequest>(json!({
+                "name": PROVIDER_NAME,
+                "provider_type": "openai",
+                "api_key": "sk-server-security-test",
+                "base_url": "https://api.openai.com/v1",
+                "llm_model": "gpt-4o",
+                "config": {"temperature": 0.2}
+            }))
+            .expect("provider server security request deserializes")
+        };
+        let created = service
+            .create_provider("test-user", request())
+            .await
+            .expect("provider server security fixture creates");
+
+        let conflict = service
+            .create_provider("test-user", request())
+            .await
+            .expect_err("duplicate provider name returns an API conflict");
+        assert_eq!(conflict.status, StatusCode::CONFLICT);
+        assert_eq!(conflict.detail, "Provider name already exists");
+
+        let mut historical_config = service
+            .repo
+            .get_provider(&created.id)
+            .await
+            .expect("provider fixture reads")
+            .expect("provider fixture exists")
+            .config;
+        historical_config["legacy_private"] = json!({"speech_access_token": "historical-secret"});
+        historical_config["max_tokens"] = json!(2048);
+        historical_config["transport"] = json!({
+            "connect_timeout_seconds": 5,
+            "private_header": "historical-secret"
+        });
+        sqlx::query(
+            "UPDATE llm_providers SET config = $2, \
+             updated_at = GREATEST(now(), updated_at + interval '1 microsecond') \
+             WHERE id = $1::uuid",
+        )
+        .bind(&created.id)
+        .bind(&historical_config)
+        .execute(&pool)
+        .await
+        .expect("seed historical hidden provider config");
+        let persisted = service
+            .repo
+            .get_provider(&created.id)
+            .await
+            .expect("provider fixture rereads")
+            .expect("provider fixture remains available");
+        service
+            .update_provider(
+                "test-user",
+                &created.id,
+                serde_json::from_value(json!({
+                    "expected_revision": persisted.updated_at.timestamp_micros(),
+                    "config": {
+                        "temperature": 0.7,
+                        "transport": {"connect_timeout_seconds": 15}
+                    }
+                }))
+                .expect("safe provider config update deserializes"),
+            )
+            .await
+            .expect("safe provider config update succeeds")
+            .expect("updated provider remains available");
+        let updated = service
+            .repo
+            .get_provider(&created.id)
+            .await
+            .expect("updated provider fixture reads")
+            .expect("updated provider fixture exists");
+        assert_eq!(updated.config["temperature"], 0.7);
+        assert_eq!(updated.config.get("max_tokens"), None);
+        assert_eq!(
+            updated.config["legacy_private"]["speech_access_token"],
+            "historical-secret"
+        );
+        assert_eq!(
+            updated.config["transport"]["private_header"],
+            "historical-secret"
+        );
+        assert_eq!(updated.config["transport"]["connect_timeout_seconds"], 15);
+
+        sqlx::query("DELETE FROM llm_providers WHERE name = $1")
+            .bind(PROVIDER_NAME)
+            .execute(&pool)
+            .await
+            .expect("clean provider server security fixture after test");
+    }
+
+    #[test]
     fn environment_probe_resolves_only_allowlisted_variable_without_exposing_value() {
         let secret = "sk-runtime-only-secret";
         let request = serde_json::from_value::<ProviderProbeRequest>(json!({
@@ -3714,6 +4664,25 @@ mod tests {
         assert_eq!(
             error.detail,
             "Environment variable is not supported for this provider type"
+        );
+
+        let custom_origin = serde_json::from_value::<ProviderProbeRequest>(json!({
+            "name": "Rejected environment origin",
+            "provider_type": "openai",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "base_url": "https://collector.example.test/v1"
+        }))
+        .expect("custom-origin probe request deserializes");
+        let error = ProviderProbeConfig::from_probe_request_with(custom_origin, &|_| {
+            panic!("environment must not be read before the endpoint origin is accepted")
+        })
+        .err()
+        .expect("standard environment secret cannot target a custom origin");
+        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            error.detail,
+            "Environment credentials require the official provider endpoint"
         );
     }
 
@@ -3802,12 +4771,9 @@ mod tests {
         )
         .await;
 
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["status"], "unhealthy");
-        assert_eq!(body["probed"], true);
-        assert_eq!(body["detail"], Value::Null);
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
-            body["error_message"],
+            body["detail"],
             "HTTPS is required for credentialed providers"
         );
         let response_json = serde_json::to_string(&body).expect("health response serializes");
@@ -3910,6 +4876,64 @@ mod tests {
         assert_eq!(stored_lmstudio.error_message.as_deref(), Some("HTTP 503"));
     }
 
+    #[tokio::test]
+    async fn persisted_health_get_returns_configuration_validation_without_network_probe() {
+        let catalog = Arc::new(DevLlmProviderCatalogService::default());
+        let health_service = Arc::new(DevLlmProviderHealthService::default());
+        let provider = catalog
+            .create_provider(
+                "dev-user",
+                provider_create_request(
+                    "azure_openai",
+                    "https://example.openai.azure.com".to_string(),
+                    Some("azure-test-secret"),
+                    "gpt-4o",
+                ),
+            )
+            .await
+            .expect("unsupported-probe provider create succeeds");
+        health_service
+            .record_health(&ProviderHealthRecord {
+                provider_id: provider.id.clone(),
+                status: "configuration_valid".to_string(),
+                last_check: Utc::now(),
+                error_message: None,
+                response_time_ms: None,
+            })
+            .await
+            .expect("configuration validation health persists");
+        let providers: SharedLlmProviders = catalog;
+        let persisted_health: SharedLlmProviderHealth = health_service.clone();
+        let api = spawn_persisted_health_read_api(providers, persisted_health).await;
+
+        let (status, body) = get_persisted_health(&api, &provider.id).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "configuration_valid");
+        assert_eq!(body["probed"], false);
+        assert_eq!(body["response_time_ms"], Value::Null);
+        assert_eq!(body["error_message"], Value::Null);
+
+        health_service
+            .record_health(&ProviderHealthRecord {
+                provider_id: provider.id.clone(),
+                status: "healthy".to_string(),
+                last_check: Utc::now(),
+                error_message: None,
+                response_time_ms: Some(12),
+            })
+            .await
+            .expect("legacy probe health persists for negative read coverage");
+
+        let (status, body) = get_persisted_health(&api, &provider.id).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(
+            body["detail"],
+            "No health data available for the current provider configuration"
+        );
+    }
+
     #[test]
     fn provider_probe_builds_secure_provider_requests_and_omits_local_credentials() {
         let client = provider_probe_client().expect("probe client builds");
@@ -3918,7 +4942,7 @@ mod tests {
             provider_type: "anthropic".to_string(),
             auth_method: "api_key",
             environment_variable: None,
-            base_url: Some("https://proxy.example/root".to_string()),
+            base_url: Some("https://proxy.example".to_string()),
             llm_model: Some("claude-sonnet-4".to_string()),
             api_key: Some("anthropic-test-secret".to_string()),
             credential_error: None,
@@ -3960,7 +4984,7 @@ mod tests {
             .build()
             .expect("lmstudio request is valid");
 
-        assert_eq!(anthropic_request.url().path(), "/root/v1/models");
+        assert_eq!(anthropic_request.url().path(), "/v1/models");
         assert_eq!(
             anthropic_request
                 .headers()
@@ -3980,6 +5004,37 @@ mod tests {
         assert!(!gemini_request.url().as_str().contains("test-secret"));
         assert_eq!(lmstudio_request.url().path(), "/v1/models");
         assert!(lmstudio_request.headers().get(AUTHORIZATION).is_none());
+    }
+
+    #[test]
+    fn anthropic_probe_path_is_idempotent_with_or_without_v1_base_path() {
+        let client = provider_probe_client().expect("probe client builds");
+
+        for (base_url, expected_path) in [
+            ("https://api.anthropic.com", "/v1/models"),
+            ("https://api.anthropic.com/", "/v1/models"),
+            ("https://api.anthropic.com/v1", "/v1/models"),
+            ("https://api.anthropic.com/v1/", "/v1/models"),
+        ] {
+            let config = ProviderProbeConfig {
+                provider_id: "draft-anthropic".to_string(),
+                provider_type: "anthropic".to_string(),
+                auth_method: "api_key",
+                environment_variable: None,
+                base_url: Some(base_url.to_string()),
+                llm_model: Some("claude-sonnet-4".to_string()),
+                api_key: Some("anthropic-test-secret".to_string()),
+                credential_error: None,
+                revision: None,
+            };
+
+            let request = build_provider_probe_request(&client, &config)
+                .expect("anthropic request builds")
+                .build()
+                .expect("anthropic request is valid");
+
+            assert_eq!(request.url().path(), expected_path, "base URL: {base_url}");
+        }
     }
 
     #[test]
@@ -4017,9 +5072,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_connection_test_rejects_unsupported_provider_types() {
-        let error = execute_provider_connection_test(ProviderProbeRequest {
-            name: "Azure OpenAI test".to_string(),
+    async fn provider_connection_test_validates_configuration_without_unsupported_network_probe() {
+        let response = execute_provider_connection_test(ProviderProbeRequest {
+            name: "azure_openai test".to_string(),
             provider_type: "azure_openai".to_string(),
             auth_method: Some("api_key".to_string()),
             environment_variable: None,
@@ -4027,15 +5082,80 @@ mod tests {
             base_url: Some("https://example.openai.azure.com".to_string()),
             operation_type: None,
             is_active: Some(true),
+            ..Default::default()
         })
         .await
-        .expect_err("unsupported provider probe must fail before network I/O");
+        .expect("configuration-only provider validation succeeds without network I/O");
 
-        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(response.status, "configuration_valid");
+        assert!(!response.probed);
+        assert!(response.provider.is_none());
+        assert_eq!(response.response_time_ms, None);
+        assert_eq!(response.error_message, None);
+        assert_eq!(response.catalog, None);
         assert_eq!(
-            error.detail,
-            "Provider health check is not supported for this provider type"
+            response.detail.as_deref(),
+            Some(
+                "Connection probing is not supported for this provider type; configuration validation passed"
+            )
         );
+
+        for provider_type in ["bedrock", "vertex"] {
+            let error = execute_provider_connection_test(ProviderProbeRequest {
+                name: format!("{provider_type} test"),
+                provider_type: provider_type.to_string(),
+                auth_method: Some("api_key".to_string()),
+                environment_variable: None,
+                api_key: Some("test-secret".to_string()),
+                base_url: None,
+                operation_type: None,
+                is_active: Some(true),
+                ..Default::default()
+            })
+            .await
+            .expect_err("providers without structured credential storage must fail closed");
+            assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+        }
+
+        let error = execute_provider_connection_test(ProviderProbeRequest {
+            name: "Unsafe Azure OpenAI".to_string(),
+            provider_type: "azure_openai".to_string(),
+            auth_method: Some("api_key".to_string()),
+            environment_variable: None,
+            api_key: Some("test-secret".to_string()),
+            base_url: Some("http://example.openai.azure.com".to_string()),
+            operation_type: None,
+            is_active: Some(true),
+            ..Default::default()
+        })
+        .await
+        .expect_err("configuration-only validation still enforces transport security");
+
+        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(error.detail, "HTTPS is required for credentialed providers");
+    }
+
+    #[tokio::test]
+    async fn provider_connection_test_rejects_unsafe_supported_provider_path_before_network() {
+        for base_url in [
+            "https://api.openai.com/v1/tenant-token",
+            "https://gateway.example.test/tenant/private-token",
+        ] {
+            let error = execute_provider_connection_test(ProviderProbeRequest {
+                name: "unsafe OpenAI probe".to_string(),
+                provider_type: "openai".to_string(),
+                auth_method: Some("api_key".to_string()),
+                api_key: Some("test-secret".to_string()),
+                base_url: Some(base_url.to_string()),
+                llm_model: Some("gpt-4o".to_string()),
+                ..Default::default()
+            })
+            .await
+            .expect_err("unsafe draft probe path must fail before network I/O");
+
+            assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+            assert!(error.detail.contains("path"));
+        }
     }
 
     #[test]
@@ -4047,7 +5167,7 @@ mod tests {
 
         let response = detect_env_provider_configs_with(|name| match name {
             "OPENAI_API_KEY" => Some("sk-openai".to_string()),
-            "OPENAI_BASE_URL" => Some("https://api.openai.test/v1".to_string()),
+            "OPENAI_BASE_URL" => Some("https://api.openai.com/v1".to_string()),
             "OLLAMA_BASE_URL" => Some("http://ollama.test".to_string()),
             _ => None,
         });
@@ -4055,9 +5175,50 @@ mod tests {
         let value = serde_json::to_value(response).expect("response serializes");
 
         agistack_parity::assert_parity(&golden, &value);
+        assert_eq!(
+            value["detected_providers"]["openai"]["environment_variable"],
+            "OPENAI_API_KEY"
+        );
+        assert_eq!(
+            value["detected_providers"]["ollama"]["environment_variable"],
+            Value::Null
+        );
         let serialized = serde_json::to_string(&value).expect("response JSON serializes");
         assert!(!serialized.contains("sk-openai"));
         assert!(!serialized.contains("\"api_key\""));
+    }
+
+    #[test]
+    fn env_detection_uses_canonical_deepseek_and_minimax_base_urls() {
+        let response = detect_env_provider_configs_with(|name| match name {
+            "DEEPSEEK_API_KEY" => Some("deepseek-test-key".to_string()),
+            "MINIMAX_API_KEY" => Some("minimax-test-key".to_string()),
+            _ => None,
+        });
+
+        let deepseek = response
+            .detected_providers
+            .get("deepseek")
+            .expect("DeepSeek should be detected");
+        assert_eq!(
+            deepseek.base_url.as_deref(),
+            Some("https://api.deepseek.com/v1")
+        );
+        assert!(deepseek.credential_configured);
+
+        let minimax = response
+            .detected_providers
+            .get("minimax")
+            .expect("MiniMax should be detected");
+        assert_eq!(
+            minimax.base_url.as_deref(),
+            Some("https://api.minimax.io/v1")
+        );
+        assert!(minimax.credential_configured);
+
+        let serialized = serde_json::to_string(&response).expect("response JSON serializes");
+        assert!(!serialized.contains("deepseek-test-key"));
+        assert!(!serialized.contains("minimax-test-key"));
     }
 
     #[test]
@@ -4089,6 +5250,92 @@ mod tests {
         assert!(!serialized.contains("zhipu-key"));
         assert!(!serialized.contains("openrouter-key"));
         assert!(!serialized.contains("\"api_key\""));
+    }
+
+    #[test]
+    fn env_detection_hides_unsafe_custom_base_url_paths() {
+        let response = detect_env_provider_configs_with(|name| match name {
+            "OPENAI_API_KEY" => Some("sk-openai".to_string()),
+            "OPENAI_BASE_URL" => {
+                Some("https://gateway.example.test/tenant/secret-route".to_string())
+            }
+            _ => None,
+        });
+
+        let openai = response
+            .detected_providers
+            .get("openai")
+            .expect("OpenAI remains detectable from its API key");
+        assert_eq!(openai.base_url, None);
+        assert!(!openai.credential_configured);
+        assert_eq!(openai.environment_variable, None);
+        let serialized = serde_json::to_string(&response).expect("response JSON serializes");
+        assert!(!serialized.contains("secret-route"));
+    }
+
+    #[test]
+    fn env_detection_only_exposes_official_safe_environment_bindings() {
+        for unsafe_base_url in [
+            "https://gateway.example.test/v1",
+            "http://api.openai.com/v1",
+        ] {
+            let response = detect_env_provider_configs_with(|name| match name {
+                "OPENAI_API_KEY" => Some("sk-openai".to_string()),
+                "OPENAI_BASE_URL" => Some(unsafe_base_url.to_string()),
+                _ => None,
+            });
+            let openai = response
+                .detected_providers
+                .get("openai")
+                .expect("OpenAI remains detectable for remediation");
+            assert_eq!(openai.base_url, None);
+            assert!(!openai.credential_configured);
+            assert_eq!(openai.environment_variable, None);
+        }
+
+        let response = detect_env_provider_configs_with(|name| match name {
+            "OLLAMA_BASE_URL" => Some("http://192.168.1.50:11434".to_string()),
+            _ => None,
+        });
+        let ollama = response
+            .detected_providers
+            .get("ollama")
+            .expect("Ollama remains detectable for remediation");
+        assert_eq!(ollama.base_url, None);
+        assert_eq!(ollama.environment_variable, None);
+
+        let response = detect_env_provider_configs_with(|name| match name {
+            "OLLAMA_BASE_URL" => Some("http://localhost:11434".to_string()),
+            _ => None,
+        });
+        let ollama = response
+            .detected_providers
+            .get("ollama")
+            .expect("official local Ollama should be detected");
+        assert_eq!(ollama.base_url.as_deref(), Some("http://localhost:11434"));
+        assert!(!ollama.credential_configured);
+        assert_eq!(ollama.environment_variable, None);
+    }
+
+    #[test]
+    fn env_detection_accepts_both_official_anthropic_base_paths() {
+        for base_url in ["https://api.anthropic.com", "https://api.anthropic.com/v1"] {
+            let response = detect_env_provider_configs_with(|name| match name {
+                "ANTHROPIC_API_KEY" => Some("sk-ant-test".to_string()),
+                "ANTHROPIC_BASE_URL" => Some(base_url.to_string()),
+                _ => None,
+            });
+            let anthropic = response
+                .detected_providers
+                .get("anthropic")
+                .expect("Anthropic should be detected");
+            assert_eq!(anthropic.base_url.as_deref(), Some(base_url));
+            assert!(anthropic.credential_configured);
+            assert_eq!(
+                anthropic.environment_variable.as_deref(),
+                Some("ANTHROPIC_API_KEY")
+            );
+        }
     }
 
     #[test]
@@ -4321,9 +5568,27 @@ mod tests {
                 provider_type: "azure_openai".to_string(),
                 ..record.clone()
             },
-            Some(health),
+            Some(health.clone()),
         );
         assert_eq!(unsupported.health_status, None);
+
+        let configuration_valid = provider_response_from_record(
+            LlmProviderRecord {
+                provider_type: "azure_openai".to_string(),
+                ..record.clone()
+            },
+            Some(ProviderHealthRecord {
+                status: "configuration_valid".to_string(),
+                response_time_ms: None,
+                ..health
+            }),
+        );
+        assert_eq!(
+            configuration_valid.health_status.as_deref(),
+            Some("configuration_valid")
+        );
+        assert!(configuration_valid.health_last_check.is_some());
+        assert_eq!(configuration_valid.response_time_ms, None);
 
         let sentinel = provider_response_from_record(
             LlmProviderRecord {
@@ -4333,6 +5598,657 @@ mod tests {
             None,
         );
         assert!(!sentinel.credential_configured);
+    }
+
+    #[tokio::test]
+    async fn provider_config_public_projection_redacts_list_get_and_direct_responses() {
+        const SECRET_CANARY: &str = "provider-config-secret-canary";
+
+        fn contains_key(value: &Value, expected: &str) -> bool {
+            match value {
+                Value::Object(object) => {
+                    object.contains_key(expected)
+                        || object.values().any(|value| contains_key(value, expected))
+                }
+                Value::Array(values) => values.iter().any(|value| contains_key(value, expected)),
+                _ => false,
+            }
+        }
+
+        let persisted_config = json!({
+            "request_timeout_seconds": 45,
+            "region": "us-east-1",
+            "retries": {"max_attempts": 3},
+            "aws_secret_access_key": SECRET_CANARY,
+            "apiKey": SECRET_CANARY,
+            "clientSecret": SECRET_CANARY,
+            "x-api-key": SECRET_CANARY,
+            "apiSecret": SECRET_CANARY,
+            "token": SECRET_CANARY,
+            "custom_value": SECRET_CANARY,
+            "credentials": {
+                "secret_access_key": SECRET_CANARY,
+                "session_token": SECRET_CANARY,
+                "safe_role": "inference"
+            },
+            "nested": [
+                {
+                    "aws_session_token": SECRET_CANARY,
+                    "access_token": SECRET_CANARY,
+                    "safe_model": "gpt-4o"
+                },
+                {"oauth_token": SECRET_CANARY, "safe_weight": 2}
+            ],
+            "embedding": {
+                "dimensions": 1536,
+                "headers": {"Authorization": SECRET_CANARY},
+                "access_token": SECRET_CANARY
+            },
+            "headers": {
+                "Authorization": SECRET_CANARY,
+                "X-Request-ID": "safe-but-container-must-not-be-public"
+            },
+            "transport": {
+                "custom_headers": {"X-Api-Key": SECRET_CANARY},
+                "fallbackHeaders": {"X-Api-Key": SECRET_CANARY},
+                "authorization": SECRET_CANARY,
+                "proxyAuthorization": SECRET_CANARY,
+                "proxy_authorization": SECRET_CANARY,
+                "connect_timeout_seconds": 10
+            }
+        });
+        let record = LlmProviderRecord {
+            id: "11111111-2222-4333-8444-555555555555".to_string(),
+            name: "redacted-openai".to_string(),
+            provider_type: "openai".to_string(),
+            operation_type: "llm".to_string(),
+            api_key_encrypted: "sk-redaction-fixture-key".to_string(),
+            base_url: Some("https://api.example.test/v1".to_string()),
+            llm_model: Some("gpt-4o".to_string()),
+            llm_small_model: None,
+            embedding_model: None,
+            reranker_model: None,
+            config: persisted_config.clone(),
+            is_active: true,
+            is_default: false,
+            is_enabled: true,
+            allowed_models: vec!["gpt-4o".to_string()],
+            blocked_models: Vec::new(),
+            pool_weight: 1.0,
+            pool_enabled: true,
+            model_tier: None,
+            secondary_models: Vec::new(),
+            created_at: Utc
+                .with_ymd_and_hms(2026, 1, 2, 3, 4, 5)
+                .single()
+                .expect("fixture timestamp is valid"),
+            updated_at: Utc
+                .with_ymd_and_hms(2026, 1, 2, 3, 5, 5)
+                .single()
+                .expect("fixture timestamp is valid"),
+        };
+        let service = DevLlmProviderCatalogService::default();
+        service.records.lock().await.push(record.clone());
+
+        let unsafe_legacy_url = serde_json::to_value(provider_response_from_record(
+            LlmProviderRecord {
+                base_url: Some(
+                    "https://legacy-user:legacy-url-secret@example.test/v1?api_key=secret"
+                        .to_string(),
+                ),
+                ..record.clone()
+            },
+            None,
+        ))
+        .expect("legacy provider response serializes");
+        assert_eq!(unsafe_legacy_url["base_url"], Value::Null);
+        assert!(!unsafe_legacy_url.to_string().contains("legacy-url-secret"));
+
+        let unsafe_legacy_path = serde_json::to_value(provider_response_from_record(
+            LlmProviderRecord {
+                base_url: Some(
+                    "https://gateway.example.test/tenant/private-route-token".to_string(),
+                ),
+                ..record.clone()
+            },
+            None,
+        ))
+        .expect("legacy provider response with unsafe path serializes");
+        assert_eq!(unsafe_legacy_path["base_url"], Value::Null);
+        assert!(!unsafe_legacy_path
+            .to_string()
+            .contains("private-route-token"));
+
+        let direct = serde_json::to_value(provider_response_from_record(record, None))
+            .expect("direct provider response serializes");
+        let listed = serde_json::to_value(
+            service
+                .list_providers("dev-user", true)
+                .await
+                .expect("provider list succeeds"),
+        )
+        .expect("provider list response serializes");
+        let fetched = serde_json::to_value(
+            service
+                .get_provider("dev-user", "11111111-2222-4333-8444-555555555555")
+                .await
+                .expect("provider get succeeds")
+                .expect("provider exists"),
+        )
+        .expect("provider get response serializes");
+        let listed_provider = listed
+            .as_array()
+            .and_then(|providers| providers.first())
+            .expect("provider list has fixture");
+
+        for response in [&direct, listed_provider, &fetched] {
+            let public_config = &response["config"];
+            let serialized = serde_json::to_string(response).expect("provider response serializes");
+            assert!(!serialized.contains(SECRET_CANARY));
+            for sensitive_key in [
+                "aws_secret_access_key",
+                "secret_access_key",
+                "aws_session_token",
+                "session_token",
+                "access_token",
+                "oauth_token",
+                "apiKey",
+                "clientSecret",
+                "x-api-key",
+                "apiSecret",
+                "token",
+                "custom_value",
+                "headers",
+                "custom_headers",
+                "fallbackHeaders",
+                "authorization",
+                "proxyAuthorization",
+                "proxy_authorization",
+            ] {
+                assert!(!contains_key(response, sensitive_key));
+            }
+            assert_eq!(public_config["request_timeout_seconds"], 45);
+            assert_eq!(public_config["region"], "us-east-1");
+            assert_eq!(public_config["retries"]["max_attempts"], 3);
+            assert_eq!(public_config.get("credentials"), None);
+            assert_eq!(public_config.get("nested"), None);
+            assert_eq!(public_config["embedding"]["dimensions"], 1536);
+            assert_eq!(response["embedding_config"]["dimensions"], 1536);
+            assert_eq!(public_config["transport"]["connect_timeout_seconds"], 10);
+        }
+
+        let stored = service.records.lock().await;
+        assert_eq!(stored[0].config, persisted_config);
+        assert!(stored[0].config.to_string().contains(SECRET_CANARY));
+        assert!(!stored[0].config.to_string().contains("***"));
+    }
+
+    #[test]
+    fn provider_config_write_schema_rejects_secrets_and_merges_safe_updates() {
+        const SECRET_CANARY: &str = "write-schema-secret-canary";
+        let created_at = Utc
+            .with_ymd_and_hms(2026, 2, 3, 4, 5, 6)
+            .single()
+            .expect("fixture timestamp is valid");
+        let existing = LlmProviderRecord {
+            id: "11111111-2222-4333-8444-555555555555".to_string(),
+            name: "legacy-openai".to_string(),
+            provider_type: "openai".to_string(),
+            operation_type: "llm".to_string(),
+            api_key_encrypted: "encrypted-fixture".to_string(),
+            base_url: Some("https://api.openai.com/v1".to_string()),
+            llm_model: Some("gpt-4o".to_string()),
+            llm_small_model: None,
+            embedding_model: None,
+            reranker_model: None,
+            config: json!({
+                "auth_method": "api_key",
+                "temperature": 0.2,
+                "max_tokens": 2048,
+                "region": "us-east-1",
+                "legacy_private": {"speech_access_token": SECRET_CANARY},
+                "retries": {
+                    "max_attempts": 3,
+                    "private_retry_policy": SECRET_CANARY
+                },
+                "transport": {
+                    "connect_timeout_seconds": 5,
+                    "request_timeout_seconds": 30,
+                    "private_header": SECRET_CANARY
+                }
+            }),
+            is_active: true,
+            is_default: false,
+            is_enabled: true,
+            allowed_models: Vec::new(),
+            blocked_models: Vec::new(),
+            pool_weight: 1.0,
+            pool_enabled: true,
+            model_tier: None,
+            secondary_models: Vec::new(),
+            created_at,
+            updated_at: created_at,
+        };
+        let update = provider_update_record_with_auth(
+            &existing,
+            serde_json::from_value(json!({
+                "expected_revision": existing.updated_at.timestamp_micros(),
+                "config": {
+                    "temperature": 0.7,
+                    "transport": {"connect_timeout_seconds": 15}
+                }
+            }))
+            .expect("safe config update deserializes"),
+        )
+        .expect("safe config update is accepted");
+        let merged = update.config.expect("update carries merged config");
+        assert_eq!(merged["temperature"], 0.7);
+        assert_eq!(merged.get("max_tokens"), None);
+        assert_eq!(merged.get("region"), None);
+        assert_eq!(merged["transport"]["connect_timeout_seconds"], 15);
+        assert_eq!(merged["transport"].get("request_timeout_seconds"), None);
+        assert_eq!(merged["transport"]["private_header"], SECRET_CANARY);
+        assert_eq!(merged["retries"].get("max_attempts"), None);
+        assert_eq!(merged["retries"]["private_retry_policy"], SECRET_CANARY);
+        assert_eq!(
+            merged["legacy_private"]["speech_access_token"],
+            SECRET_CANARY
+        );
+
+        assert_eq!(
+            merge_writable_provider_config(&existing.config, None)
+                .expect("omitted config is preserved"),
+            existing.config
+        );
+        let layered_existing = json!({
+            "temperature": 0.2,
+            "private_top_level": SECRET_CANARY,
+            "embedding": {
+                "model": "legacy-model",
+                "dimensions": 1536,
+                "private_embedding_key": SECRET_CANARY,
+                "provider_options": {
+                    "batch_size": 16,
+                    "api_key": SECRET_CANARY
+                }
+            }
+        });
+        let layered = merge_writable_provider_config(
+            &layered_existing,
+            Some(json!({
+                "temperature": 0.8,
+                "embedding": {
+                    "provider_options": {"batch_size": 64}
+                }
+            })),
+        )
+        .expect("layered public config replacement succeeds");
+        assert_eq!(layered["temperature"], 0.8);
+        assert_eq!(layered["private_top_level"], SECRET_CANARY);
+        assert_eq!(layered["embedding"].get("model"), None);
+        assert_eq!(layered["embedding"].get("dimensions"), None);
+        assert_eq!(layered["embedding"]["private_embedding_key"], SECRET_CANARY);
+        assert_eq!(layered["embedding"]["provider_options"]["batch_size"], 64);
+        assert_eq!(
+            layered["embedding"]["provider_options"]["api_key"],
+            SECRET_CANARY
+        );
+
+        for forbidden_config in [
+            json!({"speech_access_token": SECRET_CANARY}),
+            json!({"provider_options": {"api_key": SECRET_CANARY}}),
+            json!({"embedding": {"provider_options": {"token": SECRET_CANARY}}}),
+            json!({"aws_secret_access_key": SECRET_CANARY}),
+        ] {
+            let request = serde_json::from_value::<ProviderCreateRequest>(json!({
+                "name": "unsafe-openai",
+                "provider_type": "openai",
+                "api_key": "sk-test-secret",
+                "llm_model": "gpt-4o",
+                "config": forbidden_config
+            }))
+            .expect("credential-bearing config request deserializes");
+            let error = provider_create_record_with_auth(request)
+                .expect_err("credential-bearing JSON config must be rejected");
+            assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+            assert!(!error.detail.contains(SECRET_CANARY));
+        }
+
+        let embedding_request = serde_json::from_value::<ProviderCreateRequest>(json!({
+            "name": "unsafe-embedding",
+            "provider_type": "dashscope_embedding",
+            "api_key": "sk-test-secret",
+            "embedding_model": "text-embedding-v3",
+            "embedding_config": {
+                "provider_options": {"api_key": SECRET_CANARY}
+            }
+        }))
+        .expect("credential-bearing embedding request deserializes");
+        let error = provider_create_record_with_auth(embedding_request)
+            .expect_err("embedding provider_options must not be persisted in JSONB");
+        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(!error.detail.contains(SECRET_CANARY));
+
+        let safe_embedding_request = serde_json::from_value::<ProviderCreateRequest>(json!({
+            "name": "safe-embedding",
+            "provider_type": "dashscope_embedding",
+            "api_key": "sk-test-secret",
+            "embedding_model": "text-embedding-v3",
+            "embedding_config": {
+                "dimensions": 1024,
+                "provider_options": {
+                    "batch_size": 32,
+                    "input_type": "search_document",
+                    "truncate": "END"
+                }
+            }
+        }))
+        .expect("safe embedding options request deserializes");
+        let safe_embedding = provider_create_record_with_auth(safe_embedding_request)
+            .expect("positive-schema embedding options are accepted");
+        assert_eq!(
+            safe_embedding.config["embedding"]["provider_options"],
+            json!({
+                "batch_size": 32,
+                "input_type": "search_document",
+                "truncate": "END"
+            })
+        );
+
+        let embedding_existing = LlmProviderRecord {
+            provider_type: "dashscope_embedding".to_string(),
+            operation_type: "embedding".to_string(),
+            base_url: Some("https://dashscope.aliyuncs.com/compatible-mode/v1".to_string()),
+            llm_model: None,
+            embedding_model: Some("text-embedding-v3".to_string()),
+            config: json!({
+                "auth_method": "api_key",
+                "embedding": {
+                    "model": "stale-config-model",
+                    "dimensions": 1536,
+                    "timeout": 60,
+                    "user": "stale-user",
+                    "encoding_format": "float",
+                    "private_embedding_key": SECRET_CANARY,
+                    "provider_options": {
+                        "batch_size": 16,
+                        "input_type": "search_document",
+                        "truncate": "END",
+                        "api_key": SECRET_CANARY
+                    }
+                }
+            }),
+            ..existing.clone()
+        };
+        let embedding_update = provider_update_record_with_auth(
+            &embedding_existing,
+            serde_json::from_value(json!({
+                "expected_revision": embedding_existing.updated_at.timestamp_micros(),
+                "embedding_config": {
+                    "dimensions": 768,
+                    "provider_options": {"batch_size": 32}
+                }
+            }))
+            .expect("standalone embedding config update deserializes"),
+        )
+        .expect("standalone embedding config update succeeds");
+        let embedding = &embedding_update
+            .config
+            .expect("embedding update carries config")["embedding"];
+        assert_eq!(embedding["dimensions"], 768);
+        assert_eq!(embedding["provider_options"]["batch_size"], 32);
+        for stale_public_field in ["model", "timeout", "user", "encoding_format"] {
+            assert_eq!(embedding.get(stale_public_field), None);
+        }
+        for stale_public_option in ["input_type", "truncate"] {
+            assert_eq!(embedding["provider_options"].get(stale_public_option), None);
+        }
+        assert_eq!(embedding["private_embedding_key"], SECRET_CANARY);
+        assert_eq!(embedding["provider_options"]["api_key"], SECRET_CANARY);
+    }
+
+    #[tokio::test]
+    async fn provider_types_fail_closed_when_structured_auth_storage_is_unavailable() {
+        let descriptors = list_provider_types().await.0;
+        for provider_type in ["bedrock", "vertex"] {
+            let descriptor = descriptors
+                .iter()
+                .find(|descriptor| descriptor.provider_type == provider_type)
+                .expect("provider descriptor exists");
+            assert!(descriptor.auth_methods.is_empty());
+            assert!(descriptor.unavailable_auth_methods.contains(&"api_key"));
+
+            let request = serde_json::from_value::<ProviderCreateRequest>(json!({
+                "name": format!("{provider_type}-unsafe-auth"),
+                "provider_type": provider_type,
+                "auth_method": "api_key",
+                "api_key": "single-field-credential",
+                "llm_model": "test-model"
+            }))
+            .expect("unsupported auth request deserializes");
+            let error = provider_create_record_with_auth(request)
+                .expect_err("unsupported structured auth must fail closed");
+            assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    #[test]
+    fn provider_base_url_policy_requires_exact_official_or_safe_custom_paths() {
+        assert!(
+            validate_persisted_provider_base_url("openai", Some("https://api.openai.com/v1"))
+                .is_ok()
+        );
+        assert!(validate_persisted_provider_base_url(
+            "openai",
+            Some("https://gateway.example.test")
+        )
+        .is_ok());
+        assert!(validate_persisted_provider_base_url(
+            "openai",
+            Some("https://gateway.example.test/v1")
+        )
+        .is_ok());
+        assert!(validate_persisted_provider_base_url(
+            "openai",
+            Some("https://api.openai.com/v1/tenant-token")
+        )
+        .is_err());
+        assert!(validate_persisted_provider_base_url(
+            "openai",
+            Some("https://gateway.example.test/tenant/private-token")
+        )
+        .is_err());
+        assert!(!environment_credential_endpoint_is_official(
+            "openai",
+            Some("https://api.openai.com/v1/tenant-token")
+        ));
+        for anthropic_base_url in [
+            "https://api.anthropic.com",
+            "https://api.anthropic.com/",
+            "https://api.anthropic.com/v1",
+            "https://api.anthropic.com/v1/",
+        ] {
+            assert!(
+                validate_persisted_provider_base_url("anthropic", Some(anthropic_base_url)).is_ok()
+            );
+            assert!(environment_credential_endpoint_is_official(
+                "anthropic",
+                Some(anthropic_base_url)
+            ));
+        }
+
+        for (provider_type, base_url) in [
+            ("gemini", "https://generativelanguage.googleapis.com"),
+            ("gemini", "https://generativelanguage.googleapis.com/v1beta"),
+            ("ollama", "http://localhost:11434"),
+            ("ollama", "http://localhost:11434/api"),
+            ("deepseek", "https://api.deepseek.com/v1"),
+            ("minimax", "https://api.minimax.io/v1"),
+        ] {
+            assert!(
+                validate_persisted_provider_base_url(provider_type, Some(base_url)).is_ok(),
+                "official base URL must be accepted: {provider_type} {base_url}"
+            );
+            assert!(
+                environment_credential_endpoint_is_official(provider_type, Some(base_url)),
+                "official origin/path must remain eligible for environment references: {provider_type} {base_url}"
+            );
+        }
+
+        for (provider_type, base_url) in [
+            ("gemini", "https://generativelanguage.googleapis.com/v1"),
+            ("ollama", "http://localhost:11434/v1"),
+            ("deepseek", "https://api.deepseek.com"),
+            ("minimax", "https://api.minimax.io/anthropic/v1"),
+        ] {
+            assert!(
+                validate_persisted_provider_base_url(provider_type, Some(base_url)).is_err(),
+                "non-canonical official path must fail closed: {provider_type} {base_url}"
+            );
+            assert!(!environment_credential_endpoint_is_official(
+                provider_type,
+                Some(base_url)
+            ));
+        }
+    }
+
+    #[test]
+    fn provider_requests_accept_known_compatibility_fields_and_reject_unknown_fields() {
+        let create = serde_json::from_value::<ProviderCreateRequest>(json!({
+            "name": "known-openai",
+            "provider_type": "openai",
+            "operation_type": "llm",
+            "api_key": "sk-test-secret",
+            "base_url": "https://api.openai.com/v1",
+            "llm_model": "gpt-4o",
+            "llm_small_model": "gpt-4o-mini",
+            "embedding_model": null,
+            "embedding_config": null,
+            "reranker_model": null,
+            "config": {"temperature": 0.2},
+            "is_active": true,
+            "is_default": false,
+            "is_enabled": true,
+            "allowed_models": ["gpt-4o"],
+            "blocked_models": [],
+            "pool_weight": 1.0,
+            "pool_enabled": true,
+            "model_tier": "large",
+            "secondary_models": ["gpt-4o-mini"]
+        }));
+        assert!(create.is_ok());
+
+        let update = serde_json::from_value::<ProviderUpdateRequest>(json!({
+            "expected_revision": 1,
+            "name": "known-openai",
+            "provider_type": "openai",
+            "operation_type": "llm",
+            "base_url": null,
+            "llm_model": "gpt-4o",
+            "llm_small_model": "gpt-4o-mini",
+            "embedding_model": null,
+            "embedding_config": null,
+            "reranker_model": null,
+            "config": {"temperature": 0.2},
+            "is_active": true,
+            "is_default": false,
+            "is_enabled": true,
+            "allowed_models": ["gpt-4o"],
+            "blocked_models": [],
+            "pool_weight": 1.0,
+            "pool_enabled": true,
+            "model_tier": null,
+            "secondary_models": ["gpt-4o-mini"]
+        }));
+        assert!(update.is_ok());
+
+        let probe = serde_json::from_value::<ProviderProbeRequest>(json!({
+            "name": "known-openai-probe",
+            "provider_type": "openai",
+            "operation_type": "llm",
+            "api_key": "sk-test-secret",
+            "base_url": "https://api.openai.com/v1",
+            "llm_model": "gpt-4o",
+            "llm_small_model": "gpt-4o-mini",
+            "embedding_model": null,
+            "embedding_config": null,
+            "reranker_model": null,
+            "config": {"temperature": 0.2},
+            "is_active": true,
+            "is_default": false,
+            "is_enabled": true,
+            "allowed_models": ["gpt-4o"],
+            "blocked_models": [],
+            "pool_weight": 1.0,
+            "pool_enabled": true,
+            "model_tier": "large",
+            "secondary_models": ["gpt-4o-mini"]
+        }));
+        assert!(probe.is_ok());
+
+        let create = serde_json::from_value::<ProviderCreateRequest>(json!({
+            "name": "strict-openai",
+            "provider_type": "openai",
+            "api_key": "sk-test-secret",
+            "llm_model": "gpt-4o",
+            "oauth_token": "must-not-be-ignored"
+        }));
+        assert!(create.is_err());
+
+        let update = serde_json::from_value::<ProviderUpdateRequest>(json!({
+            "expected_revision": 0,
+            "credential_value": "must-not-be-ignored"
+        }));
+        assert!(update.is_err());
+
+        let probe = serde_json::from_value::<ProviderProbeRequest>(json!({
+            "name": "strict-openai-probe",
+            "provider_type": "openai",
+            "api_key": "sk-test-secret",
+            "unknown_probe_field": "must-not-be-ignored"
+        }));
+        assert!(probe.is_err());
+    }
+
+    #[test]
+    fn provider_persistence_rejects_credential_urls_and_environment_custom_origins() {
+        for unsafe_url in [
+            "https://user:secret@example.test/v1",
+            "https://example.test/v1?api_key=secret",
+            "https://example.test/v1#token=secret",
+        ] {
+            let request = serde_json::from_value::<ProviderCreateRequest>(json!({
+                "name": "unsafe-openai",
+                "provider_type": "openai",
+                "api_key": "sk-test-secret",
+                "base_url": unsafe_url,
+                "llm_model": "gpt-4o"
+            }))
+            .expect("unsafe URL request shape deserializes");
+            assert!(provider_create_record_with_auth(request).is_err());
+        }
+
+        let environment_request = serde_json::from_value::<ProviderCreateRequest>(json!({
+            "name": "environment-openai",
+            "provider_type": "openai",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "base_url": "https://collector.example.test/v1",
+            "llm_model": "gpt-4o"
+        }))
+        .expect("environment request shape deserializes");
+        assert!(provider_create_record_with_auth(environment_request).is_err());
+
+        let official_origin_wrong_path = serde_json::from_value::<ProviderCreateRequest>(json!({
+            "name": "environment-openai-wrong-path",
+            "provider_type": "openai",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "base_url": "https://api.openai.com/v1/tenant-secret",
+            "llm_model": "gpt-4o"
+        }))
+        .expect("official-origin wrong-path request deserializes");
+        assert!(provider_create_record_with_auth(official_origin_wrong_path).is_err());
     }
 
     #[tokio::test]
@@ -4370,6 +6286,8 @@ mod tests {
         assert_eq!(updated.llm_model.as_deref(), Some("gpt-4o-mini"));
         assert_eq!(updated.auth_method, "api_key");
         assert!(updated.credential_configured);
+        let updated_json = serde_json::to_value(&updated).expect("provider response serializes");
+        assert_eq!(updated_json["credential_source"], "encrypted_store");
         assert!(!updated.api_key_masked.contains("sk-dev-secret-12345"));
         assert!(updated.revision > created.revision);
         let probe = service
@@ -4399,7 +6317,7 @@ mod tests {
                 &created.id,
                 ProviderUpdateRequest {
                     expected_revision: updated.revision,
-                    base_url: Some("https://other.example.test/v1".to_string()),
+                    base_url: Some(Some("https://other.example.test/v1".to_string())),
                     ..Default::default()
                 },
             )
@@ -4428,7 +6346,7 @@ mod tests {
                 ProviderUpdateRequest {
                     expected_revision: updated.revision,
                     api_key: Some("sk-replacement-secret-67890".to_string()),
-                    base_url: Some("https://other.example.test/v1".to_string()),
+                    base_url: Some(Some("https://other.example.test/v1".to_string())),
                     ..Default::default()
                 },
             )
@@ -4465,13 +6383,120 @@ mod tests {
                 ProviderUpdateRequest {
                     expected_revision: local.revision,
                     provider_type: Some("openai".to_string()),
-                    base_url: Some("https://api.openai.com/v1".to_string()),
+                    base_url: Some(Some("https://api.openai.com/v1".to_string())),
                     ..Default::default()
                 },
             )
             .await
             .expect_err("local to credentialed change requires a new API key");
         assert_eq!(unsafe_auth_change.status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn dev_provider_update_distinguishes_missing_null_and_empty_base_url() {
+        let service = DevLlmProviderCatalogService::default();
+        let created = service
+            .create_provider(
+                "dev-user",
+                provider_create_request(
+                    "ollama",
+                    "http://127.0.0.1:11434".to_string(),
+                    None,
+                    "llama3.1:8b",
+                ),
+            )
+            .await
+            .expect("local provider create succeeds");
+        let preserved = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                serde_json::from_value(json!({
+                    "expected_revision": created.revision,
+                    "name": "renamed-ollama"
+                }))
+                .expect("missing base URL update deserializes"),
+            )
+            .await
+            .expect("missing base URL update succeeds")
+            .expect("provider remains available");
+        assert_eq!(
+            preserved.base_url.as_deref(),
+            Some("http://127.0.0.1:11434")
+        );
+
+        let cleared_with_null = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                serde_json::from_value(json!({
+                    "expected_revision": preserved.revision,
+                    "base_url": null
+                }))
+                .expect("null base URL update deserializes"),
+            )
+            .await
+            .expect("null base URL update succeeds")
+            .expect("provider remains available");
+        assert_eq!(cleared_with_null.base_url, None);
+        {
+            let stored = service.records.lock().await;
+            assert_eq!(stored[0].base_url, None);
+        }
+
+        let reset = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                serde_json::from_value(json!({
+                    "expected_revision": cleared_with_null.revision,
+                    "base_url": "http://127.0.0.1:11435"
+                }))
+                .expect("replacement base URL update deserializes"),
+            )
+            .await
+            .expect("replacement base URL update succeeds")
+            .expect("provider remains available");
+        assert_eq!(reset.base_url.as_deref(), Some("http://127.0.0.1:11435"));
+
+        let cleared_with_empty = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                serde_json::from_value(json!({
+                    "expected_revision": reset.revision,
+                    "base_url": "   "
+                }))
+                .expect("empty base URL update deserializes"),
+            )
+            .await
+            .expect("empty base URL update succeeds")
+            .expect("provider remains available");
+        assert_eq!(cleared_with_empty.base_url, None);
+        let stored = service.records.lock().await;
+        assert_eq!(stored[0].base_url, None);
+    }
+
+    #[tokio::test]
+    async fn dev_no_auth_provider_reports_credentials_not_required() {
+        let service = DevLlmProviderCatalogService::default();
+        let created = service
+            .create_provider(
+                "dev-user",
+                provider_create_request(
+                    "ollama",
+                    "http://127.0.0.1:11434".to_string(),
+                    None,
+                    "llama3.1:8b",
+                ),
+            )
+            .await
+            .expect("local provider create succeeds");
+        let created_json =
+            serde_json::to_value(&created).expect("local provider response serializes");
+
+        assert_eq!(created_json["credential_source"], "not_required");
+        assert_eq!(created_json["credential_configured"], true);
     }
 
     #[tokio::test]
@@ -4493,6 +6518,9 @@ mod tests {
             .expect("environment provider create succeeds");
 
         assert_eq!(created.auth_method, "environment");
+        let created_json =
+            serde_json::to_value(&created).expect("environment provider response serializes");
+        assert_eq!(created_json["credential_source"], "environment");
         assert_eq!(
             created.environment_variable.as_deref(),
             Some("OPENAI_API_KEY")

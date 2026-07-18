@@ -167,7 +167,7 @@ Settings 使用“设置分区 → 资源目录 → 详情/配置”的稳定三
 - Relationship graph：展示“哪些 Agent 使用此 Model/Skill/Plugin”以及 Agent 的模型、技能、插件依赖。
 - Governance：所有编辑生成版本和审计记录；安装 Plugin 不自动扩张任何 Agent 权限。
 - Creation：新建 Skill/Agent 先生成 governed draft，完成依赖、权限和验证后才能 Publish/Enable。
-- Provider setup：Add Provider 使用 Choose → Authenticate & Verify → Enable Models 三步向导；连接成功不自动改变 Routing 或 Agent 配置。
+- Provider setup：Add Provider 使用 Choose → Authenticate & Verify → Enable Models 三步向导；认证方式由后端 capability descriptor 驱动，不可用方式保留可见但禁用并说明原因；连接成功不自动改变 Routing 或 Agent 配置。
 
 ### 7.5 Project 内的 Workspace → Conversation 树
 
@@ -272,8 +272,9 @@ Settings 使用“设置分区 → 资源目录 → 详情/配置”的稳定三
 1. 用户进入 Settings，在 AI resources 分区按 Models / Skills / Plugins / Agents 切换资源类型，并在目录中搜索或筛选状态。
 2. Models 先显示 Provider Catalog。用户选择 Provider 后查看连接健康、认证类型、Endpoint、已启用模型和工作区路由。
 3. Add Provider 依次完成 Provider 选择、Auth / Endpoint 验证、模型发现与启用；若 `/models` 不可用，允许手动添加精确 Model ID。
+   OAuth 只有在后端声明完整 start/callback 能力时才可用；Environment secret 只提交并持久化后端实际检测或允许的变量名，标准变量只能解析并发送到对应供应商的官方 HTTPS Origin，变量值不得进入响应、日志或普通配置 JSON；自定义 Endpoint 使用显式加密凭据。Provider 不支持网络探测时，后端只返回 `configuration_valid + probed=false`，不得伪装连接成功。客户端不得提供自由 Provider JSON、自由 Headers 或明文辅助凭据输入；只有后端公开安全 schema 中的结构化字段可以回显和提交，未知字段默认丢弃。
 4. Routing 独立配置 Default / Fast / Coding / Vision 和有序 Fallback；Provider 连接成功不得自动修改 Routing 或 Agent 配置。
-5. 编辑 Provider、Skill 或 Agent 时进入显式 Edit 状态；Save 创建新的配置版本并记录操作者、差异和时间。
+5. 编辑 Provider、Skill 或 Agent 时进入显式 Edit 状态；Save 提交当前 revision，冲突返回 409 并要求重载。Provider Endpoint 采用三态更新：省略保留、显式 `null` 清除、合法字符串替换；清除必须落库为 SQL `NULL`。默认 Provider 的创建、切换与旧默认清理在同一事务内完成。
 6. 安装 Plugin 前预览权限；连接成功后仍需在 Agent 的 Capability 配置中显式授予，禁止自动继承。
 7. 新建 Skill/Agent 先创建 Draft；通过验证并完成权限检查后才能 Publish/Enable。
 8. 暂停 Agent 只阻止新 Run；运行中任务继续遵循各自的 Run policy，并在 UI 中明确提示。
@@ -408,8 +409,9 @@ stateDiagram-v2
 - NFR-008：中英文 UI；日期、数字、快捷键和术语本地化。
 - NFR-009：默认遵循 `.gitignore` 与企业排除规则；索引范围可见。
 - NFR-010：审计日志记录 Agent、工具、输入、输出、理由、延迟、权限和结果。
-- NFR-011：认证令牌、Provider 凭据和环境密钥不得以明文写入日志或客户端持久化；原型只持久化非敏感会话标记。
+- NFR-011：认证令牌、Provider 凭据和环境密钥不得以明文写入日志、客户端持久化或 Provider 公共 API 响应；Environment secret 只允许持久化受支持且绑定官方 Origin 的变量名，公共 `config` 必须使用独立的安全字段投影，未知字段默认不公开。
 - NFR-012：Tenant / Project 切换在 UI 中必须是原子状态更新；失败时保持原上下文并提供可重试错误。
+- NFR-013：Provider 创建、默认切换、Credential / Endpoint 绑定和 revision CAS 必须保持事务原子性；并发写入后每个 Operation type 最多一个默认 Provider，stale 请求不得产生部分副作用。
 
 ## 14. 成功指标
 

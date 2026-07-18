@@ -8,6 +8,7 @@ const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/cl
 const {
   filterProviders,
   providerConnectionStatus,
+  providerConfigurationValidationOutcome,
   providerCreateInputFromDraft,
   providerDraftFromProvider,
   providerAuthMethodSupported,
@@ -316,8 +317,26 @@ test('provider workspace helpers search structured fields and map attention stat
       is_active: true,
       credential_configured: false,
       health_status: 'configuration_valid',
+      llm_model: 'local-model',
+      allowed_models: ['local-model'],
     }),
-    'attention',
+    'connected',
+  );
+  assert.equal(
+    providerConnectionStatus(
+      {
+        id: 'azure-configured',
+        name: 'Azure configured',
+        provider_type: 'azure_openai',
+        auth_method: 'api_key',
+        is_active: true,
+        credential_configured: true,
+        llm_model: 'deployment-name',
+        allowed_models: ['deployment-name'],
+      },
+      false,
+    ),
+    'connected',
   );
   assert.deepEqual(
     filterProviders(providers, '  ANTHRO ', 'all').map((provider) => provider.id),
@@ -424,13 +443,31 @@ test('local routing candidates fail closed to runtime-supported ready providers'
 test('fallback availability ignores stale targets when a valid candidate remains', () => {
   const stale = { provider_id: 'provider-stale', model_id: 'removed-model' };
   const activeA = { provider_id: 'provider-openai', model_id: 'gpt-main' };
-  const activeB = { provider_id: 'provider-anthropic', model_id: 'claude-main' };
+  const activeB = {
+    provider_id: 'provider-anthropic',
+    model_id: 'claude-main',
+  };
   assert.equal(routingFallbackCanAdd([stale, activeA], [activeA, activeB], 8), true);
   assert.equal(routingFallbackCanAdd([stale, activeA, activeB], [activeA, activeB], 8), false);
   assert.equal(routingFallbackCanAdd([stale, activeA], [activeA, activeB], 2), false);
 });
 
 test('provider validation distinguishes configuration-only results from real probes', () => {
+  assert.deepEqual(
+    providerConfigurationValidationOutcome({
+      id: 'azure-provider',
+      name: 'Azure OpenAI',
+      provider_type: 'azure_openai',
+      health_status: null,
+    }),
+    {
+      provider: null,
+      status: 'configuration_valid',
+      probed: false,
+      detail: null,
+      catalog: null,
+    },
+  );
   assert.deepEqual(
     providerValidationSignal({
       provider: null,
@@ -535,6 +572,10 @@ test('provider wizard creates only active providers with an enabled model', () =
   );
   assert.match(
     addProviderDialogSource,
+    /anthropic:[\s\S]{0,100}baseUrl: 'https:\/\/api\.anthropic\.com'/,
+  );
+  assert.doesNotMatch(
+    addProviderDialogSource,
     /anthropic:[\s\S]{0,100}baseUrl: 'https:\/\/api\.anthropic\.com\/v1'/,
   );
 });
@@ -563,7 +604,7 @@ test('provider authentication UI exposes truthful OAuth and environment-secret s
   assert.match(providerConnectionPanelSource, /providers\.oauthUnavailableDescription/);
   assert.match(
     providerConnectionPanelSource,
-    /environmentSecretStatus = validation\?\.probed === true[\s\S]{0,120}validation\?\.probed === false/,
+    /environmentSecretStatus =\s*validation\?\.probed === true[\s\S]{0,260}validation\?\.probed === false/,
   );
   assert.doesNotMatch(
     providerConnectionPanelSource,
@@ -583,7 +624,7 @@ test('provider authentication UI exposes truthful OAuth and environment-secret s
   assert.match(addProviderDialogSource, /providers\.environmentSecretDescription/);
   assert.match(
     addProviderDialogSource,
-    /environmentSecretStatus = validation\?\.probed === true[\s\S]{0,120}validation\?\.probed === false/,
+    /environmentSecretStatus =\s*validation\?\.probed === true[\s\S]{0,260}validation\?\.probed === false/,
   );
   assert.doesNotMatch(
     addProviderDialogSource,
@@ -611,12 +652,9 @@ test('provider editing preserves stored credentials only for the unchanged endpo
   assert.match(providerConnectionPanelSource, /secretRequiredForEndpointChange/);
   assert.match(
     providerConnectionPanelSource,
-    /probeSupported = providerTypeDescriptor\?\.probeSupported === true/,
+    /probeSupported = providerTypeDescriptor\?\.probeSupported !== false/,
   );
-  assert.match(
-    providerConnectionPanelSource,
-    /validationAvailable = authCapabilityAvailable/,
-  );
+  assert.match(providerConnectionPanelSource, /validationAvailable = authCapabilityAvailable/);
   assert.match(
     providerConnectionPanelSource,
     /providerValidationAccepted\(validation, probeSupported\)/,
@@ -625,16 +663,21 @@ test('provider editing preserves stored credentials only for the unchanged endpo
     providerConnectionPanelSource,
     /currentProviderVerified[\s\S]{0,220}providerHealth === 'healthy'[\s\S]{0,160}providerHealth === 'connected'[\s\S]{0,160}providerHealth === 'ready'/,
   );
+  assert.match(
+    providerConnectionPanelSource,
+    /currentProviderConfigured[\s\S]{0,220}!probeSupported[\s\S]{0,220}configuration_valid/,
+  );
+  assert.match(
+    providerConnectionPanelSource,
+    /!editing && !probeSupported[\s\S]{0,180}providerConfigurationValidationOutcome\(provider\)[\s\S]{0,220}onValidate\(/,
+  );
   assert.match(providerConnectionPanelSource, /providers\.connectionPreviouslyVerified/);
   assert.match(
     i18nSource,
     /'providers\.connectionPreviouslyVerified':\s*'Authentication works and the provider responded\.'/,
   );
   assert.match(i18nSource, /'providers\.connectionPreviouslyVerified': '认证正常，供应商已响应。'/);
-  assert.doesNotMatch(
-    providerConnectionPanelSource,
-    /disabled=\{!probeSupported \|\| !verified/,
-  );
+  assert.doesNotMatch(providerConnectionPanelSource, /disabled=\{!probeSupported \|\| !verified/);
   assert.match(
     providerConnectionPanelSource,
     /provider\.credential_configured === true[\s\S]{0,100}provider\.api_key_masked/,
@@ -650,6 +693,10 @@ test('provider editing preserves stored credentials only for the unchanged endpo
   assert.match(
     providerStatusBadgeSource,
     /provider\.credential_configured === undefined[\s\S]{0,100}providers\.status\.credentialUnknown/,
+  );
+  assert.match(
+    providerStatusBadgeSource,
+    /probeSupported[\s\S]{0,220}providers\.status\.configured/,
   );
   assert.match(
     providerOverviewPanelsSource,
@@ -678,8 +725,14 @@ test('provider editing preserves stored credentials only for the unchanged endpo
 });
 
 test('provider routing is policy-backed, cross-provider, and context safe', () => {
-  assert.match(modelProviderWorkspaceCss, /\.model-provider-workspace\s*\{[\s\S]*line-height:\s*normal/);
-  assert.match(modelProviderWorkspaceSource, /routingScope\s*\?\s*t\('providers\.workspaceScope'\)/);
+  assert.match(
+    modelProviderWorkspaceCss,
+    /\.model-provider-workspace\s*\{[\s\S]*line-height:\s*normal/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /routingScope\s*\?\s*t\('providers\.workspaceScope'\)/,
+  );
   assert.match(providerOverviewPanelsSource, /const controller = new AbortController\(\)/);
   assert.match(providerOverviewPanelsSource, /onLoadUsage\(provider\.id, controller\.signal\)/);
   assert.match(providerOverviewPanelsSource, /return \(\) => controller\.abort\(\)/);
@@ -701,10 +754,7 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
   assert.doesNotMatch(providerOverviewPanelsSource, /draft && enabledOptions\.length > 0/);
   assert.match(providerOverviewPanelsSource, /effectivePolicy && draft \? \(/);
   assert.match(providerOverviewPanelsSource, /providerRoutingOverview\(provider, policy\)/);
-  assert.match(
-    providerOverviewPanelsSource,
-    /expectedRevision: policy\.revision/,
-  );
+  assert.match(providerOverviewPanelsSource, /expectedRevision: policy\.revision/);
   assert.doesNotMatch(providerOverviewPanelsSource, /const moveFallback|\bmoveFallback\(index/);
   assert.doesNotMatch(providerOverviewPanelsSource, /provider-fallback-actions/);
   assert.match(providerOverviewPanelsSource, /removeFallback\(index\)/);
@@ -727,9 +777,25 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
   assert.match(modelProviderWorkspaceSource, /provider\.runtime_selected === true/);
   assert.match(
     modelProviderWorkspaceSource,
-    /!outcome\.probed && outcome\.status === 'configuration_valid'[\s\S]{0,1200}'providers\.providerConfigured'/,
+    /const configurationOnlyValidated =\s*!draftValidation\.probed && draftValidation\.status === 'configuration_valid'/,
   );
-  assert.match(i18nSource, /'providers\.providerConfigured': '\{provider\} configuration is ready'/);
+  assert.match(
+    modelProviderWorkspaceSource,
+    /if \(configurationOnlyValidated\)[\s\S]{0,700}else \{[\s\S]{0,240}checkLlmProvider/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /validationState === 'configured'[\s\S]{0,120}'providers\.providerConfigured'/,
+  );
+  assert.match(
+    i18nSource,
+    /'providers\.providerConfigured': '\{provider\} configuration validated'/,
+  );
+  assert.match(i18nSource, /'providers\.status\.configured': 'Configuration validated'/);
+  assert.match(i18nSource, /'providers\.configurationValidated': 'Configuration validated'/);
+  assert.match(i18nSource, /'providers\.providerConfigured': '\{provider\} 配置已校验'/);
+  assert.match(i18nSource, /'providers\.status\.configured': '配置已校验'/);
+  assert.match(i18nSource, /'providers\.configurationValidated': '配置已校验'/);
   assert.match(
     i18nSource,
     /'providers\.identityDescription':[\s\S]{0,120}'Provider credentials, endpoint health, available models, and workspace routing are managed independently\.'/,
@@ -776,10 +842,7 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
   assert.match(updateProvider, /requestClient\.updateLlmProvider/);
   assert.doesNotMatch(updateProvider, /selectLlmRuntimeProvider|refreshRuntimeProjection/);
   assert.match(ordinarySave, /updateProvider/);
-  assert.match(
-    ordinarySave,
-    /await refreshRuntimeProjection\(requestScope, requestClient\)/,
-  );
+  assert.match(ordinarySave, /await refreshRuntimeProjection\(requestScope, requestClient\)/);
   assert.doesNotMatch(ordinarySave, /selectLlmRuntimeProvider/);
   assert.match(modelProviderWorkspaceSource, /onSave=\{saveRoutingPolicy\}/);
   assert.match(
@@ -805,10 +868,7 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
     /Promise\.all\(\[[\s\S]{0,180}listLlmProviders\(\)[\s\S]{0,260}getLlmProviderRoutingPolicy\([\s\S]{0,160}routingScope\.workspaceId/,
   );
   assert.match(routingSave, /setProviders\(modelProviders\)/);
-  assert.match(
-    routingSave,
-    /await refreshRuntimeProjection\(requestScope, requestClient\)/,
-  );
+  assert.match(routingSave, /await refreshRuntimeProjection\(requestScope, requestClient\)/);
   assert.match(
     settingsWindowSource,
     /key=\{`\$\{config\.mode\}\|\$\{config\.apiBaseUrl\}\|\$\{config\.tenantId\}\|\$\{config\.projectId\}\|\$\{config\.workspaceId\}`\}/,
@@ -823,8 +883,7 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
     true,
   );
   assert.match(modelProviderWorkspaceSource, /clientRef\.current !== requestClient/);
-  const scopeKeyDeclaration =
-    modelProviderWorkspaceSource.match(/const scopeKey = .*;/)?.[0] ?? '';
+  const scopeKeyDeclaration = modelProviderWorkspaceSource.match(/const scopeKey = .*;/)?.[0] ?? '';
   assert.doesNotMatch(scopeKeyDeclaration, /apiKey|localApiToken/);
   assert.match(scopeKeyDeclaration, /config\.projectId/);
   assert.match(scopeKeyDeclaration, /config\.workspaceId/);
@@ -850,16 +909,10 @@ test('provider settings QA records preserve the authoritative LLM operation cont
   );
   assert.match(providerSettingsQaSource, /environment_variable:\s*'ANTHROPIC_API_KEY'/);
   assert.match(providerSettingsQaSource, /provider_type:\s*'openai_compatible'/);
-  assert.doesNotMatch(
-    providerSettingsQaSource,
-    /provider_type:\s*'(?:gemini|openrouter|ollama)'/,
-  );
+  assert.doesNotMatch(providerSettingsQaSource, /provider_type:\s*'(?:gemini|openrouter|ollama)'/);
   assert.doesNotMatch(providerSettingsQaSource, /llmProvider|llmBaseUrl|llmModel|llmApiKey/);
   assert.match(providerSettingsQaSource, /mode: 'local'/);
-  assert.match(
-    providerSettingsQaSource,
-    /path === '\/api\/v1\/llm-providers\/routing-policy'/,
-  );
+  assert.match(providerSettingsQaSource, /path === '\/api\/v1\/llm-providers\/routing-policy'/);
   assert.match(providerSettingsQaSource, /draft\.expected_revision !== routingPolicy\.revision/);
   assert.doesNotMatch(providerSettingsQaSource, /draft\.roles\.fast !== null/);
   assert.doesNotMatch(providerSettingsQaSource, /draft\.roles\.vision !== null/);
@@ -887,7 +940,10 @@ test('routing policy client normalizes targets and sends optimistic revisions', 
         roles: {
           default: { provider_id: ' provider-openai ', model_id: ' gpt-5 ' },
           fast: { provider_id: 'provider-openai', model_id: 'gpt-5-mini' },
-          coding: { provider_id: 'provider-anthropic', model_id: 'claude-code' },
+          coding: {
+            provider_id: 'provider-anthropic',
+            model_id: 'claude-code',
+          },
           vision: { provider_id: 'provider-google', model_id: 'gemini-vision' },
         },
         fallbacks: [{ provider_id: ' provider-anthropic ', model_id: ' claude-fast ' }],
@@ -1078,10 +1134,7 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
     const localUpdated = await local.updateLlmProvider('local-runtime', mutation);
     const localValidation = await local.checkLlmProvider('local-runtime', 8);
     await cloud.updateLlmProvider('11111111-2222-4333-8444-555555555555', mutation);
-    const cloudValidation = await cloud.checkLlmProvider(
-      '11111111-2222-4333-8444-555555555555',
-      8,
-    );
+    const cloudValidation = await cloud.checkLlmProvider('11111111-2222-4333-8444-555555555555', 8);
 
     assert.equal(calls[0]?.init?.method, 'PUT');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
@@ -1109,7 +1162,9 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
       },
     );
     assert.equal(String(calls[1]?.input).endsWith('/local-runtime/health-check'), true);
-    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { expected_revision: 8 });
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
+      expected_revision: 8,
+    });
     assert.equal(localValidation.probed, true);
     assert.equal(localValidation.status, 'healthy');
     assert.equal(calls[2]?.init?.method, 'PUT');
@@ -1299,7 +1354,10 @@ test('OAuth provider mutations fail closed before making a request', async () =>
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => {
     requestCount += 1;
-    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response('{}', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   };
 
   try {
@@ -1506,10 +1564,7 @@ test('provider responses normalize compatibility fields explicitly', async () =>
     for (const forbiddenKey of ['api_key', 'api_key_encrypted', 'credential', 'secret']) {
       assert.equal(Object.hasOwn(legacy, forbiddenKey), false);
     }
-    assert.equal(
-      JSON.stringify(providers).includes('response-secret-must-be-dropped'),
-      false,
-    );
+    assert.equal(JSON.stringify(providers).includes('response-secret-must-be-dropped'), false);
     const persisted = providers[2];
     assert.equal(persisted.api_key_masked, '••••••••••••');
     assert.equal(persisted.credential_source, 'system_vault');
@@ -1572,7 +1627,10 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
             },
           ]
         : [
-            { provider_type: 'openai', auth_methods: ['environment', 'api_key'] },
+            {
+              provider_type: 'openai',
+              auth_methods: ['environment', 'api_key'],
+            },
             { provider_type: 'ollama', auth_methods: ['none'] },
             {
               provider_type: 'anthropic',
@@ -1944,14 +2002,8 @@ test('live provider discovery remains scoped to the saved connection', () => {
     /config\.mode === 'local'[\s\S]{0,180}discoverLlmProviderModels\(targetProvider\.id, targetProvider\.revision \?\? 0\)[\s\S]{0,180}listLlmProviderModels\(targetProvider\.provider_type\)/,
   );
   assert.match(providerModelsPanelSource, /onLoadCatalogRef\.current\(provider\)/);
-  assert.doesNotMatch(
-    providerModelsPanelSource,
-    /setEnabled\([\s\S]{0,180}nextCatalog\.models/,
-  );
-  assert.match(
-    i18nSource,
-    /Checks authentication, endpoint connectivity, and model discovery\./,
-  );
+  assert.doesNotMatch(providerModelsPanelSource, /setEnabled\([\s\S]{0,180}nextCatalog\.models/);
+  assert.match(i18nSource, /Checks authentication, endpoint connectivity, and model discovery\./);
   assert.match(i18nSource, /检查认证、端点连通性与模型发现。/);
 });
 

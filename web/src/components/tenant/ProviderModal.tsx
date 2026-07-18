@@ -31,7 +31,23 @@ import {
 import { formatDateTime } from '@/utils/date';
 
 import { providerAPI } from '../../services/api';
-import { ProviderConfig, ProviderCreate, ProviderType, ProviderUpdate } from '../../types/memory';
+import {
+  DetectedEnvironmentProvider,
+  ProviderAuthMethod,
+  ProviderConfig,
+  ProviderCreate,
+  ProviderType,
+  ProviderTypeDescriptor,
+  ProviderUpdate,
+} from '../../types/memory';
+import {
+  buildProviderAuthPayload,
+  getDefaultProviderAuthMethod,
+  getDetectedEnvironmentVariable,
+  getProviderAuthMethods,
+  indexProviderCapabilities,
+  isProviderCredentialReady,
+} from '../provider/providerAuth';
 
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
@@ -91,6 +107,8 @@ interface ProviderModalProps {
   provider?: ProviderConfig | null | undefined;
 }
 
+type ProviderCapabilityLoadState = 'loading' | 'ready' | 'error';
+
 const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'openrouter', label: 'OpenRouter' },
@@ -122,11 +140,6 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'ollama', label: 'Ollama (Local)' },
   { value: 'lmstudio', label: 'LM Studio (Local)' },
 ];
-
-const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
-
-const providerTypeRequiresApiKey = (type: ProviderType) =>
-  !OPTIONAL_API_KEY_PROVIDERS.includes(type);
 
 const getProviderErrorMessage = (err: unknown): string => {
   if (typeof err === 'object' && err !== null && 'response' in err) {
@@ -286,10 +299,18 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'basic' | 'models' | 'advanced'>('basic');
+  const [providerCapabilities, setProviderCapabilities] = useState<
+    Partial<Record<ProviderType, ProviderTypeDescriptor>>
+  >({});
+  const [providerCapabilityLoadState, setProviderCapabilityLoadState] =
+    useState<ProviderCapabilityLoadState>('loading');
+  const [envProviders, setEnvProviders] = useState<Record<string, DetectedEnvironmentProvider>>({});
 
   const [formData, setFormData] = useState<{
     name: string;
     provider_type: ProviderType;
+    auth_method: ProviderAuthMethod;
+    environment_variable: string;
     api_key: string;
     base_url: string;
     llm_model: string;
@@ -301,6 +322,8 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
   }>({
     name: '',
     provider_type: 'openai',
+    auth_method: 'api_key',
+    environment_variable: '',
     api_key: '',
     base_url: '',
     llm_model: 'gpt-4o',
@@ -311,13 +334,69 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
     is_default: false,
   });
 
+  const availableAuthMethods = getProviderAuthMethods(
+    providerCapabilities,
+    formData.provider_type,
+    provider?.provider_type === formData.provider_type ? provider.auth_method : undefined
+  );
+  const detectedEnvironmentVariable = getDetectedEnvironmentVariable(
+    envProviders[formData.provider_type],
+    availableAuthMethods
+  );
+  const authMethodAvailable =
+    providerCapabilityLoadState === 'ready' && availableAuthMethods.includes(formData.auth_method);
+  const credentialReady =
+    authMethodAvailable && isProviderCredentialReady(formData, provider, formData.provider_type);
+
   useEffect(() => {
+    if (!isOpen) return;
+
+    setProviderCapabilities({});
+    setProviderCapabilityLoadState('loading');
+    const capabilitiesPromise = providerAPI
+      .listTypes()
+      .then((descriptors) => {
+        const capabilities = indexProviderCapabilities(descriptors);
+        setProviderCapabilities(capabilities);
+        setProviderCapabilityLoadState('ready');
+        if (!provider) {
+          setFormData((current) => {
+            const methods = getProviderAuthMethods(capabilities, current.provider_type);
+            if (methods.includes(current.auth_method)) return current;
+            return {
+              ...current,
+              auth_method: methods[0] ?? 'api_key',
+              api_key: '',
+              environment_variable: '',
+            };
+          });
+        }
+        return capabilities;
+      })
+      .catch(() => {
+        setProviderCapabilities({});
+        setProviderCapabilityLoadState('error');
+        return {} as Partial<Record<ProviderType, ProviderTypeDescriptor>>;
+      });
+    const environmentPromise = providerAPI
+      .detectEnvKeys()
+      .then((response) => {
+        setEnvProviders(response.detected_providers);
+        return response.detected_providers;
+      })
+      .catch(() => {
+        setEnvProviders({});
+        return {} as Record<string, DetectedEnvironmentProvider>;
+      });
+
     if (provider) {
       setFormData({
         name: provider.name,
         provider_type: provider.provider_type,
+        auth_method: provider.auth_method,
+        environment_variable: provider.environment_variable ?? '',
         api_key: '', // Don't pre-fill API key for security
-        base_url: provider.base_url || '',
+        base_url: provider.base_url ?? '',
         llm_model: provider.llm_model || '',
         llm_small_model: provider.llm_small_model || '',
         embedding_model: provider.embedding_model || '',
@@ -330,6 +409,8 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
       setFormData({
         name: '',
         provider_type: 'openai',
+        auth_method: getDefaultProviderAuthMethod({}, 'openai'),
+        environment_variable: '',
         api_key: '',
         base_url: '',
         llm_model: 'gpt-4o',
@@ -339,6 +420,30 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
         is_active: true,
         is_default: false,
       });
+
+      void Promise.all([capabilitiesPromise, environmentPromise]).then(
+        ([capabilities, detectedProviders]) => {
+          const detected = detectedProviders.openai;
+          const authMethods = getProviderAuthMethods(capabilities, 'openai');
+          const environmentVariable = getDetectedEnvironmentVariable(detected, authMethods);
+          setFormData((current) => {
+            if (current.provider_type !== 'openai') return current;
+            return {
+              ...current,
+              auth_method: environmentVariable
+                ? 'environment'
+                : getDefaultProviderAuthMethod(capabilities, 'openai'),
+              environment_variable: environmentVariable ?? '',
+              api_key: '',
+              base_url: detected?.base_url ?? current.base_url,
+              llm_model: detected?.llm_model ?? current.llm_model,
+              llm_small_model: detected?.llm_small_model ?? current.llm_small_model,
+              embedding_model: detected?.embedding_model ?? current.embedding_model,
+              reranker_model: detected?.reranker_model ?? current.reranker_model,
+            };
+          });
+        }
+      );
     }
     setActiveTab('basic');
     setError(null);
@@ -346,13 +451,22 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
 
   const handleProviderTypeChange = (type: ProviderType) => {
     const defaults = DEFAULT_MODELS[type];
+    const authMethods = getProviderAuthMethods(providerCapabilities, type);
+    const detected = envProviders[type];
+    const environmentVariable = getDetectedEnvironmentVariable(detected, authMethods);
     setFormData((prev) => ({
       ...prev,
       provider_type: type,
-      llm_model: defaults?.llm || '',
-      llm_small_model: defaults?.small || '',
-      embedding_model: defaults?.embedding || '',
-      reranker_model: defaults?.reranker || '',
+      auth_method: environmentVariable
+        ? 'environment'
+        : getDefaultProviderAuthMethod(providerCapabilities, type),
+      environment_variable: environmentVariable ?? '',
+      api_key: '',
+      base_url: detected?.base_url ?? '',
+      llm_model: detected?.llm_model ?? defaults?.llm ?? '',
+      llm_small_model: detected?.llm_small_model ?? defaults?.small ?? '',
+      embedding_model: detected?.embedding_model ?? defaults?.embedding ?? '',
+      reranker_model: detected?.reranker_model ?? defaults?.reranker ?? '',
     }));
   };
 
@@ -362,11 +476,22 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
     setError(null);
 
     try {
+      if (!credentialReady) {
+        setError(
+          t('components.provider.modal.errors.credentialRequired', {
+            defaultValue: 'Configure the selected authentication method before saving.',
+          })
+        );
+        return;
+      }
+
       if (provider) {
         const updateData: ProviderUpdate = {
+          expected_revision: provider.revision,
           name: formData.name,
           provider_type: formData.provider_type,
-          base_url: formData.base_url || undefined,
+          ...buildProviderAuthPayload(formData),
+          base_url: formData.base_url.trim() || null,
           llm_model: formData.llm_model,
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
@@ -374,17 +499,13 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
           is_active: formData.is_active,
           is_default: formData.is_default,
         };
-        // Only include API key if it was changed
-        if (formData.api_key) {
-          updateData.api_key = formData.api_key;
-        }
         await providerAPI.update(provider.id, updateData);
       } else {
         const createData: ProviderCreate = {
           name: formData.name,
           provider_type: formData.provider_type,
-          api_key: formData.api_key,
-          base_url: formData.base_url || undefined,
+          ...buildProviderAuthPayload(formData),
+          base_url: formData.base_url.trim() || undefined,
           llm_model: formData.llm_model,
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
@@ -545,34 +666,171 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
 
                 <div>
                   <label
-                    htmlFor="api-key"
+                    htmlFor="provider-auth-method"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    {t('components.provider.modal.labels.apiKey')} {!isEditing && '*'}
+                    {t('components.provider.modal.labels.authMethod', {
+                      defaultValue: 'Authentication',
+                    })}
                   </label>
-                  <input
-                    id="api-key"
-                    type="password"
-                    required={!isEditing && providerTypeRequiresApiKey(formData.provider_type)}
-                    value={formData.api_key}
-                    onChange={(e) => {
-                      setFormData((prev) => ({ ...prev, api_key: e.target.value }));
-                    }}
-                    placeholder={
-                      isEditing
-                        ? t('components.provider.modal.placeholders.keepCurrentKey')
-                        : providerTypeRequiresApiKey(formData.provider_type)
-                          ? t('components.provider.modal.placeholders.enterApiKey')
-                          : t('components.provider.modal.placeholders.optionalLocalApiKey')
+                  <select
+                    id="provider-auth-method"
+                    value={authMethodAvailable ? formData.auth_method : ''}
+                    disabled={
+                      providerCapabilityLoadState !== 'ready' || availableAuthMethods.length === 0
                     }
+                    onChange={(event) => {
+                      const authMethod = event.target.value as ProviderAuthMethod;
+                      setFormData((current) => ({
+                        ...current,
+                        auth_method: authMethod,
+                        api_key: authMethod === 'api_key' ? current.api_key : '',
+                        environment_variable:
+                          authMethod === 'environment'
+                            ? current.environment_variable || detectedEnvironmentVariable || ''
+                            : '',
+                      }));
+                    }}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                  <p className="mt-1 text-xs text-slate-500">
-                    {providerTypeRequiresApiKey(formData.provider_type)
-                      ? t('components.provider.modal.help.apiKeyRequired')
-                      : t('components.provider.modal.help.apiKeyOptional')}
-                  </p>
+                  >
+                    {availableAuthMethods.length === 0 && (
+                      <option value="">
+                        {providerCapabilityLoadState === 'loading'
+                          ? t('components.provider.modal.auth.loading', {
+                              defaultValue: 'Loading authentication capabilities…',
+                            })
+                          : providerCapabilityLoadState === 'error'
+                            ? t('components.provider.modal.auth.loadFailed', {
+                                defaultValue: 'Authentication capabilities unavailable',
+                              })
+                            : t('components.provider.modal.auth.unavailable', {
+                                defaultValue: 'No secure authentication available',
+                              })}
+                      </option>
+                    )}
+                    {availableAuthMethods.map((method) => (
+                      <option key={method} value={method}>
+                        {method === 'environment'
+                          ? t('components.provider.modal.auth.environment', {
+                              defaultValue: 'Environment variable',
+                            })
+                          : method === 'none'
+                            ? t('components.provider.modal.auth.none', {
+                                defaultValue: 'No authentication',
+                              })
+                            : method === 'oauth'
+                              ? t('components.provider.modal.auth.oauth', {
+                                  defaultValue: 'OAuth',
+                                })
+                              : t('components.provider.modal.auth.apiKey', {
+                                  defaultValue: 'API key',
+                                })}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+
+                {!authMethodAvailable && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+                    {providerCapabilityLoadState === 'loading'
+                      ? t('components.provider.modal.help.authLoading', {
+                          defaultValue:
+                            'Authentication options are loading. Saving stays disabled until the server confirms them.',
+                        })
+                      : providerCapabilityLoadState === 'error'
+                        ? t('components.provider.modal.help.authLoadFailed', {
+                            defaultValue:
+                              'Authentication options could not be loaded. Reopen this dialog to try again.',
+                          })
+                        : t('components.provider.modal.help.authUnavailable', {
+                            defaultValue:
+                              'This provider cannot be configured until secure credential storage is available.',
+                          })}
+                  </p>
+                )}
+
+                {authMethodAvailable && formData.auth_method === 'api_key' && (
+                  <div>
+                    <label
+                      htmlFor="api-key"
+                      className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
+                      {t('components.provider.modal.labels.apiKey')} {!isEditing && '*'}
+                    </label>
+                    <input
+                      id="api-key"
+                      type="password"
+                      required={!provider || !provider.credential_configured}
+                      value={formData.api_key}
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, api_key: e.target.value }));
+                      }}
+                      placeholder={
+                        isEditing
+                          ? t('components.provider.modal.placeholders.keepCurrentKey')
+                          : t('components.provider.modal.placeholders.enterApiKey')
+                      }
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      {provider?.credential_configured && !formData.api_key
+                        ? t('components.provider.modal.help.currentCredentialRetained', {
+                            defaultValue: 'Leave blank to keep the configured credential.',
+                          })
+                        : t('components.provider.modal.help.apiKeyRequired')}
+                    </p>
+                  </div>
+                )}
+
+                {authMethodAvailable && formData.auth_method === 'environment' && (
+                  <div>
+                    <label
+                      htmlFor="provider-environment-variable"
+                      className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
+                      {t('components.provider.modal.labels.environmentVariable', {
+                        defaultValue: 'Environment variable',
+                      })}{' '}
+                      *
+                    </label>
+                    <input
+                      id="provider-environment-variable"
+                      type="text"
+                      required
+                      value={formData.environment_variable}
+                      onChange={(event) => {
+                        setFormData((current) => ({
+                          ...current,
+                          environment_variable: event.target.value,
+                        }));
+                      }}
+                      placeholder={t('components.provider.modal.placeholders.environmentVariable', {
+                        defaultValue: 'PROVIDER_API_KEY',
+                      })}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent font-mono"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      {detectedEnvironmentVariable === formData.environment_variable
+                        ? t('components.provider.modal.help.environmentDetected', {
+                            defaultValue:
+                              'Detected {{environmentVariable}}. Its secret value remains in the runtime environment.',
+                            environmentVariable: formData.environment_variable,
+                          })
+                        : t('components.provider.modal.help.environmentVariable', {
+                            defaultValue:
+                              'Only the variable name is saved and sent. The secret value is never copied into this form.',
+                          })}
+                    </p>
+                  </div>
+                )}
+
+                {authMethodAvailable && formData.auth_method === 'none' && (
+                  <p className="rounded-lg border border-slate-200 p-3 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    {t('components.provider.modal.help.noAuthentication', {
+                      defaultValue: 'This provider does not require a credential.',
+                    })}
+                  </p>
+                )}
 
                 <div className="flex items-center gap-6">
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -771,7 +1029,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !credentialReady}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
             >
               {isSubmitting ? (

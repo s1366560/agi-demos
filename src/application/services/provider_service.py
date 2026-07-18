@@ -8,7 +8,7 @@ Handles business logic and coordinates between domain and infrastructure layers.
 import logging
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
@@ -27,6 +27,7 @@ from src.domain.llm_providers.models import (
     ProviderConfigCreate,
     ProviderConfigResponse,
     ProviderConfigUpdate,
+    ProviderCredentialRequiredError,
     ProviderHealth,
     ProviderProbeRequest,
     ProviderStatus,
@@ -35,10 +36,27 @@ from src.domain.llm_providers.models import (
     RateLimitStats,
     ResilienceStatus,
     TenantProviderMapping,
+    UnsupportedProviderAuthError,
     get_default_model_metadata,
+    provider_revision,
+    validate_provider_base_url_transport,
 )
 from src.domain.llm_providers.repositories import ProviderRepository
-from src.infrastructure.llm.provider_credentials import from_decrypted_api_key
+from src.domain.llm_providers.security_policy import (
+    append_provider_url_segments,
+    environment_credential_endpoint_is_official,
+    normalize_provider_family,
+    provider_persistent_auth_supported,
+    provider_probe_default_base_url,
+    provider_probe_supported,
+)
+from src.infrastructure.i18n import gettext as _
+from src.infrastructure.llm.provider_credentials import (
+    configured_environment_variable,
+    configured_provider_auth_method,
+    from_decrypted_api_key,
+    resolve_persisted_provider_credential,
+)
 from src.infrastructure.llm.resilience import (
     get_circuit_breaker_registry,
     get_health_checker,
@@ -48,7 +66,6 @@ from src.infrastructure.persistence.llm_providers_repository import SQLAlchemyPr
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
-_PROVIDER_VARIANT_SUFFIXES: tuple[str, ...] = ("_coding", "_embedding", "_reranker")
 
 
 class ProviderService:
@@ -89,16 +106,19 @@ class ProviderService:
             ValueError: If validation fails (excluding duplicate name)
         """
         logger.info(f"Creating provider: {config.name} ({config.provider_type})")
+        self._validate_persistent_auth(
+            provider_type=config.provider_type,
+            auth_method=config.auth_method,
+            environment_variable=config.environment_variable,
+            api_key=config.api_key,
+            credential_already_configured=False,
+        )
 
         # Fast path: check if provider already exists
         existing = await self.repository.get_by_name(config.name)
         if existing:
             logger.info(f"Provider '{config.name}' already exists, returning existing provider")
             return existing
-
-        # If this is marked as default, unset other defaults for the same operation role.
-        if config.is_default:
-            await self._clear_default_providers(config.operation_type)
 
         # Create provider (idempotent - returns existing if another process created it)
         provider = await self.repository.create(config)
@@ -145,9 +165,35 @@ class ProviderService:
         """Build an API response without reloading the provider row."""
         # Get latest health status
         health = await self.repository.get_latest_health(provider.id)
+        if health is not None and health.last_check < provider.updated_at:
+            health = None
 
-        # Mask API key (show only last 4 characters)
-        api_key_masked = self._mask_api_key(provider.api_key_encrypted)
+        auth_method = configured_provider_auth_method(provider.provider_type, provider.config)
+        environment_variable = None
+        credential_source: Literal["service_encrypted", "environment", "none"]
+        if auth_method == ProviderAuthMethod.ENVIRONMENT:
+            environment_variable = configured_environment_variable(
+                provider.provider_type,
+                provider.config,
+            )
+            credential_source = "environment"
+            credential_configured = bool(
+                environment_variable
+                and environment_credential_endpoint_is_official(
+                    provider.provider_type,
+                    provider.base_url,
+                )
+                and os.getenv(environment_variable, "").strip()
+            )
+            api_key_masked = ""
+        elif auth_method == ProviderAuthMethod.NONE:
+            credential_source = "none"
+            credential_configured = True
+            api_key_masked = "(local-no-key)"
+        else:
+            credential_source = "service_encrypted"
+            credential_configured = self._credential_is_configured(provider.api_key_encrypted)
+            api_key_masked = self._mask_api_key(provider.api_key_encrypted)
 
         # Get resilience status
         resilience = self._get_resilience_status(provider.provider_type)
@@ -158,7 +204,7 @@ class ProviderService:
             name=provider.name,
             provider_type=provider.provider_type,
             operation_type=provider.operation_type,
-            base_url=provider.base_url,
+            base_url=self._public_provider_base_url(provider.base_url, provider.provider_type),
             llm_model=provider.llm_model,
             llm_small_model=provider.llm_small_model,
             embedding_model=provider.embedding_model,
@@ -170,7 +216,12 @@ class ProviderService:
             is_enabled=provider.is_enabled,
             allowed_models=provider.allowed_models,
             blocked_models=provider.blocked_models,
+            auth_method=auth_method,
+            environment_variable=environment_variable,
+            credential_source=credential_source,
+            credential_configured=credential_configured,
             api_key_masked=api_key_masked,
+            revision=provider_revision(provider.updated_at),
             created_at=provider.created_at,
             updated_at=provider.updated_at,
             health_status=health.status if health else None,
@@ -192,22 +243,73 @@ class ProviderService:
             return None
         original_provider_type = existing.provider_type
 
+        endpoint_fields = {"base_url", "provider_type"}
+        target_provider_type = config.provider_type or existing.provider_type
+        if not provider_persistent_auth_supported(target_provider_type):
+            raise UnsupportedProviderAuthError(
+                "Persistent authentication is not available for this provider type"
+            )
+        target_base_url = (
+            config.base_url if "base_url" in config.model_fields_set else existing.base_url
+        )
+        if endpoint_fields.intersection(config.model_fields_set):
+            validated_base_url = validate_provider_base_url_transport(
+                target_base_url,
+                target_provider_type,
+            )
+            if "base_url" in config.model_fields_set:
+                config.base_url = validated_base_url
+
+        existing_base_url = existing.base_url.strip() if existing.base_url else None
+        provider_type_changed = (
+            "provider_type" in config.model_fields_set
+            and target_provider_type != existing.provider_type
+        )
+        base_url_changed = (
+            "base_url" in config.model_fields_set and config.base_url != existing_base_url
+        )
+        credential_binding_changed = provider_type_changed or base_url_changed
+
+        auth_fields = {
+            "auth_method",
+            "environment_variable",
+            "api_key",
+            "base_url",
+            "provider_type",
+        }
+        if auth_fields.intersection(config.model_fields_set):
+            is_target_local = target_provider_type in {
+                ProviderType.OLLAMA,
+                ProviderType.LMSTUDIO,
+            }
+            credential_already_configured = (
+                False
+                if is_target_local or credential_binding_changed
+                else self._credential_is_configured(existing.api_key_encrypted)
+            )
+            self._validate_persistent_auth(
+                provider_type=target_provider_type,
+                auth_method=config.auth_method,
+                environment_variable=config.environment_variable,
+                api_key=config.api_key,
+                credential_already_configured=credential_already_configured,
+            )
+
         target_operation = config.operation_type or existing.operation_type
         will_be_default = (
             config.is_default if config.is_default is not None else existing.is_default
         )
-
-        # If setting as default, unset other defaults for the target operation role.
+        replace_default_for = None
         if will_be_default and (
             not existing.is_default or target_operation != existing.operation_type
         ):
-            await self._clear_default_providers(
-                target_operation,
-                exclude_provider_id=provider_id,
-            )
+            replace_default_for = target_operation
 
-        # Update provider
-        updated = await self.repository.update(provider_id, config)
+        updated = await self.repository.update(
+            provider_id,
+            config,
+            replace_default_for=replace_default_for,
+        )
 
         self.resolution_service.invalidate_cache()
         self._invalidate_model_pool_cache()
@@ -252,6 +354,21 @@ class ProviderService:
         provider = await self.repository.get_by_id(provider_id)
         if not provider:
             raise ValueError(f"Provider not found: {provider_id}")
+        if not provider_probe_supported(provider.provider_type):
+            health = ProviderHealth(
+                provider_id=provider_id,
+                status=ProviderStatus.CONFIGURATION_VALID,
+                last_check=datetime.now(UTC),
+                error_message=None,
+                response_time_ms=None,
+            )
+            await self.repository.create_health_check(health)
+            logger.info(
+                "Health check skipped for provider %s: configuration is valid but probing is "
+                "unsupported",
+                provider_id,
+            )
+            return health
 
         start_time = time.time()
         status = "healthy"
@@ -259,10 +376,18 @@ class ProviderService:
         response_time_ms = None
 
         try:
-            decrypted_key = self.encryption_service.decrypt(provider.api_key_encrypted)
-            api_key = from_decrypted_api_key(decrypted_key)
-            assert api_key is not None, "Decrypted API key is None"
-            status, error_message = await self._check_provider_endpoint(provider, api_key)
+            provider.base_url = validate_provider_base_url_transport(
+                provider.base_url,
+                provider.provider_type,
+            )
+            api_key = resolve_persisted_provider_credential(
+                provider_type=provider.provider_type,
+                config=provider.config,
+                base_url=provider.base_url,
+                api_key_encrypted=provider.api_key_encrypted,
+                decrypt=self.encryption_service.decrypt,
+            )
+            status, error_message = await self._check_provider_endpoint(provider, api_key or "")
             response_time_ms = int((time.time() - start_time) * 1000)
         except Exception as e:
             logger.error(f"Health check failed for provider {provider_id}: {e}")
@@ -298,6 +423,13 @@ class ProviderService:
 
         api_key = config.api_key or ""
         if config.auth_method == ProviderAuthMethod.ENVIRONMENT:
+            if not self._environment_credential_endpoint_is_official(
+                config.provider_type,
+                config.base_url,
+            ):
+                raise ValueError(
+                    "Environment credentials can only be used with the official provider endpoint"
+                )
             environment_variable = config.environment_variable
             api_key = os.getenv(environment_variable, "").strip() if environment_variable else ""
             if not api_key:
@@ -315,6 +447,13 @@ class ProviderService:
                     catalog=None,
                     environment_variable=environment_variable,
                 )
+
+        if not provider_probe_supported(config.provider_type):
+            return ProviderValidationResponse.from_configuration_validation(
+                provider_id=provider_id,
+                detail=_("Connection probing is not supported for this provider type"),
+                environment_variable=config.environment_variable,
+            )
 
         provider = ProviderConfig(
             id=provider_id,
@@ -358,27 +497,34 @@ class ProviderService:
 
         provider_type = provider.provider_type
         normalized_provider_type = self._normalize_provider_type(provider_type)
-        base_url = provider.base_url
+        if not provider_probe_supported(provider_type):
+            raise UnsupportedProviderAuthError(
+                "Provider health check is not supported for this provider type"
+            )
+        base_url = validate_provider_base_url_transport(provider.base_url, provider_type)
 
         # Providers with standard GET /models + Bearer auth
-        bearer_providers: dict[str, str] = {
-            "openai": "https://api.openai.com/v1",
-            "openrouter": "https://openrouter.ai/api/v1",
-            "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "deepseek": "https://api.deepseek.com/v1",
-            "minimax": "https://api.minimax.io/v1",
-            "zai": "https://open.bigmodel.cn/api/paas/v4",
-            "kimi": "https://api.moonshot.cn/v1",
-            "groq": "https://api.groq.com/openai/v1",
-            "mistral": "https://api.mistral.ai/v1",
-            "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
+        bearer_providers = {
+            "openai",
+            "openrouter",
+            "dashscope",
+            "deepseek",
+            "minimax",
+            "zai",
+            "kimi",
+            "groq",
+            "mistral",
+            "volcengine",
         }
 
         async with httpx.AsyncClient(timeout=5.0) as client:
             if normalized_provider_type in bearer_providers:
+                api_base = base_url or provider_probe_default_base_url(normalized_provider_type)
+                if api_base is None:
+                    raise ValueError("Provider base URL is required")
                 return await self._http_health_check(
                     client,
-                    url=f"{base_url or bearer_providers[normalized_provider_type]}/models",
+                    url=append_provider_url_segments(api_base, ("models",)),
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
 
@@ -389,12 +535,7 @@ class ProviderService:
     @staticmethod
     def _normalize_provider_type(provider_type: ProviderType | str) -> str:
         """Normalize specialized provider variants to their base provider type."""
-        normalized = str(getattr(provider_type, "value", provider_type)).strip().lower()
-        for suffix in _PROVIDER_VARIANT_SUFFIXES:
-            if normalized.endswith(suffix):
-                normalized = normalized.removesuffix(suffix)
-                break
-        return normalized
+        return normalize_provider_family(provider_type)
 
     async def _check_special_provider(
         self,
@@ -425,39 +566,39 @@ class ProviderService:
         provider: ProviderConfig,
     ) -> tuple[str, dict[str, str] | None] | None:
         """Return (url, headers) for special provider health checks, or None if unknown."""
-        builders: dict[str, tuple[str, str, dict[str, str] | None]] = {
+        builders: dict[str, tuple[str, tuple[str, ...], dict[str, str] | None]] = {
             "gemini": (
-                base_url or "https://generativelanguage.googleapis.com",
-                "/v1beta/models/{model}",
+                base_url or provider_probe_default_base_url("gemini") or "",
+                ("v1beta", "models", provider.llm_model or "gemini-pro"),
                 {"x-goog-api-key": api_key},
             ),
             "anthropic": (
-                base_url or "https://api.anthropic.com",
-                "/v1/models",
+                base_url or provider_probe_default_base_url("anthropic") or "",
+                ("v1", "models"),
                 {"x-api-key": api_key, "anthropic-version": "2023-06-01"},
             ),
-            "azure_openai": (base_url or "", "/models", {"api-key": api_key}),
-            "ollama": (base_url or "http://localhost:11434", "/api/tags", None),
+            "azure_openai": (base_url or "", ("models",), {"api-key": api_key}),
+            "ollama": (
+                base_url or provider_probe_default_base_url("ollama") or "",
+                ("api", "tags"),
+                None,
+            ),
             "lmstudio": (
-                base_url or "http://localhost:1234/v1",
-                "/models",
+                base_url or provider_probe_default_base_url("lmstudio") or "",
+                ("models",),
                 {"Authorization": f"Bearer {api_key}"} if api_key else None,
             ),
             "cohere": (
-                base_url or "https://api.cohere.com",
-                "/v1/models",
+                base_url or provider_probe_default_base_url("cohere") or "",
+                ("models",),
                 {"Authorization": f"Bearer {api_key}"},
             ),
         }
         spec = builders.get(provider_type)
         if spec is None:
             return None
-        api_base, path_template, headers = spec
-        # Gemini uses model in URL path
-        if provider_type == "gemini":
-            model = provider.llm_model or "gemini-pro"
-            path_template = path_template.format(model=model)
-        return f"{api_base}{path_template}", headers
+        api_base, path_segments, headers = spec
+        return append_provider_url_segments(api_base, path_segments), headers
 
     @staticmethod
     async def _check_bedrock_provider(
@@ -781,27 +922,6 @@ class ProviderService:
                 return OperationType.LLM
         return OperationType.LLM
 
-    async def _clear_default_providers(
-        self,
-        operation_type: OperationType = OperationType.LLM,
-        *,
-        exclude_provider_id: UUID | None = None,
-    ) -> None:
-        """Unset default flag from providers in the same operation role."""
-        providers = await self.repository.list_all()
-        for provider in providers:
-            provider_operation_type = self._coerce_operation_type(
-                getattr(provider, "operation_type", OperationType.LLM)
-            )
-            if (
-                provider.is_default
-                and provider_operation_type == operation_type
-                and provider.id != exclude_provider_id
-            ):
-                await self.repository.update(
-                    provider.id, ProviderConfigUpdate(name=None, api_key=None, is_default=False)
-                )
-
     async def clear_all_providers(self) -> int:
         """
         Clear all LLM provider configurations.
@@ -857,6 +977,74 @@ class ProviderService:
                 type(e).__name__,
             )
             return "sk-[ERROR]"
+
+    def _credential_is_configured(self, encrypted_key: str) -> bool:
+        """Return whether encrypted storage contains usable API-key material."""
+        try:
+            decrypted = self.encryption_service.decrypt(encrypted_key)
+            return from_decrypted_api_key(decrypted) is not None
+        except Exception:
+            return False
+
+    @staticmethod
+    def _public_provider_base_url(
+        base_url: str | None,
+        provider_type: ProviderType,
+    ) -> str | None:
+        """Return a response-safe endpoint only when it satisfies the current contract."""
+        try:
+            return validate_provider_base_url_transport(base_url, provider_type)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _environment_credential_endpoint_is_official(
+        provider_type: ProviderType,
+        base_url: str | None,
+    ) -> bool:
+        """Keep server environment credentials on the provider's official origin."""
+        return environment_credential_endpoint_is_official(provider_type, base_url)
+
+    @staticmethod
+    def _validate_persistent_auth(
+        *,
+        provider_type: ProviderType,
+        auth_method: ProviderAuthMethod | None,
+        environment_variable: str | None,
+        api_key: str | None,
+        credential_already_configured: bool,
+    ) -> None:
+        """Validate the authentication contract supported by persistent execution."""
+        if not provider_persistent_auth_supported(provider_type):
+            raise UnsupportedProviderAuthError(
+                "Persistent authentication is not available for this provider type"
+            )
+        is_local = provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+        effective_auth = auth_method or (
+            ProviderAuthMethod.NONE if is_local else ProviderAuthMethod.API_KEY
+        )
+        if effective_auth in {ProviderAuthMethod.ENVIRONMENT, ProviderAuthMethod.OAUTH}:
+            raise UnsupportedProviderAuthError(
+                "Authentication method is not supported for persistent providers"
+            )
+        if environment_variable:
+            raise UnsupportedProviderAuthError(
+                "Authentication method is not supported for persistent providers"
+            )
+        if is_local:
+            if effective_auth != ProviderAuthMethod.NONE or api_key:
+                raise UnsupportedProviderAuthError(
+                    "API-key authentication is not supported for local providers"
+                )
+            return
+        if effective_auth != ProviderAuthMethod.API_KEY:
+            raise UnsupportedProviderAuthError(
+                "No-auth authentication is not supported for remote providers"
+            )
+        if not api_key and not credential_already_configured:
+            raise ProviderCredentialRequiredError(
+                "API key must be resubmitted after the provider binding changes"
+            )
 
     def _get_resilience_status(self, provider_type: ProviderType) -> ResilienceStatus:
         """

@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ProviderList } from '@/pages/tenant/ProviderList';
 import { providerAPI } from '@/services/api';
 
-import type { ProviderConfig, SystemResilienceStatus } from '@/types/memory';
+import type { ProviderConfig, ProviderHealth, SystemResilienceStatus } from '@/types/memory';
 
 const messageMock = vi.hoisted(() => ({
   error: vi.fn(),
@@ -57,7 +57,9 @@ vi.mock('@/components/provider', () => ({
   ),
   ProviderConfigModal: () => null,
   ProviderHealthPanel: ({ systemStatus }: { systemStatus: SystemResilienceStatus | null }) => (
-    <div data-testid="provider-health-panel">{systemStatus ? 'status loaded' : 'status missing'}</div>
+    <div data-testid="provider-health-panel">
+      {systemStatus ? 'status loaded' : 'status missing'}
+    </div>
   ),
   ProviderCard: ({
     onAssign,
@@ -120,9 +122,12 @@ const systemStatus = (): SystemResilienceStatus => ({
 const provider = (overrides: Partial<ProviderConfig> = {}): ProviderConfig => ({
   allowed_models: [],
   api_key_masked: 'sk-***',
+  auth_method: 'api_key',
   blocked_models: [],
   config: {},
   created_at: '2026-06-17T00:00:00Z',
+  credential_configured: true,
+  environment_variable: null,
   health_status: 'unknown',
   id: 'provider-1',
   is_active: true,
@@ -130,10 +135,20 @@ const provider = (overrides: Partial<ProviderConfig> = {}): ProviderConfig => ({
   is_enabled: true,
   llm_model: 'gpt-4.1',
   name: 'OpenAI Primary',
-  operation_type: 'chat',
+  operation_type: 'llm',
   provider_type: 'openai',
   response_time_ms: undefined,
+  revision: 1,
   updated_at: '2026-06-17T00:00:00Z',
+  ...overrides,
+});
+
+const providerHealth = (overrides: Partial<ProviderHealth> = {}): ProviderHealth => ({
+  last_check: '2026-06-17T00:00:00Z',
+  probed: true,
+  provider_id: 'provider-1',
+  response_time_ms: 42,
+  status: 'healthy',
   ...overrides,
 });
 
@@ -157,7 +172,7 @@ describe('ProviderList', () => {
     providerStoreMock.loading = false;
     providerStoreMock.providers = [];
     tenantStoreMock.currentTenant = { id: 'tenant-1', name: 'Tenant 1' };
-    vi.mocked(providerAPI.checkHealth).mockResolvedValue(undefined);
+    vi.mocked(providerAPI.checkHealth).mockResolvedValue(providerHealth());
     vi.mocked(providerAPI.getSystemStatus).mockResolvedValue(systemStatus());
     vi.mocked(providerAPI.resetCircuitBreaker).mockResolvedValue(undefined);
   });
@@ -184,6 +199,39 @@ describe('ProviderList', () => {
       expect(providerAPI.checkHealth).toHaveBeenCalledWith('provider-1');
       expect(messageMock.error).toHaveBeenCalledWith('Failed to check provider health');
     });
+  });
+
+  it('reloads providers after a configuration-only health validation', async () => {
+    providerStoreMock.providers = [provider()];
+    vi.mocked(providerAPI.checkHealth).mockResolvedValueOnce(
+      providerHealth({
+        detail: 'Connection probing is not supported for this provider type',
+        probed: false,
+        response_time_ms: null,
+        status: 'configuration_valid',
+      })
+    );
+
+    renderProviderList();
+
+    await waitFor(() => {
+      expect(providerStoreMock.fetchProviders).toHaveBeenCalledTimes(1);
+      expect(providerAPI.getSystemStatus).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check OpenAI Primary' }));
+
+    await waitFor(() => {
+      expect(providerStoreMock.fetchProviders).toHaveBeenCalledTimes(2);
+      expect(providerAPI.getSystemStatus).toHaveBeenCalledTimes(2);
+    });
+    expect(messageMock.success).toHaveBeenCalledWith(
+      'Configuration validated. Network probing is not supported for this provider.'
+    );
+
+    const healthCheckOrder = vi.mocked(providerAPI.checkHealth).mock.invocationCallOrder.at(-1);
+    const providerReloadOrder = providerStoreMock.fetchProviders.mock.invocationCallOrder.at(-1);
+    expect(providerReloadOrder).toBeGreaterThan(healthCheckOrder ?? 0);
   });
 
   it('uses the route tenant for assignment routing when the store tenant is stale', async () => {

@@ -23,13 +23,23 @@ from src.domain.llm_providers.models import (
     ProviderConfigCreate,
     ProviderConfigResponse,
     ProviderConfigUpdate,
+    ProviderCredentialRequiredError,
     ProviderHealth,
     ProviderProbeRequest,
+    ProviderRevisionConflictError,
+    ProviderStatus,
     ProviderType,
     ProviderTypeDescriptor,
     ProviderValidationResponse,
     TenantProviderMapping,
+    UnsupportedProviderAuthError,
+    infer_operation_type_from_provider_type,
     provider_environment_variables,
+    validate_provider_base_url_transport,
+)
+from src.domain.llm_providers.security_policy import (
+    provider_persistent_auth_supported,
+    provider_probe_supported,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -172,6 +182,11 @@ async def create_provider(
         provider = await service.create_provider(config)
         logger.info(f"Provider created: {provider.id} by user {current_user.id}")
         return await service.get_provider_response(provider.id)
+    except UnsupportedProviderAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("Unsupported provider authentication method"),
+        ) from exc
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -209,25 +224,33 @@ async def list_provider_types(
     List all supported provider types.
     """
     no_auth_providers = {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
-    return [
-        ProviderTypeDescriptor(
-            provider_type=provider_type,
-            auth_methods=[
+    descriptors: list[ProviderTypeDescriptor] = []
+    for provider_type in ProviderType:
+        persistent_auth_available = provider_persistent_auth_supported(provider_type)
+        if not persistent_auth_available:
+            auth_methods: list[ProviderAuthMethod] = []
+            unavailable_auth_methods = ["api_key", "environment", "oauth"]
+        else:
+            auth_methods = [
                 ProviderAuthMethod.NONE
                 if provider_type in no_auth_providers
                 else ProviderAuthMethod.API_KEY
-            ],
-            unavailable_auth_methods=(
-                (["environment"] if provider_environment_variables(provider_type) else [])
-                + (
-                    ["oauth"]
-                    if provider_type in {ProviderType.OPENAI, ProviderType.ANTHROPIC}
-                    else []
-                )
-            ),
+            ]
+            unavailable_auth_methods = (
+                ["environment"] if provider_environment_variables(provider_type) else []
+            ) + (
+                ["oauth"] if provider_type in {ProviderType.OPENAI, ProviderType.ANTHROPIC} else []
+            )
+        descriptors.append(
+            ProviderTypeDescriptor(
+                provider_type=provider_type,
+                operation_type=infer_operation_type_from_provider_type(provider_type).value,
+                probe_supported=provider_probe_supported(provider_type),
+                auth_methods=auth_methods,
+                unavailable_auth_methods=unavailable_auth_methods,
+            )
         )
-        for provider_type in ProviderType
-    ]
+    return descriptors
 
 
 # Model Catalog Endpoints (MUST be before /models/{provider_type}
@@ -504,6 +527,20 @@ async def detect_env_providers(
     from src.infrastructure.llm.initializer import detect_env_providers as _detect
 
     detected = _detect()
+
+    def _safe_base_url(name: str, value: object) -> str | None:
+        try:
+            provider_type = ProviderType(name)
+        except ValueError:
+            return None
+        try:
+            return validate_provider_base_url_transport(
+                value if isinstance(value, str) else None,
+                provider_type,
+            )
+        except ValueError:
+            return None
+
     return {
         "detected_providers": {
             name: {
@@ -511,7 +548,7 @@ async def detect_env_providers(
                 "operation_type": config.get("operation_type", "llm"),
                 "credential_source": "environment",
                 "credential_configured": bool(config.get("api_key")),
-                "base_url": config.get("base_url"),
+                "base_url": _safe_base_url(name, config.get("base_url")),
                 "llm_model": config.get("llm_model"),
                 "llm_small_model": config.get("llm_small_model"),
                 "embedding_model": config.get("embedding_model"),
@@ -563,7 +600,28 @@ async def update_provider(
 
     Requires admin access.
     """
-    updated = await service.update_provider(provider_id, config)
+    if config.expected_revision is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("Provider revision is required"),
+        )
+    try:
+        updated = await service.update_provider(provider_id, config)
+    except ProviderRevisionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_("Provider configuration changed; reload and try again"),
+        ) from exc
+    except ProviderCredentialRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("Provider credential must be resubmitted"),
+        ) from exc
+    except UnsupportedProviderAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("Unsupported provider authentication method"),
+        ) from exc
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -639,12 +697,20 @@ async def check_provider_health(
     try:
         health = await service.check_provider_health(provider_id)
         logger.info(f"Health check completed for provider {provider_id}: {health.status}")
+        probed = health.status != ProviderStatus.CONFIGURATION_VALID
         return ProviderValidationResponse.from_health(
             health,
-            probed=True,
-            detail=None,
+            probed=probed,
+            detail=(
+                None if probed else _("Connection probing is not supported for this provider type")
+            ),
             catalog=None,
         )
+    except UnsupportedProviderAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Provider health check is not supported"),
+        ) from exc
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

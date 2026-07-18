@@ -7,11 +7,11 @@ Provides all CRUD operations, tenant resolution, and usage tracking.
 
 import json
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast, override
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,11 +25,15 @@ from src.domain.llm_providers.models import (
     ProviderConfigCreate,
     ProviderConfigUpdate,
     ProviderHealth,
+    ProviderRevisionConflictError,
     ProviderStatus,
     ProviderType,
     ResolvedProvider,
     TenantProviderMapping,
     UsageStatistics,
+    merge_provider_embedding_config,
+    merge_provider_request_config,
+    provider_revision,
 )
 from src.domain.llm_providers.repositories import ProviderRepository
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -41,6 +45,13 @@ from src.infrastructure.persistence.llm_providers_models import (
     TenantProviderMapping as TenantProviderMappingORM,
 )
 from src.infrastructure.security.encryption_service import get_encryption_service
+
+_DEFAULT_PROVIDER_LOCK_NAMESPACE = 0x4D535044
+_DEFAULT_PROVIDER_OPERATION_LOCK_IDS = {
+    OperationType.LLM: 1,
+    OperationType.EMBEDDING: 2,
+    OperationType.RERANK: 3,
+}
 
 
 class SQLAlchemyProviderRepository(ProviderRepository):
@@ -117,6 +128,24 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         return OperationType.LLM
 
     @staticmethod
+    async def _acquire_default_operation_lock(
+        session: AsyncSession,
+        operation_type: OperationType,
+    ) -> None:
+        """Serialize default transitions for one operation in PostgreSQL transactions."""
+        if session.get_bind().dialect.name != "postgresql":
+            return
+        operation_lock_id = _DEFAULT_PROVIDER_OPERATION_LOCK_IDS[operation_type]
+        _ = await session.execute(
+            select(
+                func.pg_advisory_xact_lock(
+                    _DEFAULT_PROVIDER_LOCK_NAMESPACE,
+                    operation_lock_id,
+                )
+            )
+        )
+
+    @staticmethod
     def _apply_operation_field_separation(
         orm: LLMProviderORM,
         updated_config: dict[str, Any],
@@ -190,10 +219,13 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         """Create a new provider configuration with idempotent upsert on name conflict."""
 
         async def op(session: AsyncSession) -> ProviderConfig:
+            operation_type = config.operation_type
+            if config.is_default:
+                await self._acquire_default_operation_lock(session, operation_type)
+
             # Encrypt API key before storing
             storable_api_key = to_storable_api_key(config.provider_type, config.api_key)
             api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
-            operation_type = config.operation_type
             embedding_payload = (
                 self._build_embedding_payload(
                     config.embedding_model,
@@ -212,8 +244,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                     provider_config.pop("embedding", None)
 
             # Build values dict for insert
+            provider_id = uuid4()
             values = {
-                "id": uuid4(),
+                "id": provider_id,
                 "name": config.name,
                 "provider_type": config.provider_type.value,
                 "operation_type": operation_type.value,
@@ -255,10 +288,37 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
             # Use PostgreSQL ON CONFLICT DO NOTHING for atomic upsert
             # This allows multiple processes to safely attempt creation simultaneously
-            stmt = pg_insert(LLMProviderORM).values(values)
-            stmt = stmt.on_conflict_do_nothing(constraint="llm_providers_name_key")
+            stmt = (
+                pg_insert(LLMProviderORM)
+                .values(values)
+                .on_conflict_do_nothing(constraint="llm_providers_name_key")
+                .returning(LLMProviderORM.id)
+            )
 
-            await session.execute(stmt)
+            insert_result = await session.execute(stmt)
+            inserted_id = insert_result.scalar_one_or_none()
+
+            if config.is_default and inserted_id is not None:
+                defaults_result = await session.execute(
+                    select(LLMProviderORM)
+                    .where(
+                        LLMProviderORM.operation_type == operation_type.value,
+                        LLMProviderORM.is_default.is_(True),
+                        LLMProviderORM.id != inserted_id,
+                    )
+                    .order_by(LLMProviderORM.id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+                transition_time = datetime.now(UTC)
+                for previous_default in defaults_result.scalars().all():
+                    previous_default.is_default = False
+                    previous_default.updated_at = self._next_updated_at(
+                        previous_default.updated_at,
+                        transition_time,
+                    )
+
+            await session.flush()
             await session.commit()
 
             # Fetch the created (or existing) provider
@@ -331,7 +391,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         ]
         for field_name, orm_attr in simple_fields:
             value = getattr(config, field_name, None)
-            if value is not None:
+            if value is not None or (
+                field_name == "base_url" and field_name in config.model_fields_set
+            ):
                 setattr(orm, orm_attr or field_name, value)
 
         if config.provider_type is not None:
@@ -370,9 +432,12 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
     def _apply_api_key_update(self, orm: LLMProviderORM, config: ProviderConfigUpdate) -> None:
         """Encrypt and apply API key update if provided."""
-        if config.api_key is None:
-            return
         provider_type = config.provider_type or ProviderType(orm.provider_type)
+        if config.api_key is None and provider_type not in {
+            ProviderType.OLLAMA,
+            ProviderType.LMSTUDIO,
+        }:
+            return
         storable_api_key = to_storable_api_key(provider_type, config.api_key)
         orm.api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
 
@@ -382,18 +447,19 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         config: ProviderConfigUpdate,
         updated_config: dict[str, Any],
     ) -> bool:
-        """Apply embedding_config update. Returns True if config dict was modified."""
-        effective_embedding_model = config.embedding_model or orm.embedding_model
-        embedding_payload = self._build_embedding_payload(
-            effective_embedding_model,
-            config.embedding_config,
+        """Replace public embedding fields while preserving historical private metadata."""
+        embedding_payload = (
+            self._build_embedding_payload(config.embedding_model, config.embedding_config) or {}
         )
-        if embedding_payload:
-            updated_config["embedding"] = embedding_payload
-            orm.embedding_model = embedding_payload.get("model")
+        merged_embedding = merge_provider_embedding_config(
+            updated_config.get("embedding"),
+            embedding_payload,
+        )
+        if merged_embedding:
+            updated_config["embedding"] = merged_embedding
         else:
             updated_config.pop("embedding", None)
-            orm.embedding_model = None
+        orm.embedding_model = embedding_payload.get("model")
         return True
 
     def _apply_embedding_model_update(
@@ -419,28 +485,125 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         orm.embedding_model = config.embedding_model
         return True
 
+    @staticmethod
+    def _clear_structured_auth_metadata(
+        config: ProviderConfigUpdate,
+        updated_config: dict[str, Any],
+    ) -> bool:
+        """Clear Rust environment references only on an explicit auth binding change."""
+        auth_binding_fields = {"api_key", "auth_method", "base_url", "provider_type"}
+        if not auth_binding_fields.intersection(config.model_fields_set):
+            return False
+        had_metadata = any(key in updated_config for key in ("auth_method", "environment_variable"))
+        updated_config.pop("auth_method", None)
+        updated_config.pop("environment_variable", None)
+        return had_metadata
+
+    @staticmethod
+    def _next_updated_at(current_updated_at: datetime, now: datetime) -> datetime:
+        """Return a timestamp whose public revision is newer than the current one."""
+        if provider_revision(now) > provider_revision(current_updated_at):
+            return now
+        normalized_current = current_updated_at
+        if normalized_current.tzinfo is None:
+            normalized_current = normalized_current.replace(tzinfo=UTC)
+        return normalized_current + timedelta(microseconds=1)
+
     @override
     async def update(
-        self, provider_id: UUID, config: ProviderConfigUpdate
+        self,
+        provider_id: UUID,
+        config: ProviderConfigUpdate,
+        *,
+        replace_default_for: OperationType | None = None,
     ) -> ProviderConfig | None:
-        """Update provider configuration."""
+        """Update one provider and optionally replace an operation default atomically."""
         session = await self._get_session()
 
         from uuid import UUID as _UUID
 
         pid = _UUID(str(provider_id))
-        result = await session.execute(select(LLMProviderORM).where(LLMProviderORM.id == pid))
-        orm = result.scalar_one_or_none()
+        locked_providers: list[LLMProviderORM] | None = None
+        if replace_default_for is None:
+            result = await session.execute(
+                select(LLMProviderORM)
+                .where(LLMProviderORM.id == pid)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            orm = result.scalar_one_or_none()
+        else:
+            await self._acquire_default_operation_lock(session, replace_default_for)
+            # Lock the target plus every current default in the destination role.
+            # The advisory lock covers empty roles and concurrent inserts; UUID
+            # ordering keeps overlapping row-lock sets deterministic.
+            result = await session.execute(
+                select(LLMProviderORM)
+                .where(
+                    or_(
+                        LLMProviderORM.id == pid,
+                        and_(
+                            LLMProviderORM.operation_type == replace_default_for.value,
+                            LLMProviderORM.is_default.is_(True),
+                        ),
+                    )
+                )
+                .order_by(LLMProviderORM.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            locked_providers = list(result.scalars().all())
+            orm = next((provider for provider in locked_providers if provider.id == pid), None)
 
         if not orm:
             return None
+
+        current_revision = provider_revision(orm.updated_at)
+        if config.expected_revision is not None and current_revision != config.expected_revision:
+            await session.rollback()
+            raise ProviderRevisionConflictError(
+                "Provider configuration changed; reload and try again"
+            )
+
+        if replace_default_for is not None:
+            target_operation = config.operation_type or self._operation_type_from_value(
+                orm.operation_type
+            )
+            target_is_default = (
+                config.is_default if config.is_default is not None else orm.is_default
+            )
+            if target_operation != replace_default_for or not target_is_default:
+                await session.rollback()
+                raise ValueError(
+                    "Default replacement must keep the target default for the requested operation"
+                )
+
+            transition_time = datetime.now(UTC)
+            for provider in locked_providers or []:
+                if (
+                    provider.id != pid
+                    and provider.is_default
+                    and self._operation_type_from_value(provider.operation_type)
+                    == replace_default_for
+                ):
+                    provider.is_default = False
+                    provider.updated_at = self._next_updated_at(
+                        provider.updated_at,
+                        transition_time,
+                    )
 
         self._apply_simple_field_updates(orm, config)
         self._apply_api_key_update(orm, config)
 
         should_update_config = config.config is not None
         updated_config = (
-            dict(config.config) if config.config is not None else dict(orm.config or {})
+            merge_provider_request_config(orm.config, config.config)
+            if config.config is not None
+            else dict(orm.config or {})
+        )
+
+        should_update_config = (
+            self._clear_structured_auth_metadata(config, updated_config) or should_update_config
         )
 
         if config.embedding_config is not None:
@@ -453,6 +616,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         if should_update_config:
             orm.config = updated_config
+
+        orm.updated_at = self._next_updated_at(orm.updated_at, datetime.now(UTC))
 
         await session.flush()
         await session.commit()

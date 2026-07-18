@@ -53,9 +53,18 @@ class ProviderRepository(ABC):
 
     @abstractmethod
     async def update(
-        self, provider_id: UUID, config: ProviderConfigUpdate
+        self,
+        provider_id: UUID,
+        config: ProviderConfigUpdate,
+        *,
+        replace_default_for: OperationType | None = None,
     ) -> ProviderConfig | None:
-        """Update provider configuration."""
+        """Update provider configuration.
+
+        When ``replace_default_for`` is supplied, the target revision check,
+        removal of the previous operation default, and target update must be
+        committed atomically.
+        """
 
     @abstractmethod
     async def delete(self, provider_id: UUID, *, hard_delete: bool = False) -> bool:

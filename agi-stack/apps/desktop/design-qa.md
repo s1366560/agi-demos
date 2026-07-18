@@ -761,7 +761,10 @@ The source capture is softer and records an earlier popup width. Production foll
   health aliases, source-attributed model catalogs, tenant-checked usage, and explicit connection
   validation. Validation returns `probed` evidence so the UI distinguishes a real outbound probe
   from credential or configuration failure.
-- Cloud mode uses the real Provider type catalog, static model catalog, connection test, health check, update, create, and usage endpoints. The Desktop always sends `expected_revision`; the target Rust strangler route enforces it, while a direct legacy Python route currently ignores that compatibility field and exposes no CAS revision.
+- Cloud mode uses the real Provider type catalog, static model catalog, connection test, health check,
+  update, create, and usage endpoints. The Desktop and Web editors send `expected_revision`; local
+  Rust, target Rust, and Python all expose a revision and enforce the comparison atomically before
+  mutation. A stale update returns `409` instead of rebinding a credential to an overwritten endpoint.
 - Local catalogs identify built-in suggestions as `static-fallback`; an empty catalog without a source remains unavailable. No local `/models` network request is implied.
 - Fast, coding, vision, fallback, and cloud routing mutations remain read-only because the current service contract does not expose those writes.
 - A newly connected Provider is created active only after explicit validation and the final Add action; the UI does not claim unsupported per-role routing writes.
@@ -772,11 +775,12 @@ The source capture is softer and records an earlier popup width. Production foll
   allow-lists response fields before retaining them.
 - Environment-secret references are implemented for the local and target Rust runtimes. Only the
   allow-listed variable name is persisted or returned; the value is resolved at runtime and remains
-  in process memory. Missing values return `probed: false` without a network request. The legacy
-  Python compatibility API retains a direct environment probe but marks environment auth unavailable
-  for CRUD/runtime until every execution consumer can resolve it safely. OAuth remains visible but
-  disabled as “Backend not configured”; no browser window or simulated OAuth flow exists. Invented
-  success rates and synthetic activity feeds remain absent.
+  in process memory. Missing values return `probed: false` without a network request. Gateway-owned
+  CRUD persists environment references in Rust; Python Agent bootstrap and persisted health checks
+  consume those structured references without decrypting the no-key sentinel. The direct Python
+  compatibility CRUD surface still does not advertise or write environment auth. OAuth remains
+  visible but disabled as “Backend not configured”; no browser window or simulated OAuth flow exists.
+  Invented success rates and synthetic activity feeds remain absent.
 
 ## Interaction verification
 
@@ -897,6 +901,78 @@ Verification: 409 Desktop tests; 34 local Rust Provider tests; 31 target Rust Pr
 Python Provider tests; TypeScript, Rustfmt, Clippy with warnings denied, Ruff, Mypy, Pyright, and golden
 contract parity passed.
 
+### Iteration 7 — passed: cross-runtime authentication boundary
+
+The final contract pass converted public Provider configuration from an open-ended secret denylist
+to an explicit safe-field projection in target Rust and Python. Unknown config keys, nested
+`provider_options`, headers, tokens, credentials, and future unrecognized fields remain server-side.
+Create, update, and probe bodies reject unknown fields instead of silently accepting misspelled or
+credential-like input.
+
+Environment authentication is now origin-bound. `OPENAI_API_KEY` can be resolved only for the
+official OpenAI HTTPS origin, and `ANTHROPIC_API_KEY` only for the official Anthropic HTTPS origin.
+OpenAI-compatible and custom endpoints require an explicit endpoint-bound API key or no-auth local
+configuration. Userinfo, query, fragment, remote plaintext HTTP, and historical unsafe endpoints are
+rejected or hidden before any credential is resolved or sent.
+
+Environment detection returns the exact allow-listed variable name plus availability, never its
+value. Web and Desktop consume this as a reference and render authentication choices from the
+Provider capability descriptor. Create, update, and probe requests keep API-key, Environment, and
+No-auth fields mutually exclusive. Existing credentials are reusable only while Provider type,
+authentication method, endpoint, and (for Environment) variable binding remain unchanged.
+
+Python now matches the Rust optimistic-concurrency contract with an exact microsecond revision,
+row-locked comparison, monotonically advanced `updated_at`, and `409` conflict response. Saved local
+no-auth Providers execute their health probe with an empty credential rather than failing before the
+endpoint adapter is called. Both Web Provider editors submit the loaded revision.
+
+Default-Provider create and update operations now share an operation-scoped PostgreSQL transaction
+advisory lock. Insertion, stale-revision validation, prior-default clearing, and revision advancement
+commit atomically, including the empty-table create/create case. Endpoint updates use a three-state
+contract: omitted retains the binding, explicit `null` or blank clears it to SQL `NULL`, and a valid
+string replaces it. Anthropic `/v1` probe paths append idempotently. Providers without a supported
+network probe return `configuration_valid` with `probed: false` after structural and security
+validation; they never simulate a successful request.
+
+Verification: 409 Desktop tests and Desktop TypeScript; 38 local Rust Provider tests and Clippy with
+warnings denied; 37 target Rust Provider API tests, a PostgreSQL NULL-persistence integration test,
+and Clippy with warnings denied for server and Postgres adapter; 150 focused Python unit/integration
+tests using the repository `.env`, plus real PostgreSQL two-session create/create and create/update
+default races ending with exactly one default. Ruff, Mypy, and Pyright report zero errors. A clean
+baseline plus the eight Provider Web files passes TypeScript, ESLint, Prettier, and 11/11 focused
+tests. The shared dirty worktree's full Web check remains blocked only by unrelated in-progress
+`useUnifiedAgentStatus.ts` and timeline-store mock changes (22 failures; 3,537 other tests pass).
+
+### Iteration 8 — passed: fail-closed capability loading and no-probe parity
+
+The final security audit removed the remaining implicit-auth fallback. Both Web Provider editors now
+hold authentication and saving closed while the capability descriptor is loading, when the request
+fails, when the selected Provider descriptor is absent, or when `auth_methods` is explicitly empty.
+The UI distinguishes each state in English and Simplified Chinese. Free-form Provider JSON, free-form
+embedding options, plaintext RTC/access/speech credentials, and unknown response config fields are
+not rendered or submitted; the client projects only the backend's explicit public-safe schema.
+
+Rust and Python now share the same standalone `embedding_config` update contract: submitted public
+safe fields replace the prior public set, omitted public fields are cleared, and historical private
+metadata remains server-side. Rust accepts every explicitly supported official base path (including
+Anthropic root and `/v1`) while environment detection validates transport, origin, and path before it
+exposes a variable reference. Unsafe records remain visible only as unavailable repair state and never
+resolve or return a secret.
+
+Desktop, Web, Rust, and Python now agree on providers that do not support an outbound probe. Draft and
+persisted checks return or project `configuration_valid` with `probed: false`; Desktop avoids a second
+health request after create, and every UI says “Configuration validated / 配置已校验” rather than
+“Connected” or “Error”.
+
+Verification: 409/409 Desktop UI tests, 207/207 Desktop Rust tests, and Desktop TypeScript; 48/48 Rust
+server Provider tests; 5/5 live PostgreSQL adapter tests using the repository `.env` and covering CRUD,
+health ordering, default-provider atomicity, duplicate names, assignments, and usage; Rustfmt and
+Clippy with warnings denied; 235/235 focused Python tests, Ruff, Pyright with zero errors, and i18n
+validation; 29/29 focused Web/i18n tests plus isolated TypeScript, ESLint, and Prettier. The shared
+worktree's full Web type check still has the
+three unrelated `useUnifiedAgentStatus.ts` errors, and full Mypy currently reports four unrelated
+baseline errors in agent client-turn persistence and chat acknowledgement handling.
+
 ## Copy differences from the visual prototype
 
 - Configuration-only fallback results remain explicitly labeled when an outbound probe is unavailable.
@@ -909,9 +985,8 @@ These differences are deliberate truthfulness constraints, not visual omissions.
 
 ## Remaining Provider-management findings
 
-- [P1] OAuth and advanced request policy remain unavailable rather than simulated. The legacy Python
-  runtime also keeps environment-backed persisted credentials explicitly unavailable until all
-  execution consumers support runtime resolution.
+- [P2] OAuth and advanced request policy remain unavailable rather than simulated until dedicated,
+  structured backend capabilities and encrypted storage are implemented.
 - [P1] Authoritative workspace usage data and Provider audit events remain to be implemented.
 
 ## Follow-up polish

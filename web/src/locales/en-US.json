@@ -81,6 +81,7 @@
       "healthy": "Healthy",
       "unhealthy": "Unhealthy",
       "degraded": "Degraded",
+      "configurationValid": "Configuration validated",
       "unknown": "Unknown",
       "paused": "Paused",
       "archived": "Archived",
@@ -1366,6 +1367,7 @@
         "savedPrefix": "Saved provider health check",
         "livePrefix": "Connection test",
         "passed": "{{prefix}} passed{{responseTime}}.",
+        "configurationValid": "Configuration validated. Network probing is not supported for this provider.",
         "returned": "{{prefix}} returned {{status}}{{responseTime}}{{detail}}.",
         "apiKeyRequired": "API key is required",
         "failed": "Connection failed. Please check the provider configuration."
@@ -8745,7 +8747,9 @@
           "smallFastModel": "Small/Fast Model",
           "embeddingModel": "Embedding Model",
           "rerankerModel": "Reranker Model",
-          "customBaseUrl": "Custom Base URL"
+          "customBaseUrl": "Custom Base URL",
+          "authMethod": "Authentication",
+          "environmentVariable": "Environment variable"
         },
         "placeholders": {
           "providerName": "e.g., Production OpenAI",
@@ -8756,7 +8760,8 @@
           "smallModel": "e.g., gpt-4o-mini",
           "embeddingModel": "e.g., text-embedding-3-small",
           "rerankerModel": "e.g., gpt-4o-mini (optional)",
-          "baseUrl": "https://api.example.com/v1"
+          "baseUrl": "https://api.example.com/v1",
+          "environmentVariable": "PROVIDER_API_KEY"
         },
         "help": {
           "apiKeyRequired": "Your API key is encrypted and stored securely.",
@@ -8765,12 +8770,31 @@
           "smallModel": "Faster model for simpler tasks and cost optimization.",
           "embeddingModel": "Model for generating vector embeddings.",
           "rerankerModel": "Model for reranking search results. Uses LLM if not specified.",
-          "baseUrl": "Override the default API endpoint. Useful for proxies or self-hosted models."
+          "baseUrl": "Override the default API endpoint. Useful for proxies or self-hosted models.",
+          "authUnavailable": "This provider cannot be configured until secure credential storage is available.",
+          "authLoading": "Authentication options are loading. Saving stays disabled until the server confirms them.",
+          "authLoadFailed": "Authentication options could not be loaded. Reopen this dialog to try again.",
+          "currentCredentialRetained": "Leave this field empty to keep the current credential for the same endpoint.",
+          "environmentDetected": "Detected {{environmentVariable}}. Its secret value remains in the runtime environment.",
+          "environmentVariable": "Only the variable name is saved and sent. The secret value is never copied into this form.",
+          "noAuthentication": "This provider does not require a credential."
         },
         "providerInformation": "Provider Information",
         "saving": "Saving...",
         "updateProvider": "Update Provider",
-        "createProvider": "Create Provider"
+        "createProvider": "Create Provider",
+        "auth": {
+          "apiKey": "API key",
+          "environment": "Environment variable",
+          "none": "No authentication",
+          "oauth": "OAuth",
+          "unavailable": "No secure authentication available",
+          "loading": "Loading authentication capabilities…",
+          "loadFailed": "Authentication capabilities unavailable"
+        },
+        "errors": {
+          "credentialRequired": "Configure the selected authentication method before saving."
+        }
       },
       "config": {
         "addTitle": "Add New Provider",
@@ -8837,6 +8861,32 @@
         "base64": "Base64",
         "envDetectedTitle": "Environment Variables Detected",
         "envDetectedDescription": "We found configuration in your environment variables. The fields below have been auto-filled.",
+        "envCredentialReferenceDetected": "Credential reference {{environmentVariable}} was detected. Secret values remain in the runtime environment.",
+        "envCredentialReferenceUnavailable": "Non-secret configuration was detected, but no credential variable reference was exposed. No credential was auto-filled.",
+        "authMethod": "Authentication",
+        "authUnavailable": "No secure authentication available",
+        "authUnavailableHelp": "This provider cannot be configured until secure credential storage is available.",
+        "authLoading": "Loading authentication capabilities…",
+        "authLoadingHelp": "Authentication options are loading. Saving stays disabled until the server confirms them.",
+        "authLoadFailed": "Authentication capabilities unavailable",
+        "authLoadFailedHelp": "Authentication options could not be loaded. Reopen this dialog to try again.",
+        "credentialConfigured": "Configured",
+        "environmentVariable": "Environment variable",
+        "environmentVariablePlaceholder": "PROVIDER_API_KEY",
+        "environmentVariableHelp": "Only the variable name is saved and sent. The secret value never enters this form.",
+        "noAuthenticationHelp": "This provider does not require a credential.",
+        "operationType": "Operation type",
+        "operationTypeLlm": "LLM",
+        "operationTypeEmbedding": "Embedding",
+        "operationTypeRerank": "Rerank",
+        "secureRtcCredentials": "Secure RTC credentials",
+        "secureRtcCredentialsUnavailable": "Unavailable until dedicated encrypted fields are supported.",
+        "auth": {
+          "apiKey": "API key",
+          "environment": "Environment variable",
+          "none": "No authentication",
+          "oauth": "OAuth"
+        },
         "providerName": "Provider Name",
         "providerNamePlaceholder": "My OpenAI Provider",
         "apiKey": "API Key",

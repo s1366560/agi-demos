@@ -16,6 +16,7 @@ import type {
   TenantCreate,
   TenantUpdate,
   ProviderCreate,
+  ProviderConnectionProbe,
   ProviderUpdate,
   User,
   Project,
@@ -34,6 +35,8 @@ import type {
   QueueDepth,
   ProviderConfig,
   ProviderHealth,
+  ProviderTypeDescriptor,
+  DetectedEnvironmentProvider,
   RecentTask,
   StatusBreakdown,
   SchemaEntityType,
@@ -509,6 +512,9 @@ export const providerAPI = {
   get: async (id: string): Promise<ProviderConfig> => {
     return await api.get(`/llm-providers/${id}`);
   },
+  listTypes: async (): Promise<ProviderTypeDescriptor[]> => {
+    return await api.get('/llm-providers/types');
+  },
   create: async (data: ProviderCreate): Promise<ProviderConfig> => {
     return await api.post('/llm-providers/', data);
   },
@@ -521,7 +527,7 @@ export const providerAPI = {
   checkHealth: async (id: string): Promise<ProviderHealth> => {
     return await api.post(`/llm-providers/${id}/health-check`);
   },
-  testConnection: async (data: ProviderCreate): Promise<ProviderHealth> => {
+  testConnection: async (data: ProviderConnectionProbe): Promise<ProviderHealth> => {
     return await api.post('/llm-providers/test-connection', data);
   },
   getUsage: async (
@@ -610,19 +616,7 @@ export const providerAPI = {
     });
   },
   detectEnvKeys: async (): Promise<{
-    detected_providers: Record<
-      string,
-      {
-        provider_type: string;
-        operation_type: 'llm' | 'embedding' | 'rerank';
-        api_key: string | null;
-        base_url: string | null;
-        llm_model: string | null;
-        llm_small_model: string | null;
-        embedding_model: string | null;
-        reranker_model: string | null;
-      }
-    >;
+    detected_providers: Record<string, DetectedEnvironmentProvider>;
   }> => {
     return await api.get('/llm-providers/env-detection');
   },

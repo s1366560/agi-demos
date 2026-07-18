@@ -8,8 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+from src.domain.llm_providers.models import ProviderCredentialRequiredError, ProviderType
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
+from src.infrastructure.llm.provider_credentials import NO_API_KEY_SENTINEL
 
 
 @pytest.fixture(autouse=True)
@@ -93,9 +95,11 @@ def tenant_agent_config(conversation: SimpleNamespace) -> TenantAgentConfig:
 
 def _build_provider_mocks() -> tuple[SimpleNamespace, MagicMock, MagicMock]:
     provider_config = SimpleNamespace(
+        provider_type=ProviderType.OPENAI,
         llm_model="qwen-plus",
         api_key_encrypted="encrypted-key",
         base_url=None,
+        config={},
     )
     factory = MagicMock()
     factory.resolve_provider = AsyncMock(return_value=provider_config)
@@ -110,6 +114,96 @@ def _build_fake_module(name: str, **attrs) -> ModuleType:
     for key, value in attrs.items():
         setattr(module, key, value)
     return module
+
+
+@pytest.mark.unit
+def test_runtime_credential_resolves_rust_environment_record_without_decrypting() -> None:
+    """Rust environment records resolve the allow-listed variable only at execution."""
+    provider = SimpleNamespace(
+        provider_type=ProviderType.OPENAI,
+        api_key_encrypted="encrypted-no-key-sentinel",
+        base_url="https://api.openai.com/v1",
+        config={
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+        },
+    )
+    decrypt = MagicMock()
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-runtime-only"}):
+        credential = AgentRuntimeBootstrapper._resolve_provider_runtime_credential(
+            provider,
+            decrypt,
+        )
+
+    assert credential == "sk-runtime-only"
+    decrypt.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("config", "base_url", "environment"),
+    [
+        (
+            {"auth_method": "environment", "environment_variable": "DATABASE_URL"},
+            "https://api.openai.com/v1",
+            {"DATABASE_URL": "postgresql://secret"},
+        ),
+        (
+            {"auth_method": "environment", "environment_variable": "OPENAI_API_KEY"},
+            "https://proxy.example/v1",
+            {"OPENAI_API_KEY": "sk-runtime-only"},
+        ),
+        (
+            {"auth_method": "environment", "environment_variable": "OPENAI_API_KEY"},
+            "https://api.openai.com/v1/tenant-path-token",
+            {"OPENAI_API_KEY": "sk-runtime-only"},
+        ),
+        (
+            {"auth_method": "environment", "environment_variable": "OPENAI_API_KEY"},
+            "https://api.openai.com/v1",
+            {},
+        ),
+    ],
+)
+def test_runtime_credential_rejects_invalid_environment_records(
+    config: dict[str, str],
+    base_url: str,
+    environment: dict[str, str],
+) -> None:
+    """Missing, unallow-listed, or custom-origin environment credentials fail closed."""
+    provider = SimpleNamespace(
+        provider_type=ProviderType.OPENAI,
+        api_key_encrypted="encrypted-no-key-sentinel",
+        base_url=base_url,
+        config=config,
+    )
+    decrypt = MagicMock()
+
+    with (
+        patch.dict("os.environ", environment, clear=True),
+        pytest.raises(ProviderCredentialRequiredError),
+    ):
+        AgentRuntimeBootstrapper._resolve_provider_runtime_credential(provider, decrypt)
+
+    decrypt.assert_not_called()
+
+
+@pytest.mark.unit
+def test_runtime_credential_never_passes_no_key_sentinel() -> None:
+    """A no-key storage sentinel cannot become an Agent LLM API key."""
+    provider = SimpleNamespace(
+        provider_type=ProviderType.OPENAI,
+        api_key_encrypted="encrypted-no-key-sentinel",
+        base_url="https://api.openai.com/v1",
+        config={},
+    )
+    decrypt = MagicMock(return_value=NO_API_KEY_SENTINEL)
+
+    with pytest.raises(ProviderCredentialRequiredError):
+        AgentRuntimeBootstrapper._resolve_provider_runtime_credential(provider, decrypt)
+
+    decrypt.assert_called_once_with("encrypted-no-key-sentinel")
 
 
 @pytest.mark.unit

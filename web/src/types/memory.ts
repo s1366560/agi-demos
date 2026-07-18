@@ -381,8 +381,30 @@ export type ProviderType =
   | 'volcengine_coding'
   | 'volcengine_embedding'
   | 'volcengine_reranker';
-export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';
+export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy' | 'configuration_valid';
 export type ProviderOperationType = 'llm' | 'embedding' | 'rerank';
+export type ProviderAuthMethod = 'api_key' | 'environment' | 'none' | 'oauth';
+
+export interface ProviderTypeDescriptor {
+  provider_type: ProviderType;
+  operation_type?: ProviderOperationType | undefined;
+  probe_supported?: boolean | undefined;
+  auth_methods: ProviderAuthMethod[];
+  unavailable_auth_methods: ProviderAuthMethod[];
+}
+
+export interface DetectedEnvironmentProvider {
+  provider_type: string;
+  operation_type: ProviderOperationType;
+  credential_source: 'environment';
+  credential_configured: boolean;
+  environment_variable?: string | null | undefined;
+  base_url: string | null;
+  llm_model: string | null;
+  llm_small_model: string | null;
+  embedding_model: string | null;
+  reranker_model: string | null;
+}
 
 export interface EmbeddingConfig {
   model?: string | undefined;
@@ -419,7 +441,7 @@ export interface ProviderConfig {
   name: string;
   provider_type: ProviderType;
   operation_type: ProviderOperationType;
-  base_url?: string | undefined;
+  base_url?: string | null | undefined;
   llm_model?: string | undefined;
   llm_small_model?: string | undefined;
   embedding_model?: string | undefined;
@@ -429,9 +451,13 @@ export interface ProviderConfig {
   is_active: boolean;
   is_enabled: boolean;
   is_default: boolean;
+  auth_method: ProviderAuthMethod;
+  environment_variable: string | null;
+  credential_configured: boolean;
   api_key_masked: string;
   allowed_models: string[];
   blocked_models: string[];
+  revision: number;
   created_at: string;
   updated_at: string;
   health_status?: ProviderStatus | undefined;
@@ -450,6 +476,9 @@ export interface ProviderConfig {
 export interface ProviderHealth {
   provider_id: string;
   status: ProviderStatus;
+  probed?: boolean | undefined;
+  detail?: string | null | undefined;
+  environment_variable?: string | null | undefined;
   last_check: string;
   error_message?: string | null | undefined;
   response_time_ms?: number | null | undefined;
@@ -459,8 +488,10 @@ export interface ProviderCreate {
   name: string;
   provider_type: ProviderType;
   operation_type?: ProviderOperationType | undefined;
-  api_key: string;
-  base_url?: string | undefined;
+  auth_method: ProviderAuthMethod;
+  environment_variable?: string | undefined;
+  api_key?: string | undefined;
+  base_url?: string | null | undefined;
   llm_model?: string | undefined;
   llm_small_model?: string | undefined;
   embedding_model?: string | undefined;
@@ -479,11 +510,14 @@ export interface ProviderCreate {
 }
 
 export interface ProviderUpdate {
+  expected_revision: number;
   name?: string | undefined;
   provider_type?: ProviderType | undefined;
   operation_type?: ProviderOperationType | undefined;
+  auth_method?: ProviderAuthMethod | undefined;
+  environment_variable?: string | undefined;
   api_key?: string | undefined;
-  base_url?: string | undefined;
+  base_url?: string | null | undefined;
   llm_model?: string | undefined;
   llm_small_model?: string | undefined;
   embedding_model?: string | undefined;
@@ -499,6 +533,17 @@ export interface ProviderUpdate {
   pool_weight?: number | undefined;
   model_tier?: 'small' | 'medium' | 'large' | null | undefined;
   secondary_models?: string[] | undefined;
+}
+
+export interface ProviderConnectionProbe {
+  name: string;
+  provider_type: ProviderType;
+  operation_type?: ProviderOperationType | undefined;
+  auth_method: ProviderAuthMethod;
+  environment_variable?: string | undefined;
+  api_key?: string | undefined;
+  base_url?: string | null | undefined;
+  is_active?: boolean | undefined;
 }
 
 export interface ModelCatalogEntry {

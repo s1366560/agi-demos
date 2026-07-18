@@ -13,9 +13,12 @@ from src.domain.llm_providers.models import (
     OperationType,
     ProviderConfigCreate,
     ProviderConfigUpdate,
+    ProviderRevisionConflictError,
     ProviderStatus,
     ProviderType,
+    provider_revision,
 )
+from src.infrastructure.persistence.llm_providers_models import LLMProvider as LLMProviderORM
 from src.infrastructure.persistence.llm_providers_repository import SQLAlchemyProviderRepository
 
 
@@ -63,7 +66,7 @@ class TestProviderRepository:
                 encoding_format="float",
                 user="tenant-a",
                 timeout=9.5,
-                provider_options={"x_custom": "on"},
+                provider_options={"batch_size": 32},
             ),
         )
 
@@ -78,8 +81,96 @@ class TestProviderRepository:
         stored_embedding = provider.config.get("embedding", {})
         assert stored_embedding.get("model") == "text-embedding-3-large"
         assert stored_embedding.get("dimensions") == 1024
-        assert stored_embedding.get("x_custom") is None
-        assert stored_embedding.get("provider_options", {}).get("x_custom") == "on"
+        assert stored_embedding.get("batch_size") is None
+        assert stored_embedding.get("provider_options", {}).get("batch_size") == 32
+
+    @pytest.mark.asyncio
+    async def test_create_default_atomically_replaces_only_same_operation_default(self, db_session):
+        """Creating a default clears and revises the previous operation default."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+        previous_default = await repository.create(
+            ProviderConfigCreate(
+                name="previous-default-before-create",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-previous-create",
+                llm_model="gpt-4o",
+                is_default=True,
+            )
+        )
+        embedding_default = await repository.create(
+            ProviderConfigCreate(
+                name="embedding-default-before-create",
+                provider_type=ProviderType.OPENAI,
+                operation_type=OperationType.EMBEDDING,
+                api_key="sk-test-embedding-create",
+                embedding_model="text-embedding-3-small",
+                is_default=True,
+            )
+        )
+
+        created = await repository.create(
+            ProviderConfigCreate(
+                name="new-default-from-create",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-new-create",
+                llm_model="gpt-4o-mini",
+                is_default=True,
+            )
+        )
+
+        assert created.is_default is True
+        db_session.expire_all()
+        persisted_previous = await repository.get_by_id(previous_default.id)
+        persisted_embedding = await repository.get_by_id(embedding_default.id)
+        assert persisted_previous is not None
+        assert persisted_previous.is_default is False
+        assert provider_revision(persisted_previous.updated_at) > provider_revision(
+            previous_default.updated_at
+        )
+        assert persisted_embedding is not None
+        assert persisted_embedding.is_default is True
+        assert provider_revision(persisted_embedding.updated_at) == provider_revision(
+            embedding_default.updated_at
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_default_name_conflict_does_not_clear_current_default(self, db_session):
+        """An idempotent name conflict must not remove the existing default."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+        current_default = await repository.create(
+            ProviderConfigCreate(
+                name="current-default-before-name-conflict",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-current-conflict",
+                llm_model="gpt-4o",
+                is_default=True,
+            )
+        )
+        existing_non_default = await repository.create(
+            ProviderConfigCreate(
+                name="existing-name-conflict-target",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-existing-conflict",
+                llm_model="gpt-4o-mini",
+            )
+        )
+
+        returned = await repository.create(
+            ProviderConfigCreate(
+                name=existing_non_default.name,
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-ignored-conflict",
+                llm_model="gpt-4o-mini",
+                is_default=True,
+            )
+        )
+
+        assert returned.id == existing_non_default.id
+        assert returned.is_default is False
+        db_session.expire_all()
+        persisted_default = await repository.get_by_id(current_default.id)
+        assert persisted_default is not None
+        assert persisted_default.is_default is True
 
     @pytest.mark.asyncio
     async def test_get_provider_by_id(self, db_session):
@@ -168,6 +259,7 @@ class TestProviderRepository:
 
         # Update provider
         update = ProviderConfigUpdate(
+            expected_revision=provider_revision(created.updated_at),
             name="updated-name",
             llm_model="gpt-4o-turbo",
         )
@@ -177,10 +269,130 @@ class TestProviderRepository:
         assert updated is not None
         assert updated.name == "updated-name"
         assert updated.llm_model == "gpt-4o-turbo"
+        assert provider_revision(updated.updated_at) > provider_revision(created.updated_at)
+
+        with pytest.raises(ProviderRevisionConflictError):
+            await repository.update(
+                created.id,
+                ProviderConfigUpdate(
+                    expected_revision=provider_revision(created.updated_at),
+                    name="stale-write",
+                ),
+            )
+
+    @pytest.mark.asyncio
+    async def test_stale_default_switch_has_no_side_effects(self, db_session):
+        """A stale target revision must not clear the current operation default."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+        current_default = await repository.create(
+            ProviderConfigCreate(
+                name="current-default-stale-switch",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-current-default",
+                llm_model="gpt-4o",
+                is_default=True,
+            )
+        )
+        target = await repository.create(
+            ProviderConfigCreate(
+                name="target-stale-switch",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-target",
+                llm_model="gpt-4o-mini",
+            )
+        )
+        stale_revision = provider_revision(target.updated_at)
+        fresh_target = await repository.update(
+            target.id,
+            ProviderConfigUpdate(name="target-stale-switch-fresh"),
+        )
+        assert fresh_target is not None
+
+        with pytest.raises(ProviderRevisionConflictError):
+            await repository.update(
+                target.id,
+                ProviderConfigUpdate(
+                    expected_revision=stale_revision,
+                    is_default=True,
+                ),
+                replace_default_for=OperationType.LLM,
+            )
+
+        await db_session.rollback()
+        db_session.expire_all()
+        persisted_default = await repository.get_by_id(current_default.id)
+        persisted_target = await repository.get_by_id(target.id)
+
+        assert persisted_default is not None
+        assert persisted_default.is_default is True
+        assert provider_revision(persisted_default.updated_at) == provider_revision(
+            current_default.updated_at
+        )
+        assert persisted_target is not None
+        assert persisted_target.name == "target-stale-switch-fresh"
+        assert persisted_target.is_default is False
+
+    @pytest.mark.asyncio
+    async def test_default_switch_updates_target_and_previous_default_atomically(self, db_session):
+        """A successful switch replaces only the default for the requested operation."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+        previous_default = await repository.create(
+            ProviderConfigCreate(
+                name="previous-llm-default",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-previous-default",
+                llm_model="gpt-4o",
+                is_default=True,
+            )
+        )
+        embedding_default = await repository.create(
+            ProviderConfigCreate(
+                name="embedding-default-during-llm-switch",
+                provider_type=ProviderType.OPENAI,
+                operation_type=OperationType.EMBEDDING,
+                api_key="sk-test-embedding-default",
+                embedding_model="text-embedding-3-small",
+                is_default=True,
+            )
+        )
+        target = await repository.create(
+            ProviderConfigCreate(
+                name="new-llm-default",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-new-default",
+                llm_model="gpt-4o-mini",
+            )
+        )
+
+        updated = await repository.update(
+            target.id,
+            ProviderConfigUpdate(
+                expected_revision=provider_revision(target.updated_at),
+                is_default=True,
+            ),
+            replace_default_for=OperationType.LLM,
+        )
+
+        assert updated is not None
+        assert updated.is_default is True
+        db_session.expire_all()
+        persisted_previous = await repository.get_by_id(previous_default.id)
+        persisted_embedding = await repository.get_by_id(embedding_default.id)
+
+        assert persisted_previous is not None
+        assert persisted_previous.is_default is False
+        assert provider_revision(persisted_previous.updated_at) > provider_revision(
+            previous_default.updated_at
+        )
+        assert persisted_embedding is not None
+        assert persisted_embedding.is_default is True
+        assert provider_revision(persisted_embedding.updated_at) == provider_revision(
+            embedding_default.updated_at
+        )
 
     @pytest.mark.asyncio
     async def test_update_provider_embedding_config_merges_model(self, db_session):
-        """Updating embedding config without model should keep existing embedding model."""
+        """An explicitly resubmitted model is stored with the embedding snapshot."""
         repository = SQLAlchemyProviderRepository(session=db_session)
 
         created = await repository.create(
@@ -196,6 +408,7 @@ class TestProviderRepository:
         updated = await repository.update(
             created.id,
             ProviderConfigUpdate(
+                embedding_model="text-embedding-3-small",
                 embedding_config=EmbeddingConfig(dimensions=1536, timeout=4.0),
             ),
         )
@@ -205,6 +418,173 @@ class TestProviderRepository:
         assert updated.embedding_config is not None
         assert updated.embedding_config.model == "text-embedding-3-small"
         assert updated.embedding_config.dimensions == 1536
+
+    @pytest.mark.asyncio
+    async def test_public_config_update_preserves_hidden_historical_fields(self, db_session):
+        """A public config snapshot replaces safe fields without erasing hidden metadata."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+        created = await repository.create(
+            ProviderConfigCreate(
+                name="provider-safe-config-merge",
+                provider_type=ProviderType.OPENAI,
+                operation_type=OperationType.EMBEDDING,
+                api_key="sk-test",
+                embedding_model="text-embedding-3-small",
+                config={"temperature": 0.2, "max_tokens": 1024},
+            )
+        )
+        orm = await db_session.get(LLMProviderORM, created.id)
+        assert orm is not None
+        orm.config = {
+            "temperature": 0.2,
+            "max_tokens": 1024,
+            "historical_private_field": "must-survive",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "retries": {"max_attempts": 4, "private_retry_token": "must-survive"},
+            "transport": {
+                "connect_timeout_seconds": 5,
+                "headers": {"Authorization": "must-survive"},
+            },
+            "embedding": {
+                "dimensions": 1536,
+                "private_embedding_field": "must-survive",
+                "provider_options": {
+                    "batch_size": 8,
+                    "private_provider_token": "must-survive",
+                },
+            },
+        }
+        await db_session.commit()
+
+        updated = await repository.update(
+            created.id,
+            ProviderConfigUpdate(
+                config={"temperature": 0.7},
+                embedding_config=EmbeddingConfig(
+                    dimensions=2048,
+                    provider_options={"batch_size": 16},
+                ),
+            ),
+        )
+
+        assert updated is not None
+        assert updated.config == {
+            "temperature": 0.7,
+            "historical_private_field": "must-survive",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "retries": {"private_retry_token": "must-survive"},
+            "transport": {"headers": {"Authorization": "must-survive"}},
+            "embedding": {
+                "dimensions": 2048,
+                "private_embedding_field": "must-survive",
+                "provider_options": {
+                    "batch_size": 16,
+                    "private_provider_token": "must-survive",
+                },
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_standalone_embedding_update_replaces_safe_fields_and_preserves_private_metadata(
+        self,
+        db_session,
+    ):
+        """Structured embedding updates replace their public snapshot at every nested level."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+        created = await repository.create(
+            ProviderConfigCreate(
+                name="provider-standalone-embedding-safe-merge",
+                provider_type=ProviderType.OPENAI,
+                operation_type=OperationType.EMBEDDING,
+                api_key="sk-test",
+                embedding_model="text-embedding-3-small",
+            )
+        )
+        orm = await db_session.get(LLMProviderORM, created.id)
+        assert orm is not None
+        orm.config = {
+            "embedding": {
+                "model": "text-embedding-3-small",
+                "dimensions": 1536,
+                "encoding_format": "float",
+                "timeout": 8.0,
+                "private_embedding_metadata": {"lineage": "must-survive"},
+                "provider_options": {
+                    "batch_size": 8,
+                    "input_type": "search_document",
+                    "private_provider_token": "must-survive",
+                },
+            }
+        }
+        await db_session.commit()
+
+        updated = await repository.update(
+            created.id,
+            ProviderConfigUpdate(
+                embedding_config=EmbeddingConfig(
+                    dimensions=2048,
+                    provider_options={"batch_size": 16},
+                )
+            ),
+        )
+
+        assert updated is not None
+        assert updated.embedding_model is None
+        assert updated.config == {
+            "embedding": {
+                "dimensions": 2048,
+                "private_embedding_metadata": {"lineage": "must-survive"},
+                "provider_options": {
+                    "batch_size": 16,
+                    "private_provider_token": "must-survive",
+                },
+            }
+        }
+
+    @pytest.mark.asyncio
+    async def test_empty_embedding_update_clears_only_safe_fields(self, db_session):
+        """An explicit empty embedding object cannot erase historical private metadata."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+        created = await repository.create(
+            ProviderConfigCreate(
+                name="provider-empty-embedding-safe-merge",
+                provider_type=ProviderType.OPENAI,
+                operation_type=OperationType.EMBEDDING,
+                api_key="sk-test",
+                embedding_model="text-embedding-3-small",
+            )
+        )
+        orm = await db_session.get(LLMProviderORM, created.id)
+        assert orm is not None
+        orm.config = {
+            "embedding": {
+                "model": "text-embedding-3-small",
+                "dimensions": 1536,
+                "timeout": 8.0,
+                "private_embedding_metadata": "must-survive",
+                "provider_options": {
+                    "batch_size": 8,
+                    "private_provider_token": "must-survive",
+                },
+            }
+        }
+        await db_session.commit()
+
+        updated = await repository.update(
+            created.id,
+            ProviderConfigUpdate.model_validate({"embedding_config": {}}),
+        )
+
+        assert updated is not None
+        assert updated.embedding_model is None
+        assert updated.config == {
+            "embedding": {
+                "private_embedding_metadata": "must-survive",
+                "provider_options": {"private_provider_token": "must-survive"},
+            }
+        }
 
     @pytest.mark.asyncio
     async def test_delete_provider_soft_delete(self, db_session):

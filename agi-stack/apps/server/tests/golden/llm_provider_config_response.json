@@ -25,6 +25,7 @@
     "gpt-4o-mini"
   ],
   "auth_method": "api_key",
+  "credential_source": "encrypted_store",
   "environment_variable": null,
   "credential_configured": true,
   "api_key_masked": "sk-sk-t...2345",

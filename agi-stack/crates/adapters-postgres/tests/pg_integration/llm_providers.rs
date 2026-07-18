@@ -1,5 +1,6 @@
 use super::support::*;
-use agistack_adapters_postgres::ProviderHealthRecord;
+use agistack_adapters_postgres::{LlmProviderMutationError, ProviderHealthRecord};
+use sqlx::Row;
 
 const PROVIDER_ID: &str = "11111111-2222-4333-8444-555555555555";
 const OTHER_PROVIDER_ID: &str = "21111111-2222-4333-8444-555555555555";
@@ -10,6 +11,7 @@ const USAGE_FIRST_ID: &str = "61111111-2222-4333-8444-555555555555";
 const USAGE_SECOND_ID: &str = "71111111-2222-4333-8444-555555555555";
 const USAGE_OTHER_ID: &str = "81111111-2222-4333-8444-555555555555";
 const CRUD_OPENAI_NAME: &str = "llm_provider_crud_openai";
+const DEFAULT_TRANSITION_PREFIX: &str = "llm_provider_default_transition_";
 
 #[tokio::test]
 async fn llm_provider_latest_health_matches_python_ordering() {
@@ -161,6 +163,7 @@ async fn llm_provider_crud_writes_python_encrypted_metadata_rows() {
                 provider_type: Some("dashscope_embedding".to_string()),
                 operation_type: Some("embedding".to_string()),
                 api_key_plaintext: Some("dashscope-crud-secret".to_string()),
+                base_url: Some(Some("https://dashscope.example.test/v1".to_string())),
                 embedding_model: Some("text-embedding-v3".to_string()),
                 config: Some(
                     json!({"embedding": {"model": "text-embedding-v3", "dimensions": 1024}}),
@@ -184,12 +187,55 @@ async fn llm_provider_crud_writes_python_encrypted_metadata_rows() {
     assert!(!updated.pool_enabled);
     assert!(updated.is_default);
     assert_eq!(
+        updated.base_url.as_deref(),
+        Some("https://dashscope.example.test/v1")
+    );
+    assert_eq!(
         agistack_adapters_secrets::try_decrypt_python_aes256_gcm(
             &updated.api_key_encrypted,
             &encryption_key,
         )
         .expect("updated provider api key decrypts"),
         "dashscope-crud-secret"
+    );
+
+    let preserved_base_url = repo
+        .update_provider(
+            &created.id,
+            &LlmProviderUpdateRecord {
+                expected_updated_at: updated.updated_at,
+                is_enabled: Some(false),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("provider update preserving base URL succeeds")
+        .expect("provider with preserved base URL is returned");
+    assert_eq!(
+        preserved_base_url.base_url.as_deref(),
+        Some("https://dashscope.example.test/v1")
+    );
+
+    let cleared_base_url = repo
+        .update_provider(
+            &created.id,
+            &LlmProviderUpdateRecord {
+                expected_updated_at: preserved_base_url.updated_at,
+                base_url: Some(None),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("provider base URL clear succeeds")
+        .expect("provider with cleared base URL is returned");
+    assert_eq!(cleared_base_url.base_url, None);
+    assert_eq!(
+        repo.get_provider(&created.id)
+            .await
+            .expect("provider read after base URL clear succeeds")
+            .expect("provider remains available")
+            .base_url,
+        None
     );
 
     let stale_update = repo
@@ -226,6 +272,164 @@ async fn llm_provider_crud_writes_python_encrypted_metadata_rows() {
 }
 
 #[tokio::test]
+async fn llm_provider_default_transitions_are_atomic_and_name_conflicts_are_explicit() {
+    let Some(pool) =
+        pool_or_skip("llm_provider_default_transitions_are_atomic_and_name_conflicts_are_explicit")
+            .await
+    else {
+        return;
+    };
+    if std::env::var("LLM_ENCRYPTION_KEY").is_err() {
+        eprintln!(
+            "[skip] llm_provider_default_transitions_are_atomic_and_name_conflicts_are_explicit: \
+             LLM_ENCRYPTION_KEY unset"
+        );
+        return;
+    }
+    ensure_python_shaped_tables(&pool).await;
+    clean_llm_provider_default_transition_rows(&pool).await;
+    let existing_rerank_defaults = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM llm_providers \
+         WHERE operation_type = 'rerank' AND is_default AND name NOT LIKE $1",
+    )
+    .bind(format!("{DEFAULT_TRANSITION_PREFIX}%"))
+    .fetch_one(&pool)
+    .await
+    .expect("count pre-existing rerank defaults");
+    if existing_rerank_defaults > 0 {
+        eprintln!(
+            "[skip] llm_provider_default_transitions_are_atomic_and_name_conflicts_are_explicit: \
+             database has a non-test rerank default"
+        );
+        return;
+    }
+
+    let provider = |suffix: &str, is_default: bool| LlmProviderCreateRecord {
+        name: format!("{DEFAULT_TRANSITION_PREFIX}{suffix}"),
+        provider_type: "cohere".to_string(),
+        operation_type: "rerank".to_string(),
+        api_key_plaintext: format!("rerank-{suffix}-secret"),
+        base_url: Some("https://api.cohere.com/v1".to_string()),
+        llm_model: None,
+        llm_small_model: None,
+        embedding_model: None,
+        reranker_model: Some("rerank-v3.5".to_string()),
+        config: json!({}),
+        is_active: true,
+        is_default,
+        is_enabled: true,
+        allowed_models: Vec::new(),
+        blocked_models: Vec::new(),
+        pool_weight: 1.0,
+        pool_enabled: false,
+        model_tier: None,
+        secondary_models: Vec::new(),
+    };
+
+    let first_record = provider("first", true);
+    let second_record = provider("second", true);
+    let first_repo = PgLlmProviderRepository::new(pool.clone());
+    let second_repo = PgLlmProviderRepository::new(pool.clone());
+    let (first, second) = tokio::join!(
+        first_repo.create_provider(&first_record),
+        second_repo.create_provider(&second_record)
+    );
+    let first = first.expect("first concurrent default create succeeds");
+    let second = second.expect("second concurrent default create succeeds");
+
+    let rows = sqlx::query(
+        "SELECT id::text AS id, is_default, updated_at FROM llm_providers \
+         WHERE name LIKE $1 ORDER BY name",
+    )
+    .bind(format!("{DEFAULT_TRANSITION_PREFIX}%"))
+    .fetch_all(&pool)
+    .await
+    .expect("read concurrent default rows");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        rows.iter()
+            .filter(|row| row.get::<bool, _>("is_default"))
+            .count(),
+        1,
+        "concurrent creates must leave exactly one rerank default"
+    );
+    for created in [&first, &second] {
+        let stored = rows
+            .iter()
+            .find(|row| row.get::<String, _>("id") == created.id)
+            .expect("created provider remains stored");
+        if !stored.get::<bool, _>("is_default") {
+            assert!(
+                stored.get::<DateTime<Utc>, _>("updated_at") > created.updated_at,
+                "demoting the previous default must advance its public revision"
+            );
+        }
+    }
+
+    let repo = PgLlmProviderRepository::new(pool.clone());
+    let duplicate = repo
+        .create_provider(&second_record)
+        .await
+        .expect_err("duplicate provider name must be reported as a conflict");
+    assert!(matches!(duplicate, LlmProviderMutationError::NameConflict));
+
+    let third = repo
+        .create_provider(&provider("third", false))
+        .await
+        .expect("non-default provider create succeeds");
+    let previous_default = rows
+        .iter()
+        .find(|row| row.get::<bool, _>("is_default"))
+        .map(|row| {
+            (
+                row.get::<String, _>("id"),
+                row.get::<DateTime<Utc>, _>("updated_at"),
+            )
+        })
+        .expect("one default exists before update transition");
+    let promoted = repo
+        .update_provider(
+            &third.id,
+            &LlmProviderUpdateRecord {
+                expected_updated_at: third.updated_at,
+                is_default: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("default promotion update succeeds")
+        .expect("promoted provider is returned");
+    assert!(promoted.is_default);
+
+    let final_rows = sqlx::query(
+        "SELECT id::text AS id, is_default, updated_at FROM llm_providers \
+         WHERE name LIKE $1 ORDER BY name",
+    )
+    .bind(format!("{DEFAULT_TRANSITION_PREFIX}%"))
+    .fetch_all(&pool)
+    .await
+    .expect("read final default rows");
+    assert_eq!(
+        final_rows
+            .iter()
+            .filter(|row| row.get::<bool, _>("is_default"))
+            .count(),
+        1
+    );
+    assert!(final_rows.iter().any(|row| {
+        row.get::<String, _>("id") == promoted.id && row.get::<bool, _>("is_default")
+    }));
+    let demoted = final_rows
+        .iter()
+        .find(|row| row.get::<String, _>("id") == previous_default.0)
+        .expect("previous default remains stored");
+    assert!(!demoted.get::<bool, _>("is_default"));
+    assert!(demoted.get::<DateTime<Utc>, _>("updated_at") > previous_default.1);
+
+    clean_llm_provider_default_transition_rows(&pool).await;
+}
+
+#[tokio::test]
 async fn llm_provider_tenant_assignments_match_python_access_filter_order() {
     let Some(pool) =
         pool_or_skip("llm_provider_tenant_assignments_match_python_access_filter_order").await
@@ -239,6 +443,7 @@ async fn llm_provider_tenant_assignments_match_python_access_filter_order() {
     seed_llm_provider_user(&pool, "llm_provider_member").await;
     seed_llm_provider_user(&pool, "llm_provider_admin").await;
     seed_llm_provider_user(&pool, "llm_provider_stranger").await;
+    seed_llm_provider_tenant(&pool, "llm_provider_tenant", "llm_provider_member").await;
     seed_llm_provider_membership(&pool, "llm_provider_member", "llm_provider_tenant").await;
     seed_llm_provider_admin_role(&pool, "llm_provider_admin").await;
     seed_tenant_provider_mapping(
@@ -329,6 +534,7 @@ async fn llm_provider_usage_statistics_match_python_scope_and_aggregation() {
     seed_llm_provider(&pool, PROVIDER_ID, "llm_provider_usage_primary").await;
     seed_llm_provider_user(&pool, "llm_provider_member").await;
     seed_llm_provider_user(&pool, "llm_provider_admin").await;
+    seed_llm_provider_tenant(&pool, "llm_provider_tenant", "llm_provider_member").await;
     seed_llm_provider_membership(&pool, "llm_provider_member", "llm_provider_tenant").await;
     seed_llm_provider_admin_role(&pool, "llm_provider_admin").await;
     seed_usage_log(
@@ -437,6 +643,14 @@ async fn clean_llm_provider_crud_rows(pool: &PgPool) {
     .expect("clean llm provider crud rows");
 }
 
+async fn clean_llm_provider_default_transition_rows(pool: &PgPool) {
+    sqlx::query("DELETE FROM llm_providers WHERE name LIKE $1")
+        .bind(format!("{DEFAULT_TRANSITION_PREFIX}%"))
+        .execute(pool)
+        .await
+        .expect("clean llm provider default transition rows");
+}
+
 async fn clean_llm_provider_assignment_rows(pool: &PgPool) {
     sqlx::query("DELETE FROM tenant_provider_mappings WHERE tenant_id LIKE 'llm_provider_%'")
         .execute(pool)
@@ -468,6 +682,10 @@ async fn clean_llm_provider_assignment_rows(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("clean provider user tenants");
+    sqlx::query("DELETE FROM tenants WHERE id LIKE 'llm_provider_%'")
+        .execute(pool)
+        .await
+        .expect("clean provider tenants");
     sqlx::query("DELETE FROM users WHERE id LIKE 'llm_provider_%'")
         .execute(pool)
         .await
@@ -504,21 +722,44 @@ async fn seed_llm_provider(pool: &PgPool, id: &str, name: &str) {
 
 async fn seed_llm_provider_user(pool: &PgPool, user_id: &str) {
     sqlx::query(
-        "INSERT INTO users (id, email) VALUES ($1, $2) \
-         ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email",
+        "INSERT INTO users (id, email, hashed_password, is_active, is_superuser, profile) \
+         VALUES ($1, $2, $3, true, false, '{}'::json) \
+         ON CONFLICT (id) DO UPDATE SET \
+             email = EXCLUDED.email, hashed_password = EXCLUDED.hashed_password, \
+             is_active = true, is_superuser = false, profile = '{}'::json",
     )
     .bind(user_id)
     .bind(format!("{user_id}@example.test"))
+    .bind("integration-test-only")
     .execute(pool)
     .await
     .expect("seed provider user");
 }
 
+async fn seed_llm_provider_tenant(pool: &PgPool, tenant_id: &str, owner_id: &str) {
+    sqlx::query(
+        "INSERT INTO tenants \
+             (id, name, slug, owner_id, plan, max_projects, max_users, max_storage) \
+         VALUES ($1, $2, $3, $4, 'free', 10, 5, 1073741824) \
+         ON CONFLICT (id) DO UPDATE SET \
+             name = EXCLUDED.name, slug = EXCLUDED.slug, owner_id = EXCLUDED.owner_id",
+    )
+    .bind(tenant_id)
+    .bind("LLM Provider Integration Tenant")
+    .bind("llm-provider-integration-tenant")
+    .bind(owner_id)
+    .execute(pool)
+    .await
+    .expect("seed provider tenant");
+}
+
 async fn seed_llm_provider_membership(pool: &PgPool, user_id: &str, tenant_id: &str) {
     sqlx::query(
-        "INSERT INTO user_tenants (id, user_id, tenant_id, role) \
-         VALUES ($1, $2, $3, 'member') \
-         ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, tenant_id = EXCLUDED.tenant_id",
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role, permissions) \
+         VALUES ($1, $2, $3, 'member', '{}'::json) \
+         ON CONFLICT (id) DO UPDATE SET \
+             user_id = EXCLUDED.user_id, tenant_id = EXCLUDED.tenant_id, \
+             permissions = '{}'::json",
     )
     .bind(format!("llm_provider_membership_{user_id}_{tenant_id}"))
     .bind(user_id)

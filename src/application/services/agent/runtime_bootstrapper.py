@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from subprocess import DEVNULL
@@ -19,10 +20,12 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.configuration.config import Settings
+from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.domain.model.agent import Conversation
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.infrastructure.agent.sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
+from src.infrastructure.llm.provider_credentials import resolve_persisted_provider_credential
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
@@ -407,9 +410,14 @@ class AgentRuntimeBootstrapper:
         factory = get_ai_service_factory()
         provider_config = await factory.resolve_provider(conversation.tenant_id)
 
-        # Decrypt API key for the actor
+        # Resolve credentials only at the execution boundary. Environment-backed
+        # records created by the Rust runtime keep only an allow-listed reference
+        # in JSON config and a no-key sentinel in encrypted storage.
         encryption_service = get_encryption_service()
-        api_key = encryption_service.decrypt(provider_config.api_key_encrypted)
+        api_key = self._resolve_provider_runtime_credential(
+            provider_config,
+            encryption_service.decrypt,
+        )
 
         configured_model = tenant_agent_config.llm_model.strip()
         base_model = (
@@ -542,6 +550,24 @@ class AgentRuntimeBootstrapper:
             )
 
         return f"agent:{conversation.tenant_id}:{conversation.project_id}:{agent_mode}"
+
+    @staticmethod
+    def _resolve_provider_runtime_credential(
+        provider_config: ProviderConfig,
+        decrypt: Callable[[str], str],
+    ) -> str | None:
+        """Resolve one provider credential at the Agent execution boundary."""
+        provider_type = ProviderType(provider_config.provider_type)
+        provider_runtime_config = (
+            provider_config.config if isinstance(provider_config.config, dict) else {}
+        )
+        return resolve_persisted_provider_credential(
+            provider_type=provider_type,
+            config=provider_runtime_config,
+            base_url=provider_config.base_url,
+            api_key_encrypted=provider_config.api_key_encrypted,
+            decrypt=decrypt,
+        )
 
     @classmethod
     def _resolve_runtime_mode(

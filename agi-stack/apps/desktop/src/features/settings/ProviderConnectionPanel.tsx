@@ -23,6 +23,7 @@ import type {
   RuntimeMode,
 } from '../../types';
 import {
+  providerConfigurationValidationOutcome,
   providerDraftFromProvider,
   providerMutationFromDraft,
   providerProbeInputFromDraft,
@@ -31,12 +32,7 @@ import {
   type ProviderEditorDraft,
 } from './providerManagementModel';
 
-const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = [
-  'oauth',
-  'api_key',
-  'environment',
-  'none',
-];
+const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = ['oauth', 'api_key', 'environment', 'none'];
 
 type ProviderConnectionPanelProps = {
   provider: ManagedLlmProvider;
@@ -104,6 +100,10 @@ export function ProviderConnectionPanel({
     draft.baseUrl.trim().replace(/\/$/, '') !== normalizedProviderBaseUrl;
   const credentialRequiredForDraft =
     draft.authMethod === 'api_key' && endpointChanged && !probeInput.apiKey;
+  const probeInputValid = providerProbeInputIsValid(
+    probeInput,
+    provider.credential_configured === true && !endpointChanged,
+  );
   const updateDraft = <Key extends keyof ProviderEditorDraft>(
     key: Key,
     value: ProviderEditorDraft[Key],
@@ -145,10 +145,18 @@ export function ProviderConnectionPanel({
       setBusy(null);
       return;
     }
+    if (!probeInputValid) {
+      setError(t('providers.configurationValidationFailed'));
+      setBusy(null);
+      return;
+    }
     try {
-      const outcome = validateDraft
-        ? await onValidateDraft(draftProbeInput)
-        : await onValidate(providerId, provider.revision ?? 0);
+      const outcome =
+        !editing && !probeSupported
+          ? providerConfigurationValidationOutcome(provider)
+          : validateDraft
+            ? await onValidateDraft(draftProbeInput)
+            : await onValidate(providerId, provider.revision ?? 0);
       if (requestId !== validationRequestId.current || providerId !== activeProviderIdRef.current) {
         return;
       }
@@ -217,27 +225,34 @@ export function ProviderConnectionPanel({
   const authMethods = providerTypeDescriptor?.authMethods ?? [];
   const unavailableAuthMethods = providerTypeDescriptor?.unavailableAuthMethods ?? [];
   const authOptions = AUTH_METHOD_ORDER.filter(
-    (authMethod) =>
-      authMethods.includes(authMethod) || unavailableAuthMethods.includes(authMethod),
+    (authMethod) => authMethods.includes(authMethod) || unavailableAuthMethods.includes(authMethod),
   );
   const authMethodUnavailable = (authMethod: LlmProviderAuthMethod) =>
     unavailableAuthMethods.includes(authMethod) || !authMethods.includes(authMethod);
   const authCapabilityAvailable =
     authMethods.includes(draft.authMethod) && !authMethodUnavailable(draft.authMethod);
-  const probeSupported = providerTypeDescriptor?.probeSupported === true;
+  const probeSupported = providerTypeDescriptor?.probeSupported !== false;
   const providerHealth = provider.health_status?.trim().toLowerCase();
   const currentProviderVerified =
     !editing &&
     validation == null &&
     error == null &&
     (providerHealth === 'healthy' || providerHealth === 'connected' || providerHealth === 'ready');
+  const currentProviderConfigured =
+    !editing &&
+    validation == null &&
+    error == null &&
+    !probeSupported &&
+    (providerHealth === 'configuration_valid' ||
+      (!providerHealth &&
+        providerProbeInputIsValid(probeInput, provider.credential_configured === true)));
   const validationAccepted =
-    providerValidationAccepted(validation, probeSupported) || currentProviderVerified;
+    providerValidationAccepted(validation, probeSupported) ||
+    currentProviderVerified ||
+    currentProviderConfigured;
   const validationAvailable = authCapabilityAvailable;
   const secretDescriptionKey =
-    mode === 'local'
-      ? 'providers.secretDescription.local'
-      : 'providers.secretDescription.cloud';
+    mode === 'local' ? 'providers.secretDescription.local' : 'providers.secretDescription.cloud';
   const credentialValue = editing
     ? draft.apiKey
     : provider.credential_configured === true
@@ -253,17 +268,20 @@ export function ProviderConnectionPanel({
   const persistedEnvironmentVariable = (provider.environment_variable ?? '').trim();
   const environmentVariableChanged =
     draft.environmentVariable.trim() !== persistedEnvironmentVariable;
-  const environmentSecretStatus = validation?.probed === true
-    ? 'available'
-    : validation?.probed === false
-      ? 'unavailable'
-      : provider.auth_method === 'environment' && !environmentVariableChanged
-        ? provider.credential_configured === true
-          ? 'available'
-          : provider.credential_configured === false
-            ? 'unavailable'
-            : 'unknown'
-        : 'unknown';
+  const environmentSecretStatus =
+    validation?.probed === true
+      ? 'available'
+      : validation?.probed === false && validation.status === 'configuration_valid'
+        ? 'available'
+        : validation?.probed === false
+          ? 'unavailable'
+          : provider.auth_method === 'environment' && !environmentVariableChanged
+            ? provider.credential_configured === true
+              ? 'available'
+              : provider.credential_configured === false
+                ? 'unavailable'
+                : 'unknown'
+            : 'unknown';
   const environmentSecretStatusKey =
     environmentSecretStatus === 'available'
       ? 'providers.environmentSecretAvailable'
@@ -277,16 +295,20 @@ export function ProviderConnectionPanel({
     validation?.errorMessage ||
     (currentProviderVerified
       ? t('providers.connectionPreviouslyVerified')
-      : validationAccepted
-      ? discoveredModelCount > 0
-        ? t('providers.connectionVerifiedWithModels', { count: discoveredModelCount })
-        : t('providers.connectionVerifiedDiscoveryUnavailable')
-      : validation?.detail ||
-        t(
-          probeSupported
-            ? 'providers.connectionTestDescription'
-            : 'providers.configurationValidationDescription',
-        ));
+      : currentProviderConfigured
+        ? t('providers.configurationValidationDescription')
+        : validationAccepted
+          ? discoveredModelCount > 0
+            ? t('providers.connectionVerifiedWithModels', {
+                count: discoveredModelCount,
+              })
+            : t('providers.connectionVerifiedDiscoveryUnavailable')
+          : validation?.detail ||
+            t(
+              probeSupported
+                ? 'providers.connectionTestDescription'
+                : 'providers.configurationValidationDescription',
+            ));
 
   return (
     <section className="provider-form-card">
@@ -546,9 +568,7 @@ export function ProviderConnectionPanel({
                         : 'providers.validateBeforeSaving',
               )}
             </b>
-            <small>
-              {validationDetail}
-            </small>
+            <small>{validationDetail}</small>
           </span>
         </div>
         {canManage ? (
@@ -558,17 +578,11 @@ export function ProviderConnectionPanel({
               busy !== null ||
               !validationAvailable ||
               credentialRequiredForDraft ||
-              (editing &&
-                !providerProbeInputIsValid(
-                  probeInput,
-                  provider.credential_configured === true && !endpointChanged,
-                ))
+              !probeInputValid
             }
             onClick={() => void testConnection()}
           >
-            {t(
-              probeSupported ? 'providers.testConnection' : 'providers.validateConfiguration',
-            )}
+            {t(probeSupported ? 'providers.testConnection' : 'providers.validateConfiguration')}
           </button>
         ) : null}
         {editing ? (

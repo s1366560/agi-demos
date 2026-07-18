@@ -81,6 +81,7 @@
       "healthy": "健康",
       "unhealthy": "不健康",
       "degraded": "降级",
+      "configurationValid": "配置已校验",
       "unknown": "未知",
       "paused": "已暂停",
       "archived": "已归档",
@@ -1415,6 +1416,7 @@
         "savedPrefix": "已保存提供商健康检查",
         "livePrefix": "连接测试",
         "passed": "{{prefix}} 已通过{{responseTime}}。",
+        "configurationValid": "配置已校验；此提供商不支持网络探测。",
         "returned": "{{prefix}} 返回 {{status}}{{responseTime}}{{detail}}。",
         "apiKeyRequired": "API Key 必填",
         "failed": "连接失败，请检查提供商配置。"
@@ -8768,7 +8770,9 @@
           "smallFastModel": "小型/快速模型",
           "embeddingModel": "嵌入模型",
           "rerankerModel": "重排模型",
-          "customBaseUrl": "自定义基础地址"
+          "customBaseUrl": "自定义基础地址",
+          "authMethod": "认证方式",
+          "environmentVariable": "环境变量"
         },
         "placeholders": {
           "providerName": "例如：Production OpenAI",
@@ -8779,7 +8783,8 @@
           "smallModel": "例如：gpt-4o-mini",
           "embeddingModel": "例如：text-embedding-3-small",
           "rerankerModel": "例如：gpt-4o-mini（可选）",
-          "baseUrl": "https://api.example.com/v1"
+          "baseUrl": "https://api.example.com/v1",
+          "environmentVariable": "PROVIDER_API_KEY"
         },
         "help": {
           "apiKeyRequired": "您的 API Key 会加密后安全存储。",
@@ -8788,12 +8793,31 @@
           "smallModel": "用于简单任务和成本优化的快速模型。",
           "embeddingModel": "用于生成向量嵌入的模型。",
           "rerankerModel": "用于搜索结果重排的模型；未指定时使用 LLM。",
-          "baseUrl": "覆盖默认 API 端点，适用于代理或自托管模型。"
+          "baseUrl": "覆盖默认 API 端点，适用于代理或自托管模型。",
+          "authUnavailable": "安全凭据存储可用前，暂不能配置此提供商。",
+          "authLoading": "正在加载认证选项；服务器确认前无法保存。",
+          "authLoadFailed": "无法加载认证选项，请重新打开此对话框后重试。",
+          "currentCredentialRetained": "若端点未变更，留空可保留当前凭据。",
+          "environmentDetected": "已检测到 {{environmentVariable}}，密钥值仍保留在运行时环境中。",
+          "environmentVariable": "只会保存并发送变量名，密钥值不会复制到此表单。",
+          "noAuthentication": "此提供商不需要凭据。"
         },
         "providerInformation": "提供商信息",
         "saving": "保存中...",
         "updateProvider": "更新提供商",
-        "createProvider": "创建提供商"
+        "createProvider": "创建提供商",
+        "auth": {
+          "apiKey": "API Key",
+          "environment": "环境变量",
+          "none": "无需认证",
+          "oauth": "OAuth",
+          "unavailable": "没有可用的安全认证方式",
+          "loading": "正在加载认证能力…",
+          "loadFailed": "认证能力暂不可用"
+        },
+        "errors": {
+          "credentialRequired": "请先配置所选认证方式再保存。"
+        }
       },
       "config": {
         "addTitle": "添加新提供商",
@@ -8860,6 +8884,32 @@
         "base64": "Base64",
         "envDetectedTitle": "检测到环境变量",
         "envDetectedDescription": "已在环境变量中找到配置，下面的字段已自动填充。",
+        "envCredentialReferenceDetected": "已检测到凭据引用 {{environmentVariable}}，密钥值仍保留在运行时环境中。",
+        "envCredentialReferenceUnavailable": "检测到非敏感配置，但后端未提供凭据变量引用，因此未自动填充凭据。",
+        "authMethod": "认证方式",
+        "authUnavailable": "没有可用的安全认证方式",
+        "authUnavailableHelp": "安全凭据存储可用前，暂不能配置此提供商。",
+        "authLoading": "正在加载认证能力…",
+        "authLoadingHelp": "正在加载认证选项；服务器确认前无法保存。",
+        "authLoadFailed": "认证能力暂不可用",
+        "authLoadFailedHelp": "无法加载认证选项，请重新打开此对话框后重试。",
+        "credentialConfigured": "已配置",
+        "environmentVariable": "环境变量",
+        "environmentVariablePlaceholder": "PROVIDER_API_KEY",
+        "environmentVariableHelp": "只会保存并发送变量名，密钥值不会进入此表单。",
+        "noAuthenticationHelp": "此提供商不需要凭据。",
+        "operationType": "操作类型",
+        "operationTypeLlm": "LLM",
+        "operationTypeEmbedding": "嵌入",
+        "operationTypeRerank": "重排",
+        "secureRtcCredentials": "安全 RTC 凭据",
+        "secureRtcCredentialsUnavailable": "专用加密字段可用前暂不可配置。",
+        "auth": {
+          "apiKey": "API Key",
+          "environment": "环境变量",
+          "none": "无需认证",
+          "oauth": "OAuth"
+        },
         "providerName": "提供商名称",
         "providerNamePlaceholder": "我的 OpenAI 提供商",
         "apiKey": "API Key",

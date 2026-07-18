@@ -5,6 +5,9 @@
 //! Python's runtime resilience caches. API keys are written with the same Python
 //! AES-GCM envelope so Python can continue to decrypt rows created by Rust.
 
+use std::error::Error;
+use std::fmt;
+
 use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{QueryBuilder, Row};
 
@@ -20,6 +23,40 @@ const PROVIDER_COLS: &str = "id::text AS id, name, provider_type, operation_type
     reranker_model, config, is_active, is_default, is_enabled, allowed_models, \
     blocked_models, pool_weight, pool_enabled, model_tier, secondary_models, \
     created_at, updated_at";
+const DEFAULT_PROVIDER_LOCK_NAMESPACE: i32 = 0x4D53_5044;
+const PROVIDER_NAME_UNIQUE_CONSTRAINT: &str = "llm_providers_name_key";
+
+#[derive(Debug)]
+pub enum LlmProviderMutationError {
+    NameConflict,
+    Storage(CoreError),
+}
+
+impl fmt::Display for LlmProviderMutationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NameConflict => formatter.write_str("provider name already exists"),
+            Self::Storage(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl Error for LlmProviderMutationError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::NameConflict => None,
+            Self::Storage(error) => Some(error),
+        }
+    }
+}
+
+impl From<CoreError> for LlmProviderMutationError {
+    fn from(error: CoreError) -> Self {
+        Self::Storage(error)
+    }
+}
+
+pub type LlmProviderMutationResult<T> = Result<T, LlmProviderMutationError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmProviderRecord {
@@ -77,7 +114,9 @@ pub struct LlmProviderUpdateRecord {
     pub provider_type: Option<String>,
     pub operation_type: Option<String>,
     pub api_key_plaintext: Option<String>,
-    pub base_url: Option<String>,
+    /// `None` preserves the current value, `Some(None)` clears it, and
+    /// `Some(Some(url))` replaces it.
+    pub base_url: Option<Option<String>>,
     pub llm_model: Option<String>,
     pub llm_small_model: Option<String>,
     pub embedding_model: Option<String>,
@@ -176,22 +215,30 @@ impl PgLlmProviderRepository {
     pub async fn create_provider(
         &self,
         record: &LlmProviderCreateRecord,
-    ) -> CoreResult<LlmProviderRecord> {
+    ) -> LlmProviderMutationResult<LlmProviderRecord> {
         let provider_id = try_generate_uuid_v4()
             .map_err(|e| CoreError::Storage(format!("generate llm provider id: {e}")))?;
         let api_key_encrypted = encrypt_provider_api_key(&record.api_key_plaintext)?;
         let allowed_models = json_string_or_none(&record.allowed_models)?;
         let blocked_models = json_string_or_none(&record.blocked_models)?;
         let secondary_models = json_value_or_none(&record.secondary_models);
-        let sql = "INSERT INTO llm_providers (\
+        let mut transaction = self.pool.begin().await.map_err(|error| {
+            provider_mutation_storage_error("begin create llm provider transaction", error)
+        })?;
+        if record.is_default {
+            acquire_default_operation_lock(&mut transaction, &record.operation_type).await?;
+        }
+        let sql = format!(
+            "INSERT INTO llm_providers (\
              id, name, provider_type, operation_type, api_key_encrypted, base_url, \
              llm_model, llm_small_model, embedding_model, reranker_model, config, \
              is_active, is_default, is_enabled, allowed_models, blocked_models, \
              pool_weight, pool_enabled, model_tier, secondary_models, created_at, updated_at\
          ) VALUES (\
              $1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,now(),now()\
-         ) ON CONFLICT (name) DO NOTHING";
-        sqlx::query(sql)
+         ) RETURNING {PROVIDER_COLS}"
+        );
+        let row = sqlx::query(&sql)
             .bind(&provider_id)
             .bind(&record.name)
             .bind(&record.provider_type)
@@ -212,27 +259,61 @@ impl PgLlmProviderRepository {
             .bind(record.pool_enabled)
             .bind(&record.model_tier)
             .bind(&secondary_models)
-            .execute(&self.pool)
+            .fetch_one(&mut *transaction)
             .await
-            .map_err(|e| CoreError::Storage(format!("create llm provider: {e}")))?;
-
-        let sql = format!("SELECT {PROVIDER_COLS} FROM llm_providers WHERE name = $1");
-        sqlx::query(&sql)
-            .bind(&record.name)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| CoreError::Storage(format!("read created llm provider: {e}")))
-            .and_then(row_to_provider)
+            .map_err(|error| provider_mutation_sqlx_error("create llm provider", error))?;
+        if record.is_default {
+            demote_other_operation_defaults(&mut transaction, &record.operation_type, &provider_id)
+                .await?;
+        }
+        let created = row_to_provider(row)?;
+        transaction.commit().await.map_err(|error| {
+            provider_mutation_storage_error("commit create llm provider transaction", error)
+        })?;
+        Ok(created)
     }
 
     pub async fn update_provider(
         &self,
         provider_id: &str,
         update: &LlmProviderUpdateRecord,
-    ) -> CoreResult<Option<LlmProviderRecord>> {
+    ) -> LlmProviderMutationResult<Option<LlmProviderRecord>> {
         let Some(existing) = self.get_provider(provider_id).await? else {
             return Ok(None);
         };
+
+        let target_operation = update
+            .operation_type
+            .as_deref()
+            .unwrap_or(&existing.operation_type)
+            .to_string();
+        let target_is_default = update.is_default.unwrap_or(existing.is_default);
+        let mut transaction = self.pool.begin().await.map_err(|error| {
+            provider_mutation_storage_error("begin update llm provider transaction", error)
+        })?;
+        if target_is_default {
+            acquire_default_operation_lock(&mut transaction, &target_operation).await?;
+        }
+        let select_sql =
+            format!("SELECT {PROVIDER_COLS} FROM llm_providers WHERE id = $1::uuid FOR UPDATE");
+        let Some(row) = sqlx::query(&select_sql)
+            .bind(provider_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|error| provider_mutation_sqlx_error("lock llm provider for update", error))?
+        else {
+            transaction.rollback().await.map_err(|error| {
+                provider_mutation_storage_error("rollback missing llm provider update", error)
+            })?;
+            return Ok(None);
+        };
+        let existing = row_to_provider(row)?;
+        if existing.updated_at != update.expected_updated_at {
+            transaction.rollback().await.map_err(|error| {
+                provider_mutation_storage_error("rollback stale llm provider update", error)
+            })?;
+            return Ok(None);
+        }
 
         let api_key_encrypted = match update.api_key_plaintext.as_deref() {
             Some(api_key) => encrypt_provider_api_key(api_key)?,
@@ -265,7 +346,15 @@ impl PgLlmProviderRepository {
             .operation_type
             .as_ref()
             .unwrap_or(&existing.operation_type);
+        let target_is_default = update.is_default.unwrap_or(existing.is_default);
+        if target_is_default {
+            demote_other_operation_defaults(&mut transaction, operation_type, provider_id).await?;
+        }
         let config = update.config.as_ref().unwrap_or(&existing.config);
+        let base_url = match &update.base_url {
+            Some(value) => value.as_ref(),
+            None => existing.base_url.as_ref(),
+        };
         let replace_model_fields = update.provider_type.is_some()
             || update.operation_type.is_some()
             || update.config.is_some();
@@ -281,13 +370,13 @@ impl PgLlmProviderRepository {
              WHERE id=$1::uuid AND updated_at = $21::timestamptz \
              RETURNING {PROVIDER_COLS}"
         );
-        sqlx::query(&sql)
+        let updated = sqlx::query(&sql)
             .bind(provider_id)
             .bind(update.name.as_ref().unwrap_or(&existing.name))
             .bind(provider_type)
             .bind(operation_type)
             .bind(api_key_encrypted)
-            .bind(update.base_url.as_ref().or(existing.base_url.as_ref()))
+            .bind(base_url)
             .bind(if replace_model_fields {
                 update.llm_model.as_ref()
             } else {
@@ -332,11 +421,15 @@ impl PgLlmProviderRepository {
             })
             .bind(&secondary_models)
             .bind(update.expected_updated_at)
-            .fetch_optional(&self.pool)
+            .fetch_optional(&mut *transaction)
             .await
-            .map_err(|e| CoreError::Storage(format!("update llm provider: {e}")))?
+            .map_err(|error| provider_mutation_sqlx_error("update llm provider", error))?
             .map(row_to_provider)
-            .transpose()
+            .transpose()?;
+        transaction.commit().await.map_err(|error| {
+            provider_mutation_storage_error("commit update llm provider transaction", error)
+        })?;
+        Ok(updated)
     }
 
     pub async fn soft_delete_provider(&self, provider_id: &str) -> CoreResult<bool> {
@@ -568,6 +661,70 @@ impl PgLlmProviderRepository {
             .collect::<Result<Vec<_>, sqlx::Error>>()
             .map_err(|e| CoreError::Storage(format!("decode llm provider usage statistics: {e}")))
     }
+}
+
+fn provider_mutation_storage_error(context: &str, error: sqlx::Error) -> LlmProviderMutationError {
+    LlmProviderMutationError::Storage(CoreError::Storage(format!("{context}: {error}")))
+}
+
+fn provider_mutation_sqlx_error(context: &str, error: sqlx::Error) -> LlmProviderMutationError {
+    let is_provider_name_conflict = error.as_database_error().is_some_and(|database_error| {
+        database_error.code().as_deref() == Some("23505")
+            && database_error.constraint() == Some(PROVIDER_NAME_UNIQUE_CONSTRAINT)
+    });
+    if is_provider_name_conflict {
+        LlmProviderMutationError::NameConflict
+    } else {
+        provider_mutation_storage_error(context, error)
+    }
+}
+
+fn default_operation_lock_id(operation_type: &str) -> Result<i32, LlmProviderMutationError> {
+    match operation_type {
+        "llm" => Ok(1),
+        "embedding" => Ok(2),
+        "rerank" => Ok(3),
+        _ => Err(LlmProviderMutationError::Storage(CoreError::Storage(
+            "invalid provider operation type for default transition".to_string(),
+        ))),
+    }
+}
+
+async fn acquire_default_operation_lock(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    operation_type: &str,
+) -> LlmProviderMutationResult<()> {
+    let operation_lock_id = default_operation_lock_id(operation_type)?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(DEFAULT_PROVIDER_LOCK_NAMESPACE)
+        .bind(operation_lock_id)
+        .execute(&mut **transaction)
+        .await
+        .map_err(|error| {
+            provider_mutation_storage_error("acquire provider default operation lock", error)
+        })?;
+    Ok(())
+}
+
+async fn demote_other_operation_defaults(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    operation_type: &str,
+    provider_id: &str,
+) -> LlmProviderMutationResult<()> {
+    sqlx::query(
+        "UPDATE llm_providers SET \
+             is_default = false, \
+             updated_at = GREATEST(now(), updated_at + interval '1 microsecond') \
+         WHERE operation_type = $1 AND is_default AND id <> $2::uuid",
+    )
+    .bind(operation_type)
+    .bind(provider_id)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|error| {
+        provider_mutation_storage_error("demote previous llm provider defaults", error)
+    })?;
+    Ok(())
 }
 
 fn row_to_provider(row: sqlx::postgres::PgRow) -> CoreResult<LlmProviderRecord> {

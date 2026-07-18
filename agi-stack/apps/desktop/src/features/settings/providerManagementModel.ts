@@ -37,11 +37,7 @@ export type ProviderConnectionStatus = Exclude<ProviderListFilter, 'all'>;
 
 export type ProviderRoutingOverview = Pick<LlmProviderRoutingPolicy, 'roles' | 'fallbacks'>;
 
-const LOCAL_RUNTIME_ROUTING_PROVIDER_TYPES = new Set([
-  'anthropic',
-  'openai',
-  'openai_compatible',
-]);
+const LOCAL_RUNTIME_ROUTING_PROVIDER_TYPES = new Set(['anthropic', 'openai', 'openai_compatible']);
 
 const LOCAL_RUNTIME_ROUTABLE_HEALTH_STATUSES = new Set([
   'configuration_valid',
@@ -80,14 +76,15 @@ export function providerAuthMethodSupported(
   method: LlmProviderAuthMethod,
 ): boolean {
   return (
-    descriptor.authMethods.includes(method) &&
-    !descriptor.unavailableAuthMethods.includes(method)
+    descriptor.authMethods.includes(method) && !descriptor.unavailableAuthMethods.includes(method)
   );
 }
 
 export function providerManagementAllowed(mode: RuntimeMode, roles: readonly string[]): boolean {
   const normalized = new Set(roles.map((role) => role.trim().toLowerCase()));
-  return mode === 'local' ? normalized.has('owner') || normalized.has('admin') : normalized.has('admin');
+  return mode === 'local'
+    ? normalized.has('owner') || normalized.has('admin')
+    : normalized.has('admin');
 }
 
 export function providerDraftFromProvider(provider: ManagedLlmProvider): ProviderEditorDraft {
@@ -159,6 +156,7 @@ export function providerProbeInputIsValid(
 
 export function providerConnectionStatus(
   provider: ManagedLlmProvider,
+  probeSupported = true,
 ): ProviderConnectionStatus {
   if (
     provider.is_active === false ||
@@ -167,16 +165,17 @@ export function providerConnectionStatus(
   ) {
     return 'attention';
   }
+  if (providerEnabledModelIds(provider).length === 0) return 'attention';
   const healthStatus = provider.health_status?.trim().toLowerCase();
-  if (!healthStatus) return 'attention';
+  if (!healthStatus) return probeSupported ? 'attention' : 'connected';
   if (
     healthStatus !== 'healthy' &&
     healthStatus !== 'connected' &&
-    healthStatus !== 'ready'
+    healthStatus !== 'ready' &&
+    healthStatus !== 'configuration_valid'
   ) {
     return 'attention';
   }
-  if (providerEnabledModelIds(provider).length === 0) return 'attention';
   return 'connected';
 }
 
@@ -184,6 +183,7 @@ export function filterProviders(
   providers: readonly ManagedLlmProvider[],
   query: string,
   filter: ProviderListFilter,
+  providerTypes: readonly LlmProviderTypeDescriptor[] = [],
 ): ManagedLlmProvider[] {
   const needle = query.trim().toLowerCase();
   return providers.filter((provider) => {
@@ -191,7 +191,10 @@ export function filterProviders(
       !needle ||
       provider.name.toLowerCase().includes(needle) ||
       provider.provider_type.toLowerCase().includes(needle);
-    const matchesFilter = filter === 'all' || providerConnectionStatus(provider) === filter;
+    const descriptor = providerTypes.find((item) => item.providerType === provider.provider_type);
+    const matchesFilter =
+      filter === 'all' ||
+      providerConnectionStatus(provider, descriptor?.probeSupported !== false) === filter;
     return matchesQuery && matchesFilter;
   });
 }
@@ -201,11 +204,7 @@ export function providerModelsFromProvider(
 ): LlmProviderCatalogModel[] {
   const operationType = provider.operation_type?.trim().toLowerCase();
   const capability =
-    operationType === 'embedding'
-      ? 'embedding'
-      : operationType === 'rerank'
-        ? 'rerank'
-        : 'chat';
+    operationType === 'embedding' ? 'embedding' : operationType === 'rerank' ? 'rerank' : 'chat';
   const seen = new Set<string>();
   return (provider.allowed_models ?? [])
     .map((model) => model.trim())
@@ -280,10 +279,7 @@ export function providerRoutingOverview(
   };
 }
 
-export function providerModelCanBeDisabled(
-  provider: ManagedLlmProvider,
-  modelId: string,
-): boolean {
+export function providerModelCanBeDisabled(provider: ManagedLlmProvider, modelId: string): boolean {
   const primaryModel = provider.llm_model?.trim();
   return !primaryModel || modelId.trim() !== primaryModel;
 }
@@ -304,9 +300,9 @@ export function providerMutationForEnabledModels(
 export function providerDraftIsValid(draft: ProviderEditorDraft): boolean {
   return Boolean(
     draft.name.trim() &&
-      draft.providerType.trim() &&
-      draft.baseUrl.trim() &&
-      draft.primaryModel.trim(),
+    draft.providerType.trim() &&
+    draft.baseUrl.trim() &&
+    draft.primaryModel.trim(),
   );
 }
 
@@ -319,9 +315,7 @@ export function providerValidationSignal(
   };
 }
 
-export function providerValidationSucceeded(
-  outcome: LlmProviderValidationOutcome | null,
-): boolean {
+export function providerValidationSucceeded(outcome: LlmProviderValidationOutcome | null): boolean {
   return outcome?.probed === true && outcome.status === 'healthy';
 }
 
@@ -331,6 +325,18 @@ export function providerValidationAccepted(
 ): boolean {
   if (probeSupported) return providerValidationSucceeded(outcome);
   return outcome?.probed === false && outcome.status === 'configuration_valid';
+}
+
+export function providerConfigurationValidationOutcome(
+  _provider: ManagedLlmProvider,
+): LlmProviderValidationOutcome {
+  return {
+    provider: null,
+    status: 'configuration_valid',
+    probed: false,
+    detail: null,
+    catalog: null,
+  };
 }
 
 function normalizedModelIds(value: string): string[] {

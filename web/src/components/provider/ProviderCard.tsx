@@ -30,9 +30,9 @@ import {
   User,
 } from 'lucide-react';
 
-import { ProviderConfig, CircuitBreakerState } from '../../types/memory';
-
 import { ProviderIcon } from './ProviderIcon';
+
+import type { CircuitBreakerState, ProviderConfig } from '../../types/memory';
 
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
@@ -106,7 +106,18 @@ const getStatusConfig = (healthStatus?: string) => {
         borderColor: 'border-emerald-200 dark:border-emerald-800',
         dotColor: 'bg-emerald-500',
         icon: 'check_circle',
-        label: 'Healthy',
+        labelDefault: 'Healthy',
+        labelKey: 'common.status.healthy',
+      };
+    case 'configuration_valid':
+      return {
+        color: 'text-emerald-600 dark:text-emerald-400',
+        bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+        borderColor: 'border-emerald-200 dark:border-emerald-800',
+        dotColor: 'bg-emerald-500',
+        icon: 'check_circle',
+        labelDefault: 'Configuration validated',
+        labelKey: 'common.status.configurationValid',
       };
     case 'degraded':
       return {
@@ -115,7 +126,8 @@ const getStatusConfig = (healthStatus?: string) => {
         borderColor: 'border-amber-200 dark:border-amber-800',
         dotColor: 'bg-amber-500',
         icon: 'warning',
-        label: 'Degraded',
+        labelDefault: 'Degraded',
+        labelKey: 'common.status.degraded',
       };
     case 'unhealthy':
       return {
@@ -124,7 +136,8 @@ const getStatusConfig = (healthStatus?: string) => {
         borderColor: 'border-red-200 dark:border-red-800',
         dotColor: 'bg-red-500',
         icon: 'error',
-        label: 'Unhealthy',
+        labelDefault: 'Unhealthy',
+        labelKey: 'common.status.unhealthy',
       };
     default:
       return {
@@ -133,7 +146,8 @@ const getStatusConfig = (healthStatus?: string) => {
         borderColor: 'border-slate-200 dark:border-slate-700',
         dotColor: 'bg-slate-400',
         icon: 'help',
-        label: 'Unknown',
+        labelDefault: 'Unknown',
+        labelKey: 'common.status.unknown',
       };
   }
 };
@@ -289,7 +303,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             {renderDynamicIcon(statusConfig.icon, 16, statusConfig.color)}
             <div className="flex flex-col">
               <span className={`text-xs font-medium ${statusConfig.color}`}>
-                {statusConfig.label}
+                {t(statusConfig.labelKey, { defaultValue: statusConfig.labelDefault })}
               </span>
               {provider.response_time_ms && (
                 <span className="text-2xs text-slate-500">{provider.response_time_ms}ms</span>

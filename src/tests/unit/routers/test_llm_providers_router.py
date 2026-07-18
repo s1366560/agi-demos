@@ -9,11 +9,16 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from src.domain.llm_providers.models import (
+    ProviderAuthMethod,
     ProviderConfigResponse,
+    ProviderCredentialRequiredError,
     ProviderHealth,
+    ProviderRevisionConflictError,
     ProviderStatus,
     ProviderType,
     ProviderValidationResponse,
+    UnsupportedProviderAuthError,
+    infer_operation_type_from_provider_type,
 )
 
 
@@ -23,6 +28,7 @@ def create_provider_response(
     provider_type: ProviderType = ProviderType.OPENAI,
     is_active: bool = True,
     is_default: bool = False,
+    config: dict[str, object] | None = None,
 ) -> ProviderConfigResponse:
     """Create a ProviderConfigResponse for testing."""
     if provider_id is None:
@@ -36,10 +42,15 @@ def create_provider_response(
         embedding_model="text-embedding-3-small",
         reranker_model=None,
         base_url=None,
-        config={},
+        config={} if config is None else config,
         is_active=is_active,
         is_default=is_default,
+        auth_method=ProviderAuthMethod.API_KEY,
+        environment_variable=None,
+        credential_source="service_encrypted",
+        credential_configured=True,
         api_key_masked="sk-...xyz",
+        revision=1_700_000_000_000_000,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
         health_status=ProviderStatus.HEALTHY,
@@ -231,6 +242,59 @@ class TestLLMProvidersRouterCreate:
         assert response.json()["detail"] == "Invalid provider request"
         assert "secret-provider" not in response.text
 
+    @pytest.mark.parametrize("auth_method", ["environment", "oauth"])
+    def test_create_provider_rejects_unsupported_persistent_auth(self, llm_client, auth_method):
+        """CRUD rejects unsupported auth methods with 422 before calling the service."""
+        response = llm_client.post(
+            "/api/v1/llm-providers/",
+            json={
+                "name": "unsupported-auth-openai",
+                "provider_type": "openai",
+                "auth_method": auth_method,
+                "environment_variable": (
+                    "OPENAI_API_KEY" if auth_method == "environment" else None
+                ),
+                "llm_model": "gpt-4o",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_create_provider_rejects_unknown_fields(self, llm_client):
+        """Unknown credential fields are not silently ignored by create."""
+        response = llm_client.post(
+            "/api/v1/llm-providers/",
+            json={
+                "name": "strict-openai",
+                "provider_type": "openai",
+                "api_key": "sk-test",
+                "llm_model": "gpt-4o",
+                "credential_value": "must-not-be-ignored",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_create_provider_maps_service_auth_validation_to_422(
+        self,
+        llm_client,
+        mock_provider_service,
+        sample_provider_data,
+    ):
+        """Service-level auth validation remains a sanitized client error."""
+        mock_provider_service.create_provider.side_effect = UnsupportedProviderAuthError(
+            "Authentication method is not supported for persistent providers"
+        )
+
+        response = llm_client.post(
+            "/api/v1/llm-providers/",
+            json=sample_provider_data,
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["detail"] == "Unsupported provider authentication method"
+        assert "persistent providers" not in response.text
+
 
 @pytest.mark.unit
 class TestLLMProvidersRouterList:
@@ -270,6 +334,34 @@ class TestLLMProvidersRouterList:
         data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "test-provider"
+
+    def test_list_providers_serialization_omits_nested_config_secrets(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Ordinary list serialization omits both sensitive config keys and values."""
+        provider = Mock()
+        mock_provider_service.list_providers.return_value = [provider]
+        mock_provider_service.get_provider_responses.return_value = [
+            create_provider_response(
+                config={
+                    "temperature": 0.2,
+                    "safe": "visible",
+                    "nested": {"oauth_token": "list-oauth-secret", "safe": "kept"},
+                    "headers": {"Authorization": "Bearer list-header-secret"},
+                }
+            )
+        ]
+
+        response = llm_client.get("/api/v1/llm-providers/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()[0]["config"] == {"temperature": 0.2}
+        assert "oauth_token" not in response.text
+        assert "list-oauth-secret" not in response.text
+        assert "headers" not in response.text
+        assert "list-header-secret" not in response.text
 
     @pytest.mark.asyncio
     async def test_list_providers_non_admin_excludes_inactive(
@@ -314,6 +406,56 @@ class TestLLMProvidersRouterGet:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["name"] == "test-provider"
+
+    @pytest.mark.asyncio
+    async def test_get_provider_preserves_configuration_valid_health_enum(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Direct provider responses expose no-probe validation without coercing it healthy."""
+        provider_id = str(uuid4())
+        provider = create_provider_response(provider_id=provider_id).model_copy(
+            update={
+                "health_status": ProviderStatus.CONFIGURATION_VALID,
+                "response_time_ms": None,
+                "error_message": None,
+            }
+        )
+        mock_provider_service.get_provider_response.return_value = provider
+
+        response = llm_client.get(f"/api/v1/llm-providers/{provider_id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["health_status"] == "configuration_valid"
+        assert response.json()["response_time_ms"] is None
+        assert response.json()["error_message"] is None
+
+    def test_get_provider_serialization_omits_nested_config_secrets(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Ordinary get serialization omits both sensitive config keys and values."""
+        provider_id = str(uuid4())
+        mock_provider_service.get_provider_response.return_value = create_provider_response(
+            provider_id=provider_id,
+            config={
+                "region": "us-east-1",
+                "safe": "visible",
+                "nested": {"access_token": "get-access-secret", "safe": "kept"},
+                "request_headers": {"Authorization": "Bearer get-header-secret"},
+            },
+        )
+
+        response = llm_client.get(f"/api/v1/llm-providers/{provider_id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["config"] == {"region": "us-east-1"}
+        assert "access_token" not in response.text
+        assert "get-access-secret" not in response.text
+        assert "request_headers" not in response.text
+        assert "get-header-secret" not in response.text
 
     @pytest.mark.asyncio
     async def test_get_provider_not_found(self, llm_client, mock_provider_service):
@@ -375,13 +517,95 @@ class TestLLMProvidersRouterUpdate:
 
         response = llm_client.put(
             f"/api/v1/llm-providers/{provider_id}",
-            json={"name": "updated-name"},
+            json={"name": "updated-name", "expected_revision": 7},
         )
 
         assert response.status_code == status.HTTP_200_OK
         mock_provider_service.update_provider.assert_called_once()
         data = response.json()
         assert data["name"] == "updated-name"
+
+    @pytest.mark.asyncio
+    async def test_update_provider_accepts_desktop_expected_revision(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Desktop optimistic-concurrency metadata is an explicit compatible field."""
+        provider_id = str(uuid4())
+        mock_updated = Mock(id=provider_id)
+        mock_provider_service.update_provider.return_value = mock_updated
+        mock_provider_service.get_provider_response.return_value = create_provider_response(
+            provider_id=provider_id,
+            name="updated-name",
+        )
+
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{provider_id}",
+            json={"name": "updated-name", "expected_revision": 7},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        submitted = mock_provider_service.update_provider.call_args.args[1]
+        assert submitted.expected_revision == 7
+
+    def test_update_provider_rejects_whitespace_api_key(self, llm_client):
+        """A blank replacement key is rejected instead of preserving ambiguous state."""
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{uuid4()}",
+            json={"api_key": "   "},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_update_provider_requires_revision(self, llm_client, mock_provider_service):
+        """Every external update is bound to the snapshot the administrator reviewed."""
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{uuid4()}",
+            json={"name": "updated-name"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["detail"] == "Provider revision is required"
+        mock_provider_service.update_provider.assert_not_called()
+
+    def test_update_provider_maps_revision_conflict_to_409(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Stale snapshots fail closed without exposing provider internals."""
+        mock_provider_service.update_provider.side_effect = ProviderRevisionConflictError(
+            "stored revision 99 does not match 7"
+        )
+
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{uuid4()}",
+            json={"name": "stale-update", "expected_revision": 7},
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.json()["detail"] == "Provider configuration changed; reload and try again"
+        assert "revision 99" not in response.text
+
+    def test_update_provider_maps_credential_rebinding_to_422(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """A missing replacement key is returned as a sanitized actionable error."""
+        mock_provider_service.update_provider.side_effect = ProviderCredentialRequiredError(
+            "old credential cannot be sent to proxy.internal"
+        )
+
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{uuid4()}",
+            json={"base_url": "https://proxy.example/v1", "expected_revision": 7},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["detail"] == "Provider credential must be resubmitted"
+        assert "proxy.internal" not in response.text
 
     @pytest.mark.asyncio
     async def test_update_provider_not_found(self, llm_client, mock_provider_service):
@@ -392,7 +616,7 @@ class TestLLMProvidersRouterUpdate:
 
         response = llm_client.put(
             f"/api/v1/llm-providers/{provider_id}",
-            json={"name": "updated-name"},
+            json={"name": "updated-name", "expected_revision": 7},
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -415,6 +639,53 @@ class TestLLMProvidersRouterUpdate:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.parametrize("auth_method", ["environment", "oauth"])
+    def test_update_provider_rejects_unsupported_persistent_auth(self, llm_client, auth_method):
+        """Update rejects unsupported auth methods with 422 at the request boundary."""
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{uuid4()}",
+            json={
+                "auth_method": auth_method,
+                "environment_variable": (
+                    "OPENAI_API_KEY" if auth_method == "environment" else None
+                ),
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_update_provider_rejects_unknown_fields(self, llm_client):
+        """Unknown credential fields are not silently ignored by update."""
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{uuid4()}",
+            json={"credential_value": "must-not-be-ignored"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_update_provider_maps_service_auth_validation_to_422(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Effective provider-type validation errors remain a client error, never a 500."""
+        mock_provider_service.update_provider.side_effect = UnsupportedProviderAuthError(
+            "API-key authentication is not supported for local providers"
+        )
+
+        response = llm_client.put(
+            f"/api/v1/llm-providers/{uuid4()}",
+            json={
+                "auth_method": "api_key",
+                "api_key": "sk-test",
+                "expected_revision": 7,
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["detail"] == "Unsupported provider authentication method"
+        assert "local providers" not in response.text
 
 
 @pytest.mark.unit
@@ -508,7 +779,114 @@ class TestLLMProvidersRouterHealthCheck:
         }
         submitted = mock_provider_service.test_provider_connection.call_args.args[0]
         assert submitted.name == "test-openai"
-        assert not hasattr(submitted, "llm_model")
+        assert submitted.llm_model is None
+
+    @pytest.mark.asyncio
+    async def test_test_provider_connection_accepts_full_web_form_shape(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """The strict probe contract accepts every known field sent by the web form."""
+        checked_at = datetime.now(UTC)
+        mock_provider_service.test_provider_connection.return_value = ProviderValidationResponse(
+            provider=None,
+            provider_id=uuid4(),
+            status=ProviderStatus.HEALTHY,
+            probed=True,
+            detail=None,
+            catalog=None,
+            response_time_ms=80,
+            last_check=checked_at,
+            error_message=None,
+        )
+
+        response = llm_client.post(
+            "/api/v1/llm-providers/test-connection",
+            json={
+                "name": "full-form-openai",
+                "provider_type": "openai",
+                "operation_type": "llm",
+                "auth_method": "api_key",
+                "api_key": "sk-test",
+                "base_url": "https://api.openai.com/v1",
+                "llm_model": "gpt-4o",
+                "llm_small_model": "gpt-4o-mini",
+                "embedding_model": "text-embedding-3-small",
+                "reranker_model": None,
+                "config": {"timeout": 10},
+                "is_active": True,
+                "is_default": False,
+                "pool_enabled": True,
+                "pool_weight": 1.0,
+                "model_tier": "large",
+                "secondary_models": ["gpt-4o-mini"],
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        submitted = mock_provider_service.test_provider_connection.call_args.args[0]
+        assert submitted.llm_model == "gpt-4o"
+        assert submitted.config == {"timeout": 10}
+
+    def test_test_provider_connection_rejects_unknown_oauth_token_field(self, llm_client):
+        """Strict probes reject secret-shaped fields that have no executable contract."""
+        response = llm_client.post(
+            "/api/v1/llm-providers/test-connection",
+            json={
+                "name": "unknown-oauth-field",
+                "provider_type": "openai",
+                "api_key": "sk-test",
+                "oauth_token": "must-not-be-ignored",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"config": {"access_token": "must-not-be-persisted"}},
+            {"config": {"unknown_provider_option": "must-not-be-ignored"}},
+            {
+                "embedding_config": {
+                    "model": "text-embedding-3-small",
+                    "provider_options": {"api_key": "nested-secret"},
+                }
+            },
+            {"base_url": "https://proxy.example/path-token"},
+        ],
+    )
+    def test_test_provider_connection_rejects_unsafe_config_and_paths(
+        self,
+        llm_client,
+        payload,
+    ):
+        """Probe validation blocks plaintext credential fields and arbitrary URL paths."""
+        response = llm_client.post(
+            "/api/v1/llm-providers/test-connection",
+            json={
+                "name": "unsafe-probe",
+                "provider_type": "openai",
+                "api_key": "sk-test",
+                **payload,
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_test_provider_connection_rejects_oauth_until_flow_exists(self, llm_client):
+        """OAuth probe requests fail explicitly until an OAuth backend flow exists."""
+        response = llm_client.post(
+            "/api/v1/llm-providers/test-connection",
+            json={
+                "name": "oauth-openai",
+                "provider_type": "openai",
+                "auth_method": "oauth",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
     async def test_test_provider_connection_validation_error(
@@ -559,6 +937,67 @@ class TestLLMProvidersRouterHealthCheck:
         assert data["probed"] is True
         assert data["detail"] is None
         assert data["catalog"] is None
+
+    @pytest.mark.asyncio
+    async def test_check_provider_health_without_probe_returns_configuration_valid_contract(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Saved no-probe providers use the validation enum without claiming network health."""
+        provider_id = uuid4()
+        mock_health = ProviderHealth(
+            provider_id=provider_id,
+            status=ProviderStatus.CONFIGURATION_VALID,
+            response_time_ms=None,
+            last_check=datetime.now(UTC),
+            error_message=None,
+        )
+        mock_provider_service.check_provider_health.return_value = mock_health
+
+        response = llm_client.post(f"/api/v1/llm-providers/{provider_id}/health-check")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "provider": None,
+            "provider_id": str(provider_id),
+            "status": "configuration_valid",
+            "probed": False,
+            "environment_variable": None,
+            "detail": "Connection probing is not supported for this provider type",
+            "last_check": mock_health.last_check.isoformat().replace("+00:00", "Z"),
+            "response_time_ms": None,
+            "error_message": None,
+            "catalog": None,
+        }
+
+    @pytest.mark.asyncio
+    async def test_get_provider_health_preserves_configuration_valid_enum(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """The direct health resource serializes configuration-valid without coercion."""
+        provider_id = uuid4()
+        mock_health = ProviderHealth(
+            provider_id=provider_id,
+            status=ProviderStatus.CONFIGURATION_VALID,
+            response_time_ms=None,
+            last_check=datetime.now(UTC),
+            error_message=None,
+        )
+        mock_provider_service.repository.get_latest_health.return_value = mock_health
+
+        response = llm_client.get(f"/api/v1/llm-providers/{provider_id}/health")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "provider_id": str(provider_id),
+            "status": "configuration_valid",
+            "last_check": mock_health.last_check.isoformat().replace("+00:00", "Z"),
+            "error_message": None,
+            "response_time_ms": None,
+        }
 
     @pytest.mark.asyncio
     async def test_check_provider_health_not_found(self, llm_client, mock_provider_service):
@@ -784,17 +1223,28 @@ class TestLLMProvidersRouterTypes:
         assert response.json() == [
             {
                 "provider_type": provider_type.value,
+                "operation_type": infer_operation_type_from_provider_type(provider_type).value,
+                "probe_supported": provider_type
+                not in {ProviderType.AZURE_OPENAI, ProviderType.BEDROCK, ProviderType.VERTEX},
                 "auth_methods": (
-                    ["none"]
-                    if provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
-                    else ["api_key"]
+                    []
+                    if provider_type in {ProviderType.BEDROCK, ProviderType.VERTEX}
+                    else (
+                        ["none"]
+                        if provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+                        else ["api_key"]
+                    )
                 ),
                 "unavailable_auth_methods": (
-                    (["environment"] if provider_type in environment_providers else [])
-                    + (
-                        ["oauth"]
-                        if provider_type in {ProviderType.OPENAI, ProviderType.ANTHROPIC}
-                        else []
+                    ["api_key", "environment", "oauth"]
+                    if provider_type in {ProviderType.BEDROCK, ProviderType.VERTEX}
+                    else (
+                        (["environment"] if provider_type in environment_providers else [])
+                        + (
+                            ["oauth"]
+                            if provider_type in {ProviderType.OPENAI, ProviderType.ANTHROPIC}
+                            else []
+                        )
                     )
                 ),
             }
@@ -856,6 +1306,27 @@ class TestLLMProvidersRouterTypes:
         }
         assert "api_key" not in response.text
         assert secret not in response.text
+
+    def test_detect_env_providers_does_not_echo_unsafe_path(self, llm_client):
+        """Environment detection never returns a path that could contain a gateway token."""
+        detected = {
+            "openai": {
+                "api_key": "sk-must-not-leak",
+                "base_url": "https://proxy.example/tenant-path-token",
+                "llm_model": "gpt-4o",
+            }
+        }
+
+        with patch(
+            "src.infrastructure.llm.initializer.detect_env_providers",
+            return_value=detected,
+        ):
+            response = llm_client.get("/api/v1/llm-providers/env-detection")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["detected_providers"]["openai"]["base_url"] is None
+        assert "tenant-path-token" not in response.text
+        assert "sk-must-not-leak" not in response.text
 
     @pytest.mark.asyncio
     async def test_list_models_for_openai(self, llm_client):

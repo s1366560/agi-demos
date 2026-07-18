@@ -8,7 +8,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Phone,
   List,
   Sparkles,
   Loader2,
@@ -25,16 +24,31 @@ import { providerAPI } from '../../services/api';
 import { useProviderStore } from '../../stores/provider';
 import {
   EmbeddingConfig,
-  LLMConfigOverrides,
+  DetectedEnvironmentProvider,
   ModelCatalogEntry,
+  ProviderAuthMethod,
   ProviderConfig,
+  ProviderConnectionProbe,
   ProviderCreate,
   ProviderHealth,
   ProviderOperationType,
   ProviderType,
+  ProviderTypeDescriptor,
   ProviderUpdate,
 } from '../../types/memory';
 
+import {
+  buildProviderAuthPayload,
+  getDefaultProviderAuthMethod,
+  getDetectedEnvironmentVariable,
+  getProviderAuthMethods,
+  indexProviderCapabilities,
+  isProviderCredentialReady,
+} from './providerAuth';
+import {
+  projectSafeEmbeddingProviderOptions,
+  projectSafeProviderConfig,
+} from './providerConfigProjection';
 import { ProviderIcon } from './ProviderIcon';
 
 import type { TFunction } from 'i18next';
@@ -47,33 +61,29 @@ interface ProviderConfigModalProps {
   initialProviderType?: ProviderType | undefined;
 }
 
-const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
-
-const providerTypeRequiresApiKey = (type: ProviderType) =>
-  !OPTIONAL_API_KEY_PROVIDERS.includes(type);
-
 type Step = 'provider' | 'credentials' | 'models' | 'review';
+type ProviderCapabilityLoadState = 'loading' | 'ready' | 'error';
 type ProviderModels = { chat: string[]; embedding: string[]; rerank: string[] };
 type EmbeddingEncodingFormat = '' | NonNullable<EmbeddingConfig['encoding_format']>;
 type ModelTier = '' | 'small' | 'medium' | 'large';
 
-interface ProviderModalConfig extends LLMConfigOverrides {
-  rtc_app_id?: string | undefined;
-  rtc_app_key?: string | undefined;
-  volc_ak?: string | undefined;
-  volc_sk?: string | undefined;
-  speech_app_id?: string | undefined;
-  speech_access_token?: string | undefined;
-  doubao_endpoint_id?: string | undefined;
+interface ProviderModalConfig {
+  temperature?: number | null | undefined;
+  max_tokens?: number | null | undefined;
+  top_p?: number | null | undefined;
+  frequency_penalty?: number | null | undefined;
+  presence_penalty?: number | null | undefined;
+  seed?: number | null | undefined;
   timeout_seconds?: number | null | undefined;
   embedding?: EmbeddingConfig | undefined;
-  [key: string]: unknown;
 }
 
 interface ProviderFormData {
   name: string;
   provider_type: ProviderType;
   operation_type: ProviderOperationType;
+  auth_method: ProviderAuthMethod;
+  environment_variable: string;
   api_key: string;
   base_url: string;
   llm_model: string;
@@ -83,7 +93,7 @@ interface ProviderFormData {
   embedding_encoding_format: EmbeddingEncodingFormat;
   embedding_user: string;
   embedding_timeout: string;
-  embedding_provider_options_json: string;
+  embedding_provider_options: Record<string, unknown>;
   reranker_model: string;
   config: ProviderModalConfig;
   is_active: boolean;
@@ -155,7 +165,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const toProviderModalConfig = (value: unknown): ProviderModalConfig =>
-  isRecord(value) ? { ...value } : {};
+  projectSafeProviderConfig(value) as ProviderModalConfig;
 
 const getProviderErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message.length > 0) {
@@ -173,11 +183,6 @@ const getProviderErrorMessage = (error: unknown, fallback: string): string => {
   }
 
   return fallback;
-};
-
-const parseConfigJson = (value: string): ProviderModalConfig | null => {
-  const parsed = JSON.parse(value) as unknown;
-  return isRecord(parsed) ? { ...parsed } : null;
 };
 
 const filterModelOption = (input: string, option?: { label?: string | undefined }): boolean =>
@@ -235,6 +240,16 @@ const formatProviderHealthResult = (
     };
   }
 
+  if (health.status === 'configuration_valid') {
+    return {
+      success: true,
+      message: t('tenant.providers.connectionTest.configurationValid', {
+        defaultValue:
+          'Configuration validated. Network probing is not supported for this provider.',
+      }),
+    };
+  }
+
   const detail = health.error_message ? `: ${health.error_message}` : '';
   return {
     success: false,
@@ -245,6 +260,21 @@ const formatProviderHealthResult = (
       detail,
     }),
   };
+};
+
+const formatAuthMethodLabel = (method: ProviderAuthMethod, t: TFunction): string => {
+  if (method === 'environment') {
+    return t('components.provider.config.auth.environment', {
+      defaultValue: 'Environment variable',
+    });
+  }
+  if (method === 'none') {
+    return t('components.provider.config.auth.none', { defaultValue: 'No authentication' });
+  }
+  if (method === 'oauth') {
+    return t('components.provider.config.auth.oauth', { defaultValue: 'OAuth' });
+  }
+  return t('components.provider.config.auth.apiKey', { defaultValue: 'API key' });
 };
 
 export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
@@ -269,21 +299,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [showAdvancedEmbedding, setShowAdvancedEmbedding] = useState(false);
   const [showAdvancedLLM, setShowAdvancedLLM] = useState(false);
-  const [envProviders, setEnvProviders] = useState<
-    Record<
-      string,
-      {
-        provider_type: string;
-        operation_type: ProviderOperationType;
-        api_key: string | null;
-        base_url: string | null;
-        llm_model: string | null;
-        llm_small_model: string | null;
-        embedding_model: string | null;
-        reranker_model: string | null;
-      }
-    >
+  const [envProviders, setEnvProviders] = useState<Record<string, DetectedEnvironmentProvider>>({});
+  const [providerCapabilities, setProviderCapabilities] = useState<
+    Partial<Record<ProviderType, ProviderTypeDescriptor>>
   >({});
+  const [providerCapabilityLoadState, setProviderCapabilityLoadState] =
+    useState<ProviderCapabilityLoadState>('loading');
 
   const { searchModels, modelSearchResults, fetchModelCatalog, modelCatalog } = useProviderStore(
     useShallow((s) => ({
@@ -298,6 +319,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     name: '',
     provider_type: 'openai' as ProviderType,
     operation_type: 'llm',
+    auth_method: 'api_key',
+    environment_variable: '',
     api_key: '',
     base_url: '',
     llm_model: 'gpt-4o',
@@ -307,7 +330,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     embedding_encoding_format: '',
     embedding_user: '',
     embedding_timeout: '',
-    embedding_provider_options_json: '{}',
+    embedding_provider_options: {},
     reranker_model: '',
     config: {},
     is_active: true,
@@ -324,11 +347,27 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     return modelCatalog.find((m) => m.name === formData.llm_model) ?? null;
   }, [formData.llm_model, modelCatalog]);
 
+  const availableAuthMethods = useMemo(
+    () =>
+      getProviderAuthMethods(
+        providerCapabilities,
+        formData.provider_type,
+        provider?.provider_type === formData.provider_type ? provider.auth_method : undefined
+      ),
+    [formData.provider_type, provider, providerCapabilities]
+  );
+  const detectedEnvironmentVariable = getDetectedEnvironmentVariable(
+    envProviders[formData.provider_type],
+    availableAuthMethods
+  );
+  const authMethodAvailable =
+    providerCapabilityLoadState === 'ready' && availableAuthMethods.includes(formData.auth_method);
+  const credentialReady =
+    authMethodAvailable && isProviderCredentialReady(formData, provider, formData.provider_type);
+
   useEffect(() => {
     void fetchModelCatalog(resolveCatalogProviderType(formData.provider_type));
   }, [fetchModelCatalog, formData.provider_type]);
-
-  const [configJsonStr, setConfigJsonStr] = useState('{}');
 
   // Track which model fields are in custom input mode
   const [useCustomModel, setUseCustomModel] = useState({
@@ -401,6 +440,34 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
   // Initialize form data
   useEffect(() => {
+    setProviderCapabilities({});
+    setProviderCapabilityLoadState('loading');
+    const capabilitiesPromise = providerAPI
+      .listTypes()
+      .then((descriptors) => {
+        const capabilities = indexProviderCapabilities(descriptors);
+        setProviderCapabilities(capabilities);
+        setProviderCapabilityLoadState('ready');
+        if (!provider) {
+          setFormData((current) => {
+            const methods = getProviderAuthMethods(capabilities, current.provider_type);
+            if (methods.includes(current.auth_method)) return current;
+            return {
+              ...current,
+              auth_method: methods[0] ?? 'api_key',
+              api_key: '',
+              environment_variable: '',
+            };
+          });
+        }
+        return capabilities;
+      })
+      .catch(() => {
+        setProviderCapabilities({});
+        setProviderCapabilityLoadState('error');
+        return {} as Partial<Record<ProviderType, ProviderTypeDescriptor>>;
+      });
+
     if (provider) {
       const embeddingConfig = resolveEmbeddingConfig(provider);
 
@@ -432,6 +499,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         name: provider.name,
         provider_type: provider.provider_type,
         operation_type: provider.operation_type,
+        auth_method: provider.auth_method,
+        environment_variable: provider.environment_variable ?? '',
         api_key: '',
         base_url: provider.base_url ?? '',
         llm_model: provider.llm_model ?? '',
@@ -443,10 +512,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         embedding_user: embeddingConfig?.user ?? '',
         embedding_timeout:
           embeddingConfig?.timeout !== undefined ? String(embeddingConfig.timeout) : '',
-        embedding_provider_options_json: JSON.stringify(
-          embeddingConfig?.provider_options ?? {},
-          null,
-          2
+        embedding_provider_options: projectSafeEmbeddingProviderOptions(
+          embeddingConfig?.provider_options
         ),
         reranker_model: provider.reranker_model ?? '',
         config: toProviderModalConfig(provider.config),
@@ -458,7 +525,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         model_tier: provider.model_tier ?? '',
         secondary_models: provider.secondary_models ?? [],
       });
-      setConfigJsonStr(JSON.stringify(toProviderModalConfig(provider.config), null, 2));
 
       setCurrentStep('credentials');
     } else {
@@ -479,6 +545,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         name: providerMeta?.label ?? '',
         provider_type: defaultProvider,
         operation_type: defaultOperation,
+        auth_method: getDefaultProviderAuthMethod({}, defaultProvider),
+        environment_variable: '',
         api_key: '',
         base_url: '',
         llm_model: '',
@@ -488,7 +556,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         embedding_encoding_format: '',
         embedding_user: '',
         embedding_timeout: '',
-        embedding_provider_options_json: '{}',
+        embedding_provider_options: {},
         reranker_model: '',
         config: {},
         is_active: true,
@@ -499,7 +567,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         model_tier: '',
         secondary_models: [],
       });
-      setConfigJsonStr('{}');
 
       // Fetch models for default provider
       void fetchModels(defaultProvider).then((models) => {
@@ -513,12 +580,22 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
             reranker_model: models.rerank[0] ?? '',
           }));
 
-          void envDetectionPromise.then((envData) => {
-            if (envData && envData[defaultProvider]) {
+          void Promise.all([capabilitiesPromise, envDetectionPromise]).then(
+            ([capabilities, envData]) => {
+              if (!envData || !envData[defaultProvider]) return;
               const envValues = envData[defaultProvider];
+              const authMethods = getProviderAuthMethods(capabilities, defaultProvider);
+              const environmentVariable = getDetectedEnvironmentVariable(envValues, authMethods);
               setFormData((prev) => {
-                const newData = { ...prev };
-                if (envValues.api_key) newData.api_key = envValues.api_key;
+                if (prev.provider_type !== defaultProvider) return prev;
+                const newData = {
+                  ...prev,
+                  auth_method: environmentVariable
+                    ? ('environment' as const)
+                    : getDefaultProviderAuthMethod(capabilities, defaultProvider),
+                  environment_variable: environmentVariable ?? '',
+                  api_key: '',
+                };
                 if (envValues.base_url) {
                   newData.base_url = envValues.base_url;
                   newData.use_custom_base_url = true;
@@ -533,7 +610,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 return newData;
               });
             }
-          });
+          );
         }
       });
       setUseCustomModel({
@@ -556,23 +633,32 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     // Fetch models first
     const models = await fetchModels(type);
     const primaryModel = resolvePrimaryLlmModel(models);
+    const authMethods = getProviderAuthMethods(providerCapabilities, type);
+    const envValues = envProviders[type];
+    const environmentVariable = getDetectedEnvironmentVariable(envValues, authMethods);
 
     setFormData((prev) => {
       const newData = {
         ...prev,
         provider_type: type,
         operation_type: nextOperation,
+        auth_method: environmentVariable
+          ? ('environment' as const)
+          : getDefaultProviderAuthMethod(providerCapabilities, type),
+        environment_variable: environmentVariable ?? '',
+        api_key: '',
+        base_url: '',
+        use_custom_base_url: false,
         name: providerMeta?.label ?? prev.name,
         llm_model: nextOperation === 'llm' ? primaryModel : '',
         llm_small_model: resolveSmallLlmModel(models, primaryModel),
         embedding_model: models?.embedding[0] ?? '',
         embedding_dimensions: '1536', // Default, user can change
+        embedding_provider_options: {},
         reranker_model: models?.rerank[0] ?? '',
       };
 
-      const envValues = envProviders[type];
       if (envValues) {
-        if (envValues.api_key) newData.api_key = envValues.api_key;
         if (envValues.base_url) {
           newData.base_url = envValues.base_url;
           newData.use_custom_base_url = true;
@@ -601,7 +687,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   };
 
   const handleTestConnection = useCallback(async () => {
-    if (!formData.api_key && !isEditing && providerTypeRequiresApiKey(formData.provider_type)) {
+    if (!credentialReady) {
       setTestResult({
         success: false,
         message: t('tenant.providers.connectionTest.apiKeyRequired'),
@@ -613,33 +699,29 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setTestResult(null);
 
     try {
-      if (!formData.api_key && provider?.id) {
+      const normalizedBaseUrl = formData.base_url.trim() || null;
+      const canUseSavedCredential =
+        provider?.provider_type === formData.provider_type &&
+        provider.auth_method === formData.auth_method &&
+        (provider.base_url ?? null) === normalizedBaseUrl &&
+        ((formData.auth_method === 'api_key' && !formData.api_key.trim()) ||
+          (formData.auth_method === 'environment' &&
+            (provider.environment_variable ?? '') === formData.environment_variable.trim()) ||
+          formData.auth_method === 'none');
+
+      if (provider && canUseSavedCredential) {
         const health = await providerAPI.checkHealth(provider.id);
         setTestResult(formatProviderHealthResult(health, t, true));
         return;
       }
 
-      const includeLlmFields = formData.operation_type === 'llm';
-      const includeEmbeddingFields = formData.operation_type === 'embedding';
-      const includeRerankerFields = formData.operation_type === 'rerank';
-
-      const testData: ProviderCreate = {
+      const testData: ProviderConnectionProbe = {
         name: formData.name || `${formData.provider_type}-connection-test`,
         provider_type: formData.provider_type,
         operation_type: formData.operation_type,
-        api_key: formData.api_key,
-        base_url: formData.base_url || undefined,
-        llm_model: includeLlmFields ? formData.llm_model : undefined,
-        llm_small_model: includeLlmFields ? formData.llm_small_model || undefined : undefined,
-        embedding_model: includeEmbeddingFields ? formData.embedding_model || undefined : undefined,
-        reranker_model: includeRerankerFields ? formData.reranker_model || undefined : undefined,
-        config: formData.config,
+        ...buildProviderAuthPayload(formData),
+        base_url: normalizedBaseUrl,
         is_active: formData.is_active,
-        is_default: formData.is_default,
-        pool_enabled: formData.pool_enabled,
-        pool_weight: formData.pool_weight,
-        ...(formData.model_tier ? { model_tier: formData.model_tier } : {}),
-        secondary_models: formData.secondary_models,
       };
 
       const health = await providerAPI.testConnection(testData);
@@ -652,17 +734,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     } finally {
       setIsTesting(false);
     }
-  }, [formData, isEditing, provider?.id, t]);
+  }, [credentialReady, formData, provider, t]);
 
   const canProceed = () => {
     switch (currentStep) {
       case 'provider':
         return !!formData.provider_type;
       case 'credentials':
-        return (
-          !!formData.name &&
-          (isEditing || !!formData.api_key || !providerTypeRequiresApiKey(formData.provider_type))
-        );
+        return !!formData.name && credentialReady;
       case 'models':
         if (formData.operation_type === 'embedding') return !!formData.embedding_model;
         if (formData.operation_type === 'rerank') return !!formData.reranker_model;
@@ -679,9 +758,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setError(null);
 
     try {
-      const embeddingProviderOptions = parseConfigJson(
-        formData.embedding_provider_options_json || '{}'
-      );
       const embeddingDimensions = formData.embedding_dimensions.trim()
         ? Number(formData.embedding_dimensions)
         : undefined;
@@ -705,27 +781,26 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       if (showEmbeddingFields && embeddingTimeout !== undefined) {
         embeddingConfig.timeout = embeddingTimeout;
       }
-      if (
-        showEmbeddingFields &&
-        embeddingProviderOptions &&
-        Object.keys(embeddingProviderOptions).length > 0
-      ) {
-        embeddingConfig.provider_options = embeddingProviderOptions;
+      if (showEmbeddingFields && Object.keys(formData.embedding_provider_options).length > 0) {
+        embeddingConfig.provider_options = formData.embedding_provider_options;
       }
 
-      const config = { ...formData.config };
+      const configInput = { ...formData.config };
       if (showEmbeddingFields && Object.keys(embeddingConfig).length > 0) {
-        config.embedding = embeddingConfig;
+        configInput.embedding = embeddingConfig;
       } else {
-        delete config.embedding;
+        delete configInput.embedding;
       }
+      const config = projectSafeProviderConfig(configInput);
 
       if (provider) {
         const updateData: ProviderUpdate = {
+          expected_revision: provider.revision,
           name: formData.name,
           provider_type: formData.provider_type,
           operation_type: formData.operation_type,
-          base_url: formData.base_url || undefined,
+          ...buildProviderAuthPayload(formData),
+          base_url: formData.base_url.trim() || null,
           llm_model: formData.llm_model,
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
@@ -750,17 +825,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         if (!showRerankerFields) {
           delete updateData.reranker_model;
         }
-        if (formData.api_key) {
-          updateData.api_key = formData.api_key;
-        }
         await providerAPI.update(provider.id, updateData);
       } else {
         const createData: ProviderCreate = {
           name: formData.name,
           provider_type: formData.provider_type,
           operation_type: formData.operation_type,
-          api_key: formData.api_key,
-          base_url: formData.base_url || undefined,
+          ...buildProviderAuthPayload(formData),
+          base_url: formData.base_url.trim() || undefined,
           llm_model: formData.llm_model,
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
@@ -1049,10 +1121,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         })}
                       </h4>
                       <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
-                        {t('components.provider.config.envDetectedDescription', {
-                          defaultValue:
-                            'We found configuration in your environment variables. The fields below have been auto-filled.',
-                        })}
+                        {detectedEnvironmentVariable
+                          ? t('components.provider.config.envCredentialReferenceDetected', {
+                              defaultValue:
+                                'Credential reference {{environmentVariable}} was detected. Secret values remain in the runtime environment.',
+                              environmentVariable: detectedEnvironmentVariable,
+                            })
+                          : t('components.provider.config.envCredentialReferenceUnavailable', {
+                              defaultValue:
+                                'Non-secret configuration was detected, but no credential variable reference was exposed. No credential was auto-filled.',
+                            })}
                       </p>
                     </div>
                   </div>
@@ -1077,13 +1155,87 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     />
                   </div>
 
-                  {providerTypeRequiresApiKey(formData.provider_type) && (
+                  <div>
+                    <label
+                      htmlFor="provider-auth-method"
+                      className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                    >
+                      {t('components.provider.config.authMethod', {
+                        defaultValue: 'Authentication',
+                      })}
+                    </label>
+                    <select
+                      id="provider-auth-method"
+                      value={authMethodAvailable ? formData.auth_method : ''}
+                      disabled={
+                        providerCapabilityLoadState !== 'ready' || availableAuthMethods.length === 0
+                      }
+                      onChange={(event) => {
+                        const authMethod = event.target.value as ProviderAuthMethod;
+                        setFormData((current) => ({
+                          ...current,
+                          auth_method: authMethod,
+                          api_key: authMethod === 'api_key' ? current.api_key : '',
+                          environment_variable:
+                            authMethod === 'environment'
+                              ? current.environment_variable || detectedEnvironmentVariable || ''
+                              : '',
+                        }));
+                        setTestResult(null);
+                      }}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                      {availableAuthMethods.length === 0 && (
+                        <option value="">
+                          {providerCapabilityLoadState === 'loading'
+                            ? t('components.provider.config.authLoading', {
+                                defaultValue: 'Loading authentication capabilities…',
+                              })
+                            : providerCapabilityLoadState === 'error'
+                              ? t('components.provider.config.authLoadFailed', {
+                                  defaultValue: 'Authentication capabilities unavailable',
+                                })
+                              : t('components.provider.config.authUnavailable', {
+                                  defaultValue: 'No secure authentication available',
+                                })}
+                        </option>
+                      )}
+                      {availableAuthMethods.map((method) => (
+                        <option key={method} value={method}>
+                          {formatAuthMethodLabel(method, t)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {!authMethodAvailable && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+                      {providerCapabilityLoadState === 'loading'
+                        ? t('components.provider.config.authLoadingHelp', {
+                            defaultValue:
+                              'Authentication options are loading. Saving stays disabled until the server confirms them.',
+                          })
+                        : providerCapabilityLoadState === 'error'
+                          ? t('components.provider.config.authLoadFailedHelp', {
+                              defaultValue:
+                                'Authentication options could not be loaded. Reopen this dialog to try again.',
+                            })
+                          : t('components.provider.config.authUnavailableHelp', {
+                              defaultValue:
+                                'This provider cannot be configured until secure credential storage is available.',
+                            })}
+                    </div>
+                  )}
+
+                  {authMethodAvailable && formData.auth_method === 'api_key' && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         {t('components.provider.config.apiKey', { defaultValue: 'API Key' })}
-                        {!isEditing && envProviders[formData.provider_type]?.api_key && (
+                        {provider && provider.credential_configured && (
                           <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                            {t('components.provider.config.fromEnv', { defaultValue: 'From ENV' })}
+                            {t('components.provider.config.credentialConfigured', {
+                              defaultValue: 'Configured',
+                            })}
                           </span>
                         )}
                       </label>
@@ -1105,7 +1257,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           onClick={() => {
                             void handleTestConnection();
                           }}
-                          disabled={isTesting || (!formData.api_key && !provider?.id)}
+                          disabled={isTesting || !credentialReady}
                           className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 font-medium"
                         >
                           {isTesting ? (
@@ -1132,6 +1284,95 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     </div>
                   )}
 
+                  {authMethodAvailable && formData.auth_method === 'environment' && (
+                    <div>
+                      <label
+                        htmlFor="provider-environment-variable"
+                        className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                      >
+                        {t('components.provider.config.environmentVariable', {
+                          defaultValue: 'Environment variable',
+                        })}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          id="provider-environment-variable"
+                          type="text"
+                          value={formData.environment_variable}
+                          onChange={(event) => {
+                            setFormData((current) => ({
+                              ...current,
+                              environment_variable: event.target.value,
+                            }));
+                          }}
+                          className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent font-mono"
+                          placeholder={t(
+                            'components.provider.config.environmentVariablePlaceholder',
+                            { defaultValue: 'PROVIDER_API_KEY' }
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleTestConnection();
+                          }}
+                          disabled={isTesting || !credentialReady}
+                          className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 font-medium"
+                        >
+                          {isTesting ? (
+                            <Loader2
+                              size={18}
+                              className="animate-spin motion-reduce:animate-none"
+                            />
+                          ) : (
+                            t('common.test', { defaultValue: 'Test' })
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {t('components.provider.config.environmentVariableHelp', {
+                          defaultValue:
+                            'Only the variable name is saved and sent. The secret value stays in the runtime environment.',
+                        })}
+                      </p>
+                      {testResult && (
+                        <div
+                          className={`mt-2 px-3 py-2 rounded-lg text-sm ${
+                            testResult.success
+                              ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                              : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                          }`}
+                        >
+                          {testResult.message}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {authMethodAvailable && formData.auth_method === 'none' && (
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        {t('components.provider.config.noAuthenticationHelp', {
+                          defaultValue: 'This provider does not require a credential.',
+                        })}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleTestConnection();
+                        }}
+                        disabled={isTesting}
+                        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 font-medium"
+                      >
+                        {isTesting ? (
+                          <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
+                        ) : (
+                          t('common.test', { defaultValue: 'Test' })
+                        )}
+                      </button>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       {t('components.provider.config.baseUrl', { defaultValue: 'Base URL' })}{' '}
@@ -1155,201 +1396,26 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      {t('components.provider.config.providerConfigurationJson', {
-                        defaultValue: 'Provider Configuration (JSON)',
-                      })}
-                    </label>
-                    <textarea
-                      value={configJsonStr}
-                      onChange={(e) => {
-                        setConfigJsonStr(e.target.value);
-                        try {
-                          const parsed = parseConfigJson(e.target.value);
-                          if (parsed) {
-                            setFormData({ ...formData, config: parsed });
-                          }
-                        } catch (_err) {
-                          // Ignore invalid JSON while typing
-                        }
-                      }}
-                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
-                      rows={4}
-                      placeholder="{}"
-                    />
-                  </div>
-
-                  {/* Volcengine RTC Configuration */}
                   {(formData.provider_type === 'volcengine' ||
                     formData.provider_type.startsWith('volcengine_')) && (
-                    <div className="border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const el = document.getElementById('rtc-config-section');
-                          if (el) el.classList.toggle('hidden');
-                        }}
-                        className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Phone size={18} className="text-primary" />
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                            Voice & Video Call Settings (RTC)
-                          </span>
-                        </div>
-                        <ChevronDown size={18} className="text-slate-400" />
-                      </button>
-                      <div
-                        id="rtc-config-section"
-                        className="hidden p-4 space-y-3 border-t border-slate-200 dark:border-slate-600"
-                      >
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                          {t('components.provider.config.rtcDescription', {
-                            defaultValue:
-                              'Configure Volcengine RTC for real-time voice and video AI conversations. Leave blank to use environment variables as fallback.',
-                          })}
-                        </p>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+                      <div className="flex items-start justify-between gap-4">
                         <div>
-                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            RTC App ID
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.config.rtc_app_id ?? ''}
-                            onChange={(e) => {
-                              const newConfig = { ...formData.config, rtc_app_id: e.target.value };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder={t('components.provider.config.rtcAppIdPlaceholder', {
-                              defaultValue: 'Your RTC App ID',
+                          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                            {t('components.provider.config.secureRtcCredentials', {
+                              defaultValue: 'Secure RTC credentials',
                             })}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            RTC App Key
-                          </label>
-                          <input
-                            type="password"
-                            value={formData.config.rtc_app_key ?? ''}
-                            onChange={(e) => {
-                              const newConfig = { ...formData.config, rtc_app_key: e.target.value };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder={t('components.provider.config.rtcAppKeyPlaceholder', {
-                              defaultValue: 'Your RTC App Key',
+                          </p>
+                          <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+                            {t('components.provider.config.secureRtcCredentialsUnavailable', {
+                              defaultValue:
+                                'RTC and speech credentials cannot be stored in provider configuration. Configure the runtime secret store before enabling voice and video.',
                             })}
-                          />
+                          </p>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            Volcengine Access Key (AK)
-                          </label>
-                          <input
-                            type="password"
-                            value={formData.config.volc_ak ?? ''}
-                            onChange={(e) => {
-                              const newConfig = { ...formData.config, volc_ak: e.target.value };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder={t('components.provider.config.accessKeyPlaceholder', {
-                              defaultValue: 'Your Volcengine Access Key',
-                            })}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            Volcengine Secret Key (SK)
-                          </label>
-                          <input
-                            type="password"
-                            value={formData.config.volc_sk ?? ''}
-                            onChange={(e) => {
-                              const newConfig = { ...formData.config, volc_sk: e.target.value };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder={t('components.provider.config.secretKeyPlaceholder', {
-                              defaultValue: 'Your Volcengine Secret Key',
-                            })}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            Speech App ID
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.config.speech_app_id ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                speech_app_id: e.target.value,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder={t('components.provider.config.speechAppIdPlaceholder', {
-                              defaultValue: 'Speech App ID from Volcengine Speech Console',
-                            })}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            Speech Access Token
-                          </label>
-                          <input
-                            type="password"
-                            value={formData.config.speech_access_token ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                speech_access_token: e.target.value,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder={t(
-                              'components.provider.config.speechAccessTokenPlaceholder',
-                              {
-                                defaultValue: 'Access Token from Volcengine Speech Console',
-                              }
-                            )}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            {t('components.provider.config.doubaoEndpointId', {
-                              defaultValue: 'Doubao Endpoint ID',
-                            })}
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.config.doubao_endpoint_id ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                doubao_endpoint_id: e.target.value,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder={t('components.provider.config.endpointIdPlaceholder', {
-                              defaultValue: 'Doubao model endpoint ID for voice chat',
-                            })}
-                          />
-                        </div>
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                          {t('common.status.unavailable', { defaultValue: 'Unavailable' })}
+                        </span>
                       </div>
                     </div>
                   )}
@@ -1701,7 +1767,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                         temperature: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
-                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                     }}
                                   />
                                 </div>
@@ -1718,7 +1783,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                       temperature: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
-                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                   }}
                                 />
                               </div>
@@ -1744,7 +1808,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                   max_tokens: toNullableNumber(val),
                                 };
                                 setFormData({ ...formData, config: newConfig });
-                                setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                               }}
                             />
                           </div>
@@ -1773,7 +1836,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                         top_p: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
-                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                     }}
                                   />
                                 </div>
@@ -1790,7 +1852,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                       top_p: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
-                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                   }}
                                 />
                               </div>
@@ -1812,7 +1873,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                   timeout_seconds: toNullableNumber(val),
                                 };
                                 setFormData({ ...formData, config: newConfig });
-                                setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                               }}
                             />
                           </div>
@@ -1841,7 +1901,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                         frequency_penalty: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
-                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                     }}
                                   />
                                 </div>
@@ -1858,7 +1917,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                       frequency_penalty: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
-                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                   }}
                                 />
                               </div>
@@ -1886,7 +1944,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                         presence_penalty: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
-                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                     }}
                                   />
                                 </div>
@@ -1903,7 +1960,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                       presence_penalty: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
-                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                   }}
                                 />
                               </div>
@@ -1929,7 +1985,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                     seed: toNullableNumber(val),
                                   };
                                   setFormData({ ...formData, config: newConfig });
-                                  setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                 }}
                               />
                             </div>
@@ -2101,26 +2156,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                             />
                           </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            {t('components.provider.config.providerOptionsJson', {
-                              defaultValue: 'Provider Options (JSON)',
-                            })}
-                          </label>
-                          <textarea
-                            value={formData.embedding_provider_options_json}
-                            onChange={(e) => {
-                              setFormData({
-                                ...formData,
-                                embedding_provider_options_json: e.target.value,
-                              });
-                            }}
-                            placeholder="{}"
-                            rows={2}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-xs"
-                          />
                         </div>
                       </div>
                     )}
@@ -2444,107 +2479,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           : t('common.status.inactive')}
                       </span>
                     </div>
-                    {/* RTC Configuration Summary */}
-                    {(formData.provider_type === 'volcengine' ||
-                      formData.provider_type.startsWith('volcengine_')) &&
-                      (formData.config.rtc_app_id ||
-                        formData.config.volc_ak ||
-                        formData.config.doubao_endpoint_id) && (
-                        <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2">
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <Phone size={14} className="text-primary" />
-                            <span className="text-xs font-medium text-slate-500">
-                              {t('components.provider.config.rtcTitle', {
-                                defaultValue: 'Voice & Video Call (RTC)',
-                              })}
-                            </span>
-                          </div>
-                          {formData.config.rtc_app_id && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">
-                                {t('components.provider.config.rtcAppId', {
-                                  defaultValue: 'RTC App ID:',
-                                })}
-                              </span>
-                              <span className="font-medium text-slate-900 dark:text-white">
-                                {formData.config.rtc_app_id}
-                              </span>
-                            </div>
-                          )}
-                          {formData.config.rtc_app_key && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">
-                                {t('components.provider.config.rtcAppKey', {
-                                  defaultValue: 'RTC App Key:',
-                                })}
-                              </span>
-                              <span className="font-medium text-slate-900 dark:text-white">
-                                ********
-                              </span>
-                            </div>
-                          )}
-                          {formData.config.volc_ak && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">
-                                {t('components.provider.config.accessKey', {
-                                  defaultValue: 'Access Key:',
-                                })}
-                              </span>
-                              <span className="font-medium text-slate-900 dark:text-white">
-                                ********
-                              </span>
-                            </div>
-                          )}
-                          {formData.config.volc_sk && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">
-                                {t('components.provider.config.secretKey', {
-                                  defaultValue: 'Secret Key:',
-                                })}
-                              </span>
-                              <span className="font-medium text-slate-900 dark:text-white">
-                                ********
-                              </span>
-                            </div>
-                          )}
-                          {formData.config.speech_app_id && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">
-                                {t('components.provider.config.speechAppId', {
-                                  defaultValue: 'Speech App ID:',
-                                })}
-                              </span>
-                              <span className="font-medium text-slate-900 dark:text-white">
-                                {formData.config.speech_app_id}
-                              </span>
-                            </div>
-                          )}
-                          {formData.config.speech_access_token && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">
-                                {t('components.provider.config.speechAccessToken', {
-                                  defaultValue: 'Speech Access Token:',
-                                })}
-                              </span>
-                              <span className="font-medium text-slate-900 dark:text-white">
-                                ********
-                              </span>
-                            </div>
-                          )}
-                          {formData.config.doubao_endpoint_id && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">
-                                {t('components.provider.config.endpointId', {
-                                  defaultValue: 'Endpoint ID:',
-                                })}
-                              </span>
-                              <span className="font-medium text-slate-900 dark:text-white">
-                                {formData.config.doubao_endpoint_id}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
                   </div>
                 </div>
               </div>

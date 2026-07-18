@@ -5,12 +5,18 @@ This module contains Pydantic models for LLM provider configuration,
 following Domain-Driven Design principles.
 """
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any, Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from src.domain.llm_providers.security_policy import (
+    provider_persistent_auth_supported,
+    validate_provider_base_url,
+)
 
 # ============================================================================
 # Model Metadata Models (for context window management)
@@ -345,7 +351,28 @@ class ProviderAuthMethod(StrEnum):
 
     API_KEY = "api_key"
     ENVIRONMENT = "environment"
+    OAUTH = "oauth"
     NONE = "none"
+
+
+class UnsupportedProviderAuthError(ValueError):
+    """Persistent or probe authentication cannot be executed by this backend."""
+
+
+class ProviderCredentialRequiredError(ValueError):
+    """A credential must be resubmitted because its provider binding changed."""
+
+
+class ProviderRevisionConflictError(ValueError):
+    """The submitted provider snapshot is no longer authoritative."""
+
+
+def provider_revision(updated_at: datetime) -> int:
+    """Convert a provider timestamp to the cross-runtime microsecond revision contract."""
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    delta = updated_at.astimezone(UTC) - datetime(1970, 1, 1, tzinfo=UTC)
+    return (delta.days * 86_400 + delta.seconds) * 1_000_000 + delta.microseconds
 
 
 _PROVIDER_ENVIRONMENT_VARIABLES: dict[str, tuple[str, ...]] = {
@@ -379,6 +406,8 @@ class ProviderTypeDescriptor(BaseModel):
     """Public capabilities for configuring an LLM provider type."""
 
     provider_type: ProviderType
+    operation_type: Literal["llm", "embedding", "rerank"] = "llm"
+    probe_supported: bool = True
     auth_methods: list[ProviderAuthMethod]
     unavailable_auth_methods: list[str] = Field(default_factory=list)
 
@@ -389,6 +418,7 @@ class ProviderStatus(StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
+    CONFIGURATION_VALID = "configuration_valid"
 
 
 class OperationType(StrEnum):
@@ -429,6 +459,172 @@ class EmbeddingConfig(BaseModel):
         default_factory=dict,
         description="Additional provider-specific embedding parameters",
     )
+
+
+class _SafeEmbeddingProviderOptions(BaseModel):
+    """Explicit non-credential embedding options accepted from public requests."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    batch_size: int | None = Field(default=None, ge=1, le=2048)
+    input_type: (
+        Literal[
+            "search_document",
+            "search_query",
+            "classification",
+            "clustering",
+        ]
+        | None
+    ) = None
+    truncate: Literal["NONE", "START", "END"] | None = None
+
+
+class _SafeRetryConfig(BaseModel):
+    """Public retry tuning without executable or credential-bearing fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_attempts: int | None = Field(default=None, ge=0, le=20)
+    base_delay: float | None = Field(default=None, ge=0, le=300)
+    max_delay: float | None = Field(default=None, ge=0, le=3600)
+    backoff_factor: float | None = Field(default=None, ge=0, le=100)
+
+
+class _SafeTransportConfig(BaseModel):
+    """Public transport timeouts without headers, URLs, or authentication state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    connect_timeout_seconds: float | None = Field(default=None, gt=0, le=3600)
+    request_timeout_seconds: float | None = Field(default=None, gt=0, le=3600)
+    idle_timeout_seconds: float | None = Field(default=None, gt=0, le=86_400)
+
+
+def _validate_request_embedding_config(value: EmbeddingConfig | None) -> EmbeddingConfig | None:
+    """Validate and normalize the public subset of structured embedding options."""
+    if value is None:
+        return None
+    safe_options = _SafeEmbeddingProviderOptions.model_validate(value.provider_options)
+    value.provider_options = safe_options.model_dump(exclude_none=True)
+    return value
+
+
+class _SafeProviderRequestConfig(BaseModel):
+    """Positive schema for JSON config accepted from create/update/probe requests."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1)
+    top_p: float | None = Field(default=None, ge=0, le=1)
+    timeout: float | None = Field(default=None, gt=0, le=3600)
+    timeout_seconds: float | None = Field(default=None, gt=0, le=3600)
+    request_timeout_seconds: float | None = Field(default=None, gt=0, le=3600)
+    connect_timeout_seconds: float | None = Field(default=None, gt=0, le=3600)
+    frequency_penalty: float | None = Field(default=None, ge=-2, le=2)
+    presence_penalty: float | None = Field(default=None, ge=-2, le=2)
+    seed: int | None = None
+    max_retries: int | None = Field(default=None, ge=0, le=20)
+    region: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]{1,64}$")
+    retries: _SafeRetryConfig | None = None
+    transport: _SafeTransportConfig | None = None
+    embedding: EmbeddingConfig | None = None
+
+    @field_validator("embedding")
+    @classmethod
+    def validate_embedding(cls, value: EmbeddingConfig | None) -> EmbeddingConfig | None:
+        """Reject arbitrary embedding provider options in nested config."""
+        return _validate_request_embedding_config(value)
+
+
+_SAFE_PROVIDER_CONFIG_FIELDS = frozenset(_SafeProviderRequestConfig.model_fields)
+_SAFE_RETRY_CONFIG_FIELDS = frozenset(_SafeRetryConfig.model_fields)
+_SAFE_TRANSPORT_CONFIG_FIELDS = frozenset(_SafeTransportConfig.model_fields)
+_SAFE_EMBEDDING_CONFIG_FIELDS = frozenset(EmbeddingConfig.model_fields)
+_SAFE_EMBEDDING_PROVIDER_OPTION_FIELDS = frozenset(_SafeEmbeddingProviderOptions.model_fields)
+
+
+def validate_provider_request_config(value: object) -> dict[str, Any]:
+    """Validate public JSON config and return a JSON-compatible safe projection."""
+    parsed = _SafeProviderRequestConfig.model_validate({} if value is None else value)
+    return parsed.model_dump(mode="json", exclude_none=True, exclude_unset=True)
+
+
+def merge_provider_request_config(
+    existing: object,
+    submitted: dict[str, Any],
+) -> dict[str, Any]:
+    """Replace public fields while preserving historical hidden/private fields."""
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    nested_fields = {"embedding", "retries", "transport"}
+    for key in _SAFE_PROVIDER_CONFIG_FIELDS - nested_fields:
+        merged.pop(key, None)
+    merged.update({key: value for key, value in submitted.items() if key not in nested_fields})
+
+    nested_schemas = {
+        "retries": _SAFE_RETRY_CONFIG_FIELDS,
+        "transport": _SAFE_TRANSPORT_CONFIG_FIELDS,
+    }
+    for key, safe_fields in nested_schemas.items():
+        nested = _merge_safe_config_object(
+            merged.get(key),
+            submitted.get(key),
+            safe_fields,
+        )
+        if nested:
+            merged[key] = nested
+        else:
+            merged.pop(key, None)
+
+    embedding = merge_provider_embedding_config(merged.get("embedding"), submitted.get("embedding"))
+    if embedding:
+        merged["embedding"] = embedding
+    else:
+        merged.pop("embedding", None)
+    return merged
+
+
+def _merge_safe_config_object(
+    existing: object,
+    submitted: object,
+    safe_fields: frozenset[str],
+) -> dict[str, Any]:
+    """Replace safe keys in one object while retaining unknown historical keys."""
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    for key in safe_fields:
+        merged.pop(key, None)
+    if isinstance(submitted, dict):
+        merged.update({key: value for key, value in submitted.items() if key in safe_fields})
+    return merged
+
+
+def merge_provider_embedding_config(existing: object, submitted: object) -> dict[str, Any]:
+    """Merge embedding fields and provider options at their respective safe-key levels."""
+    existing_config = dict(existing) if isinstance(existing, dict) else {}
+    submitted_config = dict(submitted) if isinstance(submitted, dict) else {}
+    merged = _merge_safe_config_object(
+        existing_config,
+        submitted_config,
+        _SAFE_EMBEDDING_CONFIG_FIELDS - {"provider_options"},
+    )
+
+    existing_options = existing_config.get("provider_options")
+    submitted_options = submitted_config.get("provider_options")
+    if not isinstance(existing_options, dict) and "provider_options" not in submitted_config:
+        if existing_options is not None:
+            merged["provider_options"] = existing_options
+        return merged
+
+    provider_options = _merge_safe_config_object(
+        existing_options,
+        submitted_options,
+        _SAFE_EMBEDDING_PROVIDER_OPTION_FIELDS,
+    )
+    if provider_options:
+        merged["provider_options"] = provider_options
+    else:
+        merged.pop("provider_options", None)
+    return merged
 
 
 class ProviderConfigBase(BaseModel):
@@ -520,23 +716,114 @@ class ProviderConfigBase(BaseModel):
         return self
 
 
+def _normalize_persistent_provider_base_url(value: str | None) -> str | None:
+    """Validate the structural parts shared by persisted and probe endpoints."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    try:
+        parsed = urlsplit(normalized)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise ValueError("Invalid provider base URL") from exc
+    if parsed.scheme not in {"http", "https"} or hostname is None:
+        raise ValueError("Invalid provider base URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Invalid provider base URL")
+    if parsed.query or "?" in normalized:
+        raise ValueError("Invalid provider base URL")
+    if parsed.fragment or "#" in normalized:
+        raise ValueError("Invalid provider base URL")
+    return normalized
+
+
+def validate_provider_base_url_transport(
+    value: str | None,
+    provider_type: ProviderType,
+) -> str | None:
+    """Validate transport plus the explicit non-secret API base-path policy."""
+    return validate_provider_base_url(value, provider_type)
+
+
 class ProviderConfigCreate(ProviderConfigBase):
     """Model for creating a new provider (includes API key)"""
 
+    model_config = ConfigDict(extra="forbid")
+
+    auth_method: ProviderAuthMethod | None = Field(
+        None,
+        description="Persistent credential method",
+    )
+    environment_variable: str | None = Field(
+        None,
+        description="Reserved credential reference; unsupported for persistent providers",
+    )
     api_key: str | None = Field(None, description="API key for the provider")
 
-    @field_validator("api_key")
+    @field_validator("api_key", "environment_variable")
     @classmethod
-    def normalize_api_key(cls, v: str | None) -> str | None:
-        """Normalize API key by trimming whitespace."""
+    def normalize_credential_field(cls, v: str | None) -> str | None:
+        """Normalize credential input by trimming whitespace."""
         return v.strip() if isinstance(v, str) else v
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_persistent_base_url(cls, value: str | None) -> str | None:
+        """Keep credentials and query tokens out of persistent provider endpoints."""
+        return _normalize_persistent_provider_base_url(value)
+
+    @field_validator("config")
+    @classmethod
+    def validate_public_config(cls, value: object) -> dict[str, Any]:
+        """Allow only explicitly safe, non-credential JSON configuration."""
+        return validate_provider_request_config(value)
+
+    @field_validator("embedding_config")
+    @classmethod
+    def validate_structured_embedding(
+        cls,
+        value: EmbeddingConfig | None,
+    ) -> EmbeddingConfig | None:
+        """Reject unstructured embedding provider options before persistence."""
+        return _validate_request_embedding_config(value)
 
     @model_validator(mode="after")
     def validate_api_key_requirement(self) -> "ProviderConfigCreate":
-        """Require API key for remote providers while allowing local providers."""
-        if self.provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}:
+        """Accept only executable persistent authentication configurations."""
+        self.base_url = validate_provider_base_url_transport(self.base_url, self.provider_type)
+        if not provider_persistent_auth_supported(self.provider_type):
+            raise UnsupportedProviderAuthError(
+                "Persistent authentication is not available for this provider type"
+            )
+        is_local = self.provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+        auth_method = self.auth_method or (
+            ProviderAuthMethod.NONE if is_local else ProviderAuthMethod.API_KEY
+        )
+        self.auth_method = auth_method
+
+        if auth_method in {ProviderAuthMethod.ENVIRONMENT, ProviderAuthMethod.OAUTH}:
+            raise UnsupportedProviderAuthError(
+                "Authentication method is not supported for persistent providers"
+            )
+        if self.environment_variable:
+            raise UnsupportedProviderAuthError(
+                "Authentication method is not supported for persistent providers"
+            )
+
+        if is_local:
+            if auth_method != ProviderAuthMethod.NONE or self.api_key:
+                raise UnsupportedProviderAuthError(
+                    "API-key authentication is not supported for local providers"
+                )
             return self._validate_required_model()
 
+        if auth_method != ProviderAuthMethod.API_KEY:
+            raise UnsupportedProviderAuthError(
+                "No-auth authentication is not supported for remote providers"
+            )
         if not self.api_key:
             raise ValueError("API key cannot be empty")
 
@@ -558,11 +845,11 @@ class ProviderConfigCreate(ProviderConfigBase):
         return self
 
 
-class ProviderProbeRequest(BaseModel):
+class ProviderProbeRequest(ProviderConfigBase):
     """Connection fields accepted when probing a provider without persisting it."""
 
-    name: str = Field(..., min_length=1, description="Human-readable provider name")
-    provider_type: ProviderType = Field(..., description="Provider type to probe")
+    model_config = ConfigDict(extra="forbid")
+
     auth_method: ProviderAuthMethod | None = Field(
         None,
         description="Credential source used only for this probe",
@@ -572,19 +859,6 @@ class ProviderProbeRequest(BaseModel):
         description="Allow-listed server environment variable name; never its value",
     )
     api_key: str | None = Field(None, description="Ephemeral API key used only for this probe")
-    base_url: str | None = Field(None, description="Custom provider endpoint")
-    config: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional connection fields required by the provider",
-    )
-
-    @field_validator("name")
-    @classmethod
-    def name_must_not_be_empty(cls, value: str) -> str:
-        """Normalize the display name while rejecting whitespace-only values."""
-        if not value.strip():
-            raise ValueError("Provider name cannot be empty")
-        return value.strip()
 
     @field_validator("api_key", "environment_variable")
     @classmethod
@@ -592,14 +866,39 @@ class ProviderProbeRequest(BaseModel):
         """Normalize an ephemeral API key or environment-variable reference."""
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("base_url")
+    @classmethod
+    def validate_probe_base_url(cls, value: str | None) -> str | None:
+        """Reject unsafe endpoint structures before an ephemeral credential is resolved."""
+        return _normalize_persistent_provider_base_url(value)
+
+    @field_validator("config")
+    @classmethod
+    def validate_public_config(cls, value: object) -> dict[str, Any]:
+        """Reject arbitrary executable or credential-bearing probe config."""
+        return validate_provider_request_config(value)
+
+    @field_validator("embedding_config")
+    @classmethod
+    def validate_structured_embedding(
+        cls,
+        value: EmbeddingConfig | None,
+    ) -> EmbeddingConfig | None:
+        """Reject unstructured embedding provider options in draft probes."""
+        return _validate_request_embedding_config(value)
+
     @model_validator(mode="after")
     def validate_api_key_requirement(self) -> "ProviderProbeRequest":
         """Validate the mutually exclusive credential source without requiring a model."""
+        self.base_url = validate_provider_base_url_transport(self.base_url, self.provider_type)
         is_local = self.provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
         auth_method = self.auth_method or (
             ProviderAuthMethod.NONE if is_local else ProviderAuthMethod.API_KEY
         )
         self.auth_method = auth_method
+
+        if auth_method == ProviderAuthMethod.OAUTH:
+            raise UnsupportedProviderAuthError("OAuth authentication is not supported")
 
         if auth_method == ProviderAuthMethod.NONE:
             if not is_local or self.api_key or self.environment_variable:
@@ -628,9 +927,14 @@ class ProviderProbeRequest(BaseModel):
 class ProviderConfigUpdate(BaseModel):
     """Model for updating an existing provider"""
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = Field(None, min_length=1)
     provider_type: ProviderType | None = None
     operation_type: OperationType | None = None
+    auth_method: ProviderAuthMethod | None = None
+    environment_variable: str | None = None
+    expected_revision: int | None = Field(default=None, ge=0)
     api_key: str | None = Field(None, min_length=1)
     base_url: str | None = None
     llm_model: str | None = None
@@ -651,9 +955,67 @@ class ProviderConfigUpdate(BaseModel):
 
     @field_validator("api_key")
     @classmethod
-    def normalize_api_key(cls, v: str | None) -> str | None:
-        """Normalize API key by trimming whitespace."""
-        return v.strip() if isinstance(v, str) else v
+    def normalize_api_key(cls, value: str | None) -> str | None:
+        """Normalize a supplied replacement key and reject whitespace-only values."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("API key cannot be empty")
+        return normalized
+
+    @field_validator("environment_variable")
+    @classmethod
+    def normalize_environment_variable(cls, value: str | None) -> str | None:
+        """Normalize the unsupported reference before model-level validation."""
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_persistent_base_url(cls, value: str | None) -> str | None:
+        """Keep credentials and query tokens out of persistent provider endpoints."""
+        return _normalize_persistent_provider_base_url(value)
+
+    @field_validator("config")
+    @classmethod
+    def validate_public_config(cls, value: object) -> dict[str, Any] | None:
+        """Allow only explicitly safe JSON fields in persistent updates."""
+        if value is None:
+            return None
+        return validate_provider_request_config(value)
+
+    @field_validator("embedding_config")
+    @classmethod
+    def validate_structured_embedding(
+        cls,
+        value: EmbeddingConfig | None,
+    ) -> EmbeddingConfig | None:
+        """Reject unstructured embedding provider options before persistence."""
+        return _validate_request_embedding_config(value)
+
+    @model_validator(mode="after")
+    def validate_persistent_auth_method(self) -> "ProviderConfigUpdate":
+        """Reject credential sources the persistent repository cannot execute."""
+        if self.provider_type is not None:
+            self.base_url = validate_provider_base_url_transport(
+                self.base_url,
+                self.provider_type,
+            )
+            if not provider_persistent_auth_supported(self.provider_type):
+                raise UnsupportedProviderAuthError(
+                    "Persistent authentication is not available for this provider type"
+                )
+        if self.auth_method in {ProviderAuthMethod.ENVIRONMENT, ProviderAuthMethod.OAUTH}:
+            raise UnsupportedProviderAuthError(
+                "Authentication method is not supported for persistent providers"
+            )
+        if self.environment_variable:
+            raise UnsupportedProviderAuthError(
+                "Authentication method is not supported for persistent providers"
+            )
+        if self.auth_method == ProviderAuthMethod.NONE and self.api_key:
+            raise UnsupportedProviderAuthError("No-auth provider updates cannot include an API key")
+        return self
 
 
 class ProviderConfig(ProviderConfigBase):
@@ -738,11 +1100,108 @@ class ResilienceStatus(BaseModel):
     can_execute: bool = Field(True, description="Whether requests can be executed")
 
 
+_PUBLIC_PROVIDER_NUMBER_FIELDS = (
+    "temperature",
+    "max_tokens",
+    "top_p",
+    "timeout",
+    "timeout_seconds",
+    "request_timeout_seconds",
+    "connect_timeout_seconds",
+    "frequency_penalty",
+    "presence_penalty",
+    "seed",
+    "max_retries",
+)
+_PUBLIC_RETRY_NUMBER_FIELDS = ("max_attempts", "base_delay", "max_delay", "backoff_factor")
+_PUBLIC_TRANSPORT_NUMBER_FIELDS = (
+    "connect_timeout_seconds",
+    "request_timeout_seconds",
+    "idle_timeout_seconds",
+)
+
+
+def _public_number_fields(value: object, keys: tuple[str, ...]) -> dict[str, int | float]:
+    """Project explicitly public numeric tuning fields from an arbitrary JSON object."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: item
+        for key in keys
+        if isinstance((item := value.get(key)), (int, float)) and not isinstance(item, bool)
+    }
+
+
+def _public_embedding_response_config(value: object) -> dict[str, Any]:
+    """Project the non-secret, schema-bound subset of an embedding configuration."""
+    if isinstance(value, EmbeddingConfig):
+        value = value.model_dump()
+    if not isinstance(value, dict):
+        return {}
+    public: dict[str, Any] = _public_number_fields(value, ("dimensions", "timeout"))
+    for key in ("model", "user"):
+        item = value.get(key)
+        if isinstance(item, str) and 0 < len(item) <= 512 and item.isprintable():
+            public[key] = item
+    encoding_format = value.get("encoding_format")
+    if encoding_format in {"float", "base64"}:
+        public["encoding_format"] = encoding_format
+    raw_provider_options = value.get("provider_options", {})
+    safe_provider_options = (
+        {
+            key: item
+            for key, item in raw_provider_options.items()
+            if key in _SAFE_EMBEDDING_PROVIDER_OPTION_FIELDS
+        }
+        if isinstance(raw_provider_options, dict)
+        else {}
+    )
+    try:
+        provider_options = _SafeEmbeddingProviderOptions.model_validate(
+            safe_provider_options
+        ).model_dump(exclude_none=True)
+    except ValueError:
+        provider_options = {}
+    if provider_options:
+        public["provider_options"] = provider_options
+    return public
+
+
+def _public_provider_response_config(value: object) -> dict[str, Any]:
+    """Project only schema-bound fields that are safe for ordinary Provider responses."""
+    if not isinstance(value, dict):
+        return {}
+    public: dict[str, Any] = _public_number_fields(value, _PUBLIC_PROVIDER_NUMBER_FIELDS)
+    region = value.get("region")
+    if (
+        isinstance(region, str)
+        and 0 < len(region) <= 64
+        and region.isascii()
+        and all(char.isalnum() or char == "-" for char in region)
+    ):
+        public["region"] = region
+    retries = _public_number_fields(value.get("retries"), _PUBLIC_RETRY_NUMBER_FIELDS)
+    if retries:
+        public["retries"] = retries
+    transport = _public_number_fields(value.get("transport"), _PUBLIC_TRANSPORT_NUMBER_FIELDS)
+    if transport:
+        public["transport"] = transport
+    embedding = _public_embedding_response_config(value.get("embedding"))
+    if embedding:
+        public["embedding"] = embedding
+    return public
+
+
 class ProviderConfigResponse(ProviderConfigBase):
     """Provider configuration for API responses (API key masked)"""
 
     id: UUID
+    auth_method: ProviderAuthMethod = ProviderAuthMethod.API_KEY
+    environment_variable: str | None = None
+    credential_source: Literal["service_encrypted", "environment", "none"] = "service_encrypted"
+    credential_configured: bool = False
     api_key_masked: str = Field(..., description="Masked API key (e.g., 'sk-...xyz')")
+    revision: int = Field(..., ge=0, description="Optimistic concurrency revision in microseconds")
     created_at: datetime
     updated_at: datetime
     health_status: ProviderStatus | None = None
@@ -753,6 +1212,18 @@ class ProviderConfigResponse(ProviderConfigBase):
     resilience: ResilienceStatus | None = Field(
         None, description="Provider resilience status (circuit breaker + rate limiter)"
     )
+
+    @field_validator("config", mode="before")
+    @classmethod
+    def redact_config_credentials(cls, value: object) -> object:
+        """Keep arbitrary or sensitive provider config out of public response serialization."""
+        return _public_provider_response_config(value)
+
+    @field_validator("embedding_config", mode="before")
+    @classmethod
+    def redact_embedding_config_credentials(cls, value: object) -> object:
+        """Expose only the schema-bound public subset of structured embedding config."""
+        return _public_embedding_response_config(value)
 
 
 # ============================================================================
@@ -849,6 +1320,28 @@ class ProviderValidationResponse(BaseModel):
             response_time_ms=health.response_time_ms,
             error_message=health.error_message,
             catalog=catalog,
+        )
+
+    @classmethod
+    def from_configuration_validation(
+        cls,
+        *,
+        provider_id: UUID,
+        detail: str,
+        environment_variable: str | None = None,
+    ) -> "ProviderValidationResponse":
+        """Return a valid configuration result when no safe network probe exists."""
+        return cls(
+            provider=None,
+            provider_id=provider_id,
+            status=ProviderStatus.CONFIGURATION_VALID,
+            probed=False,
+            environment_variable=environment_variable,
+            detail=detail,
+            last_check=datetime.now(UTC),
+            response_time_ms=None,
+            error_message=None,
+            catalog=None,
         )
 
 
