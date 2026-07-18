@@ -39,7 +39,7 @@ import {
   visibleQueuedRunInputs,
 } from '../session/sessionRunInputModel';
 import { ComposerControls } from './ComposerControls';
-import { AgentTimeline } from './ChatTimeline';
+import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import { isImportantTimelineItem } from './chatTimelinePresentation';
 import { SessionEmptyState, WorkspaceTranscriptMessage } from './ChatTranscript';
 import { ChatWorkflowStrip } from './ChatWorkflowStrip';
@@ -197,6 +197,14 @@ export function ChatPanel({
   const timelineHasMore = timelineState?.hasMore ?? false;
   const timelineLoading = timelineState?.loading ?? false;
   const timelineLoadingEarlier = timelineState?.loadingEarlier ?? false;
+  const [earlierTimelineRender, setEarlierTimelineRender] = useState({
+    conversationId: '',
+    allowance: 0,
+  });
+  const timelineEarlierAllowance =
+    earlierTimelineRender.conversationId === timelineConversationId
+      ? earlierTimelineRender.allowance
+      : 0;
   const timelineError = timelineState?.error ?? null;
   const timelineItems = timelineState?.items ?? null;
   const hasTimelineState = timelineState !== null;
@@ -368,7 +376,7 @@ export function ChatPanel({
       restoreAnchorOffset();
       window.requestAnimationFrame(restoreAnchorOffset);
     });
-  }, [scrollViewport, timelineConversationId, timelineItemCount, timelineLoadingEarlier]);
+  }, [scrollViewport, timelineConversationId, timelineItemCount, timelineLoadingEarlier, timelineEarlierAllowance]);
 
   const requestEarlierTimeline = useCallback(() => {
     if (timelineLoading || timelineLoadingEarlier || earlierScrollRef.current) return;
@@ -387,6 +395,22 @@ export function ChatPanel({
     timelineLoading,
     timelineLoadingEarlier,
   ]);
+
+  const showEarlierTimelineItems = useCallback(() => {
+    earlierScrollRef.current = captureEarlierScrollAnchor() ?? {
+      conversationId: timelineConversationId,
+      anchorId: null,
+      anchorMemberId: null,
+      anchorOffset: 0,
+      top: 0,
+    };
+    setEarlierTimelineRender((current) => ({
+      conversationId: timelineConversationId,
+      allowance:
+        (current.conversationId === timelineConversationId ? current.allowance : 0) +
+        TIMELINE_RENDER_STEP,
+    }));
+  }, [captureEarlierScrollAnchor, timelineConversationId]);
 
   useEffect(() => {
     const viewport = scrollViewport();
@@ -528,6 +552,8 @@ export function ChatPanel({
                 expandedItems={expandedTimelineItems}
                 onToggleItem={toggleTimelineItem}
                 onLoadEarlier={requestEarlierTimeline}
+                onShowEarlier={showEarlierTimelineItems}
+                earlierRenderAllowance={timelineEarlierAllowance}
                 onRetry={onRefresh}
                 onRespondToHitl={onRespondToHitl}
                 respondableHitlRequestIds={respondableHitlRequestIds}

@@ -45,6 +45,10 @@ import {
   SessionEmptyState,
 } from './ChatTranscript';
 
+const TIMELINE_RENDER_THRESHOLD = 150;
+const TIMELINE_RENDER_WINDOW = 100;
+export const TIMELINE_RENDER_STEP = 100;
+
 type TimelineActivityGroupNode = {
   kind: 'activity_group';
   id: string;
@@ -69,6 +73,8 @@ export function AgentTimeline({
   expandedItems,
   onToggleItem,
   onLoadEarlier,
+  onShowEarlier,
+  earlierRenderAllowance,
   onRetry,
   onRespondToHitl,
   respondableHitlRequestIds,
@@ -77,6 +83,8 @@ export function AgentTimeline({
   expandedItems: Record<string, boolean>;
   onToggleItem: (item: AgentTimelineItem) => void;
   onLoadEarlier: () => void;
+  onShowEarlier: () => void;
+  earlierRenderAllowance: number;
   onRetry: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
@@ -98,6 +106,10 @@ export function AgentTimeline({
   const narrative = useMemo(
     () => annotateTimelineGroups(groupNarrativeActivity(buildSessionNarrative(state.items))),
     [state.items],
+  );
+  const renderWindow = useMemo(
+    () => resolveTimelineRenderWindow(narrative, state.items.length, earlierRenderAllowance),
+    [narrative, state.items.length, earlierRenderAllowance],
   );
   const [expandedGroupItems, setExpandedGroupItems] = useState<Record<string, boolean>>({});
   const setGroupOpen = (items: AgentTimelineItem[], open: boolean) => {
@@ -165,10 +177,24 @@ export function AgentTimeline({
           )}
         </div>
       ) : null}
+      {renderWindow.hiddenCount > 0 ? (
+        <div className="timeline-history-control" aria-live="polite">
+          <Button
+            type="button"
+            size="1"
+            variant="ghost"
+            className="timeline-history-action"
+            onClick={onShowEarlier}
+          >
+            {t('session.showEarlierItems', { count: renderWindow.hiddenCount })}
+          </Button>
+        </div>
+      ) : null}
       {state.items.length === 0 && !state.error ? (
         <SessionEmptyState />
       ) : (
         narrative.map((node, index) => {
+          if (index < renderWindow.startIndex) return null;
           if (node.kind === 'activity_group') {
             const groupId = timelineGroupIdentity(narrative, index);
             const open = node.items.some((item) => expandedGroupItems[item.id]);
@@ -597,6 +623,24 @@ function timelineGroupIdentity(narrative: AnnotatedTimelineNode[], index: number
   const node = narrative[index];
   if (!node || node.kind === 'item') return node?.id ?? `timeline-node:${index}`;
   return node.groupId;
+}
+
+function resolveTimelineRenderWindow(
+  narrative: AnnotatedTimelineNode[],
+  itemCount: number,
+  earlierAllowance: number,
+): { startIndex: number; hiddenCount: number } {
+  if (itemCount <= TIMELINE_RENDER_THRESHOLD) return { startIndex: 0, hiddenCount: 0 };
+  const budget = TIMELINE_RENDER_WINDOW + earlierAllowance;
+  if (budget >= itemCount) return { startIndex: 0, hiddenCount: 0 };
+  let coveredItems = 0;
+  let startIndex = narrative.length;
+  while (startIndex > 0 && coveredItems < budget) {
+    startIndex -= 1;
+    const node = narrative[startIndex];
+    coveredItems += node.kind === 'item' ? 1 : node.items.length;
+  }
+  return { startIndex, hiddenCount: itemCount - coveredItems };
 }
 
 function isCollapsibleRuntimeItem(item: AgentTimelineItem): boolean {
