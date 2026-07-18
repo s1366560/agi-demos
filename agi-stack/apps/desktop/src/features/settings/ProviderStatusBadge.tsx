@@ -30,6 +30,9 @@ function providerStatusKey(provider: ManagedLlmProvider): string {
     return 'providers.status.connected';
   }
   if (status) return 'providers.status.attention';
+  if (provider.auth_method !== 'none' && provider.credential_configured === undefined) {
+    return 'providers.status.credentialUnknown';
+  }
   return 'providers.status.notChecked';
 }
 

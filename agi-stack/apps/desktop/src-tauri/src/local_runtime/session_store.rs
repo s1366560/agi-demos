@@ -29,7 +29,8 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 12;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 13;
+const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 
 pub(super) struct PreparedToolInvocation {
@@ -89,6 +90,7 @@ impl DesktopCheckpointAuthority {
 #[derive(Clone)]
 pub(super) struct DesktopSessionStore {
     connection: Arc<Mutex<Connection>>,
+    installation_id: Arc<str>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -238,6 +240,10 @@ impl DesktopSessionStore {
                    seed_kind TEXT NOT NULL,
                    applied_at TEXT NOT NULL,
                    value_json TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_runtime_metadata (
+                   key TEXT PRIMARY KEY,
+                   value_text TEXT NOT NULL
                  );
                  CREATE TABLE IF NOT EXISTS desktop_workspace_messages (
                    id TEXT PRIMARY KEY,
@@ -455,6 +461,31 @@ impl DesktopSessionStore {
                 "desktop session store requires exclusive SQLite ownership, got {locking_mode}"
             ));
         }
+        let installation_id = match connection
+            .query_row(
+                "SELECT value_text FROM desktop_runtime_metadata WHERE key = ?1",
+                params![INSTALLATION_ID_METADATA_KEY],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?
+        {
+            Some(value) => {
+                Uuid::parse_str(&value)
+                    .map_err(|_| "desktop installation id is invalid".to_string())?;
+                value
+            }
+            None => {
+                let value = Uuid::new_v4().to_string();
+                connection
+                    .execute(
+                        "INSERT INTO desktop_runtime_metadata (key, value_text) VALUES (?1, ?2)",
+                        params![INSTALLATION_ID_METADATA_KEY, value],
+                    )
+                    .map_err(|error| error.to_string())?;
+                value
+            }
+        };
         super::auth_context::initialize_auth_context_schema(&connection)?;
         super::resource_registry::initialize_resource_registry(&connection)?;
         connection
@@ -464,7 +495,12 @@ impl DesktopSessionStore {
         recover_interrupted_runs(&connection, &super::now_iso())?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
+            installation_id: Arc::from(installation_id),
         })
+    }
+
+    pub(super) fn installation_id(&self) -> &str {
+        &self.installation_id
     }
 
     pub(super) fn ensure_workspace(&self, workspace: &Value) -> Result<(), String> {

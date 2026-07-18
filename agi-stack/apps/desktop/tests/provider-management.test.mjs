@@ -34,6 +34,10 @@ const providerConnectionPanelSource = readFileSync(
   new URL('../src/features/settings/ProviderConnectionPanel.tsx', import.meta.url),
   'utf8',
 );
+const providerStatusBadgeSource = readFileSync(
+  new URL('../src/features/settings/ProviderStatusBadge.tsx', import.meta.url),
+  'utf8',
+);
 const providerModelsPanelSource = readFileSync(
   new URL('../src/features/settings/ProviderModelsPanel.tsx', import.meta.url),
   'utf8',
@@ -470,6 +474,46 @@ test('provider editing preserves stored credentials only for the unchanged endpo
     providerConnectionPanelSource,
     /disabled=\{!probeSupported \|\| !verified/,
   );
+  assert.match(
+    providerConnectionPanelSource,
+    /provider\.credential_configured === true[\s\S]{0,100}provider\.api_key_masked/,
+  );
+  assert.match(
+    providerConnectionPanelSource,
+    /provider\.credential_configured === false[\s\S]{0,120}providers\.credentialMissing[\s\S]{0,120}providers\.credentialUnknown/,
+  );
+  assert.match(
+    providerStatusBadgeSource,
+    /provider\.credential_configured === false && provider\.auth_method !== 'none'/,
+  );
+  assert.match(
+    providerStatusBadgeSource,
+    /provider\.credential_configured === undefined[\s\S]{0,100}providers\.status\.credentialUnknown/,
+  );
+  assert.match(
+    providerOverviewPanelsSource,
+    /provider\.auth_method === 'none' \|\| provider\.credential_configured === true/,
+  );
+  assert.match(
+    providerOverviewPanelsSource,
+    /provider\.credential_configured === false[\s\S]{0,100}providers\.credentialMissing[\s\S]{0,100}providers\.credentialUnknown/,
+  );
+  assert.doesNotMatch(
+    providerOverviewPanelsSource,
+    /provider\.credential_configured\s*\|\|\s*provider\.api_key_masked/,
+  );
+  assert.match(
+    i18nSource,
+    /Secrets stay in this device's system vault and are never returned by the API/,
+  );
+  assert.match(
+    i18nSource,
+    /Secrets are encrypted and stored by the service; the API never returns plaintext credentials/,
+  );
+  assert.match(i18nSource, /Save a credential securely for the current tenant/);
+  assert.match(i18nSource, /密钥保存在本机系统凭据库中，API 永不回传密钥/);
+  assert.match(i18nSource, /密钥由服务端加密保存，API 永不回传明文凭据/);
+  assert.match(modelProviderWorkspaceSource, /mode=\{config\.mode\}/);
 });
 
 test('provider routing is policy-backed, cross-provider, and context safe', () => {
@@ -951,7 +995,30 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           id: 'legacy-openai',
           name: 'Legacy OpenAI',
           provider_type: 'openai',
-          api_key_masked: 'sk-…last4',
+          credential_configured: false,
+          api_key_masked: 'sk-sensitive-mask-source',
+          api_key: 'response-secret-must-be-dropped',
+          api_key_encrypted: 'response-ciphertext-must-be-dropped',
+          credential: 'response-credential-must-be-dropped',
+          secret: 'response-secret-field-must-be-dropped',
+        },
+        {
+          id: 'persisted-openai',
+          name: 'Persisted OpenAI',
+          provider_type: 'openai',
+          auth_method: 'api_key',
+          credential_configured: true,
+          api_key_masked: 'sk-server-value-must-not-be-retained',
+          credential_source: 'system_vault',
+          health_status: 'configuration_valid',
+          revision: 4,
+        },
+        {
+          id: 'unknown-openai',
+          name: 'Unknown OpenAI',
+          provider_type: 'openai',
+          auth_method: 'api_key',
+          api_key_masked: 'sk-untrusted-legacy-mask',
         },
       ]),
       { status: 200, headers: { 'content-type': 'application/json' } },
@@ -988,12 +1055,44 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           id: 'legacy-openai',
           providerType: 'openai',
           authMethod: undefined,
+          credentialConfigured: false,
+          runtimeSelected: false,
+          revision: 0,
+        },
+        {
+          id: 'persisted-openai',
+          providerType: 'openai',
+          authMethod: 'api_key',
           credentialConfigured: true,
+          runtimeSelected: false,
+          revision: 4,
+        },
+        {
+          id: 'unknown-openai',
+          providerType: 'openai',
+          authMethod: 'api_key',
+          credentialConfigured: undefined,
           runtimeSelected: false,
           revision: 0,
         },
       ],
     );
+    const legacy = providers[1];
+    assert.equal(legacy.api_key_masked, null);
+    for (const forbiddenKey of ['api_key', 'api_key_encrypted', 'credential', 'secret']) {
+      assert.equal(Object.hasOwn(legacy, forbiddenKey), false);
+    }
+    assert.equal(
+      JSON.stringify(providers).includes('response-secret-must-be-dropped'),
+      false,
+    );
+    const persisted = providers[2];
+    assert.equal(persisted.api_key_masked, '••••••••••••');
+    assert.equal(persisted.credential_source, 'system_vault');
+    assert.equal(providerDraftFromProvider(persisted).apiKey, '');
+    const unknown = providers[3];
+    assert.equal(unknown.credential_configured, undefined);
+    assert.equal(unknown.api_key_masked, null);
   } finally {
     globalThis.fetch = originalFetch;
   }

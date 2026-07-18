@@ -68,7 +68,12 @@ Post-fix full-view and focused comparisons at both native sizes show no actionab
 
 ## Findings
 
-No actionable P0, P1, or P2 findings remain.
+- Credential persistence P0: resolved in Iteration 5.
+- [P1] Real outbound connection probing and automatic model discovery remain unimplemented.
+- [P1] The full Provider/authentication matrix and advanced connection fields remain incomplete.
+- [P1] Routing is still tenant-scoped instead of the researched workspace policy scope; Fast and
+  Vision workloads remain unavailable.
+- [P1] Usage statistics and Provider mutation audit events still lack authoritative runtime data.
 
 ## Intentional product constraints
 
@@ -535,7 +540,11 @@ The source capture is softer and records an earlier popup width. Production foll
 - Local catalogs identify built-in suggestions as `static-fallback`; an empty catalog without a source remains unavailable. No local `/models` network request is implied.
 - Fast, coding, vision, fallback, and cloud routing mutations remain read-only because the current service contract does not expose those writes.
 - A newly connected Provider is created active only after explicit validation and the final Add action; the UI does not claim unsupported per-role routing writes.
-- API keys are accepted only in write requests, cleared after use, and never hydrated from Provider responses. QA responses deliberately strip submitted secrets.
+- API keys are accepted only in write requests and stored in the operating-system credential vault.
+  Versioned records bind each secret to tenant, Provider, revision, type, endpoint, and auth method;
+  stale or corrupt records fail closed. Provider responses expose only
+  `credential_configured` plus a non-locating `system_vault` source enum, and the frontend
+  allow-lists response fields before retaining them.
 - OAuth, environment-secret references, live `/models` discovery, invented success rates, and synthetic activity feeds were not implemented because the current backend cannot support them truthfully.
 
 ## Interaction verification
@@ -595,6 +604,40 @@ routing state remains truthfully read-only; local routing uses an explicit “Sa
 runtime” action. The approved visual hierarchy did not change, so the existing same-viewport combined
 comparison remains current. Final contract audit: P0 0, P1 0, P2 0.
 
+### Iteration 5 — passed: secure credential persistence
+
+The prior process-memory-only credential behavior was replaced with the existing cross-platform
+system-vault adapter (macOS Keychain, Windows Credential Manager, Linux persistent secret service).
+Each desktop database now owns a persisted installation UUID. Vault accounts are one-way digests of
+installation, tenant, Provider, revision, and binding identity, and each versioned record repeats those
+fields for validation. The next revision is pre-written to its own account before the SQLite CAS; a
+conflict removes only that candidate, while a process crash leaves the database's prior revision and
+credential intact. Startup loads only the exact database revision and binding, so an uncommitted future
+entry cannot replace or delete the authoritative secret. Credential writes run off the async request
+executor, Provider mutations serialize before reading the current revision, and a disabled Provider
+removes plaintext runtime material while retaining its vault secret for explicit reactivation.
+
+Current-run same-viewport evidence:
+
+- Source: `qa/provider-credential-persistence/01-source-connection-current.jpg`
+- Implementation: `qa/provider-credential-persistence/02-implementation-connection-current.jpg`
+- Viewport: `1280 × 720`, connection tab, configured API-key state
+
+The combined visual review found no P0/P1/P2 regression in popup geometry, Provider navigation,
+connection card hierarchy, authentication selection, masked credential field, endpoint section, or
+primary actions. The implementation deliberately replaces the prototype's workspace-scoped secret
+copy with tenant/device-accurate system-vault copy. Cloud mode separately identifies service-side
+encrypted storage; legacy cloud responses without an authoritative `credential_configured` field now
+remain unknown rather than being misreported as missing. Runtime evidence, rather than the static QA
+fixture, proves persistence: the Provider remains `credential_configured: true` and
+`configuration_valid` after reopening the SQLite store and runtime state, while the database, WAL,
+responses, status projection, and debug output contain no canary secret. Dedicated tests also cover
+same-revision concurrent updates, installation/profile isolation, and a simulated crash after the next
+vault revision is written but before the SQLite revision changes.
+
+Verification: 178 Rust tests, Clippy with warnings denied, 381 Desktop tests, TypeScript, and the Vite
+production build passed. The existing Vite large-chunk advisory remains unchanged.
+
 ## Copy differences from the visual prototype
 
 - “Connection verified” becomes “Configuration valid” in local mode because no outbound request is made.
@@ -605,15 +648,21 @@ comparison remains current. Final contract audit: P0 0, P1 0, P2 0.
 
 These differences are deliberate truthfulness constraints, not visual omissions.
 
-## Findings
+## Remaining Provider-management findings
 
-No actionable P0, P1, or P2 findings remain.
+- [P1] Connection validation is configuration-only in the local runtime; implement a real outbound
+  probe with redacted diagnostics and explicit timeout authority.
+- [P1] Model discovery still uses a static fallback; implement authoritative Provider catalog refresh.
+- [P1] OAuth, environment-backed credentials, advanced request policy, and the complete Provider/auth
+  compatibility matrix remain unavailable rather than simulated.
+- [P1] Workspace-scoped routing, executable Fast/Vision role selection, authoritative usage data, and
+  Provider audit events remain to be implemented.
 
 ## Follow-up polish
 
 - [P3] Code-split the existing desktop bundle in a later performance iteration; this does not affect Provider workflow correctness or visual fidelity.
 
-provider settings final result: passed
+provider credential persistence result: passed; overall provider settings result: in progress
 
 ---
 

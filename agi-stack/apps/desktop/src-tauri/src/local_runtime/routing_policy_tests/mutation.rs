@@ -224,7 +224,7 @@ async fn provider_update_cannot_invalidate_selected_default_route() {
 }
 
 #[tokio::test]
-async fn disabling_unreferenced_provider_clears_only_its_runtime_material() {
+async fn disabling_unreferenced_provider_clears_runtime_material_but_preserves_its_vault_secret() {
     let credential = "routing-spare-provider-secret";
     let state = test_state(credential);
     seed_active_provider(
@@ -281,6 +281,7 @@ async fn disabling_unreferenced_provider_clears_only_its_runtime_material() {
     }
 
     let disabled = app
+        .clone()
         .oneshot(authenticated_json_request(
             "PUT",
             &format!("/api/v1/llm-providers/{spare_id}"),
@@ -290,14 +291,20 @@ async fn disabling_unreferenced_provider_clears_only_its_runtime_material() {
         .await
         .expect("disable spare provider");
     assert_eq!(disabled.status(), StatusCode::OK);
-    let runtime = state.provider_runtime.lock().expect("provider runtime");
-    assert!(!runtime.bindings.contains_key(&spare_key));
-    assert!(!runtime.credentials.contains_key(&spare_key));
-    assert_eq!(
-        runtime.selections.get("local").map(String::as_str),
-        Some("primary-provider")
-    );
-    drop(runtime);
+    let disabled = response_json(disabled).await;
+    assert_eq!(disabled["credential_configured"], true);
+    assert_eq!(disabled["health_status"], "disabled");
+    let disabled_revision = disabled["revision"].as_u64().expect("disabled revision");
+    {
+        let runtime = state.provider_runtime.lock().expect("provider runtime");
+        assert!(!runtime.bindings.contains_key(&spare_key));
+        assert!(!runtime.credentials.contains_key(&spare_key));
+        assert!(runtime.configured_credentials.contains(&spare_key));
+        assert_eq!(
+            runtime.selections.get("local").map(String::as_str),
+            Some("primary-provider")
+        );
+    }
     let policy = state
         .session_store
         .llm_routing_policy("local", Utc::now().timestamp_millis())
@@ -307,6 +314,24 @@ async fn disabling_unreferenced_provider_clears_only_its_runtime_material() {
         policy["roles"]["default"]["provider_id"],
         "primary-provider"
     );
+
+    let reactivated = app
+        .oneshot(authenticated_json_request(
+            "PUT",
+            &format!("/api/v1/llm-providers/{spare_id}"),
+            credential,
+            json!({"is_active": true, "expected_revision": disabled_revision}),
+        ))
+        .await
+        .expect("reactivate spare provider");
+    assert_eq!(reactivated.status(), StatusCode::OK);
+    let reactivated = response_json(reactivated).await;
+    assert_eq!(reactivated["credential_configured"], true);
+    assert_eq!(reactivated["health_status"], "configuration_valid");
+    let runtime = state.provider_runtime.lock().expect("provider runtime");
+    assert!(runtime.bindings.contains_key(&spare_key));
+    assert!(runtime.credentials.contains_key(&spare_key));
+    assert!(runtime.configured_credentials.contains(&spare_key));
 }
 
 #[tokio::test]
@@ -417,7 +442,7 @@ async fn routing_policy_validates_default_models_and_fallback_constraints() {
                 "is_active": true,
                 "base_url": "https://api.example.test/v1",
                 "auth_method": "api_key",
-                "credential_source": "runtime_memory",
+                "credential_source": "system_vault",
                 "credential_configured": true,
                 "llm_model": "credential-model",
                 "allowed_models": ["credential-model"],

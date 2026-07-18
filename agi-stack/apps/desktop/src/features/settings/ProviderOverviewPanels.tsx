@@ -93,11 +93,11 @@ export function ProviderOverviewPanel({
                 provider.auth_method === 'none' ? 'providers.auth.none' : 'providers.auth.api_key',
               )}
               {' · '}
-              {provider.auth_method === 'none' ||
-              provider.credential_configured ||
-              provider.api_key_masked
+              {provider.auth_method === 'none' || provider.credential_configured === true
                 ? t('providers.credentialConfigured')
-                : t('providers.credentialMissing')}
+                : provider.credential_configured === false
+                  ? t('providers.credentialMissing')
+                  : t('providers.credentialUnknown')}
             </span>
           </div>
           <button type="button" onClick={() => onTabChange('connection')}>

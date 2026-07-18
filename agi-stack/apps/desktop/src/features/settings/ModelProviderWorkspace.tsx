@@ -654,6 +654,7 @@ export function ModelProviderWorkspace({
                 <ProviderConnectionPanel
                   provider={provider}
                   providerTypeDescriptor={providerTypeDescriptor}
+                  mode={config.mode}
                   canManage={canManage}
                   onSave={saveProvider}
                   onValidate={validateProvider}

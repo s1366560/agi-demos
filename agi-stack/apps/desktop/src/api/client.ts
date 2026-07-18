@@ -1333,22 +1333,46 @@ function normalizeManagedLlmProvider(payload: unknown): ManagedLlmProvider {
     readCompatString(payload, 'auth_method', 'authMethod').toLowerCase(),
   );
   const maskedCredential = readCompatString(payload, 'api_key_masked', 'apiKeyMasked');
-  const credentialConfigured =
-    readCompatBoolean(payload, 'credential_configured', 'credentialConfigured') ??
-    (authMethod === 'none' || Boolean(maskedCredential));
+  const credentialConfigured = readCompatBoolean(
+    payload,
+    'credential_configured',
+    'credentialConfigured',
+  );
   const runtimeSelected =
     readCompatBoolean(payload, 'runtime_selected', 'runtimeSelected') ?? false;
   const revision = readCompatInteger(payload, 'revision', 'version') ?? 0;
 
   return {
-    ...payload,
     id,
+    tenant_id: readCompatString(payload, 'tenant_id', 'tenantId') || undefined,
     name,
     provider_type: providerType,
+    operation_type: readCompatString(payload, 'operation_type', 'operationType') || undefined,
     auth_method: authMethod,
+    is_active: readCompatBoolean(payload, 'is_active', 'isActive'),
+    is_enabled: readCompatBoolean(payload, 'is_enabled', 'isEnabled'),
+    base_url: readCompatNullableString(payload, 'base_url', 'baseUrl'),
+    llm_model: readCompatNullableString(payload, 'llm_model', 'llmModel'),
+    llm_small_model: readCompatNullableString(payload, 'llm_small_model', 'llmSmallModel'),
+    embedding_model: readCompatNullableString(payload, 'embedding_model', 'embeddingModel'),
+    reranker_model: readCompatNullableString(payload, 'reranker_model', 'rerankerModel'),
+    allowed_models: readCompatStringArray(payload, 'allowed_models', 'allowedModels'),
+    secondary_models: readCompatStringArray(payload, 'secondary_models', 'secondaryModels'),
+    health_status: readCompatNullableString(payload, 'health_status', 'healthStatus'),
+    credential_source:
+      readCompatString(payload, 'credential_source', 'credentialSource') || undefined,
     credential_configured: credentialConfigured,
     runtime_selected: runtimeSelected,
+    api_key_masked: credentialConfigured && maskedCredential ? '••••••••••••' : null,
+    health_last_check: readCompatNullableString(
+      payload,
+      'health_last_check',
+      'healthLastCheck',
+    ),
+    response_time_ms: readCompatNullableNumber(payload, 'response_time_ms', 'responseTimeMs'),
+    error_message: readCompatNullableString(payload, 'error_message', 'errorMessage'),
     revision,
+    updated_at: readCompatNullableString(payload, 'updated_at', 'updatedAt'),
   };
 }
 
@@ -1449,6 +1473,19 @@ function readCompatInteger(
 ): number | undefined {
   const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
   return Number.isInteger(value) && typeof value === 'number' ? value : undefined;
+}
+
+function readCompatStringArray(
+  record: Record<string, unknown>,
+  snakeCaseKey: string,
+  camelCaseKey?: string,
+): string[] | null {
+  const value = record[snakeCaseKey] ?? (camelCaseKey ? record[camelCaseKey] : undefined);
+  if (!Array.isArray(value)) return null;
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function readCompatNullableString(

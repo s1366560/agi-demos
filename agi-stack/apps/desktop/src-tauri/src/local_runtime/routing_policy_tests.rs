@@ -197,7 +197,7 @@ fn seed_active_provider(
                 "is_active": true,
                 "base_url": "http://127.0.0.1:11434/v1",
                 "auth_method": "none",
-                "credential_source": "runtime_memory",
+                "credential_source": "none",
                 "credential_configured": false,
                 "llm_model": model,
                 "allowed_models": allowed_models,

@@ -18,6 +18,7 @@ import type {
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
+  RuntimeMode,
 } from '../../types';
 import {
   providerDraftFromProvider,
@@ -30,6 +31,7 @@ import {
 type ProviderConnectionPanelProps = {
   provider: ManagedLlmProvider;
   providerTypeDescriptor?: LlmProviderTypeDescriptor;
+  mode: RuntimeMode;
   canManage: boolean;
   onSave: (
     provider: ManagedLlmProvider,
@@ -42,6 +44,7 @@ type ProviderConnectionPanelProps = {
 export function ProviderConnectionPanel({
   provider,
   providerTypeDescriptor,
+  mode,
   canManage,
   onSave,
   onValidate,
@@ -187,12 +190,22 @@ export function ProviderConnectionPanel({
   const probeSupported = providerTypeDescriptor?.probeSupported === true;
   const validationAccepted = providerValidationAccepted(validation, probeSupported);
   const validationAvailable = authCapabilityAvailable;
+  const secretDescriptionKey =
+    mode === 'local'
+      ? 'providers.secretDescription.local'
+      : 'providers.secretDescription.cloud';
   const credentialValue = editing
     ? draft.apiKey
-    : provider.api_key_masked ||
-      (provider.credential_configured
-        ? t('providers.credentialConfigured')
-        : t('providers.credentialMissing'));
+    : provider.credential_configured === true
+      ? provider.api_key_masked || t('providers.credentialConfigured')
+      : '';
+  const credentialPlaceholder = editing
+    ? t('providers.apiKeyPlaceholder')
+    : provider.credential_configured === true
+      ? t('providers.credentialConfigured')
+      : provider.credential_configured === false
+        ? t('providers.credentialMissing')
+        : t('providers.credentialUnknown');
 
   return (
     <section className="provider-form-card">
@@ -282,7 +295,7 @@ export function ProviderConnectionPanel({
                 value={credentialValue}
                 autoComplete="new-password"
                 onChange={(event) => updateDraft('apiKey', event.target.value)}
-                placeholder={t('providers.apiKeyPlaceholder')}
+                placeholder={credentialPlaceholder}
               />
               <button
                 type="button"
@@ -293,7 +306,7 @@ export function ProviderConnectionPanel({
                 {showSecret ? <EyeClosedIcon /> : <EyeOpenIcon />}
               </button>
             </div>
-            <small>{t('providers.secretDescription')}</small>
+            <small>{t(secretDescriptionKey)}</small>
           </label>
         ) : (
           <div className="provider-capability-note compact">
@@ -330,7 +343,7 @@ export function ProviderConnectionPanel({
             <ExclamationTriangleIcon />
             <span>
               <b>{t('providers.secretRequiredForEndpointChange')}</b>
-              <small>{t('providers.secretDescription')}</small>
+              <small>{t(secretDescriptionKey)}</small>
             </span>
           </div>
         ) : null}

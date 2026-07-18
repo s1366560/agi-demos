@@ -653,6 +653,7 @@ export type LlmProviderAuthMethod = 'api_key' | 'none';
 
 export type ManagedLlmProvider = {
   id: string;
+  tenant_id?: string;
   name: string;
   provider_type: string;
   operation_type?: string;
@@ -667,6 +668,7 @@ export type ManagedLlmProvider = {
   allowed_models?: string[] | null;
   secondary_models?: string[] | null;
   health_status?: string | null;
+  credential_source?: string | null;
   credential_configured?: boolean;
   runtime_selected?: boolean;
   api_key_masked?: string | null;
@@ -675,7 +677,6 @@ export type ManagedLlmProvider = {
   error_message?: string | null;
   revision?: number;
   updated_at?: string | null;
-  [key: string]: unknown;
 };
 
 export type LlmProviderMutationInput = {

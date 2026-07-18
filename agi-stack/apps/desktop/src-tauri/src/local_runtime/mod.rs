@@ -60,6 +60,7 @@ mod authorized_tool_host;
 mod changes;
 #[cfg(test)]
 mod managed_resource_tests;
+mod provider_credentials;
 mod resource_registry;
 #[cfg(test)]
 mod routing_policy_tests;
@@ -90,6 +91,11 @@ use authority_store::{
 };
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
+#[cfg(test)]
+use provider_credentials::ProviderCredentialStore;
+use provider_credentials::{
+    provider_credential_binding_digest, ProviderCredentialBroker, ProviderCredentialStoreError,
+};
 use resource_registry::{ManagedResourceKind, ResourceRegistryError};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
@@ -116,12 +122,16 @@ impl LocalRuntimeService {
         let tool_host = LocalToolHost::new(&workspace_root).map_err(|error| error.to_string())?;
         let api_token = generate_capability_token();
         let session_store = DesktopSessionStore::open(&session_store_path)?;
-        let state = Arc::new(LocalRuntimeState::new(
+        let provider_credentials =
+            ProviderCredentialBroker::native(session_store.installation_id())
+                .map_err(|error| error.to_string())?;
+        let state = Arc::new(LocalRuntimeState::new_with_provider_credentials(
             workspace_root,
             tool_host,
             checkpoints,
             api_token,
             session_store,
+            provider_credentials,
         )?);
         state.reconcile_recovered_runs_from_checkpoints().await?;
 
@@ -772,6 +782,7 @@ struct LocalRuntimeState {
     clock: Arc<SystemClock>,
     config: Mutex<LocalRuntimeConfig>,
     provider_runtime: Mutex<ProviderRuntimeState>,
+    provider_credentials: ProviderCredentialBroker,
     session_store: DesktopSessionStore,
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
@@ -805,6 +816,7 @@ struct ProviderRuntimeBinding {
 struct ProviderRuntimeState {
     bindings: HashMap<ProviderRuntimeKey, ProviderRuntimeBinding>,
     credentials: HashMap<ProviderRuntimeKey, String>,
+    configured_credentials: HashSet<ProviderRuntimeKey>,
     selections: HashMap<String, String>,
 }
 
@@ -899,6 +911,7 @@ impl ReActControl for LocalRunControl {
 }
 
 impl LocalRuntimeState {
+    #[cfg(test)]
     fn new(
         workspace_root: PathBuf,
         tool_host: LocalToolHost,
@@ -906,6 +919,32 @@ impl LocalRuntimeState {
         api_token: String,
         session_store: DesktopSessionStore,
     ) -> Result<Self, String> {
+        let provider_credentials =
+            ProviderCredentialBroker::in_memory(session_store.installation_id())
+                .map_err(|error| error.to_string())?;
+        Self::new_with_provider_credentials(
+            workspace_root,
+            tool_host,
+            checkpoints,
+            api_token,
+            session_store,
+            provider_credentials,
+        )
+    }
+
+    fn new_with_provider_credentials(
+        workspace_root: PathBuf,
+        tool_host: LocalToolHost,
+        checkpoints: Arc<dyn CheckpointStore>,
+        api_token: String,
+        session_store: DesktopSessionStore,
+        provider_credentials: ProviderCredentialBroker,
+    ) -> Result<Self, String> {
+        if provider_credentials.installation_id() != session_store.installation_id() {
+            return Err(
+                "provider credential storage does not match this desktop installation".to_string(),
+            );
+        }
         let (events, _) = broadcast::channel(256);
         let workspace_id = "local-workspace".to_string();
         let now = now_iso();
@@ -937,16 +976,24 @@ impl LocalRuntimeState {
         )?;
         let mut provider_bindings = HashMap::new();
         let mut provider_values = HashMap::new();
+        let mut provider_credential_records = Vec::new();
         for (tenant_id, provider) in session_store.list_runtime_provider_connections()? {
             let Some(provider_id) = provider.get("id").and_then(Value::as_str) else {
-                continue;
-            };
-            let Some(binding) = runtime_binding_from_provider(&provider) else {
                 continue;
             };
             let key = ProviderRuntimeKey {
                 tenant_id,
                 provider_id: provider_id.to_string(),
+            };
+            if let Some(binding_digest) = provider_credential_binding(&provider) {
+                let provider_revision = provider
+                    .get("revision")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                provider_credential_records.push((key.clone(), provider_revision, binding_digest));
+            }
+            let Some(binding) = runtime_binding_from_provider(&provider) else {
+                continue;
             };
             provider_values.insert(key.clone(), provider);
             provider_bindings.insert(key, binding);
@@ -991,6 +1038,21 @@ impl LocalRuntimeState {
                 }
             }
         }
+        let mut runtime_credentials = HashMap::new();
+        let mut configured_credentials = HashSet::new();
+        for (key, provider_revision, binding_digest) in provider_credential_records {
+            if let Ok(Some(credential)) = provider_credentials.load(
+                &key.tenant_id,
+                &key.provider_id,
+                provider_revision,
+                &binding_digest,
+            ) {
+                configured_credentials.insert(key.clone());
+                if provider_bindings.contains_key(&key) {
+                    runtime_credentials.insert(key, credential);
+                }
+            }
+        }
         Ok(Self {
             api_token,
             workspace_root: Mutex::new(workspace_root),
@@ -1000,9 +1062,11 @@ impl LocalRuntimeState {
             config: Mutex::new(LocalRuntimeConfig::default()),
             provider_runtime: Mutex::new(ProviderRuntimeState {
                 bindings: provider_bindings,
-                credentials: HashMap::new(),
+                credentials: runtime_credentials,
+                configured_credentials,
                 selections: provider_selections,
             }),
+            provider_credentials,
             session_store,
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
@@ -2830,7 +2894,7 @@ struct ManagedAgentEnabledBody {
     enabled: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct LlmProviderMutation {
     #[serde(default)]
     name: Option<String>,
@@ -3014,7 +3078,7 @@ async fn list_llm_providers(
                 provider,
                 selected_provider_id.map(String::as_str) == Some(provider_id.as_str()),
                 runtime.bindings.get(&key),
-                runtime.credentials.contains_key(&key),
+                runtime.configured_credentials.contains(&key),
             )
         })
         .collect();
@@ -3221,7 +3285,7 @@ async fn create_llm_provider(
 ) -> LocalJsonResult {
     ensure_provider_manager(&authenticated)?;
     let provider_id = format!("provider-{}", Uuid::new_v4());
-    mutate_llm_provider(state, authenticated, provider_id, request, true)
+    mutate_llm_provider_blocking(state, authenticated, provider_id, request, true).await
 }
 
 async fn update_llm_provider(
@@ -3237,7 +3301,21 @@ async fn update_llm_provider(
             Json(json!({ "detail": "expected_revision is required" })),
         ));
     }
-    mutate_llm_provider(state, authenticated, provider_id, request, false)
+    mutate_llm_provider_blocking(state, authenticated, provider_id, request, false).await
+}
+
+async fn mutate_llm_provider_blocking(
+    state: Arc<LocalRuntimeState>,
+    authenticated: AuthenticatedContext,
+    provider_id: String,
+    request: LlmProviderMutation,
+    creating: bool,
+) -> LocalJsonResult {
+    tokio::task::spawn_blocking(move || {
+        mutate_llm_provider(state, authenticated, provider_id, request, creating)
+    })
+    .await
+    .map_err(|_| local_store_error("provider credential storage task failed".to_string()))?
 }
 
 #[derive(Debug, Deserialize)]
@@ -3301,7 +3379,7 @@ async fn select_llm_provider_runtime(
         .map_err(resource_registry_error)?;
     runtime.bindings.insert(key.clone(), binding.clone());
     runtime.selections.insert(tenant_id.clone(), provider_id);
-    let credential_configured = runtime.credentials.contains_key(&key);
+    let credential_configured = runtime.configured_credentials.contains(&key);
     Ok(Json(provider_with_runtime_state(
         stored,
         true,
@@ -3329,6 +3407,13 @@ fn mutate_llm_provider(
         is_active,
         expected_revision,
     } = request;
+    // Provider mutations are serialized before reading the current DB revision. This keeps the
+    // versioned credential pre-write aligned with the SQLite compare-and-swap in this process;
+    // the session store's exclusive SQLite ownership provides the cross-process boundary.
+    let mut runtime = state
+        .provider_runtime
+        .lock()
+        .map_err(|error| local_store_error(error.to_string()))?;
     let current = state
         .session_store
         .managed_resource(
@@ -3347,6 +3432,12 @@ fn mutate_llm_provider(
             Json(json!({ "detail": "provider id already exists" })),
         ));
     }
+    let current_revision = current
+        .as_ref()
+        .and_then(|provider| provider.get("revision"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let previous_credential_binding = current.as_ref().and_then(provider_credential_binding);
     let mut provider = current.unwrap_or_else(|| {
         json!({
             "id": provider_id,
@@ -3356,7 +3447,7 @@ fn mutate_llm_provider(
             "is_active": false,
             "base_url": null,
             "auth_method": "api_key",
-            "credential_source": "runtime_memory",
+            "credential_source": "system_vault",
             "credential_configured": false,
             "llm_model": null,
             "allowed_models": [],
@@ -3434,22 +3525,60 @@ fn mutate_llm_provider(
         let base_url = validated_local_provider_base_url(base_url)?;
         object.insert("base_url".to_string(), json!(base_url));
     }
-    object.insert("credential_source".to_string(), json!("runtime_memory"));
+    object.insert(
+        "credential_source".to_string(),
+        json!(if auth_method == "none" {
+            "none"
+        } else {
+            "system_vault"
+        }),
+    );
     object.insert("credential_configured".to_string(), json!(false));
     object.insert("health_status".to_string(), json!("not_checked"));
 
     let is_active = object.get("is_active").and_then(Value::as_bool) == Some(true);
     let expected_revision = if creating { Some(0) } else { expected_revision };
+    if expected_revision != Some(current_revision) {
+        return Err(resource_registry_error(
+            ResourceRegistryError::RevisionConflict {
+                expected: expected_revision.unwrap_or(0),
+                actual: current_revision,
+            },
+        ));
+    }
+    let next_revision = if creating {
+        0
+    } else {
+        current_revision.saturating_add(1)
+    };
+    let next_credential_binding = provider_credential_binding(&provider);
     let key = ProviderRuntimeKey {
         tenant_id: tenant_id.clone(),
         provider_id: provider_id.clone(),
     };
-    let mut runtime = state
-        .provider_runtime
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?;
     let previous_binding = runtime.bindings.get(&key).cloned();
-    let previous_credential = runtime.credentials.get(&key).cloned();
+    let previous_credential = if let Some(credential) = runtime.credentials.get(&key).cloned() {
+        Some(credential)
+    } else if runtime.configured_credentials.contains(&key) {
+        let binding_digest = previous_credential_binding.as_deref().ok_or_else(|| {
+            provider_credential_store_error(ProviderCredentialStoreError::InvalidRecord)
+        })?;
+        let credential = state
+            .provider_credentials
+            .load(
+                &key.tenant_id,
+                &key.provider_id,
+                current_revision,
+                binding_digest,
+            )
+            .map_err(provider_credential_store_error)?;
+        if credential.is_none() {
+            runtime.configured_credentials.remove(&key);
+        }
+        credential
+    } else {
+        None
+    };
     let was_selected = runtime
         .selections
         .get(tenant_id)
@@ -3466,18 +3595,12 @@ fn mutate_llm_provider(
         }
         next
     });
-    let next_credential = if auth_method == "none" || next_binding.is_none() {
+    let next_credential = if next_credential_binding.is_none() {
         None
     } else if submitted_credential.is_some() {
         submitted_credential
-    } else if previous_binding.as_ref().is_some_and(|previous| {
-        next_binding.as_ref().is_some_and(|next| {
-            previous.provider_type == next.provider_type
-                && previous.base_url == next.base_url
-                && previous.auth_method == next.auth_method
-        })
-    }) {
-        previous_credential
+    } else if previous_credential_binding == next_credential_binding {
+        previous_credential.clone()
     } else {
         None
     };
@@ -3487,19 +3610,55 @@ fn mutate_llm_provider(
             json!(auth_method == "none" || next_credential.is_some()),
         );
     }
-    let stored = state
-        .session_store
-        .put_managed_resource(
-            ManagedResourceKind::Provider,
-            "tenant",
-            tenant_id,
-            &provider_id,
-            if is_active { "active" } else { "disabled" },
-            expected_revision,
-            provider,
-            Utc::now().timestamp_millis(),
-        )
-        .map_err(resource_registry_error)?;
+    let wrote_next_credential = if let (Some(binding_digest), Some(credential)) = (
+        next_credential_binding.as_deref(),
+        next_credential.as_deref(),
+    ) {
+        state
+            .provider_credentials
+            .save(
+                &key.tenant_id,
+                &key.provider_id,
+                next_revision,
+                binding_digest,
+                credential,
+            )
+            .map_err(provider_credential_store_error)?;
+        true
+    } else {
+        false
+    };
+    let stored = match state.session_store.put_managed_resource(
+        ManagedResourceKind::Provider,
+        "tenant",
+        tenant_id,
+        &provider_id,
+        if is_active { "active" } else { "disabled" },
+        expected_revision,
+        provider,
+        Utc::now().timestamp_millis(),
+    ) {
+        Ok(stored) => stored,
+        Err(error) => {
+            if wrote_next_credential {
+                clear_provider_credential(
+                    &state.provider_credentials,
+                    &key,
+                    next_revision,
+                    next_credential_binding.as_deref(),
+                )?;
+            }
+            return Err(resource_registry_error(error));
+        }
+    };
+    if previous_credential.is_some() {
+        let _ = clear_provider_credential(
+            &state.provider_credentials,
+            &key,
+            current_revision,
+            previous_credential_binding.as_deref(),
+        );
+    }
     if was_selected && next_binding.is_none() {
         runtime.selections.remove(tenant_id);
     }
@@ -3509,21 +3668,64 @@ fn mutate_llm_provider(
         runtime.bindings.remove(&key);
     }
     if let Some(credential) = next_credential {
-        runtime.credentials.insert(key.clone(), credential);
+        runtime.configured_credentials.insert(key.clone());
+        if next_binding.is_some() {
+            runtime.credentials.insert(key.clone(), credential);
+        } else {
+            runtime.credentials.remove(&key);
+        }
     } else {
         runtime.credentials.remove(&key);
+        runtime.configured_credentials.remove(&key);
     }
     let selected = runtime
         .selections
         .get(tenant_id)
         .is_some_and(|selected| selected == &provider_id);
-    let credential_configured = runtime.credentials.contains_key(&key);
+    let credential_configured = runtime.configured_credentials.contains(&key);
     Ok(Json(provider_with_runtime_state(
         stored,
         selected,
         next_binding.as_ref(),
         credential_configured,
     )))
+}
+
+fn clear_provider_credential(
+    broker: &ProviderCredentialBroker,
+    key: &ProviderRuntimeKey,
+    provider_revision: u64,
+    binding_digest: Option<&str>,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let result = match binding_digest {
+        Some(binding_digest) => broker.clear(
+            &key.tenant_id,
+            &key.provider_id,
+            provider_revision,
+            binding_digest,
+        ),
+        None => Ok(()),
+    };
+    result.map_err(provider_credential_store_error)
+}
+
+fn provider_credential_store_error(
+    error: ProviderCredentialStoreError,
+) -> (StatusCode, Json<Value>) {
+    let status = match error {
+        ProviderCredentialStoreError::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+        ProviderCredentialStoreError::InvalidKey
+        | ProviderCredentialStoreError::InvalidRecord
+        | ProviderCredentialStoreError::UnsupportedVersion
+        | ProviderCredentialStoreError::CorruptRecord => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    (
+        status,
+        Json(json!({
+            "code": "provider_credential_store_unavailable",
+            "detail": "the provider credential could not be saved securely; unlock the operating system credential store and retry",
+        })),
+    )
 }
 
 async fn validate_llm_provider(
@@ -3552,7 +3754,7 @@ async fn validate_llm_provider(
         provider_id: provider_id.clone(),
     };
     let binding = runtime.bindings.get(&key).cloned();
-    let credential_configured = runtime.credentials.contains_key(&key);
+    let credential_configured = runtime.configured_credentials.contains(&key);
     let selected = runtime
         .selections
         .get(tenant_id)
@@ -3909,6 +4111,27 @@ fn normalized_runtime_credential(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
+fn provider_credential_binding(provider: &Value) -> Option<String> {
+    let provider_type = provider.get("provider_type")?.as_str()?.trim();
+    let base_url = provider.get("base_url")?.as_str()?.trim();
+    let auth_method = provider
+        .get("auth_method")
+        .and_then(Value::as_str)
+        .unwrap_or("api_key")
+        .trim();
+    if !runtime_provider_supported(provider_type)
+        || auth_method != "api_key"
+        || validated_local_provider_base_url(base_url).is_err()
+    {
+        return None;
+    }
+    Some(provider_credential_binding_digest(
+        provider_type,
+        base_url,
+        auth_method,
+    ))
+}
+
 fn runtime_provider_supported(provider_type: &str) -> bool {
     matches!(provider_type, "openai" | "openai_compatible" | "anthropic")
 }
@@ -4138,7 +4361,18 @@ fn provider_with_runtime_state(
     let credential_configured =
         binding.is_some_and(|binding| binding.auth_method == "none") || credential_configured;
     let status = provider_configuration_status(&provider, binding, credential_configured);
+    let credential_source = if provider
+        .get("auth_method")
+        .and_then(Value::as_str)
+        .unwrap_or("api_key")
+        == "none"
+    {
+        "none"
+    } else {
+        "system_vault"
+    };
     if let Some(object) = provider.as_object_mut() {
+        object.insert("credential_source".to_string(), json!(credential_source));
         object.insert(
             "credential_configured".to_string(),
             json!(credential_configured),
@@ -7283,6 +7517,22 @@ mod tests {
         }
     }
 
+    struct UnavailableProviderCredentialStore;
+
+    impl ProviderCredentialStore for UnavailableProviderCredentialStore {
+        fn save(&self, _account: &str, _value: &str) -> Result<(), ProviderCredentialStoreError> {
+            Err(ProviderCredentialStoreError::Unavailable)
+        }
+
+        fn load(&self, _account: &str) -> Result<Option<String>, ProviderCredentialStoreError> {
+            Err(ProviderCredentialStoreError::Unavailable)
+        }
+
+        fn clear(&self, _account: &str) -> Result<(), ProviderCredentialStoreError> {
+            Err(ProviderCredentialStoreError::Unavailable)
+        }
+    }
+
     fn test_root() -> PathBuf {
         std::env::temp_dir().join(format!("agistack-local-runtime-{}", Uuid::new_v4()))
     }
@@ -8299,6 +8549,151 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unavailable_credential_store_rejects_provider_update_without_mutating_runtime_or_db() {
+        let root = test_root();
+        let tool_host = LocalToolHost::new(&root).expect("tool host");
+        let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+        let session_store = DesktopSessionStore::in_memory().expect("session store");
+        let provider_credentials = ProviderCredentialBroker::new(
+            Arc::new(UnavailableProviderCredentialStore),
+            session_store.installation_id(),
+        )
+        .expect("unavailable credential broker");
+        let state = Arc::new(
+            LocalRuntimeState::new_with_provider_credentials(
+                root,
+                tool_host,
+                checkpoints,
+                "unavailable-vault-session".to_string(),
+                session_store,
+                provider_credentials,
+            )
+            .expect("local runtime state"),
+        );
+        state
+            .session_store
+            .seed_test_session("unavailable-vault-session")
+            .expect("authenticated test session");
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "unavailable-vault-session",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "api_key",
+                    "api_key": "must-never-be-persisted",
+                    "llm_model": "model-a",
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("provider update response");
+
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::SERVICE_UNAVAILABLE
+        );
+        let error = response_json(response).await;
+        assert_eq!(error["code"], "provider_credential_store_unavailable");
+        assert!(!error.to_string().contains("must-never-be-persisted"));
+        let persisted = state
+            .session_store
+            .managed_resource(
+                ManagedResourceKind::Provider,
+                "tenant",
+                "local",
+                "local-runtime",
+            )
+            .expect("persisted provider")
+            .expect("seeded provider");
+        assert_eq!(persisted["revision"], 0);
+        assert_eq!(persisted["is_active"], false);
+        assert!(!persisted.to_string().contains("must-never-be-persisted"));
+        assert!(state
+            .provider_runtime
+            .lock()
+            .expect("provider runtime")
+            .credentials
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn concurrent_provider_updates_keep_the_winning_revision_and_credential_together() {
+        let state = test_state("concurrent-provider-session");
+        let app = local_router(Arc::clone(&state));
+        let request = |model: &str, api_key: &str| {
+            authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "concurrent-provider-session",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "api_key",
+                    "api_key": api_key,
+                    "llm_model": model,
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            )
+        };
+
+        let (first, second) = tokio::join!(
+            app.clone()
+                .oneshot(request("winner-a-model", "winner-a-secret")),
+            app.oneshot(request("winner-b-model", "winner-b-secret")),
+        );
+        let first = first.expect("first provider response");
+        let second = second.expect("second provider response");
+        let (winner, conflict) = match (first.status(), second.status()) {
+            (StatusCode::OK, StatusCode::CONFLICT) => (first, second),
+            (StatusCode::CONFLICT, StatusCode::OK) => (second, first),
+            statuses => panic!("expected one winner and one revision conflict, got {statuses:?}"),
+        };
+        let winner = response_json(winner).await;
+        let conflict = response_json(conflict).await;
+        assert_eq!(winner["revision"], 1);
+        assert!(!winner.to_string().contains("winner-a-secret"));
+        assert!(!winner.to_string().contains("winner-b-secret"));
+        assert!(!conflict.to_string().contains("winner-a-secret"));
+        assert!(!conflict.to_string().contains("winner-b-secret"));
+
+        let expected_credential = match winner["llm_model"].as_str() {
+            Some("winner-a-model") => "winner-a-secret",
+            Some("winner-b-model") => "winner-b-secret",
+            model => panic!("unexpected winning provider model {model:?}"),
+        };
+        let key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        assert_eq!(
+            state
+                .provider_runtime
+                .lock()
+                .expect("provider runtime")
+                .credentials
+                .get(&key)
+                .map(String::as_str),
+            Some(expected_credential)
+        );
+        let binding_digest =
+            provider_credential_binding_digest("openai", "https://api.example.test/v1", "api_key");
+        assert_eq!(
+            state
+                .provider_credentials
+                .load("local", "local-runtime", 1, &binding_digest)
+                .expect("winning provider credential")
+                .as_deref(),
+            Some(expected_credential)
+        );
+    }
+
+    #[tokio::test]
     async fn provider_endpoints_reject_invalid_or_unsafe_transport_before_persistence() {
         let state = test_state("provider-endpoint-secret");
         let app = local_router(state);
@@ -9249,25 +9644,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_selection_id_survives_restart_but_provider_credential_does_not() {
+    async fn runtime_selection_and_provider_credential_survive_restart_without_secret_exposure() {
         let root = test_root();
         std::fs::create_dir_all(&root).expect("create restart test root");
         let store_path = root.join("sessions.db");
         let workspace_root = root.join("workspace");
         std::fs::create_dir_all(&workspace_root).expect("create workspace root");
         let credential = "restart-provider-selection-secret";
+        let first_store = DesktopSessionStore::open(&store_path).expect("open session store");
+        let provider_credentials =
+            ProviderCredentialBroker::in_memory(first_store.installation_id())
+                .expect("provider credential broker");
 
         {
-            let store = DesktopSessionStore::open(&store_path).expect("open session store");
             let tool_host = LocalToolHost::new(&workspace_root).expect("tool host");
             let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
             let state = Arc::new(
-                LocalRuntimeState::new(
+                LocalRuntimeState::new_with_provider_credentials(
                     workspace_root.clone(),
                     tool_host,
                     checkpoints,
                     credential.to_string(),
-                    store,
+                    first_store,
+                    provider_credentials.clone(),
                 )
                 .expect("runtime state"),
             );
@@ -9309,16 +9708,29 @@ mod tests {
             assert_eq!(selected["credential_configured"], true);
         }
 
+        let binding_digest =
+            provider_credential_binding_digest("openai", "https://api.example.test/v1", "api_key");
+        provider_credentials
+            .save(
+                "local",
+                "local-runtime",
+                2,
+                &binding_digest,
+                "uncommitted-crash-window-secret",
+            )
+            .expect("simulate a credential pre-write before a process crash");
+
         let store = DesktopSessionStore::open(&store_path).expect("reopen session store");
         let tool_host = LocalToolHost::new(&workspace_root).expect("restored tool host");
         let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
         let state = Arc::new(
-            LocalRuntimeState::new(
+            LocalRuntimeState::new_with_provider_credentials(
                 workspace_root,
                 tool_host,
                 checkpoints,
                 credential.to_string(),
                 store,
+                provider_credentials,
             )
             .expect("restored runtime state"),
         );
@@ -9327,6 +9739,20 @@ mod tests {
             api_base_url: "http://127.0.0.1:1".to_string(),
         };
         let status = serde_json::to_value(service.status()).expect("restored status");
+        let runtime_key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        assert_eq!(
+            state
+                .provider_runtime
+                .lock()
+                .expect("provider runtime")
+                .credentials
+                .get(&runtime_key)
+                .map(String::as_str),
+            Some("ephemeral-restart-key")
+        );
         assert_eq!(status["runtime_providers"][0]["tenant_id"], "local");
         assert_eq!(
             status["runtime_providers"][0]["provider_id"],
@@ -9334,7 +9760,7 @@ mod tests {
         );
         assert_eq!(
             status["runtime_providers"][0]["credential_configured"],
-            false
+            true
         );
         assert!(!status.to_string().contains("ephemeral-restart-key"));
 
@@ -9350,10 +9776,32 @@ mod tests {
         assert_eq!(providers.status(), axum::http::StatusCode::OK);
         let providers = response_json(providers).await;
         assert_eq!(providers[0]["runtime_selected"], true);
-        assert_eq!(providers[0]["credential_configured"], false);
-        assert_eq!(providers[0]["health_status"], "needs_credentials");
+        assert_eq!(providers[0]["credential_configured"], true);
+        assert_eq!(providers[0]["health_status"], "configuration_valid");
+        assert_eq!(providers[0]["credential_source"], "system_vault");
+        assert!(!providers.to_string().contains("ephemeral-restart-key"));
+        assert!(!providers
+            .to_string()
+            .contains("uncommitted-crash-window-secret"));
 
         drop(service);
+        for path in [
+            store_path.clone(),
+            store_path.with_extension("db-wal"),
+            store_path.with_extension("db-shm"),
+        ] {
+            if !path.exists() {
+                continue;
+            }
+            let bytes = std::fs::read(&path).expect("read provider database artifact");
+            assert!(
+                !bytes
+                    .windows(b"ephemeral-restart-key".len())
+                    .any(|window| window == b"ephemeral-restart-key"),
+                "provider credential leaked into {}",
+                path.display()
+            );
+        }
         std::fs::remove_dir_all(root).expect("remove restart test root");
     }
 
@@ -9382,7 +9830,7 @@ mod tests {
                     "is_active": true,
                     "base_url": "http://127.0.0.1:11434/v1",
                     "auth_method": "none",
-                    "credential_source": "runtime_memory",
+                    "credential_source": "none",
                     "credential_configured": false,
                     "llm_model": "local-model",
                     "allowed_models": ["local-model"],
@@ -9447,12 +9895,13 @@ mod tests {
                 .expect("mark old schema version");
         }
         let migrated = DesktopSessionStore::open(&old_path).expect("migrate old store");
+        let installation_id = migrated.installation_id().to_string();
         drop(migrated);
         let connection = rusqlite::Connection::open(&old_path).expect("inspect migrated store");
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -9462,20 +9911,37 @@ mod tests {
             )
             .expect("provider selection table count");
         assert_eq!(selection_table, 1);
+        let stored_installation_id: String = connection
+            .query_row(
+                "SELECT value_text FROM desktop_runtime_metadata WHERE key = 'installation_id'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("installation id");
+        assert_eq!(stored_installation_id, installation_id);
         drop(connection);
+
+        let reopened = DesktopSessionStore::open(&old_path).expect("reopen migrated store");
+        assert_eq!(reopened.installation_id(), installation_id);
+        drop(reopened);
+
+        let other_path = root.join("other.db");
+        let other = DesktopSessionStore::open(&other_path).expect("open another profile store");
+        assert_ne!(other.installation_id(), installation_id);
+        drop(other);
 
         let future_path = root.join("future.db");
         {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 13;")
+                .execute_batch("PRAGMA user_version = 14;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 12"));
+        assert!(error.contains("newer than supported schema version 13"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -10174,7 +10640,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 12);
+        assert_eq!(schema_version, 13);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
