@@ -211,9 +211,18 @@ impl SkillEngine {
     pub fn evaluate(&self, name: &str, ctx: &SkillContext) -> CoreResult<bool> {
         let compiled = self.compiled(name)?;
         let mut scope = ctx.scope();
+        self.evaluate_ast(compiled, &mut scope)
+    }
+
+    fn evaluate_ast(&self, compiled: &CompiledSkill, scope: &mut Scope<'_>) -> CoreResult<bool> {
         self.engine
-            .eval_ast_with_scope::<bool>(&mut scope, &compiled.ast)
-            .map_err(|e| CoreError::Tool(format!("skill `{name}`: trigger failed: {e}")))
+            .eval_ast_with_scope::<bool>(scope, &compiled.ast)
+            .map_err(|e| {
+                CoreError::Tool(format!(
+                    "skill `{}`: trigger failed: {e}",
+                    compiled.skill.name
+                ))
+            })
     }
 
     /// Every registered skill whose trigger fires for `ctx`, by name (sorted).
@@ -221,8 +230,12 @@ impl SkillEngine {
     /// what to do with it.
     pub fn matches(&self, ctx: &SkillContext) -> CoreResult<Vec<String>> {
         let mut fired = Vec::new();
+        // One scope for the whole pass: every trigger sees the same `ctx`, and
+        // iterating the compiled skills directly avoids a per-skill name lookup
+        // plus scope rebuild (O(n^2) -> O(n)).
+        let mut scope = ctx.scope();
         for compiled in &self.skills {
-            if self.evaluate(&compiled.skill.name, ctx)? {
+            if self.evaluate_ast(compiled, &mut scope)? {
                 fired.push(compiled.skill.name.clone());
             }
         }
