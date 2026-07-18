@@ -16,6 +16,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
+use futures_util::{stream, StreamExt};
 use serde_json::{json, Value};
 
 use agistack_core::model::{GraphEntity, Relationship, Subgraph};
@@ -72,6 +73,10 @@ type SearchApiResult<T> = Result<T, SearchApiError>;
 
 const FANOUT_PROJECT_PAGE_SIZE: i64 = 100;
 const FANOUT_PROJECT_PAGE_LIMIT: i64 = 10;
+/// Bounded concurrency for the per-project graph fan-out when `project_id` is
+/// omitted: wide enough to hide per-project round-trip latency, narrow enough
+/// to avoid flooding the store on wide scopes.
+const SCOPE_FANOUT_CONCURRENCY: usize = 8;
 
 #[derive(Debug, Clone)]
 struct SearchScope {
@@ -235,14 +240,30 @@ async fn search_scope_entities(
     query: &str,
     per_project_limit: usize,
 ) -> SearchApiResult<Vec<GraphEntity>> {
+    // Query projects concurrently, but keep the sequential contract: `buffered`
+    // yields per-project results in scope order, so hits concatenate in scope
+    // order and the first error in scope order aborts the merge.
+    let per_project: Vec<_> = stream::iter(
+        scope
+            .project_ids
+            .iter()
+            .cloned()
+            .map(|project_id| {
+                let graph = app.graph.clone();
+                async move {
+                    graph
+                        .search_entities(&project_id, query, per_project_limit)
+                        .await
+                }
+            }),
+    )
+    .buffered(SCOPE_FANOUT_CONCURRENCY)
+    .collect()
+    .await;
+
     let mut entities = Vec::new();
-    for project_id in &scope.project_ids {
-        let mut hits = app
-            .graph
-            .search_entities(project_id, query, per_project_limit)
-            .await
-            .map_err(SearchApiError::internal)?;
-        entities.append(&mut hits);
+    for hits in per_project {
+        entities.append(&mut hits.map_err(SearchApiError::internal)?);
     }
     Ok(entities)
 }
@@ -252,14 +273,19 @@ async fn find_start_entity_project_in_scope(
     scope: &SearchScope,
     start_entity_uuid: &str,
 ) -> SearchApiResult<Option<String>> {
-    for project_id in &scope.project_ids {
-        if app
-            .graph
-            .get_entity(project_id, start_entity_uuid)
-            .await
-            .map_err(SearchApiError::internal)?
-            .is_some()
-        {
+    // Probe all scope projects concurrently, then walk the results in scope
+    // order so the selection stays deterministic: the first error in scope
+    // order aborts, otherwise the first project holding the entity wins.
+    let probes: Vec<_> = stream::iter(scope.project_ids.iter().cloned().map(|project_id| {
+        let graph = app.graph.clone();
+        async move { graph.get_entity(&project_id, start_entity_uuid).await }
+    }))
+    .buffered(SCOPE_FANOUT_CONCURRENCY)
+    .collect()
+    .await;
+
+    for (project_id, probe) in scope.project_ids.iter().zip(probes) {
+        if probe.map_err(SearchApiError::internal)?.is_some() {
             return Ok(Some(project_id.clone()));
         }
     }
