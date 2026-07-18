@@ -16,6 +16,7 @@ import type {
   DesktopRuntimeConfig,
   LocalRuntimeProvider,
   LlmProviderCreateInput,
+  LlmProviderModelCatalog,
   LlmProviderMutationInput,
   LlmProviderRoutingPolicy,
   LlmProviderRoutingPolicyMutationInput,
@@ -313,10 +314,13 @@ export function ModelProviderWorkspace({
   );
 
   const validateProvider = useCallback(
-    async (providerId: string): Promise<LlmProviderValidationOutcome> => {
+    async (
+      providerId: string,
+      expectedRevision: number,
+    ): Promise<LlmProviderValidationOutcome> => {
       const requestScope = scopeKey;
       const requestClient = client;
-      const outcome = await requestClient.checkLlmProvider(providerId);
+      const outcome = await requestClient.checkLlmProvider(providerId, expectedRevision);
       if (
         !mountedRef.current ||
         clientRef.current !== requestClient ||
@@ -346,6 +350,14 @@ export function ModelProviderWorkspace({
     [client, replaceProvider, scopeKey, t],
   );
 
+  const loadProviderCatalog = useCallback(
+    (targetProvider: ManagedLlmProvider): Promise<LlmProviderModelCatalog> =>
+      config.mode === 'local'
+        ? client.discoverLlmProviderModels(targetProvider.id, targetProvider.revision ?? 0)
+        : client.listLlmProviderModels(targetProvider.provider_type),
+    [client, config.mode],
+  );
+
   const createProvider = useCallback(
     async (input: LlmProviderCreateInput) => {
       const requestScope = scopeKey;
@@ -361,7 +373,7 @@ export function ModelProviderWorkspace({
       let validationState: 'connected' | 'configured' | 'attention' = 'attention';
       let checkedProvider = created;
       try {
-        const outcome = await requestClient.checkLlmProvider(created.id);
+        const outcome = await requestClient.checkLlmProvider(created.id, created.revision ?? 0);
         validationState =
           outcome.probed && outcome.status === 'healthy'
             ? 'connected'
@@ -663,9 +675,10 @@ export function ModelProviderWorkspace({
               ) : null}
               {tab === 'models' ? (
                 <ProviderModelsPanel
+                  key={`${scopeKey}:${provider.id}`}
                   provider={provider}
                   canManage={canManage}
-                  onLoadCatalog={client.listLlmProviderModels.bind(client)}
+                  onLoadCatalog={loadProviderCatalog}
                   onSave={saveProvider}
                 />
               ) : null}
@@ -697,7 +710,6 @@ export function ModelProviderWorkspace({
         <AddProviderDialog
           onClose={() => setAdding(false)}
           onLoadTypes={client.listLlmProviderTypes.bind(client)}
-          onLoadCatalog={client.listLlmProviderModels.bind(client)}
           onValidateDraft={client.testLlmProviderDraft.bind(client)}
           onCreate={createProvider}
         />

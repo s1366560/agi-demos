@@ -15,6 +15,7 @@ import {
 import { useI18n } from '../../i18n';
 import type {
   LlmProviderMutationInput,
+  LlmProviderProbeInput,
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
@@ -22,8 +23,9 @@ import type {
 } from '../../types';
 import {
   providerDraftFromProvider,
-  providerDraftIsValid,
   providerMutationFromDraft,
+  providerProbeInputFromDraft,
+  providerProbeInputIsValid,
   providerValidationAccepted,
   type ProviderEditorDraft,
 } from './providerManagementModel';
@@ -37,8 +39,11 @@ type ProviderConnectionPanelProps = {
     provider: ManagedLlmProvider,
     mutation: LlmProviderMutationInput,
   ) => Promise<ManagedLlmProvider>;
-  onValidate: (providerId: string) => Promise<LlmProviderValidationOutcome>;
-  onValidateDraft: (mutation: LlmProviderMutationInput) => Promise<LlmProviderValidationOutcome>;
+  onValidate: (
+    providerId: string,
+    expectedRevision: number,
+  ) => Promise<LlmProviderValidationOutcome>;
+  onValidateDraft: (input: LlmProviderProbeInput) => Promise<LlmProviderValidationOutcome>;
 };
 
 export function ProviderConnectionPanel({
@@ -84,12 +89,13 @@ export function ProviderConnectionPanel({
   }, [provider.id]);
 
   const mutation = useMemo(() => providerMutationFromDraft(draft), [draft]);
+  const probeInput = useMemo(() => providerProbeInputFromDraft(draft), [draft]);
   const normalizedProviderBaseUrl = (provider.base_url ?? '').trim().replace(/\/$/, '');
   const endpointChanged =
     draft.providerType.trim() !== provider.provider_type ||
     draft.baseUrl.trim().replace(/\/$/, '') !== normalizedProviderBaseUrl;
   const credentialRequiredForDraft =
-    draft.authMethod === 'api_key' && endpointChanged && !mutation.apiKey;
+    draft.authMethod === 'api_key' && endpointChanged && !probeInput.apiKey;
   const updateDraft = <Key extends keyof ProviderEditorDraft>(
     key: Key,
     value: ProviderEditorDraft[Key],
@@ -106,8 +112,8 @@ export function ProviderConnectionPanel({
     const requestId = validationRequestId.current + 1;
     validationRequestId.current = requestId;
     const providerId = provider.id;
-    const draftMutation = mutation;
-    const validateDraft = editing && !(draft.authMethod === 'api_key' && !draftMutation.apiKey);
+    const draftProbeInput = probeInput;
+    const validateDraft = editing && !(draft.authMethod === 'api_key' && !draftProbeInput.apiKey);
     setBusy('test');
     setError(null);
     setValidation(null);
@@ -118,8 +124,8 @@ export function ProviderConnectionPanel({
     }
     try {
       const outcome = validateDraft
-        ? await onValidateDraft(draftMutation)
-        : await onValidate(providerId);
+        ? await onValidateDraft(draftProbeInput)
+        : await onValidate(providerId, provider.revision ?? 0);
       if (requestId !== validationRequestId.current || providerId !== activeProviderIdRef.current) {
         return;
       }
@@ -188,7 +194,14 @@ export function ProviderConnectionPanel({
   const authMethods = providerTypeDescriptor?.authMethods ?? [];
   const authCapabilityAvailable = authMethods.includes(draft.authMethod);
   const probeSupported = providerTypeDescriptor?.probeSupported === true;
-  const validationAccepted = providerValidationAccepted(validation, probeSupported);
+  const providerHealth = provider.health_status?.trim().toLowerCase();
+  const currentProviderVerified =
+    !editing &&
+    validation == null &&
+    error == null &&
+    (providerHealth === 'healthy' || providerHealth === 'connected' || providerHealth === 'ready');
+  const validationAccepted =
+    providerValidationAccepted(validation, probeSupported) || currentProviderVerified;
   const validationAvailable = authCapabilityAvailable;
   const secretDescriptionKey =
     mode === 'local'
@@ -206,6 +219,22 @@ export function ProviderConnectionPanel({
       : provider.credential_configured === false
         ? t('providers.credentialMissing')
         : t('providers.credentialUnknown');
+  const discoveredModelCount = validation?.catalog?.models.length ?? 0;
+  const validationDetail =
+    error ||
+    validation?.errorMessage ||
+    (currentProviderVerified
+      ? t('providers.connectionPreviouslyVerified')
+      : validationAccepted
+      ? discoveredModelCount > 0
+        ? t('providers.connectionVerifiedWithModels', { count: discoveredModelCount })
+        : t('providers.connectionVerifiedDiscoveryUnavailable')
+      : validation?.detail ||
+        t(
+          probeSupported
+            ? 'providers.connectionTestDescription'
+            : 'providers.configurationValidationDescription',
+        ));
 
   return (
     <section className="provider-form-card">
@@ -417,14 +446,7 @@ export function ProviderConnectionPanel({
               )}
             </b>
             <small>
-              {error ||
-                validation?.errorMessage ||
-                validation?.detail ||
-                t(
-                  probeSupported
-                    ? 'providers.connectionTestDescription'
-                    : 'providers.configurationValidationDescription',
-                )}
+              {validationDetail}
             </small>
           </span>
         </div>
@@ -435,7 +457,11 @@ export function ProviderConnectionPanel({
               busy !== null ||
               !validationAvailable ||
               credentialRequiredForDraft ||
-              (editing && !providerDraftIsValid(draft))
+              (editing &&
+                !providerProbeInputIsValid(
+                  probeInput,
+                  provider.credential_configured === true && !endpointChanged,
+                ))
             }
             onClick={() => void testConnection()}
           >

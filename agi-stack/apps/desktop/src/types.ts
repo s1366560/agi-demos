@@ -693,6 +693,15 @@ export type LlmProviderMutationInput = {
 
 export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
 
+export type LlmProviderProbeInput = {
+  name: string;
+  providerType: string;
+  authMethod: LlmProviderAuthMethod;
+  baseUrl: string;
+  active: boolean;
+  apiKey?: string;
+};
+
 export type LlmRoutingRole = 'default' | 'fast' | 'coding' | 'vision';
 
 export type LlmRouteTarget = {
@@ -731,8 +740,11 @@ export type LlmProviderCatalogModel = {
 
 export type LlmProviderModelCatalog = {
   providerType: string;
+  providerId: string | null;
   availability: 'available' | 'unavailable';
   source: string | null;
+  discoveredAt: string | null;
+  detail: string | null;
   models: LlmProviderCatalogModel[];
 };
 
@@ -765,6 +777,7 @@ export type LlmProviderValidationOutcome = {
   lastChecked?: string | null;
   responseTimeMs?: number | null;
   errorMessage?: string | null;
+  catalog: LlmProviderModelCatalog | null;
 };
 
 export type ManagedSkill = {

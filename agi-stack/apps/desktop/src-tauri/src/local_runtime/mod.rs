@@ -61,6 +61,7 @@ mod changes;
 #[cfg(test)]
 mod managed_resource_tests;
 mod provider_credentials;
+mod provider_probe;
 mod resource_registry;
 #[cfg(test)]
 mod routing_policy_tests;
@@ -96,6 +97,7 @@ use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
     provider_credential_binding_digest, ProviderCredentialBroker, ProviderCredentialStoreError,
 };
+use provider_probe::{ProviderProbeOutcome, ProviderProbeRequest, ProviderProbeService};
 use resource_registry::{ManagedResourceKind, ResourceRegistryError};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
@@ -783,6 +785,7 @@ struct LocalRuntimeState {
     config: Mutex<LocalRuntimeConfig>,
     provider_runtime: Mutex<ProviderRuntimeState>,
     provider_credentials: ProviderCredentialBroker,
+    provider_probe: ProviderProbeService,
     session_store: DesktopSessionStore,
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
@@ -812,12 +815,32 @@ struct ProviderRuntimeBinding {
     auth_method: String,
 }
 
+#[derive(Clone, Debug)]
+struct ProviderProbeSnapshot {
+    provider_revision: u64,
+    binding_digest: String,
+    status: String,
+    detail: String,
+    last_check: String,
+    response_time_ms: u64,
+    error_code: Option<String>,
+}
+
+#[derive(Clone)]
+struct ProviderProbeBindingSnapshot {
+    provider_type: String,
+    base_url: String,
+    auth_method: String,
+    binding_digest: String,
+}
+
 #[derive(Default)]
 struct ProviderRuntimeState {
     bindings: HashMap<ProviderRuntimeKey, ProviderRuntimeBinding>,
     credentials: HashMap<ProviderRuntimeKey, String>,
     configured_credentials: HashSet<ProviderRuntimeKey>,
     selections: HashMap<String, String>,
+    probes: HashMap<ProviderRuntimeKey, ProviderProbeSnapshot>,
 }
 
 #[derive(Clone)]
@@ -1065,8 +1088,10 @@ impl LocalRuntimeState {
                 credentials: runtime_credentials,
                 configured_credentials,
                 selections: provider_selections,
+                probes: HashMap::new(),
             }),
             provider_credentials,
+            provider_probe: ProviderProbeService::default(),
             session_store,
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
@@ -2242,12 +2267,12 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             patch(update_llm_provider).put(update_llm_provider),
         )
         .route(
-            "/api/v1/llm-providers/:provider_id/test",
+            "/api/v1/llm-providers/:provider_id/health-check",
             post(validate_llm_provider),
         )
         .route(
-            "/api/v1/llm-providers/:provider_id/health-check",
-            post(validate_llm_provider),
+            "/api/v1/llm-providers/:provider_id/models/discover",
+            post(discover_llm_provider_models),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/usage",
@@ -2916,6 +2941,30 @@ struct LlmProviderMutation {
     expected_revision: Option<u64>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmProviderDraftProbe {
+    name: String,
+    provider_type: String,
+    base_url: String,
+    #[serde(default = "default_provider_auth_method")]
+    auth_method: String,
+    #[serde(default)]
+    api_key: Option<String>,
+    #[serde(default, rename = "is_active")]
+    _is_active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmProviderProbeAction {
+    expected_revision: u64,
+}
+
+fn default_provider_auth_method() -> String {
+    "api_key".to_string()
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields)]
 struct LlmRouteTarget {
@@ -2969,19 +3018,19 @@ const LOCAL_LLM_PROVIDER_TYPES: &[LlmProviderTypeDescriptor] = &[
     LlmProviderTypeDescriptor {
         provider_type: "openai",
         operation_type: "llm",
-        probe_supported: false,
+        probe_supported: true,
         auth_methods: &["api_key", "none"],
     },
     LlmProviderTypeDescriptor {
         provider_type: "anthropic",
         operation_type: "llm",
-        probe_supported: false,
+        probe_supported: true,
         auth_methods: &["api_key", "none"],
     },
     LlmProviderTypeDescriptor {
         provider_type: "openai_compatible",
         operation_type: "llm",
-        probe_supported: false,
+        probe_supported: true,
         auth_methods: &["api_key", "none"],
     },
 ];
@@ -3079,6 +3128,7 @@ async fn list_llm_providers(
                 selected_provider_id.map(String::as_str) == Some(provider_id.as_str()),
                 runtime.bindings.get(&key),
                 runtime.configured_credentials.contains(&key),
+                runtime.probes.get(&key),
             )
         })
         .collect();
@@ -3385,6 +3435,7 @@ async fn select_llm_provider_runtime(
         true,
         Some(&binding),
         credential_configured,
+        runtime.probes.get(&key),
     )))
 }
 
@@ -3522,7 +3573,7 @@ fn mutate_llm_provider(
         ));
     }
     if let Some(base_url) = object.get("base_url").and_then(Value::as_str) {
-        let base_url = validated_local_provider_base_url(base_url)?;
+        let base_url = normalized_runtime_provider_base_url(&provider_type, base_url)?;
         object.insert("base_url".to_string(), json!(base_url));
     }
     object.insert(
@@ -3659,6 +3710,7 @@ fn mutate_llm_provider(
             previous_credential_binding.as_deref(),
         );
     }
+    runtime.probes.remove(&key);
     if was_selected && next_binding.is_none() {
         runtime.selections.remove(tenant_id);
     }
@@ -3688,6 +3740,7 @@ fn mutate_llm_provider(
         selected,
         next_binding.as_ref(),
         credential_configured,
+        None,
     )))
 }
 
@@ -3732,54 +3785,64 @@ async fn validate_llm_provider(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path(provider_id): Path<String>,
+    Json(request): Json<LlmProviderProbeAction>,
 ) -> LocalJsonResult {
     ensure_provider_manager(&authenticated)?;
-    let tenant_id = &authenticated.workspace.tenant_id;
+    let result = probe_saved_llm_provider(
+        Arc::clone(&state),
+        &authenticated,
+        &provider_id,
+        request.expected_revision,
+    )
+    .await?;
     let runtime = state
         .provider_runtime
         .lock()
         .map_err(|error| local_store_error(error.to_string()))?;
-    let provider = state
-        .session_store
-        .managed_resource(
-            ManagedResourceKind::Provider,
-            "tenant",
-            tenant_id,
-            &provider_id,
-        )
-        .map_err(local_store_error)?
-        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
     let key = ProviderRuntimeKey {
-        tenant_id: tenant_id.clone(),
-        provider_id: provider_id.clone(),
+        tenant_id: authenticated.workspace.tenant_id.clone(),
+        provider_id,
     };
-    let binding = runtime.bindings.get(&key).cloned();
+    let binding = runtime.bindings.get(&key);
     let credential_configured = runtime.configured_credentials.contains(&key);
     let selected = runtime
         .selections
-        .get(tenant_id)
-        .is_some_and(|selected| selected == &provider_id);
-    let status = provider_configuration_status(&provider, binding.as_ref(), credential_configured);
+        .get(&authenticated.workspace.tenant_id)
+        .is_some_and(|selected| selected == &key.provider_id);
     Ok(Json(json!({
         "provider": provider_with_runtime_state(
-            provider,
+            result.provider,
             selected,
-            binding.as_ref(),
+            binding,
             credential_configured,
+            runtime.probes.get(&key),
         ),
-        "status": status,
-        "probed": false,
-        "detail": "configuration validated locally; no external request was sent",
+        "status": result.outcome.status,
+        "probed": result.probed,
+        "detail": result.outcome.detail,
+        "last_check": result.last_check,
+        "response_time_ms": result.outcome.response_time_ms,
+        "error_code": result.outcome.error_code,
+        "error_message": result.outcome.error_code.map(|_| result.outcome.detail),
+        "catalog": provider_probe_catalog(
+            &result.provider_type,
+            Some(&key.provider_id),
+            &result.outcome,
+            &result.last_check,
+        ),
     })))
 }
 
 async fn validate_llm_provider_draft(
     Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(request): Json<LlmProviderMutation>,
+    State(state): State<Arc<LocalRuntimeState>>,
+    Json(request): Json<LlmProviderDraftProbe>,
 ) -> LocalJsonResult {
     ensure_provider_manager(&authenticated)?;
-    required_provider_draft_field(request.name, "provider name")?;
-    let provider_type = required_provider_draft_field(request.provider_type, "provider type")?;
+    if request.name.trim().is_empty() {
+        return Err(provider_probe_request_error("provider name is required"));
+    }
+    let provider_type = request.provider_type.trim().to_lowercase();
     if !runtime_provider_supported(&provider_type) {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -3787,39 +3850,289 @@ async fn validate_llm_provider_draft(
         ));
     }
 
-    let base_url = required_provider_draft_field(request.base_url, "provider base URL")?;
-    validated_local_provider_base_url(&base_url)?;
-    required_provider_draft_field(request.llm_model, "provider model")?;
-
-    let auth_method = normalized_optional(request.auth_method, "auth method")?
-        .unwrap_or_else(|| "api_key".to_string());
+    let base_url = normalized_runtime_provider_base_url(&provider_type, &request.base_url)?;
+    let auth_method = request.auth_method.trim().to_lowercase();
     if !matches!(auth_method.as_str(), "api_key" | "none") {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({ "detail": "unsupported local provider auth method" })),
         ));
     }
-    let has_credential = request
+    let credential = request
         .api_key
         .as_deref()
-        .and_then(normalized_runtime_credential)
-        .is_some();
-    let status = if auth_method == "api_key" && !has_credential {
-        "needs_credentials"
-    } else {
-        "configuration_valid"
-    };
-    let detail = if status == "needs_credentials" {
-        "configuration is structurally valid but requires credentials; no external request was sent"
-    } else {
-        "configuration validated locally; no external request was sent"
-    };
+        .and_then(normalized_runtime_credential);
+    if auth_method == "api_key" && credential.is_none() {
+        return Ok(Json(json!({
+            "provider": null,
+            "status": "needs_credentials",
+            "probed": false,
+            "detail": "Enter a provider credential before testing this connection.",
+            "last_check": null,
+            "response_time_ms": null,
+            "error_code": "credential_unavailable",
+            "error_message": "Enter a provider credential before testing this connection.",
+            "catalog": null,
+        })));
+    }
+    let last_check = now_iso();
+    let outcome = state
+        .provider_probe
+        .probe(ProviderProbeRequest {
+            provider_type: provider_type.clone(),
+            base_url,
+            auth_method,
+            credential,
+        })
+        .await;
     Ok(Json(json!({
         "provider": null,
-        "status": status,
-        "probed": false,
-        "detail": detail,
+        "status": outcome.status,
+        "probed": true,
+        "detail": outcome.detail,
+        "last_check": last_check,
+        "response_time_ms": outcome.response_time_ms,
+        "error_code": outcome.error_code,
+        "error_message": outcome.error_code.map(|_| outcome.detail),
+        "catalog": provider_probe_catalog(
+            &provider_type,
+            None,
+            &outcome,
+            &last_check,
+        ),
     })))
+}
+
+async fn discover_llm_provider_models(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path(provider_id): Path<String>,
+    Json(request): Json<LlmProviderProbeAction>,
+) -> LocalJsonResult {
+    ensure_provider_manager(&authenticated)?;
+    let result = probe_saved_llm_provider(
+        state,
+        &authenticated,
+        &provider_id,
+        request.expected_revision,
+    )
+    .await?;
+    Ok(Json(provider_probe_catalog(
+        &result.provider_type,
+        Some(&provider_id),
+        &result.outcome,
+        &result.last_check,
+    )))
+}
+
+struct SavedProviderProbeResult {
+    provider: Value,
+    provider_type: String,
+    outcome: ProviderProbeOutcome,
+    last_check: String,
+    probed: bool,
+}
+
+async fn probe_saved_llm_provider(
+    state: Arc<LocalRuntimeState>,
+    authenticated: &AuthenticatedContext,
+    provider_id: &str,
+    expected_revision: u64,
+) -> Result<SavedProviderProbeResult, (StatusCode, Json<Value>)> {
+    let tenant_id = authenticated.workspace.tenant_id.clone();
+    let provider = state
+        .session_store
+        .managed_resource(
+            ManagedResourceKind::Provider,
+            "tenant",
+            &tenant_id,
+            provider_id,
+        )
+        .map_err(local_store_error)?
+        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
+    let revision = provider
+        .get("revision")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if revision != expected_revision {
+        return Err(provider_probe_revision_conflict(
+            expected_revision,
+            revision,
+        ));
+    }
+    let binding_snapshot = provider_probe_binding(&provider)?;
+    let provider_type = binding_snapshot.provider_type.clone();
+    let base_url = binding_snapshot.base_url.clone();
+    let auth_method = binding_snapshot.auth_method.clone();
+    let binding_digest = binding_snapshot.binding_digest.clone();
+    let credential = if auth_method == "api_key" {
+        let broker = state.provider_credentials.clone();
+        let tenant_id = tenant_id.clone();
+        let provider_id = provider_id.to_string();
+        let binding_digest = binding_digest.clone();
+        tokio::task::spawn_blocking(move || {
+            broker.load(&tenant_id, &provider_id, revision, &binding_digest)
+        })
+        .await
+        .map_err(|_| provider_credential_store_error(ProviderCredentialStoreError::Unavailable))?
+        .map_err(provider_credential_store_error)?
+    } else {
+        None
+    };
+    let (outcome, probed) = if auth_method == "api_key" && credential.is_none() {
+        (
+            ProviderProbeOutcome {
+                status: "needs_credentials",
+                detail:
+                    "The saved provider credential is unavailable. Enter it again before testing.",
+                error_code: Some("credential_unavailable"),
+                response_time_ms: 0,
+                models: Vec::new(),
+            },
+            false,
+        )
+    } else {
+        (
+            state
+                .provider_probe
+                .probe(ProviderProbeRequest {
+                    provider_type: provider_type.clone(),
+                    base_url,
+                    auth_method,
+                    credential,
+                })
+                .await,
+            true,
+        )
+    };
+    // Provider mutations acquire the same runtime mutex before changing SQLite. Holding it for
+    // this final synchronous compare-and-store closes the revision recheck/write race without
+    // ever carrying a std::sync::MutexGuard across an await.
+    let mut runtime = state
+        .provider_runtime
+        .lock()
+        .map_err(|error| local_store_error(error.to_string()))?;
+    let current = state
+        .session_store
+        .managed_resource(
+            ManagedResourceKind::Provider,
+            "tenant",
+            &tenant_id,
+            provider_id,
+        )
+        .map_err(local_store_error)?
+        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
+    let current_revision = current.get("revision").and_then(Value::as_u64).unwrap_or(0);
+    let current_digest = provider_probe_binding(&current)
+        .ok()
+        .map(|binding| binding.binding_digest);
+    if current_revision != revision || current_digest.as_deref() != Some(&binding_digest) {
+        return Err(provider_probe_revision_conflict(revision, current_revision));
+    }
+    let last_check = now_iso();
+    let key = ProviderRuntimeKey {
+        tenant_id,
+        provider_id: provider_id.to_string(),
+    };
+    runtime.probes.insert(
+        key,
+        ProviderProbeSnapshot {
+            provider_revision: revision,
+            binding_digest,
+            status: outcome.status.to_string(),
+            detail: outcome.detail.to_string(),
+            last_check: last_check.clone(),
+            response_time_ms: outcome.response_time_ms,
+            error_code: outcome.error_code.map(str::to_string),
+        },
+    );
+    drop(runtime);
+    Ok(SavedProviderProbeResult {
+        provider: current,
+        provider_type,
+        outcome,
+        last_check,
+        probed,
+    })
+}
+
+fn provider_probe_binding(
+    provider: &Value,
+) -> Result<ProviderProbeBindingSnapshot, (StatusCode, Json<Value>)> {
+    let provider_type = provider
+        .get("provider_type")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
+    if !runtime_provider_supported(&provider_type) {
+        return Err(provider_probe_request_error(
+            "unsupported local provider type",
+        ));
+    }
+    let base_url = provider
+        .get("base_url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| provider_probe_request_error("provider base URL is required"))?;
+    let base_url = normalized_runtime_provider_base_url(&provider_type, base_url)?;
+    let auth_method = provider
+        .get("auth_method")
+        .and_then(Value::as_str)
+        .unwrap_or("api_key")
+        .trim()
+        .to_lowercase();
+    if !matches!(auth_method.as_str(), "api_key" | "none") {
+        return Err(provider_probe_request_error(
+            "unsupported local provider auth method",
+        ));
+    }
+    let digest = provider_credential_binding_digest(&provider_type, &base_url, &auth_method);
+    Ok(ProviderProbeBindingSnapshot {
+        provider_type,
+        base_url,
+        auth_method,
+        binding_digest: digest,
+    })
+}
+
+fn provider_probe_catalog(
+    provider_type: &str,
+    provider_id: Option<&str>,
+    outcome: &ProviderProbeOutcome,
+    discovered_at: &str,
+) -> Value {
+    json!({
+        "provider_type": provider_type,
+        "provider_id": provider_id,
+        "availability": if outcome.healthy() { "available" } else { "unavailable" },
+        "source": outcome.healthy().then_some("provider-api"),
+        "discovered_at": discovered_at,
+        "detail": outcome.detail,
+        "models": {
+            "chat": outcome.models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>(),
+            "embedding": [],
+            "rerank": [],
+        },
+    })
+}
+
+fn provider_probe_request_error(detail: &'static str) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({ "detail": detail })),
+    )
+}
+
+fn provider_probe_revision_conflict(expected: u64, actual: u64) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::CONFLICT,
+        Json(json!({
+            "code": "provider_revision_changed",
+            "detail": "the provider changed while the connection test was running; retry with the latest configuration",
+            "expected_revision": expected,
+            "actual_revision": actual,
+        })),
+    )
 }
 
 async fn get_llm_provider_usage(
@@ -4051,18 +4364,6 @@ fn normalized_optional(
         .transpose()
 }
 
-fn required_provider_draft_field(
-    value: Option<String>,
-    label: &str,
-) -> Result<String, (StatusCode, Json<Value>)> {
-    normalized_optional(value, label)?.ok_or_else(|| {
-        (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": format!("{label} is required") })),
-        )
-    })
-}
-
 fn validated_local_provider_base_url(raw_url: &str) -> Result<String, (StatusCode, Json<Value>)> {
     let raw_url = raw_url.trim().trim_end_matches('/');
     let url = Url::parse(raw_url).map_err(|_| invalid_local_provider_base_url())?;
@@ -4070,6 +4371,7 @@ fn validated_local_provider_base_url(raw_url: &str) -> Result<String, (StatusCod
         || !url.username().is_empty()
         || url.password().is_some()
         || url.host_str().is_none()
+        || url.port() == Some(0)
         || url.query().is_some()
         || url.fragment().is_some()
         || (url.scheme() == "http" && !local_provider_host(&url))
@@ -4077,6 +4379,21 @@ fn validated_local_provider_base_url(raw_url: &str) -> Result<String, (StatusCod
         return Err(invalid_local_provider_base_url());
     }
     Ok(raw_url.to_string())
+}
+
+fn normalized_runtime_provider_base_url(
+    provider_type: &str,
+    raw_url: &str,
+) -> Result<String, (StatusCode, Json<Value>)> {
+    let base_url = validated_local_provider_base_url(raw_url)?;
+    if provider_type != "anthropic" {
+        return Ok(base_url);
+    }
+    let mut url = Url::parse(&base_url).map_err(|_| invalid_local_provider_base_url())?;
+    if url.path().is_empty() || url.path() == "/" {
+        url.set_path("/v1");
+    }
+    Ok(url.as_str().trim_end_matches('/').to_string())
 }
 
 fn local_provider_host(url: &Url) -> bool {
@@ -4119,15 +4436,13 @@ fn provider_credential_binding(provider: &Value) -> Option<String> {
         .and_then(Value::as_str)
         .unwrap_or("api_key")
         .trim();
-    if !runtime_provider_supported(provider_type)
-        || auth_method != "api_key"
-        || validated_local_provider_base_url(base_url).is_err()
-    {
+    if !runtime_provider_supported(provider_type) || auth_method != "api_key" {
         return None;
     }
+    let base_url = normalized_runtime_provider_base_url(provider_type, base_url).ok()?;
     Some(provider_credential_binding_digest(
         provider_type,
-        base_url,
+        &base_url,
         auth_method,
     ))
 }
@@ -4148,17 +4463,17 @@ fn runtime_binding_from_provider(provider: &Value) -> Option<ProviderRuntimeBind
         .and_then(Value::as_str)
         .unwrap_or("api_key")
         .trim();
+    let base_url = normalized_runtime_provider_base_url(provider_type, base_url).ok()?;
     if !runtime_provider_supported(provider_type)
         || base_url.is_empty()
         || model.is_empty()
         || !matches!(auth_method, "api_key" | "none")
-        || validated_local_provider_base_url(base_url).is_err()
     {
         return None;
     }
     Some(ProviderRuntimeBinding {
         provider_type: provider_type.to_string(),
-        base_url: base_url.to_string(),
+        base_url,
         model: model.to_string(),
         auth_method: auth_method.to_string(),
     })
@@ -4357,10 +4672,22 @@ fn provider_with_runtime_state(
     selected: bool,
     binding: Option<&ProviderRuntimeBinding>,
     credential_configured: bool,
+    probe: Option<&ProviderProbeSnapshot>,
 ) -> Value {
     let credential_configured =
         binding.is_some_and(|binding| binding.auth_method == "none") || credential_configured;
     let status = provider_configuration_status(&provider, binding, credential_configured);
+    let provider_revision = provider
+        .get("revision")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let current_binding_digest = provider_probe_binding(&provider)
+        .ok()
+        .map(|binding| binding.binding_digest);
+    let probe = probe.filter(|probe| {
+        probe.provider_revision == provider_revision
+            && current_binding_digest.as_deref() == Some(probe.binding_digest.as_str())
+    });
     let credential_source = if provider
         .get("auth_method")
         .and_then(Value::as_str)
@@ -4378,7 +4705,23 @@ fn provider_with_runtime_state(
             json!(credential_configured),
         );
         object.insert("runtime_selected".to_string(), json!(selected));
-        object.insert("health_status".to_string(), json!(status));
+        object.insert(
+            "health_status".to_string(),
+            json!(probe.map_or(status, |probe| probe.status.as_str())),
+        );
+        if let Some(probe) = probe {
+            object.insert("health_last_check".to_string(), json!(probe.last_check));
+            object.insert(
+                "response_time_ms".to_string(),
+                json!(probe.response_time_ms),
+            );
+            object.insert("health_detail".to_string(), json!(probe.detail));
+            object.insert("error_code".to_string(), json!(probe.error_code));
+            object.insert(
+                "error_message".to_string(),
+                json!(probe.error_code.as_ref().map(|_| probe.detail.as_str())),
+            );
+        }
     }
     provider
 }
@@ -7720,6 +8063,41 @@ mod tests {
         serde_json::from_slice(&body).expect("response JSON")
     }
 
+    async fn spawn_provider_model_server(
+        model_ids: &[&str],
+    ) -> (String, tokio::sync::oneshot::Sender<()>) {
+        let payload = Arc::new(json!({
+            "data": model_ids
+                .iter()
+                .map(|id| json!({ "id": id }))
+                .collect::<Vec<_>>()
+        }));
+        let app = Router::new().route(
+            "/v1/models",
+            get({
+                let payload = Arc::clone(&payload);
+                move || {
+                    let payload = Arc::clone(&payload);
+                    async move { Json((*payload).clone()) }
+                }
+            }),
+        );
+        let listener = TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("provider model listener");
+        let address = listener.local_addr().expect("provider model address");
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    shutdown_rx.await.ok();
+                })
+                .await
+                .ok();
+        });
+        (format!("http://{address}/v1"), shutdown_tx)
+    }
+
     fn timeline_test_item(id: &str, time_us: i64, counter: i64) -> Value {
         json!({
             "id": id,
@@ -8262,19 +8640,19 @@ mod tests {
                 {
                     "provider_type": "openai",
                     "operation_type": "llm",
-                    "probe_supported": false,
+                    "probe_supported": true,
                     "auth_methods": ["api_key", "none"]
                 },
                 {
                     "provider_type": "anthropic",
                     "operation_type": "llm",
-                    "probe_supported": false,
+                    "probe_supported": true,
                     "auth_methods": ["api_key", "none"]
                 },
                 {
                     "provider_type": "openai_compatible",
                     "operation_type": "llm",
-                    "probe_supported": false,
+                    "probe_supported": true,
                     "auth_methods": ["api_key", "none"]
                 }
             ])
@@ -8348,6 +8726,8 @@ mod tests {
 
     #[tokio::test]
     async fn provider_put_health_and_usage_routes_match_desktop_client_contract() {
+        let (provider_base_url, provider_shutdown) =
+            spawn_provider_model_server(&["model-a", "model-b"]).await;
         let state = test_state("provider-contract-secret");
         state
             .session_store
@@ -8377,12 +8757,11 @@ mod tests {
                 "/api/v1/llm-providers/local-runtime",
                 "provider-contract-secret",
                 json!({
-                    "provider_type": "openai",
-                    "base_url": "https://api.example.test/v1",
-                    "auth_method": "api_key",
+                    "provider_type": "openai_compatible",
+                    "base_url": provider_base_url,
+                    "auth_method": "none",
                     "llm_model": "model-a",
                     "is_active": true,
-                    "api_key": "provider-contract-key",
                     "expected_revision": 0
                 }),
             ))
@@ -8399,15 +8778,36 @@ mod tests {
                 "POST",
                 "/api/v1/llm-providers/local-runtime/health-check",
                 "provider-contract-secret",
-                json!({}),
+                json!({ "expected_revision": 1 }),
             ))
             .await
             .expect("provider health response");
         assert_eq!(health.status(), axum::http::StatusCode::OK);
         let health = response_json(health).await;
-        assert_eq!(health["status"], "configuration_valid");
-        assert_eq!(health["probed"], false);
-        assert!(health.get("last_check").is_none());
+        assert_eq!(health["status"], "healthy");
+        assert_eq!(health["probed"], true);
+        assert!(health["last_check"].is_string());
+        assert_eq!(health["provider"]["health_status"], "healthy");
+        assert_eq!(
+            health["catalog"]["models"]["chat"],
+            json!(["model-a", "model-b"])
+        );
+
+        let discovery = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/local-runtime/models/discover",
+                "provider-contract-secret",
+                json!({ "expected_revision": 1 }),
+            ))
+            .await
+            .expect("provider model discovery response");
+        assert_eq!(discovery.status(), axum::http::StatusCode::OK);
+        let discovery = response_json(discovery).await;
+        assert_eq!(discovery["source"], "provider-api");
+        assert_eq!(discovery["provider_id"], "local-runtime");
+        assert_eq!(discovery["models"]["chat"], json!(["model-a", "model-b"]));
 
         let usage = app
             .clone()
@@ -8454,10 +8854,13 @@ mod tests {
             cross_tenant_usage.status(),
             axum::http::StatusCode::NOT_FOUND
         );
+        provider_shutdown.send(()).ok();
     }
 
     #[tokio::test]
-    async fn draft_provider_validation_is_configuration_only_and_does_not_persist() {
+    async fn draft_provider_probe_discovers_models_without_persisting() {
+        let (provider_base_url, provider_shutdown) =
+            spawn_provider_model_server(&["draft-model-a", "draft-model-b"]).await;
         let state = test_state("provider-draft-secret");
         let app = local_router(state);
 
@@ -8469,12 +8872,9 @@ mod tests {
                 "provider-draft-secret",
                 json!({
                     "name": "Draft provider",
-                    "provider_type": "openai",
-                    "base_url": "https://api.example.test/v1",
-                    "auth_method": "api_key",
-                    "api_key": "draft-provider-key",
-                    "llm_model": "model-a",
-                    "allowed_models": ["model-a"],
+                    "provider_type": "openai_compatible",
+                    "base_url": provider_base_url,
+                    "auth_method": "none",
                     "is_active": true
                 }),
             ))
@@ -8483,10 +8883,15 @@ mod tests {
         assert_eq!(valid.status(), axum::http::StatusCode::OK);
         let validation = response_json(valid).await;
         assert_eq!(validation["provider"], Value::Null);
-        assert_eq!(validation["status"], "configuration_valid");
-        assert_eq!(validation["probed"], false);
+        assert_eq!(validation["status"], "healthy");
+        assert_eq!(validation["probed"], true);
         assert!(!validation.to_string().contains("draft-provider-key"));
-        assert!(validation.get("last_check").is_none());
+        assert!(validation["last_check"].is_string());
+        assert_eq!(validation["catalog"]["source"], "provider-api");
+        assert_eq!(
+            validation["catalog"]["models"]["chat"],
+            json!(["draft-model-a", "draft-model-b"])
+        );
 
         let missing_credential = app
             .clone()
@@ -8499,7 +8904,6 @@ mod tests {
                     "provider_type": "openai",
                     "base_url": "https://api.example.test/v1",
                     "auth_method": "api_key",
-                    "llm_model": "model-a",
                     "is_active": true
                 }),
             ))
@@ -8522,7 +8926,6 @@ mod tests {
                     "base_url": "file:///tmp/not-an-http-endpoint",
                     "auth_method": "api_key",
                     "api_key": "draft-provider-key",
-                    "llm_model": "model-a",
                     "is_active": true
                 }),
             ))
@@ -8546,6 +8949,7 @@ mod tests {
         let providers = response_json(providers).await;
         assert_eq!(providers.as_array().map(Vec::len), Some(1));
         assert!(!providers.to_string().contains("Draft provider"));
+        provider_shutdown.send(()).ok();
     }
 
     #[tokio::test]
@@ -8717,7 +9121,6 @@ mod tests {
                         "base_url": invalid_base_url,
                         "auth_method": "api_key",
                         "api_key": "provider-endpoint-key",
-                        "llm_model": "model-a",
                         "is_active": true
                     }),
                 ))
@@ -8745,7 +9148,6 @@ mod tests {
                     "provider_type": "openai_compatible",
                     "base_url": "http://127.0.0.1:11434/v1",
                     "auth_method": "none",
-                    "llm_model": "local-model",
                     "is_active": true
                 }),
             ))
@@ -8913,23 +9315,6 @@ mod tests {
         assert_eq!(reactivated_a["health_status"], "configuration_valid");
         assert_eq!(reactivated_a["runtime_selected"], true);
         assert_eq!(reactivated_a["revision"], 2);
-
-        let validate = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/llm-providers/local-runtime/test",
-                "provider-secret",
-                json!({}),
-            ))
-            .await
-            .expect("validate provider configuration");
-        assert_eq!(validate.status(), axum::http::StatusCode::OK);
-        let validation = response_json(validate).await;
-        assert_eq!(validation["probed"], false);
-        assert_eq!(validation["status"], "configuration_valid");
-        assert_eq!(validation["provider"]["revision"], 2);
-        assert!(validation.get("last_verified_at").is_none());
 
         let disable_a = app
             .oneshot(authenticated_json_request(
@@ -9996,9 +10381,9 @@ mod tests {
         let validate = app
             .oneshot(authenticated_json_request(
                 "POST",
-                "/api/v1/llm-providers/local-runtime/test",
+                "/api/v1/llm-providers/local-runtime/health-check",
                 "member-provider-secret",
-                json!({}),
+                json!({ "expected_revision": 0 }),
             ))
             .await
             .expect("member validation response");

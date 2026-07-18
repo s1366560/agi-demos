@@ -3,6 +3,7 @@ import type {
   LlmProviderCatalogModel,
   LlmProviderCreateInput,
   LlmProviderMutationInput,
+  LlmProviderProbeInput,
   LlmProviderRoutingPolicy,
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
@@ -39,6 +40,13 @@ const LOCAL_RUNTIME_ROUTING_PROVIDER_TYPES = new Set([
   'anthropic',
   'openai',
   'openai_compatible',
+]);
+
+const LOCAL_RUNTIME_ROUTABLE_HEALTH_STATUSES = new Set([
+  'configuration_valid',
+  'healthy',
+  'connected',
+  'ready',
 ]);
 
 const providerTypeLabels: Readonly<Record<string, string>> = {
@@ -113,6 +121,30 @@ export function providerCreateInputFromDraft(draft: ProviderEditorDraft): LlmPro
   return input;
 }
 
+export function providerProbeInputFromDraft(draft: ProviderEditorDraft): LlmProviderProbeInput {
+  const apiKey = draft.apiKey.trim();
+  return {
+    name: draft.name.trim(),
+    providerType: draft.providerType.trim(),
+    authMethod: draft.authMethod,
+    baseUrl: draft.baseUrl.trim().replace(/\/$/, ''),
+    active: draft.active,
+    ...(apiKey ? { apiKey } : {}),
+  };
+}
+
+export function providerProbeInputIsValid(
+  input: LlmProviderProbeInput,
+  credentialConfigured = false,
+): boolean {
+  return Boolean(
+    input.name &&
+      input.providerType &&
+      input.baseUrl &&
+      (input.authMethod === 'none' || input.apiKey || credentialConfigured),
+  );
+}
+
 export function providerConnectionStatus(
   provider: ManagedLlmProvider,
 ): ProviderConnectionStatus {
@@ -128,11 +160,11 @@ export function providerConnectionStatus(
   if (
     healthStatus !== 'healthy' &&
     healthStatus !== 'connected' &&
-    healthStatus !== 'ready' &&
-    healthStatus !== 'configuration_valid'
+    healthStatus !== 'ready'
   ) {
     return 'attention';
   }
+  if (providerEnabledModelIds(provider).length === 0) return 'attention';
   return 'connected';
 }
 
@@ -180,10 +212,11 @@ export function localRuntimeRoutingModelIds(provider: ManagedLlmProvider): strin
   const primaryModelConfigured = Boolean(provider.llm_model?.trim());
   const credentialConfigured =
     provider.auth_method === 'none' || provider.credential_configured === true;
+  const healthStatus = provider.health_status?.trim().toLowerCase() ?? '';
   if (
     !LOCAL_RUNTIME_ROUTING_PROVIDER_TYPES.has(providerType) ||
     (operationType && operationType !== 'llm') ||
-    provider.health_status?.trim().toLowerCase() !== 'configuration_valid' ||
+    !LOCAL_RUNTIME_ROUTABLE_HEALTH_STATUSES.has(healthStatus) ||
     provider.is_active !== true ||
     provider.is_enabled === false ||
     !endpointConfigured ||

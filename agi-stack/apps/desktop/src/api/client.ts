@@ -28,6 +28,7 @@ import type {
   LlmProviderCreateInput,
   LlmProviderModelCatalog,
   LlmProviderMutationInput,
+  LlmProviderProbeInput,
   LlmProviderRoutingPolicy,
   LlmProviderRoutingPolicyMutationInput,
   LlmProviderTypeDescriptor,
@@ -822,6 +823,23 @@ export class DesktopApiClient {
     return normalizeProviderCatalog(payload, normalizedProviderType);
   }
 
+  async discoverLlmProviderModels(
+    providerId: string,
+    expectedRevision: number,
+    signal?: AbortSignal,
+  ): Promise<LlmProviderModelCatalog> {
+    const normalizedProviderId = requireValue(providerId, 'provider id');
+    const payload = await this.request<unknown>(
+      `/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}/models/discover`,
+      {
+        method: 'POST',
+        body: { expected_revision: expectedRevision },
+        signal,
+      },
+    );
+    return normalizeProviderCatalog(payload, '', normalizedProviderId);
+  }
+
   async getLlmProviderUsage(providerId: string, signal?: AbortSignal): Promise<LlmProviderUsage> {
     const normalizedProviderId = requireValue(providerId, 'provider id');
     const payload = await this.request<unknown>(
@@ -831,7 +849,7 @@ export class DesktopApiClient {
     return normalizeProviderUsage(payload, normalizedProviderId);
   }
 
-  async testLlmProviderDraft(input: LlmProviderCreateInput): Promise<LlmProviderValidationOutcome> {
+  async testLlmProviderDraft(input: LlmProviderProbeInput): Promise<LlmProviderValidationOutcome> {
     const apiKey = input.apiKey?.trim();
     const payload = await this.request<unknown>('/api/v1/llm-providers/test-connection', {
       method: 'POST',
@@ -839,14 +857,12 @@ export class DesktopApiClient {
         name: input.name,
         provider_type: input.providerType,
         base_url: input.baseUrl,
-        llm_model: input.primaryModel,
-        allowed_models: input.allowedModels,
         is_active: input.active,
         ...(this.config.mode === 'local' ? { auth_method: input.authMethod } : {}),
         ...(apiKey ? { api_key: apiKey } : {}),
       },
     });
-    return normalizeProviderValidationOutcome(payload, this.config.mode !== 'local');
+    return normalizeProviderValidationOutcome(payload, input.providerType);
   }
 
   async updateLlmProvider(
@@ -898,16 +914,22 @@ export class DesktopApiClient {
     return normalizeManagedLlmProvider(payload);
   }
 
-  async checkLlmProvider(providerId: string): Promise<LlmProviderValidationOutcome> {
+  async checkLlmProvider(
+    providerId: string,
+    expectedRevision: number,
+  ): Promise<LlmProviderValidationOutcome> {
     const encodedProviderId = encodeURIComponent(providerId);
     const payload = await this.request<unknown>(
       `/api/v1/llm-providers/${encodedProviderId}/health-check`,
       {
         method: 'POST',
-        body: {},
+        body:
+          this.config.mode === 'local'
+            ? { expected_revision: expectedRevision }
+            : {},
       },
     );
-    return normalizeProviderValidationOutcome(payload, this.config.mode !== 'local');
+    return normalizeProviderValidationOutcome(payload);
   }
 
   async listManagedSkills(signal?: AbortSignal): Promise<ManagedSkill[]> {
@@ -1424,23 +1446,30 @@ function normalizeLlmRouteTarget(
 
 function normalizeProviderValidationOutcome(
   payload: unknown,
-  endpointProbed: boolean,
+  fallbackProviderType = '',
 ): LlmProviderValidationOutcome {
   if (!isRecord(payload)) {
     throw new DesktopApiError('Invalid provider validation response', 502, payload);
   }
   const status = readCompatString(payload, 'status');
-  if (!status) {
+  if (!status || typeof payload.probed !== 'boolean') {
     throw new DesktopApiError('Invalid provider validation response', 502, payload);
   }
+  const provider =
+    payload.provider == null ? null : normalizeManagedLlmProvider(payload.provider);
+  const providerType = provider?.provider_type || fallbackProviderType;
   return {
-    provider: payload.provider == null ? null : normalizeManagedLlmProvider(payload.provider),
+    provider,
     status,
-    probed: typeof payload.probed === 'boolean' ? payload.probed : endpointProbed,
+    probed: payload.probed,
     detail: readCompatNullableString(payload, 'detail'),
     lastChecked: readCompatNullableString(payload, 'last_check', 'lastChecked'),
     responseTimeMs: readCompatNullableNumber(payload, 'response_time_ms', 'responseTimeMs'),
     errorMessage: readCompatNullableString(payload, 'error_message', 'errorMessage'),
+    catalog:
+      payload.catalog == null
+        ? null
+        : normalizeProviderCatalog(payload.catalog, providerType, provider?.id ?? ''),
   };
 }
 
@@ -1568,20 +1597,38 @@ function readTrimmedString(record: Record<string, unknown>, key: string): string
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function unavailableProviderCatalog(providerType: string): LlmProviderModelCatalog {
+function unavailableProviderCatalog(
+  providerType: string,
+  providerId = '',
+  detail: string | null = null,
+): LlmProviderModelCatalog {
   return {
     providerType,
+    providerId: providerId || null,
     availability: 'unavailable',
     source: null,
+    discoveredAt: null,
+    detail,
     models: [],
   };
 }
 
-function normalizeProviderCatalog(payload: unknown, providerType: string): LlmProviderModelCatalog {
-  if (!payload || typeof payload !== 'object') return unavailableProviderCatalog(providerType);
+function normalizeProviderCatalog(
+  payload: unknown,
+  fallbackProviderType: string,
+  fallbackProviderId = '',
+): LlmProviderModelCatalog {
+  if (!payload || typeof payload !== 'object') {
+    return unavailableProviderCatalog(fallbackProviderType, fallbackProviderId);
+  }
   const record = payload as Record<string, unknown>;
+  const providerType = readCompatString(record, 'provider_type', 'providerType') || fallbackProviderType;
+  const providerId =
+    readCompatString(record, 'provider_id', 'providerId') || fallbackProviderId || null;
+  const detail = readCompatNullableString(record, 'detail');
+  const availability = readCompatString(record, 'availability');
   if (!record.models || typeof record.models !== 'object' || Array.isArray(record.models)) {
-    return unavailableProviderCatalog(providerType);
+    return unavailableProviderCatalog(providerType, providerId ?? '', detail);
   }
   const categorized = record.models as Record<string, unknown>;
   const models: LlmProviderModelCatalog['models'] = [];
@@ -1598,11 +1645,28 @@ function normalizeProviderCatalog(payload: unknown, providerType: string): LlmPr
     }
   }
   const source = typeof record.source === 'string' ? record.source.trim() || null : null;
-  if (models.length === 0 && source === null) return unavailableProviderCatalog(providerType);
+  const discoveredAt = readCompatNullableString(record, 'discovered_at', 'discoveredAt');
+  if (availability === 'unavailable') {
+    return {
+      providerType,
+      providerId,
+      availability: 'unavailable',
+      source,
+      discoveredAt,
+      detail,
+      models,
+    };
+  }
+  if (models.length === 0 && source === null && availability !== 'available') {
+    return unavailableProviderCatalog(providerType, providerId ?? '', detail);
+  }
   return {
     providerType,
+    providerId,
     availability: 'available',
     source,
+    discoveredAt,
+    detail,
     models,
   };
 }

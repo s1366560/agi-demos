@@ -33,19 +33,19 @@ const qaProviderTypes = [
     provider_type: 'openai',
     operation_type: 'llm',
     auth_methods: ['api_key', 'none'],
-    probe_supported: false,
+    probe_supported: true,
   },
   {
     provider_type: 'anthropic',
     operation_type: 'llm',
     auth_methods: ['api_key', 'none'],
-    probe_supported: false,
+    probe_supported: true,
   },
   {
     provider_type: 'openai_compatible',
     operation_type: 'llm',
     auth_methods: ['api_key', 'none'],
-    probe_supported: false,
+    probe_supported: true,
   },
 ] as const;
 
@@ -64,12 +64,12 @@ const initialProviders: ManagedLlmProvider[] = [
     embedding_model: 'text-embedding-3-large',
     allowed_models: ['gpt-5.1', 'gpt-5.1-mini', 'gpt-4.1'],
     secondary_models: ['gpt-5.1-mini'],
-    health_status: 'configuration_valid',
+    health_status: 'healthy',
     credential_source: 'system_vault',
     credential_configured: true,
     api_key_masked: '••••••••••7K2J',
-    health_last_check: null,
-    response_time_ms: null,
+    health_last_check: NOW,
+    response_time_ms: 184,
     revision: 14,
     updated_at: NOW,
   },
@@ -81,17 +81,17 @@ const initialProviders: ManagedLlmProvider[] = [
     auth_method: 'api_key',
     is_active: true,
     is_enabled: true,
-    base_url: 'https://api.anthropic.com',
+    base_url: 'https://api.anthropic.com/v1',
     llm_model: 'claude-sonnet-4-5',
     llm_small_model: 'claude-haiku-4-5',
     allowed_models: ['claude-sonnet-4-5', 'claude-haiku-4-5'],
     secondary_models: ['claude-haiku-4-5'],
-    health_status: 'configuration_valid',
+    health_status: 'healthy',
     credential_source: 'system_vault',
     credential_configured: true,
     api_key_masked: '••••••••••B91Q',
-    health_last_check: null,
-    response_time_ms: null,
+    health_last_check: NOW,
+    response_time_ms: 211,
     revision: 9,
     updated_at: NOW,
   },
@@ -108,11 +108,11 @@ const initialProviders: ManagedLlmProvider[] = [
     llm_small_model: 'qwen3',
     allowed_models: ['qwen3-coder', 'qwen3'],
     secondary_models: ['qwen3'],
-    health_status: 'configuration_valid',
+    health_status: 'healthy',
     credential_source: 'none',
     credential_configured: true,
-    health_last_check: null,
-    response_time_ms: null,
+    health_last_check: NOW,
+    response_time_ms: 38,
     revision: 6,
     updated_at: NOW,
   },
@@ -445,7 +445,7 @@ function safeProviderFromBody(
     !active || !baseUrl || !primaryModel
       ? 'not_configured'
       : credentialConfigured
-        ? 'configuration_valid'
+        ? 'not_checked'
         : 'needs_credentials';
   return {
     ...(current ?? {}),
@@ -547,23 +547,60 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       : jsonResponse({ detail: 'Provider model catalog not found.' }, 404);
   }
 
+  const discoveryMatch = path.match(
+    /^\/api\/v1\/llm-providers\/([^/]+)\/models\/discover$/,
+  );
+  if (method === 'POST' && discoveryMatch) {
+    const providerId = decodeURIComponent(discoveryMatch[1]);
+    const provider = providers.find((item) => item.id === providerId);
+    if (!provider) return jsonResponse({ detail: 'Provider not found.' }, 404);
+    const draft = readJsonBody(body);
+    if (draft.expected_revision !== provider.revision) {
+      return jsonResponse({ detail: 'Provider revision conflict.' }, 409);
+    }
+    const catalog = modelCatalogs[provider.provider_type];
+    return jsonResponse({
+      provider_type: provider.provider_type,
+      provider_id: provider.id,
+      availability: catalog ? 'available' : 'unavailable',
+      source: catalog ? 'provider-api' : null,
+      discovered_at: NOW,
+      detail: catalog ? null : 'This endpoint does not expose model discovery.',
+      models: catalog ?? { chat: [], embedding: [], rerank: [] },
+    });
+  }
+
   if (method === 'POST' && path === '/api/v1/llm-providers/test-connection') {
     const draft = readJsonBody(body);
+    const providerType = stringValue(draft.provider_type);
+    const authMethod = stringValue(draft.auth_method, 'api_key');
+    const catalog = modelCatalogs[providerType];
     const configured = Boolean(
       stringValue(draft.name) &&
-        stringValue(draft.provider_type) &&
+        providerType &&
         stringValue(draft.base_url) &&
-        stringValue(draft.llm_model),
+        (authMethod === 'none' || stringValue(draft.api_key)),
     );
     return jsonResponse({
-      status: configured ? 'configuration_valid' : 'configuration_invalid',
-      probed: false,
+      status: configured ? 'healthy' : 'needs_credentials',
+      probed: true,
       detail: configured
-        ? 'configuration validated locally; no external request was sent'
-        : 'required connection fields are missing; no external request was sent',
-      last_check: null,
-      response_time_ms: null,
+        ? 'Authentication and endpoint connectivity verified.'
+        : 'The provider credential is required.',
+      last_check: NOW,
+      response_time_ms: configured ? 176 : null,
       error_message: configured ? null : 'Required connection fields are missing.',
+      catalog: configured
+        ? {
+            provider_type: providerType,
+            provider_id: null,
+            availability: catalog ? 'available' : 'unavailable',
+            source: catalog ? 'provider-api' : null,
+            discovered_at: NOW,
+            detail: catalog ? null : 'This endpoint does not expose model discovery.',
+            models: catalog ?? { chat: [], embedding: [], rerank: [] },
+          }
+        : null,
     });
   }
 
@@ -634,24 +671,37 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const providerId = decodeURIComponent(healthMatch[1]);
     const provider = providers.find((item) => item.id === providerId);
     if (!provider) return jsonResponse({ detail: 'Provider not found.' }, 404);
+    const draft = readJsonBody(body);
+    if (draft.expected_revision !== provider.revision) {
+      return jsonResponse({ detail: 'Provider revision conflict.' }, 409);
+    }
     providers = providers.map((item) =>
       item.id === providerId
         ? {
             ...item,
-            health_status: 'configuration_valid',
-            health_last_check: null,
-            response_time_ms: null,
+            health_status: 'healthy',
+            health_last_check: NOW,
+            response_time_ms: 172,
             error_message: null,
           }
         : item,
     );
     return jsonResponse({
-      status: 'configuration_valid',
-      probed: false,
-      detail: 'configuration validated locally; no external request was sent',
-      last_check: null,
-      response_time_ms: null,
+      status: 'healthy',
+      probed: true,
+      detail: 'Authentication and endpoint connectivity verified.',
+      last_check: NOW,
+      response_time_ms: 172,
       error_message: null,
+      catalog: {
+        provider_type: provider.provider_type,
+        provider_id: provider.id,
+        availability: 'available',
+        source: 'provider-api',
+        discovered_at: NOW,
+        detail: null,
+        models: modelCatalogs[provider.provider_type],
+      },
     });
   }
 

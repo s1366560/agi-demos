@@ -1,6 +1,9 @@
 import type { ManagedLlmProvider } from '../../types';
 import { useI18n } from '../../i18n';
-import { providerConnectionStatus } from './providerManagementModel';
+import {
+  providerConnectionStatus,
+  providerEnabledModelIds,
+} from './providerManagementModel';
 
 type ProviderStatusBadgeProps = {
   provider: ManagedLlmProvider;
@@ -24,6 +27,12 @@ function providerStatusKey(provider: ManagedLlmProvider): string {
     status === 'offline'
   ) {
     return 'providers.status.unhealthy';
+  }
+  if (
+    (status === 'healthy' || status === 'connected' || status === 'ready') &&
+    providerEnabledModelIds(provider).length === 0
+  ) {
+    return 'providers.status.needsModels';
   }
   if (status === 'configuration_valid') return 'providers.status.configured';
   if (status === 'healthy' || status === 'connected' || status === 'ready') {

@@ -18,6 +18,8 @@ const {
   providerModelsFromProvider,
   providerMutationForEnabledModels,
   providerMutationFromDraft,
+  providerProbeInputFromDraft,
+  providerProbeInputIsValid,
   providerRoutingOverview,
   providerTypeDisplayName,
   routingFallbackCanAdd,
@@ -133,6 +135,15 @@ test('provider drafts produce trimmed mutations without retaining an empty secre
     allowedModels: ['qwen3-coder', 'qwen3-small'],
     active: true,
   });
+  assert.deepEqual(providerProbeInputFromDraft(draft), {
+    name: 'Local gateway',
+    providerType: 'openai_compatible',
+    authMethod: 'api_key',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    active: true,
+  });
+  assert.equal(providerProbeInputIsValid(providerProbeInputFromDraft(draft)), false);
+  assert.equal(providerProbeInputIsValid(providerProbeInputFromDraft(draft), true), true);
 });
 
 test('provider model selection always retains the current default model', () => {
@@ -241,7 +252,7 @@ test('provider workspace helpers search structured fields and map attention stat
       credential_configured: false,
       health_status: 'configuration_valid',
     }),
-    'connected',
+    'attention',
   );
   assert.deepEqual(
     filterProviders(providers, '  ANTHRO ', 'all').map((provider) => provider.id),
@@ -318,6 +329,10 @@ test('local routing candidates fail closed to runtime-supported ready providers'
     health_status: 'configuration_valid',
   };
   assert.deepEqual(localRuntimeRoutingModelIds(provider), ['gpt-main', 'gpt-fast']);
+  assert.deepEqual(localRuntimeRoutingModelIds({ ...provider, health_status: 'healthy' }), [
+    'gpt-main',
+    'gpt-fast',
+  ]);
   assert.deepEqual(
     localRuntimeRoutingModelIds({
       ...provider,
@@ -336,7 +351,6 @@ test('local routing candidates fail closed to runtime-supported ready providers'
     { ...provider, llm_model: null },
     { ...provider, credential_configured: false },
     { ...provider, health_status: 'not_configured' },
-    { ...provider, health_status: 'healthy' },
   ]) {
     assert.deepEqual(localRuntimeRoutingModelIds(unusable), []);
   }
@@ -439,6 +453,14 @@ test('provider wizard creates only active providers with an enabled model', () =
     /descriptor\.operationType === 'llm' && descriptor\.probeSupported/,
   );
   assert.match(addProviderDialogSource, /providerValidationAccepted\(validation, probeSupported\)/);
+  assert.match(addProviderDialogSource, /setCatalog\(outcome\.catalog\)/);
+  assert.match(addProviderDialogSource, /setSelectedModels\(new Set\(\)\)/);
+  assert.doesNotMatch(
+    addProviderDialogSource,
+    /setSelectedModels\(new Set\([\s\S]{0,120}outcome\.catalog/,
+  );
+  assert.doesNotMatch(addProviderDialogSource, /providers\.testModelId/);
+  assert.doesNotMatch(addProviderDialogSource, /onLoadCatalog/);
   assert.match(addProviderDialogSource, /if \(modelId === primaryModel\) return/);
   assert.match(addProviderDialogSource, /disabled=\{model\.id === primaryModel\}/);
   assert.match(addProviderDialogSource, /descriptor\.authMethods\.includes\('none'\)/);
@@ -446,16 +468,20 @@ test('provider wizard creates only active providers with an enabled model', () =
     addProviderDialogSource,
     /ollama:[\s\S]{0,100}baseUrl: 'http:\/\/127\.0\.0\.1:11434'/,
   );
+  assert.match(
+    addProviderDialogSource,
+    /anthropic:[\s\S]{0,100}baseUrl: 'https:\/\/api\.anthropic\.com\/v1'/,
+  );
 });
 
 test('provider editing preserves stored credentials only for the unchanged endpoint', () => {
   assert.match(
     providerConnectionPanelSource,
-    /credentialRequiredForDraft[\s\S]{0,200}draft\.authMethod === 'api_key'[\s\S]{0,200}endpointChanged[\s\S]{0,100}!mutation\.apiKey/,
+    /credentialRequiredForDraft[\s\S]{0,200}draft\.authMethod === 'api_key'[\s\S]{0,200}endpointChanged[\s\S]{0,100}!probeInput\.apiKey/,
   );
   assert.match(
     providerConnectionPanelSource,
-    /validateDraft[\s\S]{0,160}editing && !\(draft\.authMethod === 'api_key' && !draftMutation\.apiKey\)/,
+    /validateDraft[\s\S]{0,160}editing && !\(draft\.authMethod === 'api_key' && !draftProbeInput\.apiKey\)/,
   );
   assert.match(providerConnectionPanelSource, /secretRequiredForEndpointChange/);
   assert.match(
@@ -470,6 +496,16 @@ test('provider editing preserves stored credentials only for the unchanged endpo
     providerConnectionPanelSource,
     /providerValidationAccepted\(validation, probeSupported\)/,
   );
+  assert.match(
+    providerConnectionPanelSource,
+    /currentProviderVerified[\s\S]{0,220}providerHealth === 'healthy'[\s\S]{0,160}providerHealth === 'connected'[\s\S]{0,160}providerHealth === 'ready'/,
+  );
+  assert.match(providerConnectionPanelSource, /providers\.connectionPreviouslyVerified/);
+  assert.match(
+    i18nSource,
+    /'providers\.connectionPreviouslyVerified':\s*'Authentication works and the provider responded\.'/,
+  );
+  assert.match(i18nSource, /'providers\.connectionPreviouslyVerified': '认证正常，供应商已响应。'/);
   assert.doesNotMatch(
     providerConnectionPanelSource,
     /disabled=\{!probeSupported \|\| !verified/,
@@ -646,7 +682,7 @@ test('provider settings QA records preserve the authoritative LLM operation cont
   );
   assert.match(
     providerSettingsQaSource,
-    /provider_type:\s*'openai'[\s\S]{0,160}auth_methods:\s*\['api_key', 'none'\][\s\S]{0,120}probe_supported:\s*false/,
+    /provider_type:\s*'openai'[\s\S]{0,160}auth_methods:\s*\['api_key', 'none'\][\s\S]{0,120}probe_supported:\s*true/,
   );
   assert.match(providerSettingsQaSource, /provider_type:\s*'openai_compatible'/);
   assert.doesNotMatch(
@@ -662,8 +698,9 @@ test('provider settings QA records preserve the authoritative LLM operation cont
   assert.match(providerSettingsQaSource, /draft\.expected_revision !== routingPolicy\.revision/);
   assert.match(providerSettingsQaSource, /draft\.roles\.fast !== null/);
   assert.match(providerSettingsQaSource, /draft\.roles\.vision !== null/);
-  assert.match(providerSettingsQaSource, /status: configured \? 'configuration_valid'/);
-  assert.match(providerSettingsQaSource, /probed: false/);
+  assert.match(providerSettingsQaSource, /status: configured \? 'healthy'/);
+  assert.match(providerSettingsQaSource, /probed: true/);
+  assert.match(providerSettingsQaSource, /models\\\/discover/);
 });
 
 test('routing policy client normalizes targets and sends optimistic revisions', async () => {
@@ -858,9 +895,12 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
     };
 
     const localUpdated = await local.updateLlmProvider('local-runtime', mutation);
-    const localValidation = await local.checkLlmProvider('local-runtime');
+    const localValidation = await local.checkLlmProvider('local-runtime', 8);
     await cloud.updateLlmProvider('11111111-2222-4333-8444-555555555555', mutation);
-    const cloudValidation = await cloud.checkLlmProvider('11111111-2222-4333-8444-555555555555');
+    const cloudValidation = await cloud.checkLlmProvider(
+      '11111111-2222-4333-8444-555555555555',
+      8,
+    );
 
     assert.equal(calls[0]?.init?.method, 'PUT');
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
@@ -888,6 +928,7 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
       },
     );
     assert.equal(String(calls[1]?.input).endsWith('/local-runtime/health-check'), true);
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { expected_revision: 8 });
     assert.equal(localValidation.probed, true);
     assert.equal(localValidation.status, 'healthy');
     assert.equal(calls[2]?.init?.method, 'PUT');
@@ -902,6 +943,7 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
     });
     assert.equal(cloudValidation.probed, true);
     assert.equal(cloudValidation.status, 'healthy');
+    assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), {});
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1100,9 +1142,11 @@ test('provider responses normalize compatibility fields explicitly', async () =>
 
 test('provider discovery and usage use the same local and cloud contracts', async () => {
   const calls = [];
+  const requestBodies = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     calls.push(String(input));
+    if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
     const url = String(input);
     if (url.endsWith('/types')) {
       const types = url.startsWith('http://127.0.0.1:8088')
@@ -1110,11 +1154,13 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
             {
               provider_type: 'openai',
               operation_type: 'llm',
+              probe_supported: true,
               auth_methods: ['api_key'],
             },
             {
               provider_type: 'anthropic',
               operation_type: 'llm',
+              probe_supported: true,
               auth_methods: ['api_key'],
             },
             {
@@ -1126,11 +1172,13 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
             {
               provider_type: 'ollama',
               operation_type: 'llm',
+              probe_supported: true,
               auth_methods: ['none'],
             },
             {
               provider_type: 'dashscope_embedding',
               operation_type: 'embedding',
+              probe_supported: true,
               auth_methods: ['api_key'],
             },
           ]
@@ -1143,6 +1191,24 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
+    }
+    if (url.endsWith('/provider-local/models/discover')) {
+      return new Response(
+        JSON.stringify({
+          provider_type: 'openai',
+          provider_id: 'provider-local',
+          availability: 'available',
+          source: 'provider-api',
+          discovered_at: '2026-07-14T00:00:00Z',
+          detail: null,
+          models: {
+            chat: ['gpt-local'],
+            embedding: [],
+            rerank: [],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     }
     if (url.endsWith('/models/openai')) {
       return new Response(
@@ -1275,10 +1341,13 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
         source: 'local_runtime',
       },
     ]);
-    assert.deepEqual(await local.listLlmProviderModels('openai'), {
+    assert.deepEqual(await local.discoverLlmProviderModels('provider-local', 7), {
       providerType: 'openai',
+      providerId: 'provider-local',
       availability: 'available',
-      source: 'models.dev',
+      source: 'provider-api',
+      discoveredAt: '2026-07-14T00:00:00Z',
+      detail: null,
       models: [{ id: 'gpt-local', capability: 'chat' }],
     });
     assert.deepEqual(await local.getLlmProviderUsage('provider-local'), {
@@ -1303,9 +1372,10 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
     });
     assert.deepEqual(calls, [
       'http://127.0.0.1:8088/api/v1/llm-providers/types',
-      'http://127.0.0.1:8088/api/v1/llm-providers/models/openai',
+      'http://127.0.0.1:8088/api/v1/llm-providers/provider-local/models/discover',
       'http://127.0.0.1:8088/api/v1/llm-providers/provider-local/usage',
     ]);
+    assert.deepEqual(requestBodies, [{ expected_revision: 7 }]);
 
     assert.deepEqual(await cloud.listLlmProviderTypes(), [
       {
@@ -1332,8 +1402,11 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
     ]);
     assert.deepEqual(await cloud.listLlmProviderModels('anthropic'), {
       providerType: 'anthropic',
+      providerId: null,
       availability: 'available',
       source: 'models.dev',
+      discoveredAt: null,
+      detail: null,
       models: [
         { id: 'claude-sonnet-4', capability: 'chat' },
         { id: 'rerank-test', capability: 'rerank' },
@@ -1361,7 +1434,7 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
     });
     assert.deepEqual(calls, [
       'http://127.0.0.1:8088/api/v1/llm-providers/types',
-      'http://127.0.0.1:8088/api/v1/llm-providers/models/openai',
+      'http://127.0.0.1:8088/api/v1/llm-providers/provider-local/models/discover',
       'http://127.0.0.1:8088/api/v1/llm-providers/provider-local/usage',
       'https://api.example.test/api/v1/llm-providers/types',
       'https://api.example.test/api/v1/llm-providers/models/anthropic',
@@ -1414,14 +1487,20 @@ test('provider catalogs preserve static fallback provenance and reject empty uns
 
     assert.deepEqual(await client.listLlmProviderModels('openai'), {
       providerType: 'openai',
+      providerId: null,
       availability: 'available',
       source: 'static-fallback',
+      discoveredAt: null,
+      detail: null,
       models: [{ id: 'gpt-4o-mini', capability: 'chat' }],
     });
     assert.deepEqual(await client.listLlmProviderModels('custom-cloud'), {
       providerType: 'custom-cloud',
+      providerId: null,
       availability: 'unavailable',
       source: null,
+      discoveredAt: null,
+      detail: null,
       models: [],
     });
   } finally {
@@ -1458,7 +1537,24 @@ test('provider catalog UIs identify static fallback models as built-in suggestio
   assert.match(i18nSource, /'providers\.source\.staticFallback': '内置静态目录'/);
 });
 
-test('draft validation treats local checks as configuration-only and preserves cloud probes', async () => {
+test('live provider discovery remains scoped to the saved connection', () => {
+  assert.match(
+    modelProviderWorkspaceSource,
+    /config\.mode === 'local'[\s\S]{0,180}discoverLlmProviderModels\(targetProvider\.id, targetProvider\.revision \?\? 0\)[\s\S]{0,180}listLlmProviderModels\(targetProvider\.provider_type\)/,
+  );
+  assert.match(providerModelsPanelSource, /onLoadCatalogRef\.current\(provider\)/);
+  assert.doesNotMatch(
+    providerModelsPanelSource,
+    /setEnabled\([\s\S]{0,180}nextCatalog\.models/,
+  );
+  assert.match(
+    i18nSource,
+    /Checks authentication, endpoint connectivity, and model discovery\./,
+  );
+  assert.match(i18nSource, /检查认证、端点连通性与模型发现。/);
+});
+
+test('draft validation requires explicit probe evidence and can return a discovered catalog', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -1467,12 +1563,23 @@ test('draft validation treats local checks as configuration-only and preserves c
     return new Response(
       JSON.stringify({
         provider_id: 'temporary-probe',
-        status: local ? 'configuration_valid' : 'unhealthy',
-        ...(!local ? { probed: true } : {}),
-        detail: local ? 'configuration validated locally; no external request was sent' : null,
-        last_check: local ? null : '2026-07-14T10:00:00Z',
-        response_time_ms: local ? null : 37,
+        status: local ? 'healthy' : 'unhealthy',
+        probed: true,
+        detail: local ? 'Authentication and endpoint connectivity verified.' : null,
+        last_check: '2026-07-14T10:00:00Z',
+        response_time_ms: local ? 31 : 37,
         error_message: local ? null : 'model was not available',
+        catalog: local
+          ? {
+              provider_type: 'custom_gateway',
+              provider_id: null,
+              availability: 'available',
+              source: 'provider-api',
+              discovered_at: '2026-07-14T10:00:00Z',
+              detail: null,
+              models: { chat: ['gateway-model'], embedding: [], rerank: [] },
+            }
+          : null,
       }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
@@ -1497,20 +1604,27 @@ test('draft validation treats local checks as configuration-only and preserves c
       providerType: 'custom_gateway',
       authMethod: 'api_key',
       baseUrl: 'https://gateway.example.test/v1',
-      primaryModel: 'gateway-model',
-      allowedModels: ['gateway-model'],
       active: true,
       apiKey: 'draft-secret',
     };
 
     assert.deepEqual(await local.testLlmProviderDraft(input), {
       provider: null,
-      status: 'configuration_valid',
-      probed: false,
-      detail: 'configuration validated locally; no external request was sent',
-      lastChecked: null,
-      responseTimeMs: null,
+      status: 'healthy',
+      probed: true,
+      detail: 'Authentication and endpoint connectivity verified.',
+      lastChecked: '2026-07-14T10:00:00Z',
+      responseTimeMs: 31,
       errorMessage: null,
+      catalog: {
+        providerType: 'custom_gateway',
+        providerId: null,
+        availability: 'available',
+        source: 'provider-api',
+        discoveredAt: '2026-07-14T10:00:00Z',
+        detail: null,
+        models: [{ id: 'gateway-model', capability: 'chat' }],
+      },
     });
     assert.deepEqual(await cloud.testLlmProviderDraft(input), {
       provider: null,
@@ -1520,6 +1634,7 @@ test('draft validation treats local checks as configuration-only and preserves c
       lastChecked: '2026-07-14T10:00:00Z',
       responseTimeMs: 37,
       errorMessage: 'model was not available',
+      catalog: null,
     });
     assert.equal(calls[0]?.input, 'http://127.0.0.1:8088/api/v1/llm-providers/test-connection');
     assert.equal(calls[0]?.init?.method, 'POST');
@@ -1527,8 +1642,6 @@ test('draft validation treats local checks as configuration-only and preserves c
       name: 'Draft provider',
       provider_type: 'custom_gateway',
       base_url: 'https://gateway.example.test/v1',
-      llm_model: 'gateway-model',
-      allowed_models: ['gateway-model'],
       is_active: true,
       auth_method: 'api_key',
       api_key: 'draft-secret',
@@ -1539,11 +1652,40 @@ test('draft validation treats local checks as configuration-only and preserves c
       name: 'Draft provider',
       provider_type: 'custom_gateway',
       base_url: 'https://gateway.example.test/v1',
-      llm_model: 'gateway-model',
-      allowed_models: ['gateway-model'],
       is_active: true,
       api_key: 'draft-secret',
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('provider validation rejects responses without explicit probe evidence', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ status: 'healthy', detail: 'ambiguous response' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-user-session',
+      localApiToken: 'launch-capability',
+    });
+    await assert.rejects(
+      client.testLlmProviderDraft({
+        name: 'Draft provider',
+        providerType: 'openai',
+        authMethod: 'none',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        active: true,
+      }),
+      /Invalid provider validation response/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

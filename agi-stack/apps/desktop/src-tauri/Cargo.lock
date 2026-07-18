@@ -94,6 +94,7 @@ dependencies = [
  "futures-util",
  "keyring",
  "portable-pty",
+ "reqwest 0.12.28",
  "rusqlite",
  "security-framework 3.5.1",
  "serde",

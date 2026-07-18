@@ -45,11 +45,12 @@ test('settings dialogs trap focus, restore focus, and give nested Escape priorit
   assert.doesNotMatch(addProviderSource, /window\.addEventListener\('keydown'/);
 });
 
-test('provider catalog requests ignore stale responses after a provider change', () => {
-  assert.match(addProviderSource, /catalogRequestId/);
+test('provider catalog requests stay bound to their validation or provider request', () => {
+  assert.doesNotMatch(addProviderSource, /catalogRequestId/);
+  assert.match(addProviderSource, /setCatalog\(outcome\.catalog\)/);
   assert.match(
     addProviderSource,
-    /requestId !== catalogRequestId\.current[\s\S]*return/
+    /requestId !== validationRequestId\.current[\s\S]*return/
   );
   assert.match(providerModelsSource, /catalogRequestId/);
   assert.match(

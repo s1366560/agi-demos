@@ -15,12 +15,14 @@ import { useI18n } from '../../i18n';
 import type {
   LlmProviderCreateInput,
   LlmProviderModelCatalog,
+  LlmProviderProbeInput,
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
 } from '../../types';
 import {
   providerAuthMethodSupported,
+  providerProbeInputIsValid,
   providerTypeDisplayName,
   providerValidationAccepted,
 } from './providerManagementModel';
@@ -29,39 +31,32 @@ import { useModalDialog } from './useModalDialog';
 type AddProviderDialogProps = {
   onClose: () => void;
   onLoadTypes: () => Promise<LlmProviderTypeDescriptor[]>;
-  onLoadCatalog: (providerType: string) => Promise<LlmProviderModelCatalog>;
-  onValidateDraft: (input: LlmProviderCreateInput) => Promise<LlmProviderValidationOutcome>;
+  onValidateDraft: (input: LlmProviderProbeInput) => Promise<LlmProviderValidationOutcome>;
   onCreate: (input: LlmProviderCreateInput) => Promise<ManagedLlmProvider>;
 };
 
-const providerDefaults: Record<string, { baseUrl: string; model: string }> = {
+const providerDefaults: Record<string, { baseUrl: string }> = {
   openai: {
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
   },
   anthropic: {
-    baseUrl: 'https://api.anthropic.com',
-    model: 'claude-3-5-sonnet-latest',
+    baseUrl: 'https://api.anthropic.com/v1',
   },
   openai_compatible: {
     baseUrl: 'http://127.0.0.1:11434/v1',
-    model: '',
   },
-  azure_openai: { baseUrl: '', model: '' },
+  azure_openai: { baseUrl: '' },
   ollama: {
     baseUrl: 'http://127.0.0.1:11434',
-    model: '',
   },
   lmstudio: {
     baseUrl: 'http://127.0.0.1:1234/v1',
-    model: '',
   },
 };
 
 export function AddProviderDialog({
   onClose,
   onLoadTypes,
-  onLoadCatalog,
   onValidateDraft,
   onCreate,
 }: AddProviderDialogProps) {
@@ -77,19 +72,19 @@ export function AddProviderDialog({
   const [catalog, setCatalog] = useState<LlmProviderModelCatalog | null>(null);
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [validation, setValidation] = useState<LlmProviderValidationOutcome | null>(null);
-  const [busy, setBusy] = useState<'types' | 'catalog' | 'test' | 'create' | null>('types');
+  const [busy, setBusy] = useState<'types' | 'test' | 'create' | null>('types');
   const [error, setError] = useState<string | null>(null);
-  const catalogRequestId = useRef(0);
   const validationRequestId = useRef(0);
-  const onLoadCatalogRef = useRef(onLoadCatalog);
   const onLoadTypesRef = useRef(onLoadTypes);
-  onLoadCatalogRef.current = onLoadCatalog;
   onLoadTypesRef.current = onLoadTypes;
   const dialogRef = useModalDialog({ nested: true, onClose });
 
   const invalidateValidation = () => {
     validationRequestId.current += 1;
     setValidation(null);
+    setCatalog(null);
+    setPrimaryModel('');
+    setSelectedModels(new Set());
     setError(null);
     setBusy((current) => (current === 'test' ? null : current));
   };
@@ -114,7 +109,6 @@ export function AddProviderDialog({
       });
     return () => {
       cancelled = true;
-      catalogRequestId.current += 1;
       validationRequestId.current += 1;
     };
     // Dialog callbacks are stable for the lifetime of this modal.
@@ -123,42 +117,29 @@ export function AddProviderDialog({
 
   const chooseType = (descriptor: LlmProviderTypeDescriptor) => {
     invalidateValidation();
-    const requestId = catalogRequestId.current + 1;
-    catalogRequestId.current = requestId;
     const defaults = providerDefaults[descriptor.providerType] ?? {
       baseUrl: '',
-      model: '',
     };
     const nextAuth = descriptor.authMethods[0] || 'api_key';
     setSelectedType(descriptor.providerType);
     setName(providerTypeDisplayName(descriptor.providerType));
     setAuthMethod(nextAuth);
     setBaseUrl(defaults.baseUrl);
-    setPrimaryModel(defaults.model);
     setApiKey('');
-    setCatalog(null);
-    setSelectedModels(defaults.model ? new Set([defaults.model]) : new Set());
-    setBusy('catalog');
     setError(null);
-    void onLoadCatalogRef
-      .current(descriptor.providerType)
-      .then((nextCatalog) => {
-        if (requestId !== catalogRequestId.current) return;
-        setCatalog(nextCatalog);
-        const firstModel = nextCatalog.models.find((model) => model.capability === 'chat')?.id;
-        if (firstModel) {
-          setPrimaryModel(firstModel);
-          setSelectedModels(new Set([firstModel]));
-        }
-      })
-      .catch((caught) => {
-        if (requestId !== catalogRequestId.current) return;
-        setError(caught instanceof Error ? caught.message : String(caught));
-      })
-      .finally(() => {
-        if (requestId === catalogRequestId.current) setBusy(null);
-      });
   };
+
+  const probeInput = useMemo<LlmProviderProbeInput>(
+    () => ({
+      name: name.trim(),
+      providerType: selectedType,
+      authMethod,
+      baseUrl: baseUrl.trim().replace(/\/$/, ''),
+      active: true,
+      ...(authMethod === 'api_key' && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+    }),
+    [apiKey, authMethod, baseUrl, name, selectedType],
+  );
 
   const input = useMemo<LlmProviderCreateInput>(
     () => ({
@@ -176,33 +157,34 @@ export function AddProviderDialog({
 
   const selectedDescriptor = types.find((descriptor) => descriptor.providerType === selectedType);
   const catalogIsStaticFallback = catalog?.source === 'static-fallback';
-  const catalogUnavailable = catalog?.availability === 'unavailable';
+  const catalogUnavailable = !catalog || catalog.availability === 'unavailable';
   const probeSupported = selectedDescriptor?.probeSupported === true;
   const authCapabilityAvailable = selectedDescriptor
     ? providerAuthMethodSupported(selectedDescriptor, authMethod)
     : false;
 
-  const formValid = Boolean(
-    input.name &&
-      input.providerType &&
-      authCapabilityAvailable &&
-      input.baseUrl &&
-      input.primaryModel &&
-      (input.authMethod === 'none' || input.apiKey),
-  );
+  const formValid = authCapabilityAvailable && providerProbeInputIsValid(probeInput);
   const validationAccepted = providerValidationAccepted(validation, probeSupported);
 
   const testDraft = async () => {
     const requestId = validationRequestId.current + 1;
     validationRequestId.current = requestId;
-    const draftInput = input;
+    const draftInput = probeInput;
     setBusy('test');
     setError(null);
     setValidation(null);
+    setCatalog(null);
+    setSelectedModels(new Set());
+    setPrimaryModel('');
     try {
       const outcome = await onValidateDraft(draftInput);
       if (requestId !== validationRequestId.current) return;
       setValidation(outcome);
+      if (providerValidationAccepted(outcome, probeSupported)) {
+        setCatalog(outcome.catalog);
+        setSelectedModels(new Set());
+        setPrimaryModel('');
+      }
     } catch (caught) {
       if (requestId !== validationRequestId.current) return;
       setValidation(null);
@@ -386,19 +368,6 @@ export function AddProviderDialog({
                     placeholder="https://api.example.com/v1"
                   />
                 </label>
-                <label>
-                  <span>{t('providers.testModelId')}</span>
-                  <input
-                    value={primaryModel}
-                    onChange={(event) => {
-                      const next = event.target.value;
-                      setPrimaryModel(next);
-                      setSelectedModels(next.trim() ? new Set([next.trim()]) : new Set());
-                      invalidateValidation();
-                    }}
-                    placeholder="provider/exact-model-id"
-                  />
-                </label>
                 <button
                   className={`provider-wizard-test ${validationAccepted ? 'success' : ''}`}
                   type="button"
@@ -476,14 +445,22 @@ export function AddProviderDialog({
                     </label>
                   ))
                 ) : (
-                  <label>
-                    <input type="checkbox" checked readOnly />
-                    <CubeIcon />
-                    <span>
-                      <b>{primaryModel}</b>
-                      <small>{t('providers.manualModel')}</small>
-                    </span>
-                  </label>
+                  <div className="provider-wizard-form">
+                    <label>
+                      <span>{t('providers.manualModel')}</span>
+                      <input
+                        value={primaryModel}
+                        onChange={(event) => {
+                          const nextModel = event.target.value;
+                          setPrimaryModel(nextModel);
+                          setSelectedModels(
+                            nextModel.trim() ? new Set([nextModel.trim()]) : new Set(),
+                          );
+                        }}
+                        placeholder="provider/exact-model-id"
+                      />
+                    </label>
+                  </div>
                 )}
               </div>
               <div className="provider-capability-note">

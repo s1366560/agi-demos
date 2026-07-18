@@ -24,7 +24,7 @@ import {
 type ProviderModelsPanelProps = {
   provider: ManagedLlmProvider;
   canManage: boolean;
-  onLoadCatalog: (providerType: string) => Promise<LlmProviderModelCatalog>;
+  onLoadCatalog: (provider: ManagedLlmProvider) => Promise<LlmProviderModelCatalog>;
   onSave: (
     provider: ManagedLlmProvider,
     mutation: LlmProviderMutationInput,
@@ -66,13 +66,9 @@ export function ProviderModelsPanel({
     setLoading(true);
     setError(null);
     try {
-      const nextCatalog = await onLoadCatalogRef.current(provider.provider_type);
+      const nextCatalog = await onLoadCatalogRef.current(provider);
       if (requestId !== catalogRequestId.current) return;
       setCatalog(nextCatalog);
-      setEnabled((current) => {
-        if (current.size > 0 || nextCatalog.availability !== 'available') return current;
-        return new Set(nextCatalog.models.map((model) => model.id));
-      });
     } catch (caught) {
       if (requestId !== catalogRequestId.current) return;
       setCatalog(null);
