@@ -45,13 +45,24 @@ import {
   SessionEmptyState,
 } from './ChatTranscript';
 
-type TimelinePresentationNode =
-  | SessionNarrativeNode
-  | {
-      kind: 'activity_group';
-      id: string;
-      items: AgentTimelineItem[];
-    };
+type TimelineActivityGroupNode = {
+  kind: 'activity_group';
+  id: string;
+  items: AgentTimelineItem[];
+};
+
+type TimelinePresentationNode = SessionNarrativeNode | TimelineActivityGroupNode;
+
+type TimelineGroupNode = Exclude<TimelinePresentationNode, { kind: 'item' }>;
+
+type TimelineGroupAnnotation = {
+  groupId: string;
+  membersJson: string;
+};
+
+type AnnotatedTimelineNode =
+  | Extract<TimelinePresentationNode, { kind: 'item' }>
+  | (TimelineGroupNode & TimelineGroupAnnotation);
 
 export function AgentTimeline({
   state,
@@ -85,7 +96,7 @@ export function AgentTimeline({
     [state.items],
   );
   const narrative = useMemo(
-    () => groupNarrativeActivity(buildSessionNarrative(state.items)),
+    () => annotateTimelineGroups(groupNarrativeActivity(buildSessionNarrative(state.items))),
     [state.items],
   );
   const [expandedGroupItems, setExpandedGroupItems] = useState<Record<string, boolean>>({});
@@ -165,7 +176,7 @@ export function AgentTimeline({
               <details
                 className="timeline-debug-group"
                 data-timeline-anchor-id={groupId}
-                data-timeline-anchor-members={JSON.stringify(node.items.map((item) => item.id))}
+                data-timeline-anchor-members={node.membersJson}
                 key={groupId}
                 open={open}
                 onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
@@ -203,7 +214,7 @@ export function AgentTimeline({
               <details
                 className={`timeline-tool-group status-${node.status}`}
                 data-timeline-anchor-id={groupId}
-                data-timeline-anchor-members={JSON.stringify(node.items.map((item) => item.id))}
+                data-timeline-anchor-members={node.membersJson}
                 key={groupId}
                 open={open}
                 onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
@@ -286,6 +297,8 @@ function TimelineItemView({
 }) {
   const { t } = useI18n();
   const kind = timelineKind(item);
+  const lineCount = useMemo(() => timelineDetailLineCount(item, kind), [item, kind]);
+  const summary = useMemo(() => timelineSummary(item, kind, t), [item, kind, t]);
   if (kind === 'user' || kind === 'agent') {
     return (
       <NarrativeMessageFrame
@@ -311,7 +324,6 @@ function TimelineItemView({
 
   const hasDetails = timelineHasDetails(item, kind);
   const status = timelineStatus(item);
-  const lineCount = timelineDetailLineCount(item, kind);
   return (
     <article
       className={`message timeline-row timeline-item ${kind} ${expanded ? 'is-expanded' : ''} ${
@@ -340,7 +352,7 @@ function TimelineItemView({
             {timelineIcon(kind, item)}
           </span>
           <span className="timeline-row-title">{timelineTitle(item, t)}</span>
-          <span className="timeline-row-summary">{timelineSummary(item, kind, t)}</span>
+          <span className="timeline-row-summary">{summary}</span>
         </div>
         {expanded && hasDetails ? (
           <TimelineItemBody
@@ -529,37 +541,62 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
   return grouped;
 }
 
-function timelineGroupIdentity(narrative: TimelinePresentationNode[], index: number): string {
+function annotateTimelineGroups(nodes: TimelinePresentationNode[]): AnnotatedTimelineNode[] {
+  const annotated: AnnotatedTimelineNode[] = new Array(nodes.length);
+  let ordinalsAfterItem: Record<string, number> = {};
+  let lastItemId: string | null = null;
+  let leadingGroups: Array<{ node: TimelineGroupNode; index: number }> = [];
+
+  const annotateGroup = (node: TimelineGroupNode, index: number, groupId: string) => {
+    annotated[index] = {
+      ...node,
+      groupId,
+      membersJson: JSON.stringify(node.items.map((item) => item.id)),
+    };
+  };
+
+  const resolveLeadingGroups = (nextItemId: string | null) => {
+    const ordinalsBeforeItem: Record<string, number> = {};
+    for (let position = leadingGroups.length - 1; position >= 0; position -= 1) {
+      const { node, index } = leadingGroups[position];
+      const ordinal = ordinalsBeforeItem[node.kind] ?? 0;
+      annotateGroup(
+        node,
+        index,
+        nextItemId
+          ? `${node.kind}:before:${nextItemId}:${ordinal}`
+          : `${node.kind}:unbounded:${ordinal}`,
+      );
+      ordinalsBeforeItem[node.kind] = ordinal + 1;
+    }
+    leadingGroups = [];
+  };
+
+  nodes.forEach((node, index) => {
+    if (node.kind === 'item') {
+      if (lastItemId === null) resolveLeadingGroups(node.id);
+      lastItemId = node.id;
+      ordinalsAfterItem = {};
+      annotated[index] = node;
+      return;
+    }
+    if (lastItemId !== null) {
+      const ordinal = ordinalsAfterItem[node.kind] ?? 0;
+      annotateGroup(node, index, `${node.kind}:after:${lastItemId}:${ordinal}`);
+      ordinalsAfterItem[node.kind] = ordinal + 1;
+      return;
+    }
+    leadingGroups.push({ node, index });
+  });
+  if (lastItemId === null) resolveLeadingGroups(null);
+
+  return annotated;
+}
+
+function timelineGroupIdentity(narrative: AnnotatedTimelineNode[], index: number): string {
   const node = narrative[index];
   if (!node || node.kind === 'item') return node?.id ?? `timeline-node:${index}`;
-
-  const previousItem = narrative
-    .slice(0, index)
-    .reverse()
-    .find((candidate) => candidate.kind === 'item');
-  if (previousItem) {
-    const ordinal = narrative
-      .slice(narrative.indexOf(previousItem) + 1, index)
-      .filter((candidate) => candidate.kind === node.kind).length;
-    return `${node.kind}:after:${previousItem.id}:${ordinal}`;
-  }
-
-  const nextItemOffset = narrative
-    .slice(index + 1)
-    .findIndex((candidate) => candidate.kind === 'item');
-  if (nextItemOffset >= 0) {
-    const nextItemIndex = index + nextItemOffset + 1;
-    const nextItem = narrative[nextItemIndex];
-    const ordinalFromNext = narrative
-      .slice(index + 1, nextItemIndex)
-      .filter((candidate) => candidate.kind === node.kind).length;
-    return `${node.kind}:before:${nextItem.id}:${ordinalFromNext}`;
-  }
-
-  const ordinalFromEnd = narrative
-    .slice(index + 1)
-    .filter((candidate) => candidate.kind === node.kind).length;
-  return `${node.kind}:unbounded:${ordinalFromEnd}`;
+  return node.groupId;
 }
 
 function isCollapsibleRuntimeItem(item: AgentTimelineItem): boolean {
