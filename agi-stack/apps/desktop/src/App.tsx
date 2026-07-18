@@ -116,6 +116,7 @@ import {
 } from './features/session/sessionInvocationLedgerModel';
 import {
   decodeConversationSessionProjection,
+  signedSessionSnapshotRevision,
   socketEventInvalidatesSessionProjectionForScope,
 } from './features/session/sessionProjectionModel';
 import {
@@ -1701,6 +1702,11 @@ export function App() {
   );
   const timelineRequestRef = useRef(0);
   const sessionProjectionRequestRef = useRef(0);
+  const sessionProjectionRevisionRef = useRef<{
+    scopeKey: string;
+    snapshotRevision: string;
+    projection: ConversationSessionProjection;
+  } | null>(null);
   const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
   const agentTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const sessionEventsHeadRef = useRef<AgentWsEvent | null>(null);
@@ -1892,13 +1898,37 @@ export function App() {
       )
       .then((payload) => {
         if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
-        const projection = decodeConversationSessionProjection(payload, {
-          conversationId: scopedConversationId,
-          projectId: config.projectId,
-          tenantId: config.tenantId,
-          workspaceId: config.workspaceId || null,
-        });
-        if (projection) setSessionDisplayProjection(projection);
+        // A schema_version 1 snapshot_revision is the canonical digest of the payload,
+        // so an unchanged revision means the already-decoded projection still holds;
+        // skip the canonicalize + SHA-256 + validate pass entirely in that case.
+        const scopeKey = [
+          scopedConversationId,
+          config.tenantId,
+          config.projectId,
+          config.workspaceId || '',
+        ].join('\n');
+        const payloadRevision = signedSessionSnapshotRevision(payload);
+        const seen = sessionProjectionRevisionRef.current;
+        const projection =
+          payloadRevision !== null &&
+          seen !== null &&
+          seen.scopeKey === scopeKey &&
+          seen.snapshotRevision === payloadRevision
+            ? seen.projection
+            : decodeConversationSessionProjection(payload, {
+                conversationId: scopedConversationId,
+                projectId: config.projectId,
+                tenantId: config.tenantId,
+                workspaceId: config.workspaceId || null,
+              });
+        if (projection) {
+          sessionProjectionRevisionRef.current = {
+            scopeKey,
+            snapshotRevision: projection.snapshotRevision,
+            projection,
+          };
+          setSessionDisplayProjection(projection);
+        }
         setSessionProjectionState(
           projection
             ? {

@@ -84,6 +84,19 @@ export function decodeConversationSessionProjection(
   return null;
 }
 
+/**
+ * Returns the signed snapshot revision of a schema_version 1 payload without
+ * decoding it. The revision is the canonical SHA-256 digest of the payload, so
+ * an equal revision guarantees identical content; anything else returns null.
+ */
+export function signedSessionSnapshotRevision(payload: unknown): string | null {
+  const root = recordValue(payload);
+  if (root?.schema_version !== 1 || typeof root.snapshot_revision !== 'string') {
+    return null;
+  }
+  return sha256DigestPattern.test(root.snapshot_revision) ? root.snapshot_revision : null;
+}
+
 function decodeDesktopConversationSessionProjection(
   payload: unknown,
   expectedScope: string | SessionProjectionScope,

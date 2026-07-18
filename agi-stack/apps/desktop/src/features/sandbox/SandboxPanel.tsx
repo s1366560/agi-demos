@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Badge, Button, Flex, Text, TextField } from '@radix-ui/themes';
 import { DesktopIcon, LightningBoltIcon, ReloadIcon } from '@radix-ui/react-icons';
 
@@ -11,6 +12,8 @@ import {
   terminalOutputText,
   type TerminalBindingState,
 } from '../session/sessionTerminalModel';
+
+const TERMINAL_RENDER_CHUNK_LIMIT = 50;
 
 type SandboxPanelProps = {
   sandbox: ProjectSandbox | null;
@@ -81,11 +84,16 @@ export function SandboxPanel({
         : terminalBinding === 'stale' || terminalBinding === 'error'
           ? 'red'
           : 'gray';
-  const terminalLogText = terminalLines.length
-    ? terminalOutputText(terminalLines)
-    : terminalUnavailable
-      ? t('sandbox.terminalUnavailableDescription')
-      : t('session.terminalEmpty');
+  // Join at most the latest chunks and only recompute when the lines buffer changes.
+  const terminalLogText = useMemo(
+    () =>
+      terminalLines.length
+        ? terminalOutputText(terminalLines, TERMINAL_RENDER_CHUNK_LIMIT)
+        : terminalUnavailable
+          ? t('sandbox.terminalUnavailableDescription')
+          : t('session.terminalEmpty'),
+    [terminalLines, terminalUnavailable, t],
+  );
 
   return (
     <section className="sandbox-panel">

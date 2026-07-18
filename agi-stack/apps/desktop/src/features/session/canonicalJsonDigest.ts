@@ -51,7 +51,14 @@ function canonicalJson(value: unknown, ancestors: Set<object>): string | null {
     } else {
       const record = value as Record<string, unknown>;
       const entries: string[] = [];
-      for (const key of Object.keys(record).sort(compareUtf8)) {
+      // Encode each key once per object instead of twice per sort comparison; the
+      // comparator must keep exact UTF-8 byte order to match the server digest.
+      const encodedKeys = Object.keys(record).map((key) => ({
+        key,
+        bytes: utf8Encoder.encode(key),
+      }));
+      encodedKeys.sort((left, right) => compareUtf8Bytes(left.bytes, right.bytes));
+      for (const { key } of encodedKeys) {
         const child = canonicalJson(record[key], ancestors);
         if (child === null) {
           result = null;
@@ -67,15 +74,13 @@ function canonicalJson(value: unknown, ancestors: Set<object>): string | null {
   return result;
 }
 
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = utf8Encoder.encode(left);
-  const rightBytes = utf8Encoder.encode(right);
-  const commonLength = Math.min(leftBytes.length, rightBytes.length);
+function compareUtf8Bytes(left: Uint8Array, right: Uint8Array): number {
+  const commonLength = Math.min(left.length, right.length);
   for (let index = 0; index < commonLength; index += 1) {
-    const difference = leftBytes[index] - rightBytes[index];
+    const difference = left[index] - right[index];
     if (difference !== 0) return difference;
   }
-  return leftBytes.length - rightBytes.length;
+  return left.length - right.length;
 }
 
 function rotateRight(value: number, bits: number): number {

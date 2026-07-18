@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Badge, Flex, Heading, ScrollArea, Tabs, Text } from '@radix-ui/themes';
 
 import { useI18n } from '../../i18n';
@@ -14,6 +15,8 @@ import type {
 import { MemoryPanel } from '../memory/MemoryPanel';
 import { SandboxPanel } from '../sandbox/SandboxPanel';
 import type { TerminalBindingState } from '../session/sessionTerminalModel';
+
+const MAX_RENDERED_EVENTS = 50;
 
 type StatusPanelProps = {
   selectedTask: WorkspaceTask | null;
@@ -53,6 +56,20 @@ type StatusPanelProps = {
 
 export function StatusPanel(props: StatusPanelProps) {
   const { t } = useI18n();
+  // Events arrive newest-first and the rAF-batched array identity changes at most
+  // once per frame, so serialize the rendered rows only when the buffer changes.
+  const renderedEvents = useMemo(
+    () =>
+      props.events
+        .slice(0, MAX_RENDERED_EVENTS)
+        .map((event, index) => ({
+          event,
+          badge: props.events.length - index,
+          key: `${event.type ?? 'event'}-${index}`,
+          detail: JSON.stringify(event, null, 2),
+        })),
+    [props.events],
+  );
   const terminalStatus =
     props.terminalBinding === 'connected'
       ? t('session.terminalConnected')
@@ -162,19 +179,29 @@ export function StatusPanel(props: StatusPanelProps) {
                   {t('status.noLiveUpdates')}
                 </Text>
               ) : (
-                props.events.map((event, index) => (
-                  <article className="event-row" key={`${event.type ?? 'event'}-${index}`}>
-                    <Flex align="center" justify="between" gap="2" mb="1">
-                      <Text size="2" weight="bold">
-                        {String(event.type ?? event.event_type ?? 'event')}
-                      </Text>
-                      <Badge color="gray" variant="soft">
-                        #{props.events.length - index}
-                      </Badge>
-                    </Flex>
-                    <pre>{JSON.stringify(event, null, 2)}</pre>
-                  </article>
-                ))
+                <>
+                  {props.events.length > renderedEvents.length ? (
+                    <Text size="1" color="gray">
+                      {t('status.eventsShowingLatest', {
+                        shown: renderedEvents.length,
+                        total: props.events.length,
+                      })}
+                    </Text>
+                  ) : null}
+                  {renderedEvents.map((row) => (
+                    <article className="event-row" key={row.key}>
+                      <Flex align="center" justify="between" gap="2" mb="1">
+                        <Text size="2" weight="bold">
+                          {String(row.event.type ?? row.event.event_type ?? 'event')}
+                        </Text>
+                        <Badge color="gray" variant="soft">
+                          #{row.badge}
+                        </Badge>
+                      </Flex>
+                      <pre>{row.detail}</pre>
+                    </article>
+                  ))}
+                </>
               )}
             </div>
           </Tabs.Content>
