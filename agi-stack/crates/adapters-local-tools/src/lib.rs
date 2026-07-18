@@ -591,17 +591,25 @@ async fn edit_tool(
 
 async fn glob_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
     let pattern = string_any(&input, &["pattern", "glob"])?;
-    let pattern = runtime.workspace_root.join(pattern);
+    let root = runtime.workspace_root().to_path_buf();
+    let matches = tokio::task::spawn_blocking(move || glob_matches(&root, &pattern))
+        .await
+        .map_err(|error| error.to_string())??;
+    Ok(json!({ "matches": matches }))
+}
+
+fn glob_matches(root: &Path, pattern: &str) -> Result<Vec<String>, String> {
+    let pattern = root.join(pattern);
     let pattern = pattern.to_string_lossy().to_string();
     let mut matches = Vec::new();
     for entry in glob::glob(&pattern).map_err(|error| error.to_string())? {
         let path = entry.map_err(|error| error.to_string())?;
-        if path.starts_with(runtime.workspace_root()) {
-            matches.push(relative_string(runtime.workspace_root(), &path));
+        if path.starts_with(root) {
+            matches.push(relative_string(root, &path));
         }
     }
     matches.sort();
-    Ok(json!({ "matches": matches }))
+    Ok(matches)
 }
 
 async fn grep_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
@@ -609,8 +617,17 @@ async fn grep_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value
     let regex = Regex::new(&pattern).map_err(|error| error.to_string())?;
     let dir =
         runtime.resolve_dir_path(string_opt(&input, &["path", "directory", "dir"]).as_deref())?;
+    let root = runtime.workspace_root().to_path_buf();
+    let (matches, truncated) =
+        tokio::task::spawn_blocking(move || grep_matches(&root, &dir, &regex))
+            .await
+            .map_err(|error| error.to_string())?;
+    Ok(json!({ "matches": matches, "truncated": truncated }))
+}
+
+fn grep_matches(root: &Path, dir: &Path, regex: &Regex) -> (Vec<Value>, bool) {
     let mut matches = Vec::new();
-    for entry in WalkDir::new(&dir).into_iter().filter_map(Result::ok) {
+    for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
         if !entry.file_type().is_file() || is_ignored_path(entry.path()) {
             continue;
         }
@@ -620,48 +637,65 @@ async fn grep_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value
         for (index, line) in text.lines().enumerate() {
             if regex.is_match(line) {
                 matches.push(json!({
-                    "path": relative_string(runtime.workspace_root(), entry.path()),
+                    "path": relative_string(root, entry.path()),
                     "line": index + 1,
                     "preview": truncate_text(line, 300),
                 }));
             }
             if matches.len() >= 500 {
-                return Ok(json!({ "matches": matches, "truncated": true }));
+                return (matches, true);
             }
         }
     }
-    Ok(json!({ "matches": matches, "truncated": false }))
+    (matches, false)
 }
 
 async fn list_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
     let dir =
         runtime.resolve_dir_path(string_opt(&input, &["path", "directory", "dir"]).as_deref())?;
     let recursive = bool_field(&input, "recursive").unwrap_or(false);
-    let mut entries = Vec::new();
-    if recursive {
-        for entry in WalkDir::new(&dir)
-            .max_depth(8)
-            .into_iter()
-            .filter_map(Result::ok)
-        {
-            if entry.path() == dir || is_ignored_path(entry.path()) {
-                continue;
-            }
-            entries.push(path_entry(runtime.workspace_root(), entry.path())?);
-        }
+    let root = runtime.workspace_root().to_path_buf();
+    let entries = if recursive {
+        let walk_dir = dir.clone();
+        tokio::task::spawn_blocking(move || recursive_entries(&root, &walk_dir))
+            .await
+            .map_err(|error| error.to_string())??
     } else {
         let mut read_dir = fs::read_dir(&dir)
             .await
             .map_err(|error| error.to_string())?;
+        let mut paths = Vec::new();
         while let Some(entry) = read_dir
             .next_entry()
             .await
             .map_err(|error| error.to_string())?
         {
-            entries.push(path_entry(runtime.workspace_root(), &entry.path())?);
+            paths.push(entry.path());
         }
-    }
+        tokio::task::spawn_blocking(move || path_entries(&root, &paths))
+            .await
+            .map_err(|error| error.to_string())??
+    };
     Ok(json!({ "path": relative_string(runtime.workspace_root(), &dir), "entries": entries }))
+}
+
+fn recursive_entries(root: &Path, dir: &Path) -> Result<Vec<Value>, String> {
+    let mut entries = Vec::new();
+    for entry in WalkDir::new(dir)
+        .max_depth(8)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        if entry.path() == dir || is_ignored_path(entry.path()) {
+            continue;
+        }
+        entries.push(path_entry(root, entry.path())?);
+    }
+    Ok(entries)
+}
+
+fn path_entries(root: &Path, paths: &[PathBuf]) -> Result<Vec<Value>, String> {
+    paths.iter().map(|path| path_entry(root, path)).collect()
 }
 
 async fn patch_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
@@ -852,9 +886,17 @@ async fn code_index_build_tool(
 ) -> Result<Value, String> {
     let dir =
         runtime.resolve_dir_path(string_opt(&input, &["path", "directory", "dir"]).as_deref())?;
+    let root = runtime.workspace_root().to_path_buf();
+    let (files, symbols) = tokio::task::spawn_blocking(move || build_code_index(&root, &dir))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(json!({ "files_indexed": files, "symbols_indexed": symbols.len(), "symbols": symbols }))
+}
+
+fn build_code_index(root: &Path, dir: &Path) -> (usize, Vec<Value>) {
     let mut symbols = Vec::new();
     let mut files = 0usize;
-    for entry in WalkDir::new(&dir)
+    for entry in WalkDir::new(dir)
         .max_depth(12)
         .into_iter()
         .filter_map(Result::ok)
@@ -871,13 +913,13 @@ async fn code_index_build_tool(
         };
         for symbol in find_symbols_in_text(&content) {
             symbols.push(json!({
-                "file": relative_string(runtime.workspace_root(), entry.path()),
+                "file": relative_string(root, entry.path()),
                 "language": language,
                 "symbol": symbol,
             }));
         }
     }
-    Ok(json!({ "files_indexed": files, "symbols_indexed": symbols.len(), "symbols": symbols }))
+    (files, symbols)
 }
 
 async fn find_definition_tool(
@@ -885,21 +927,30 @@ async fn find_definition_tool(
     runtime: Arc<LocalToolRuntime>,
 ) -> Result<Value, String> {
     let symbol = string_any(&input, &["symbol", "name"])?;
+    let root = runtime.workspace_root().to_path_buf();
+    let lookup = symbol.clone();
+    let definitions = tokio::task::spawn_blocking(move || find_definitions(&root, &lookup))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(json!({ "symbol": symbol, "definitions": definitions }))
+}
+
+fn find_definitions(root: &Path, symbol: &str) -> Vec<Value> {
     let mut definitions = Vec::new();
-    for source in source_files(runtime.workspace_root()) {
+    for source in source_files(root) {
         let Ok(content) = std::fs::read_to_string(&source) else {
             continue;
         };
         for found in find_symbols_in_text(&content) {
-            if found.get("name").and_then(Value::as_str) == Some(symbol.as_str()) {
+            if found.get("name").and_then(Value::as_str) == Some(symbol) {
                 definitions.push(json!({
-                    "file": relative_string(runtime.workspace_root(), &source),
+                    "file": relative_string(root, &source),
                     "symbol": found,
                 }));
             }
         }
     }
-    Ok(json!({ "symbol": symbol, "definitions": definitions }))
+    definitions
 }
 
 async fn find_references_tool(
@@ -926,8 +977,16 @@ async fn dependency_graph_tool(
 ) -> Result<Value, String> {
     let dir =
         runtime.resolve_dir_path(string_opt(&input, &["path", "directory", "dir"]).as_deref())?;
+    let root = runtime.workspace_root().to_path_buf();
+    let graph = tokio::task::spawn_blocking(move || dependency_graph(&root, &dir))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(json!({ "dependencies": graph }))
+}
+
+fn dependency_graph(root: &Path, dir: &Path) -> BTreeMap<String, Vec<String>> {
     let mut graph = BTreeMap::new();
-    for source in source_files(&dir) {
+    for source in source_files(dir) {
         let Ok(content) = std::fs::read_to_string(&source) else {
             continue;
         };
@@ -938,10 +997,10 @@ async fn dependency_graph_tool(
             .into_iter()
             .collect();
         if !deps.is_empty() {
-            graph.insert(relative_string(runtime.workspace_root(), &source), deps);
+            graph.insert(relative_string(root, &source), deps);
         }
     }
-    Ok(json!({ "dependencies": graph }))
+    graph
 }
 
 async fn edit_by_ast_tool(input: Value, runtime: Arc<LocalToolRuntime>) -> Result<Value, String> {
