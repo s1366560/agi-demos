@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -215,13 +215,16 @@ export function App() {
   const [artifactFilter, setArtifactFilter] = useState("All");
   const [selectedArtifact, setSelectedArtifact] = useState("0002-retry-backoff.patch");
   const [decision, setDecision] = useState("pending");
-  const [command, setCommand] = useState("");
   const [zoom, setZoom] = useState(100);
   const [viewMode, setViewMode] = useState("Timeline");
   const [customEvents, setCustomEvents] = useState([]);
+  const nextEventIdRef = useRef(0);
 
   const events = useMemo(() => {
-    const allEvents = [...customEvents, ...baseEvents];
+    const allEvents = [
+      ...customEvents,
+      ...baseEvents.map((event, index) => ({ ...event, rowKey: `base-${index}` })),
+    ];
     if (eventFilter === "All") return allEvents;
     return allEvents.filter((event) => event.type === eventFilter);
   }, [customEvents, eventFilter]);
@@ -232,26 +235,25 @@ export function App() {
   }, [artifactFilter]);
 
   function addEvent(kind, source, detail, type = "Messages") {
-    setCustomEvents((current) => [
-      {
-        time: "now",
-        kind,
-        source,
-        status: "",
-        detail,
-        latency: "",
-        type,
-      },
-      ...current,
-    ]);
+    setCustomEvents((current) =>
+      [
+        {
+          rowKey: `custom-${nextEventIdRef.current++}`,
+          time: "now",
+          kind,
+          source,
+          status: "",
+          detail,
+          latency: "",
+          type,
+        },
+        ...current,
+      ].slice(0, 200),
+    );
   }
 
-  function submitCommand(event) {
-    event.preventDefault();
-    const trimmed = command.trim();
-    if (!trimmed) return;
-    addEvent("message", "Operator", trimmed);
-    setCommand("");
+  function submitCommand(text) {
+    addEvent("message", "Operator", text);
   }
 
   function approvePatch() {
@@ -538,8 +540,8 @@ export function App() {
                 </button>
               </div>
               <div className="event-list">
-                {events.map((event, index) => (
-                  <button className="event-row" key={`${event.time}-${event.kind}-${index}`} type="button">
+                {events.map((event) => (
+                  <button className="event-row" key={event.rowKey} type="button">
                     <span className="event-time">{event.time}</span>
                     <EventIcon kind={event.kind} />
                     <strong>{event.kind}</strong>
@@ -611,28 +613,44 @@ export function App() {
         </div>
       </main>
 
-      <form className="command-bar" onSubmit={submitCommand}>
-        <button aria-label="Slash commands" className="slash-button" type="button">
-          /
-        </button>
-        <input
-          value={command}
-          onChange={(event) => setCommand(event.target.value)}
-          placeholder="Steer this run or start a new task..."
-        />
-        <select aria-label="Model">
-          <option>OpenAI gpt-4o-mini</option>
-          <option>Local qwen-coder</option>
-        </select>
-        <select aria-label="Runtime target">
-          <option>Local Rust Core</option>
-          <option>Staging Runtime</option>
-        </select>
-        <button className="send-button" type="submit" aria-label="Send command">
-          <Send size={21} />
-        </button>
-      </form>
+      <CommandBar onSubmitCommand={submitCommand} />
     </div>
+  );
+}
+
+function CommandBar({ onSubmitCommand }) {
+  const [command, setCommand] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const trimmed = command.trim();
+    if (!trimmed) return;
+    onSubmitCommand(trimmed);
+    setCommand("");
+  }
+
+  return (
+    <form className="command-bar" onSubmit={handleSubmit}>
+      <button aria-label="Slash commands" className="slash-button" type="button">
+        /
+      </button>
+      <input
+        value={command}
+        onChange={(event) => setCommand(event.target.value)}
+        placeholder="Steer this run or start a new task..."
+      />
+      <select aria-label="Model">
+        <option>OpenAI gpt-4o-mini</option>
+        <option>Local qwen-coder</option>
+      </select>
+      <select aria-label="Runtime target">
+        <option>Local Rust Core</option>
+        <option>Staging Runtime</option>
+      </select>
+      <button className="send-button" type="submit" aria-label="Send command">
+        <Send size={21} />
+      </button>
+    </form>
   );
 }
 
