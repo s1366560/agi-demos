@@ -6,6 +6,7 @@ Handles business logic and coordinates between domain and infrastructure layers.
 """
 
 import logging
+import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID, uuid4
@@ -21,6 +22,7 @@ from src.domain.llm_providers.models import (
     LLMUsageLogCreate,
     ModelMetadata,
     OperationType,
+    ProviderAuthMethod,
     ProviderConfig,
     ProviderConfigCreate,
     ProviderConfigResponse,
@@ -294,18 +296,36 @@ class ProviderService:
         error_message = None
         response_time_ms = None
 
+        api_key = config.api_key or ""
+        if config.auth_method == ProviderAuthMethod.ENVIRONMENT:
+            environment_variable = config.environment_variable
+            api_key = os.getenv(environment_variable, "").strip() if environment_variable else ""
+            if not api_key:
+                health = ProviderHealth(
+                    provider_id=provider_id,
+                    status=ProviderStatus.UNHEALTHY,
+                    last_check=datetime.now(UTC),
+                    error_message=None,
+                    response_time_ms=0,
+                )
+                return ProviderValidationResponse.from_health(
+                    health,
+                    probed=False,
+                    detail="Environment credential is not configured",
+                    catalog=None,
+                    environment_variable=environment_variable,
+                )
+
         provider = ProviderConfig(
             id=provider_id,
             api_key_encrypted="",
             created_at=now,
             updated_at=now,
-            **config.model_dump(exclude={"api_key"}),
+            **config.model_dump(exclude={"api_key", "auth_method", "environment_variable"}),
         )
 
         try:
-            status, error_message = await self._check_provider_endpoint(
-                provider, config.api_key or ""
-            )
+            status, error_message = await self._check_provider_endpoint(provider, api_key)
             response_time_ms = int((time.time() - start_time) * 1000)
         except Exception as e:
             logger.error("Provider connection test failed for %s: %s", config.provider_type, e)
@@ -325,6 +345,7 @@ class ProviderService:
             probed=True,
             detail=None,
             catalog=None,
+            environment_variable=config.environment_variable,
         )
 
     async def _check_provider_endpoint(

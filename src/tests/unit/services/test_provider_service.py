@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from src.application.services.provider_service import ProviderService
 from src.domain.llm_providers.models import (
     OperationType,
+    ProviderAuthMethod,
     ProviderConfig,
     ProviderConfigCreate,
     ProviderConfigUpdate,
@@ -416,6 +417,74 @@ class TestProviderService:
         assert checked_provider.llm_model is None
         assert mock_check.await_args.args[1] == "sk-test"
         service.repository.create_health_check.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_test_provider_connection_resolves_environment_reference_at_probe_time(
+        self,
+        service,
+    ):
+        """Environment auth resolves an allow-listed variable without returning its value."""
+        secret = "sk-runtime-only-secret"
+        config = ProviderProbeRequest(
+            name="environment-openai",
+            provider_type=ProviderType.OPENAI,
+            auth_method=ProviderAuthMethod.ENVIRONMENT,
+            environment_variable="OPENAI_API_KEY",
+        )
+
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": secret}),
+            patch.object(
+                service,
+                "_check_provider_endpoint",
+                new=AsyncMock(return_value=("healthy", None)),
+            ) as mock_check,
+        ):
+            validation = await service.test_provider_connection(config)
+
+        assert validation.status == ProviderStatus.HEALTHY
+        assert validation.probed is True
+        assert validation.environment_variable == "OPENAI_API_KEY"
+        assert mock_check.await_args.args[1] == secret
+        assert secret not in validation.model_dump_json()
+
+    @pytest.mark.asyncio
+    async def test_test_provider_connection_reports_missing_environment_credential_without_probe(
+        self,
+        service,
+    ):
+        """A missing environment variable is an explicit validation result, not a network probe."""
+        config = ProviderProbeRequest(
+            name="missing-environment-openai",
+            provider_type=ProviderType.OPENAI,
+            auth_method=ProviderAuthMethod.ENVIRONMENT,
+            environment_variable="OPENAI_API_KEY",
+        )
+
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(service, "_check_provider_endpoint", new=AsyncMock()) as mock_check,
+        ):
+            validation = await service.test_provider_connection(config)
+
+        assert validation.status == ProviderStatus.UNHEALTHY
+        assert validation.probed is False
+        assert validation.detail == "Environment credential is not configured"
+        assert validation.environment_variable == "OPENAI_API_KEY"
+        mock_check.assert_not_awaited()
+
+    def test_probe_request_rejects_arbitrary_environment_variable_names(self):
+        """Provider environment auth cannot read unrelated server variables."""
+        with pytest.raises(
+            ValueError,
+            match="Environment variable is not supported for this provider type",
+        ):
+            ProviderProbeRequest(
+                name="unsafe-environment-reference",
+                provider_type=ProviderType.OPENAI,
+                auth_method=ProviderAuthMethod.ENVIRONMENT,
+                environment_variable="DATABASE_URL",
+            )
 
     @pytest.mark.asyncio
     async def test_bedrock_health_check_requires_secret_key_config(self, service):

@@ -85,6 +85,7 @@ test('provider setup fails closed when the server does not declare an auth capab
   const legacyDescriptor = {
     providerType: 'legacy',
     authMethods: [],
+    unavailableAuthMethods: [],
     operationType: 'llm',
     probeSupported: true,
     source: 'cloud_api',
@@ -92,6 +93,15 @@ test('provider setup fails closed when the server does not declare an auth capab
   const apiKeyDescriptor = {
     providerType: 'openai',
     authMethods: ['api_key'],
+    unavailableAuthMethods: [],
+    operationType: 'llm',
+    probeSupported: true,
+    source: 'cloud_api',
+  };
+  const oauthDescriptor = {
+    providerType: 'anthropic',
+    authMethods: ['oauth', 'api_key'],
+    unavailableAuthMethods: ['oauth'],
     operationType: 'llm',
     probeSupported: true,
     source: 'cloud_api',
@@ -100,6 +110,8 @@ test('provider setup fails closed when the server does not declare an auth capab
   assert.equal(providerAuthMethodSupported(legacyDescriptor, 'api_key'), false);
   assert.equal(providerAuthMethodSupported(apiKeyDescriptor, 'api_key'), true);
   assert.equal(providerAuthMethodSupported(apiKeyDescriptor, 'none'), false);
+  assert.equal(providerAuthMethodSupported(oauthDescriptor, 'oauth'), false);
+  assert.equal(providerAuthMethodSupported(oauthDescriptor, 'api_key'), true);
 });
 
 test('provider drafts produce trimmed mutations without retaining an empty secret', () => {
@@ -148,6 +160,55 @@ test('provider drafts produce trimmed mutations without retaining an empty secre
   });
   assert.equal(providerProbeInputIsValid(providerProbeInputFromDraft(draft)), false);
   assert.equal(providerProbeInputIsValid(providerProbeInputFromDraft(draft), true), true);
+});
+
+test('environment drafts retain only the variable reference and OAuth stays unavailable', () => {
+  const environmentDraft = providerDraftFromProvider({
+    id: 'environment-openai',
+    name: 'Environment OpenAI',
+    provider_type: 'openai',
+    auth_method: 'environment',
+    environment_variable: 'OPENAI_API_KEY',
+    base_url: 'https://api.openai.com/v1/',
+    llm_model: 'gpt-test',
+    allowed_models: ['gpt-test'],
+    is_active: true,
+    revision: 3,
+  });
+  environmentDraft.apiKey = 'must-not-be-serialized';
+
+  assert.equal(environmentDraft.authMethod, 'environment');
+  assert.equal(environmentDraft.environmentVariable, 'OPENAI_API_KEY');
+  assert.deepEqual(providerMutationFromDraft(environmentDraft), {
+    name: 'Environment OpenAI',
+    providerType: 'openai',
+    authMethod: 'environment',
+    baseUrl: 'https://api.openai.com/v1',
+    primaryModel: 'gpt-test',
+    allowedModels: ['gpt-test'],
+    active: true,
+    expectedRevision: 3,
+    environmentVariable: 'OPENAI_API_KEY',
+  });
+  assert.deepEqual(providerProbeInputFromDraft(environmentDraft), {
+    name: 'Environment OpenAI',
+    providerType: 'openai',
+    authMethod: 'environment',
+    baseUrl: 'https://api.openai.com/v1',
+    active: true,
+    environmentVariable: 'OPENAI_API_KEY',
+  });
+  assert.equal(providerProbeInputIsValid(providerProbeInputFromDraft(environmentDraft)), true);
+
+  const oauthDraft = providerDraftFromProvider({
+    id: 'oauth-anthropic',
+    name: 'OAuth Anthropic',
+    provider_type: 'anthropic',
+    auth_method: 'oauth',
+    base_url: 'https://api.anthropic.com',
+  });
+  assert.equal(oauthDraft.authMethod, 'oauth');
+  assert.equal(providerProbeInputIsValid(providerProbeInputFromDraft(oauthDraft), true), false);
 });
 
 test('provider model selection always retains the current default model', () => {
@@ -478,6 +539,66 @@ test('provider wizard creates only active providers with an enabled model', () =
   );
 });
 
+test('provider authentication UI exposes truthful OAuth and environment-secret states', () => {
+  assert.match(
+    providerConnectionPanelSource,
+    /const AUTH_METHOD_ORDER[\s\S]{0,180}'oauth'[\s\S]{0,180}'api_key'[\s\S]{0,180}'environment'[\s\S]{0,180}'none'/,
+  );
+  assert.match(
+    providerConnectionPanelSource,
+    /providerTypeDescriptor\?\.unavailableAuthMethods[\s\S]{0,260}authMethodUnavailable/,
+  );
+  assert.match(
+    providerConnectionPanelSource,
+    /provider-auth-option-unavailable[\s\S]{0,500}providers\.authUnavailable/,
+  );
+  assert.match(providerConnectionPanelSource, /aria-pressed=\{draft\.authMethod === authMethod\}/);
+  assert.match(
+    providerConnectionPanelSource,
+    /selectAuthMethod[\s\S]{0,500}apiKey: ''[\s\S]{0,240}environmentVariable: ''[\s\S]{0,260}setValidation\(null\)/,
+  );
+  assert.match(providerConnectionPanelSource, /draft\.authMethod === 'environment'/);
+  assert.match(providerConnectionPanelSource, /value=\{draft\.environmentVariable\}/);
+  assert.match(providerConnectionPanelSource, /providers\.environmentSecretDescription/);
+  assert.match(providerConnectionPanelSource, /providers\.oauthUnavailableDescription/);
+  assert.match(
+    providerConnectionPanelSource,
+    /environmentSecretStatus = validation\?\.probed === true[\s\S]{0,120}validation\?\.probed === false/,
+  );
+  assert.doesNotMatch(
+    providerConnectionPanelSource,
+    /environmentSecretStatus = validationAccepted|environmentSecretStatus = [\s\S]{0,100}validation \|\| error/,
+  );
+  assert.doesNotMatch(providerConnectionPanelSource, /window\.open|oauth\/authorize|startOAuth/);
+
+  assert.match(addProviderDialogSource, /useState<LlmProviderAuthMethod>/);
+  assert.match(addProviderDialogSource, /selectedDescriptor\?\.unavailableAuthMethods/);
+  assert.match(addProviderDialogSource, /disabled=\{authMethodUnavailable\(method\)\}/);
+  assert.match(
+    addProviderDialogSource,
+    /selectAuthMethod[\s\S]{0,500}setApiKey\(''\)[\s\S]{0,240}setEnvironmentVariable\(''\)[\s\S]{0,260}invalidateValidation\(\)/,
+  );
+  assert.match(addProviderDialogSource, /authMethod === 'environment'/);
+  assert.match(addProviderDialogSource, /value=\{environmentVariable\}/);
+  assert.match(addProviderDialogSource, /providers\.environmentSecretDescription/);
+  assert.match(
+    addProviderDialogSource,
+    /environmentSecretStatus = validation\?\.probed === true[\s\S]{0,120}validation\?\.probed === false/,
+  );
+  assert.doesNotMatch(
+    addProviderDialogSource,
+    /environmentSecretStatus = validationAccepted|environmentSecretStatus = [\s\S]{0,100}validation \|\| error/,
+  );
+  assert.doesNotMatch(addProviderDialogSource, /window\.open|oauth\/authorize|startOAuth/);
+
+  assert.match(i18nSource, /'providers\.auth\.oauth': 'OAuth'/);
+  assert.match(i18nSource, /'providers\.auth\.environment': 'Environment secret'/);
+  assert.match(i18nSource, /'providers\.authUnavailable': 'Backend not configured'/);
+  assert.match(i18nSource, /'providers\.auth\.oauth': 'OAuth'/);
+  assert.match(i18nSource, /'providers\.auth\.environment': '环境密钥'/);
+  assert.match(i18nSource, /'providers\.authUnavailable': '后端未配置'/);
+});
+
 test('provider editing preserves stored credentials only for the unchanged endpoint', () => {
   assert.match(
     providerConnectionPanelSource,
@@ -721,8 +842,13 @@ test('provider settings QA records preserve the authoritative LLM operation cont
   );
   assert.match(
     providerSettingsQaSource,
-    /provider_type:\s*'openai'[\s\S]{0,160}auth_methods:\s*\['api_key', 'none'\][\s\S]{0,120}probe_supported:\s*true/,
+    /provider_type:\s*'openai'[\s\S]{0,220}auth_methods:\s*\['api_key', 'environment'\][\s\S]{0,160}unavailable_auth_methods:\s*\['oauth'\][\s\S]{0,120}probe_supported:\s*true/,
   );
+  assert.match(
+    providerSettingsQaSource,
+    /provider_type:\s*'openai_compatible'[\s\S]{0,220}auth_methods:\s*\['api_key', 'environment', 'none'\]/,
+  );
+  assert.match(providerSettingsQaSource, /environment_variable:\s*'ANTHROPIC_API_KEY'/);
   assert.match(providerSettingsQaSource, /provider_type:\s*'openai_compatible'/);
   assert.doesNotMatch(
     providerSettingsQaSource,
@@ -941,6 +1067,7 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
       name: 'Provider',
       providerType: 'openai',
       authMethod: 'api_key',
+      environmentVariable: 'MUST_NOT_BE_SENT',
       baseUrl: 'https://llm.example.test/v1',
       primaryModel: 'gpt-test',
       allowedModels: ['gpt-test'],
@@ -989,6 +1116,7 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
     assert.deepEqual(JSON.parse(String(calls[2]?.init?.body)), {
       name: 'Provider',
       provider_type: 'openai',
+      auth_method: 'api_key',
       base_url: 'https://llm.example.test/v1',
       llm_model: 'gpt-test',
       allowed_models: ['gpt-test'],
@@ -1003,7 +1131,7 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
   }
 });
 
-test('provider create adapters keep local-only auth fields out of cloud requests', async () => {
+test('provider create adapters send auth method and omit mismatched credentials', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -1041,6 +1169,8 @@ test('provider create adapters keep local-only auth fields out of cloud requests
       allowedModels: ['qwen3-coder'],
       active: true,
       apiKey: 'runtime-only-secret',
+      environmentVariable: 'MUST_NOT_BE_SENT',
+      oauthToken: 'oauth-token-must-not-be-sent',
     };
 
     await local.createLlmProvider(input);
@@ -1066,8 +1196,173 @@ test('provider create adapters keep local-only auth fields out of cloud requests
       llm_model: 'qwen3-coder',
       allowed_models: ['qwen3-coder'],
       is_active: true,
-      api_key: 'runtime-only-secret',
+      auth_method: 'none',
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('environment provider requests send only variable references in local and cloud modes', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (String(input).endsWith('/test-connection')) {
+      return new Response(JSON.stringify({ status: 'healthy', probed: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        id: `provider-${calls.length}`,
+        name: 'Environment provider',
+        provider_type: 'openai',
+        auth_method: 'environment',
+        environment_variable: 'OPENAI_API_KEY',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const clients = [
+      new DesktopApiClient({
+        ...DEFAULT_CONFIG,
+        mode: 'local',
+        apiBaseUrl: 'http://127.0.0.1:8088',
+        apiKey: 'local-user-session',
+        localApiToken: 'launch-capability',
+      }),
+      new DesktopApiClient({
+        ...DEFAULT_CONFIG,
+        mode: 'cloud',
+        apiBaseUrl: 'https://api.example.test',
+        apiKey: 'cloud-user-session',
+      }),
+    ];
+    const credentialInput = {
+      authMethod: 'environment',
+      environmentVariable: '  OPENAI_API_KEY  ',
+      apiKey: 'api-key-must-not-be-sent',
+      environmentValue: 'environment-value-must-not-be-sent',
+      oauthToken: 'oauth-token-must-not-be-sent',
+    };
+
+    for (const client of clients) {
+      await client.createLlmProvider({
+        ...credentialInput,
+        name: 'Environment provider',
+        providerType: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        primaryModel: 'gpt-test',
+        allowedModels: ['gpt-test'],
+        active: true,
+      });
+      await client.updateLlmProvider('environment-provider', {
+        ...credentialInput,
+        name: 'Environment provider',
+        providerType: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        primaryModel: 'gpt-test',
+        allowedModels: ['gpt-test'],
+        active: true,
+        expectedRevision: 4,
+      });
+      await client.testLlmProviderDraft({
+        ...credentialInput,
+        name: 'Environment provider',
+        providerType: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        active: true,
+      });
+    }
+
+    assert.equal(calls.length, 6);
+    for (const call of calls) {
+      const body = JSON.parse(String(call.init?.body));
+      assert.equal(body.auth_method, 'environment');
+      assert.equal(body.environment_variable, 'OPENAI_API_KEY');
+      for (const forbiddenKey of ['api_key', 'environment_value', 'oauth_token']) {
+        assert.equal(Object.hasOwn(body, forbiddenKey), false);
+      }
+      assert.equal(JSON.stringify(body).includes('must-not-be-sent'), false);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('OAuth provider mutations fail closed before making a request', async () => {
+  let requestCount = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    const clients = [
+      new DesktopApiClient({
+        ...DEFAULT_CONFIG,
+        mode: 'local',
+        apiBaseUrl: 'http://127.0.0.1:8088',
+        apiKey: 'local-user-session',
+        localApiToken: 'launch-capability',
+      }),
+      new DesktopApiClient({
+        ...DEFAULT_CONFIG,
+        mode: 'cloud',
+        apiBaseUrl: 'https://api.example.test',
+        apiKey: 'cloud-user-session',
+      }),
+    ];
+    const oauthCredential = {
+      authMethod: 'oauth',
+      apiKey: 'api-key-must-not-be-sent',
+      environmentVariable: 'MUST_NOT_BE_SENT',
+      oauthToken: 'oauth-token-must-not-be-sent',
+    };
+
+    for (const client of clients) {
+      await assert.rejects(
+        client.createLlmProvider({
+          ...oauthCredential,
+          name: 'OAuth provider',
+          providerType: 'anthropic',
+          baseUrl: 'https://api.anthropic.com',
+          primaryModel: 'claude-test',
+          allowedModels: ['claude-test'],
+          active: true,
+        }),
+        /OAuth provider authentication is not available/,
+      );
+      await assert.rejects(
+        client.updateLlmProvider('oauth-provider', {
+          ...oauthCredential,
+          name: 'OAuth provider',
+          providerType: 'anthropic',
+          baseUrl: 'https://api.anthropic.com',
+          primaryModel: 'claude-test',
+          allowedModels: ['claude-test'],
+          active: true,
+          expectedRevision: 2,
+        }),
+        /OAuth provider authentication is not available/,
+      );
+      await assert.rejects(
+        client.testLlmProviderDraft({
+          ...oauthCredential,
+          name: 'OAuth provider',
+          providerType: 'anthropic',
+          baseUrl: 'https://api.anthropic.com',
+          active: true,
+        }),
+        /OAuth provider authentication is not available/,
+      );
+    }
+    assert.equal(requestCount, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1115,6 +1410,23 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           provider_type: 'openai',
           auth_method: 'api_key',
           api_key_masked: 'sk-untrusted-legacy-mask',
+        },
+        {
+          id: 'environment-openai',
+          name: 'Environment OpenAI',
+          provider_type: 'openai',
+          auth_method: 'environment',
+          environment_variable: 'OPENAI_API_KEY',
+          credential_configured: true,
+          environment_value: 'environment-value-must-not-be-retained',
+        },
+        {
+          id: 'oauth-anthropic',
+          name: 'OAuth Anthropic',
+          provider_type: 'anthropic',
+          auth_method: 'oauth',
+          credential_configured: true,
+          oauth_token: 'oauth-token-must-not-be-retained',
         },
       ]),
       { status: 200, headers: { 'content-type': 'application/json' } },
@@ -1171,6 +1483,22 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           runtimeSelected: false,
           revision: 0,
         },
+        {
+          id: 'environment-openai',
+          providerType: 'openai',
+          authMethod: 'environment',
+          credentialConfigured: true,
+          runtimeSelected: false,
+          revision: 0,
+        },
+        {
+          id: 'oauth-anthropic',
+          providerType: 'anthropic',
+          authMethod: 'oauth',
+          credentialConfigured: true,
+          runtimeSelected: false,
+          revision: 0,
+        },
       ],
     );
     const legacy = providers[1];
@@ -1189,6 +1517,13 @@ test('provider responses normalize compatibility fields explicitly', async () =>
     const unknown = providers[3];
     assert.equal(unknown.credential_configured, undefined);
     assert.equal(unknown.api_key_masked, null);
+    const environment = providers[4];
+    assert.equal(environment.environment_variable, 'OPENAI_API_KEY');
+    assert.equal(providerDraftFromProvider(environment).environmentVariable, 'OPENAI_API_KEY');
+    const oauth = providers[5];
+    assert.equal(oauth.auth_method, 'oauth');
+    assert.equal(providerDraftFromProvider(oauth).authMethod, 'oauth');
+    assert.equal(JSON.stringify(providers).includes('must-not-be-retained'), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1215,7 +1550,7 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
               provider_type: 'anthropic',
               operation_type: 'llm',
               probe_supported: true,
-              auth_methods: ['api_key'],
+              auth_methods: ['oauth', 'api_key', 'oauth', 'unsupported'],
             },
             {
               provider_type: 'azure_openai',
@@ -1237,9 +1572,13 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
             },
           ]
         : [
-            { provider_type: 'openai', auth_methods: ['api_key'] },
+            { provider_type: 'openai', auth_methods: ['environment', 'api_key'] },
             { provider_type: 'ollama', auth_methods: ['none'] },
-            'anthropic',
+            {
+              provider_type: 'anthropic',
+              auth_methods: ['api_key', 'environment'],
+              unavailable_auth_methods: ['oauth'],
+            },
           ];
       return new Response(JSON.stringify(types), {
         status: 200,
@@ -1362,13 +1701,15 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
       {
         providerType: 'openai',
         authMethods: ['api_key'],
+        unavailableAuthMethods: [],
         operationType: 'llm',
         probeSupported: true,
         source: 'local_runtime',
       },
       {
         providerType: 'anthropic',
-        authMethods: ['api_key'],
+        authMethods: ['oauth', 'api_key'],
+        unavailableAuthMethods: ['oauth'],
         operationType: 'llm',
         probeSupported: true,
         source: 'local_runtime',
@@ -1376,6 +1717,7 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
       {
         providerType: 'azure_openai',
         authMethods: ['api_key'],
+        unavailableAuthMethods: [],
         operationType: 'llm',
         probeSupported: false,
         source: 'local_runtime',
@@ -1383,6 +1725,7 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
       {
         providerType: 'ollama',
         authMethods: ['none'],
+        unavailableAuthMethods: [],
         operationType: 'llm',
         probeSupported: true,
         source: 'local_runtime',
@@ -1390,6 +1733,7 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
       {
         providerType: 'dashscope_embedding',
         authMethods: ['api_key'],
+        unavailableAuthMethods: [],
         operationType: 'embedding',
         probeSupported: true,
         source: 'local_runtime',
@@ -1434,7 +1778,8 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
     assert.deepEqual(await cloud.listLlmProviderTypes(), [
       {
         providerType: 'openai',
-        authMethods: ['api_key'],
+        authMethods: ['environment', 'api_key'],
+        unavailableAuthMethods: [],
         operationType: 'llm',
         probeSupported: true,
         source: 'cloud_api',
@@ -1442,13 +1787,15 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
       {
         providerType: 'ollama',
         authMethods: ['none'],
+        unavailableAuthMethods: [],
         operationType: 'llm',
         probeSupported: true,
         source: 'cloud_api',
       },
       {
         providerType: 'anthropic',
-        authMethods: [],
+        authMethods: ['api_key', 'environment'],
+        unavailableAuthMethods: ['oauth'],
         operationType: 'llm',
         probeSupported: true,
         source: 'cloud_api',
@@ -1660,6 +2007,8 @@ test('draft validation requires explicit probe evidence and can return a discove
       baseUrl: 'https://gateway.example.test/v1',
       active: true,
       apiKey: 'draft-secret',
+      environmentVariable: 'MUST_NOT_BE_SENT',
+      oauthToken: 'oauth-token-must-not-be-sent',
     };
 
     assert.deepEqual(await local.testLlmProviderDraft(input), {

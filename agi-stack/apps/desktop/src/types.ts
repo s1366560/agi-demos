@@ -687,7 +687,7 @@ export type ReviewRunRequest = {
   feedback?: string;
 };
 
-export type LlmProviderAuthMethod = 'api_key' | 'none';
+export type LlmProviderAuthMethod = 'api_key' | 'oauth' | 'environment' | 'none';
 
 export type ManagedLlmProvider = {
   id: string;
@@ -708,6 +708,7 @@ export type ManagedLlmProvider = {
   health_status?: string | null;
   credential_source?: string | null;
   credential_configured?: boolean;
+  environment_variable?: string | null;
   runtime_selected?: boolean;
   api_key_masked?: string | null;
   health_last_check?: string | null;
@@ -727,6 +728,7 @@ export type LlmProviderMutationInput = {
   active: boolean;
   expectedRevision: number;
   apiKey?: string;
+  environmentVariable?: string;
 };
 
 export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
@@ -738,6 +740,7 @@ export type LlmProviderProbeInput = {
   baseUrl: string;
   active: boolean;
   apiKey?: string;
+  environmentVariable?: string;
 };
 
 export type LlmRoutingRole = 'default' | 'fast' | 'coding' | 'vision';
@@ -770,6 +773,7 @@ export type LlmProviderRoutingPolicyMutationInput = {
 export type LlmProviderTypeDescriptor = {
   providerType: string;
   authMethods: LlmProviderAuthMethod[];
+  unavailableAuthMethods: LlmProviderAuthMethod[];
   operationType: 'llm' | 'embedding' | 'rerank';
   probeSupported: boolean;
   source: 'local_runtime' | 'cloud_api';

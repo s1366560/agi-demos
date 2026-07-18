@@ -808,25 +808,17 @@ export class DesktopApiClient {
   }
 
   async createLlmProvider(input: LlmProviderCreateInput): Promise<ManagedLlmProvider> {
-    const apiKey = input.apiKey?.trim();
-    const commonBody = {
-      name: input.name,
-      provider_type: input.providerType,
-      base_url: input.baseUrl,
-      llm_model: input.primaryModel,
-      allowed_models: input.allowedModels,
-      is_active: input.active,
-    };
     const payload = await this.request<unknown>('/api/v1/llm-providers/', {
       method: 'POST',
-      body:
-        this.config.mode === 'local'
-          ? {
-              ...commonBody,
-              auth_method: input.authMethod,
-              ...(input.authMethod === 'api_key' && apiKey ? { api_key: apiKey } : {}),
-            }
-          : { ...commonBody, ...(apiKey ? { api_key: apiKey } : {}) },
+      body: {
+        name: input.name,
+        provider_type: input.providerType,
+        base_url: input.baseUrl,
+        llm_model: input.primaryModel,
+        allowed_models: input.allowedModels,
+        is_active: input.active,
+        ...providerCredentialRequestBody(input),
+      },
     });
     return normalizeManagedLlmProvider(payload);
   }
@@ -880,7 +872,6 @@ export class DesktopApiClient {
   }
 
   async testLlmProviderDraft(input: LlmProviderProbeInput): Promise<LlmProviderValidationOutcome> {
-    const apiKey = input.apiKey?.trim();
     const payload = await this.request<unknown>('/api/v1/llm-providers/test-connection', {
       method: 'POST',
       body: {
@@ -888,8 +879,7 @@ export class DesktopApiClient {
         provider_type: input.providerType,
         base_url: input.baseUrl,
         is_active: input.active,
-        auth_method: input.authMethod,
-        ...(apiKey ? { api_key: apiKey } : {}),
+        ...providerCredentialRequestBody(input),
       },
     });
     return normalizeProviderValidationOutcome(payload, input.providerType);
@@ -899,27 +889,20 @@ export class DesktopApiClient {
     providerId: string,
     input: LlmProviderMutationInput,
   ): Promise<ManagedLlmProvider> {
-    const commonBody = {
-      name: input.name,
-      provider_type: input.providerType,
-      base_url: input.baseUrl,
-      llm_model: input.primaryModel,
-      allowed_models: input.allowedModels,
-      is_active: input.active,
-      expected_revision: input.expectedRevision,
-      ...(input.apiKey ? { api_key: input.apiKey } : {}),
-    };
-    const local = this.config.mode === 'local';
     const payload = await this.request<unknown>(
       `/api/v1/llm-providers/${encodeURIComponent(providerId)}`,
       {
         method: 'PUT',
-        body: local
-          ? {
-              ...commonBody,
-              auth_method: input.authMethod,
-            }
-          : commonBody,
+        body: {
+          name: input.name,
+          provider_type: input.providerType,
+          base_url: input.baseUrl,
+          llm_model: input.primaryModel,
+          allowed_models: input.allowedModels,
+          is_active: input.active,
+          expected_revision: input.expectedRevision,
+          ...providerCredentialRequestBody(input),
+        },
       },
     );
     return normalizeManagedLlmProvider(payload);
@@ -1370,6 +1353,36 @@ function requireValue(value: string, label: string): string {
   return trimmed;
 }
 
+function providerCredentialRequestBody(input: {
+  authMethod: LlmProviderAuthMethod;
+  apiKey?: string;
+  environmentVariable?: string;
+}): Record<string, string> {
+  if (input.authMethod === 'oauth') {
+    throw new DesktopApiError(
+      'OAuth provider authentication is not available',
+      422,
+      { auth_method: 'oauth' },
+    );
+  }
+  if (input.authMethod === 'api_key') {
+    const apiKey = input.apiKey?.trim();
+    return {
+      auth_method: 'api_key',
+      ...(apiKey ? { api_key: apiKey } : {}),
+    };
+  }
+  if (input.authMethod === 'environment') {
+    const environmentVariable = input.environmentVariable?.trim();
+    return {
+      auth_method: 'environment',
+      ...(environmentVariable ? { environment_variable: environmentVariable } : {}),
+    };
+  }
+  if (input.authMethod === 'none') return { auth_method: 'none' };
+  throw new DesktopApiError('Unsupported provider authentication method', 422, null);
+}
+
 function normalizeManagedLlmProvider(payload: unknown): ManagedLlmProvider {
   if (!isRecord(payload)) {
     throw new DesktopApiError('Invalid provider response', 502, payload);
@@ -1414,6 +1427,10 @@ function normalizeManagedLlmProvider(payload: unknown): ManagedLlmProvider {
     credential_source:
       readCompatString(payload, 'credential_source', 'credentialSource') || undefined,
     credential_configured: credentialConfigured,
+    environment_variable:
+      authMethod === 'environment'
+        ? readCompatString(payload, 'environment_variable', 'environmentVariable') || null
+        : null,
     runtime_selected: runtimeSelected,
     api_key_masked: credentialConfigured && maskedCredential ? '••••••••••••' : null,
     health_last_check: readCompatNullableString(
@@ -1517,7 +1534,12 @@ function readCompatString(
 }
 
 function readProviderAuthMethod(value: string): LlmProviderAuthMethod | undefined {
-  return value === 'api_key' || value === 'none' ? value : undefined;
+  return value === 'api_key' ||
+    value === 'oauth' ||
+    value === 'environment' ||
+    value === 'none'
+    ? value
+    : undefined;
 }
 
 function readCompatBoolean(
@@ -1587,6 +1609,18 @@ function normalizeProviderTypeDescriptors(
       value && typeof value === 'object' && !Array.isArray(value)
         ? readProviderAuthMethods((value as Record<string, unknown>).auth_methods)
         : [];
+    const explicitlyUnavailableAuthMethods =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? readProviderAuthMethods(
+            (value as Record<string, unknown>).unavailable_auth_methods,
+          )
+        : [];
+    const unavailableAuthMethods = Array.from(
+      new Set<LlmProviderAuthMethod>([
+        ...explicitlyUnavailableAuthMethods,
+        ...authMethods.filter((method) => method === 'oauth'),
+      ]),
+    );
     const explicitOperationType =
       value && typeof value === 'object' && !Array.isArray(value)
         ? readTrimmedString(value as Record<string, unknown>, 'operation_type')
@@ -1598,7 +1632,14 @@ function normalizeProviderTypeDescriptors(
       Array.isArray(value) ||
       (value as Record<string, unknown>).probe_supported !== false;
     seen.add(providerType);
-    descriptors.push({ providerType, authMethods, operationType, probeSupported, source });
+    descriptors.push({
+      providerType,
+      authMethods,
+      unavailableAuthMethods,
+      operationType,
+      probeSupported,
+      source,
+    });
   }
   return descriptors;
 }
@@ -1619,9 +1660,11 @@ function readProviderAuthMethods(value: unknown): LlmProviderAuthMethod[] {
   if (!Array.isArray(value)) return [];
   const methods: LlmProviderAuthMethod[] = [];
   for (const candidate of value) {
-    if ((candidate === 'api_key' || candidate === 'none') && !methods.includes(candidate)) {
-      methods.push(candidate);
-    }
+    const method =
+      typeof candidate === 'string'
+        ? readProviderAuthMethod(candidate.trim().toLowerCase())
+        : undefined;
+    if (method && !methods.includes(method)) methods.push(method);
   }
   return methods;
 }

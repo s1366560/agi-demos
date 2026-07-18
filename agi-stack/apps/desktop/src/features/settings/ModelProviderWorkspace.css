@@ -174,7 +174,10 @@
 .provider-auth-options > button > span { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .provider-auth-options b { color: #b8c3ce; font-size: 8px; }
 .provider-auth-options small { color: #637285; font-size: 7px; line-height: 1.35; }
-.provider-auth-options-supported { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.provider-auth-options-supported { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.provider-auth-options > button.provider-auth-option-unavailable { color: #7b6e62; background: #100f0f; border-color: #3a342e; border-style: dashed; opacity: 0.78; }
+.provider-auth-options > button.provider-auth-option-unavailable.selected { color: var(--amber); background: #201a12; border-color: #725b35; }
+.provider-auth-options > button.provider-auth-option-unavailable em { align-self: flex-start; padding: 2px 4px; color: #b68a4a; font-size: 6px; font-style: normal; background: #211a11; border: 1px solid #4c3b25; border-radius: 3px; }
 .provider-input-label,
 .provider-advanced-grid label,
 .provider-role-grid label,
@@ -192,6 +195,11 @@
 .provider-advanced-grid input:disabled,
 .provider-advanced-grid select:disabled { color: #8996a7; border-color: #252f3b; opacity: 1; }
 .provider-input-label > small { color: #607083; font-size: 7px; font-weight: 400; }
+.provider-input-label-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.provider-input-label-heading > span { min-width: 0; }
+.provider-secret-status { flex: 0 0 auto; padding: 2px 5px; color: #76869a; font-size: 6px; font-style: normal; font-weight: 700; background: #141b24; border: 1px solid #334052; border-radius: 8px; }
+.provider-secret-status.available { color: var(--green); background: #10251d; border-color: #2b654c; }
+.provider-secret-status.unavailable { color: #c88a92; background: #241419; border-color: #5d3239; }
 .provider-secret-input { display: flex; align-items: center; padding-right: 9px; }
 .provider-secret-input input { min-width: 0; flex: 1; color: inherit; font-size: 8px; background: transparent; border: 0; outline: 0; }
 .provider-secret-input svg { color: #667588; }
@@ -326,6 +334,7 @@
 .provider-option-grid b { color: #b9c4cf; font-size: 9px; }
 .provider-option-grid small { color: #637285; font-size: 7px; }
 .provider-wizard-form { display: grid; gap: 10px; }
+.provider-wizard-form label > small { color: #607083; font-size: 7px; font-weight: 400; line-height: 1.45; }
 .provider-wizard-test { display: inline-flex; height: 31px; align-items: center; justify-self: start; gap: 6px; padding: 0 10px; color: #38d6ff; font-size: 8px; background: #10222b; border: 1px solid #315767; border-radius: 5px; }
 .provider-wizard-test.success { color: #35d399; background: #10251d; border-color: #2b654c; }
 .provider-wizard-models { display: grid; gap: 6px; }

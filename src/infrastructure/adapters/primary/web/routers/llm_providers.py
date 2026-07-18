@@ -29,6 +29,7 @@ from src.domain.llm_providers.models import (
     ProviderTypeDescriptor,
     ProviderValidationResponse,
     TenantProviderMapping,
+    provider_environment_variables,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -216,6 +217,14 @@ async def list_provider_types(
                 if provider_type in no_auth_providers
                 else ProviderAuthMethod.API_KEY
             ],
+            unavailable_auth_methods=(
+                (["environment"] if provider_environment_variables(provider_type) else [])
+                + (
+                    ["oauth"]
+                    if provider_type in {ProviderType.OPENAI, ProviderType.ANTHROPIC}
+                    else []
+                )
+            ),
         )
         for provider_type in ProviderType
     ]

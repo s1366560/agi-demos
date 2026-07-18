@@ -16,12 +16,13 @@ export type ProviderEditorDraft = {
   id: string;
   name: string;
   providerType: string;
-  authMethod: 'api_key' | 'none';
+  authMethod: LlmProviderAuthMethod;
   baseUrl: string;
   primaryModel: string;
   allowedModels: string;
   active: boolean;
   apiKey: string;
+  environmentVariable: string;
   expectedRevision: number;
 };
 
@@ -78,7 +79,10 @@ export function providerAuthMethodSupported(
   descriptor: LlmProviderTypeDescriptor,
   method: LlmProviderAuthMethod,
 ): boolean {
-  return descriptor.authMethods.includes(method);
+  return (
+    descriptor.authMethods.includes(method) &&
+    !descriptor.unavailableAuthMethods.includes(method)
+  );
 }
 
 export function providerManagementAllowed(mode: RuntimeMode, roles: readonly string[]): boolean {
@@ -87,22 +91,27 @@ export function providerManagementAllowed(mode: RuntimeMode, roles: readonly str
 }
 
 export function providerDraftFromProvider(provider: ManagedLlmProvider): ProviderEditorDraft {
+  const authMethod = provider.auth_method ?? 'api_key';
   return {
     id: provider.id,
     name: provider.name || provider.provider_type,
     providerType: provider.provider_type,
-    authMethod: provider.auth_method === 'none' ? 'none' : 'api_key',
+    authMethod,
     baseUrl: provider.base_url ?? '',
     primaryModel: provider.llm_model ?? '',
     allowedModels: (provider.allowed_models ?? []).join('\n'),
     active: provider.is_active !== false,
     apiKey: '',
+    environmentVariable:
+      authMethod === 'environment' ? (provider.environment_variable ?? '').trim() : '',
     expectedRevision: provider.revision ?? 0,
   };
 }
 
 export function providerMutationFromDraft(draft: ProviderEditorDraft): LlmProviderMutationInput {
-  const apiKey = draft.apiKey.trim();
+  const apiKey = draft.authMethod === 'api_key' ? draft.apiKey.trim() : '';
+  const environmentVariable =
+    draft.authMethod === 'environment' ? draft.environmentVariable.trim() : '';
   return {
     name: draft.name.trim(),
     providerType: draft.providerType.trim(),
@@ -113,6 +122,7 @@ export function providerMutationFromDraft(draft: ProviderEditorDraft): LlmProvid
     active: draft.active,
     expectedRevision: draft.expectedRevision,
     ...(apiKey ? { apiKey } : {}),
+    ...(environmentVariable ? { environmentVariable } : {}),
   };
 }
 
@@ -122,7 +132,9 @@ export function providerCreateInputFromDraft(draft: ProviderEditorDraft): LlmPro
 }
 
 export function providerProbeInputFromDraft(draft: ProviderEditorDraft): LlmProviderProbeInput {
-  const apiKey = draft.apiKey.trim();
+  const apiKey = draft.authMethod === 'api_key' ? draft.apiKey.trim() : '';
+  const environmentVariable =
+    draft.authMethod === 'environment' ? draft.environmentVariable.trim() : '';
   return {
     name: draft.name.trim(),
     providerType: draft.providerType.trim(),
@@ -130,6 +142,7 @@ export function providerProbeInputFromDraft(draft: ProviderEditorDraft): LlmProv
     baseUrl: draft.baseUrl.trim().replace(/\/$/, ''),
     active: draft.active,
     ...(apiKey ? { apiKey } : {}),
+    ...(environmentVariable ? { environmentVariable } : {}),
   };
 }
 
@@ -137,12 +150,11 @@ export function providerProbeInputIsValid(
   input: LlmProviderProbeInput,
   credentialConfigured = false,
 ): boolean {
-  return Boolean(
-    input.name &&
-      input.providerType &&
-      input.baseUrl &&
-      (input.authMethod === 'none' || input.apiKey || credentialConfigured),
-  );
+  if (!input.name || !input.providerType || !input.baseUrl) return false;
+  if (input.authMethod === 'oauth') return false;
+  if (input.authMethod === 'none') return true;
+  if (input.authMethod === 'environment') return Boolean(input.environmentVariable?.trim());
+  return Boolean(input.apiKey?.trim() || credentialConfigured);
 }
 
 export function providerConnectionStatus(

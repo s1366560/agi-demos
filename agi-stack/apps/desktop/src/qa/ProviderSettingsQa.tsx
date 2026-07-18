@@ -7,6 +7,7 @@ import { I18nProvider } from '../i18n';
 import type {
   AuthState,
   DesktopRuntimeConfig,
+  LlmProviderAuthMethod,
   LlmProviderRoutingPolicy,
   LlmRouteTarget,
   ManagedAgentDefinition,
@@ -28,24 +29,28 @@ const QA_TENANT_ID = 'tenant-northstar';
 const QA_PROJECT_ID = 'project-desktop-client';
 const QA_WORKSPACE_ID = 'workspace-desktop-client';
 const NOW = '2026-07-14T09:40:00.000Z';
+const QA_ENVIRONMENT_SECRETS = new Set(['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
 
 const qaProviderTypes = [
   {
     provider_type: 'openai',
     operation_type: 'llm',
-    auth_methods: ['api_key', 'none'],
+    auth_methods: ['api_key', 'environment'],
+    unavailable_auth_methods: ['oauth'],
     probe_supported: true,
   },
   {
     provider_type: 'anthropic',
     operation_type: 'llm',
-    auth_methods: ['api_key', 'none'],
+    auth_methods: ['api_key', 'environment'],
+    unavailable_auth_methods: ['oauth'],
     probe_supported: true,
   },
   {
     provider_type: 'openai_compatible',
     operation_type: 'llm',
-    auth_methods: ['api_key', 'none'],
+    auth_methods: ['api_key', 'environment', 'none'],
+    unavailable_auth_methods: ['oauth'],
     probe_supported: true,
   },
 ] as const;
@@ -79,7 +84,7 @@ const initialProviders: ManagedLlmProvider[] = [
     name: 'Anthropic',
     provider_type: 'anthropic',
     operation_type: 'llm',
-    auth_method: 'api_key',
+    auth_method: 'environment',
     is_active: true,
     is_enabled: true,
     base_url: 'https://api.anthropic.com/v1',
@@ -88,9 +93,9 @@ const initialProviders: ManagedLlmProvider[] = [
     allowed_models: ['claude-sonnet-4-5', 'claude-haiku-4-5'],
     secondary_models: ['claude-haiku-4-5'],
     health_status: 'healthy',
-    credential_source: 'system_vault',
+    credential_source: 'environment',
     credential_configured: true,
-    api_key_masked: '••••••••••B91Q',
+    environment_variable: 'ANTHROPIC_API_KEY',
     health_last_check: NOW,
     response_time_ms: 211,
     revision: 9,
@@ -435,15 +440,30 @@ function safeProviderFromBody(
 ): ManagedLlmProvider {
   const nextRevision = (current?.revision ?? 0) + 1;
   const apiKeySubmitted = Boolean(stringValue(body.api_key).trim());
-  const authMethod =
-    stringValue(body.auth_method, current?.auth_method ?? 'api_key') === 'none'
-      ? 'none'
-      : 'api_key';
+  const rawAuthMethod = stringValue(body.auth_method, current?.auth_method ?? 'api_key');
+  const authMethod: LlmProviderAuthMethod = [
+    'api_key',
+    'environment',
+    'none',
+  ].includes(rawAuthMethod)
+    ? (rawAuthMethod as LlmProviderAuthMethod)
+    : 'api_key';
+  const environmentVariable =
+    authMethod === 'environment'
+      ? stringValue(body.environment_variable, current?.environment_variable ?? '').trim()
+      : '';
+  const storedCredentialReusable =
+    current?.auth_method === authMethod &&
+    current.credential_configured === true &&
+    (authMethod !== 'environment' || current.environment_variable === environmentVariable);
   const active = booleanValue(body.is_active, current?.is_active ?? false);
   const baseUrl = stringValue(body.base_url, current?.base_url ?? '');
   const primaryModel = stringValue(body.llm_model, current?.llm_model ?? '');
   const credentialConfigured =
-    authMethod === 'none' || current?.credential_configured === true || apiKeySubmitted;
+    authMethod === 'none' ||
+    storedCredentialReusable ||
+    (authMethod === 'api_key' && apiKeySubmitted) ||
+    (authMethod === 'environment' && QA_ENVIRONMENT_SECRETS.has(environmentVariable));
   const healthStatus =
     !active || !baseUrl || !primaryModel
       ? 'not_configured'
@@ -464,8 +484,21 @@ function safeProviderFromBody(
     allowed_models: stringArray(body.allowed_models, current?.allowed_models ?? []),
     health_status: healthStatus,
     credential_configured: credentialConfigured,
+    credential_source:
+      authMethod === 'none'
+        ? 'none'
+        : authMethod === 'environment'
+          ? 'environment'
+          : 'system_vault',
+    environment_variable: authMethod === 'environment' ? environmentVariable : null,
     api_key_masked:
-      current?.api_key_masked || (apiKeySubmitted ? '••••••••••NEW' : null),
+      authMethod === 'api_key'
+        ? current?.auth_method === 'api_key' && current.api_key_masked
+          ? current.api_key_masked
+          : apiKeySubmitted
+            ? '••••••••••NEW'
+            : null
+        : null,
     health_last_check: null,
     response_time_ms: null,
     error_message: null,
@@ -585,12 +618,16 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const draft = readJsonBody(body);
     const providerType = stringValue(draft.provider_type);
     const authMethod = stringValue(draft.auth_method, 'api_key');
+    const environmentVariable = stringValue(draft.environment_variable).trim();
     const catalog = modelCatalogs[providerType];
     const configured = Boolean(
       stringValue(draft.name) &&
         providerType &&
         stringValue(draft.base_url) &&
-        (authMethod === 'none' || stringValue(draft.api_key)),
+        (authMethod === 'none' ||
+          (authMethod === 'api_key' && stringValue(draft.api_key)) ||
+          (authMethod === 'environment' &&
+            QA_ENVIRONMENT_SECRETS.has(environmentVariable))),
     );
     return jsonResponse({
       status: configured ? 'healthy' : 'needs_credentials',

@@ -725,6 +725,10 @@ final result: passed
 - Production overview captures: `qa/provider-settings-overview-1440.png` and `qa/provider-settings-overview-1100.png`
 - Same-canvas compact comparison: `qa/provider-settings-comparison-1100.jpg`
 - Interaction captures: `qa/provider-settings-connection-1440.png`, `qa/provider-settings-routing-1440.png`, and `qa/provider-settings-wizard-1440.png`
+- Authentication source-fidelity captures:
+  `qa/provider-auth-source-fidelity/source-model-provider-connection-1440x1024.png`,
+  `qa/provider-auth-source-fidelity/implementation-provider-auth-edit-1440x1024.png`, and
+  `qa/provider-auth-source-fidelity/comparison-source-implementation-1440x1024.png`
 - Viewports: `1440 × 1024` and `1100 × 782`, device scale factor `1`
 - State: Simplified Chinese, cloud administrator, tenant and project selected, five realistic Provider records, OpenAI selected
 - Render method: the production `SettingsWindow` and `ModelProviderWorkspace` were rendered by the Vite QA entry. The saved same-viewport captures were produced through Chrome DevTools Protocol; the current five-Provider overview and complete three-step add flow were freshly re-exercised in the user-selected in-app Browser after the contract fixes.
@@ -753,7 +757,10 @@ The source capture is softer and records an earlier popup width. Production foll
 
 ## Real contract and fail-closed behavior
 
-- Local Rust supports Provider type descriptors, list, create, revision-protected PUT/PATCH update, health aliases, source-attributed static model catalogs, tenant-checked empty usage, and configuration-only validation. The UI labels local validation as configuration validation and never claims that an outbound probe occurred.
+- Local Rust supports Provider type descriptors, list, create, revision-protected PUT/PATCH update,
+  health aliases, source-attributed model catalogs, tenant-checked usage, and explicit connection
+  validation. Validation returns `probed` evidence so the UI distinguishes a real outbound probe
+  from credential or configuration failure.
 - Cloud mode uses the real Provider type catalog, static model catalog, connection test, health check, update, create, and usage endpoints. The Desktop always sends `expected_revision`; the target Rust strangler route enforces it, while a direct legacy Python route currently ignores that compatibility field and exposes no CAS revision.
 - Local catalogs identify built-in suggestions as `static-fallback`; an empty catalog without a source remains unavailable. No local `/models` network request is implied.
 - Fast, coding, vision, fallback, and cloud routing mutations remain read-only because the current service contract does not expose those writes.
@@ -763,7 +770,13 @@ The source capture is softer and records an earlier popup width. Production foll
   stale or corrupt records fail closed. Provider responses expose only
   `credential_configured` plus a non-locating `system_vault` source enum, and the frontend
   allow-lists response fields before retaining them.
-- OAuth, environment-secret references, live `/models` discovery, invented success rates, and synthetic activity feeds were not implemented because the current backend cannot support them truthfully.
+- Environment-secret references are implemented for the local and target Rust runtimes. Only the
+  allow-listed variable name is persisted or returned; the value is resolved at runtime and remains
+  in process memory. Missing values return `probed: false` without a network request. The legacy
+  Python compatibility API retains a direct environment probe but marks environment auth unavailable
+  for CRUD/runtime until every execution consumer can resolve it safely. OAuth remains visible but
+  disabled as “Backend not configured”; no browser window or simulated OAuth flow exists. Invented
+  success rates and synthetic activity feeds remain absent.
 
 ## Interaction verification
 
@@ -856,6 +869,34 @@ vault revision is written but before the SQLite revision changes.
 Verification: 178 Rust tests, Clippy with warnings denied, 381 Desktop tests, TypeScript, and the Vite
 production build passed. The existing Vite large-chunk advisory remains unchanged.
 
+### Iteration 6 — passed: truthful authentication matrix
+
+The Connection surface now matches the approved three-card source hierarchy for OpenAI and
+Anthropic: OAuth, API key, and Environment secret. Capability descriptors keep supported and
+explicitly unavailable methods separate. OAuth is always rendered as a disabled card with a
+backend-not-configured explanation; the client rejects any attempted OAuth mutation before issuing
+a request. Switching methods clears mutually exclusive draft credentials and invalidates prior probe
+evidence.
+
+Environment authentication stores and returns only `environment_variable`. Local and target Rust
+resolve the value at probe/runtime boundaries, reject unsupported variable names where the runtime is
+multi-tenant, never write the value to SQLite or the system vault, and reconstruct the reference after
+restart. Environment availability is driven by `validation.probed`: a reachable provider may fail for
+another reason without incorrectly labeling the secret missing. The Python compatibility descriptor
+shows Environment as unavailable for persisted providers rather than advertising a mode its current
+LiteLLM consumers cannot execute.
+
+The source and implementation were captured in the same `1440 × 1024` Connection/Edit state and
+placed in one `2880 × 1024` comparison image before judgment. Popup geometry, three-column hierarchy,
+Provider navigation, authentication-card alignment, endpoint section, and actions remain source
+aligned. A fresh `1100 × 800` in-app Browser pass confirmed a single-column authentication stack,
+usable scrolling, no horizontal overflow, and no console errors. No visual or interaction P0/P1/P2
+finding remains in this authentication scope.
+
+Verification: 409 Desktop tests; 34 local Rust Provider tests; 31 target Rust Provider API tests; 72
+Python Provider tests; TypeScript, Rustfmt, Clippy with warnings denied, Ruff, Mypy, Pyright, and golden
+contract parity passed.
+
 ## Copy differences from the visual prototype
 
 - Configuration-only fallback results remain explicitly labeled when an outbound probe is unavailable.
@@ -868,15 +909,16 @@ These differences are deliberate truthfulness constraints, not visual omissions.
 
 ## Remaining Provider-management findings
 
-- [P1] OAuth, environment-backed credentials, advanced request policy, and the complete Provider/auth
-  compatibility matrix remain unavailable rather than simulated.
+- [P1] OAuth and advanced request policy remain unavailable rather than simulated. The legacy Python
+  runtime also keeps environment-backed persisted credentials explicitly unavailable until all
+  execution consumers support runtime resolution.
 - [P1] Authoritative workspace usage data and Provider audit events remain to be implemented.
 
 ## Follow-up polish
 
 - [P3] Code-split the existing desktop bundle in a later performance iteration; this does not affect Provider workflow correctness or visual fidelity.
 
-provider credential persistence result: passed; overall provider settings result: in progress
+provider authentication result: passed; overall provider settings result: in progress
 
 ---
 

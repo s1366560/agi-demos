@@ -13,6 +13,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import type {
+  LlmProviderAuthMethod,
   LlmProviderCreateInput,
   LlmProviderModelCatalog,
   LlmProviderProbeInput,
@@ -27,6 +28,13 @@ import {
   providerValidationAccepted,
 } from './providerManagementModel';
 import { useModalDialog } from './useModalDialog';
+
+const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = [
+  'oauth',
+  'api_key',
+  'environment',
+  'none',
+];
 
 type AddProviderDialogProps = {
   onClose: () => void;
@@ -65,8 +73,9 @@ export function AddProviderDialog({
   const [types, setTypes] = useState<LlmProviderTypeDescriptor[]>([]);
   const [selectedType, setSelectedType] = useState('');
   const [name, setName] = useState('');
-  const [authMethod, setAuthMethod] = useState<'api_key' | 'none'>('api_key');
+  const [authMethod, setAuthMethod] = useState<LlmProviderAuthMethod>('api_key');
   const [apiKey, setApiKey] = useState('');
+  const [environmentVariable, setEnvironmentVariable] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [primaryModel, setPrimaryModel] = useState('');
   const [catalog, setCatalog] = useState<LlmProviderModelCatalog | null>(null);
@@ -120,13 +129,23 @@ export function AddProviderDialog({
     const defaults = providerDefaults[descriptor.providerType] ?? {
       baseUrl: '',
     };
-    const nextAuth = descriptor.authMethods[0] || 'api_key';
+    const nextAuth =
+      descriptor.authMethods[0] ?? descriptor.unavailableAuthMethods[0] ?? 'api_key';
     setSelectedType(descriptor.providerType);
     setName(providerTypeDisplayName(descriptor.providerType));
     setAuthMethod(nextAuth);
     setBaseUrl(defaults.baseUrl);
     setApiKey('');
+    setEnvironmentVariable('');
     setError(null);
+  };
+
+  const selectAuthMethod = (nextAuthMethod: LlmProviderAuthMethod) => {
+    if (nextAuthMethod === authMethod) return;
+    setAuthMethod(nextAuthMethod);
+    setApiKey('');
+    setEnvironmentVariable('');
+    invalidateValidation();
   };
 
   const probeInput = useMemo<LlmProviderProbeInput>(
@@ -137,8 +156,11 @@ export function AddProviderDialog({
       baseUrl: baseUrl.trim().replace(/\/$/, ''),
       active: true,
       ...(authMethod === 'api_key' && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+      ...(authMethod === 'environment' && environmentVariable.trim()
+        ? { environmentVariable: environmentVariable.trim() }
+        : {}),
     }),
-    [apiKey, authMethod, baseUrl, name, selectedType],
+    [apiKey, authMethod, baseUrl, environmentVariable, name, selectedType],
   );
 
   const input = useMemo<LlmProviderCreateInput>(
@@ -151,11 +173,31 @@ export function AddProviderDialog({
       allowedModels: [...selectedModels],
       active: true,
       ...(authMethod === 'api_key' && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+      ...(authMethod === 'environment' && environmentVariable.trim()
+        ? { environmentVariable: environmentVariable.trim() }
+        : {}),
     }),
-    [apiKey, authMethod, baseUrl, name, primaryModel, selectedModels, selectedType],
+    [
+      apiKey,
+      authMethod,
+      baseUrl,
+      environmentVariable,
+      name,
+      primaryModel,
+      selectedModels,
+      selectedType,
+    ],
   );
 
   const selectedDescriptor = types.find((descriptor) => descriptor.providerType === selectedType);
+  const unavailableAuthMethods = selectedDescriptor?.unavailableAuthMethods ?? [];
+  const wizardAuthOptions = AUTH_METHOD_ORDER.filter(
+    (method) =>
+      selectedDescriptor?.authMethods.includes(method) || unavailableAuthMethods.includes(method),
+  );
+  const authMethodUnavailable = (method: LlmProviderAuthMethod) =>
+    unavailableAuthMethods.includes(method) ||
+    selectedDescriptor?.authMethods.includes(method) !== true;
   const catalogIsStaticFallback = catalog?.source === 'static-fallback';
   const catalogUnavailable = !catalog || catalog.availability === 'unavailable';
   const probeSupported = selectedDescriptor?.probeSupported === true;
@@ -165,6 +207,17 @@ export function AddProviderDialog({
 
   const formValid = authCapabilityAvailable && providerProbeInputIsValid(probeInput);
   const validationAccepted = providerValidationAccepted(validation, probeSupported);
+  const environmentSecretStatus = validation?.probed === true
+    ? 'available'
+    : validation?.probed === false
+      ? 'unavailable'
+      : 'unknown';
+  const environmentSecretStatusKey =
+    environmentSecretStatus === 'available'
+      ? 'providers.environmentSecretAvailable'
+      : environmentSecretStatus === 'unavailable'
+        ? 'providers.environmentSecretUnavailable'
+        : 'providers.environmentSecretUnknown';
 
   const testDraft = async () => {
     const requestId = validationRequestId.current + 1;
@@ -315,19 +368,25 @@ export function AddProviderDialog({
                     }}
                   />
                 </label>
-                {selectedDescriptor?.authMethods.length ? (
+                {wizardAuthOptions.length ? (
                   <label>
                     <span>{t('providers.authenticationMethod')}</span>
                     <select
                       value={authMethod}
                       onChange={(event) => {
-                        setAuthMethod(event.target.value === 'none' ? 'none' : 'api_key');
-                        invalidateValidation();
+                        selectAuthMethod(event.target.value as LlmProviderAuthMethod);
                       }}
                     >
-                      {selectedDescriptor.authMethods.map((method) => (
-                        <option value={method} key={method}>
+                      {wizardAuthOptions.map((method) => (
+                        <option
+                          value={method}
+                          disabled={authMethodUnavailable(method)}
+                          key={method}
+                        >
                           {t(`providers.auth.${method}`)}
+                          {authMethodUnavailable(method)
+                            ? ` — ${t('providers.authUnavailable')}`
+                            : ''}
                         </option>
                       ))}
                     </select>
@@ -355,6 +414,53 @@ export function AddProviderDialog({
                       placeholder={t('providers.apiKeyPlaceholder')}
                     />
                   </label>
+                ) : null}
+                {authCapabilityAvailable && authMethod === 'environment' ? (
+                  <label>
+                    <span className="provider-input-label-heading">
+                      <span>{t('providers.environmentVariable')}</span>
+                      <em
+                        className={`provider-secret-status ${environmentSecretStatus}`}
+                        role="status"
+                      >
+                        {t(environmentSecretStatusKey)}
+                      </em>
+                    </span>
+                    <input
+                      type="text"
+                      autoCapitalize="none"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={environmentVariable}
+                      aria-describedby="provider-wizard-environment-secret-description"
+                      onChange={(event) => {
+                        setEnvironmentVariable(event.target.value);
+                        invalidateValidation();
+                      }}
+                      placeholder={t('providers.environmentVariablePlaceholder')}
+                    />
+                    <small id="provider-wizard-environment-secret-description">
+                      {t('providers.environmentSecretDescription')}
+                    </small>
+                  </label>
+                ) : null}
+                {authCapabilityAvailable && authMethod === 'none' ? (
+                  <div className="provider-capability-note compact" role="status">
+                    <ExclamationTriangleIcon />
+                    <span>
+                      <b>{t('providers.noAuthentication')}</b>
+                      <small>{t('providers.noAuthenticationDescription')}</small>
+                    </span>
+                  </div>
+                ) : null}
+                {authMethod === 'oauth' ? (
+                  <div className="provider-capability-note compact" role="status">
+                    <ExclamationTriangleIcon />
+                    <span>
+                      <b>{t('providers.authUnavailable')}</b>
+                      <small>{t('providers.oauthUnavailableDescription')}</small>
+                    </span>
+                  </div>
                 ) : null}
                 <label>
                   <span>{t('providers.baseUrl')}</span>

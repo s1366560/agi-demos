@@ -66,6 +66,23 @@ export function ProviderOverviewPanel({
   const fastRoute = routeLabel(overviewRouting.roles.fast);
   const fallbackRoute = routeLabel(overviewRouting.fallbacks[0]);
   const policyBacked = mode === 'local' && policy !== null;
+  const authMethod = provider.auth_method ?? 'api_key';
+  const credentialReady =
+    provider.auth_method === 'none' || provider.credential_configured === true;
+  const credentialStatusKey =
+    authMethod === 'none'
+      ? 'providers.noAuthentication'
+      : authMethod === 'environment'
+        ? provider.credential_configured === true
+          ? 'providers.environmentSecretAvailable'
+          : provider.credential_configured === false
+            ? 'providers.environmentSecretUnavailable'
+            : 'providers.environmentSecretUnknown'
+        : credentialReady
+          ? 'providers.credentialConfigured'
+          : provider.credential_configured === false
+            ? 'providers.credentialMissing'
+            : 'providers.credentialUnknown';
   const checkedAt = provider.health_last_check
     ? new Date(provider.health_last_check).toLocaleString(locale)
     : t('providers.neverChecked');
@@ -86,15 +103,9 @@ export function ProviderOverviewPanel({
           <div>
             <b>{provider.base_url || t('providers.providerDefaultEndpoint')}</b>
             <span>
-              {t(
-                provider.auth_method === 'none' ? 'providers.auth.none' : 'providers.auth.api_key',
-              )}
+              {t(`providers.auth.${authMethod}`)}
               {' · '}
-              {provider.auth_method === 'none' || provider.credential_configured === true
-                ? t('providers.credentialConfigured')
-                : provider.credential_configured === false
-                  ? t('providers.credentialMissing')
-                  : t('providers.credentialUnknown')}
+              {t(credentialStatusKey)}
             </span>
           </div>
           <button type="button" onClick={() => onTabChange('connection')}>

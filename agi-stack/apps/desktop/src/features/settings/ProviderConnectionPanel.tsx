@@ -14,6 +14,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import type {
+  LlmProviderAuthMethod,
   LlmProviderMutationInput,
   LlmProviderProbeInput,
   LlmProviderTypeDescriptor,
@@ -29,6 +30,13 @@ import {
   providerValidationAccepted,
   type ProviderEditorDraft,
 } from './providerManagementModel';
+
+const AUTH_METHOD_ORDER: LlmProviderAuthMethod[] = [
+  'oauth',
+  'api_key',
+  'environment',
+  'none',
+];
 
 type ProviderConnectionPanelProps = {
   provider: ManagedLlmProvider;
@@ -103,6 +111,21 @@ export function ProviderConnectionPanel({
     if (busy === 'save') return;
     validationRequestId.current += 1;
     setDraft((current) => ({ ...current, [key]: value }));
+    setValidation(null);
+    setError(null);
+    setBusy((current) => (current === 'test' ? null : current));
+  };
+
+  const selectAuthMethod = (authMethod: LlmProviderAuthMethod) => {
+    if (busy === 'save' || draft.authMethod === authMethod) return;
+    validationRequestId.current += 1;
+    setDraft((current) => ({
+      ...current,
+      authMethod,
+      apiKey: '',
+      environmentVariable: '',
+    }));
+    setShowSecret(false);
     setValidation(null);
     setError(null);
     setBusy((current) => (current === 'test' ? null : current));
@@ -192,7 +215,15 @@ export function ProviderConnectionPanel({
   };
 
   const authMethods = providerTypeDescriptor?.authMethods ?? [];
-  const authCapabilityAvailable = authMethods.includes(draft.authMethod);
+  const unavailableAuthMethods = providerTypeDescriptor?.unavailableAuthMethods ?? [];
+  const authOptions = AUTH_METHOD_ORDER.filter(
+    (authMethod) =>
+      authMethods.includes(authMethod) || unavailableAuthMethods.includes(authMethod),
+  );
+  const authMethodUnavailable = (authMethod: LlmProviderAuthMethod) =>
+    unavailableAuthMethods.includes(authMethod) || !authMethods.includes(authMethod);
+  const authCapabilityAvailable =
+    authMethods.includes(draft.authMethod) && !authMethodUnavailable(draft.authMethod);
   const probeSupported = providerTypeDescriptor?.probeSupported === true;
   const providerHealth = provider.health_status?.trim().toLowerCase();
   const currentProviderVerified =
@@ -219,6 +250,27 @@ export function ProviderConnectionPanel({
       : provider.credential_configured === false
         ? t('providers.credentialMissing')
         : t('providers.credentialUnknown');
+  const persistedEnvironmentVariable = (provider.environment_variable ?? '').trim();
+  const environmentVariableChanged =
+    draft.environmentVariable.trim() !== persistedEnvironmentVariable;
+  const environmentSecretStatus = validation?.probed === true
+    ? 'available'
+    : validation?.probed === false
+      ? 'unavailable'
+      : provider.auth_method === 'environment' && !environmentVariableChanged
+        ? provider.credential_configured === true
+          ? 'available'
+          : provider.credential_configured === false
+            ? 'unavailable'
+            : 'unknown'
+        : 'unknown';
+  const environmentSecretStatusKey =
+    environmentSecretStatus === 'available'
+      ? 'providers.environmentSecretAvailable'
+      : environmentSecretStatus === 'unavailable'
+        ? 'providers.environmentSecretUnavailable'
+        : 'providers.environmentSecretUnknown';
+  const environmentSecretHintId = `provider-environment-secret-${provider.id}`;
   const discoveredModelCount = validation?.catalog?.models.length ?? 0;
   const validationDetail =
     error ||
@@ -279,23 +331,41 @@ export function ProviderConnectionPanel({
           role="group"
           aria-label={t('providers.authenticationMethod')}
         >
-          {authMethods.map((authMethod) => (
-            <button
-              className={draft.authMethod === authMethod ? 'selected' : ''}
-              type="button"
-              disabled={!editing || busy === 'save'}
-              key={authMethod}
-              onClick={() => updateDraft('authMethod', authMethod)}
-            >
-              {authMethod === 'api_key' ? <LockClosedIcon /> : <Link2Icon />}
-              <span>
-                <b>{t(`providers.auth.${authMethod}`)}</b>
-                <small>{t(`providers.auth.${authMethod}Description`)}</small>
-              </span>
-            </button>
-          ))}
+          {authOptions.map((authMethod) => {
+            const unavailable = authMethodUnavailable(authMethod);
+            return (
+              <button
+                className={`${draft.authMethod === authMethod ? 'selected' : ''} ${
+                  unavailable ? 'provider-auth-option-unavailable' : ''
+                }`}
+                type="button"
+                disabled={!editing || busy === 'save' || unavailable}
+                aria-pressed={draft.authMethod === authMethod}
+                aria-label={`${t(`providers.auth.${authMethod}`)} · ${t(
+                  unavailable ? 'providers.authUnavailable' : 'providers.authAvailable',
+                )}`}
+                key={authMethod}
+                onClick={() => selectAuthMethod(authMethod)}
+              >
+                {authMethod === 'api_key' ? (
+                  <LockClosedIcon />
+                ) : authMethod === 'environment' ? (
+                  <GearIcon />
+                ) : authMethod === 'none' ? (
+                  <InfoCircledIcon />
+                ) : (
+                  <Link2Icon />
+                )}
+                <span>
+                  <b>{t(`providers.auth.${authMethod}`)}</b>
+                  <small>{t(`providers.auth.${authMethod}Description`)}</small>
+                  {unavailable ? <em>{t('providers.authUnavailable')}</em> : null}
+                </span>
+              </button>
+            );
+          })}
         </div>
-        {authMethods.length === 0 ? (
+        {authOptions.length === 0 ? (
           <div className="provider-capability-note compact">
             <ExclamationTriangleIcon />
             <span>
@@ -315,36 +385,67 @@ export function ProviderConnectionPanel({
         ) : null}
         {authCapabilityAvailable ? (
           draft.authMethod === 'api_key' ? (
-          <label className="provider-input-label">
-            <span>{t('providers.apiKey')}</span>
-            <div className="provider-secret-input">
+            <label className="provider-input-label">
+              <span>{t('providers.apiKey')}</span>
+              <div className="provider-secret-input">
+                <input
+                  disabled={!editing || busy === 'save'}
+                  type={showSecret ? 'text' : 'password'}
+                  value={credentialValue}
+                  autoComplete="new-password"
+                  onChange={(event) => updateDraft('apiKey', event.target.value)}
+                  placeholder={credentialPlaceholder}
+                />
+                <button
+                  type="button"
+                  disabled={!editing || busy === 'save' || !draft.apiKey}
+                  aria-label={t(showSecret ? 'providers.hideSecret' : 'providers.showSecret')}
+                  onClick={() => setShowSecret((current) => !current)}
+                >
+                  {showSecret ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                </button>
+              </div>
+              <small>{t(secretDescriptionKey)}</small>
+            </label>
+          ) : draft.authMethod === 'environment' ? (
+            <label className="provider-input-label">
+              <span className="provider-input-label-heading">
+                <span>{t('providers.environmentVariable')}</span>
+                <em className={`provider-secret-status ${environmentSecretStatus}`} role="status">
+                  {t(environmentSecretStatusKey)}
+                </em>
+              </span>
               <input
                 disabled={!editing || busy === 'save'}
-                type={showSecret ? 'text' : 'password'}
-                value={credentialValue}
-                autoComplete="new-password"
-                onChange={(event) => updateDraft('apiKey', event.target.value)}
-                placeholder={credentialPlaceholder}
+                type="text"
+                value={draft.environmentVariable}
+                autoCapitalize="none"
+                autoComplete="off"
+                spellCheck={false}
+                aria-describedby={environmentSecretHintId}
+                onChange={(event) => updateDraft('environmentVariable', event.target.value)}
+                placeholder={t('providers.environmentVariablePlaceholder')}
               />
-              <button
-                type="button"
-                disabled={!editing || busy === 'save' || !draft.apiKey}
-                aria-label={t(showSecret ? 'providers.hideSecret' : 'providers.showSecret')}
-                onClick={() => setShowSecret((current) => !current)}
-              >
-                {showSecret ? <EyeClosedIcon /> : <EyeOpenIcon />}
-              </button>
+              <small id={environmentSecretHintId}>
+                {t('providers.environmentSecretDescription')}
+              </small>
+            </label>
+          ) : draft.authMethod === 'none' ? (
+            <div className="provider-capability-note compact">
+              <InfoCircledIcon />
+              <span>
+                <b>{t('providers.noAuthentication')}</b>
+                <small>{t('providers.noAuthenticationDescription')}</small>
+              </span>
             </div>
-            <small>{t(secretDescriptionKey)}</small>
-          </label>
-        ) : (
-          <div className="provider-capability-note compact">
-            <InfoCircledIcon />
-            <span>
-              <b>{t('providers.noAuthentication')}</b>
-              <small>{t('providers.noAuthenticationDescription')}</small>
-            </span>
-          </div>
+          ) : (
+            <div className="provider-capability-note compact" role="status">
+              <Link2Icon />
+              <span>
+                <b>{t('providers.authUnavailable')}</b>
+                <small>{t('providers.oauthUnavailableDescription')}</small>
+              </span>
+            </div>
           )
         ) : null}
       </div>

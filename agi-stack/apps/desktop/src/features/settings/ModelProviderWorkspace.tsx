@@ -670,11 +670,7 @@ export function ModelProviderWorkspace({
                   <ProviderStatusBadge provider={provider} />
                   <span className="provider-auth-badge">
                     <LockClosedIcon />
-                    {t(
-                      provider.auth_method === 'none'
-                        ? 'providers.auth.none'
-                        : 'providers.auth.api_key',
-                    )}
+                    {t(`providers.auth.${provider.auth_method ?? 'api_key'}`)}
                   </span>
                 </div>
               </div>

@@ -1080,6 +1080,14 @@ impl LocalRuntimeState {
                 }
             }
         }
+        for (key, provider) in &provider_values {
+            if let Some(credential) = resolved_environment_credential(provider) {
+                configured_credentials.insert(key.clone());
+                if provider_bindings.contains_key(key) {
+                    runtime_credentials.insert(key.clone(), credential);
+                }
+            }
+        }
         Ok(Self {
             api_token,
             workspace_root: Mutex::new(workspace_root),
@@ -2996,6 +3004,8 @@ struct LlmProviderMutation {
     #[serde(default)]
     api_key: Option<String>,
     #[serde(default)]
+    environment_variable: Option<String>,
+    #[serde(default)]
     llm_model: Option<String>,
     #[serde(default)]
     allowed_models: Option<Vec<String>>,
@@ -3015,6 +3025,8 @@ struct LlmProviderDraftProbe {
     auth_method: String,
     #[serde(default)]
     api_key: Option<String>,
+    #[serde(default)]
+    environment_variable: Option<String>,
     #[serde(default, rename = "is_active")]
     _is_active: Option<bool>,
 }
@@ -3097,6 +3109,7 @@ struct LlmProviderTypeDescriptor {
     operation_type: &'static str,
     probe_supported: bool,
     auth_methods: &'static [&'static str],
+    unavailable_auth_methods: &'static [&'static str],
 }
 
 const LOCAL_LLM_PROVIDER_TYPES: &[LlmProviderTypeDescriptor] = &[
@@ -3104,19 +3117,22 @@ const LOCAL_LLM_PROVIDER_TYPES: &[LlmProviderTypeDescriptor] = &[
         provider_type: "openai",
         operation_type: "llm",
         probe_supported: true,
-        auth_methods: &["api_key", "none"],
+        auth_methods: &["api_key", "environment", "none"],
+        unavailable_auth_methods: &["oauth"],
     },
     LlmProviderTypeDescriptor {
         provider_type: "anthropic",
         operation_type: "llm",
         probe_supported: true,
-        auth_methods: &["api_key", "none"],
+        auth_methods: &["api_key", "environment", "none"],
+        unavailable_auth_methods: &["oauth"],
     },
     LlmProviderTypeDescriptor {
         provider_type: "openai_compatible",
         operation_type: "llm",
         probe_supported: true,
-        auth_methods: &["api_key", "none"],
+        auth_methods: &["api_key", "environment", "none"],
+        unavailable_auth_methods: &[],
     },
 ];
 
@@ -3543,6 +3559,7 @@ fn mutate_llm_provider(
         base_url,
         auth_method,
         api_key,
+        environment_variable,
         llm_model,
         allowed_models,
         is_active,
@@ -3588,6 +3605,7 @@ fn mutate_llm_provider(
             "is_active": false,
             "base_url": null,
             "auth_method": "api_key",
+            "environment_variable": null,
             "credential_source": "system_vault",
             "credential_configured": false,
             "llm_model": null,
@@ -3656,11 +3674,30 @@ fn mutate_llm_provider(
         .and_then(Value::as_str)
         .unwrap_or("api_key")
         .to_string();
-    if !matches!(auth_method.as_str(), "api_key" | "none") {
+    if !matches!(auth_method.as_str(), "api_key" | "environment" | "none") {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({ "detail": "unsupported local provider auth method" })),
         ));
+    }
+    if auth_method == "environment" {
+        let environment_variable = match environment_variable {
+            Some(value) => normalized_environment_variable_name(&value)?,
+            None => object
+                .get("environment_variable")
+                .and_then(Value::as_str)
+                .map(normalized_environment_variable_name)
+                .transpose()?
+                .ok_or_else(|| {
+                    provider_probe_request_error("environment variable name is required")
+                })?,
+        };
+        object.insert(
+            "environment_variable".to_string(),
+            json!(environment_variable),
+        );
+    } else {
+        object.remove("environment_variable");
     }
     if let Some(base_url) = object.get("base_url").and_then(Value::as_str) {
         let base_url = normalized_runtime_provider_base_url(&provider_type, base_url)?;
@@ -3668,10 +3705,10 @@ fn mutate_llm_provider(
     }
     object.insert(
         "credential_source".to_string(),
-        json!(if auth_method == "none" {
-            "none"
-        } else {
-            "system_vault"
+        json!(match auth_method.as_str() {
+            "none" => "none",
+            "environment" => "environment",
+            _ => "system_vault",
         }),
     );
     object.insert("credential_configured".to_string(), json!(false));
@@ -3736,7 +3773,9 @@ fn mutate_llm_provider(
         }
         next
     });
-    let next_credential = if next_credential_binding.is_none() {
+    let next_credential = if auth_method == "environment" {
+        resolved_environment_credential(&provider)
+    } else if next_credential_binding.is_none() {
         None
     } else if submitted_credential.is_some() {
         submitted_credential
@@ -3942,26 +3981,46 @@ async fn validate_llm_provider_draft(
 
     let base_url = normalized_runtime_provider_base_url(&provider_type, &request.base_url)?;
     let auth_method = request.auth_method.trim().to_lowercase();
-    if !matches!(auth_method.as_str(), "api_key" | "none") {
+    if !matches!(auth_method.as_str(), "api_key" | "environment" | "none") {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({ "detail": "unsupported local provider auth method" })),
         ));
     }
-    let credential = request
-        .api_key
-        .as_deref()
-        .and_then(normalized_runtime_credential);
-    if auth_method == "api_key" && credential.is_none() {
+    let credential = if auth_method == "environment" {
+        let environment_variable = request
+            .environment_variable
+            .as_deref()
+            .map(normalized_environment_variable_name)
+            .transpose()?
+            .ok_or_else(|| provider_probe_request_error("environment variable name is required"))?;
+        std::env::var(environment_variable)
+            .ok()
+            .and_then(|value| normalized_runtime_credential(&value))
+    } else {
+        request
+            .api_key
+            .as_deref()
+            .and_then(normalized_runtime_credential)
+    };
+    if matches!(auth_method.as_str(), "api_key" | "environment") && credential.is_none() {
         return Ok(Json(json!({
             "provider": null,
             "status": "needs_credentials",
             "probed": false,
-            "detail": "Enter a provider credential before testing this connection.",
+            "detail": if auth_method == "environment" {
+                "The referenced environment variable is unavailable in this runtime."
+            } else {
+                "Enter a provider credential before testing this connection."
+            },
             "last_check": null,
             "response_time_ms": null,
             "error_code": "credential_unavailable",
-            "error_message": "Enter a provider credential before testing this connection.",
+            "error_message": if auth_method == "environment" {
+                "The referenced environment variable is unavailable in this runtime."
+            } else {
+                "Enter a provider credential before testing this connection."
+            },
             "catalog": null,
         })));
     }
@@ -3971,7 +4030,7 @@ async fn validate_llm_provider_draft(
         .probe(ProviderProbeRequest {
             provider_type: provider_type.clone(),
             base_url,
-            auth_method,
+            auth_method: provider_probe_auth_method(&auth_method).to_string(),
             credential,
         })
         .await;
@@ -4066,15 +4125,22 @@ async fn probe_saved_llm_provider(
         .await
         .map_err(|_| provider_credential_store_error(ProviderCredentialStoreError::Unavailable))?
         .map_err(provider_credential_store_error)?
+    } else if auth_method == "environment" {
+        resolved_environment_credential(&provider)
     } else {
         None
     };
-    let (outcome, probed) = if auth_method == "api_key" && credential.is_none() {
+    let (outcome, probed) = if matches!(auth_method.as_str(), "api_key" | "environment")
+        && credential.is_none()
+    {
         (
             ProviderProbeOutcome {
                 status: "needs_credentials",
-                detail:
-                    "The saved provider credential is unavailable. Enter it again before testing.",
+                detail: if auth_method == "environment" {
+                    "The referenced environment variable is unavailable in this runtime."
+                } else {
+                    "The saved provider credential is unavailable. Enter it again before testing."
+                },
                 error_code: Some("credential_unavailable"),
                 response_time_ms: 0,
                 models: Vec::new(),
@@ -4088,7 +4154,7 @@ async fn probe_saved_llm_provider(
                 .probe(ProviderProbeRequest {
                     provider_type: provider_type.clone(),
                     base_url,
-                    auth_method,
+                    auth_method: provider_probe_auth_method(&auth_method).to_string(),
                     credential,
                 })
                 .await,
@@ -4171,12 +4237,24 @@ fn provider_probe_binding(
         .unwrap_or("api_key")
         .trim()
         .to_lowercase();
-    if !matches!(auth_method.as_str(), "api_key" | "none") {
+    if !matches!(auth_method.as_str(), "api_key" | "environment" | "none") {
         return Err(provider_probe_request_error(
             "unsupported local provider auth method",
         ));
     }
-    let digest = provider_credential_binding_digest(&provider_type, &base_url, &auth_method);
+    let environment_variable = if auth_method == "environment" {
+        let variable = provider_environment_variable(provider)
+            .ok_or_else(|| provider_probe_request_error("environment variable name is required"))?;
+        Some(normalized_environment_variable_name(variable)?)
+    } else {
+        None
+    };
+    let digest = provider_connection_binding_digest(
+        &provider_type,
+        &base_url,
+        &auth_method,
+        environment_variable.as_deref(),
+    );
     Ok(ProviderProbeBindingSnapshot {
         provider_type,
         base_url,
@@ -4518,6 +4596,68 @@ fn normalized_runtime_credential(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
+fn normalized_environment_variable_name(value: &str) -> Result<String, (StatusCode, Json<Value>)> {
+    let value = value.trim();
+    let mut characters = value.chars();
+    let first = characters.next();
+    let valid = value.len() <= 128
+        && first.is_some_and(|character| character == '_' || character.is_ascii_alphabetic())
+        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric());
+    if !valid {
+        return Err(provider_probe_request_error(
+            "environment variable name must contain only ASCII letters, numbers, and underscores",
+        ));
+    }
+    Ok(value.to_string())
+}
+
+fn provider_environment_variable(provider: &Value) -> Option<&str> {
+    (provider.get("auth_method").and_then(Value::as_str) == Some("environment"))
+        .then(|| {
+            provider
+                .get("environment_variable")
+                .and_then(Value::as_str)
+                .map(str::trim)
+        })
+        .flatten()
+        .filter(|value| !value.is_empty())
+}
+
+fn resolved_environment_credential(provider: &Value) -> Option<String> {
+    let variable = provider_environment_variable(provider)?;
+    std::env::var(variable)
+        .ok()
+        .and_then(|value| normalized_runtime_credential(&value))
+}
+
+fn provider_probe_auth_method(auth_method: &str) -> &str {
+    if auth_method == "environment" {
+        "api_key"
+    } else {
+        auth_method
+    }
+}
+
+fn provider_connection_binding_digest(
+    provider_type: &str,
+    base_url: &str,
+    auth_method: &str,
+    environment_variable: Option<&str>,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"memstack-llm-provider-connection-v1\0");
+    digest.update(provider_type.as_bytes());
+    digest.update(b"\0");
+    digest.update(base_url.as_bytes());
+    digest.update(b"\0");
+    digest.update(auth_method.as_bytes());
+    digest.update(b"\0");
+    if let Some(environment_variable) = environment_variable {
+        digest.update(environment_variable.as_bytes());
+    }
+    format!("{:x}", digest.finalize())
+}
+
 fn provider_credential_binding(provider: &Value) -> Option<String> {
     let provider_type = provider.get("provider_type")?.as_str()?.trim();
     let base_url = provider.get("base_url")?.as_str()?.trim();
@@ -4557,7 +4697,8 @@ fn runtime_binding_from_provider(provider: &Value) -> Option<ProviderRuntimeBind
     if !runtime_provider_supported(provider_type)
         || base_url.is_empty()
         || model.is_empty()
-        || !matches!(auth_method, "api_key" | "none")
+        || !matches!(auth_method, "api_key" | "environment" | "none")
+        || (auth_method == "environment" && provider_environment_variable(provider).is_none())
     {
         return None;
     }
@@ -4778,15 +4919,14 @@ fn provider_with_runtime_state(
         probe.provider_revision == provider_revision
             && current_binding_digest.as_deref() == Some(probe.binding_digest.as_str())
     });
-    let credential_source = if provider
+    let auth_method = provider
         .get("auth_method")
         .and_then(Value::as_str)
-        .unwrap_or("api_key")
-        == "none"
-    {
-        "none"
-    } else {
-        "system_vault"
+        .unwrap_or("api_key");
+    let credential_source = match auth_method {
+        "none" => "none",
+        "environment" => "environment",
+        _ => "system_vault",
     };
     if let Some(object) = provider.as_object_mut() {
         object.insert("credential_source".to_string(), json!(credential_source));
@@ -8794,22 +8934,208 @@ mod tests {
                     "provider_type": "openai",
                     "operation_type": "llm",
                     "probe_supported": true,
-                    "auth_methods": ["api_key", "none"]
+                    "auth_methods": ["api_key", "environment", "none"],
+                    "unavailable_auth_methods": ["oauth"]
                 },
                 {
                     "provider_type": "anthropic",
                     "operation_type": "llm",
                     "probe_supported": true,
-                    "auth_methods": ["api_key", "none"]
+                    "auth_methods": ["api_key", "environment", "none"],
+                    "unavailable_auth_methods": ["oauth"]
                 },
                 {
                     "provider_type": "openai_compatible",
                     "operation_type": "llm",
                     "probe_supported": true,
-                    "auth_methods": ["api_key", "none"]
+                    "auth_methods": ["api_key", "environment", "none"],
+                    "unavailable_auth_methods": []
                 }
             ])
         );
+    }
+
+    #[tokio::test]
+    async fn environment_provider_reference_never_persists_the_resolved_value() {
+        let state = test_state("provider-environment-secret");
+        let app = local_router(Arc::clone(&state));
+        let environment_value = std::env::var("PATH").expect("test process PATH");
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "provider-environment-secret",
+                json!({
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "environment",
+                    "environment_variable": "PATH",
+                    "llm_model": "model-a",
+                    "is_active": true,
+                    "expected_revision": 0
+                }),
+            ))
+            .await
+            .expect("environment provider update response");
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let updated = response_json(response).await;
+        assert_eq!(updated["auth_method"], "environment");
+        assert_eq!(updated["environment_variable"], "PATH");
+        assert_eq!(updated["credential_source"], "environment");
+        assert_eq!(updated["credential_configured"], true);
+        assert!(!updated.to_string().contains(&environment_value));
+
+        let persisted = state
+            .session_store
+            .managed_resource(
+                ManagedResourceKind::Provider,
+                "tenant",
+                "local",
+                "local-runtime",
+            )
+            .expect("persisted provider")
+            .expect("local runtime provider");
+        assert_eq!(persisted["environment_variable"], "PATH");
+        assert!(!persisted.to_string().contains(&environment_value));
+
+        let key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        let runtime = state.provider_runtime.lock().expect("provider runtime");
+        assert_eq!(
+            runtime.credentials.get(&key).map(String::as_str),
+            Some(environment_value.as_str())
+        );
+        assert!(runtime.configured_credentials.contains(&key));
+    }
+
+    #[tokio::test]
+    async fn environment_provider_reference_survives_restart_without_persisting_the_value() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create environment restart test root");
+        let store_path = root.join("sessions.db");
+        let workspace_root = root.join("workspace");
+        std::fs::create_dir_all(&workspace_root).expect("create environment workspace root");
+        let credential = "environment-restart-session";
+        let environment_value = std::env::var("PATH").expect("test process PATH");
+
+        {
+            let store = DesktopSessionStore::open(&store_path).expect("open session store");
+            let provider_credentials = ProviderCredentialBroker::in_memory(store.installation_id())
+                .expect("provider credential broker");
+            let state = Arc::new(
+                LocalRuntimeState::new_with_provider_credentials(
+                    workspace_root.clone(),
+                    LocalToolHost::new(&workspace_root).expect("tool host"),
+                    Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
+                    credential.to_string(),
+                    store,
+                    provider_credentials,
+                )
+                .expect("runtime state"),
+            );
+            state
+                .session_store
+                .seed_test_session(credential)
+                .expect("test session");
+            let app = local_router(state);
+            let update = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "PUT",
+                    "/api/v1/llm-providers/local-runtime",
+                    credential,
+                    json!({
+                        "provider_type": "openai",
+                        "base_url": "https://api.example.test/v1",
+                        "auth_method": "environment",
+                        "environment_variable": "PATH",
+                        "llm_model": "model-a",
+                        "is_active": true,
+                        "expected_revision": 0
+                    }),
+                ))
+                .await
+                .expect("configure environment provider");
+            assert_eq!(update.status(), axum::http::StatusCode::OK);
+
+            let select = app
+                .oneshot(authenticated_json_request(
+                    "PUT",
+                    "/api/v1/llm-providers/local-runtime/runtime-selection",
+                    credential,
+                    json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
+                ))
+                .await
+                .expect("select environment provider");
+            assert_eq!(select.status(), axum::http::StatusCode::OK);
+        }
+
+        let store = DesktopSessionStore::open(&store_path).expect("reopen session store");
+        let provider_credentials = ProviderCredentialBroker::in_memory(store.installation_id())
+            .expect("restored provider credential broker");
+        let state = Arc::new(
+            LocalRuntimeState::new_with_provider_credentials(
+                workspace_root.clone(),
+                LocalToolHost::new(&workspace_root).expect("restored tool host"),
+                Arc::new(SqliteCheckpointStore::in_memory().expect("restored checkpoints")),
+                credential.to_string(),
+                store,
+                provider_credentials,
+            )
+            .expect("restored runtime state"),
+        );
+        let runtime_key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        let runtime = state.provider_runtime.lock().expect("provider runtime");
+        assert_eq!(
+            runtime.credentials.get(&runtime_key).map(String::as_str),
+            Some(environment_value.as_str())
+        );
+        assert!(runtime.configured_credentials.contains(&runtime_key));
+        assert_eq!(
+            runtime.selections.get("local"),
+            Some(&"local-runtime".to_string())
+        );
+        drop(runtime);
+
+        let persisted = state
+            .session_store
+            .managed_resource(
+                ManagedResourceKind::Provider,
+                "tenant",
+                "local",
+                "local-runtime",
+            )
+            .expect("persisted provider")
+            .expect("local runtime provider");
+        assert_eq!(persisted["environment_variable"], "PATH");
+        assert!(!persisted.to_string().contains(&environment_value));
+        drop(state);
+
+        for path in [
+            store_path.clone(),
+            store_path.with_extension("db-wal"),
+            store_path.with_extension("db-shm"),
+        ] {
+            if !path.exists() {
+                continue;
+            }
+            let bytes = std::fs::read(&path).expect("read provider database artifact");
+            assert!(
+                !bytes
+                    .windows(environment_value.len())
+                    .any(|window| window == environment_value.as_bytes()),
+                "environment credential leaked into {}",
+                path.display()
+            );
+        }
+        std::fs::remove_dir_all(root).expect("remove environment restart test root");
     }
 
     #[tokio::test]
@@ -9066,6 +9392,53 @@ mod tests {
         let missing_credential = response_json(missing_credential).await;
         assert_eq!(missing_credential["status"], "needs_credentials");
         assert_eq!(missing_credential["probed"], false);
+
+        let missing_environment_variable = "MEMSTACK_PROVIDER_TEST_MISSING_CREDENTIAL_0F740B75";
+        assert!(std::env::var_os(missing_environment_variable).is_none());
+        let missing_environment = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-draft-secret",
+                json!({
+                    "name": "Environment draft provider",
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "environment",
+                    "environment_variable": missing_environment_variable,
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("missing environment credential response");
+        assert_eq!(missing_environment.status(), axum::http::StatusCode::OK);
+        let missing_environment = response_json(missing_environment).await;
+        assert_eq!(missing_environment["status"], "needs_credentials");
+        assert_eq!(missing_environment["probed"], false);
+        assert_eq!(missing_environment["error_code"], "credential_unavailable");
+
+        let invalid_environment = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-draft-secret",
+                json!({
+                    "name": "Invalid environment draft provider",
+                    "provider_type": "openai",
+                    "base_url": "https://api.example.test/v1",
+                    "auth_method": "environment",
+                    "environment_variable": "OPENAI_API_KEY;invalid",
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("invalid environment reference response");
+        assert_eq!(
+            invalid_environment.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
 
         let invalid_endpoint = app
             .clone()

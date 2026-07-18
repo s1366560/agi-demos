@@ -79,7 +79,10 @@ const PROVIDER_TYPES: &[&str] = &[
 
 const OPERATION_TYPES: &[&str] = &["llm", "embedding", "rerank"];
 const API_KEY_AUTH_METHODS: &[&str] = &["api_key"];
+const API_KEY_OR_ENVIRONMENT_AUTH_METHODS: &[&str] = &["api_key", "environment"];
 const NO_AUTH_METHODS: &[&str] = &["none"];
+const NO_UNAVAILABLE_AUTH_METHODS: &[&str] = &[];
+const OAUTH_UNAVAILABLE_AUTH_METHODS: &[&str] = &["oauth"];
 
 pub(crate) type SharedLlmProviderHealth = Arc<dyn LlmProviderHealthService>;
 pub(crate) type SharedLlmProviders = Arc<dyn LlmProviderCatalogService>;
@@ -87,6 +90,10 @@ pub(crate) type SharedLlmProviderAssignments = Arc<dyn LlmProviderAssignmentServ
 pub(crate) type SharedLlmProviderUsage = Arc<dyn LlmProviderUsageService>;
 
 const LOCAL_NO_API_KEY_SENTINEL: &str = "__MEMSTACK_NO_API_KEY__";
+const AUTH_METHOD_CONFIG_KEY: &str = "auth_method";
+const ENVIRONMENT_VARIABLE_CONFIG_KEY: &str = "environment_variable";
+const ENVIRONMENT_CREDENTIAL_MISSING: &str = "Environment credential is not configured";
+const ENVIRONMENT_CREDENTIAL_INVALID: &str = "Environment credential configuration is invalid";
 
 #[async_trait]
 pub(crate) trait LlmProviderCatalogService: Send + Sync {
@@ -192,7 +199,7 @@ impl LlmProviderCatalogService for PgLlmProviderCatalogService {
         _user_id: &str,
         request: ProviderCreateRequest,
     ) -> Result<ProviderConfigResponse, LlmProvidersApiError> {
-        let record = provider_create_record(request)?;
+        let record = provider_create_record_with_auth(request)?;
         let created = self
             .repo
             .create_provider(&record)
@@ -215,7 +222,7 @@ impl LlmProviderCatalogService for PgLlmProviderCatalogService {
         let Some(existing) = existing else {
             return Ok(None);
         };
-        let update = provider_update_record(&existing, request)?;
+        let update = provider_update_record_with_auth(&existing, request)?;
         let updated = self
             .repo
             .update_provider(provider_id, &update)
@@ -337,7 +344,7 @@ impl LlmProviderCatalogService for DevLlmProviderCatalogService {
         let Some(position) = records.iter().position(|record| record.id == provider_id) else {
             return Ok(None);
         };
-        let update = provider_update_record(&records[position], request)?;
+        let update = provider_update_record_with_auth(&records[position], request)?;
         apply_update_to_dev_record(&mut records[position], update);
         let response = provider_response_from_record(records[position].clone(), None);
         Ok(Some(response))
@@ -680,8 +687,15 @@ async fn list_provider_types() -> Json<Vec<ProviderTypeDescriptor>> {
                 probe_supported: provider_probe_supported(provider_type),
                 auth_methods: if matches!(provider_type, "ollama" | "lmstudio") {
                     NO_AUTH_METHODS
+                } else if provider_supports_environment(provider_type) {
+                    API_KEY_OR_ENVIRONMENT_AUTH_METHODS
                 } else {
                     API_KEY_AUTH_METHODS
+                },
+                unavailable_auth_methods: if matches!(provider_type, "openai" | "anthropic") {
+                    OAUTH_UNAVAILABLE_AUTH_METHODS
+                } else {
+                    NO_UNAVAILABLE_AUTH_METHODS
                 },
             })
             .collect(),
@@ -815,14 +829,30 @@ async fn check_provider_health(
 async fn execute_provider_connection_test(
     request: ProviderProbeRequest,
 ) -> Result<ProviderValidationResponse, LlmProvidersApiError> {
-    let config = ProviderProbeConfig::from_probe_request(request)?;
+    execute_provider_connection_test_with(request, &|name| std::env::var(name).ok()).await
+}
+
+async fn execute_provider_connection_test_with<F>(
+    request: ProviderProbeRequest,
+    lookup: &F,
+) -> Result<ProviderValidationResponse, LlmProvidersApiError>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let config = ProviderProbeConfig::from_probe_request_with(request, lookup)?;
     if !provider_probe_supported(&config.provider_type) {
         return Err(LlmProvidersApiError::bad_request(
             "Provider health check is not supported for this provider type",
         ));
     }
-    Ok(ProviderValidationResponse::from_health(
+    if let Some(detail) = config.credential_error {
+        return Ok(ProviderValidationResponse::from_credential_error(
+            &config, detail,
+        ));
+    }
+    Ok(ProviderValidationResponse::from_probe_health(
         probe_provider_connection(&config).await,
+        &config,
     ))
 }
 
@@ -840,6 +870,11 @@ async fn execute_persisted_provider_health_check(
     if !provider_probe_supported(&config.provider_type) {
         return Err(LlmProvidersApiError::bad_request(
             "Provider health check is not supported for this provider type",
+        ));
+    }
+    if let Some(detail) = config.credential_error {
+        return Ok(ProviderValidationResponse::from_credential_error(
+            &config, detail,
         ));
     }
     let health = probe_provider_connection(&config).await;
@@ -862,7 +897,9 @@ async fn execute_persisted_provider_health_check(
             "Provider configuration changed during health check; retry the check",
         ));
     }
-    Ok(ProviderValidationResponse::from_health(health))
+    Ok(ProviderValidationResponse::from_probe_health(
+        health, &config,
+    ))
 }
 
 async fn get_provider_health(
@@ -946,6 +983,8 @@ pub(crate) struct ProviderCreateRequest {
     name: String,
     provider_type: String,
     operation_type: Option<String>,
+    auth_method: Option<String>,
+    environment_variable: Option<String>,
     api_key: Option<String>,
     base_url: Option<String>,
     llm_model: Option<String>,
@@ -971,6 +1010,7 @@ struct ProviderProbeRequest {
     name: String,
     provider_type: String,
     auth_method: Option<String>,
+    environment_variable: Option<String>,
     api_key: Option<String>,
     base_url: Option<String>,
     operation_type: Option<String>,
@@ -983,6 +1023,8 @@ pub(crate) struct ProviderUpdateRequest {
     name: Option<String>,
     provider_type: Option<String>,
     operation_type: Option<String>,
+    auth_method: Option<String>,
+    environment_variable: Option<String>,
     api_key: Option<String>,
     base_url: Option<String>,
     llm_model: Option<String>,
@@ -1081,6 +1123,7 @@ struct ProviderTypeDescriptor {
     operation_type: &'static str,
     probe_supported: bool,
     auth_methods: &'static [&'static str],
+    unavailable_auth_methods: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1103,6 +1146,7 @@ struct ProviderValidationResponse {
     provider_id: String,
     status: String,
     probed: bool,
+    environment_variable: Option<String>,
     detail: Option<String>,
     last_check: String,
     response_time_ms: Option<i32>,
@@ -1113,64 +1157,131 @@ struct ProviderValidationResponse {
 pub(crate) struct ProviderProbeConfig {
     provider_id: String,
     provider_type: String,
+    auth_method: &'static str,
+    environment_variable: Option<String>,
     base_url: Option<String>,
     llm_model: Option<String>,
     api_key: Option<String>,
+    credential_error: Option<&'static str>,
     revision: Option<i64>,
 }
 
 impl ProviderProbeConfig {
-    fn from_probe_request(request: ProviderProbeRequest) -> Result<Self, LlmProvidersApiError> {
+    fn from_probe_request_with<F>(
+        request: ProviderProbeRequest,
+        lookup: &F,
+    ) -> Result<Self, LlmProvidersApiError>
+    where
+        F: Fn(&str) -> Option<String>,
+    {
         let _name = normalize_required_name(request.name)?;
         let provider_type = normalize_provider_type(request.provider_type)?;
         let _operation_type = effective_operation_type(&provider_type, request.operation_type)?;
-        let expected_auth_method = provider_auth_method(&provider_type);
-        let auth_method = request
-            .auth_method
+        let auth_method = validate_provider_auth_method(
+            &provider_type,
+            request.auth_method.as_deref(),
+            provider_auth_method(&provider_type),
+        )?;
+        let submitted_api_key = request
+            .api_key
             .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(expected_auth_method)
-            .to_lowercase();
-        if auth_method != expected_auth_method {
-            return Err(LlmProvidersApiError::unprocessable(
-                "Authentication method is not supported for this provider type",
-            ));
-        }
-        let api_key = usable_probe_api_key(request.api_key);
-        if expected_auth_method == "api_key" && api_key.is_none() {
-            return Err(LlmProvidersApiError::unprocessable("API key is required"));
-        }
+            .is_some_and(|value| !value.trim().is_empty());
+        let submitted_environment_variable = request
+            .environment_variable
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty());
+        let (environment_variable, api_key, credential_error) = match auth_method {
+            "api_key" => {
+                if submitted_environment_variable {
+                    return Err(LlmProvidersApiError::unprocessable(
+                        "Environment variable requires environment authentication",
+                    ));
+                }
+                let api_key = usable_probe_api_key(request.api_key);
+                if api_key.is_none() {
+                    return Err(LlmProvidersApiError::unprocessable("API key is required"));
+                }
+                (None, api_key, None)
+            }
+            "environment" => {
+                if submitted_api_key {
+                    return Err(LlmProvidersApiError::unprocessable(
+                        "API key cannot be combined with environment authentication",
+                    ));
+                }
+                let environment_variable =
+                    validate_environment_variable(&provider_type, request.environment_variable)?;
+                let api_key = environment_credential_with(&environment_variable, lookup);
+                let credential_error = api_key.is_none().then_some(ENVIRONMENT_CREDENTIAL_MISSING);
+                (Some(environment_variable), api_key, credential_error)
+            }
+            "none" => {
+                if submitted_api_key || submitted_environment_variable {
+                    return Err(LlmProvidersApiError::unprocessable(
+                        "No-auth providers cannot accept credential fields",
+                    ));
+                }
+                (None, None, None)
+            }
+            _ => {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "Authentication method is not supported for this provider type",
+                ));
+            }
+        };
         let _is_active = request.is_active;
         Ok(Self {
             provider_id: uuid::Uuid::new_v4().to_string(),
             provider_type,
+            auth_method,
+            environment_variable,
             base_url: request.base_url,
             llm_model: None,
             api_key,
+            credential_error,
             revision: None,
         })
     }
 
     fn from_persisted_record(record: LlmProviderRecord) -> Self {
         let api_key = decrypt_provider_api_key_for_mask(&record.api_key_encrypted);
-        Self {
-            provider_id: record.id,
-            provider_type: record.provider_type,
-            base_url: record.base_url,
-            llm_model: record.llm_model,
-            api_key: usable_probe_api_key(api_key),
-            revision: Some(record.updated_at.timestamp_micros()),
-        }
+        Self::from_record_with(record, api_key, &|name| std::env::var(name).ok())
     }
 
     fn from_dev_record(record: LlmProviderRecord) -> Self {
+        let api_key = Some(record.api_key_encrypted.clone());
+        Self::from_record_with(record, api_key, &|name| std::env::var(name).ok())
+    }
+
+    fn from_record_with<F>(record: LlmProviderRecord, api_key: Option<String>, lookup: &F) -> Self
+    where
+        F: Fn(&str) -> Option<String>,
+    {
+        let auth_method = configured_provider_auth_method(&record.provider_type, &record.config);
+        let environment_variable =
+            configured_environment_variable(&record.provider_type, &record.config);
+        let (api_key, credential_error) = match auth_method {
+            "environment" => match environment_variable.as_deref() {
+                Some(environment_variable) => {
+                    let api_key = environment_credential_with(environment_variable, lookup);
+                    let credential_error =
+                        api_key.is_none().then_some(ENVIRONMENT_CREDENTIAL_MISSING);
+                    (api_key, credential_error)
+                }
+                None => (None, Some(ENVIRONMENT_CREDENTIAL_INVALID)),
+            },
+            "api_key" => (usable_probe_api_key(api_key), None),
+            _ => (None, None),
+        };
         Self {
             provider_id: record.id,
             provider_type: record.provider_type,
+            auth_method,
+            environment_variable,
             base_url: record.base_url,
             llm_model: record.llm_model,
-            api_key: usable_probe_api_key(Some(record.api_key_encrypted)),
+            api_key,
+            credential_error,
             revision: Some(record.updated_at.timestamp_micros()),
         }
     }
@@ -1405,7 +1516,8 @@ pub(crate) struct ProviderConfigResponse {
     pool_enabled: bool,
     model_tier: Option<String>,
     secondary_models: Vec<String>,
-    auth_method: &'static str,
+    auth_method: String,
+    environment_variable: Option<String>,
     credential_configured: bool,
     api_key_masked: String,
     revision: i64,
@@ -1508,6 +1620,7 @@ impl ProviderValidationResponse {
             provider_id: record.provider_id,
             status: record.status,
             probed: true,
+            environment_variable: None,
             detail: None,
             last_check: record
                 .last_check
@@ -1517,21 +1630,60 @@ impl ProviderValidationResponse {
             catalog: None,
         }
     }
+
+    fn from_probe_health(record: ProviderHealthRecord, config: &ProviderProbeConfig) -> Self {
+        let mut response = Self::from_health(record);
+        response.environment_variable = (config.auth_method == "environment")
+            .then(|| config.environment_variable.clone())
+            .flatten();
+        response
+    }
+
+    fn from_credential_error(config: &ProviderProbeConfig, detail: &'static str) -> Self {
+        Self {
+            provider: None,
+            provider_id: config.provider_id.clone(),
+            status: "unhealthy".to_string(),
+            probed: false,
+            environment_variable: (config.auth_method == "environment")
+                .then(|| config.environment_variable.clone())
+                .flatten(),
+            detail: Some(detail.to_string()),
+            last_check: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+            response_time_ms: Some(0),
+            error_message: None,
+            catalog: None,
+        }
+    }
 }
 
 fn provider_response_from_record(
-    record: LlmProviderRecord,
+    mut record: LlmProviderRecord,
     health: Option<ProviderHealthRecord>,
 ) -> ProviderConfigResponse {
     let health = health.filter(|value| {
         provider_probe_supported(&record.provider_type) && value.last_check >= record.updated_at
     });
     let embedding_config = extract_embedding_config(&record.config);
-    let auth_method = provider_auth_method(&record.provider_type);
+    let auth_method = configured_provider_auth_method(&record.provider_type, &record.config);
+    let environment_variable =
+        configured_environment_variable(&record.provider_type, &record.config);
     let encrypted_api_key = record.api_key_encrypted.trim();
-    let credential_configured = auth_method == "api_key"
-        && !encrypted_api_key.is_empty()
-        && encrypted_api_key != LOCAL_NO_API_KEY_SENTINEL;
+    let credential_configured = match auth_method {
+        "api_key" => {
+            !encrypted_api_key.is_empty() && encrypted_api_key != LOCAL_NO_API_KEY_SENTINEL
+        }
+        "environment" => environment_variable.as_deref().is_some_and(|name| {
+            environment_credential_with(name, &|name| std::env::var(name).ok()).is_some()
+        }),
+        _ => false,
+    };
+    let api_key_masked = if auth_method == "api_key" {
+        mask_api_key(&record.api_key_encrypted)
+    } else {
+        String::new()
+    };
+    remove_provider_auth_metadata(&mut record.config);
     let health_last_check = health.as_ref().map(|value| {
         value
             .last_check
@@ -1559,9 +1711,10 @@ fn provider_response_from_record(
         pool_enabled: record.pool_enabled,
         model_tier: record.model_tier,
         secondary_models: record.secondary_models,
-        auth_method,
+        auth_method: auth_method.to_string(),
+        environment_variable,
         credential_configured,
-        api_key_masked: mask_api_key(&record.api_key_encrypted),
+        api_key_masked,
         revision: record.updated_at.timestamp_micros(),
         created_at: record
             .created_at
@@ -1580,7 +1733,7 @@ fn provider_response_from_record(
 fn provider_record_from_create_for_dev(
     request: ProviderCreateRequest,
 ) -> Result<LlmProviderRecord, LlmProvidersApiError> {
-    let record = provider_create_record(request)?;
+    let record = provider_create_record_with_auth(request)?;
     let now = Utc::now();
     Ok(LlmProviderRecord {
         id: uuid::Uuid::new_v4().to_string(),
@@ -2124,6 +2277,147 @@ fn provider_create_record(
         model_tier,
         secondary_models,
     })
+}
+
+fn provider_create_record_with_auth(
+    mut request: ProviderCreateRequest,
+) -> Result<LlmProviderCreateRecord, LlmProvidersApiError> {
+    let provider_type = normalize_provider_type(request.provider_type.clone())?;
+    let auth_method = validate_provider_auth_method(
+        &provider_type,
+        request.auth_method.as_deref(),
+        provider_auth_method(&provider_type),
+    )?;
+    let submitted_api_key = request
+        .api_key
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let submitted_environment_variable = request
+        .environment_variable
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let environment_variable = match auth_method {
+        "api_key" => {
+            if submitted_environment_variable {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "Environment variable requires environment authentication",
+                ));
+            }
+            None
+        }
+        "environment" => {
+            if submitted_api_key {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "API key cannot be combined with environment authentication",
+                ));
+            }
+            let environment_variable =
+                validate_environment_variable(&provider_type, request.environment_variable.take())?;
+            request.api_key = Some(LOCAL_NO_API_KEY_SENTINEL.to_string());
+            Some(environment_variable)
+        }
+        "none" => {
+            if submitted_api_key || submitted_environment_variable {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "No-auth providers cannot accept credential fields",
+                ));
+            }
+            request.api_key = None;
+            None
+        }
+        _ => {
+            return Err(LlmProvidersApiError::unprocessable(
+                "Authentication method is not supported for this provider type",
+            ));
+        }
+    };
+    let mut config = request.config.take().unwrap_or_else(|| json!({}));
+    apply_provider_auth_metadata(&mut config, auth_method, environment_variable.as_deref());
+    request.config = Some(config);
+    provider_create_record(request)
+}
+
+fn provider_update_record_with_auth(
+    existing: &LlmProviderRecord,
+    mut request: ProviderUpdateRequest,
+) -> Result<LlmProviderUpdateRecord, LlmProvidersApiError> {
+    let provider_type = match request.provider_type.as_ref() {
+        Some(value) => normalize_provider_type(value.clone())?,
+        None => existing.provider_type.clone(),
+    };
+    let existing_auth_method =
+        configured_provider_auth_method(&existing.provider_type, &existing.config);
+    let provider_type_changed = provider_type != existing.provider_type;
+    let fallback_auth_method = if provider_type_changed {
+        provider_auth_method(&provider_type)
+    } else {
+        existing_auth_method
+    };
+    let auth_method = validate_provider_auth_method(
+        &provider_type,
+        request.auth_method.as_deref(),
+        fallback_auth_method,
+    )?;
+    let submitted_api_key = request
+        .api_key
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let submitted_environment_variable = request
+        .environment_variable
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let environment_variable = match auth_method {
+        "api_key" => {
+            if submitted_environment_variable {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "Environment variable requires environment authentication",
+                ));
+            }
+            if existing_auth_method != "api_key" && !submitted_api_key {
+                return Err(LlmProvidersApiError::bad_request(
+                    "API key is required when changing authentication method",
+                ));
+            }
+            None
+        }
+        "environment" => {
+            if submitted_api_key {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "API key cannot be combined with environment authentication",
+                ));
+            }
+            let environment_variable = request.environment_variable.take().or_else(|| {
+                (!provider_type_changed && existing_auth_method == "environment")
+                    .then(|| configured_environment_variable(&provider_type, &existing.config))
+                    .flatten()
+            });
+            let environment_variable =
+                validate_environment_variable(&provider_type, environment_variable)?;
+            request.api_key = Some(LOCAL_NO_API_KEY_SENTINEL.to_string());
+            Some(environment_variable)
+        }
+        "none" => {
+            if submitted_api_key || submitted_environment_variable {
+                return Err(LlmProvidersApiError::unprocessable(
+                    "No-auth providers cannot accept credential fields",
+                ));
+            }
+            request.api_key = Some(LOCAL_NO_API_KEY_SENTINEL.to_string());
+            None
+        }
+        _ => {
+            return Err(LlmProvidersApiError::unprocessable(
+                "Authentication method is not supported for this provider type",
+            ));
+        }
+    };
+    let mut config = request
+        .config
+        .take()
+        .unwrap_or_else(|| existing.config.clone());
+    apply_provider_auth_metadata(&mut config, auth_method, environment_variable.as_deref());
+    request.config = Some(config);
+    provider_update_record(existing, request)
 }
 
 fn provider_update_record(
@@ -2722,12 +3016,147 @@ fn provider_requires_api_key(provider_name: &str) -> bool {
     !matches!(provider_name, "ollama" | "lmstudio")
 }
 
+fn provider_environment_variables(provider_name: &str) -> &'static [&'static str] {
+    match catalog_provider_key(provider_name).as_str() {
+        "openai" => &["OPENAI_API_KEY"],
+        "openrouter" => &["OPENROUTER_API_KEY"],
+        "dashscope" => &["DASHSCOPE_API_KEY"],
+        "gemini" => &[
+            "GOOGLE_API_KEY",
+            "GOOGLE_GENERATIVE_AI_API_KEY",
+            "GEMINI_API_KEY",
+        ],
+        "anthropic" => &["ANTHROPIC_API_KEY"],
+        "groq" => &["GROQ_API_KEY"],
+        "mistral" => &["MISTRAL_API_KEY"],
+        "deepseek" => &["DEEPSEEK_API_KEY"],
+        "minimax" => &["MINIMAX_API_KEY"],
+        "zai" => &["ZAI_API_KEY", "ZHIPU_API_KEY"],
+        "kimi" => &["MOONSHOT_API_KEY", "KIMI_API_KEY"],
+        "volcengine" => &["VOLCENGINE_API_KEY", "ARK_API_KEY"],
+        _ => &[],
+    }
+}
+
+fn provider_supports_environment(provider_name: &str) -> bool {
+    !provider_environment_variables(provider_name).is_empty()
+}
+
 fn provider_auth_method(provider_name: &str) -> &'static str {
     if provider_requires_api_key(&catalog_provider_key(provider_name)) {
         "api_key"
     } else {
         "none"
     }
+}
+
+fn validate_provider_auth_method(
+    provider_name: &str,
+    requested: Option<&str>,
+    fallback: &'static str,
+) -> Result<&'static str, LlmProvidersApiError> {
+    let method = requested
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback);
+    match method {
+        "api_key" if provider_requires_api_key(&catalog_provider_key(provider_name)) => {
+            Ok("api_key")
+        }
+        "environment" if provider_supports_environment(provider_name) => Ok("environment"),
+        "none" if !provider_requires_api_key(&catalog_provider_key(provider_name)) => Ok("none"),
+        _ => Err(LlmProvidersApiError::unprocessable(
+            "Authentication method is not supported for this provider type",
+        )),
+    }
+}
+
+fn validate_environment_variable(
+    provider_name: &str,
+    environment_variable: Option<String>,
+) -> Result<String, LlmProvidersApiError> {
+    let environment_variable = environment_variable
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            LlmProvidersApiError::unprocessable(
+                "Environment variable is required for environment authentication",
+            )
+        })?;
+    if provider_environment_variables(provider_name).contains(&environment_variable.as_str()) {
+        Ok(environment_variable)
+    } else {
+        Err(LlmProvidersApiError::unprocessable(
+            "Environment variable is not supported for this provider type",
+        ))
+    }
+}
+
+fn configured_provider_auth_method(provider_name: &str, config: &Value) -> &'static str {
+    validate_provider_auth_method(
+        provider_name,
+        config.get(AUTH_METHOD_CONFIG_KEY).and_then(Value::as_str),
+        provider_auth_method(provider_name),
+    )
+    .unwrap_or_else(|_| provider_auth_method(provider_name))
+}
+
+fn configured_environment_variable(provider_name: &str, config: &Value) -> Option<String> {
+    if configured_provider_auth_method(provider_name, config) != "environment" {
+        return None;
+    }
+    validate_environment_variable(
+        provider_name,
+        config
+            .get(ENVIRONMENT_VARIABLE_CONFIG_KEY)
+            .and_then(Value::as_str)
+            .map(str::to_string),
+    )
+    .ok()
+}
+
+fn apply_provider_auth_metadata(
+    config: &mut Value,
+    auth_method: &str,
+    environment_variable: Option<&str>,
+) {
+    if !config.is_object() {
+        *config = json!({});
+    }
+    let Some(object) = config.as_object_mut() else {
+        return;
+    };
+    object.remove(AUTH_METHOD_CONFIG_KEY);
+    object.remove(ENVIRONMENT_VARIABLE_CONFIG_KEY);
+    if auth_method == "environment" {
+        object.insert(
+            AUTH_METHOD_CONFIG_KEY.to_string(),
+            Value::String("environment".to_string()),
+        );
+        if let Some(environment_variable) = environment_variable {
+            object.insert(
+                ENVIRONMENT_VARIABLE_CONFIG_KEY.to_string(),
+                Value::String(environment_variable.to_string()),
+            );
+        }
+    }
+}
+
+fn remove_provider_auth_metadata(config: &mut Value) {
+    if let Some(object) = config.as_object_mut() {
+        object.remove(AUTH_METHOD_CONFIG_KEY);
+        object.remove(ENVIRONMENT_VARIABLE_CONFIG_KEY);
+    }
+}
+
+fn environment_credential_with<F>(environment_variable: &str, lookup: &F) -> Option<String>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    lookup(environment_variable).and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
 }
 
 fn env_present<F>(lookup: &F, name: &str) -> bool
@@ -3210,6 +3639,8 @@ mod tests {
             name: format!("{provider_type}-test"),
             provider_type: provider_type.to_string(),
             operation_type: None,
+            auth_method: None,
+            environment_variable: None,
             api_key: api_key.map(str::to_string),
             base_url: Some(base_url),
             llm_model: Some(model.to_string()),
@@ -3240,6 +3671,73 @@ mod tests {
             serde_json::to_value(list_provider_types().await.0).expect("response serializes");
 
         agistack_parity::assert_parity(&golden, &value);
+    }
+
+    #[test]
+    fn environment_probe_resolves_only_allowlisted_variable_without_exposing_value() {
+        let secret = "sk-runtime-only-secret";
+        let request = serde_json::from_value::<ProviderProbeRequest>(json!({
+            "name": "Environment OpenAI",
+            "provider_type": "openai",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "base_url": "https://api.openai.com/v1"
+        }))
+        .expect("environment probe request deserializes");
+
+        let config = ProviderProbeConfig::from_probe_request_with(request, &|name| {
+            (name == "OPENAI_API_KEY").then(|| secret.to_string())
+        })
+        .expect("allowlisted environment reference resolves");
+
+        assert_eq!(config.auth_method, "environment");
+        assert_eq!(
+            config.environment_variable.as_deref(),
+            Some("OPENAI_API_KEY")
+        );
+        assert_eq!(config.api_key.as_deref(), Some(secret));
+        assert!(config.credential_error.is_none());
+
+        let arbitrary_reference = serde_json::from_value::<ProviderProbeRequest>(json!({
+            "name": "Rejected environment reference",
+            "provider_type": "openai",
+            "auth_method": "environment",
+            "environment_variable": "DATABASE_URL"
+        }))
+        .expect("structurally valid probe request deserializes");
+        let error = ProviderProbeConfig::from_probe_request_with(arbitrary_reference, &|name| {
+            (name == "DATABASE_URL").then(|| "must-not-be-readable".to_string())
+        })
+        .err()
+        .expect("non-provider variables must be rejected");
+        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            error.detail,
+            "Environment variable is not supported for this provider type"
+        );
+    }
+
+    #[tokio::test]
+    async fn environment_probe_reports_missing_credential_without_network_or_secret() {
+        let request = serde_json::from_value::<ProviderProbeRequest>(json!({
+            "name": "Missing environment OpenAI",
+            "provider_type": "openai",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "base_url": "https://api.openai.com/v1"
+        }))
+        .expect("environment probe request deserializes");
+
+        let response = execute_provider_connection_test_with(request, &|_| None)
+            .await
+            .expect("missing environment credential is a validation response");
+        let value = serde_json::to_value(response).expect("validation response serializes");
+
+        assert_eq!(value["status"], "unhealthy");
+        assert_eq!(value["probed"], false);
+        assert_eq!(value["environment_variable"], "OPENAI_API_KEY");
+        assert_eq!(value["detail"], "Environment credential is not configured");
+        assert!(!value.to_string().contains("runtime-only-secret"));
     }
 
     #[test]
@@ -3418,25 +3916,34 @@ mod tests {
         let anthropic = ProviderProbeConfig {
             provider_id: uuid::Uuid::new_v4().to_string(),
             provider_type: "anthropic".to_string(),
+            auth_method: "api_key",
+            environment_variable: None,
             base_url: Some("https://proxy.example/root".to_string()),
             llm_model: Some("claude-sonnet-4".to_string()),
             api_key: Some("anthropic-test-secret".to_string()),
+            credential_error: None,
             revision: None,
         };
         let gemini = ProviderProbeConfig {
             provider_id: uuid::Uuid::new_v4().to_string(),
             provider_type: "gemini".to_string(),
+            auth_method: "api_key",
+            environment_variable: None,
             base_url: Some("https://generative.example".to_string()),
             llm_model: Some("gemini/test".to_string()),
             api_key: Some("gemini-test-secret".to_string()),
+            credential_error: None,
             revision: None,
         };
         let lmstudio = ProviderProbeConfig {
             provider_id: uuid::Uuid::new_v4().to_string(),
             provider_type: "lmstudio".to_string(),
+            auth_method: "none",
+            environment_variable: None,
             base_url: Some("http://127.0.0.1:1234/v1".to_string()),
             llm_model: Some("local-model".to_string()),
             api_key: Some("must-not-be-sent".to_string()),
+            credential_error: None,
             revision: None,
         };
 
@@ -3493,9 +4000,12 @@ mod tests {
         let unsupported = ProviderProbeConfig {
             provider_id: "draft-provider".to_string(),
             provider_type: "azure_openai".to_string(),
+            auth_method: "api_key",
+            environment_variable: None,
             base_url: Some("https://example.openai.azure.com".to_string()),
             llm_model: Some("gpt-4o".to_string()),
             api_key: Some("test-secret".to_string()),
+            credential_error: None,
             revision: None,
         };
         let client = provider_probe_client().expect("probe client builds");
@@ -3512,6 +4022,7 @@ mod tests {
             name: "Azure OpenAI test".to_string(),
             provider_type: "azure_openai".to_string(),
             auth_method: Some("api_key".to_string()),
+            environment_variable: None,
             api_key: Some("test-secret".to_string()),
             base_url: Some("https://example.openai.azure.com".to_string()),
             operation_type: None,
@@ -3692,9 +4203,12 @@ mod tests {
         let current_config = ProviderProbeConfig {
             provider_id: response.provider_id.clone(),
             provider_type: "openai".to_string(),
+            auth_method: "api_key",
+            environment_variable: None,
             base_url: None,
             llm_model: Some("gpt-4o".to_string()),
             api_key: Some("test-secret".to_string()),
+            credential_error: None,
             revision: Some(
                 Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 4)
                     .single()
@@ -3961,6 +4475,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn dev_provider_environment_reference_round_trips_without_persisting_secret() {
+        let service = DevLlmProviderCatalogService::default();
+        let request = serde_json::from_value::<ProviderCreateRequest>(json!({
+            "name": "environment-openai",
+            "provider_type": "openai",
+            "auth_method": "environment",
+            "environment_variable": "OPENAI_API_KEY",
+            "base_url": "https://api.openai.com/v1",
+            "llm_model": "gpt-4o"
+        }))
+        .expect("environment provider create request deserializes");
+
+        let created = service
+            .create_provider("dev-user", request)
+            .await
+            .expect("environment provider create succeeds");
+
+        assert_eq!(created.auth_method, "environment");
+        assert_eq!(
+            created.environment_variable.as_deref(),
+            Some("OPENAI_API_KEY")
+        );
+        assert!(created.api_key_masked.is_empty());
+        assert_eq!(created.config, json!({}));
+
+        let stored = service.records.lock().await;
+        assert_eq!(stored[0].api_key_encrypted, LOCAL_NO_API_KEY_SENTINEL);
+        assert_eq!(stored[0].config["auth_method"], "environment");
+        assert_eq!(stored[0].config["environment_variable"], "OPENAI_API_KEY");
+        assert!(!stored[0].config.to_string().contains("sk-"));
+        drop(stored);
+
+        let switched = service
+            .update_provider(
+                "dev-user",
+                &created.id,
+                serde_json::from_value::<ProviderUpdateRequest>(json!({
+                    "expected_revision": created.revision,
+                    "auth_method": "api_key",
+                    "api_key": "sk-new-explicit-secret"
+                }))
+                .expect("API-key update request deserializes"),
+            )
+            .await
+            .expect("switching to explicit API key succeeds")
+            .expect("updated provider exists");
+
+        assert_eq!(switched.auth_method, "api_key");
+        assert!(switched.environment_variable.is_none());
+        assert!(!serde_json::to_string(&switched)
+            .expect("provider response serializes")
+            .contains("sk-new-explicit-secret"));
+    }
+
+    #[tokio::test]
     async fn dev_health_service_persists_latest_probe_result() {
         let service = DevLlmProviderHealthService::default();
         let record = ProviderHealthRecord {
@@ -3995,6 +4564,8 @@ mod tests {
             name: "test-openai".to_string(),
             provider_type: "openai".to_string(),
             operation_type: None,
+            auth_method: None,
+            environment_variable: None,
             api_key: None,
             base_url: None,
             llm_model: Some("gpt-4o".to_string()),
@@ -4020,6 +4591,8 @@ mod tests {
             name: "local-ollama".to_string(),
             provider_type: "ollama".to_string(),
             operation_type: None,
+            auth_method: None,
+            environment_variable: None,
             api_key: None,
             base_url: Some("http://localhost:11434".to_string()),
             llm_model: Some("llama3.1:8b".to_string()),

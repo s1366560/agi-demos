@@ -344,7 +344,35 @@ class ProviderAuthMethod(StrEnum):
     """Authentication methods supported by an LLM provider type."""
 
     API_KEY = "api_key"
+    ENVIRONMENT = "environment"
     NONE = "none"
+
+
+_PROVIDER_ENVIRONMENT_VARIABLES: dict[str, tuple[str, ...]] = {
+    "openai": ("OPENAI_API_KEY",),
+    "openrouter": ("OPENROUTER_API_KEY",),
+    "dashscope": ("DASHSCOPE_API_KEY",),
+    "gemini": ("GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"),
+    "anthropic": ("ANTHROPIC_API_KEY",),
+    "groq": ("GROQ_API_KEY",),
+    "mistral": ("MISTRAL_API_KEY",),
+    "deepseek": ("DEEPSEEK_API_KEY",),
+    "minimax": ("MINIMAX_API_KEY",),
+    "zai": ("ZAI_API_KEY", "ZHIPU_API_KEY"),
+    "kimi": ("MOONSHOT_API_KEY", "KIMI_API_KEY"),
+    "volcengine": ("VOLCENGINE_API_KEY", "ARK_API_KEY"),
+}
+_PROVIDER_VARIANT_SUFFIXES: tuple[str, ...] = ("_coding", "_embedding", "_reranker")
+
+
+def provider_environment_variables(provider_type: ProviderType) -> tuple[str, ...]:
+    """Return the server-side credential variable names allowed for a provider type."""
+    provider_family = provider_type.value
+    for suffix in _PROVIDER_VARIANT_SUFFIXES:
+        if provider_family.endswith(suffix):
+            provider_family = provider_family[: -len(suffix)]
+            break
+    return _PROVIDER_ENVIRONMENT_VARIABLES.get(provider_family, ())
 
 
 class ProviderTypeDescriptor(BaseModel):
@@ -352,6 +380,7 @@ class ProviderTypeDescriptor(BaseModel):
 
     provider_type: ProviderType
     auth_methods: list[ProviderAuthMethod]
+    unavailable_auth_methods: list[str] = Field(default_factory=list)
 
 
 class ProviderStatus(StrEnum):
@@ -534,6 +563,14 @@ class ProviderProbeRequest(BaseModel):
 
     name: str = Field(..., min_length=1, description="Human-readable provider name")
     provider_type: ProviderType = Field(..., description="Provider type to probe")
+    auth_method: ProviderAuthMethod | None = Field(
+        None,
+        description="Credential source used only for this probe",
+    )
+    environment_variable: str | None = Field(
+        None,
+        description="Allow-listed server environment variable name; never its value",
+    )
     api_key: str | None = Field(None, description="Ephemeral API key used only for this probe")
     base_url: str | None = Field(None, description="Custom provider endpoint")
     config: dict[str, Any] = Field(
@@ -549,20 +586,42 @@ class ProviderProbeRequest(BaseModel):
             raise ValueError("Provider name cannot be empty")
         return value.strip()
 
-    @field_validator("api_key")
+    @field_validator("api_key", "environment_variable")
     @classmethod
-    def normalize_api_key(cls, value: str | None) -> str | None:
-        """Normalize an ephemeral API key before the connection attempt."""
+    def normalize_credential_reference(cls, value: str | None) -> str | None:
+        """Normalize an ephemeral API key or environment-variable reference."""
         return value.strip() if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def validate_api_key_requirement(self) -> "ProviderProbeRequest":
-        """Require credentials for remote providers without requiring a model."""
-        if (
-            self.provider_type not in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
-            and not self.api_key
-        ):
-            raise ValueError("API key cannot be empty")
+        """Validate the mutually exclusive credential source without requiring a model."""
+        is_local = self.provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+        auth_method = self.auth_method or (
+            ProviderAuthMethod.NONE if is_local else ProviderAuthMethod.API_KEY
+        )
+        self.auth_method = auth_method
+
+        if auth_method == ProviderAuthMethod.NONE:
+            if not is_local or self.api_key or self.environment_variable:
+                raise ValueError("No-auth providers cannot accept credential fields")
+            return self
+
+        if is_local:
+            raise ValueError("Authentication method is not supported for this provider type")
+
+        if auth_method == ProviderAuthMethod.API_KEY:
+            if self.environment_variable:
+                raise ValueError("Environment variable requires environment authentication")
+            if not self.api_key:
+                raise ValueError("API key cannot be empty")
+            return self
+
+        if self.api_key:
+            raise ValueError("API key cannot be combined with environment authentication")
+        if not self.environment_variable:
+            raise ValueError("Environment variable is required for environment authentication")
+        if self.environment_variable not in provider_environment_variables(self.provider_type):
+            raise ValueError("Environment variable is not supported for this provider type")
         return self
 
 
@@ -761,6 +820,7 @@ class ProviderValidationResponse(BaseModel):
     provider_id: UUID
     status: ProviderStatus
     probed: bool
+    environment_variable: str | None = None
     detail: str | None
     last_check: datetime
     response_time_ms: int | None = Field(..., ge=0)
@@ -775,6 +835,7 @@ class ProviderValidationResponse(BaseModel):
         probed: bool,
         detail: str | None,
         catalog: dict[str, Any] | None,
+        environment_variable: str | None = None,
     ) -> "ProviderValidationResponse":
         """Adapt an internal health result to the explicit validation contract."""
         return cls(
@@ -782,6 +843,7 @@ class ProviderValidationResponse(BaseModel):
             provider_id=health.provider_id,
             status=health.status,
             probed=probed,
+            environment_variable=environment_variable,
             detail=detail,
             last_check=health.last_check,
             response_time_ms=health.response_time_ms,

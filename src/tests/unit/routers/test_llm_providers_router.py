@@ -499,6 +499,7 @@ class TestLLMProvidersRouterHealthCheck:
             "provider_id": str(mock_validation.provider_id),
             "status": "healthy",
             "probed": True,
+            "environment_variable": None,
             "detail": None,
             "last_check": checked_at.isoformat().replace("+00:00", "Z"),
             "response_time_ms": 120,
@@ -751,6 +752,35 @@ class TestLLMProvidersRouterTypes:
         response = llm_client.get("/api/v1/llm-providers/types")
 
         assert response.status_code == status.HTTP_200_OK
+        environment_providers = {
+            ProviderType.OPENAI,
+            ProviderType.OPENROUTER,
+            ProviderType.DASHSCOPE,
+            ProviderType.DASHSCOPE_CODING,
+            ProviderType.DASHSCOPE_EMBEDDING,
+            ProviderType.DASHSCOPE_RERANKER,
+            ProviderType.GEMINI,
+            ProviderType.ANTHROPIC,
+            ProviderType.GROQ,
+            ProviderType.MISTRAL,
+            ProviderType.DEEPSEEK,
+            ProviderType.MINIMAX,
+            ProviderType.MINIMAX_CODING,
+            ProviderType.MINIMAX_EMBEDDING,
+            ProviderType.MINIMAX_RERANKER,
+            ProviderType.ZAI,
+            ProviderType.ZAI_CODING,
+            ProviderType.ZAI_EMBEDDING,
+            ProviderType.ZAI_RERANKER,
+            ProviderType.KIMI,
+            ProviderType.KIMI_CODING,
+            ProviderType.KIMI_EMBEDDING,
+            ProviderType.KIMI_RERANKER,
+            ProviderType.VOLCENGINE,
+            ProviderType.VOLCENGINE_CODING,
+            ProviderType.VOLCENGINE_EMBEDDING,
+            ProviderType.VOLCENGINE_RERANKER,
+        }
         assert response.json() == [
             {
                 "provider_type": provider_type.value,
@@ -758,6 +788,14 @@ class TestLLMProvidersRouterTypes:
                     ["none"]
                     if provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
                     else ["api_key"]
+                ),
+                "unavailable_auth_methods": (
+                    (["environment"] if provider_type in environment_providers else [])
+                    + (
+                        ["oauth"]
+                        if provider_type in {ProviderType.OPENAI, ProviderType.ANTHROPIC}
+                        else []
+                    )
                 ),
             }
             for provider_type in ProviderType
