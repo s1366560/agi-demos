@@ -57,6 +57,8 @@ export function useAgentSocket(
   const [events, setEvents] = useState<AgentWsEvent[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const contextStateRef = useRef(createAgentSocketContextState());
+  const pendingEventsRef = useRef<AgentWsEvent[]>([]);
+  const eventsFlushCancelRef = useRef<(() => void) | null>(null);
 
   const client = useMemo(
     () => new DesktopApiClient(config),
@@ -147,6 +149,27 @@ export function useAgentSocket(
       sendSocketMessage(buildHitlSocketMessage(submission)),
     [sendSocketMessage],
   );
+
+  const flushPendingEvents = useCallback(() => {
+    eventsFlushCancelRef.current = null;
+    const pending = pendingEventsRef.current;
+    if (!pending.length) return;
+    pendingEventsRef.current = [];
+    setEvents((current) =>
+      [...pending.reverse(), ...current].slice(0, MAX_SOCKET_EVENTS),
+    );
+  }, []);
+
+  const scheduleEventsFlush = useCallback(() => {
+    if (eventsFlushCancelRef.current) return;
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(flushPendingEvents);
+      eventsFlushCancelRef.current = () => cancelAnimationFrame(frame);
+    } else {
+      const timer = setTimeout(flushPendingEvents, 16);
+      eventsFlushCancelRef.current = () => clearTimeout(timer);
+    }
+  }, [flushPendingEvents]);
 
   useEffect(() => {
     const credential = desktopApiCredential(config);
@@ -303,7 +326,8 @@ export function useAgentSocket(
               contextStateRef.current.seenEventKeys.delete(oldestKey);
           }
         }
-        setEvents((current) => [event, ...current].slice(0, MAX_SOCKET_EVENTS));
+        pendingEventsRef.current.push(event);
+        scheduleEventsFlush();
       };
     };
 
@@ -313,6 +337,9 @@ export function useAgentSocket(
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       stopConnectionTimers();
+      eventsFlushCancelRef.current?.();
+      eventsFlushCancelRef.current = null;
+      pendingEventsRef.current = [];
       const socket = socketRef.current;
       socketRef.current = null;
       if (socket) {
@@ -330,6 +357,7 @@ export function useAgentSocket(
     config.workspaceId,
     contextRevision,
     enabled,
+    scheduleEventsFlush,
   ]);
 
   return {
