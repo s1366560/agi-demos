@@ -1090,9 +1090,11 @@ async fn append_event(
     ));
     let envelope = EventEnvelope::wrap(event_type, data.clone(), event_id.clone(), now_iso())
         .with_correlation(conversation_id.to_string(), None);
+    // `data` moves into the payload (no second deep clone of potentially large
+    // tool payloads); the PG insert below borrows it back out of the payload.
     let payload = json!({
         "type": event_type.as_str(),
-        "data": data.clone(),
+        "data": data,
         "event_time_us": event_time_us,
         "event_counter": counter,
         "envelope": envelope.to_value(),
@@ -1107,7 +1109,8 @@ async fn append_event(
         .map_err(|e| e.to_string())?;
 
     if let Some(writer) = app.agent_event_writer.as_ref() {
-        let message_id = data.get("message_id").and_then(Value::as_str);
+        let event_data = &payload["data"];
+        let message_id = event_data.get("message_id").and_then(Value::as_str);
         let db_counter = i32::try_from(counter).unwrap_or(i32::MAX);
         writer
             .insert_event(AgentExecutionEventInsertRecord {
@@ -1115,7 +1118,7 @@ async fn append_event(
                 conversation_id,
                 message_id,
                 event_type: event_type.as_str(),
-                event_data: &data,
+                event_data,
                 event_time_us,
                 event_counter: db_counter,
                 correlation_id: message_id.or(Some(conversation_id)),
