@@ -147,8 +147,16 @@ impl Authenticator for PgAuthenticator {
             ));
         }
 
-        // Best-effort audit touch; a failure here must never fail the request.
-        let _ = self.keys.touch_last_used(&record.id).await;
+        // Best-effort audit touch, fired off the request path so the key SELECT
+        // is the only round trip the request pays for. Still unconditional —
+        // one UPDATE per authenticated request, mirroring the Python auth path —
+        // and a failure must never fail the request, so the result stays
+        // discarded inside the spawned task.
+        let keys = self.keys.clone();
+        let api_key_id = record.id.clone();
+        tokio::spawn(async move {
+            let _ = keys.touch_last_used(&api_key_id).await;
+        });
 
         Ok(Identity {
             user_id: record.user_id,

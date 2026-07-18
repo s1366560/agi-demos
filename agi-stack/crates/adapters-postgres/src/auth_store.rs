@@ -38,7 +38,9 @@ impl ApiKeyRecord {
     }
 }
 
-/// Read-only lookup over the Python `api_keys` table.
+/// Read-only lookup over the Python `api_keys` table. `Clone` is cheap (the
+/// pool is `Arc`'d internally) so callers can hand a copy to a spawned task.
+#[derive(Clone)]
 pub struct PgApiKeyStore {
     pool: PgPool,
 }
