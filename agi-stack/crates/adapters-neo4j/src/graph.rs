@@ -339,9 +339,19 @@ impl GraphStore for Neo4jGraphStore {
     ) -> CoreResult<Subgraph> {
         // Fetch the project slice, then run the exact same BFS as the other tiers
         // so structural results are identical across in-memory / SQLite / Neo4j.
+        let (ents, rels) = self.project_slice(project_id).await?;
+        Ok(bfs_subgraph(&ents, &rels, uuid, max_depth))
+    }
+
+    async fn project_slice(
+        &self,
+        project_id: &str,
+    ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
+        // Two project-scoped Cypher queries total — one for entities, one for
+        // relationships — so multi-seed traversals can load the slice once.
         let ents = self.load_entities(project_id).await?;
         let rels = self.load_relationships(project_id).await?;
-        Ok(bfs_subgraph(&ents, &rels, uuid, max_depth))
+        Ok((ents, rels))
     }
 
     async fn search_entities(

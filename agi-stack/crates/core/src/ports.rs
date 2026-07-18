@@ -529,6 +529,16 @@ pub trait GraphStore: Send + Sync {
         max_depth: usize,
     ) -> CoreResult<Subgraph>;
 
+    /// Full project-scoped slice — every [`GraphEntity`] in the project plus the
+    /// [`Relationship`]s whose *both* endpoints exist in it — loaded in one pass
+    /// for server-side multi-seed traversals that would otherwise issue one
+    /// [`subgraph`](GraphStore::subgraph) round-trip per seed. `project_id`-scoped
+    /// like every other method (multi-tenancy invariant).
+    async fn project_slice(
+        &self,
+        project_id: &str,
+    ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)>;
+
     /// Case-insensitive substring search over entity `name`/`summary` — the
     /// keyword tier of hybrid search and the always-correct baseline (the graph
     /// analogue of [`MemoryRepository::search_by_project`]). Returns up to `limit`

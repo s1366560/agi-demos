@@ -702,33 +702,10 @@ async fn merge_subgraphs(
     project_id: &str,
     seeds: &[GraphEntity],
 ) -> SearchApiResult<Subgraph> {
-    let mut seen_entities = BTreeSet::new();
-    let mut seen_relationships = BTreeSet::new();
-    let mut entities = Vec::new();
-    let mut relationships = Vec::new();
-    for seed in seeds.iter().take(1_000) {
-        let graph = app
-            .graph
-            .subgraph(project_id, &seed.uuid, 1)
-            .await
-            .map_err(SearchApiError::internal)?;
-        for entity in graph.entities {
-            if seen_entities.insert(entity.uuid.clone()) {
-                entities.push(entity);
-            }
-        }
-        for rel in graph.relationships {
-            if seen_relationships.insert(rel.uuid.clone()) {
-                relationships.push(rel);
-            }
-        }
-    }
-    entities.sort_by(|a, b| a.uuid.cmp(&b.uuid));
-    relationships.sort_by(|a, b| a.uuid.cmp(&b.uuid));
-    Ok(Subgraph {
-        entities,
-        relationships,
-    })
+    let seed_ids: Vec<String> = seeds.iter().map(|seed| seed.uuid.clone()).collect();
+    crate::graph_api::merge_seed_subgraphs(&app.graph, project_id, &seed_ids, 1, 1_000)
+        .await
+        .map_err(SearchApiError::internal)
 }
 
 fn relationship_weight(rel: &Relationship) -> f64 {

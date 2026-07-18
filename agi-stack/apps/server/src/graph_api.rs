@@ -11,6 +11,7 @@
 //! migrated with parity goldens.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use axum::{
@@ -22,7 +23,9 @@ use axum::{
 };
 use serde_json::{json, Value};
 
+use agistack_adapters_mem::InMemoryGraphStore;
 use agistack_core::model::{GraphEntity, Relationship, Subgraph};
+use agistack_core::ports::{CoreResult, GraphStore};
 use agistack_core::{detect_communities, CommunityEdge, DEFAULT_MIN_COMMUNITY_SIZE};
 
 use crate::auth::Identity;
@@ -780,24 +783,27 @@ async fn graph_project_snapshot(
     merge_subgraphs(app, project_id, &seed_ids, 1, limit).await
 }
 
-async fn merge_subgraphs(
-    app: &AppState,
+/// Load the project slice once, hydrate a local in-memory graph from it, and
+/// merge the per-seed `depth`-hop subgraphs against that local store — one
+/// [`GraphStore::project_slice`] call on the backing store instead of one
+/// `subgraph` round-trip per seed. The in-memory adapter is the cross-tier
+/// parity oracle, so the per-seed BFS semantics match every backend exactly.
+pub(crate) async fn merge_seed_subgraphs(
+    graph: &Arc<dyn GraphStore>,
     project_id: &str,
     seed_ids: &[String],
     depth: usize,
-    limit: usize,
-) -> GraphApiResult<Subgraph> {
+    max_seeds: usize,
+) -> CoreResult<Subgraph> {
+    let (slice_entities, slice_relationships) = graph.project_slice(project_id).await?;
+    let local = InMemoryGraphStore::from_slice(slice_entities, slice_relationships);
     let mut entity_ids = BTreeSet::new();
     let mut rel_ids = BTreeSet::new();
     let mut entities = Vec::new();
     let mut relationships = Vec::new();
 
-    for seed_id in seed_ids.iter().take(limit) {
-        let subgraph = app
-            .graph
-            .subgraph(project_id, seed_id, depth)
-            .await
-            .map_err(GraphApiError::internal)?;
+    for seed_id in seed_ids.iter().take(max_seeds) {
+        let subgraph = local.subgraph(project_id, seed_id, depth).await?;
         for entity in subgraph.entities {
             if entity_ids.insert(entity.uuid.clone()) {
                 entities.push(entity);
@@ -812,15 +818,32 @@ async fn merge_subgraphs(
 
     entities.sort_by(|a, b| a.uuid.cmp(&b.uuid));
     relationships.sort_by(|a, b| a.uuid.cmp(&b.uuid));
-    entities.truncate(limit);
-    let entity_ids: BTreeSet<String> = entities.iter().map(|entity| entity.uuid.clone()).collect();
-    relationships.retain(|rel| {
-        entity_ids.contains(&rel.source_uuid) && entity_ids.contains(&rel.target_uuid)
-    });
     Ok(Subgraph {
         entities,
         relationships,
     })
+}
+
+async fn merge_subgraphs(
+    app: &AppState,
+    project_id: &str,
+    seed_ids: &[String],
+    depth: usize,
+    limit: usize,
+) -> GraphApiResult<Subgraph> {
+    let mut merged = merge_seed_subgraphs(&app.graph, project_id, seed_ids, depth, limit)
+        .await
+        .map_err(GraphApiError::internal)?;
+    merged.entities.truncate(limit);
+    let entity_ids: BTreeSet<String> = merged
+        .entities
+        .iter()
+        .map(|entity| entity.uuid.clone())
+        .collect();
+    merged.relationships.retain(|rel| {
+        entity_ids.contains(&rel.source_uuid) && entity_ids.contains(&rel.target_uuid)
+    });
+    Ok(merged)
 }
 
 fn relationship_weight(rel: &Relationship) -> f64 {

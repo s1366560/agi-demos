@@ -39,32 +39,25 @@ impl InMemoryGraphStore {
         Self::default()
     }
 
-    /// Snapshot the project-scoped entities and the relationships whose *both*
-    /// endpoints exist in that project. Taken under lock, then released before any
-    /// traversal so we never hold two locks at once.
-    fn project_slice(&self, project_id: &str) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
-        let entities = self.entities.lock().map_err(|_| poisoned())?;
-        let rels = self.relationships.lock().map_err(|_| poisoned())?;
-        let present: HashSet<&str> = entities
-            .keys()
-            .filter(|(p, _)| p == project_id)
-            .map(|(_, u)| u.as_str())
-            .collect();
-        let ents: Vec<GraphEntity> = entities
-            .iter()
-            .filter(|((p, _), _)| p == project_id)
-            .map(|(_, e)| e.clone())
-            .collect();
-        let rs: Vec<Relationship> = rels
-            .values()
-            .filter(|r| {
-                r.project_id == project_id
-                    && present.contains(r.source_uuid.as_str())
-                    && present.contains(r.target_uuid.as_str())
-            })
-            .cloned()
-            .collect();
-        Ok((ents, rs))
+    /// Hydrate a store from a pre-loaded slice — entities keyed by their own
+    /// `(project_id, uuid)`, relationships by `uuid` — so callers that fetched a
+    /// [`GraphStore::project_slice`] once can run per-seed traversals locally
+    /// instead of round-tripping per seed.
+    pub fn from_slice(entities: Vec<GraphEntity>, relationships: Vec<Relationship>) -> Self {
+        Self {
+            entities: Mutex::new(
+                entities
+                    .into_iter()
+                    .map(|entity| ((entity.project_id.clone(), entity.uuid.clone()), entity))
+                    .collect(),
+            ),
+            relationships: Mutex::new(
+                relationships
+                    .into_iter()
+                    .map(|rel| (rel.uuid.clone(), rel))
+                    .collect(),
+            ),
+        }
     }
 
     fn scoped_slice(
@@ -160,7 +153,7 @@ impl GraphStore for InMemoryGraphStore {
     }
 
     async fn neighbors(&self, project_id: &str, uuid: &str) -> CoreResult<Vec<GraphEntity>> {
-        let (ents, rels) = self.project_slice(project_id)?;
+        let (ents, rels) = self.project_slice(project_id).await?;
         let by_uuid: HashMap<&str, &GraphEntity> =
             ents.iter().map(|e| (e.uuid.as_str(), e)).collect();
         let mut out: Vec<GraphEntity> = rels
@@ -179,8 +172,39 @@ impl GraphStore for InMemoryGraphStore {
         uuid: &str,
         max_depth: usize,
     ) -> CoreResult<Subgraph> {
-        let (ents, rels) = self.project_slice(project_id)?;
+        let (ents, rels) = self.project_slice(project_id).await?;
         Ok(bfs_subgraph(&ents, &rels, uuid, max_depth))
+    }
+
+    /// Snapshot the project-scoped entities and the relationships whose *both*
+    /// endpoints exist in that project. Taken under lock, then released before any
+    /// traversal so we never hold two locks at once.
+    async fn project_slice(
+        &self,
+        project_id: &str,
+    ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
+        let entities = self.entities.lock().map_err(|_| poisoned())?;
+        let rels = self.relationships.lock().map_err(|_| poisoned())?;
+        let present: HashSet<&str> = entities
+            .keys()
+            .filter(|(p, _)| p == project_id)
+            .map(|(_, u)| u.as_str())
+            .collect();
+        let ents: Vec<GraphEntity> = entities
+            .iter()
+            .filter(|((p, _), _)| p == project_id)
+            .map(|(_, e)| e.clone())
+            .collect();
+        let rs: Vec<Relationship> = rels
+            .values()
+            .filter(|r| {
+                r.project_id == project_id
+                    && present.contains(r.source_uuid.as_str())
+                    && present.contains(r.target_uuid.as_str())
+            })
+            .cloned()
+            .collect();
+        Ok((ents, rs))
     }
 
     async fn search_entities(

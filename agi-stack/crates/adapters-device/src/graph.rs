@@ -72,19 +72,7 @@ impl SqliteGraphStore {
         })
     }
 
-    /// Load the project-scoped entities and the relationships whose *both*
-    /// endpoints exist in that project (so traversal never dangles across a
-    /// project boundary), matching the in-memory adapter's `project_slice`.
-    fn project_slice(&self, project_id: &str) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
-        let conn = self.conn.lock().map_err(to_graph)?;
-        let ents = load_entities(&conn, project_id)?;
-        let present: HashSet<String> = ents.iter().map(|e| e.uuid.clone()).collect();
-        let mut rels = load_relationships(&conn, project_id)?;
-        rels.retain(|r| present.contains(&r.source_uuid) && present.contains(&r.target_uuid));
-        Ok((ents, rels))
-    }
-
-    fn scoped_slice(
+    async fn scoped_slice(
         &self,
         scope: GraphStatsScope,
     ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
@@ -107,7 +95,8 @@ impl SqliteGraphStore {
                 let mut ents = Vec::new();
                 let mut rels = Vec::new();
                 for project_id in project_ids {
-                    let (mut project_ents, mut project_rels) = self.project_slice(&project_id)?;
+                    let (mut project_ents, mut project_rels) =
+                        self.project_slice(&project_id).await?;
                     ents.append(&mut project_ents);
                     rels.append(&mut project_rels);
                 }
@@ -304,7 +293,7 @@ impl GraphStore for SqliteGraphStore {
     }
 
     async fn neighbors(&self, project_id: &str, uuid: &str) -> CoreResult<Vec<GraphEntity>> {
-        let (ents, rels) = self.project_slice(project_id)?;
+        let (ents, rels) = self.project_slice(project_id).await?;
         let by_uuid: HashMap<&str, &GraphEntity> =
             ents.iter().map(|e| (e.uuid.as_str(), e)).collect();
         let mut out: Vec<GraphEntity> = rels
@@ -323,8 +312,23 @@ impl GraphStore for SqliteGraphStore {
         uuid: &str,
         max_depth: usize,
     ) -> CoreResult<Subgraph> {
-        let (ents, rels) = self.project_slice(project_id)?;
+        let (ents, rels) = self.project_slice(project_id).await?;
         Ok(bfs_subgraph(&ents, &rels, uuid, max_depth))
+    }
+
+    /// Load the project-scoped entities and the relationships whose *both*
+    /// endpoints exist in that project (so traversal never dangles across a
+    /// project boundary), matching the in-memory adapter's `project_slice`.
+    async fn project_slice(
+        &self,
+        project_id: &str,
+    ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
+        let conn = self.conn.lock().map_err(to_graph)?;
+        let ents = load_entities(&conn, project_id)?;
+        let present: HashSet<String> = ents.iter().map(|e| e.uuid.clone()).collect();
+        let mut rels = load_relationships(&conn, project_id)?;
+        rels.retain(|r| present.contains(&r.source_uuid) && present.contains(&r.target_uuid));
+        Ok((ents, rels))
     }
 
     async fn search_entities(
@@ -348,7 +352,7 @@ impl GraphStore for SqliteGraphStore {
     }
 
     async fn stats(&self, scope: GraphStatsScope) -> CoreResult<GraphStats> {
-        let (entities, relationships) = self.scoped_slice(scope)?;
+        let (entities, relationships) = self.scoped_slice(scope).await?;
         let mut stats = GraphStats::default();
         for entity in entities {
             stats.add_entity_type(&entity.entity_type, 1);
@@ -358,7 +362,7 @@ impl GraphStore for SqliteGraphStore {
     }
 
     async fn export(&self, scope: GraphStatsScope) -> CoreResult<GraphExport> {
-        let (entities, relationships) = self.scoped_slice(scope)?;
+        let (entities, relationships) = self.scoped_slice(scope).await?;
         Ok(GraphExport {
             entities,
             relationships,
@@ -370,7 +374,7 @@ impl GraphStore for SqliteGraphStore {
         scope: GraphStatsScope,
         cutoff_ms: i64,
     ) -> CoreResult<usize> {
-        let (entities, _) = self.scoped_slice(scope)?;
+        let (entities, _) = self.scoped_slice(scope).await?;
         Ok(entities
             .iter()
             .filter(|entity| entity.entity_type == "Episodic" && entity.created_at_ms < cutoff_ms)
@@ -382,7 +386,7 @@ impl GraphStore for SqliteGraphStore {
         scope: GraphStatsScope,
         cutoff_ms: i64,
     ) -> CoreResult<usize> {
-        let (entities, _) = self.scoped_slice(scope)?;
+        let (entities, _) = self.scoped_slice(scope).await?;
         let expired: Vec<(String, String)> = entities
             .into_iter()
             .filter(|entity| entity.entity_type == "Episodic" && entity.created_at_ms < cutoff_ms)

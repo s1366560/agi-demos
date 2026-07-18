@@ -1,5 +1,6 @@
-use std::sync::{atomic::AtomicU64, Arc, Mutex};
+use std::sync::{atomic::{AtomicU64, AtomicUsize, Ordering}, Arc, Mutex};
 
+use async_trait::async_trait;
 use axum::extract::{Path, Query, State};
 use serde_json::json;
 use tokio::time::{sleep, Duration};
@@ -8,7 +9,8 @@ use agistack_adapters_mem::{
     HashEmbedding, InMemoryCheckpointStore, InMemoryContainerRuntime, InMemoryEventStream,
     InMemoryGraphStore, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm, SystemClock,
 };
-use agistack_core::ports::{CheckpointStore, EventStream, ToolHost};
+use agistack_core::model::{GraphExport, GraphStats, GraphStatsScope};
+use agistack_core::ports::{CheckpointStore, CoreResult, EventStream, GraphStore, ToolHost};
 use agistack_core::{MemoryService, ReActEngine};
 use agistack_plugin_host::{ControlPlane, DataPlaneReconciler, PluginHost};
 
@@ -860,4 +862,134 @@ fn entity_view_matches_golden() {
         "created_at": "2023-11-14T22:13:20Z",
     });
     assert_eq!(actual, expected);
+}
+
+/// Counting [`GraphStore`] test double: delegates to an in-memory store while
+/// recording `project_slice` and per-seed `subgraph` calls, so tests can prove
+/// snapshot/community requests load the project slice once instead of
+/// round-tripping one `subgraph` query per seed.
+struct CountingGraphStore {
+    inner: InMemoryGraphStore,
+    subgraph_calls: AtomicUsize,
+    project_slice_calls: AtomicUsize,
+}
+
+impl CountingGraphStore {
+    fn new(inner: InMemoryGraphStore) -> Self {
+        Self {
+            inner,
+            subgraph_calls: AtomicUsize::new(0),
+            project_slice_calls: AtomicUsize::new(0),
+        }
+    }
+
+    fn subgraph_calls(&self) -> usize {
+        self.subgraph_calls.load(Ordering::Relaxed)
+    }
+
+    fn project_slice_calls(&self) -> usize {
+        self.project_slice_calls.load(Ordering::Relaxed)
+    }
+}
+
+#[async_trait]
+impl GraphStore for CountingGraphStore {
+    async fn upsert_entity(&self, entity: GraphEntity) -> CoreResult<()> {
+        self.inner.upsert_entity(entity).await
+    }
+
+    async fn upsert_relationship(&self, rel: Relationship) -> CoreResult<()> {
+        self.inner.upsert_relationship(rel).await
+    }
+
+    async fn delete_entity(&self, project_id: &str, uuid: &str) -> CoreResult<()> {
+        self.inner.delete_entity(project_id, uuid).await
+    }
+
+    async fn delete_relationship(&self, project_id: &str, uuid: &str) -> CoreResult<()> {
+        self.inner.delete_relationship(project_id, uuid).await
+    }
+
+    async fn get_entity(&self, project_id: &str, uuid: &str) -> CoreResult<Option<GraphEntity>> {
+        self.inner.get_entity(project_id, uuid).await
+    }
+
+    async fn neighbors(&self, project_id: &str, uuid: &str) -> CoreResult<Vec<GraphEntity>> {
+        self.inner.neighbors(project_id, uuid).await
+    }
+
+    async fn subgraph(
+        &self,
+        project_id: &str,
+        uuid: &str,
+        max_depth: usize,
+    ) -> CoreResult<Subgraph> {
+        self.subgraph_calls.fetch_add(1, Ordering::Relaxed);
+        self.inner.subgraph(project_id, uuid, max_depth).await
+    }
+
+    async fn project_slice(
+        &self,
+        project_id: &str,
+    ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
+        self.project_slice_calls.fetch_add(1, Ordering::Relaxed);
+        self.inner.project_slice(project_id).await
+    }
+
+    async fn search_entities(
+        &self,
+        project_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> CoreResult<Vec<GraphEntity>> {
+        self.inner.search_entities(project_id, query, limit).await
+    }
+
+    async fn stats(&self, scope: GraphStatsScope) -> CoreResult<GraphStats> {
+        self.inner.stats(scope).await
+    }
+
+    async fn export(&self, scope: GraphStatsScope) -> CoreResult<GraphExport> {
+        self.inner.export(scope).await
+    }
+
+    async fn count_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize> {
+        self.inner.count_episodes_older_than(scope, cutoff_ms).await
+    }
+
+    async fn delete_episodes_older_than(
+        &self,
+        scope: GraphStatsScope,
+        cutoff_ms: i64,
+    ) -> CoreResult<usize> {
+        self.inner.delete_episodes_older_than(scope, cutoff_ms).await
+    }
+}
+
+#[tokio::test]
+async fn community_snapshot_loads_one_project_slice_without_per_seed_subgraph_calls() {
+    let mut app = test_state();
+    let graph = Arc::new(CountingGraphStore::new(InMemoryGraphStore::new()));
+    app.graph = graph.clone();
+    seed_two_community_graph(&app).await;
+
+    let Json(page) = list_communities(
+        State(app),
+        Extension(identity()),
+        Query(CommunityQuery {
+            project_id: Some("p1".to_string()),
+            min_members: Some(2),
+            limit: Some(10),
+            offset: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page.total, 2);
+    assert_eq!(graph.project_slice_calls(), 1);
+    assert_eq!(graph.subgraph_calls(), 0);
 }
