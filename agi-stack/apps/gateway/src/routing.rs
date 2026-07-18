@@ -3,6 +3,8 @@ mod rules;
 #[cfg(test)]
 mod tests;
 
+use std::sync::OnceLock;
+
 use axum::http::{HeaderMap, Method};
 
 pub use rules::{STRANGLED_METHOD_RULES, STRANGLED_PREFIXES};
@@ -66,7 +68,10 @@ pub fn is_strangled(path: &str) -> bool {
         // Match the prefix exactly or as a path segment boundary so
         // `/api/v1/memories` and `/api/v1/memories/123` match but a hypothetical
         // `/api/v1/memories_admin` does not.
-        path == *p || path.starts_with(&format!("{p}/"))
+        path == *p
+            || path
+                .strip_prefix(*p)
+                .is_some_and(|rest| rest.starts_with('/'))
     })
 }
 
@@ -82,7 +87,9 @@ pub fn is_strangled_request(method: &Method, path: &str) -> bool {
 fn method_matches(rule: &MethodRule, method: &Method, path: &str) -> bool {
     (rule.method == "*" || method.as_str() == rule.method)
         && match rule.match_kind {
-            MethodMatchKind::Exact => path == rule.path || path == format!("{}/", rule.path),
+            MethodMatchKind::Exact => {
+                path == rule.path || path.strip_prefix(rule.path) == Some("/")
+            }
             MethodMatchKind::SingleChild => single_child_path(rule.path, path),
             MethodMatchKind::SingleChildExcept(excluded) => single_child_segment(rule.path, path)
                 .map(|segment| !excluded.contains(&segment))
@@ -118,8 +125,13 @@ fn single_child_path(base: &str, path: &str) -> bool {
     single_child_segment(base, path).is_some()
 }
 
+/// Strip `base` plus its `/` segment boundary from `path`, allocation-free.
+fn strip_base_segment<'a>(base: &str, path: &'a str) -> Option<&'a str> {
+    path.strip_prefix(base)?.strip_prefix('/')
+}
+
 fn single_child_segment<'a>(base: &str, path: &'a str) -> Option<&'a str> {
-    let rest = path.strip_prefix(&format!("{base}/"))?;
+    let rest = strip_base_segment(base, path)?;
     if !rest.is_empty() && !rest.contains('/') {
         Some(rest)
     } else {
@@ -128,7 +140,7 @@ fn single_child_segment<'a>(base: &str, path: &'a str) -> Option<&'a str> {
 }
 
 fn single_child_with_suffix<'a>(base: &str, path: &'a str, suffix: &str) -> Option<&'a str> {
-    let rest = path.strip_prefix(&format!("{base}/"))?;
+    let rest = strip_base_segment(base, path)?;
     let mut parts = rest.split('/');
     let child = parts.next()?;
     let actual_suffix = parts.next()?;
@@ -144,7 +156,7 @@ fn single_child_with_suffix_and_grandchild<'a>(
     path: &'a str,
     suffix: &str,
 ) -> Option<&'a str> {
-    let rest = path.strip_prefix(&format!("{base}/"))?;
+    let rest = strip_base_segment(base, path)?;
     let mut parts = rest.split('/');
     let child = parts.next()?;
     let actual_suffix = parts.next()?;
@@ -165,7 +177,7 @@ fn single_child_with_tail<'a>(
     path: &'a str,
     tail: &'static [&'static str],
 ) -> Option<&'a str> {
-    let rest = path.strip_prefix(&format!("{base}/"))?;
+    let rest = strip_base_segment(base, path)?;
     let mut parts = rest.split('/');
     let child = parts.next()?;
     if child.is_empty() {
@@ -191,7 +203,7 @@ fn single_child_with_tail_prefix<'a>(
     path: &'a str,
     tail_prefix: &'static [&'static str],
 ) -> Option<&'a str> {
-    let rest = path.strip_prefix(&format!("{base}/"))?;
+    let rest = strip_base_segment(base, path)?;
     let mut parts = rest.split('/');
     let child = parts.next()?;
     if child.is_empty() {
@@ -213,7 +225,7 @@ fn single_child_with_tail_prefix<'a>(
 }
 
 fn fixed_child_with_grandchild(base: &str, path: &str, child: &str) -> bool {
-    let Some(rest) = path.strip_prefix(&format!("{base}/")) else {
+    let Some(rest) = strip_base_segment(base, path) else {
         return false;
     };
     let mut parts = rest.split('/');
@@ -254,7 +266,19 @@ pub fn upstream_for_request_with_headers<'a>(
     headers: &HeaderMap,
     upstreams: &'a Upstreams,
 ) -> &'a str {
-    if is_preview_host_headers(headers) {
+    upstream_for_request_with_preview(method, path, is_preview_host_headers(headers), upstreams)
+}
+
+/// Same as [`upstream_for_request_with_headers`] but takes the preview-host
+/// verdict precomputed, so a handler that already checked the `Host` header
+/// does not pay for a second check.
+pub fn upstream_for_request_with_preview<'a>(
+    method: &Method,
+    path: &str,
+    preview_host: bool,
+    upstreams: &'a Upstreams,
+) -> &'a str {
+    if preview_host {
         &upstreams.rust
     } else {
         upstream_for_request(method, path, upstreams)
@@ -262,8 +286,7 @@ pub fn upstream_for_request_with_headers<'a>(
 }
 
 pub fn is_preview_host(host_header: &str) -> bool {
-    let suffix = preview_host_suffix_hostname();
-    is_preview_host_for_suffix(host_header, &suffix)
+    is_preview_host_for_suffix(host_header, preview_host_suffix_hostname())
 }
 
 pub(super) fn is_preview_host_headers(headers: &HeaderMap) -> bool {
@@ -274,13 +297,18 @@ pub(super) fn is_preview_host_headers(headers: &HeaderMap) -> bool {
         .unwrap_or(false)
 }
 
-fn preview_host_suffix_hostname() -> String {
-    let raw = std::env::var(PREVIEW_HOST_SUFFIX_ENV)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "preview.localhost:8000".to_string());
-    host_header_hostname(&raw).unwrap_or_else(|| "preview.localhost".to_string())
+/// The preview-host suffix is process configuration: read and normalize the
+/// environment once instead of on every request.
+fn preview_host_suffix_hostname() -> &'static str {
+    static SUFFIX: OnceLock<String> = OnceLock::new();
+    SUFFIX.get_or_init(|| {
+        let raw = std::env::var(PREVIEW_HOST_SUFFIX_ENV)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "preview.localhost:8000".to_string());
+        host_header_hostname(&raw).unwrap_or_else(|| "preview.localhost".to_string())
+    })
 }
 
 fn is_preview_host_for_suffix(host_header: &str, suffix_hostname: &str) -> bool {

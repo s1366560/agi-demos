@@ -48,12 +48,12 @@ use tokio_tungstenite::{
 
 mod routing;
 
-use routing::is_preview_host_headers;
 pub use routing::{
     is_preview_host, is_strangled, is_strangled_request, strangled_rule_summary, upstream_for,
     upstream_for_request, upstream_for_request_with_headers, MethodMatchKind, MethodRule,
     Upstreams, STRANGLED_METHOD_RULES, STRANGLED_PREFIXES,
 };
+use routing::{is_preview_host_headers, upstream_for_request_with_preview};
 
 /// Max proxied body size (request or response) — 25 MiB, generous for JSON
 /// payloads while bounding memory. Larger streaming bodies (e.g. agent token
@@ -285,9 +285,10 @@ pub async fn proxy(State(state): State<GatewayState>, req: Request<Body>) -> Res
         .map(|pq| pq.as_str())
         .unwrap_or("/");
 
+    // Compute the preview-host verdict once per request and pass it down.
     let preview_host = is_preview_host_headers(&parts.headers);
     let upstream =
-        upstream_for_request_with_headers(&parts.method, &path, &parts.headers, &state.upstreams);
+        upstream_for_request_with_preview(&parts.method, &path, preview_host, &state.upstreams);
     let url = format!("{upstream}{path_and_query}");
 
     let body_bytes = match axum::body::to_bytes(body, MAX_BODY_BYTES).await {
