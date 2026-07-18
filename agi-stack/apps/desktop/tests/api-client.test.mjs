@@ -11,7 +11,6 @@ const {
   desktopLaunchCapability,
   DesktopApiClient,
   DesktopApiError,
-  isLegacyWorkspaceContextRouteMissing,
 } = clientModule;
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
@@ -317,35 +316,6 @@ test('workspace member roster exhausts every authoritative page', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
-});
-
-test('workspace context compatibility fallback accepts only the legacy missing-route envelope', () => {
-  assert.equal(
-    isLegacyWorkspaceContextRouteMissing(
-      new DesktopApiError('Not Found', 404, { detail: 'Not Found' }),
-    ),
-    true,
-  );
-  assert.equal(
-    isLegacyWorkspaceContextRouteMissing(
-      new DesktopApiError('Not found', 404, { detail: 'Not found' }),
-    ),
-    true,
-  );
-  assert.equal(
-    isLegacyWorkspaceContextRouteMissing(
-      new DesktopApiError('unavailable', 404, {
-        detail: { code: 'workspace_context_unavailable' },
-      }),
-    ),
-    false,
-  );
-  assert.equal(
-    isLegacyWorkspaceContextRouteMissing(
-      new DesktopApiError('Not Found', 403, { detail: 'Not Found' }),
-    ),
-    false,
-  );
 });
 
 test('conversation session authority request preserves scoped identity without legacy fallback', async () => {

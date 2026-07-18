@@ -10,8 +10,10 @@ use uuid::Uuid;
 use super::session_store::DesktopSessionStore;
 
 const LOCAL_USER_ID: &str = "local-user";
-const DEFAULT_TENANT_ID: &str = "local";
-const DEFAULT_PROJECT_ID: &str = "local-project";
+const DEFAULT_TENANT_ID: &str = "northstar";
+const DEFAULT_PROJECT_ID: &str = "desktop-client";
+const LEGACY_DEFAULT_TENANT_ID: &str = "local";
+const LEGACY_DEFAULT_PROJECT_ID: &str = "local-project";
 const LOCAL_SESSION_TTL_MS: i64 = 12 * 60 * 60 * 1_000;
 const TRUSTED_LOCAL_SESSION_TTL_MS: i64 = 30 * 24 * 60 * 60 * 1_000;
 
@@ -332,6 +334,32 @@ fn seed_auth_catalog(connection: &Connection) -> Result<(), String> {
                user_id, tenant_id, project_id, revision, updated_at_ms
              ) VALUES (?1, ?2, ?3, 0, ?4)",
             params![LOCAL_USER_ID, DEFAULT_TENANT_ID, DEFAULT_PROJECT_ID, now_ms],
+        )
+        .map_err(|error| error.to_string())?;
+    connection
+        .execute(
+            "UPDATE desktop_workspace_contexts
+             SET tenant_id = ?1, project_id = ?2, updated_at_ms = ?3
+             WHERE user_id = ?4
+               AND tenant_id = ?5
+               AND project_id = ?6
+               AND revision = 0
+               AND NOT EXISTS (
+                 SELECT 1 FROM desktop_user_sessions
+                 WHERE user_id = ?4
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM desktop_workspace_context_events
+                 WHERE user_id = ?4
+               )",
+            params![
+                DEFAULT_TENANT_ID,
+                DEFAULT_PROJECT_ID,
+                now_ms,
+                LOCAL_USER_ID,
+                LEGACY_DEFAULT_TENANT_ID,
+                LEGACY_DEFAULT_PROJECT_ID,
+            ],
         )
         .map_err(|error| error.to_string())?;
     Ok(())
@@ -722,6 +750,20 @@ impl DesktopSessionStore {
 
     #[cfg(test)]
     pub(super) fn seed_test_session(&self, credential: &str) -> Result<(), String> {
+        let connection = self.connection()?;
+        connection
+            .execute(
+                "UPDATE desktop_workspace_contexts
+                 SET tenant_id = ?1, project_id = ?2, revision = 0
+                 WHERE user_id = ?3",
+                params![
+                    LEGACY_DEFAULT_TENANT_ID,
+                    LEGACY_DEFAULT_PROJECT_ID,
+                    LOCAL_USER_ID,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        drop(connection);
         self.create_local_session(credential.to_string(), true, Utc::now().timestamp_millis())
             .map(|_| ())
             .map_err(|error| error.to_string())
@@ -834,6 +876,97 @@ fn iso_from_millis(value: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fresh_catalog_opens_the_prototype_workspace_context() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+
+        assert_eq!(
+            store.workspace_context(LOCAL_USER_ID).expect("context"),
+            DesktopWorkspaceContext {
+                tenant_id: "northstar".to_string(),
+                project_id: "desktop-client".to_string(),
+                revision: 0,
+                updated_at: store
+                    .workspace_context(LOCAL_USER_ID)
+                    .expect("timestamped context")
+                    .updated_at,
+            }
+        );
+    }
+
+    #[test]
+    fn untouched_legacy_default_moves_to_the_prototype_context() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let connection = store.connection().expect("connection");
+        connection
+            .execute(
+                "UPDATE desktop_workspace_contexts
+                 SET tenant_id = 'local', project_id = 'local-project', revision = 0
+                 WHERE user_id = ?1",
+                [LOCAL_USER_ID],
+            )
+            .expect("restore legacy default");
+
+        initialize_auth_context_schema(&connection).expect("rerun catalog initialization");
+        let migrated =
+            query_workspace_context(&connection, LOCAL_USER_ID).expect("migrated context");
+
+        assert_eq!(migrated.tenant_id, "northstar");
+        assert_eq!(migrated.project_id, "desktop-client");
+        assert_eq!(migrated.revision, 0);
+    }
+
+    #[test]
+    fn selected_legacy_context_is_not_overwritten() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let connection = store.connection().expect("connection");
+        connection
+            .execute(
+                "UPDATE desktop_workspace_contexts
+                 SET tenant_id = 'local', project_id = 'local-project', revision = 2
+                 WHERE user_id = ?1",
+                [LOCAL_USER_ID],
+            )
+            .expect("record selected legacy context");
+
+        initialize_auth_context_schema(&connection).expect("rerun catalog initialization");
+        let preserved = query_workspace_context(&connection, LOCAL_USER_ID).expect("context");
+
+        assert_eq!(preserved.tenant_id, "local");
+        assert_eq!(preserved.project_id, "local-project");
+        assert_eq!(preserved.revision, 2);
+    }
+
+    #[test]
+    fn used_legacy_context_is_not_migrated_as_an_untouched_default() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let connection = store.connection().expect("connection");
+        connection
+            .execute(
+                "UPDATE desktop_workspace_contexts
+                 SET tenant_id = 'local', project_id = 'local-project', revision = 0
+                 WHERE user_id = ?1",
+                [LOCAL_USER_ID],
+            )
+            .expect("restore used legacy context");
+        drop(connection);
+        store
+            .create_local_session(
+                "used-legacy-session".to_string(),
+                true,
+                Utc::now().timestamp_millis(),
+            )
+            .expect("record prior use");
+
+        let connection = store.connection().expect("connection");
+        initialize_auth_context_schema(&connection).expect("rerun catalog initialization");
+        let preserved = query_workspace_context(&connection, LOCAL_USER_ID).expect("context");
+
+        assert_eq!(preserved.tenant_id, "local");
+        assert_eq!(preserved.project_id, "local-project");
+        assert_eq!(preserved.revision, 0);
+    }
 
     #[test]
     fn session_credentials_are_hashed_and_revocation_is_immediate() {

@@ -45,6 +45,10 @@ const workspaceDockStyles = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.css', import.meta.url),
   'utf8'
 );
+const settingsCoreSource = readFileSync(
+  new URL('../src/features/settings/SettingsCorePages.tsx', import.meta.url),
+  'utf8'
+);
 const chatPanelSource = readFileSync(
   new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
   'utf8'
@@ -61,6 +65,14 @@ test('hierarchy pages remove the legacy pane inset around prototype-owned canvas
     sidebarStyles,
     /\.app-shell\.hierarchy-shell \.pane-stage\.single-stage\s*\{[\s\S]*?padding:\s*0\s*;/,
   );
+});
+
+test('workspace tree gives the Radix viewport the full available navigation height', () => {
+  assert.match(
+    workspaceDockStyles,
+    /\.dock-list > \[data-radix-scroll-area-viewport\][\s\S]*?height:\s*100%/,
+  );
+  assert.doesNotMatch(workspaceDockStyles, /\.dock-list > div\s*\{[\s\S]*?height:\s*100%/);
 });
 
 test('authenticated identities without a project remain inside the desktop shell', () => {
@@ -106,6 +118,43 @@ test('workspace hydration and refresh fail closed across tenant boundaries', () 
   );
   assert.match(appSource, /if \(auth\.status === 'signed_in'\) return auth\.projects/);
   assert.doesNotMatch(appSource, /availableProjects\[0\]/);
+});
+
+test('tenant and project changes require server-issued workspace context authority', () => {
+  const hydrateCloudSession =
+    appSource.match(
+      /const hydrateCloudSession = async \([\s\S]*?\n  const login = async/
+    )?.[0] ?? '';
+  const applySettingsContext =
+    appSource.match(
+      /const applySettingsContext = async \(tenantId: string, projectId: string\) => \{[\s\S]*?\n  \};/
+    )?.[0] ?? '';
+
+  assert.match(hydrateCloudSession, /identityClient\.getWorkspaceContext\(\)/);
+  assert.doesNotMatch(hydrateCloudSession, /isLegacyWorkspaceContextRouteMissing|return null/);
+  assert.match(applySettingsContext, /await api\.switchWorkspaceContext\(/);
+  assert.doesNotMatch(
+    applySettingsContext,
+    /isLegacyWorkspaceContextRouteMissing|nextRemoteWorkspaceContext|new Date\(\)\.toISOString\(\)/,
+  );
+});
+
+test('workspace settings freeze and expose selection semantics while a switch is pending', () => {
+  const workspaceSettingsPage =
+    settingsCoreSource.match(
+      /export function WorkspaceSettingsPage\([\s\S]*?\nexport function GeneralSettingsPage/
+    )?.[0] ?? '';
+
+  assert.match(workspaceSettingsPage, /disabled=\{loading \|\| applying\}/);
+  assert.match(workspaceSettingsPage, /aria-pressed=\{tenant\.id === tenantId\}/);
+  assert.match(workspaceSettingsPage, /disabled=\{applying\}/);
+  assert.match(settingsCoreSource, /aria-pressed=\{selected\}/);
+});
+
+test('workspace and session creation remain inside the new task flow', () => {
+  assert.doesNotMatch(appSource, /const createWorkspace = async/);
+  assert.doesNotMatch(appSource, /const createSessionForWorkspace = async/);
+  assert.doesNotMatch(appSource, /newWorkspaceName|creatingWorkspace|creatingSessionWorkspaceId/);
 });
 
 test('an authoritative context switch closes settings even when workspace hydration degrades', () => {

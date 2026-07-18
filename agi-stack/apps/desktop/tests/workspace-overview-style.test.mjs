@@ -21,6 +21,10 @@ const qaStylesheet = readFileSync(
   new URL('../src/qa/workspaceExecutionQa.css', import.meta.url),
   'utf8'
 );
+const qaSource = readFileSync(
+  new URL('../src/qa/WorkspaceExecutionQa.tsx', import.meta.url),
+  'utf8'
+);
 
 function cssRule(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -39,6 +43,12 @@ test('workspace overview QA canvas uses the production prototype sidebar width',
     qaStylesheet,
     /\.workspace-execution-qa-shell\s*\{[\s\S]*?grid-template-columns:\s*220px\s+minmax\(0,\s*1fr\)\s*;/,
   );
+});
+
+test('workspace overview QA renders the production hierarchy sidebar', () => {
+  assert.match(qaSource, /import \{ DesktopSidebar \}/);
+  assert.match(qaSource, /<DesktopSidebar/);
+  assert.doesNotMatch(qaSource, /workspace-execution-qa-sidebar/);
 });
 
 test('workspace overview locks the approved prototype geometry', () => {

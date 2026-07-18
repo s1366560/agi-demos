@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Badge, Button, Text } from '@radix-ui/themes';
 import {
   BellIcon,
@@ -192,6 +192,7 @@ export function WorkspaceSettingsPage({
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const applyingRef = useRef(false);
 
   useEffect(() => {
     setTenantId(config.tenantId);
@@ -241,13 +242,15 @@ export function WorkspaceSettingsPage({
   const changed = tenantId !== config.tenantId || projectId !== config.projectId;
 
   const chooseTenant = (nextTenantId: string) => {
+    if (loading || applyingRef.current) return;
     setProjects([]);
     setTenantId(nextTenantId);
     setProjectId('');
   };
 
   const applyContext = async () => {
-    if (!tenantId || !projectId) return;
+    if (!tenantId || !projectId || applyingRef.current) return;
+    applyingRef.current = true;
     setApplying(true);
     setError(null);
     try {
@@ -256,6 +259,7 @@ export function WorkspaceSettingsPage({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
+      applyingRef.current = false;
       setApplying(false);
     }
   };
@@ -292,6 +296,8 @@ export function WorkspaceSettingsPage({
               type="button"
               key={tenant.id}
               className={tenant.id === tenantId ? 'active' : ''}
+              aria-pressed={tenant.id === tenantId}
+              disabled={loading || applying}
               onClick={() => chooseTenant(tenant.id)}
             >
               <span className="settings-choice-icon">
@@ -324,6 +330,7 @@ export function WorkspaceSettingsPage({
                 key={project.id}
                 project={project}
                 selected={project.id === projectId}
+                disabled={applying}
                 onSelect={() => setProjectId(project.id)}
               />
             ))}
@@ -537,15 +544,23 @@ function ContextStep({
 function ProjectChoice({
   project,
   selected,
+  disabled,
   onSelect,
 }: {
   project: ProjectSummary;
   selected: boolean;
+  disabled: boolean;
   onSelect: () => void;
 }) {
   const { t } = useI18n();
   return (
-    <button type="button" className={selected ? 'active' : ''} onClick={onSelect}>
+    <button
+      type="button"
+      className={selected ? 'active' : ''}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onSelect}
+    >
       <span className="settings-choice-icon">
         <CubeIcon />
       </span>

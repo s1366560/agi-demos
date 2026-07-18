@@ -1,24 +1,19 @@
 import '@radix-ui/themes/styles.css';
 import { Theme } from '@radix-ui/themes';
-import {
-  ChatBubbleIcon,
-  CubeIcon,
-  GearIcon,
-  GridIcon,
-  HomeIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-} from '@radix-ui/react-icons';
-import React from 'react';
+import React, { useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
+import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
+  CurrentUser,
   DesktopArtifactVersion,
   DesktopRun,
   PlanSnapshot,
+  RuntimeNodeLoadState,
+  WorkspaceSummary,
 } from '../types';
 import '../styles.css';
 import './workspaceExecutionQa.css';
@@ -93,6 +88,67 @@ const conversations: AgentConversation[] = [
     metadata: { run: { status: 'ready_review' } },
   },
 ];
+
+const reliabilityConversation: AgentConversation = {
+  id: 'conversation-4',
+  project_id: 'northstar-project',
+  tenant_id: 'northstar',
+  user_id: 'alex',
+  title: 'Plan agent SDK upgrade',
+  status: 'active',
+  message_count: 17,
+  created_at: now,
+  updated_at: '2026-07-13T09:31:00Z',
+  conversation_mode: 'code',
+  agent_config: { capability_mode: 'code' },
+  participant_agents: ['planner', 'coder'],
+  metadata: { run: { status: 'needs_approval' } },
+};
+
+const workspaces: WorkspaceSummary[] = [
+  {
+    id: 'desktop-client',
+    tenant_id: 'northstar',
+    project_id: 'northstar-project',
+    name: 'Desktop Client',
+    description: '应用体验、前端与 Rust 运行时交付。',
+    office_status: 'online',
+    updated_at: now,
+    metadata: { collaboration_mode: 'multi_agent_shared' },
+  },
+  {
+    id: 'release-reliability',
+    tenant_id: 'northstar',
+    project_id: 'northstar-project',
+    name: 'Release Reliability',
+    description: '发布自动化、验证证据与恢复演练。',
+    office_status: 'online',
+    updated_at: '2026-07-13T09:31:00Z',
+    metadata: { collaboration_mode: 'multi_agent_shared' },
+  },
+];
+
+const conversationsByWorkspace: Record<string, AgentConversation[]> = {
+  'desktop-client': conversations,
+  'release-reliability': [reliabilityConversation],
+};
+
+const nodeState: RuntimeNodeLoadState = {
+  projects: { 'northstar-project': { loading: false, error: null } },
+  workspaces: Object.fromEntries(
+    workspaces.map((workspace) => [workspace.id, { loading: false, error: null }]),
+  ),
+};
+
+const currentUser: CurrentUser = {
+  user_id: 'alex',
+  email: 'alex@northstar.ai',
+  name: 'Alex Chen',
+  roles: ['owner'],
+  is_active: true,
+  created_at: now,
+  profile: {},
+};
 
 const artifacts: DesktopArtifactVersion[] = [
   {
@@ -223,51 +279,71 @@ const plan: PlanSnapshot = {
 };
 
 function WorkspaceExecutionQa() {
+  const [mode, setMode] = useState<'work' | 'code'>('work');
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(workspaces[0].id);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState(
+    () => new Set(workspaces.map((workspace) => workspace.id)),
+  );
+  const selectedWorkspace =
+    workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? workspaces[0];
+  const selectedConversations = conversationsByWorkspace[selectedWorkspace.id] ?? [];
+
+  const selectWorkspace = (workspaceId: string) => {
+    setSelectedWorkspaceId(workspaceId);
+    setSelectedConversationId(null);
+    setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+  };
+
+  const selectConversation = (workspaceId: string, conversation: AgentConversation) => {
+    setSelectedWorkspaceId(workspaceId);
+    setSelectedConversationId(conversation.id);
+    setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+  };
+
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="workspace-execution-qa-shell">
-        <aside className="workspace-execution-qa-sidebar">
-          <div className="workspace-execution-qa-brand">
-            <CubeIcon />
-            <span>
-              <strong>MemStack</strong>
-              <small>智能体工作区</small>
-            </span>
-          </div>
-          <button type="button" className="workspace-execution-qa-new">
-            <PlusIcon /> 新建任务
-          </button>
-          <nav>
-            <button type="button"><HomeIcon /> 首页</button>
-            <button type="button"><GridIcon /> 我的工作 <em>3</em></button>
-            <button type="button"><MagnifyingGlassIcon /> 搜索</button>
-          </nav>
-          <section>
-            <span>工作空间</span>
-            <button type="button" className="selected"><CubeIcon /> Desktop Client</button>
-            {conversations.map((conversation) => (
-              <button type="button" key={conversation.id}>
-                <ChatBubbleIcon /> {conversation.title}
-              </button>
-            ))}
-          </section>
-          <button type="button" className="workspace-execution-qa-settings">
-            <GearIcon /> 设置
-          </button>
-        </aside>
+        <DesktopSidebar
+          activeSection={null}
+          mode={mode}
+          taskCount={8}
+          tenantName="Northstar Labs"
+          projectName="Desktop Client"
+          user={currentUser}
+          workspaces={workspaces}
+          conversationsByWorkspace={conversationsByWorkspace}
+          nodeState={nodeState}
+          currentProjectId="northstar-project"
+          currentWorkspaceId={selectedWorkspace.id}
+          currentConversationId={selectedConversationId}
+          workspaceTreeSelectionMode={selectedConversationId ? 'conversation' : 'overview'}
+          expandedWorkspaceIds={expandedWorkspaceIds}
+          newTaskDisabledReason={null}
+          onModeChange={setMode}
+          onNavigate={() => undefined}
+          onToggleWorkspace={(workspaceId) =>
+            setExpandedWorkspaceIds((current) => {
+              const next = new Set(current);
+              if (next.has(workspaceId)) next.delete(workspaceId);
+              else next.add(workspaceId);
+              return next;
+            })
+          }
+          onRetryProject={() => undefined}
+          onRetryWorkspace={() => undefined}
+          onSelectWorkspace={(_projectId, workspaceId) => selectWorkspace(workspaceId)}
+          onSelectConversation={(_projectId, workspaceId, conversation) =>
+            selectConversation(workspaceId, conversation)
+          }
+          onNewTask={() => undefined}
+          onOpenAccountSettings={() => undefined}
+          onSwitchWorkspace={() => undefined}
+          onSignOut={() => undefined}
+        />
         <main>
           <WorkspaceOverview
-            workspace={{
-              id: 'desktop-client',
-              project_id: 'northstar-project',
-              name: 'Desktop Client',
-              description: '应用体验、前端与 Rust 运行时交付。',
-              office_status: 'online',
-              updated_at: now,
-              metadata: {
-                collaboration_mode: 'multi_agent_shared',
-              },
-            }}
+            workspace={selectedWorkspace}
             project={{
               id: 'northstar-project',
               tenant_id: 'northstar',
@@ -284,13 +360,13 @@ function WorkspaceExecutionQa() {
               },
             }}
             tenantName="Northstar Labs"
-            conversations={conversations}
+            conversations={selectedConversations}
             members={{
               status: 'ready',
               error: null,
               items: Array.from({ length: 8 }, (_, index) => ({
                 id: `member-${index + 1}`,
-                workspace_id: 'desktop-client',
+                workspace_id: selectedWorkspace.id,
                 user_id: `user-${index + 1}`,
                 role: index === 0 ? 'owner' : 'viewer',
               })),
@@ -301,28 +377,28 @@ function WorkspaceExecutionQa() {
               items: [
                 {
                   id: 'binding-1',
-                  workspace_id: 'desktop-client',
+                  workspace_id: selectedWorkspace.id,
                   agent_id: 'planner',
                   display_name: 'Planner',
                   is_active: true,
                 },
                 {
                   id: 'binding-2',
-                  workspace_id: 'desktop-client',
+                  workspace_id: selectedWorkspace.id,
                   agent_id: 'coder',
                   display_name: 'Coder',
                   is_active: true,
                 },
                 {
                   id: 'binding-3',
-                  workspace_id: 'desktop-client',
+                  workspace_id: selectedWorkspace.id,
                   agent_id: 'reviewer',
                   display_name: 'Reviewer',
                   is_active: true,
                 },
                 {
                   id: 'binding-4',
-                  workspace_id: 'desktop-client',
+                  workspace_id: selectedWorkspace.id,
                   agent_id: 'researcher',
                   display_name: 'Researcher',
                   is_active: true,
@@ -331,6 +407,7 @@ function WorkspaceExecutionQa() {
             }}
             plan={{
               ...plan,
+              workspace_id: selectedWorkspace.id,
               root_goal: {
                 title: '交付覆盖通用与编程场景的可靠桌面智能体工作空间。',
               },
@@ -338,7 +415,10 @@ function WorkspaceExecutionQa() {
             sandboxStatus="connected"
             newTaskDisabledReason={null}
             onNewTask={() => undefined}
-            onOpenConversation={() => undefined}
+            onOpenConversation={(conversationId) => {
+              const conversation = selectedConversations.find((item) => item.id === conversationId);
+              if (conversation) selectConversation(selectedWorkspace.id, conversation);
+            }}
             onOpenSettings={() => undefined}
           />
         </main>

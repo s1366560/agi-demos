@@ -8422,7 +8422,7 @@ mod tests {
         let credential = created["access_token"]
             .as_str()
             .expect("session credential");
-        assert_eq!(created["context"]["tenant_id"], "local");
+        assert_eq!(created["context"]["tenant_id"], "northstar");
         assert_eq!(created["context"]["revision"], 0);
 
         let authenticated = app
@@ -10427,7 +10427,7 @@ mod tests {
                     .header("authorization", format!("Bearer {credential}"))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"project_id":"local-project","title":"Local context","agent_config":{"capability_mode":"code"}}"#,
+                        r#"{"project_id":"desktop-client","title":"Prototype context","agent_config":{"capability_mode":"code"}}"#,
                     ))
                     .expect("request"),
             )
@@ -10450,7 +10450,7 @@ mod tests {
                     .header("authorization", format!("Bearer {credential}"))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"tenant_id":"northstar","project_id":"desktop-client","expected_revision":0,"idempotency_key":"switch-resource-scope"}"#,
+                        r#"{"tenant_id":"local","project_id":"local-project","expected_revision":0,"idempotency_key":"switch-resource-scope"}"#,
                     ))
                     .expect("request"),
             )
@@ -10462,7 +10462,7 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/api/v1/agent/conversations?project_id=local-project")
+                    .uri("/api/v1/agent/conversations?project_id=desktop-client")
                     .header("x-agistack-launch", "launch-secret")
                     .header("authorization", format!("Bearer {credential}"))
                     .body(Body::empty())
@@ -10481,7 +10481,7 @@ mod tests {
                     .header("x-agistack-launch", "launch-secret")
                     .header("authorization", format!("Bearer {credential}"))
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"project_id":"local-project"}"#))
+                    .body(Body::from(r#"{"project_id":"desktop-client"}"#))
                     .expect("request"),
             )
             .await
@@ -10493,7 +10493,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!(
-                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=local-project"
+                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=desktop-client"
                     ))
                     .header("x-agistack-launch", "launch-secret")
                     .header("authorization", format!("Bearer {credential}"))
@@ -10516,7 +10516,7 @@ mod tests {
                     .header("authorization", format!("Bearer {credential}"))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"project_id":"desktop-client","title":"Active context"}"#,
+                        r#"{"project_id":"local-project","title":"Active context"}"#,
                     ))
                     .expect("request"),
             )
@@ -10528,8 +10528,8 @@ mod tests {
             .expect("active conversation body");
         let active_conversation: Value =
             serde_json::from_slice(&body).expect("active conversation json");
-        assert_eq!(active_conversation["tenant_id"], "northstar");
-        assert_eq!(active_conversation["project_id"], "desktop-client");
+        assert_eq!(active_conversation["tenant_id"], "local");
+        assert_eq!(active_conversation["project_id"], "local-project");
     }
 
     #[tokio::test]
@@ -11038,8 +11038,8 @@ mod tests {
             .session_store
             .workspace_context("local-user")
             .expect("default workspace context");
-        assert_eq!(default_context.tenant_id, "local");
-        assert_eq!(default_context.project_id, "local-project");
+        assert_eq!(default_context.tenant_id, "northstar");
+        assert_eq!(default_context.project_id, "desktop-client");
 
         let workspaces = state
             .session_store

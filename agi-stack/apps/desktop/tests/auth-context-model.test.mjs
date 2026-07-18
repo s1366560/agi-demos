@@ -11,7 +11,6 @@ const {
   isSameDesktopProjectRequestScope,
   isSameDesktopRequestScope,
   isWorkspaceReady,
-  nextRemoteWorkspaceContext,
   resolveSignOutDisposition,
   workspaceContextMatchesSelection,
 } = require('/tmp/agistack-desktop-test-dist/src/features/auth/authContextModel.js');
@@ -127,23 +126,9 @@ test('workspace context responses must exactly match the requested tenant and pr
   assert.equal(workspaceContextMatchesSelection(context, 'tenant-a', 'project-b'), false);
 });
 
-test('context revisions reject stale responses and advance remote context monotonically', () => {
+test('context revisions reject stale responses without manufacturing client authority', () => {
   assert.equal(isCurrentContextRevision(3, 3), true);
   assert.equal(isCurrentContextRevision(3, 4), false);
-  assert.deepEqual(
-    nextRemoteWorkspaceContext(
-      authenticated.context,
-      'orbital',
-      'agent-evals',
-      '2026-07-13T01:00:00Z',
-    ),
-    {
-      tenant_id: 'orbital',
-      project_id: 'agent-evals',
-      revision: 4,
-      updated_at: '2026-07-13T01:00:00Z',
-    },
-  );
 });
 
 test('desktop request scope invalidates every identity and hierarchy boundary', () => {

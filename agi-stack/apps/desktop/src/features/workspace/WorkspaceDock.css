@@ -5,11 +5,11 @@
 }
 
 .workspace-session-tree .dock-list,
-.workspace-session-tree .dock-list > div {
+.workspace-session-tree .dock-list > [data-radix-scroll-area-viewport] {
   height: 100%;
 }
 
-.workspace-session-tree .dock-list > div > div {
+.workspace-session-tree .dock-list > [data-radix-scroll-area-viewport] > div {
   display: grid;
   gap: 7px;
   padding: 0 8px 12px;

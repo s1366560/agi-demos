@@ -43,7 +43,6 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
-  isLegacyWorkspaceContextRouteMissing,
 } from './api/client';
 import {
   ingestLocalMemory,
@@ -65,7 +64,6 @@ import {
   isSameDesktopProjectRequestScope,
   isSameDesktopRequestScope,
   isWorkspaceReady,
-  nextRemoteWorkspaceContext,
   resolveSignOutDisposition,
   workspaceContextMatchesSelection,
 } from './features/auth/authContextModel';
@@ -243,7 +241,6 @@ import type {
   WorkbenchSection,
   WorkspaceAgentBinding,
   WorkspaceAuthorityCollection,
-  WorkspaceContextSnapshot,
   WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
@@ -290,21 +287,6 @@ const emptyConversationTimeline: ConversationTimelineState = {
   hasMore: false,
   firstCursor: null,
   lastCursor: null,
-};
-
-const DEFAULT_WORKSPACE_NAME = 'Desktop workspace';
-
-const formatDesktopWorkspaceName = () => {
-  const now = new Date();
-  const pad = (value: number) => String(value).padStart(2, '0');
-  const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  return `${DEFAULT_WORKSPACE_NAME} ${date} ${time}`;
-};
-
-const resolveNewWorkspaceName = (draft: string) => {
-  const trimmed = draft.trim();
-  return !trimmed || trimmed === DEFAULT_WORKSPACE_NAME ? formatDesktopWorkspaceName() : trimmed;
 };
 
 type CommandPaletteItem = {
@@ -1679,9 +1661,6 @@ export function App() {
   const [memoryQuery, setMemoryQuery] = useState('desktop workspace');
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryResult, setMemoryResult] = useState<LocalMemoryResult | null>(null);
-  const [newWorkspaceName, setNewWorkspaceName] = useState(DEFAULT_WORKSPACE_NAME);
-  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
-  const [creatingSessionWorkspaceId, setCreatingSessionWorkspaceId] = useState<string | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
   const [sessionProjectionState, setSessionProjectionState] =
@@ -2727,8 +2706,6 @@ export function App() {
     setRunInputsError(null);
     setPromotingRunInputId(null);
     runInputRequestRef.current = null;
-    setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
-    setCreatingSessionWorkspaceId(null);
     const clearedExpandedWorkspaceIds = new Set<string>();
     expandedWorkspaceIdsRef.current = clearedExpandedWorkspaceIds;
     setExpandedWorkspaceIds(clearedExpandedWorkspaceIds);
@@ -3272,51 +3249,31 @@ export function App() {
   ): Promise<boolean> => {
     const tokenConfig = { ...runtimeConfig, apiKey: outcome.access_token, workspaceId: '' };
     const identityClient = new DesktopApiClient(tokenConfig);
-    const [user, tenants, authoritativeContext] = await Promise.all([
+    const [user, tenants, authoritativeContextResponse] = await Promise.all([
       identityClient.currentUser(),
       identityClient.listTenants(),
-      identityClient
-        .getWorkspaceContext()
-        .then((response) => response.context)
-        .catch((caught) => {
-          if (isLegacyWorkspaceContextRouteMissing(caught)) return null;
-          throw caught;
-        }),
+      identityClient.getWorkspaceContext(),
     ]);
-    const preferredTenantId =
-      authoritativeContext?.tenant_id ?? outcome.context?.tenant_id ?? tenants[0]?.id ?? '';
-    const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId: preferredTenantId });
-    const projects = await projectClient.listProjects(preferredTenantId || undefined);
+    const authoritativeContext = authoritativeContextResponse.context;
+    const tenantId = authoritativeContext.tenant_id;
+    const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId });
+    const projects = tenantId ? await projectClient.listProjects(tenantId) : [];
     if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
-    const tenantId = preferredTenantId;
     if (tenantId && !tenants.some((tenant) => tenant.id === tenantId)) {
       throw new Error(t('login.authenticatedTenantUnavailable'));
     }
     const scopedProjects = projects.filter((project) => project.tenant_id === tenantId);
-    const preferredProjectId =
-      authoritativeContext?.project_id ?? outcome.context?.project_id ?? '';
+    const preferredProjectId = authoritativeContext.project_id;
     const preferredProject = findWorkspaceProject(
       scopedProjects,
       tenantId,
       preferredProjectId,
     );
-    const projectId = preferredProject?.id ?? scopedProjects[0]?.id ?? '';
-    if (
-      authoritativeContext &&
-      !workspaceContextMatchesSelection(authoritativeContext, tenantId, projectId)
-    ) {
+    const projectId = preferredProject?.id ?? '';
+    if (!workspaceContextMatchesSelection(authoritativeContext, tenantId, projectId)) {
       throw new Error(t('login.authoritativeProjectUnavailable'));
     }
-    const context = authoritativeContext
-      ? authoritativeContext
-      : outcome.context?.tenant_id === tenantId && outcome.context.project_id === projectId
-        ? outcome.context
-        : {
-            tenant_id: tenantId,
-            project_id: projectId,
-            revision: 0,
-            updated_at: new Date().toISOString(),
-          };
+    const context = authoritativeContext;
     if (!workspaceContextMatchesSelection(context, tenantId, projectId)) {
       throw new Error(t('login.authenticatedContextMismatch'));
     }
@@ -3687,105 +3644,6 @@ export function App() {
     applySectionSideEffects(targetSection);
     void loadConversationTimeline(conversation, projectId, nextConfig);
     if (requiresRuntimeRefresh) void refreshRuntime(nextConfig);
-  };
-
-  const createWorkspace = async (projectId = config.projectId) => {
-    const name = resolveNewWorkspaceName(newWorkspaceName);
-    const project =
-      sidebarProjects.find((item) => item.id === projectId) ??
-      auth.projects.find((item) => item.id === projectId);
-    const projectTenantId = project?.tenant_id || config.tenantId;
-    setCreatingWorkspace(true);
-    setError(null);
-    try {
-      const client = new DesktopApiClient({
-        ...config,
-        tenantId: projectTenantId,
-        projectId,
-        workspaceId: '',
-      });
-      const created = await client.createWorkspaceForProject(
-        projectId,
-        name,
-        'Created from agi-stack Desktop',
-        projectTenantId,
-      );
-      const nextConfig = {
-        ...config,
-        tenantId: projectTenantId,
-        projectId,
-        workspaceId: created.id,
-      };
-      commitRuntimeConfig(nextConfig);
-      setAgentConversationSession(null);
-      resetConversationTimeline();
-      setAgentTaskSignals([]);
-      setNewWorkspaceName(DEFAULT_WORKSPACE_NAME);
-      setExpandedWorkspaceIds((current) => new Set([...current, created.id]));
-      applySectionSideEffects('chat');
-      await refreshRuntime(nextConfig);
-    } catch (caught) {
-      setError(formatConnectionError(caught, config.apiBaseUrl));
-    } finally {
-      setCreatingWorkspace(false);
-    }
-  };
-
-  const createSessionForWorkspace = async (projectId: string, workspaceId: string) => {
-    const project =
-      sidebarProjects.find((item) => item.id === projectId) ??
-      auth.projects.find((item) => item.id === projectId);
-    const workspace = dataset.workspaces.find((item) => item.id === workspaceId);
-    const projectTenantId = project?.tenant_id || config.tenantId;
-    const nextConfig = {
-      ...config,
-      tenantId: projectTenantId,
-      projectId,
-      workspaceId,
-    };
-    const workspaceName = workspaceLabel(workspace);
-    setCreatingSessionWorkspaceId(workspaceId);
-    setError(null);
-    try {
-      const client = new DesktopApiClient(nextConfig);
-      const created = await client.createAgentConversation(
-        `${workspaceName}: New session ${new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}`,
-        projectId,
-      );
-      const conversation = await client.updateAgentConversationMode(
-        created.id,
-        { workspace_id: workspaceId },
-        projectId,
-      );
-      commitRuntimeConfig(nextConfig);
-      setAgentConversationSession({
-        scopeKey: agentConversationScopeKeyFor(projectId, workspaceId),
-        conversation,
-      });
-      setDataset((current) => ({
-        ...current,
-        conversationsByWorkspace: {
-          ...current.conversationsByWorkspace,
-          [workspaceId]: [
-            conversation,
-            ...(current.conversationsByWorkspace[workspaceId] ?? []).filter(
-              (item) => item.id !== conversation.id,
-            ),
-          ],
-        },
-      }));
-      setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
-      applySectionSideEffects('chat');
-      void loadConversationTimeline(conversation, projectId);
-      await refreshRuntime(nextConfig);
-    } catch (caught) {
-      setError(formatConnectionError(caught, config.apiBaseUrl));
-    } finally {
-      setCreatingSessionWorkspaceId(null);
-    }
   };
 
   const openNewTask = (
@@ -5145,30 +5003,14 @@ export function App() {
       throw new Error(t('settings.selectedProjectUnavailable'));
     }
 
-    let nextContext: WorkspaceContextSnapshot;
-    try {
-      nextContext = (
-        await api.switchWorkspaceContext(
-          tenantId,
-          projectId,
-          auth.context.revision,
-          globalThis.crypto.randomUUID(),
-        )
-      ).context;
-    } catch (caught) {
-      if (
-        auth.credentialKind !== 'cloud_session' ||
-        !isLegacyWorkspaceContextRouteMissing(caught)
-      ) {
-        throw caught;
-      }
-      nextContext = nextRemoteWorkspaceContext(
-        auth.context,
+    const nextContext = (
+      await api.switchWorkspaceContext(
         tenantId,
         projectId,
-        new Date().toISOString(),
-      );
-    }
+        auth.context.revision,
+        globalThis.crypto.randomUUID(),
+      )
+    ).context;
     if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
       throw new Error(t('settings.contextResponseMismatch'));
     }

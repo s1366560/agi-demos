@@ -314,6 +314,12 @@
   border-color: #2c7084;
 }
 
+.settings-tenant-list > button:disabled,
+.settings-project-grid > button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .settings-choice-icon {
   display: grid;
   width: 33px;

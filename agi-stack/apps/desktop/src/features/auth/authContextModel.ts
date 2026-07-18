@@ -95,17 +95,3 @@ export function isSameDesktopProjectRequestScope(
     expected.projectId === current.projectId
   );
 }
-
-export function nextRemoteWorkspaceContext(
-  current: WorkspaceContextSnapshot,
-  tenantId: string,
-  projectId: string,
-  updatedAt: string,
-): WorkspaceContextSnapshot {
-  return {
-    tenant_id: tenantId,
-    project_id: projectId,
-    revision: current.revision + 1,
-    updated_at: updatedAt,
-  };
-}

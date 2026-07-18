@@ -89,6 +89,66 @@ final result: passed
 
 ---
 
+# Tenant → project → workspace → conversation hierarchy authority design QA
+
+Date: 2026-07-18
+
+Scope: authoritative tenant and project context, production workspace/conversation tree, workspace
+overview entry, and settings context-switch interaction.
+
+## Visual sources
+
+- Prototype: `qa/hierarchy-source-workspace-1325.png`
+- Implementation: `qa/hierarchy-implementation-workspace-final-1325.png`
+- Side-by-side comparison: `qa/hierarchy-workspace-final-comparison-1325.png`
+- Viewport: `1325 x 964`, device scale factor `1`
+
+## Findings resolved
+
+- P0: a fresh Rust catalog now opens `northstar / desktop-client`, matching the prototype instead
+  of showing the legacy `local / local-project` context. Only a truly untouched legacy default is
+  migrated; contexts with prior sessions, context events, or a nonzero revision are preserved.
+- P1: React hydration and settings switching now accept only server-issued workspace context and
+  revision authority. The client no longer manufactures a fallback context after a missing route.
+- P1: settings tenant/project choices expose selected state and remain frozen while an authority
+  switch is pending, preventing overlapping context mutations.
+- P1: the production Radix scroll viewport now owns the full remaining navigation height. The tree
+  viewport increased from 168 px to 312 px in the audited state, keeping both workspaces and their
+  conversation children available without the focus ring shrinking layout.
+- P2: removed the obsolete direct workspace/session creation paths. Creation remains in the governed
+  New Task → Agent Plan → Human Review flow.
+- P2: the hierarchy QA route now renders `DesktopSidebar` itself rather than a hand-coded visual
+  substitute, so the comparison exercises production tree behavior and styling.
+
+## Interaction verification
+
+- Both workspace roots are visible in the production tree.
+- Collapse and re-expand preserve the selected workspace and conversation state.
+- Selecting a conversation produces the production active-row treatment and changes the QA overview
+  selection without changing tenant/project authority.
+- Settings choices lock during apply and depend on the authoritative switch response.
+- No P0/P1/P2 visual mismatch remains in the hierarchy canvas at the audited viewport.
+
+## Automated verification
+
+- Desktop tests: 387 passed.
+- Rust tests: 188 passed serially, including loopback provider probes.
+- TypeScript check and Vite production build: passed.
+- Rust formatting and Clippy with warnings denied: passed.
+- The existing Vite large-chunk advisory remains P3 performance follow-up work.
+
+## Remaining architecture work outside this slice
+
+- Make workspace creation metadata and initial conversation binding one atomic Rust transaction.
+- Add authoritative workspace roster/agent endpoints and bounded pagination where collection sizes can
+  grow.
+- Replace remaining demo execution phases with structured run-state projection as those backend
+  contracts become available.
+
+final result: passed for the hierarchy authority slice; overall desktop reconstruction remains in progress
+
+---
+
 # Tenant model-routing policy design QA
 
 Date: 2026-07-18
