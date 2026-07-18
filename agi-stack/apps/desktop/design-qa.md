@@ -84,6 +84,159 @@ final result: passed
 
 ---
 
+# Tenant model-routing policy design QA
+
+Date: 2026-07-18
+
+Scope: Settings -> Models -> OpenAI -> Routing, executable workload-role assignment, ordered
+fallback editing, timeout failover, save/conflict feedback, local-runtime compatibility, and tenant
+scope.
+
+## Visual truth and implementation evidence
+
+- Source visual truth:
+  `agi-stack/apps/desktop/qa/routing-policy-source-final.png`
+- Implementation screenshot:
+  `agi-stack/apps/desktop/qa/routing-policy-implementation-final.png`
+- Focused source region:
+  `agi-stack/apps/desktop/qa/routing-policy-source-focused.png`
+- Focused implementation region:
+  `agi-stack/apps/desktop/qa/routing-policy-implementation-focused.png`
+- Viewport: browser content reports `1325 x 939`, device scale factor `1`; both in-app Browser
+  captures use the same `1325 x 745` visible page region after browser chrome.
+- State: Simplified Chinese, dark theme, Settings modal, Models selected, OpenAI selected, Routing
+  tab selected. The implementation uses the local QA authority with OpenAI, Anthropic, and an
+  OpenAI-compatible local gateway.
+
+## Full-view comparison evidence
+
+The source and implementation screenshots were opened together in one comparison input. The
+settings frame, 183-pixel section rail, 292-pixel provider list, provider detail column, header,
+five-tab strip, two-column role grid, fallback card, dark palette, border density, and vertical
+rhythm align at the same visible crop. No persistent control is hidden by viewport overflow.
+
+The implementation intentionally shows three locally executable provider types instead of the
+source's five-provider cloud catalog. It labels the authority as tenant routing because the SQLite
+policy is tenant-scoped and shared by that tenant's projects and workspaces. Fast and Vision remain
+visible in the four-role contract but are disabled with an explicit local-runtime limitation;
+Default and Coding are the two roles with structured production callers. These are truthful product
+constraints, not accidental layout drift.
+
+## Focused-region comparison evidence
+
+The provider header, tabs, role card, four selectors, fallback card, and first ordered fallback
+were cropped from the actual source and implementation screenshots and opened together. The
+following surfaces remain readable at native scale:
+
+- provider icon, title, connection status, endpoint summary, and tab alignment;
+- workload eyebrow, heading, explanatory copy, and save action;
+- two-by-two role geometry, labels, helper copy, select height, radii, and borders;
+- fallback order numbering, select geometry, and row controls.
+
+The implementation adds explicit up/down/remove controls, disables Save until the policy is dirty,
+and marks Fast/Vision as unavailable. Those differences expose real ordered mutation, prevent no-op
+writes, and avoid claiming runtime capabilities that do not yet exist; they do not alter the
+approved composition.
+
+## Required fidelity surfaces
+
+- Fonts and typography: the existing desktop sans-serif stack, heading weights, compact eyebrow,
+  tab labels, helper copy, and exact model IDs preserve the source hierarchy and wrapping.
+- Spacing and layout rhythm: frame margins, three-column settings layout, provider header height,
+  tab rhythm, two-column role grid, card padding, fallback rows, and radii match the source. The
+  shorter provider list is an intentional local-runtime data difference.
+- Colors and visual tokens: flat near-black surfaces, slate borders, muted labels, green
+  configuration-valid state, amber reserved-role limits, and cyan selection/action tokens remain
+  consistent. No gradient or invented elevation was introduced.
+- Image quality and asset fidelity: the existing MemStack and provider raster/icon assets are
+  retained; no visible source asset was replaced with CSS art, text glyphs, or placeholder boxes.
+- Copy and content: role names, descriptions, fallback rationale, provider context, and model IDs
+  are localized. `Tenant routing` replaces the source's `Workspace routing` so the UI states the
+  actual persistence boundary. Local validation says `Configured` and never fabricates an external
+  connectivity probe.
+- Accessibility: the provider tabs use the tab pattern; role and fallback selectors have semantic
+  labels; fallback move/remove actions have localized accessible names; errors use alerts and save
+  confirmation uses a status region.
+
+## Interaction verification
+
+- Changed the Coding route from Anthropic to OpenAI: passed; Save became available.
+- Fast and Vision selectors: passed; both are visibly disabled and explain that the current local
+  runtime cannot execute them.
+- Added a third fallback, moved it upward, and removed it again: passed; duplicate choices stayed
+  disabled and row numbering/actions updated.
+- Saved the policy: passed; the dirty state reset, Save became disabled, and the localized
+  `Tenant routing policy saved` status appeared.
+- Candidate authority: passed; only providers projected by the local API as
+  `configuration_valid` are selectable. Persisted unavailable targets remain visible but disabled.
+- Failover execution: passed in Rust tests; each candidate has a 45-second bound, timeout advances
+  to the next target, and a single candidate is also bounded.
+- Conflict recovery: passed in source and automated contract tests; a 409 reloads both provider
+  roster and policy, then refreshes the runtime projection under the original scope guard.
+- Legacy runtime selection: passed in Rust and client tests; mutation requires both the provider
+  revision and routing-policy revision, so it cannot overwrite a newer policy silently.
+- All-candidates-unavailable state: passed in component contract tests; the warning supplements the
+  persisted role/fallback editor instead of hiding authoritative targets.
+- Current-page console: no warning or error entries after the final QA navigation and interaction;
+  only Vite connection and React development information was emitted.
+
+## Comparison history
+
+### Iteration 1 — blocked
+
+- [P1] `routing-policy-implementation-before.png` exposed only the Default role; Fast, Coding, and
+  Vision were disabled and the fallback list was not editable.
+- [P1] The Rust runtime persisted only a selected default provider and did not consume ordered
+  fallbacks during execution.
+- [P2] Every provider/model appeared selectable even when the local runtime could not execute it.
+- [P2] Member read access, optimistic-conflict recovery, authoritative null roles, and runtime
+  projection refresh were inconsistent with the visible UI contract.
+
+Fixes: added the authoritative tenant policy API and revision contract; implemented the executable
+Default/Coding assignments, ordered fallback editing, disabled unavailable targets, conflict
+reload, read-only member access, structured Work/Code routing, and sequential execution failover.
+Provider mutation and policy mutation now share one runtime/store lock order.
+
+### Iteration 2 — runtime-truth audit
+
+- [P1] Fast/Vision were editable despite having no structured production caller.
+- [P1] A pending provider could block forever before reaching fallback.
+- [P2] Conflict recovery omitted the provider roster and runtime projection.
+- [P2] Frontend candidate readiness diverged from the Rust runtime projection.
+- [P2] Stale fallback rows could incorrectly disable Add fallback.
+- [P2] The QA mock fabricated `healthy`, latency, and an external probe.
+- [P2] The legacy runtime-selection endpoint could rewrite a newer policy using only provider
+  revision authority.
+- [P2] The no-available-candidate warning replaced the editor and hid persisted targets.
+
+Fixes: Fast/Vision are rejected by local policy mutation and disabled with explicit copy; all LLM
+candidates use bounded timeout failover; 409 recovery reloads roster and policy; candidate options
+require server-projected `configuration_valid`; fallback availability is set-based; QA mirrors the
+local configuration-only response with `probed: false`.
+Legacy selection now requires both optimistic revisions, and an unavailable-candidate warning no
+longer suppresses the authoritative editor.
+
+### Iteration 3 — passed
+
+The post-fix full-view and focused comparisons show no actionable P0, P1, or P2 visual findings.
+The remaining differences are the explicit tenant scope, locally supported provider roster, exact
+runtime model IDs, disabled reserved roles, dirty-save state, and usable reorder controls described
+above.
+
+## Findings
+
+No actionable P0, P1, or P2 findings remain.
+
+## Follow-up polish
+
+- [P3] A future structured metadata-generation contract can activate Fast. A separate attachment
+  contract plus multimodal adapters can activate Vision. Until then, the current conversation
+  contract explicitly routes Work to Default and Code to Coding without guessing intent from text.
+
+final result: passed
+
+---
+
 # Long-session history recovery design QA
 
 Date: 2026-07-18

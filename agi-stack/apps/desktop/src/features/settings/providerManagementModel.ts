@@ -3,8 +3,10 @@ import type {
   LlmProviderCatalogModel,
   LlmProviderCreateInput,
   LlmProviderMutationInput,
+  LlmProviderRoutingPolicy,
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
+  LlmRouteTarget,
   ManagedLlmProvider,
   RuntimeMode,
 } from '../../types';
@@ -30,6 +32,14 @@ export type ProviderValidationSignal = {
 export type ProviderListFilter = 'all' | 'connected' | 'attention';
 
 export type ProviderConnectionStatus = Exclude<ProviderListFilter, 'all'>;
+
+export type ProviderRoutingOverview = Pick<LlmProviderRoutingPolicy, 'roles' | 'fallbacks'>;
+
+const LOCAL_RUNTIME_ROUTING_PROVIDER_TYPES = new Set([
+  'anthropic',
+  'openai',
+  'openai_compatible',
+]);
 
 const providerTypeLabels: Readonly<Record<string, string>> = {
   anthropic: 'Anthropic',
@@ -118,7 +128,8 @@ export function providerConnectionStatus(
   if (
     healthStatus !== 'healthy' &&
     healthStatus !== 'connected' &&
-    healthStatus !== 'ready'
+    healthStatus !== 'ready' &&
+    healthStatus !== 'configuration_valid'
   ) {
     return 'attention';
   }
@@ -160,6 +171,68 @@ export function providerModelsFromProvider(
 
 export function providerEnabledModelIds(provider: ManagedLlmProvider): string[] {
   return normalizedModelSequence([...(provider.allowed_models ?? []), provider.llm_model ?? '']);
+}
+
+export function localRuntimeRoutingModelIds(provider: ManagedLlmProvider): string[] {
+  const providerType = provider.provider_type.trim().toLowerCase();
+  const operationType = provider.operation_type?.trim().toLowerCase();
+  const endpointConfigured = Boolean(provider.base_url?.trim());
+  const primaryModelConfigured = Boolean(provider.llm_model?.trim());
+  const credentialConfigured =
+    provider.auth_method === 'none' || provider.credential_configured === true;
+  if (
+    !LOCAL_RUNTIME_ROUTING_PROVIDER_TYPES.has(providerType) ||
+    (operationType && operationType !== 'llm') ||
+    provider.health_status?.trim().toLowerCase() !== 'configuration_valid' ||
+    provider.is_active !== true ||
+    provider.is_enabled === false ||
+    !endpointConfigured ||
+    !primaryModelConfigured ||
+    !credentialConfigured
+  ) {
+    return [];
+  }
+  return providerEnabledModelIds(provider);
+}
+
+function routingTargetKey(target: LlmRouteTarget): string {
+  return JSON.stringify([target.provider_id, target.model_id]);
+}
+
+export function routingFallbackCanAdd(
+  fallbacks: readonly LlmRouteTarget[],
+  availableTargets: readonly LlmRouteTarget[],
+  maxFallbacks: number,
+): boolean {
+  if (fallbacks.length >= maxFallbacks) return false;
+  const used = new Set(fallbacks.map(routingTargetKey));
+  return availableTargets.some((target) => !used.has(routingTargetKey(target)));
+}
+
+export function providerRoutingOverview(
+  provider: ManagedLlmProvider,
+  policy: LlmProviderRoutingPolicy | null,
+): ProviderRoutingOverview {
+  if (policy) {
+    return {
+      roles: { ...policy.roles },
+      fallbacks: [...policy.fallbacks],
+    };
+  }
+  const route = (modelId: string | null | undefined) =>
+    modelId ? { provider_id: provider.id, model_id: modelId } : null;
+  return {
+    roles: {
+      default: route(provider.llm_model),
+      fast: route(provider.llm_small_model),
+      coding: null,
+      vision: null,
+    },
+    fallbacks: (provider.secondary_models ?? []).flatMap((modelId) => {
+      const target = route(modelId);
+      return target ? [target] : [];
+    }),
+  };
 }
 
 export function providerModelCanBeDisabled(

@@ -10,13 +10,15 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from '../../api/client';
+import { DesktopApiClient, DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   DesktopRuntimeConfig,
   LocalRuntimeProvider,
   LlmProviderCreateInput,
   LlmProviderMutationInput,
+  LlmProviderRoutingPolicy,
+  LlmProviderRoutingPolicyMutationInput,
   LlmProviderTypeDescriptor,
   LlmProviderValidationOutcome,
   ManagedLlmProvider,
@@ -31,7 +33,12 @@ import {
   type ProviderTab,
 } from './ProviderOverviewPanels';
 import { ProviderStatusBadge } from './ProviderStatusBadge';
-import { filterProviders, type ProviderListFilter } from './providerManagementModel';
+import {
+  filterProviders,
+  providerModelsFromProvider,
+  providerTypeDisplayName,
+  type ProviderListFilter,
+} from './providerManagementModel';
 import './ModelProviderWorkspace.css';
 
 type ModelProviderWorkspaceProps = {
@@ -62,6 +69,9 @@ export function ModelProviderWorkspace({
   const client = useMemo(() => new DesktopApiClient(config), [config]);
   const [providers, setProviders] = useState<ManagedLlmProvider[]>([]);
   const [providerTypes, setProviderTypes] = useState<LlmProviderTypeDescriptor[]>([]);
+  const [routingPolicy, setRoutingPolicy] = useState<LlmProviderRoutingPolicy | null>(null);
+  const [routingLoading, setRoutingLoading] = useState(config.mode === 'local');
+  const [routingError, setRoutingError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<ProviderTab>('overview');
   const [query, setQuery] = useState('');
@@ -98,10 +108,23 @@ export function ModelProviderWorkspace({
       const requestClient = client;
       setLoading(true);
       setError(null);
+      setRoutingLoading(config.mode === 'local');
+      setRoutingError(null);
       try {
-        const [items, types] = await Promise.all([
+        const policyRequest =
+          config.mode === 'local'
+            ? requestClient
+                .getLlmProviderRoutingPolicy(signal)
+                .then((policy) => ({ policy, error: null }))
+                .catch((caught: unknown) => ({
+                  policy: null,
+                  error: caught instanceof Error ? caught.message : String(caught),
+                }))
+            : Promise.resolve({ policy: null, error: null });
+        const [items, types, policyOutcome] = await Promise.all([
           requestClient.listLlmProviders(signal),
           requestClient.listLlmProviderTypes(signal).catch(() => []),
+          policyRequest,
         ]);
         if (
           signal?.aborted ||
@@ -116,6 +139,8 @@ export function ModelProviderWorkspace({
         );
         setProviders(modelProviders);
         setProviderTypes(types);
+        setRoutingPolicy(policyOutcome.policy);
+        setRoutingError(policyOutcome.error);
         onCountChange?.(modelProviders.length);
         setSelectedId((current) =>
           current && modelProviders.some((item) => item.id === current)
@@ -133,6 +158,8 @@ export function ModelProviderWorkspace({
         }
         setProviders([]);
         setProviderTypes([]);
+        setRoutingPolicy(null);
+        setRoutingError(null);
         onCountChange?.(null);
         setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
@@ -143,10 +170,11 @@ export function ModelProviderWorkspace({
           scopeKeyRef.current === requestScope
         ) {
           setLoading(false);
+          setRoutingLoading(false);
         }
       }
     },
-    [client, onCountChange, scopeKey],
+    [client, config.mode, onCountChange, scopeKey],
   );
 
   useEffect(() => {
@@ -230,6 +258,60 @@ export function ModelProviderWorkspace({
     [client, refreshRuntimeProjection, scopeKey, updateProvider],
   );
 
+  const saveRoutingPolicy = useCallback(
+    async (
+      mutation: LlmProviderRoutingPolicyMutationInput,
+    ): Promise<LlmProviderRoutingPolicy> => {
+      const requestScope = scopeKey;
+      const requestClient = client;
+      let updated: LlmProviderRoutingPolicy;
+      try {
+        updated = await requestClient.updateLlmProviderRoutingPolicy(mutation);
+      } catch (caught) {
+        if (!(caught instanceof DesktopApiError) || caught.status !== 409) throw caught;
+        const [latestItems, latestPolicy] = await Promise.all([
+          requestClient.listLlmProviders(),
+          requestClient.getLlmProviderRoutingPolicy(),
+        ]);
+        if (
+          !mountedRef.current ||
+          clientRef.current !== requestClient ||
+          scopeKeyRef.current !== requestScope
+        ) {
+          throw new Error(t('providers.contextChanged'));
+        }
+        const modelProviders = latestItems.filter(
+          (item) => !item.operation_type || item.operation_type === 'llm',
+        );
+        setProviders(modelProviders);
+        setSelectedId((current) =>
+          current && modelProviders.some((item) => item.id === current)
+            ? current
+            : (modelProviders[0]?.id ?? null),
+        );
+        onCountChange?.(modelProviders.length);
+        setRoutingPolicy(latestPolicy);
+        setRoutingError(null);
+        await refreshRuntimeProjection(requestScope, requestClient);
+        showToast(t('providers.routingConflictReloaded'));
+        return latestPolicy;
+      }
+      if (
+        !mountedRef.current ||
+        clientRef.current !== requestClient ||
+        scopeKeyRef.current !== requestScope
+      ) {
+        throw new Error(t('providers.contextChanged'));
+      }
+      setRoutingPolicy(updated);
+      setRoutingError(null);
+      showToast(t('providers.routingSaved'));
+      await refreshRuntimeProjection(requestScope, requestClient);
+      return updated;
+    },
+    [client, onCountChange, refreshRuntimeProjection, scopeKey, showToast, t],
+  );
+
   const validateProvider = useCallback(
     async (providerId: string): Promise<LlmProviderValidationOutcome> => {
       const requestScope = scopeKey;
@@ -276,11 +358,16 @@ export function ModelProviderWorkspace({
       ) {
         throw new Error(t('providers.contextChanged'));
       }
-      let connected = false;
+      let validationState: 'connected' | 'configured' | 'attention' = 'attention';
       let checkedProvider = created;
       try {
         const outcome = await requestClient.checkLlmProvider(created.id);
-        connected = outcome.status === 'healthy';
+        validationState =
+          outcome.probed && outcome.status === 'healthy'
+            ? 'connected'
+            : !outcome.probed && outcome.status === 'configuration_valid'
+              ? 'configured'
+              : 'attention';
         checkedProvider = {
           ...created,
           health_status: outcome.status,
@@ -304,9 +391,14 @@ export function ModelProviderWorkspace({
       setTab('overview');
       setAdding(false);
       showToast(
-        t(connected ? 'providers.providerConnected' : 'providers.providerAddedNeedsAttention', {
-          provider: created.name,
-        }),
+        t(
+          validationState === 'connected'
+            ? 'providers.providerConnected'
+            : validationState === 'configured'
+              ? 'providers.providerConfigured'
+              : 'providers.providerAddedNeedsAttention',
+          { provider: created.name },
+        ),
       );
       await refreshRuntimeProjection(requestScope, requestClient);
       return checkedProvider;
@@ -318,41 +410,6 @@ export function ModelProviderWorkspace({
     setSelectedId(providerId);
     setTab('overview');
   };
-
-  const selectRuntimeProvider = useCallback(
-    async (selectedProvider: ManagedLlmProvider) => {
-      if (config.mode !== 'local') return;
-      const requestScope = scopeKey;
-      const requestClient = client;
-      const selected = await requestClient.selectLlmRuntimeProvider(
-        selectedProvider.id,
-        selectedProvider.revision ?? 0,
-      );
-      if (
-        !mountedRef.current ||
-        clientRef.current !== requestClient ||
-        scopeKeyRef.current !== requestScope
-      ) {
-        throw new Error(t('providers.contextChanged'));
-      }
-      replaceProvider(selected);
-      showToast(t('providers.localRuntimeUpdated'));
-      await Promise.all([
-        loadProviders(),
-        refreshRuntimeProjection(requestScope, requestClient),
-      ]);
-    },
-    [
-      client,
-      config.mode,
-      loadProviders,
-      refreshRuntimeProjection,
-      replaceProvider,
-      scopeKey,
-      showToast,
-      t,
-    ],
-  );
 
   const copyProviderId = async () => {
     if (!provider) return;
@@ -430,9 +487,9 @@ export function ModelProviderWorkspace({
               <span className="provider-list-copy">
                 <b>{item.name || item.provider_type}</b>
                 <small>
-                  {item.provider_type} ·{' '}
+                  {providerTypeDisplayName(item.provider_type)} ·{' '}
                   {t('providers.modelCount', {
-                    count: item.allowed_models?.length ?? 0,
+                    count: providerModelsFromProvider(item).length,
                   })}
                 </small>
                 <ProviderStatusBadge provider={item} />
@@ -527,7 +584,8 @@ export function ModelProviderWorkspace({
               </div>
               <div>
                 <span>
-                  {t('providers.modelProviderEyebrow')} · {provider.provider_type.toUpperCase()}
+                  {t('providers.modelProviderEyebrow')} ·{' '}
+                  {providerTypeDisplayName(provider.provider_type).toUpperCase()}
                 </span>
                 <h1>{provider.name || provider.provider_type}</h1>
                 <p>{t('providers.identityDescription')}</p>
@@ -585,6 +643,8 @@ export function ModelProviderWorkspace({
               {tab === 'overview' ? (
                 <ProviderOverviewPanel
                   provider={provider}
+                  providers={providers}
+                  policy={routingPolicy}
                   mode={config.mode}
                   runtimeSelected={providerRuntimeSelected}
                   onTabChange={setTab}
@@ -611,11 +671,13 @@ export function ModelProviderWorkspace({
               {tab === 'routing' ? (
                 <ProviderRoutingPanel
                   provider={provider}
+                  providers={providers}
+                  policy={routingPolicy}
+                  loading={routingLoading}
+                  loadError={routingError}
                   mode={config.mode}
-                  runtimeSelected={providerRuntimeSelected}
                   canManage={canManage}
-                  onSave={updateProvider}
-                  onRuntimeSelected={selectRuntimeProvider}
+                  onSave={saveRoutingPolicy}
                 />
               ) : null}
               {tab === 'usage' ? (

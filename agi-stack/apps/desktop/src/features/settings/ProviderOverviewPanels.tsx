@@ -1,30 +1,44 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityLogIcon,
   ArrowRightIcon,
   CheckCircledIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  Cross2Icon,
   CubeIcon,
   ExclamationTriangleIcon,
   InfoCircledIcon,
   Link2Icon,
   MixerHorizontalIcon,
+  PlusIcon,
   ReloadIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import type {
-  LlmProviderMutationInput,
+  LlmProviderRoutingPolicy,
+  LlmProviderRoutingPolicyMutationInput,
   LlmProviderUsage,
+  LlmRouteTarget,
+  LlmRoutingRole,
   ManagedLlmProvider,
   RuntimeMode,
 } from '../../types';
-import { providerDraftFromProvider, providerMutationFromDraft } from './providerManagementModel';
+import {
+  localRuntimeRoutingModelIds,
+  providerEnabledModelIds,
+  providerRoutingOverview,
+  routingFallbackCanAdd,
+} from './providerManagementModel';
 import { ProviderStatusBadge } from './ProviderStatusBadge';
 
 export type ProviderTab = 'overview' | 'connection' | 'models' | 'routing' | 'usage';
 
 type ProviderOverviewPanelProps = {
   provider: ManagedLlmProvider;
+  providers: ManagedLlmProvider[];
+  policy: LlmProviderRoutingPolicy | null;
   mode: RuntimeMode;
   runtimeSelected: boolean;
   onTabChange: (tab: ProviderTab) => void;
@@ -32,12 +46,29 @@ type ProviderOverviewPanelProps = {
 
 export function ProviderOverviewPanel({
   provider,
+  providers,
+  policy,
   mode,
   runtimeSelected,
   onTabChange,
 }: ProviderOverviewPanelProps) {
   const { locale, t } = useI18n();
-  const enabledModels = provider.allowed_models ?? [];
+  const enabledModels = [
+    ...new Set([provider.llm_model, ...(provider.allowed_models ?? [])].filter(Boolean)),
+  ] as string[];
+  const providerNames = useMemo(
+    () => new Map(providers.map((item) => [item.id, item.name || item.provider_type])),
+    [providers],
+  );
+  const routeLabel = (target: LlmRouteTarget | null | undefined): string | null =>
+    target
+      ? `${providerNames.get(target.provider_id) ?? target.provider_id} / ${target.model_id}`
+      : null;
+  const overviewRouting = providerRoutingOverview(provider, policy);
+  const defaultRoute = routeLabel(overviewRouting.roles.default);
+  const fastRoute = routeLabel(overviewRouting.roles.fast);
+  const fallbackRoute = routeLabel(overviewRouting.fallbacks[0]);
+  const policyBacked = mode === 'local' && policy !== null;
   const checkedAt = provider.health_last_check
     ? new Date(provider.health_last_check).toLocaleString(locale)
     : t('providers.neverChecked');
@@ -137,22 +168,38 @@ export function ProviderOverviewPanel({
         <div className="provider-routing-list">
           <div>
             <span>{t('providers.defaultRole')}</span>
-            <b>{provider.llm_model || t('providers.notConfigured')}</b>
+            <b>{defaultRoute || t('providers.notConfigured')}</b>
             <em>
-              {mode === 'local' && runtimeSelected
-                ? t('providers.localRuntimeSelected')
-                : t('providers.providerPrimaryModel')}
+              {policyBacked
+                ? t('providers.tenantRoutingPolicy')
+                : mode === 'local' && runtimeSelected
+                  ? t('providers.localRuntimeSelected')
+                  : t('providers.providerPrimaryModel')}
             </em>
           </div>
           <div>
             <span>{t('providers.fastRole')}</span>
-            <b>{provider.llm_small_model || t('providers.notConfigured')}</b>
-            <em>{t('providers.readOnlyFromServer')}</em>
+            <b>
+              {mode === 'local'
+                ? t('providers.notConfigured')
+                : fastRoute || t('providers.notConfigured')}
+            </b>
+            <em>
+              {t(
+                mode === 'local'
+                  ? 'providers.roleRuntimeUnavailable'
+                  : policyBacked
+                    ? 'providers.tenantRoutingPolicy'
+                    : 'providers.readOnlyFromServer',
+              )}
+            </em>
           </div>
           <div>
             <span>{t('providers.fallbackRole')}</span>
-            <b>{provider.secondary_models?.[0] || t('providers.notConfigured')}</b>
-            <em>{t('providers.readOnlyFromServer')}</em>
+            <b>{fallbackRoute || t('providers.notConfigured')}</b>
+            <em>
+              {t(policyBacked ? 'providers.tenantRoutingPolicy' : 'providers.readOnlyFromServer')}
+            </em>
           </div>
         </div>
         <button type="button" onClick={() => onTabChange('routing')}>
@@ -165,67 +212,282 @@ export function ProviderOverviewPanel({
 
 type ProviderRoutingPanelProps = {
   provider: ManagedLlmProvider;
+  providers: ManagedLlmProvider[];
+  policy: LlmProviderRoutingPolicy | null;
+  loading: boolean;
+  loadError: string | null;
   mode: RuntimeMode;
-  runtimeSelected: boolean;
   canManage: boolean;
   onSave: (
-    provider: ManagedLlmProvider,
-    mutation: LlmProviderMutationInput,
-  ) => Promise<ManagedLlmProvider>;
-  onRuntimeSelected: (provider: ManagedLlmProvider) => Promise<void>;
+    mutation: LlmProviderRoutingPolicyMutationInput,
+  ) => Promise<LlmProviderRoutingPolicy>;
 };
+
+const ROUTING_ROLES: LlmRoutingRole[] = ['default', 'fast', 'coding', 'vision'];
+const CONFIGURABLE_LOCAL_ROUTING_ROLES = new Set<LlmRoutingRole>(['default', 'coding']);
+const MAX_ROUTING_FALLBACKS = 8;
+
+type RoutingDraft = {
+  policyKey: string;
+  roles: LlmProviderRoutingPolicy['roles'];
+  fallbacks: LlmRouteTarget[];
+};
+
+type RoutingModelOption = {
+  key: string;
+  label: string;
+  target: LlmRouteTarget;
+  available: boolean;
+};
+
+function routeTargetKey(target: LlmRouteTarget): string {
+  return JSON.stringify([target.provider_id, target.model_id]);
+}
+
+function sameRouteTarget(left: LlmRouteTarget | null, right: LlmRouteTarget | null): boolean {
+  return (
+    left === right ||
+    (left?.provider_id === right?.provider_id && left?.model_id === right?.model_id)
+  );
+}
+
+function routingDraftFromPolicy(
+  policyKey: string,
+  policy: LlmProviderRoutingPolicy,
+): RoutingDraft {
+  return {
+    policyKey,
+    roles: { ...policy.roles },
+    fallbacks: [...policy.fallbacks],
+  };
+}
+
+function routingDraftChanged(
+  policy: LlmProviderRoutingPolicy,
+  draft: RoutingDraft,
+): boolean {
+  if (ROUTING_ROLES.some((role) => !sameRouteTarget(policy.roles[role], draft.roles[role]))) {
+    return true;
+  }
+  return (
+    policy.fallbacks.length !== draft.fallbacks.length ||
+    policy.fallbacks.some((target, index) => !sameRouteTarget(target, draft.fallbacks[index] ?? null))
+  );
+}
+
+function cloudRoutingProjection(provider: ManagedLlmProvider): LlmProviderRoutingPolicy {
+  const route = (modelId: string | null | undefined): LlmRouteTarget | null =>
+    modelId ? { provider_id: provider.id, model_id: modelId } : null;
+  return {
+    tenant_id: 'cloud-read-only',
+    revision: provider.revision ?? 0,
+    roles: {
+      default: route(provider.llm_model),
+      fast: route(provider.llm_small_model),
+      coding: null,
+      vision: null,
+    },
+    fallbacks: (provider.secondary_models ?? []).flatMap((modelId) => {
+      const target = route(modelId);
+      return target ? [target] : [];
+    }),
+    updated_at: provider.updated_at ?? '',
+  };
+}
 
 export function ProviderRoutingPanel({
   provider,
+  providers,
+  policy,
+  loading,
+  loadError,
   mode,
-  runtimeSelected,
   canManage,
   onSave,
-  onRuntimeSelected,
 }: ProviderRoutingPanelProps) {
   const { t } = useI18n();
-  const availableModels = useMemo(
-    () =>
-      [
-        ...new Set([provider.llm_model, ...(provider.allowed_models ?? [])].filter(Boolean)),
-      ] as string[],
-    [provider.allowed_models, provider.llm_model],
+  const effectivePolicy = useMemo(
+    () => policy ?? (mode === 'cloud' ? cloudRoutingProjection(provider) : null),
+    [mode, policy, provider],
   );
-  const initialDefaultModel = provider.llm_model ?? availableModels[0] ?? '';
-  const [routingDraft, setRoutingDraft] = useState({
-    providerId: provider.id,
-    defaultModel: initialDefaultModel,
-  });
-  const [savingProviderId, setSavingProviderId] = useState<string | null>(null);
-  const [providerError, setProviderError] = useState<{
-    providerId: string;
+  const policyKey = effectivePolicy
+    ? [
+        mode,
+        effectivePolicy.tenant_id,
+        String(effectivePolicy.revision),
+        JSON.stringify(effectivePolicy.roles),
+        JSON.stringify(effectivePolicy.fallbacks),
+      ].join('\u0000')
+    : `${mode}\u0000missing`;
+  const modelOptions = useMemo(() => {
+    const options = new Map<string, RoutingModelOption>();
+    const providerNames = new Map(providers.map((item) => [item.id, item.name || item.provider_type]));
+    for (const item of providers) {
+      const modelCandidates =
+        mode === 'local'
+          ? localRuntimeRoutingModelIds(item)
+          : providerEnabledModelIds(item);
+      for (const model of modelCandidates) {
+        const modelId = model.trim();
+        if (!modelId) continue;
+        const target = { provider_id: item.id, model_id: modelId };
+        const key = routeTargetKey(target);
+        options.set(key, {
+          key,
+          label: `${item.name || item.provider_type} / ${modelId}`,
+          target,
+          available: true,
+        });
+      }
+    }
+    const referencedTargets = effectivePolicy
+      ? [
+          ...ROUTING_ROLES.flatMap((role) => {
+            const target = effectivePolicy.roles[role];
+            return target ? [target] : [];
+          }),
+          ...effectivePolicy.fallbacks,
+        ]
+      : [];
+    for (const target of referencedTargets) {
+      const key = routeTargetKey(target);
+      if (options.has(key)) continue;
+      const providerLabel = providerNames.get(target.provider_id) ?? target.provider_id;
+      options.set(key, {
+        key,
+        label: `${providerLabel} / ${target.model_id} · ${t('providers.routeUnavailable')}`,
+        target,
+        available: false,
+      });
+    }
+    return [...options.values()];
+  }, [effectivePolicy, mode, providers, t]);
+  const enabledOptions = modelOptions.filter((option) => option.available);
+  const optionByKey = useMemo(
+    () => new Map(modelOptions.map((option) => [option.key, option])),
+    [modelOptions],
+  );
+  const [storedDraft, setStoredDraft] = useState<RoutingDraft | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<{
+    policyKey: string;
     message: string;
   } | null>(null);
-  const defaultModel =
-    routingDraft.providerId === provider.id ? routingDraft.defaultModel : initialDefaultModel;
-  const saving = savingProviderId === provider.id;
-  const error = providerError?.providerId === provider.id ? providerError.message : null;
+  const saveRequestRef = useRef(0);
+  const storedOrPolicyDraft =
+    storedDraft?.policyKey === policyKey
+      ? storedDraft
+      : effectivePolicy
+        ? routingDraftFromPolicy(policyKey, effectivePolicy)
+        : null;
+  const draft =
+    storedOrPolicyDraft && mode === 'local'
+      ? {
+          ...storedOrPolicyDraft,
+          roles: { ...storedOrPolicyDraft.roles, fast: null, vision: null },
+        }
+      : storedOrPolicyDraft;
+  const saving = savingKey === policyKey;
+  const error = saveError?.policyKey === policyKey ? saveError.message : null;
+  const dirty = Boolean(effectivePolicy && draft && routingDraftChanged(effectivePolicy, draft));
+  const editable = mode === 'local' && canManage && policy !== null && !loading && !loadError;
 
-  const localRoutingAvailable = mode === 'local';
-  const saveDefaultRoute = async () => {
-    setSavingProviderId(provider.id);
-    setProviderError(null);
+  useEffect(() => {
+    return () => {
+      saveRequestRef.current += 1;
+    };
+  }, [policyKey]);
+
+  const updateRole = (role: LlmRoutingRole, optionKey: string) => {
+    if (!effectivePolicy) return;
+    const target = optionKey ? (optionByKey.get(optionKey)?.target ?? null) : null;
+    setStoredDraft((current) => {
+      const base =
+        current?.policyKey === policyKey
+          ? current
+          : routingDraftFromPolicy(policyKey, effectivePolicy);
+      return { ...base, roles: { ...base.roles, [role]: target } };
+    });
+  };
+
+  const updateFallback = (index: number, optionKey: string) => {
+    if (!effectivePolicy) return;
+    const target = optionByKey.get(optionKey)?.target;
+    if (!target) return;
+    setStoredDraft((current) => {
+      const base =
+        current?.policyKey === policyKey
+          ? current
+          : routingDraftFromPolicy(policyKey, effectivePolicy);
+      return {
+        ...base,
+        fallbacks: base.fallbacks.map((item, currentIndex) =>
+          currentIndex === index ? target : item,
+        ),
+      };
+    });
+  };
+
+  const moveFallback = (index: number, offset: -1 | 1) => {
+    if (!effectivePolicy) return;
+    setStoredDraft((current) => {
+      const base =
+        current?.policyKey === policyKey
+          ? current
+          : routingDraftFromPolicy(policyKey, effectivePolicy);
+      const destination = index + offset;
+      if (destination < 0 || destination >= base.fallbacks.length) return base;
+      const fallbacks = [...base.fallbacks];
+      [fallbacks[index], fallbacks[destination]] = [fallbacks[destination], fallbacks[index]];
+      return { ...base, fallbacks };
+    });
+  };
+
+  const removeFallback = (index: number) => {
+    if (!effectivePolicy) return;
+    setStoredDraft((current) => {
+      const base =
+        current?.policyKey === policyKey
+          ? current
+          : routingDraftFromPolicy(policyKey, effectivePolicy);
+      return {
+        ...base,
+        fallbacks: base.fallbacks.filter((_, currentIndex) => currentIndex !== index),
+      };
+    });
+  };
+
+  const addFallback = () => {
+    if (!effectivePolicy || !draft) return;
+    if (draft.fallbacks.length >= MAX_ROUTING_FALLBACKS) return;
+    const used = new Set(draft.fallbacks.map(routeTargetKey));
+    const next = enabledOptions.find((option) => !used.has(option.key));
+    if (!next) return;
+    setStoredDraft({ ...draft, fallbacks: [...draft.fallbacks, next.target] });
+  };
+
+  const saveRouting = async () => {
+    if (!editable || !policy || !draft || !draft.roles.default) return;
+    const requestId = ++saveRequestRef.current;
+    setSavingKey(policyKey);
+    setSaveError(null);
     try {
-      const draft = providerDraftFromProvider(provider);
-      draft.primaryModel = defaultModel;
-      draft.active = true;
-      const enabled = new Set(provider.allowed_models ?? []);
-      enabled.add(defaultModel);
-      draft.allowedModels = [...enabled].join('\n');
-      const updated = await onSave(provider, providerMutationFromDraft(draft));
-      await onRuntimeSelected(updated);
-    } catch (caught) {
-      setProviderError({
-        providerId: provider.id,
-        message: caught instanceof Error ? caught.message : String(caught),
+      await onSave({
+        roles: draft.roles,
+        fallbacks: draft.fallbacks,
+        expectedRevision: policy.revision,
       });
+    } catch (caught) {
+      if (saveRequestRef.current === requestId) {
+        setSaveError({
+          policyKey,
+          message: caught instanceof Error ? caught.message : String(caught),
+        });
+      }
     } finally {
-      setSavingProviderId((current) => (current === provider.id ? null : current));
+      if (saveRequestRef.current === requestId) {
+        setSavingKey((current) => (current === policyKey ? null : current));
+      }
     }
   };
 
@@ -237,14 +499,12 @@ export function ProviderRoutingPanel({
           <h3>{t('providers.routingTitle')}</h3>
           <p>{t('providers.routingDescription')}</p>
         </div>
-        {localRoutingAvailable && canManage ? (
+        {mode === 'local' && canManage ? (
           <button
             className="primary"
             type="button"
-            disabled={
-              saving || !defaultModel || (runtimeSelected && defaultModel === provider.llm_model)
-            }
-            onClick={() => void saveDefaultRoute()}
+            disabled={!editable || saving || !dirty || !draft?.roles.default}
+            onClick={() => void saveRouting()}
           >
             {saving ? <ReloadIcon className="spin" /> : <CheckCircledIcon />}
             {t(saving ? 'providers.savingRouting' : 'providers.saveRouting')}
@@ -252,7 +512,7 @@ export function ProviderRoutingPanel({
         ) : null}
       </header>
 
-      {!localRoutingAvailable ? (
+      {mode === 'cloud' ? (
         <div className="provider-capability-note">
           <InfoCircledIcon />
           <span>
@@ -262,70 +522,158 @@ export function ProviderRoutingPanel({
         </div>
       ) : null}
 
-      <div className="provider-role-grid">
-        <label>
-          <span>
-            <b>{t('providers.defaultModel')}</b>
-            <small>{t('providers.defaultModelDescription')}</small>
-          </span>
-          <select
-            value={defaultModel}
-            disabled={!localRoutingAvailable || !canManage}
-            onChange={(event) =>
-              setRoutingDraft({ providerId: provider.id, defaultModel: event.target.value })
-            }
-          >
-            {availableModels.map((model) => (
-              <option value={model} key={model}>
-                {provider.name} / {model}
-              </option>
-            ))}
-          </select>
-        </label>
-        {[
-          ['fast', provider.llm_small_model],
-          ['coding', null],
-          ['vision', null],
-        ].map(([role, model]) => (
-          <label key={role}>
-            <span>
-              <b>{t(`providers.${role}Model`)}</b>
-              <small>{t('providers.roleContractUnavailable')}</small>
-            </span>
-            <select value={model || ''} disabled>
-              <option value="">{model || t('providers.notExposedByServer')}</option>
-            </select>
-          </label>
-        ))}
-      </div>
+      {loading ? (
+        <div className="provider-loading-state" role="status">
+          <ReloadIcon className="spin" />
+          <span>{t('providers.loadingRouting')}</span>
+        </div>
+      ) : null}
+      {!loading && loadError ? (
+        <div className="provider-inline-error" role="alert">
+          <ExclamationTriangleIcon />
+          <span>{loadError}</span>
+        </div>
+      ) : null}
+      {!loading && !loadError && mode === 'local' && !effectivePolicy ? (
+        <div className="provider-empty-state large">
+          <InfoCircledIcon />
+          <b>{t('providers.routingUnavailable')}</b>
+          <span>{t('providers.routingUnavailableDescription')}</span>
+        </div>
+      ) : null}
+      {!loading && !loadError && effectivePolicy && enabledOptions.length === 0 ? (
+        <div className="provider-empty-state large">
+          <ExclamationTriangleIcon />
+          <b>{t('providers.noRoutingModels')}</b>
+          <span>{t('providers.noRoutingModelsDescription')}</span>
+        </div>
+      ) : null}
 
-      <section className="provider-fallback-editor">
-        <header>
-          <div>
-            <span>{t('providers.failoverEyebrow')}</span>
-            <h3>{t('providers.fallbackOrder')}</h3>
+      {!loading && !loadError && effectivePolicy && draft ? (
+        <>
+          <div className="provider-role-grid">
+            {ROUTING_ROLES.map((role) => {
+              const selectedTarget = draft.roles[role];
+              const runtimeSupported =
+                mode !== 'local' || CONFIGURABLE_LOCAL_ROUTING_ROLES.has(role);
+              return (
+                <label key={role}>
+                  <span>
+                    <b>{t(`providers.${role}Model`)}</b>
+                    <small>{t(`providers.${role}ModelDescription`)}</small>
+                    {!runtimeSupported ? (
+                      <em>{t('providers.roleRuntimeUnavailable')}</em>
+                    ) : null}
+                  </span>
+                  <select
+                    value={selectedTarget ? routeTargetKey(selectedTarget) : ''}
+                    disabled={!editable || !runtimeSupported}
+                    onChange={(event) => updateRole(role, event.target.value)}
+                  >
+                    <option value="" disabled={role === 'default'}>
+                      {t('providers.notConfigured')}
+                    </option>
+                    {modelOptions.map((option) => (
+                      <option value={option.key} disabled={!option.available} key={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              );
+            })}
           </div>
-          <small>{t('providers.fallbackReadOnlyDescription')}</small>
-        </header>
-        {(provider.secondary_models ?? []).length > 0 ? (
-          provider.secondary_models?.map((model, index) => (
-            <div key={`${model}-${index}`}>
-              <span>{index + 1}</span>
-              <select value={model} disabled>
-                <option value={model}>
-                  {provider.name} / {model}
-                </option>
-              </select>
-              <em>{t('providers.readOnly')}</em>
-            </div>
-          ))
-        ) : (
-          <div className="provider-fallback-empty">
-            <InfoCircledIcon />
-            <span>{t('providers.noFallbacks')}</span>
-          </div>
-        )}
-      </section>
+
+          <section className="provider-fallback-editor">
+            <header>
+              <div>
+                <span>{t('providers.failoverEyebrow')}</span>
+                <h3>{t('providers.fallbackOrder')}</h3>
+              </div>
+              <small>{t('providers.fallbackReadOnlyDescription')}</small>
+            </header>
+            {draft.fallbacks.length > 0 ? (
+              draft.fallbacks.map((target, index) => {
+                const currentKey = routeTargetKey(target);
+                const usedElsewhere = new Set(
+                  draft.fallbacks
+                    .filter((_, currentIndex) => currentIndex !== index)
+                    .map(routeTargetKey),
+                );
+                return (
+                  <div key={`${currentKey}-${index}`}>
+                    <span>{index + 1}</span>
+                    <select
+                      value={currentKey}
+                      disabled={!editable}
+                      onChange={(event) => updateFallback(index, event.target.value)}
+                    >
+                      {modelOptions.map((option) => (
+                        <option
+                          value={option.key}
+                          disabled={!option.available || usedElsewhere.has(option.key)}
+                          key={option.key}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {editable ? (
+                      <div className="provider-fallback-actions">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          aria-label={t('providers.moveFallbackUp', { count: index + 1 })}
+                          onClick={() => moveFallback(index, -1)}
+                        >
+                          <ChevronUpIcon />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === draft.fallbacks.length - 1}
+                          aria-label={t('providers.moveFallbackDown', { count: index + 1 })}
+                          onClick={() => moveFallback(index, 1)}
+                        >
+                          <ChevronDownIcon />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={t('providers.removeFallback', { count: index + 1 })}
+                          onClick={() => removeFallback(index)}
+                        >
+                          <Cross2Icon />
+                        </button>
+                      </div>
+                    ) : (
+                      <em>{t('providers.readOnly')}</em>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="provider-fallback-empty">
+                <InfoCircledIcon />
+                <span>{t('providers.noFallbacks')}</span>
+              </div>
+            )}
+            {editable ? (
+              <button
+                type="button"
+                disabled={
+                  !routingFallbackCanAdd(
+                    draft.fallbacks,
+                    enabledOptions.map((option) => option.target),
+                    MAX_ROUTING_FALLBACKS,
+                  )
+                }
+                onClick={addFallback}
+              >
+                <PlusIcon /> {t('providers.addFallback')}
+              </button>
+            ) : null}
+          </section>
+        </>
+      ) : null}
 
       {error ? (
         <div className="provider-inline-error" role="alert">

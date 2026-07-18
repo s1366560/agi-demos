@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -28,6 +28,7 @@ impl ManagedResourceKind {
 #[derive(Debug)]
 pub(super) enum ResourceRegistryError {
     NotFound,
+    InvalidRoutingPolicy(String),
     Immutable {
         kind: ManagedResourceKind,
         id: String,
@@ -43,6 +44,7 @@ impl fmt::Display for ResourceRegistryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound => formatter.write_str("managed resource not found"),
+            Self::InvalidRoutingPolicy(detail) => formatter.write_str(detail),
             Self::Immutable { kind, id } => {
                 write!(formatter, "managed {} {id} is immutable", kind.as_str())
             }
@@ -76,6 +78,12 @@ pub(super) fn initialize_resource_registry(connection: &Connection) -> Result<()
                tenant_id TEXT PRIMARY KEY,
                provider_id TEXT NOT NULL,
                selected_at_ms INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS desktop_llm_routing_policies (
+               tenant_id TEXT PRIMARY KEY,
+               revision INTEGER NOT NULL CHECK(revision >= 0),
+               updated_at_ms INTEGER NOT NULL,
+               value_json TEXT NOT NULL
              );",
         )
         .map_err(|error| error.to_string())?;
@@ -123,11 +131,145 @@ impl DesktopSessionStore {
         selections
     }
 
+    pub(super) fn list_llm_routing_policies(&self) -> Result<Vec<(String, Value)>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT tenant_id, value_json FROM desktop_llm_routing_policies
+                 ORDER BY tenant_id ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let policies = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| error.to_string())?
+            .map(|row| {
+                let (tenant_id, value_json) = row.map_err(|error| error.to_string())?;
+                let policy =
+                    serde_json::from_str(&value_json).map_err(|error| error.to_string())?;
+                Ok((tenant_id, policy))
+            })
+            .collect();
+        policies
+    }
+
+    pub(super) fn llm_routing_policy(
+        &self,
+        tenant_id: &str,
+        now_ms: i64,
+    ) -> Result<Value, ResourceRegistryError> {
+        let mut connection = self.connection().map_err(ResourceRegistryError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        if let Some(policy) = query_routing_policy(&transaction, tenant_id)? {
+            return Ok(policy);
+        }
+        if let Some(policy) = legacy_routing_policy(&transaction, tenant_id)? {
+            let value_json = serde_json::to_string(&policy)
+                .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+            transaction
+                .execute(
+                    "INSERT INTO desktop_llm_routing_policies(
+                       tenant_id, revision, updated_at_ms, value_json
+                     ) VALUES (?1, 0, ?2, ?3)",
+                    params![
+                        tenant_id,
+                        policy_timestamp_ms(&policy).unwrap_or(now_ms),
+                        value_json
+                    ],
+                )
+                .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+            transaction
+                .commit()
+                .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+            return Ok(policy);
+        }
+        Ok(empty_routing_policy(tenant_id, now_ms))
+    }
+
+    pub(super) fn put_llm_routing_policy(
+        &self,
+        tenant_id: &str,
+        expected_revision: u64,
+        roles: Value,
+        fallbacks: Value,
+        now_ms: i64,
+    ) -> Result<Value, ResourceRegistryError> {
+        let mut connection = self.connection().map_err(ResourceRegistryError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        validate_routing_policy_targets(&transaction, tenant_id, &roles, &fallbacks)?;
+        let current_revision = transaction
+            .query_row(
+                "SELECT revision FROM desktop_llm_routing_policies WHERE tenant_id = ?1",
+                params![tenant_id],
+                |row| row.get::<_, u64>(0),
+            )
+            .optional()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?
+            .unwrap_or(0);
+        if expected_revision != current_revision {
+            return Err(ResourceRegistryError::RevisionConflict {
+                expected: expected_revision,
+                actual: current_revision,
+            });
+        }
+        let next_revision = current_revision.saturating_add(1);
+        let default_provider_id = roles
+            .get("default")
+            .and_then(|target| target.get("provider_id"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ResourceRegistryError::InvalidRoutingPolicy(
+                    "default routing target is required".to_string(),
+                )
+            })?;
+        let policy = json!({
+            "tenant_id": tenant_id,
+            "revision": next_revision,
+            "roles": roles,
+            "fallbacks": fallbacks,
+            "updated_at": iso_from_millis(now_ms),
+        });
+        let value_json = serde_json::to_string(&policy)
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_llm_routing_policies(
+                   tenant_id, revision, updated_at_ms, value_json
+                 ) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(tenant_id) DO UPDATE SET
+                   revision = excluded.revision,
+                   updated_at_ms = excluded.updated_at_ms,
+                   value_json = excluded.value_json",
+                params![tenant_id, next_revision, now_ms, value_json],
+            )
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_llm_provider_selections(tenant_id, provider_id, selected_at_ms)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(tenant_id) DO UPDATE SET
+                   provider_id = excluded.provider_id,
+                   selected_at_ms = excluded.selected_at_ms",
+                params![tenant_id, default_provider_id, now_ms],
+            )
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        Ok(policy)
+    }
+
     pub(super) fn select_llm_provider(
         &self,
         tenant_id: &str,
         provider_id: &str,
         expected_revision: u64,
+        expected_policy_revision: u64,
         now_ms: i64,
     ) -> Result<Value, ResourceRegistryError> {
         let mut connection = self.connection().map_err(ResourceRegistryError::Storage)?;
@@ -151,6 +293,26 @@ impl DesktopSessionStore {
                 actual: provider.0,
             });
         }
+        let provider_value: Value = serde_json::from_str(&provider.1)
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        let model_id = provider_value
+            .get("llm_model")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
+            .ok_or_else(|| {
+                ResourceRegistryError::InvalidRoutingPolicy(
+                    "selected provider must have a configured model".to_string(),
+                )
+            })?;
+        sync_routing_policy_default(
+            &transaction,
+            tenant_id,
+            provider_id,
+            model_id,
+            expected_policy_revision,
+            now_ms,
+        )?;
         transaction
             .execute(
                 "INSERT INTO desktop_llm_provider_selections(tenant_id, provider_id, selected_at_ms)
@@ -164,8 +326,7 @@ impl DesktopSessionStore {
         transaction
             .commit()
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
-        serde_json::from_str(&provider.1)
-            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))
+        Ok(provider_value)
     }
 
     pub(super) fn clear_llm_provider_selection_if_matches(
@@ -282,6 +443,9 @@ impl DesktopSessionStore {
                     actual: actual_revision,
                 });
             }
+        }
+        if kind == ManagedResourceKind::Provider && scope_kind == "tenant" {
+            ensure_provider_policy_compatible(&transaction, scope_id, id, status, &value)?;
         }
         let next_revision = current_revision.map_or(0, |revision| revision.saturating_add(1));
         let updated_at = iso_from_millis(now_ms);
@@ -406,6 +570,360 @@ fn ensure_managed_resource_mutable(
         });
     }
     Ok(())
+}
+
+fn query_routing_policy(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+) -> Result<Option<Value>, ResourceRegistryError> {
+    let value_json = transaction
+        .query_row(
+            "SELECT value_json FROM desktop_llm_routing_policies WHERE tenant_id = ?1",
+            params![tenant_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    value_json
+        .map(|value| {
+            serde_json::from_str(&value)
+                .map_err(|error| ResourceRegistryError::Storage(error.to_string()))
+        })
+        .transpose()
+}
+
+fn sync_routing_policy_default(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+    provider_id: &str,
+    model_id: &str,
+    expected_revision: u64,
+    now_ms: i64,
+) -> Result<(), ResourceRegistryError> {
+    let target = json!({
+        "provider_id": provider_id,
+        "model_id": model_id,
+    });
+    let mut policy = query_routing_policy(transaction, tenant_id)?.unwrap_or_else(|| {
+        json!({
+            "tenant_id": tenant_id,
+            "revision": 0,
+            "roles": {
+                "default": null,
+                "fast": null,
+                "coding": null,
+                "vision": null,
+            },
+            "fallbacks": [],
+            "updated_at": iso_from_millis(now_ms),
+        })
+    });
+    let current_revision = policy.get("revision").and_then(Value::as_u64).unwrap_or(0);
+    if expected_revision != current_revision {
+        return Err(ResourceRegistryError::RevisionConflict {
+            expected: expected_revision,
+            actual: current_revision,
+        });
+    }
+    if policy.get("roles").and_then(|roles| roles.get("default")) == Some(&target) {
+        return Ok(());
+    }
+    let next_revision = current_revision.saturating_add(1);
+    let policy_object = policy.as_object_mut().ok_or_else(|| {
+        ResourceRegistryError::Storage("routing policy must be an object".to_string())
+    })?;
+    let roles = policy_object
+        .get_mut("roles")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| {
+            ResourceRegistryError::Storage("routing policy roles must be an object".to_string())
+        })?;
+    roles.insert("default".to_string(), target);
+    policy_object.insert("revision".to_string(), json!(next_revision));
+    policy_object.insert("updated_at".to_string(), json!(iso_from_millis(now_ms)));
+    let value_json = serde_json::to_string(&policy)
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    transaction
+        .execute(
+            "INSERT INTO desktop_llm_routing_policies(
+               tenant_id, revision, updated_at_ms, value_json
+             ) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(tenant_id) DO UPDATE SET
+               revision = excluded.revision,
+               updated_at_ms = excluded.updated_at_ms,
+               value_json = excluded.value_json",
+            params![tenant_id, next_revision, now_ms, value_json],
+        )
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    Ok(())
+}
+
+fn legacy_routing_policy(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+) -> Result<Option<Value>, ResourceRegistryError> {
+    let selected = transaction
+        .query_row(
+            "SELECT selection.provider_id, selection.selected_at_ms, resource.value_json
+             FROM desktop_llm_provider_selections AS selection
+             JOIN desktop_managed_resources AS resource
+               ON resource.kind = 'provider'
+              AND resource.scope_kind = 'tenant'
+              AND resource.scope_id = selection.tenant_id
+              AND resource.id = selection.provider_id
+             WHERE selection.tenant_id = ?1",
+            params![tenant_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    let Some((provider_id, selected_at_ms, provider_json)) = selected else {
+        return Ok(None);
+    };
+    let provider: Value = serde_json::from_str(&provider_json)
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    let Some(model_id) = provider
+        .get("llm_model")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+    else {
+        return Ok(None);
+    };
+    Ok(Some(json!({
+        "tenant_id": tenant_id,
+        "revision": 0,
+        "roles": {
+            "default": {
+                "provider_id": provider_id,
+                "model_id": model_id,
+            },
+            "fast": null,
+            "coding": null,
+            "vision": null,
+        },
+        "fallbacks": [],
+        "updated_at": iso_from_millis(selected_at_ms),
+    })))
+}
+
+fn empty_routing_policy(tenant_id: &str, now_ms: i64) -> Value {
+    json!({
+        "tenant_id": tenant_id,
+        "revision": 0,
+        "roles": {
+            "default": null,
+            "fast": null,
+            "coding": null,
+            "vision": null,
+        },
+        "fallbacks": [],
+        "updated_at": iso_from_millis(now_ms),
+    })
+}
+
+fn policy_timestamp_ms(policy: &Value) -> Option<i64> {
+    let updated_at = policy.get("updated_at")?.as_str()?;
+    DateTime::parse_from_rfc3339(updated_at)
+        .ok()
+        .map(|timestamp| timestamp.timestamp_millis())
+}
+
+fn validate_routing_policy_targets(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+    roles: &Value,
+    fallbacks: &Value,
+) -> Result<(), ResourceRegistryError> {
+    let roles = roles.as_object().ok_or_else(|| {
+        ResourceRegistryError::InvalidRoutingPolicy("routing roles must be an object".to_string())
+    })?;
+    let default = roles
+        .get("default")
+        .filter(|target| !target.is_null())
+        .ok_or_else(|| {
+            ResourceRegistryError::InvalidRoutingPolicy(
+                "default routing target is required".to_string(),
+            )
+        })?;
+    validate_routing_target(transaction, tenant_id, default)?;
+    for role in ["fast", "coding", "vision"] {
+        if let Some(target) = roles.get(role).filter(|target| !target.is_null()) {
+            validate_routing_target(transaction, tenant_id, target)?;
+        }
+    }
+    let fallbacks = fallbacks.as_array().ok_or_else(|| {
+        ResourceRegistryError::InvalidRoutingPolicy(
+            "routing fallbacks must be an array".to_string(),
+        )
+    })?;
+    if fallbacks.len() > 8 {
+        return Err(ResourceRegistryError::InvalidRoutingPolicy(
+            "routing fallbacks cannot contain more than 8 targets".to_string(),
+        ));
+    }
+    let mut seen = HashSet::with_capacity(fallbacks.len());
+    for target in fallbacks {
+        let identity = routing_target_identity(target)?;
+        if !seen.insert(identity) {
+            return Err(ResourceRegistryError::InvalidRoutingPolicy(
+                "routing fallbacks cannot contain duplicate targets".to_string(),
+            ));
+        }
+        validate_routing_target(transaction, tenant_id, target)?;
+    }
+    Ok(())
+}
+
+fn validate_routing_target(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+    target: &Value,
+) -> Result<(), ResourceRegistryError> {
+    let (provider_id, model_id) = routing_target_identity(target)?;
+    let provider = transaction
+        .query_row(
+            "SELECT status, value_json FROM desktop_managed_resources
+             WHERE kind = 'provider' AND scope_kind = 'tenant'
+               AND scope_id = ?1 AND id = ?2",
+            params![tenant_id, provider_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?
+        .ok_or(ResourceRegistryError::NotFound)?;
+    let provider_value: Value = serde_json::from_str(&provider.1)
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    if !provider_is_configured(&provider.0, &provider_value) {
+        return Err(ResourceRegistryError::InvalidRoutingPolicy(format!(
+            "provider {provider_id} must be active and configured"
+        )));
+    }
+    if !provider_supports_model(&provider_value, &model_id) {
+        return Err(ResourceRegistryError::InvalidRoutingPolicy(format!(
+            "model {model_id} is not configured for provider {provider_id}"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_provider_policy_compatible(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+    provider_id: &str,
+    status: &str,
+    provider: &Value,
+) -> Result<(), ResourceRegistryError> {
+    let Some(policy) = query_routing_policy(transaction, tenant_id)? else {
+        return Ok(());
+    };
+    let mut referenced_models = Vec::new();
+    if let Some(roles) = policy.get("roles").and_then(Value::as_object) {
+        for role in ["default", "fast", "coding", "vision"] {
+            if let Some(target) = roles.get(role).filter(|target| !target.is_null()) {
+                let (target_provider_id, model_id) = routing_target_identity(target)?;
+                if target_provider_id == provider_id {
+                    referenced_models.push((role.to_string(), model_id));
+                }
+            }
+        }
+    }
+    if let Some(fallbacks) = policy.get("fallbacks").and_then(Value::as_array) {
+        for target in fallbacks {
+            let (target_provider_id, model_id) = routing_target_identity(target)?;
+            if target_provider_id == provider_id {
+                referenced_models.push(("fallback".to_string(), model_id));
+            }
+        }
+    }
+    if referenced_models.is_empty() {
+        return Ok(());
+    }
+    if !provider_is_configured(status, provider) {
+        return Err(ResourceRegistryError::InvalidRoutingPolicy(format!(
+            "provider update would invalidate routing policy target {provider_id}"
+        )));
+    }
+    if let Some((role, model_id)) = referenced_models
+        .into_iter()
+        .find(|(_, model_id)| !provider_supports_model(provider, model_id))
+    {
+        return Err(ResourceRegistryError::InvalidRoutingPolicy(format!(
+            "provider update would invalidate {role} routing model {model_id}"
+        )));
+    }
+    Ok(())
+}
+
+fn routing_target_identity(target: &Value) -> Result<(String, String), ResourceRegistryError> {
+    let provider_id = target
+        .get("provider_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ResourceRegistryError::InvalidRoutingPolicy(
+                "routing target provider_id cannot be empty".to_string(),
+            )
+        })?;
+    let model_id = target
+        .get("model_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ResourceRegistryError::InvalidRoutingPolicy(
+                "routing target model_id cannot be empty".to_string(),
+            )
+        })?;
+    Ok((provider_id.to_string(), model_id.to_string()))
+}
+
+fn provider_supports_model(provider: &Value, model_id: &str) -> bool {
+    provider
+        .get("llm_model")
+        .and_then(Value::as_str)
+        .is_some_and(|model| model.trim() == model_id)
+        || provider
+            .get("allowed_models")
+            .and_then(Value::as_array)
+            .is_some_and(|models| {
+                models
+                    .iter()
+                    .any(|model| model.as_str().is_some_and(|model| model.trim() == model_id))
+            })
+}
+
+fn provider_is_configured(status: &str, provider: &Value) -> bool {
+    let credential_configured = provider
+        .get("auth_method")
+        .and_then(Value::as_str)
+        .is_some_and(|auth_method| auth_method == "none")
+        || provider
+            .get("credential_configured")
+            .and_then(Value::as_bool)
+            == Some(true);
+    status == "active"
+        && credential_configured
+        && provider.get("is_active").and_then(Value::as_bool) == Some(true)
+        && provider
+            .get("provider_type")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+        && provider
+            .get("base_url")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+        && provider
+            .get("llm_model")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
 }
 
 fn seed_resource_registry(connection: &Connection) -> Result<(), String> {

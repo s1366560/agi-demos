@@ -13,11 +13,14 @@ const {
   providerAuthMethodSupported,
   providerManagementAllowed,
   providerEnabledModelIds,
+  localRuntimeRoutingModelIds,
   providerModelCanBeDisabled,
   providerModelsFromProvider,
   providerMutationForEnabledModels,
   providerMutationFromDraft,
+  providerRoutingOverview,
   providerTypeDisplayName,
+  routingFallbackCanAdd,
   providerValidationAccepted,
   providerValidationSignal,
   providerValidationSucceeded,
@@ -234,7 +237,7 @@ test('provider workspace helpers search structured fields and map attention stat
       credential_configured: false,
       health_status: 'configuration_valid',
     }),
-    'attention',
+    'connected',
   );
   assert.deepEqual(
     filterProviders(providers, '  ANTHRO ', 'all').map((provider) => provider.id),
@@ -255,6 +258,93 @@ test('provider workspace helpers search structured fields and map attention stat
   assert.deepEqual(providerModelsFromProvider(providers[2]), [
     { id: 'text-embedding-3-large', capability: 'embedding' },
   ]);
+});
+
+test('authoritative routing nulls do not fall back to provider defaults', () => {
+  const provider = {
+    id: 'provider-openai',
+    name: 'OpenAI',
+    provider_type: 'openai',
+    llm_model: 'provider-default',
+    llm_small_model: 'provider-fast',
+    secondary_models: ['provider-fallback'],
+  };
+  const authoritative = providerRoutingOverview(provider, {
+    tenant_id: 'tenant-a',
+    revision: 3,
+    roles: { default: null, fast: null, coding: null, vision: null },
+    fallbacks: [],
+    updated_at: '2026-07-18T00:00:00.000Z',
+  });
+  assert.deepEqual(authoritative.roles, {
+    default: null,
+    fast: null,
+    coding: null,
+    vision: null,
+  });
+  assert.deepEqual(authoritative.fallbacks, []);
+
+  const projected = providerRoutingOverview(provider, null);
+  assert.deepEqual(projected.roles.default, {
+    provider_id: 'provider-openai',
+    model_id: 'provider-default',
+  });
+  assert.deepEqual(projected.roles.fast, {
+    provider_id: 'provider-openai',
+    model_id: 'provider-fast',
+  });
+  assert.deepEqual(projected.fallbacks, [
+    { provider_id: 'provider-openai', model_id: 'provider-fallback' },
+  ]);
+});
+
+test('local routing candidates fail closed to runtime-supported ready providers', () => {
+  const provider = {
+    id: 'provider-openai',
+    name: 'OpenAI',
+    provider_type: 'openai',
+    operation_type: 'llm',
+    auth_method: 'api_key',
+    is_active: true,
+    is_enabled: true,
+    base_url: 'https://api.openai.com/v1',
+    llm_model: 'gpt-main',
+    allowed_models: ['gpt-main', 'gpt-fast', 'gpt-fast'],
+    credential_configured: true,
+    health_status: 'configuration_valid',
+  };
+  assert.deepEqual(localRuntimeRoutingModelIds(provider), ['gpt-main', 'gpt-fast']);
+  assert.deepEqual(
+    localRuntimeRoutingModelIds({
+      ...provider,
+      provider_type: 'openai_compatible',
+      auth_method: 'none',
+      credential_configured: false,
+    }),
+    ['gpt-main', 'gpt-fast'],
+  );
+
+  for (const unusable of [
+    { ...provider, provider_type: 'gemini' },
+    { ...provider, is_active: false },
+    { ...provider, is_enabled: false },
+    { ...provider, base_url: '' },
+    { ...provider, llm_model: null },
+    { ...provider, credential_configured: false },
+    { ...provider, health_status: 'not_configured' },
+    { ...provider, health_status: 'healthy' },
+  ]) {
+    assert.deepEqual(localRuntimeRoutingModelIds(unusable), []);
+  }
+});
+
+test('fallback availability ignores stale targets when a valid candidate remains', () => {
+  const stale = { provider_id: 'provider-stale', model_id: 'removed-model' };
+  const activeA = { provider_id: 'provider-openai', model_id: 'gpt-main' };
+  const activeB = { provider_id: 'provider-anthropic', model_id: 'claude-main' };
+  assert.equal(routingFallbackCanAdd([stale, activeA], [activeA, activeB], 8), true);
+  assert.equal(routingFallbackCanAdd([stale, activeA, activeB], [activeA, activeB], 8), false);
+  assert.equal(routingFallbackCanAdd([stale, activeA], [activeA, activeB], 2), false);
 });
 
 test('provider validation distinguishes configuration-only results from real probes', () => {
@@ -382,35 +472,68 @@ test('provider editing preserves stored credentials only for the unchanged endpo
   );
 });
 
-test('provider routing and usage obey current runtime and request identity', () => {
-  assert.match(
-    providerOverviewPanelsSource,
-    /runtimeSelected && defaultModel === provider\.llm_model/,
-  );
+test('provider routing is policy-backed, cross-provider, and context safe', () => {
   assert.match(providerOverviewPanelsSource, /const controller = new AbortController\(\)/);
   assert.match(providerOverviewPanelsSource, /onLoadUsage\(provider\.id, controller\.signal\)/);
   assert.match(providerOverviewPanelsSource, /return \(\) => controller\.abort\(\)/);
+  assert.match(
+    providerOverviewPanelsSource,
+    /const ROUTING_ROLES: LlmRoutingRole\[\] = \['default', 'fast', 'coding', 'vision'\]/,
+  );
+  assert.match(
+    providerOverviewPanelsSource,
+    /mode === 'local'[\s\S]{0,100}localRuntimeRoutingModelIds\(item\)[\s\S]{0,100}providerEnabledModelIds\(item\)/,
+  );
+  assert.match(
+    providerOverviewPanelsSource,
+    /for \(const target of referencedTargets\)[\s\S]{0,600}available: false/,
+  );
+  assert.doesNotMatch(providerOverviewPanelsSource, /draft && enabledOptions\.length > 0/);
+  assert.match(providerOverviewPanelsSource, /effectivePolicy && draft \? \(/);
+  assert.match(providerOverviewPanelsSource, /providerRoutingOverview\(provider, policy\)/);
+  assert.match(
+    providerOverviewPanelsSource,
+    /expectedRevision: policy\.revision/,
+  );
+  assert.match(providerOverviewPanelsSource, /moveFallback\(index, -1\)/);
+  assert.match(providerOverviewPanelsSource, /moveFallback\(index, 1\)/);
+  assert.match(providerOverviewPanelsSource, /removeFallback\(index\)/);
+  assert.match(providerOverviewPanelsSource, /const MAX_ROUTING_FALLBACKS = 8/);
+  assert.match(providerOverviewPanelsSource, /const MAX_ROUTING_FALLBACKS = 8/);
+  assert.match(providerOverviewPanelsSource, /routingFallbackCanAdd\(/);
+  assert.match(providerOverviewPanelsSource, /const saveRequestRef = useRef\(0\)/);
+  assert.doesNotMatch(
+    providerOverviewPanelsSource,
+    /providerDraftFromProvider|providerMutationFromDraft|onRuntimeSelected/,
+  );
   assert.match(
     modelProviderWorkspaceSource,
     /config\.mode === 'local'[\s\S]{0,80}\? runtimeProvider\?\.provider_id === provider\.id[\s\S]{0,80}: provider\.runtime_selected === true/,
   );
   assert.match(modelProviderWorkspaceSource, /provider\.runtime_selected === true/);
+  assert.match(
+    modelProviderWorkspaceSource,
+    /!outcome\.probed && outcome\.status === 'configuration_valid'[\s\S]{0,1200}'providers\.providerConfigured'/,
+  );
+  assert.match(i18nSource, /'providers\.providerConfigured': '\{provider\} configuration is ready'/);
   assert.doesNotMatch(
     modelProviderWorkspaceSource,
     /llmProvider|llmBaseUrl|llmModel|llmApiKey|onConfigChange/,
   );
+  assert.match(modelProviderWorkspaceSource, /getLlmProviderRoutingPolicy\(signal\)/);
+  assert.match(modelProviderWorkspaceSource, /Promise\.all\(\[/);
   assert.match(
     modelProviderWorkspaceSource,
-    /requestClient\.selectLlmRuntimeProvider\([\s\S]{0,120}selectedProvider\.revision/,
+    /requestClient\.updateLlmProviderRoutingPolicy\(mutation\)/,
   );
-  assert.match(providerOverviewPanelsSource, /await onRuntimeSelected\(updated\)/);
+  assert.match(modelProviderWorkspaceSource, /setRoutingPolicy\(updated\)/);
   const updateProvider =
     modelProviderWorkspaceSource.match(
       /const updateProvider = useCallback\([\s\S]*?\n  \);\n\n  const saveProvider/,
     )?.[0] ?? '';
   const ordinarySave =
     modelProviderWorkspaceSource.match(
-      /const saveProvider = useCallback\([\s\S]*?\n  \);\n\n  const validateProvider/,
+      /const saveProvider = useCallback\([\s\S]*?\n  \);\n\n  const saveRoutingPolicy/,
     )?.[0] ?? '';
   assert.match(updateProvider, /requestClient\.updateLlmProvider/);
   assert.doesNotMatch(updateProvider, /selectLlmRuntimeProvider|refreshRuntimeProjection/);
@@ -420,7 +543,7 @@ test('provider routing and usage obey current runtime and request identity', () 
     /await refreshRuntimeProjection\(requestScope, requestClient\)/,
   );
   assert.doesNotMatch(ordinarySave, /selectLlmRuntimeProvider/);
-  assert.match(modelProviderWorkspaceSource, /onSave=\{updateProvider\}/);
+  assert.match(modelProviderWorkspaceSource, /onSave=\{saveRoutingPolicy\}/);
   assert.match(
     modelProviderWorkspaceSource,
     /const refreshRuntimeProjection = useCallback\([\s\S]{0,260}clientRef\.current !== requestClient[\s\S]{0,180}await onRuntimeStatusRefresh\(\)/,
@@ -429,9 +552,24 @@ test('provider routing and usage obey current runtime and request identity', () 
     modelProviderWorkspaceSource,
     /catch \{[\s\S]{0,180}showToast\(t\('providers\.runtimeRefreshFailed'\)\)/,
   );
+  const routingSave =
+    modelProviderWorkspaceSource.match(
+      /const saveRoutingPolicy = useCallback\([\s\S]*?\n  \);\n\n  const validateProvider/,
+    )?.[0] ?? '';
+  assert.doesNotMatch(routingSave, /\.updateLlmProvider\(|selectLlmRuntimeProvider/);
+  assert.match(routingSave, /scopeKeyRef\.current !== requestScope/);
   assert.match(
-    modelProviderWorkspaceSource,
-    /const selected = await requestClient\.selectLlmRuntimeProvider[\s\S]{0,360}replaceProvider\(selected\)[\s\S]{0,320}refreshRuntimeProjection\(requestScope, requestClient\)/,
+    routingSave,
+    /caught instanceof DesktopApiError[\s\S]{0,100}caught\.status !== 409[\s\S]{0,180}getLlmProviderRoutingPolicy\(\)/,
+  );
+  assert.match(
+    routingSave,
+    /Promise\.all\(\[[\s\S]{0,180}listLlmProviders\(\)[\s\S]{0,180}getLlmProviderRoutingPolicy\(\)/,
+  );
+  assert.match(routingSave, /setProviders\(modelProviders\)/);
+  assert.match(
+    routingSave,
+    /await refreshRuntimeProjection\(requestScope, requestClient\)/,
   );
   assert.match(
     settingsWindowSource,
@@ -464,12 +602,88 @@ test('provider settings QA records preserve the authoritative LLM operation cont
   );
   assert.match(
     providerSettingsQaSource,
-    /provider_type:\s*'openai'[\s\S]{0,160}auth_methods:\s*\['api_key'\][\s\S]{0,120}probe_supported:\s*true/,
+    /provider_type:\s*'openai'[\s\S]{0,160}auth_methods:\s*\['api_key', 'none'\][\s\S]{0,120}probe_supported:\s*false/,
+  );
+  assert.match(providerSettingsQaSource, /provider_type:\s*'openai_compatible'/);
+  assert.doesNotMatch(
+    providerSettingsQaSource,
+    /provider_type:\s*'(?:gemini|openrouter|ollama)'/,
   );
   assert.doesNotMatch(providerSettingsQaSource, /llmProvider|llmBaseUrl|llmModel|llmApiKey/);
+  assert.match(providerSettingsQaSource, /mode: 'local'/);
+  assert.match(
+    providerSettingsQaSource,
+    /path === '\/api\/v1\/llm-providers\/routing-policy'/,
+  );
+  assert.match(providerSettingsQaSource, /draft\.expected_revision !== routingPolicy\.revision/);
+  assert.match(providerSettingsQaSource, /draft\.roles\.fast !== null/);
+  assert.match(providerSettingsQaSource, /draft\.roles\.vision !== null/);
+  assert.match(providerSettingsQaSource, /status: configured \? 'configuration_valid'/);
+  assert.match(providerSettingsQaSource, /probed: false/);
 });
 
-test('runtime selection is an explicit revision-guarded provider action', async () => {
+test('routing policy client normalizes targets and sends optimistic revisions', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    const revision = init?.method === 'PUT' ? 8 : 7;
+    return new Response(
+      JSON.stringify({
+        tenant_id: ' tenant-a ',
+        revision,
+        roles: {
+          default: { provider_id: ' provider-openai ', model_id: ' gpt-5 ' },
+          fast: null,
+          coding: { provider_id: 'provider-anthropic', model_id: 'claude-code' },
+          vision: null,
+        },
+        fallbacks: [{ provider_id: ' provider-anthropic ', model_id: ' claude-fast ' }],
+        updated_at: '2026-07-18T00:00:00.000Z',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const local = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-user-session',
+    });
+    const policy = await local.getLlmProviderRoutingPolicy();
+    assert.deepEqual(policy, {
+      tenant_id: 'tenant-a',
+      revision: 7,
+      roles: {
+        default: { provider_id: 'provider-openai', model_id: 'gpt-5' },
+        fast: null,
+        coding: { provider_id: 'provider-anthropic', model_id: 'claude-code' },
+        vision: null,
+      },
+      fallbacks: [{ provider_id: 'provider-anthropic', model_id: 'claude-fast' }],
+      updated_at: '2026-07-18T00:00:00.000Z',
+    });
+    const updated = await local.updateLlmProviderRoutingPolicy({
+      roles: policy.roles,
+      fallbacks: policy.fallbacks,
+      expectedRevision: policy.revision,
+    });
+    assert.equal(updated.revision, 8);
+    assert.equal(calls[0]?.input, 'http://127.0.0.1:8088/api/v1/llm-providers/routing-policy');
+    assert.equal(calls[1]?.init?.method, 'PUT');
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
+      roles: policy.roles,
+      fallbacks: policy.fallbacks,
+      expected_revision: 7,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('runtime selection is guarded by both provider and routing-policy revisions', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -511,11 +725,18 @@ test('runtime selection is an explicit revision-guarded provider action', async 
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.input.endsWith('/provider-local'), true);
 
-    const selected = await local.selectLlmRuntimeProvider('provider-local', updated.revision ?? 0);
+    const selected = await local.selectLlmRuntimeProvider(
+      'provider-local',
+      updated.revision ?? 0,
+      0,
+    );
     assert.equal(selected.runtime_selected, true);
     assert.equal(calls[1]?.input.endsWith('/provider-local/runtime-selection'), true);
     assert.equal(calls[1]?.init?.method, 'PUT');
-    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { expected_revision: 8 });
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
+      expected_revision: 8,
+      expected_policy_revision: 0,
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1138,7 +1359,7 @@ test('provider catalog UIs identify static fallback models as built-in suggestio
   assert.match(i18nSource, /'providers\.source\.staticFallback': '内置静态目录'/);
 });
 
-test('draft connection tests probe both runtimes and preserve live failures', async () => {
+test('draft validation treats local checks as configuration-only and preserves cloud probes', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -1147,10 +1368,11 @@ test('draft connection tests probe both runtimes and preserve live failures', as
     return new Response(
       JSON.stringify({
         provider_id: 'temporary-probe',
-        status: local ? 'healthy' : 'unhealthy',
-        ...(local ? { probed: true } : {}),
-        last_check: '2026-07-14T10:00:00Z',
-        response_time_ms: 37,
+        status: local ? 'configuration_valid' : 'unhealthy',
+        ...(!local ? { probed: true } : {}),
+        detail: local ? 'configuration validated locally; no external request was sent' : null,
+        last_check: local ? null : '2026-07-14T10:00:00Z',
+        response_time_ms: local ? null : 37,
         error_message: local ? null : 'model was not available',
       }),
       { status: 200, headers: { 'content-type': 'application/json' } },
@@ -1184,11 +1406,11 @@ test('draft connection tests probe both runtimes and preserve live failures', as
 
     assert.deepEqual(await local.testLlmProviderDraft(input), {
       provider: null,
-      status: 'healthy',
-      probed: true,
-      detail: null,
-      lastChecked: '2026-07-14T10:00:00Z',
-      responseTimeMs: 37,
+      status: 'configuration_valid',
+      probed: false,
+      detail: 'configuration validated locally; no external request was sent',
+      lastChecked: null,
+      responseTimeMs: null,
       errorMessage: null,
     });
     assert.deepEqual(await cloud.testLlmProviderDraft(input), {

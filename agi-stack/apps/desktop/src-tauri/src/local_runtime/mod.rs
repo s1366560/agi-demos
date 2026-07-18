@@ -17,8 +17,10 @@ use agistack_core::{
         react::{ReActControl, ReActEngine, ReActObserver, RunDirective, SteeringInstruction},
         types::{AgentAction, HitlKind, Role, SessionState, SessionStatus, TranscriptEntry},
     },
-    model::Episode,
-    ports::{CheckpointStore, CoreError, CoreResult, LlmPort, MemoryDraft, ToolHost},
+    model::{Episode, Memory},
+    ports::{
+        CheckpointStore, CoreError, CoreResult, LlmPort, MemoryDraft, RelationshipDraft, ToolHost,
+    },
 };
 use async_trait::async_trait;
 use axum::{
@@ -59,6 +61,8 @@ mod changes;
 #[cfg(test)]
 mod managed_resource_tests;
 mod resource_registry;
+#[cfg(test)]
+mod routing_policy_tests;
 mod run_control;
 mod session_projection;
 mod session_store;
@@ -932,6 +936,7 @@ impl LocalRuntimeState {
             &now,
         )?;
         let mut provider_bindings = HashMap::new();
+        let mut provider_values = HashMap::new();
         for (tenant_id, provider) in session_store.list_runtime_provider_connections()? {
             let Some(provider_id) = provider.get("id").and_then(Value::as_str) else {
                 continue;
@@ -939,13 +944,12 @@ impl LocalRuntimeState {
             let Some(binding) = runtime_binding_from_provider(&provider) else {
                 continue;
             };
-            provider_bindings.insert(
-                ProviderRuntimeKey {
-                    tenant_id,
-                    provider_id: provider_id.to_string(),
-                },
-                binding,
-            );
+            let key = ProviderRuntimeKey {
+                tenant_id,
+                provider_id: provider_id.to_string(),
+            };
+            provider_values.insert(key.clone(), provider);
+            provider_bindings.insert(key, binding);
         }
         let mut provider_selections = HashMap::new();
         for (tenant_id, provider_id) in session_store.list_selected_llm_providers()? {
@@ -957,6 +961,34 @@ impl LocalRuntimeState {
                 provider_selections.insert(tenant_id, provider_id);
             } else {
                 session_store.clear_llm_provider_selection_if_matches(&tenant_id, &provider_id)?;
+            }
+        }
+        for (tenant_id, policy) in session_store.list_llm_routing_policies()? {
+            let Some(default_target) = policy.get("roles").and_then(|roles| roles.get("default"))
+            else {
+                continue;
+            };
+            let Some(provider_id) = default_target.get("provider_id").and_then(Value::as_str)
+            else {
+                continue;
+            };
+            let Some(model_id) = default_target.get("model_id").and_then(Value::as_str) else {
+                continue;
+            };
+            if provider_selections.get(&tenant_id).map(String::as_str) != Some(provider_id) {
+                continue;
+            }
+            let key = ProviderRuntimeKey {
+                tenant_id,
+                provider_id: provider_id.to_string(),
+            };
+            if provider_values
+                .get(&key)
+                .is_some_and(|provider| provider_supports_route_model(provider, model_id))
+            {
+                if let Some(binding) = provider_bindings.get_mut(&key) {
+                    binding.model = model_id.to_string();
+                }
             }
         }
         Ok(Self {
@@ -1717,7 +1749,7 @@ impl LocalRuntimeState {
             )),
         };
         Ok(ReActEngine::new(
-            self.llm(&conversation.tenant_id),
+            self.llm_for_capability(&conversation.tenant_id, conversation.capability_mode),
             tool_host,
             self.checkpoints.clone(),
             self.clock.clone(),
@@ -1886,53 +1918,63 @@ impl LocalRuntimeState {
         self.release_agent_run(&conversation_id);
     }
 
+    #[cfg(test)]
     fn llm(&self, tenant_id: &str) -> Arc<dyn LlmPort> {
-        let (binding, credential) = {
-            let runtime = self
-                .provider_runtime
-                .lock()
-                .expect("provider runtime state");
-            let key = runtime
-                .selections
-                .get(tenant_id)
-                .map(|provider_id| ProviderRuntimeKey {
+        self.llm_for_role(tenant_id, LlmWorkloadRole::Default)
+    }
+
+    fn llm_for_capability(
+        &self,
+        tenant_id: &str,
+        capability: ConversationCapabilityMode,
+    ) -> Arc<dyn LlmPort> {
+        self.llm_for_role(tenant_id, workload_role_for_capability(capability))
+    }
+
+    fn llm_for_role(&self, tenant_id: &str, role: LlmWorkloadRole) -> Arc<dyn LlmPort> {
+        let runtime = self
+            .provider_runtime
+            .lock()
+            .expect("provider runtime state");
+        let policy = match self
+            .session_store
+            .llm_routing_policy(tenant_id, Utc::now().timestamp_millis())
+        {
+            Ok(policy) => policy,
+            Err(_) => return Arc::new(UnconfiguredLocalLlm),
+        };
+        let mut targets = match routing_targets_for_role(&policy, role) {
+            Ok(targets) => targets,
+            Err(_) => return Arc::new(UnconfiguredLocalLlm),
+        };
+        if targets.is_empty() {
+            if let Some(provider_id) = runtime.selections.get(tenant_id) {
+                if let Some(binding) = runtime.bindings.get(&ProviderRuntimeKey {
                     tenant_id: tenant_id.to_string(),
                     provider_id: provider_id.clone(),
-                });
-            key.as_ref()
-                .map(|key| {
-                    (
-                        runtime.bindings.get(key).cloned(),
-                        runtime.credentials.get(key).cloned(),
-                    )
-                })
-                .unwrap_or((None, None))
-        };
-        if let Some(binding) = binding {
-            if binding.auth_method != "none" && credential.is_none() {
-                return Arc::new(UnconfiguredLocalLlm);
+                }) {
+                    targets.push(LlmRouteTarget {
+                        provider_id: provider_id.clone(),
+                        model_id: binding.model.clone(),
+                    });
+                }
             }
-            if matches!(
-                binding.provider_type.as_str(),
-                "openai" | "openai_compatible"
-            ) {
-                let llm = HttpLlm::new(binding.base_url, binding.model);
-                let llm = if let Some(credential) = credential {
-                    llm.with_api_key(credential)
-                } else {
-                    llm
+        }
+        let candidates = targets
+            .into_iter()
+            .filter_map(|target| {
+                let key = ProviderRuntimeKey {
+                    tenant_id: tenant_id.to_string(),
+                    provider_id: target.provider_id,
                 };
-                return Arc::new(llm);
-            }
-            if binding.provider_type == "anthropic" {
-                let llm = AnthropicLlm::new(binding.base_url, binding.model);
-                let llm = if let Some(credential) = credential {
-                    llm.with_api_key(credential)
-                } else {
-                    llm
-                };
-                return Arc::new(AnthropicAgentLlm { inner: llm });
-            }
+                let mut binding = runtime.bindings.get(&key)?.clone();
+                binding.model = target.model_id;
+                llm_from_runtime_binding(binding, runtime.credentials.get(&key).cloned())
+            })
+            .collect::<Vec<_>>();
+        drop(runtime);
+        if !candidates.is_empty() {
+            return FailoverLlm::from_candidates(candidates);
         }
         #[cfg(test)]
         if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
@@ -2122,6 +2164,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/llm-providers/test-connection",
             post(validate_llm_provider_draft),
+        )
+        .route(
+            "/api/v1/llm-providers/routing-policy",
+            get(get_llm_routing_policy).put(put_llm_routing_policy),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/runtime-selection",
@@ -2518,6 +2564,10 @@ fn resource_registry_error(error: ResourceRegistryError) -> (StatusCode, Json<Va
         ResourceRegistryError::RevisionConflict { .. } => {
             (StatusCode::CONFLICT, Json(json!({ "detail": detail })))
         }
+        ResourceRegistryError::InvalidRoutingPolicy(_) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": detail })),
+        ),
         ResourceRegistryError::Storage(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "detail": detail })),
@@ -2802,6 +2852,47 @@ struct LlmProviderMutation {
     expected_revision: Option<u64>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
+struct LlmRouteTarget {
+    provider_id: String,
+    model_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LlmRoutingRoles {
+    default: Option<LlmRouteTarget>,
+    fast: Option<LlmRouteTarget>,
+    coding: Option<LlmRouteTarget>,
+    vision: Option<LlmRouteTarget>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmRoutingPolicyMutation {
+    expected_revision: u64,
+    roles: LlmRoutingRolesMutation,
+    fallbacks: Vec<LlmRouteTarget>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmRoutingRolesMutation {
+    default: Value,
+    fast: Value,
+    coding: Value,
+    vision: Value,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LlmWorkloadRole {
+    Default,
+    Fast,
+    Coding,
+    Vision,
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 struct LlmProviderTypeDescriptor {
     provider_type: &'static str,
@@ -2930,6 +3021,199 @@ async fn list_llm_providers(
     Ok(Json(Value::Array(providers)))
 }
 
+async fn get_llm_routing_policy(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+) -> LocalJsonResult {
+    state
+        .session_store
+        .llm_routing_policy(
+            &authenticated.workspace.tenant_id,
+            Utc::now().timestamp_millis(),
+        )
+        .map(Json)
+        .map_err(resource_registry_error)
+}
+
+async fn put_llm_routing_policy(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Json(request): Json<LlmRoutingPolicyMutation>,
+) -> LocalJsonResult {
+    ensure_provider_manager(&authenticated)?;
+    let tenant_id = &authenticated.workspace.tenant_id;
+    let expected_revision = request.expected_revision;
+    let (roles, fallbacks) = normalized_routing_policy(request)?;
+    let default_target = roles
+        .default
+        .as_ref()
+        .ok_or_else(|| routing_policy_validation_error("default routing target is required"))?;
+    let mut runtime = state
+        .provider_runtime
+        .lock()
+        .map_err(|error| local_store_error(error.to_string()))?;
+    let current_policy = state
+        .session_store
+        .llm_routing_policy(tenant_id, Utc::now().timestamp_millis())
+        .map_err(resource_registry_error)?;
+    let actual_revision = current_policy
+        .get("revision")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if expected_revision != actual_revision {
+        return Err(resource_registry_error(
+            ResourceRegistryError::RevisionConflict {
+                expected: expected_revision,
+                actual: actual_revision,
+            },
+        ));
+    }
+    let mut default_binding = None;
+    for target in [
+        LlmWorkloadRole::Default,
+        LlmWorkloadRole::Fast,
+        LlmWorkloadRole::Coding,
+        LlmWorkloadRole::Vision,
+    ]
+    .into_iter()
+    .filter_map(|role| configured_routing_target(&roles, role))
+    .chain(fallbacks.iter())
+    {
+        let provider = state
+            .session_store
+            .managed_resource(
+                ManagedResourceKind::Provider,
+                "tenant",
+                tenant_id,
+                &target.provider_id,
+            )
+            .map_err(local_store_error)?
+            .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
+        let binding = runtime_binding_for_route_target(&provider, target)?;
+        let key = ProviderRuntimeKey {
+            tenant_id: tenant_id.clone(),
+            provider_id: target.provider_id.clone(),
+        };
+        if binding.auth_method != "none" && !runtime.credentials.contains_key(&key) {
+            return Err(routing_policy_validation_error(format!(
+                "provider {} requires credentials before it can be routed",
+                target.provider_id
+            )));
+        }
+        if target == default_target {
+            default_binding = Some(binding);
+        }
+    }
+    let default_binding = default_binding
+        .ok_or_else(|| routing_policy_validation_error("default routing target is required"))?;
+    let roles_json =
+        serde_json::to_value(&roles).map_err(|error| local_store_error(error.to_string()))?;
+    let fallbacks_json =
+        serde_json::to_value(&fallbacks).map_err(|error| local_store_error(error.to_string()))?;
+    let policy = state
+        .session_store
+        .put_llm_routing_policy(
+            tenant_id,
+            expected_revision,
+            roles_json,
+            fallbacks_json,
+            Utc::now().timestamp_millis(),
+        )
+        .map_err(resource_registry_error)?;
+    let key = ProviderRuntimeKey {
+        tenant_id: tenant_id.clone(),
+        provider_id: default_target.provider_id.clone(),
+    };
+    runtime.bindings.insert(key, default_binding);
+    runtime
+        .selections
+        .insert(tenant_id.clone(), default_target.provider_id.clone());
+    Ok(Json(policy))
+}
+
+fn normalized_routing_policy(
+    request: LlmRoutingPolicyMutation,
+) -> Result<(LlmRoutingRoles, Vec<LlmRouteTarget>), (StatusCode, Json<Value>)> {
+    if request.fallbacks.len() > 8 {
+        return Err(routing_policy_validation_error(
+            "routing fallbacks cannot contain more than 8 targets",
+        ));
+    }
+    let roles = LlmRoutingRoles {
+        default: normalized_nullable_route_target(request.roles.default, "default")?,
+        fast: normalized_nullable_route_target(request.roles.fast, "fast")?,
+        coding: normalized_nullable_route_target(request.roles.coding, "coding")?,
+        vision: normalized_nullable_route_target(request.roles.vision, "vision")?,
+    };
+    if roles.default.is_none() {
+        return Err(routing_policy_validation_error(
+            "default routing target is required",
+        ));
+    }
+    if roles.fast.is_some() {
+        return Err(routing_policy_validation_error(
+            "fast routing target is not supported by the current conversation protocol",
+        ));
+    }
+    if roles.vision.is_some() {
+        return Err(routing_policy_validation_error(
+            "vision routing target is not supported by the current conversation protocol",
+        ));
+    }
+    let mut seen = HashSet::with_capacity(request.fallbacks.len());
+    let mut fallbacks = Vec::with_capacity(request.fallbacks.len());
+    for target in request.fallbacks {
+        let target = normalized_route_target(target)?;
+        if !seen.insert(target.clone()) {
+            return Err(routing_policy_validation_error(
+                "routing fallbacks cannot contain duplicate targets",
+            ));
+        }
+        fallbacks.push(target);
+    }
+    Ok((roles, fallbacks))
+}
+
+fn normalized_nullable_route_target(
+    value: Value,
+    role: &str,
+) -> Result<Option<LlmRouteTarget>, (StatusCode, Json<Value>)> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    let target = serde_json::from_value::<LlmRouteTarget>(value)
+        .map_err(|_| routing_policy_validation_error(format!("invalid {role} routing target")))?;
+    normalized_route_target(target).map(Some)
+}
+
+fn normalized_route_target(
+    target: LlmRouteTarget,
+) -> Result<LlmRouteTarget, (StatusCode, Json<Value>)> {
+    let provider_id = target.provider_id.trim().to_string();
+    if provider_id.is_empty() {
+        return Err(routing_policy_validation_error(
+            "routing target provider_id cannot be empty",
+        ));
+    }
+    let model_id = target.model_id.trim().to_string();
+    if model_id.is_empty() {
+        return Err(routing_policy_validation_error(
+            "routing target model_id cannot be empty",
+        ));
+    }
+    Ok(LlmRouteTarget {
+        provider_id,
+        model_id,
+    })
+}
+
+fn routing_policy_validation_error(detail: impl Into<String>) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({ "detail": detail.into() })),
+    )
+}
+
 async fn create_llm_provider(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -2960,6 +3244,7 @@ async fn update_llm_provider(
 #[serde(deny_unknown_fields)]
 struct RuntimeProviderSelectionRequest {
     expected_revision: u64,
+    expected_policy_revision: u64,
 }
 
 async fn select_llm_provider_runtime(
@@ -2992,19 +3277,28 @@ async fn select_llm_provider_runtime(
             })),
         )
     })?;
+    let key = ProviderRuntimeKey {
+        tenant_id: tenant_id.clone(),
+        provider_id: provider_id.clone(),
+    };
+    if binding.auth_method != "none" && !runtime.credentials.contains_key(&key) {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "detail": "provider credentials are required before runtime selection"
+            })),
+        ));
+    }
     let stored = state
         .session_store
         .select_llm_provider(
             tenant_id,
             &provider_id,
             request.expected_revision,
+            request.expected_policy_revision,
             Utc::now().timestamp_millis(),
         )
         .map_err(resource_registry_error)?;
-    let key = ProviderRuntimeKey {
-        tenant_id: tenant_id.clone(),
-        provider_id: provider_id.clone(),
-    };
     runtime.bindings.insert(key.clone(), binding.clone());
     runtime.selections.insert(tenant_id.clone(), provider_id);
     let credential_configured = runtime.credentials.contains_key(&key);
@@ -3161,7 +3455,17 @@ fn mutate_llm_provider(
         .get(tenant_id)
         .is_some_and(|selected| selected == &provider_id);
     let submitted_credential = api_key.as_deref().and_then(normalized_runtime_credential);
-    let next_binding = runtime_binding_from_provider(&provider);
+    let next_binding = runtime_binding_from_provider(&provider).map(|mut next| {
+        if was_selected {
+            if let Some(previous) = previous_binding
+                .as_ref()
+                .filter(|previous| provider_supports_route_model(&provider, &previous.model))
+            {
+                next.model.clone_from(&previous.model);
+            }
+        }
+        next
+    });
     let next_credential = if auth_method == "none" || next_binding.is_none() {
         None
     } else if submitted_credential.is_some() {
@@ -3177,6 +3481,12 @@ fn mutate_llm_provider(
     } else {
         None
     };
+    if let Some(object) = provider.as_object_mut() {
+        object.insert(
+            "credential_configured".to_string(),
+            json!(auth_method == "none" || next_credential.is_some()),
+        );
+    }
     let stored = state
         .session_store
         .put_managed_resource(
@@ -3629,6 +3939,142 @@ fn runtime_binding_from_provider(provider: &Value) -> Option<ProviderRuntimeBind
         model: model.to_string(),
         auth_method: auth_method.to_string(),
     })
+}
+
+fn runtime_binding_for_route_target(
+    provider: &Value,
+    target: &LlmRouteTarget,
+) -> Result<ProviderRuntimeBinding, (StatusCode, Json<Value>)> {
+    let mut binding = runtime_binding_from_provider(provider).ok_or_else(|| {
+        routing_policy_validation_error(format!(
+            "provider {} must be active and configured",
+            target.provider_id
+        ))
+    })?;
+    if !provider_supports_route_model(provider, &target.model_id) {
+        return Err(routing_policy_validation_error(format!(
+            "model {} is not configured for provider {}",
+            target.model_id, target.provider_id
+        )));
+    }
+    binding.model.clone_from(&target.model_id);
+    Ok(binding)
+}
+
+fn provider_supports_route_model(provider: &Value, model_id: &str) -> bool {
+    provider
+        .get("llm_model")
+        .and_then(Value::as_str)
+        .is_some_and(|model| model.trim() == model_id)
+        || provider
+            .get("allowed_models")
+            .and_then(Value::as_array)
+            .is_some_and(|models| {
+                models
+                    .iter()
+                    .any(|model| model.as_str().is_some_and(|model| model.trim() == model_id))
+            })
+}
+
+fn routing_targets_for_role(
+    policy: &Value,
+    role: LlmWorkloadRole,
+) -> Result<Vec<LlmRouteTarget>, String> {
+    let roles_value = policy
+        .get("roles")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "routing policy roles must be an object".to_string())?;
+    if roles_value.len() != 4
+        || ["default", "fast", "coding", "vision"]
+            .into_iter()
+            .any(|role| !roles_value.contains_key(role))
+    {
+        return Err("routing policy roles must contain every supported role".to_string());
+    }
+    let roles = serde_json::from_value::<LlmRoutingRoles>(Value::Object(roles_value.clone()))
+        .map_err(|error| error.to_string())?;
+    let primary = configured_routing_target(&roles, role)
+        .cloned()
+        .or_else(|| roles.default.clone());
+    let mut seen = HashSet::new();
+    let mut targets = Vec::new();
+    if let Some(primary) = primary {
+        ensure_stored_route_target(&primary)?;
+        seen.insert(primary.clone());
+        targets.push(primary);
+    }
+    let fallbacks = policy
+        .get("fallbacks")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "routing policy fallbacks must be an array".to_string())?;
+    for fallback in fallbacks {
+        let fallback = serde_json::from_value::<LlmRouteTarget>(fallback.clone())
+            .map_err(|error| error.to_string())?;
+        ensure_stored_route_target(&fallback)?;
+        if seen.insert(fallback.clone()) {
+            targets.push(fallback);
+        }
+    }
+    Ok(targets)
+}
+
+fn ensure_stored_route_target(target: &LlmRouteTarget) -> Result<(), String> {
+    if target.provider_id.trim().is_empty() || target.model_id.trim().is_empty() {
+        return Err("routing policy target identifiers cannot be empty".to_string());
+    }
+    Ok(())
+}
+
+fn workload_role_for_capability(capability: ConversationCapabilityMode) -> LlmWorkloadRole {
+    match capability {
+        ConversationCapabilityMode::Code => LlmWorkloadRole::Coding,
+        ConversationCapabilityMode::Work | ConversationCapabilityMode::Unavailable => {
+            LlmWorkloadRole::Default
+        }
+    }
+}
+
+fn configured_routing_target(
+    roles: &LlmRoutingRoles,
+    role: LlmWorkloadRole,
+) -> Option<&LlmRouteTarget> {
+    match role {
+        LlmWorkloadRole::Default => roles.default.as_ref(),
+        LlmWorkloadRole::Fast => roles.fast.as_ref(),
+        LlmWorkloadRole::Coding => roles.coding.as_ref(),
+        LlmWorkloadRole::Vision => roles.vision.as_ref(),
+    }
+}
+
+fn llm_from_runtime_binding(
+    binding: ProviderRuntimeBinding,
+    credential: Option<String>,
+) -> Option<Arc<dyn LlmPort>> {
+    if binding.auth_method != "none" && credential.is_none() {
+        return None;
+    }
+    if matches!(
+        binding.provider_type.as_str(),
+        "openai" | "openai_compatible"
+    ) {
+        let llm = HttpLlm::new(binding.base_url, binding.model);
+        let llm = if let Some(credential) = credential {
+            llm.with_api_key(credential)
+        } else {
+            llm
+        };
+        return Some(Arc::new(llm));
+    }
+    if binding.provider_type == "anthropic" {
+        let llm = AnthropicLlm::new(binding.base_url, binding.model);
+        let llm = if let Some(credential) = credential {
+            llm.with_api_key(credential)
+        } else {
+            llm
+        };
+        return Some(Arc::new(AnthropicAgentLlm { inner: llm }));
+    }
+    None
 }
 
 fn ensure_provider_manager(
@@ -6557,6 +7003,86 @@ fn artifact_tool_outputs(tool: &str, output_json: &str) -> Vec<Value> {
     vec![value]
 }
 
+struct FailoverLlm {
+    candidates: Vec<Arc<dyn LlmPort>>,
+    candidate_timeout: std::time::Duration,
+}
+
+impl FailoverLlm {
+    const CANDIDATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
+    fn from_candidates(candidates: Vec<Arc<dyn LlmPort>>) -> Arc<dyn LlmPort> {
+        Arc::new(Self {
+            candidates,
+            candidate_timeout: Self::CANDIDATE_TIMEOUT,
+        })
+    }
+
+    #[cfg(test)]
+    fn from_candidates_with_timeout(
+        candidates: Vec<Arc<dyn LlmPort>>,
+        candidate_timeout: std::time::Duration,
+    ) -> Arc<dyn LlmPort> {
+        Arc::new(Self {
+            candidates,
+            candidate_timeout,
+        })
+    }
+
+    async fn attempt<T, F, Fut>(&self, mut operation: F) -> CoreResult<T>
+    where
+        F: FnMut(Arc<dyn LlmPort>) -> Fut,
+        Fut: std::future::Future<Output = CoreResult<T>>,
+    {
+        let mut last_error = None;
+        for candidate in &self.candidates {
+            match tokio::time::timeout(self.candidate_timeout, operation(Arc::clone(candidate)))
+                .await
+            {
+                Ok(Ok(value)) => return Ok(value),
+                Ok(Err(error)) => last_error = Some(error),
+                Err(_) => {
+                    last_error = Some(CoreError::Llm(format!(
+                        "model_timeout: LLM routing candidate exceeded {} ms",
+                        self.candidate_timeout.as_millis()
+                    )));
+                }
+            }
+        }
+        Err(last_error.unwrap_or_else(|| {
+            CoreError::Llm("model_unconfigured: no usable LLM routing targets".to_string())
+        }))
+    }
+}
+
+#[async_trait]
+impl LlmPort for FailoverLlm {
+    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
+        self.attempt(|candidate| async move { candidate.extract_memory(episode).await })
+            .await
+    }
+
+    async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
+        self.attempt(|candidate| async move { candidate.extract_relationships(memory).await })
+            .await
+    }
+
+    async fn decide(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        available_tools: &[String],
+    ) -> CoreResult<AgentAction> {
+        self.attempt(|candidate| async move {
+            candidate
+                .decide(goal, round, transcript, available_tools)
+                .await
+        })
+        .await
+    }
+}
+
 struct UnconfiguredLocalLlm;
 
 #[async_trait]
@@ -7944,6 +8470,21 @@ mod tests {
         let activated_b = response_json(activate_b).await;
         assert_eq!(activated_b["credential_configured"], false);
         assert_eq!(activated_b["health_status"], "needs_credentials");
+        let provider_b_id = activated_b["id"].as_str().expect("provider B id");
+        let select_b = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                &format!("/api/v1/llm-providers/{provider_b_id}/runtime-selection"),
+                "provider-secret",
+                json!({ "expected_revision": 0, "expected_policy_revision": 0 }),
+            ))
+            .await
+            .expect("select provider B without credentials");
+        assert_eq!(
+            select_b.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
 
         let select_a = app
             .clone()
@@ -7951,7 +8492,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "provider-secret",
-                json!({ "expected_revision": 1 }),
+                json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
             ))
             .await
             .expect("select provider A");
@@ -8004,23 +8545,32 @@ mod tests {
             ))
             .await
             .expect("disable active provider");
-        assert_eq!(disable_a.status(), axum::http::StatusCode::OK);
-        let disabled_a = response_json(disable_a).await;
-        assert_eq!(disabled_a["health_status"], "disabled");
+        assert_eq!(
+            disable_a.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert!(response_json(disable_a).await["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("invalidate routing policy")));
         let runtime = state.provider_runtime.lock().expect("provider runtime");
         let key = ProviderRuntimeKey {
             tenant_id: "local".to_string(),
             provider_id: "local-runtime".to_string(),
         };
-        assert!(!runtime.bindings.contains_key(&key));
-        assert!(!runtime.credentials.contains_key(&key));
-        assert!(!runtime.selections.contains_key("local"));
+        assert!(runtime.bindings.contains_key(&key));
+        assert!(runtime.credentials.contains_key(&key));
+        assert_eq!(
+            runtime.selections.get("local"),
+            Some(&"local-runtime".to_string())
+        );
         drop(runtime);
-        assert!(state
-            .session_store
-            .list_selected_llm_providers()
-            .expect("persisted provider selections")
-            .is_empty());
+        assert_eq!(
+            state
+                .session_store
+                .list_selected_llm_providers()
+                .expect("persisted provider selections"),
+            vec![("local".to_string(), "local-runtime".to_string())]
+        );
 
         let persisted = state
             .session_store
@@ -8032,6 +8582,8 @@ mod tests {
             )
             .expect("persisted provider")
             .expect("local runtime provider");
+        assert_eq!(persisted["is_active"], true);
+        assert_eq!(persisted["revision"], 2);
         assert!(!persisted.to_string().contains("provider-key-a"));
         assert!(persisted.get("api_key").is_none());
     }
@@ -8081,14 +8633,17 @@ mod tests {
         assert_eq!(updated["runtime_selected"], false);
         assert_eq!(updated["credential_configured"], true);
 
-        for _ in 0..2 {
+        for expected_policy_revision in [0, 1] {
             let selection = app
                 .clone()
                 .oneshot(authenticated_json_request(
                     "PUT",
                     "/api/v1/llm-providers/local-runtime/runtime-selection",
                     "explicit-provider-selection-secret",
-                    json!({ "expected_revision": 1 }),
+                    json!({
+                        "expected_revision": 1,
+                        "expected_policy_revision": expected_policy_revision
+                    }),
                 ))
                 .await
                 .expect("select provider runtime");
@@ -8104,7 +8659,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "explicit-provider-selection-secret",
-                json!({ "expected_revision": 0 }),
+                json!({ "expected_revision": 0, "expected_policy_revision": 1 }),
             ))
             .await
             .expect("stale selection response");
@@ -8181,7 +8736,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "runtime-provider-projection-secret",
-                json!({ "expected_revision": 1 }),
+                json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
             ))
             .await
             .expect("select local tenant provider");
@@ -8233,7 +8788,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "runtime-provider-projection-secret",
-                json!({ "expected_revision": 1 }),
+                json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
             ))
             .await
             .expect("select northstar tenant provider");
@@ -8319,7 +8874,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "selection-signout-secret",
-                json!({ "expected_revision": 1 }),
+                json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
             ))
             .await
             .expect("select provider");
@@ -8440,7 +8995,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "stale-provider-selection-secret",
-                json!({ "expected_revision": 1 }),
+                json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
             ))
             .await
             .expect("select provider");
@@ -8488,7 +9043,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn endpoint_change_atomically_drops_old_credential_until_replaced() {
+    async fn routed_endpoint_change_requires_replacement_credential_atomically() {
         let state = test_state("atomic-provider-credential-secret");
         let app = local_router(Arc::clone(&state));
         let update = app
@@ -8516,7 +9071,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "atomic-provider-credential-secret",
-                json!({ "expected_revision": 1 }),
+                json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
             ))
             .await
             .expect("select provider");
@@ -8535,11 +9090,13 @@ mod tests {
             ))
             .await
             .expect("change endpoint without credential");
-        assert_eq!(endpoint_change.status(), axum::http::StatusCode::OK);
-        let endpoint_change = response_json(endpoint_change).await;
-        assert_eq!(endpoint_change["credential_configured"], false);
-        assert_eq!(endpoint_change["health_status"], "needs_credentials");
-        assert_eq!(endpoint_change["runtime_selected"], true);
+        assert_eq!(
+            endpoint_change.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert!(response_json(endpoint_change).await["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("invalidate routing policy")));
 
         let key = ProviderRuntimeKey {
             tenant_id: "local".to_string(),
@@ -8552,9 +9109,9 @@ mod tests {
                     .bindings
                     .get(&key)
                     .map(|binding| binding.base_url.as_str()),
-                Some("https://new.example.test/v1")
+                Some("https://old.example.test/v1")
             );
-            assert!(!runtime.credentials.contains_key(&key));
+            assert!(runtime.credentials.contains_key(&key));
         }
 
         let replacement = app
@@ -8563,8 +9120,9 @@ mod tests {
                 "/api/v1/llm-providers/local-runtime",
                 "atomic-provider-credential-secret",
                 json!({
+                    "base_url": "https://new.example.test/v1",
                     "api_key": "new-provider-key",
-                    "expected_revision": 2
+                    "expected_revision": 1
                 }),
             ))
             .await
@@ -8680,7 +9238,7 @@ mod tests {
                 "PUT",
                 "/api/v1/llm-providers/local-runtime/runtime-selection",
                 "workspace-config-provider-secret",
-                json!({ "expected_revision": 1 }),
+                json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
             ))
             .await
             .expect("select provider after workspace reconfigure");
@@ -8742,7 +9300,7 @@ mod tests {
                     "PUT",
                     "/api/v1/llm-providers/local-runtime/runtime-selection",
                     credential,
-                    json!({ "expected_revision": 1 }),
+                    json!({ "expected_revision": 1, "expected_policy_revision": 0 }),
                 ))
                 .await
                 .expect("select provider");

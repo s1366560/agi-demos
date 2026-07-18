@@ -28,6 +28,8 @@ import type {
   LlmProviderCreateInput,
   LlmProviderModelCatalog,
   LlmProviderMutationInput,
+  LlmProviderRoutingPolicy,
+  LlmProviderRoutingPolicyMutationInput,
   LlmProviderTypeDescriptor,
   LlmProviderUsage,
   LlmProviderUsageStatistic,
@@ -753,6 +755,27 @@ export class DesktopApiClient {
     );
   }
 
+  async getLlmProviderRoutingPolicy(signal?: AbortSignal): Promise<LlmProviderRoutingPolicy> {
+    const payload = await this.request<unknown>('/api/v1/llm-providers/routing-policy', {
+      signal,
+    });
+    return normalizeLlmProviderRoutingPolicy(payload);
+  }
+
+  async updateLlmProviderRoutingPolicy(
+    input: LlmProviderRoutingPolicyMutationInput,
+  ): Promise<LlmProviderRoutingPolicy> {
+    const payload = await this.request<unknown>('/api/v1/llm-providers/routing-policy', {
+      method: 'PUT',
+      body: {
+        roles: input.roles,
+        fallbacks: input.fallbacks,
+        expected_revision: input.expectedRevision,
+      },
+    });
+    return normalizeLlmProviderRoutingPolicy(payload);
+  }
+
   async createLlmProvider(input: LlmProviderCreateInput): Promise<ManagedLlmProvider> {
     const apiKey = input.apiKey?.trim();
     const commonBody = {
@@ -823,7 +846,7 @@ export class DesktopApiClient {
         ...(apiKey ? { api_key: apiKey } : {}),
       },
     });
-    return normalizeProviderValidationOutcome(payload, true);
+    return normalizeProviderValidationOutcome(payload, this.config.mode !== 'local');
   }
 
   async updateLlmProvider(
@@ -859,13 +882,17 @@ export class DesktopApiClient {
   async selectLlmRuntimeProvider(
     providerId: string,
     expectedRevision: number,
+    expectedPolicyRevision: number,
   ): Promise<ManagedLlmProvider> {
     const normalizedProviderId = requireValue(providerId, 'provider id');
     const payload = await this.request<unknown>(
       `/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}/runtime-selection`,
       {
         method: 'PUT',
-        body: { expected_revision: expectedRevision },
+        body: {
+          expected_revision: expectedRevision,
+          expected_policy_revision: expectedPolicyRevision,
+        },
       },
     );
     return normalizeManagedLlmProvider(payload);
@@ -876,11 +903,11 @@ export class DesktopApiClient {
     const payload = await this.request<unknown>(
       `/api/v1/llm-providers/${encodedProviderId}/health-check`,
       {
-      method: 'POST',
-      body: {},
+        method: 'POST',
+        body: {},
       },
     );
-    return normalizeProviderValidationOutcome(payload, true);
+    return normalizeProviderValidationOutcome(payload, this.config.mode !== 'local');
   }
 
   async listManagedSkills(signal?: AbortSignal): Promise<ManagedSkill[]> {
@@ -1323,6 +1350,52 @@ function normalizeManagedLlmProvider(payload: unknown): ManagedLlmProvider {
     runtime_selected: runtimeSelected,
     revision,
   };
+}
+
+function normalizeLlmProviderRoutingPolicy(payload: unknown): LlmProviderRoutingPolicy {
+  if (!isRecord(payload) || !isRecord(payload.roles) || !Array.isArray(payload.fallbacks)) {
+    throw new DesktopApiError('Invalid provider routing policy response', 502, payload);
+  }
+  const tenantId = readCompatString(payload, 'tenant_id', 'tenantId');
+  const revision = readCompatInteger(payload, 'revision');
+  const updatedAt = readCompatString(payload, 'updated_at', 'updatedAt');
+  if (!tenantId || revision == null || revision < 0 || !updatedAt) {
+    throw new DesktopApiError('Invalid provider routing policy response', 502, payload);
+  }
+  return {
+    tenant_id: tenantId,
+    revision,
+    roles: {
+      default: normalizeLlmRouteTarget(payload.roles.default, payload),
+      fast: normalizeLlmRouteTarget(payload.roles.fast, payload),
+      coding: normalizeLlmRouteTarget(payload.roles.coding, payload),
+      vision: normalizeLlmRouteTarget(payload.roles.vision, payload),
+    },
+    fallbacks: payload.fallbacks.map((target) => {
+      const normalized = normalizeLlmRouteTarget(target, payload);
+      if (!normalized) {
+        throw new DesktopApiError('Invalid provider routing policy response', 502, payload);
+      }
+      return normalized;
+    }),
+    updated_at: updatedAt,
+  };
+}
+
+function normalizeLlmRouteTarget(
+  value: unknown,
+  payload: unknown,
+): LlmProviderRoutingPolicy['roles']['default'] {
+  if (value === null) return null;
+  if (!isRecord(value)) {
+    throw new DesktopApiError('Invalid provider routing policy response', 502, payload);
+  }
+  const providerId = readCompatString(value, 'provider_id', 'providerId');
+  const modelId = readCompatString(value, 'model_id', 'modelId');
+  if (!providerId || !modelId) {
+    throw new DesktopApiError('Invalid provider routing policy response', 502, payload);
+  }
+  return { provider_id: providerId, model_id: modelId };
 }
 
 function normalizeProviderValidationOutcome(

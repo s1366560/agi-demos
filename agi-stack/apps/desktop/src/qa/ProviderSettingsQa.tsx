@@ -7,6 +7,8 @@ import { I18nProvider } from '../i18n';
 import type {
   AuthState,
   DesktopRuntimeConfig,
+  LlmProviderRoutingPolicy,
+  LlmRouteTarget,
   ManagedAgentDefinition,
   ManagedLlmProvider,
   ManagedPlugin,
@@ -30,32 +32,20 @@ const qaProviderTypes = [
   {
     provider_type: 'openai',
     operation_type: 'llm',
-    auth_methods: ['api_key'],
-    probe_supported: true,
+    auth_methods: ['api_key', 'none'],
+    probe_supported: false,
   },
   {
     provider_type: 'anthropic',
     operation_type: 'llm',
-    auth_methods: ['api_key'],
-    probe_supported: true,
+    auth_methods: ['api_key', 'none'],
+    probe_supported: false,
   },
   {
-    provider_type: 'gemini',
+    provider_type: 'openai_compatible',
     operation_type: 'llm',
-    auth_methods: ['api_key'],
-    probe_supported: true,
-  },
-  {
-    provider_type: 'openrouter',
-    operation_type: 'llm',
-    auth_methods: ['api_key'],
-    probe_supported: true,
-  },
-  {
-    provider_type: 'ollama',
-    operation_type: 'llm',
-    auth_methods: ['none'],
-    probe_supported: true,
+    auth_methods: ['api_key', 'none'],
+    probe_supported: false,
   },
 ] as const;
 
@@ -72,13 +62,13 @@ const initialProviders: ManagedLlmProvider[] = [
     llm_model: 'gpt-5.1',
     llm_small_model: 'gpt-5.1-mini',
     embedding_model: 'text-embedding-3-large',
-    allowed_models: ['gpt-5.1', 'gpt-5.1-mini', 'text-embedding-3-large'],
+    allowed_models: ['gpt-5.1', 'gpt-5.1-mini', 'gpt-4.1'],
     secondary_models: ['gpt-5.1-mini'],
-    health_status: 'healthy',
+    health_status: 'configuration_valid',
     credential_configured: true,
     api_key_masked: '••••••••••7K2J',
-    health_last_check: NOW,
-    response_time_ms: 184,
+    health_last_check: null,
+    response_time_ms: null,
     revision: 14,
     updated_at: NOW,
   },
@@ -95,74 +85,51 @@ const initialProviders: ManagedLlmProvider[] = [
     llm_small_model: 'claude-haiku-4-5',
     allowed_models: ['claude-sonnet-4-5', 'claude-haiku-4-5'],
     secondary_models: ['claude-haiku-4-5'],
-    health_status: 'healthy',
+    health_status: 'configuration_valid',
     credential_configured: true,
     api_key_masked: '••••••••••B91Q',
-    health_last_check: '2026-07-14T09:38:00.000Z',
-    response_time_ms: 226,
+    health_last_check: null,
+    response_time_ms: null,
     revision: 9,
     updated_at: NOW,
   },
   {
-    id: 'provider-google-ai',
-    name: 'Google AI',
-    provider_type: 'gemini',
+    id: 'provider-local-gateway',
+    name: 'Local Gateway',
+    provider_type: 'openai_compatible',
     operation_type: 'llm',
-    auth_method: 'api_key',
+    auth_method: 'none',
     is_active: true,
     is_enabled: true,
-    base_url: 'https://generativelanguage.googleapis.com/v1beta',
-    llm_model: 'gemini-2.5-pro',
-    llm_small_model: 'gemini-2.5-flash',
-    allowed_models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
-    secondary_models: ['gemini-2.5-flash'],
-    health_status: 'healthy',
+    base_url: 'http://127.0.0.1:11434/v1',
+    llm_model: 'qwen3-coder',
+    llm_small_model: 'qwen3',
+    allowed_models: ['qwen3-coder', 'qwen3'],
+    secondary_models: ['qwen3'],
+    health_status: 'configuration_valid',
     credential_configured: true,
-    api_key_masked: '••••••••••M4X8',
-    health_last_check: '2026-07-14T09:36:00.000Z',
-    response_time_ms: 201,
+    health_last_check: null,
+    response_time_ms: null,
     revision: 6,
     updated_at: NOW,
   },
-  {
-    id: 'provider-openrouter',
-    name: 'OpenRouter',
-    provider_type: 'openrouter',
-    operation_type: 'llm',
-    auth_method: 'api_key',
-    is_active: true,
-    is_enabled: true,
-    base_url: 'https://openrouter.ai/api/v1',
-    llm_model: 'anthropic/claude-sonnet-4.5',
-    allowed_models: ['anthropic/claude-sonnet-4.5', 'openai/gpt-5.1'],
-    health_status: 'rate_limited',
-    credential_configured: true,
-    api_key_masked: '••••••••••R2P6',
-    health_last_check: '2026-07-14T09:31:00.000Z',
-    response_time_ms: 612,
-    error_message: 'Provider quota requires attention.',
-    revision: 3,
-    updated_at: NOW,
-  },
-  {
-    id: 'provider-ollama',
-    name: 'Ollama',
-    provider_type: 'ollama',
-    operation_type: 'llm',
-    auth_method: 'none',
-    is_active: false,
-    is_enabled: false,
-    base_url: 'http://127.0.0.1:11434/v1',
-    llm_model: 'qwen3-coder',
-    allowed_models: ['qwen3-coder', 'llama3.3'],
-    health_status: 'offline',
-    credential_configured: false,
-    health_last_check: '2026-07-14T08:54:00.000Z',
-    error_message: 'Local endpoint is unavailable from the cloud runtime.',
-    revision: 2,
-    updated_at: NOW,
-  },
 ];
+
+const initialRoutingPolicy: LlmProviderRoutingPolicy = {
+  tenant_id: QA_TENANT_ID,
+  revision: 4,
+  roles: {
+    default: { provider_id: 'provider-openai', model_id: 'gpt-5.1' },
+    fast: null,
+    coding: { provider_id: 'provider-anthropic', model_id: 'claude-sonnet-4-5' },
+    vision: null,
+  },
+  fallbacks: [
+    { provider_id: 'provider-anthropic', model_id: 'claude-sonnet-4-5' },
+    { provider_id: 'provider-local-gateway', model_id: 'qwen3-coder' },
+  ],
+  updated_at: NOW,
+};
 
 const modelCatalogs: Record<string, Record<'chat' | 'embedding' | 'rerank', string[]>> = {
   openai: {
@@ -175,24 +142,15 @@ const modelCatalogs: Record<string, Record<'chat' | 'embedding' | 'rerank', stri
     embedding: [],
     rerank: [],
   },
-  gemini: {
-    chat: ['gemini-2.5-pro', 'gemini-2.5-flash'],
-    embedding: ['text-embedding-004'],
-    rerank: [],
-  },
-  openrouter: {
-    chat: ['anthropic/claude-sonnet-4.5', 'openai/gpt-5.1', 'google/gemini-2.5-pro'],
+  openai_compatible: {
+    chat: ['qwen3-coder', 'qwen3'],
     embedding: [],
-    rerank: [],
-  },
-  ollama: {
-    chat: ['qwen3-coder', 'llama3.3'],
-    embedding: ['nomic-embed-text'],
     rerank: [],
   },
 };
 
 let providers = initialProviders.map((provider) => ({ ...provider }));
+let routingPolicy = initialRoutingPolicy;
 
 let skills: ManagedSkill[] = [
   {
@@ -376,7 +334,7 @@ const qaConfig: DesktopRuntimeConfig = {
   tenantId: QA_TENANT_ID,
   projectId: QA_PROJECT_ID,
   workspaceId: 'workspace-desktop-client',
-  mode: 'cloud',
+  mode: 'local',
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -420,30 +378,90 @@ function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function isRouteTarget(value: unknown): value is LlmRouteTarget {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const target = value as Record<string, unknown>;
+  const keys = Object.keys(target).sort();
+  return (
+    keys.length === 2 &&
+    keys[0] === 'model_id' &&
+    keys[1] === 'provider_id' &&
+    typeof target.provider_id === 'string' &&
+    target.provider_id.trim().length > 0 &&
+    typeof target.model_id === 'string' &&
+    target.model_id.trim().length > 0
+  );
+}
+
+function isRoutingRoles(value: unknown): value is LlmProviderRoutingPolicy['roles'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const roles = value as Record<string, unknown>;
+  const roleNames = ['coding', 'default', 'fast', 'vision'];
+  return (
+    JSON.stringify(Object.keys(roles).sort()) === JSON.stringify(roleNames) &&
+    roleNames.every((role) => roles[role] === null || isRouteTarget(roles[role]))
+  );
+}
+
+function routingTargetAvailable(target: LlmRouteTarget): boolean {
+  const provider = providers.find((item) => item.id === target.provider_id);
+  if (!provider) return false;
+  const supportedProvider = ['anthropic', 'openai', 'openai_compatible'].includes(
+    provider.provider_type,
+  );
+  const credentialReady =
+    provider.auth_method === 'none' || provider.credential_configured === true;
+  const models = new Set([provider.llm_model, ...(provider.allowed_models ?? [])].filter(Boolean));
+  return Boolean(
+    supportedProvider &&
+      provider.health_status === 'configuration_valid' &&
+      provider.is_active === true &&
+      provider.is_enabled !== false &&
+      provider.base_url?.trim() &&
+      credentialReady &&
+      models.has(target.model_id),
+  );
+}
+
 function safeProviderFromBody(
   body: Record<string, unknown>,
   current?: ManagedLlmProvider,
 ): ManagedLlmProvider {
   const nextRevision = (current?.revision ?? 0) + 1;
   const apiKeySubmitted = Boolean(stringValue(body.api_key).trim());
+  const authMethod =
+    stringValue(body.auth_method, current?.auth_method ?? 'api_key') === 'none'
+      ? 'none'
+      : 'api_key';
+  const active = booleanValue(body.is_active, current?.is_active ?? false);
+  const baseUrl = stringValue(body.base_url, current?.base_url ?? '');
+  const primaryModel = stringValue(body.llm_model, current?.llm_model ?? '');
+  const credentialConfigured =
+    authMethod === 'none' || current?.credential_configured === true || apiKeySubmitted;
+  const healthStatus =
+    !active || !baseUrl || !primaryModel
+      ? 'not_configured'
+      : credentialConfigured
+        ? 'configuration_valid'
+        : 'needs_credentials';
   return {
     ...(current ?? {}),
     id: current?.id ?? `provider-${crypto.randomUUID()}`,
     name: stringValue(body.name, current?.name ?? 'New provider'),
     provider_type: stringValue(body.provider_type, current?.provider_type ?? 'openai'),
     operation_type: current?.operation_type ?? 'llm',
-    auth_method: current?.auth_method ?? 'api_key',
-    is_active: booleanValue(body.is_active, current?.is_active ?? false),
-    is_enabled: booleanValue(body.is_active, current?.is_enabled ?? false),
-    base_url: stringValue(body.base_url, current?.base_url ?? ''),
-    llm_model: stringValue(body.llm_model, current?.llm_model ?? ''),
+    auth_method: authMethod,
+    is_active: active,
+    is_enabled: active,
+    base_url: baseUrl,
+    llm_model: primaryModel,
     allowed_models: stringArray(body.allowed_models, current?.allowed_models ?? []),
-    health_status: current?.health_status ?? 'healthy',
-    credential_configured: current?.credential_configured || apiKeySubmitted,
+    health_status: healthStatus,
+    credential_configured: credentialConfigured,
     api_key_masked:
       current?.api_key_masked || (apiKeySubmitted ? '••••••••••NEW' : null),
-    health_last_check: NOW,
-    response_time_ms: current?.response_time_ms ?? 210,
+    health_last_check: null,
+    response_time_ms: null,
     error_message: null,
     revision: nextRevision,
     updated_at: NOW,
@@ -472,6 +490,47 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   if (method === 'GET' && path === '/api/v1/llm-providers/') {
     return jsonResponse(providers);
   }
+  if (path === '/api/v1/llm-providers/routing-policy') {
+    if (method === 'GET') return jsonResponse(routingPolicy);
+    if (method === 'PUT') {
+      const draft = readJsonBody(body);
+      if (draft.expected_revision !== routingPolicy.revision) {
+        return jsonResponse({ detail: 'Routing policy revision conflict.' }, 409);
+      }
+      if (
+        !isRoutingRoles(draft.roles) ||
+        !Array.isArray(draft.fallbacks) ||
+        !draft.fallbacks.every(isRouteTarget) ||
+        draft.roles.default === null ||
+        draft.roles.fast !== null ||
+        draft.roles.vision !== null ||
+        draft.fallbacks.length > 8
+      ) {
+        return jsonResponse({ detail: 'Invalid routing policy.' }, 422);
+      }
+      const targets = [
+        ...Object.values(draft.roles).filter((target): target is LlmRouteTarget => target !== null),
+        ...draft.fallbacks,
+      ];
+      const fallbackKeys = draft.fallbacks.map((target) =>
+        JSON.stringify([target.provider_id, target.model_id]),
+      );
+      if (
+        targets.some((target) => !routingTargetAvailable(target)) ||
+        new Set(fallbackKeys).size !== fallbackKeys.length
+      ) {
+        return jsonResponse({ detail: 'Routing target is unavailable.' }, 422);
+      }
+      routingPolicy = {
+        ...routingPolicy,
+        revision: routingPolicy.revision + 1,
+        roles: { ...draft.roles },
+        fallbacks: [...draft.fallbacks],
+        updated_at: new Date().toISOString(),
+      };
+      return jsonResponse(routingPolicy);
+    }
+  }
   if (method === 'GET' && path === '/api/v1/llm-providers/types') {
     return jsonResponse({ types: qaProviderTypes });
   }
@@ -494,9 +553,13 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         stringValue(draft.llm_model),
     );
     return jsonResponse({
-      status: configured ? 'healthy' : 'configuration_invalid',
-      last_check: NOW,
-      response_time_ms: configured ? 196 : null,
+      status: configured ? 'configuration_valid' : 'configuration_invalid',
+      probed: false,
+      detail: configured
+        ? 'configuration validated locally; no external request was sent'
+        : 'required connection fields are missing; no external request was sent',
+      last_check: null,
+      response_time_ms: null,
       error_message: configured ? null : 'Required connection fields are missing.',
     });
   }
@@ -572,17 +635,19 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       item.id === providerId
         ? {
             ...item,
-            health_status: 'healthy',
-            health_last_check: NOW,
-            response_time_ms: 188,
+            health_status: 'configuration_valid',
+            health_last_check: null,
+            response_time_ms: null,
             error_message: null,
           }
         : item,
     );
     return jsonResponse({
-      status: 'healthy',
-      last_check: NOW,
-      response_time_ms: 188,
+      status: 'configuration_valid',
+      probed: false,
+      detail: 'configuration validated locally; no external request was sent',
+      last_check: null,
+      response_time_ms: null,
       error_message: null,
     });
   }

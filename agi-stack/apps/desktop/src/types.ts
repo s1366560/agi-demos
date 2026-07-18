@@ -692,6 +692,29 @@ export type LlmProviderMutationInput = {
 
 export type LlmProviderCreateInput = Omit<LlmProviderMutationInput, 'expectedRevision'>;
 
+export type LlmRoutingRole = 'default' | 'fast' | 'coding' | 'vision';
+
+export type LlmRouteTarget = {
+  provider_id: string;
+  model_id: string;
+};
+
+export type LlmProviderRoutingRoles = Record<LlmRoutingRole, LlmRouteTarget | null>;
+
+export type LlmProviderRoutingPolicy = {
+  tenant_id: string;
+  revision: number;
+  roles: LlmProviderRoutingRoles;
+  fallbacks: LlmRouteTarget[];
+  updated_at: string;
+};
+
+export type LlmProviderRoutingPolicyMutationInput = {
+  roles: LlmProviderRoutingRoles;
+  fallbacks: LlmRouteTarget[];
+  expectedRevision: number;
+};
+
 export type LlmProviderTypeDescriptor = {
   providerType: string;
   authMethods: LlmProviderAuthMethod[];
