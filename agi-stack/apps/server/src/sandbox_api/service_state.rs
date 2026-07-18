@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -7,7 +7,9 @@ use serde_json::{json, Map, Value};
 use agistack_adapters_postgres::{
     PgProjectReadRepository, PgProjectSandboxRepository, ProjectSandboxRecord,
 };
-use agistack_core::ports::{ContainerState, ContainerStatus, PortBinding, ToolHost};
+use agistack_core::ports::{
+    ContainerState, ContainerStatus, CoreError, CoreResult, PortBinding, ToolHost,
+};
 
 use super::{
     connection_url, datetime_from_ms, initial_metadata, local_config_websocket_url, local_metadata,
@@ -87,6 +89,10 @@ impl ProjectSandboxConfigSource for PgProjectSandboxConfigSource {
 #[async_trait]
 pub(super) trait SandboxToolConnector: Send + Sync {
     async fn connect_tool_host(&self, url: &str) -> SandboxApiResult<Arc<dyn ToolHost>>;
+
+    /// Drop any cached connection for `url`. No-op by default so
+    /// non-caching connectors (and test fakes) stay trivially implementable.
+    async fn evict_tool_host(&self, _url: &str) {}
 }
 
 pub(super) struct WsMcpToolConnector;
@@ -98,6 +104,136 @@ impl SandboxToolConnector for WsMcpToolConnector {
             .await
             .map_err(|_| SandboxApiError::internal("Execution failed"))?;
         Ok(Arc::new(host))
+    }
+}
+
+/// Caching decorator over a [`SandboxToolConnector`] dialer: one
+/// [`CachedToolHost`] per tool-host URL, so sandbox tool execution reuses a
+/// single multiplexed MCP connection instead of paying the WebSocket dial +
+/// `initialize` / `notifications/initialized` / `tools/list` handshake on
+/// every tool call.
+///
+/// The URL uniquely identifies the remote tool host (per-sandbox host port,
+/// or a project-local tunnel endpoint), so it is the cache key. Invalidation
+/// is two-pronged:
+/// - [`CachedToolHost`] self-heals: a call that fails with a dead-transport
+///   error (the MCP connection task exited) re-dials once and retries once.
+/// - Sandbox lifecycle teardown (stop/restart/terminate/gone) calls
+///   [`SandboxToolConnector::evict_tool_host`] so stale connections are never
+///   reused — and dead entries never accumulate.
+pub(super) struct CachingToolConnector {
+    dialer: Arc<dyn SandboxToolConnector>,
+    hosts: tokio::sync::Mutex<HashMap<String, Arc<dyn ToolHost>>>,
+}
+
+impl CachingToolConnector {
+    pub(super) fn new(dialer: Arc<dyn SandboxToolConnector>) -> Self {
+        Self {
+            dialer,
+            hosts: tokio::sync::Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl SandboxToolConnector for CachingToolConnector {
+    async fn connect_tool_host(&self, url: &str) -> SandboxApiResult<Arc<dyn ToolHost>> {
+        // Hold the lock across the dial so parallel misses single-flight:
+        // exactly one connection is established per URL. Cache hits only hold
+        // the lock for a map lookup, so the hot path stays cheap.
+        let mut hosts = self.hosts.lock().await;
+        if let Some(host) = hosts.get(url) {
+            return Ok(Arc::clone(host));
+        }
+        let host = self.dialer.connect_tool_host(url).await?;
+        let host: Arc<dyn ToolHost> =
+            Arc::new(CachedToolHost::new(url, Arc::clone(&self.dialer), host));
+        hosts.insert(url.to_string(), Arc::clone(&host));
+        Ok(host)
+    }
+
+    async fn evict_tool_host(&self, url: &str) {
+        self.hosts.lock().await.remove(url);
+    }
+}
+
+/// A [`ToolHost`] wrapper that re-dials its backing connection when calls
+/// start failing with a dead transport (see [`is_dead_tool_host_error`]),
+/// then retries the call once. Concurrent healers single-flight on the write
+/// lock; the `Arc::ptr_eq` re-check ensures only the first re-dials and the
+/// rest retry on the fresh connection.
+struct CachedToolHost {
+    url: String,
+    dialer: Arc<dyn SandboxToolConnector>,
+    host: tokio::sync::RwLock<Arc<dyn ToolHost>>,
+    tools: Mutex<Vec<String>>,
+}
+
+impl CachedToolHost {
+    fn new(url: &str, dialer: Arc<dyn SandboxToolConnector>, host: Arc<dyn ToolHost>) -> Self {
+        Self {
+            url: url.to_string(),
+            dialer,
+            tools: Mutex::new(host.list_tools()),
+            host: tokio::sync::RwLock::new(host),
+        }
+    }
+}
+
+#[async_trait]
+impl ToolHost for CachedToolHost {
+    fn list_tools(&self) -> Vec<String> {
+        self.tools
+            .lock()
+            .map(|tools| tools.clone())
+            .unwrap_or_default()
+    }
+
+    async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
+        let host = self.host.read().await.clone();
+        match host.call(tool, input_json).await {
+            Ok(output) => Ok(output),
+            Err(error) if is_dead_tool_host_error(&error) => {
+                let mut current = self.host.write().await;
+                if Arc::ptr_eq(&current, &host) {
+                    let fresh = self
+                        .dialer
+                        .connect_tool_host(&self.url)
+                        .await
+                        .map_err(|err| CoreError::Tool(err.detail))?;
+                    if let Ok(mut tools) = self.tools.lock() {
+                        *tools = fresh.list_tools();
+                    }
+                    *current = fresh;
+                }
+                let host = Arc::clone(&current);
+                drop(current);
+                host.call(tool, input_json).await
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+/// Errors that prove the cached MCP connection is dead — its
+/// `run_mcp_connection` task exited or the socket is gone. Matched against
+/// the exact messages emitted by `agistack-adapters-mcp` (`WsMcpToolHost`
+/// send/receive paths and the tungstenite errors surfaced through `gerr`).
+/// Exact matches only: tool-level failures (`isError` payloads, JSON-RPC
+/// `mcp error: ...` replies) travel over a healthy connection and must not
+/// trigger a re-dial.
+fn is_dead_tool_host_error(error: &CoreError) -> bool {
+    match error {
+        CoreError::Tool(message) => matches!(
+            message.as_str(),
+            "mcp connection task is closed"
+                | "mcp connection task dropped response"
+                | "mcp connection closed"
+                | "mcp stream ended before response"
+                | "ConnectionClosed"
+                | "AlreadyClosed"
+        ),
+        _ => false,
     }
 }
 

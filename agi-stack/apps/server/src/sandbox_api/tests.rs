@@ -1,6 +1,6 @@
 use super::*;
 use agistack_adapters_mem::InMemoryContainerRuntime;
-use agistack_core::ports::{ContainerSpec, CoreResult};
+use agistack_core::ports::{ContainerSpec, CoreError, CoreResult};
 use tokio_tungstenite::tungstenite::handshake::server::{
     ErrorResponse as WsHandshakeErrorResponse, Request as WsHandshakeRequest,
     Response as WsHandshakeResponse,
@@ -189,6 +189,49 @@ impl ToolHost for StaticToolHost {
 
     async fn call(&self, _tool: &str, _input_json: &str) -> CoreResult<String> {
         Ok(self.output.clone())
+    }
+}
+
+struct ErrorToolHost {
+    message: String,
+}
+
+#[async_trait]
+impl ToolHost for ErrorToolHost {
+    fn list_tools(&self) -> Vec<String> {
+        vec!["bash".to_string()]
+    }
+
+    async fn call(&self, _tool: &str, _input_json: &str) -> CoreResult<String> {
+        Err(CoreError::Tool(self.message.clone()))
+    }
+}
+
+/// Dials hosts whose calls fail with `error_message` for the first
+/// `failing_dials` connections, then healthy `StaticToolHost`s.
+struct FlakyConnector {
+    urls: Mutex<Vec<String>>,
+    failing_dials: usize,
+    error_message: String,
+    output: String,
+}
+
+#[async_trait]
+impl SandboxToolConnector for FlakyConnector {
+    async fn connect_tool_host(&self, url: &str) -> SandboxApiResult<Arc<dyn ToolHost>> {
+        let mut urls = self
+            .urls
+            .lock()
+            .map_err(|_| SandboxApiError::internal("flaky connector mutex poisoned"))?;
+        urls.push(url.to_string());
+        if urls.len() <= self.failing_dials {
+            return Ok(Arc::new(ErrorToolHost {
+                message: self.error_message.clone(),
+            }));
+        }
+        Ok(Arc::new(StaticToolHost {
+            output: self.output.clone(),
+        }))
     }
 }
 

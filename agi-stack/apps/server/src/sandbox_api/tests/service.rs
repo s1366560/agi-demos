@@ -274,6 +274,193 @@ async fn service_prefers_record_mcp_endpoint_for_tool_execution() {
         &["ws://sandbox-mcp.test:8765"]
     );
 }
+
+const TEST_MCP_URL: &str = "ws://sandbox-mcp.test:8765";
+
+fn mcp_output() -> String {
+    json!({
+        "content": [{ "type": "text", "text": "from mcp" }],
+        "isError": false
+    })
+    .to_string()
+}
+
+/// A service whose tool executions go through a `CachingToolConnector`
+/// wrapping `dialer`, with project `p1` running at `TEST_MCP_URL`.
+async fn service_with_cached_connector(
+    registry: Arc<InMemorySandboxRegistry>,
+    dialer: Arc<dyn SandboxToolConnector>,
+) -> ProjectSandboxService {
+    let service = with_test_runtime_auth(ProjectSandboxService::with_registry(
+        Arc::new(InMemoryContainerRuntime::new()),
+        "redis:7-alpine",
+        registry.clone(),
+    ))
+    .with_tool_connector(Arc::new(CachingToolConnector::new(dialer)));
+    service
+        .ensure("p1", "t1", Some(SandboxProfile::Lite))
+        .await
+        .unwrap();
+    let mut record = registry.get("p1").await.unwrap().unwrap();
+    record.metadata_json = json!({
+        "profile": "lite",
+        "endpoint": TEST_MCP_URL
+    });
+    registry.save(&record, "running", None).await.unwrap();
+    service
+}
+
+#[tokio::test]
+async fn service_reuses_cached_tool_host_across_tool_executions() {
+    let registry = Arc::new(InMemorySandboxRegistry::new());
+    let dialer = Arc::new(RecordingConnector {
+        urls: Mutex::new(Vec::new()),
+        output: mcp_output(),
+    });
+    let service = service_with_cached_connector(registry, dialer.clone()).await;
+
+    let first = service
+        .execute_tool("p1", "bash", &json!({ "cmd": "pwd" }), 30.0)
+        .await
+        .unwrap();
+    let second = service
+        .execute_tool("p1", "bash", &json!({ "cmd": "ls" }), 30.0)
+        .await
+        .unwrap();
+
+    assert_eq!(first.content[0]["text"], "from mcp");
+    assert_eq!(second.content[0]["text"], "from mcp");
+    // Two executions, one dial: the MCP handshake happens once per endpoint.
+    assert_eq!(dialer.urls.lock().unwrap().as_slice(), &[TEST_MCP_URL]);
+}
+
+#[tokio::test]
+async fn service_single_flights_concurrent_tool_host_dials() {
+    let registry = Arc::new(InMemorySandboxRegistry::new());
+    let dialer = Arc::new(RecordingConnector {
+        urls: Mutex::new(Vec::new()),
+        output: mcp_output(),
+    });
+    let service = service_with_cached_connector(registry, dialer.clone()).await;
+
+    let args = json!({ "cmd": "pwd" });
+    let results = futures_util::future::join_all(
+        (0..4).map(|_| service.execute_tool("p1", "bash", &args, 30.0)),
+    )
+    .await;
+
+    for result in results {
+        assert!(result.unwrap().success);
+    }
+    assert_eq!(dialer.urls.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn service_evicts_and_redials_dead_cached_tool_host() {
+    let registry = Arc::new(InMemorySandboxRegistry::new());
+    let dialer = Arc::new(FlakyConnector {
+        urls: Mutex::new(Vec::new()),
+        failing_dials: 1,
+        error_message: "mcp connection task is closed".to_string(),
+        output: mcp_output(),
+    });
+    let service = service_with_cached_connector(registry, dialer.clone()).await;
+
+    // The first dialed connection is dead: the cached host evicts it,
+    // re-dials, and retries — one successful execution, two dials.
+    let healed = service
+        .execute_tool("p1", "bash", &json!({ "cmd": "pwd" }), 30.0)
+        .await
+        .unwrap();
+    assert_eq!(healed.content[0]["text"], "from mcp");
+    assert_eq!(dialer.urls.lock().unwrap().len(), 2);
+
+    // The healed connection is cached: later executions dial no more.
+    let reused = service
+        .execute_tool("p1", "bash", &json!({ "cmd": "ls" }), 30.0)
+        .await
+        .unwrap();
+    assert_eq!(reused.content[0]["text"], "from mcp");
+    assert_eq!(dialer.urls.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn service_keeps_cached_tool_host_after_tool_level_error() {
+    let registry = Arc::new(InMemorySandboxRegistry::new());
+    let dialer = Arc::new(FlakyConnector {
+        urls: Mutex::new(Vec::new()),
+        failing_dials: usize::MAX,
+        error_message: "Unknown tool: bash".to_string(),
+        output: mcp_output(),
+    });
+    let service = service_with_cached_connector(registry, dialer.clone()).await;
+
+    // Tool-level failures travel over a healthy connection: they surface as
+    // execution errors but must not evict the cached connection.
+    for _ in 0..2 {
+        let err = service
+            .execute_tool("p1", "bash", &json!({ "cmd": "pwd" }), 30.0)
+            .await
+            .unwrap_err();
+        assert_eq!(err.status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    assert_eq!(dialer.urls.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn service_drops_cached_tool_host_on_terminate() {
+    let registry = Arc::new(InMemorySandboxRegistry::new());
+    let dialer = Arc::new(RecordingConnector {
+        urls: Mutex::new(Vec::new()),
+        output: mcp_output(),
+    });
+    let service = service_with_cached_connector(registry.clone(), dialer.clone()).await;
+    service
+        .execute_tool("p1", "bash", &json!({ "cmd": "pwd" }), 30.0)
+        .await
+        .unwrap();
+    assert_eq!(dialer.urls.lock().unwrap().len(), 1);
+
+    assert!(service.terminate("p1").await.unwrap());
+
+    // A sandbox recreated at the same endpoint must not inherit the torn-down
+    // connection: terminate evicted it, so execution re-dials.
+    service
+        .ensure("p1", "t1", Some(SandboxProfile::Lite))
+        .await
+        .unwrap();
+    let mut record = registry.get("p1").await.unwrap().unwrap();
+    record.metadata_json = json!({
+        "profile": "lite",
+        "endpoint": TEST_MCP_URL
+    });
+    registry.save(&record, "running", None).await.unwrap();
+    let response = service
+        .execute_tool("p1", "bash", &json!({ "cmd": "pwd" }), 30.0)
+        .await
+        .unwrap();
+    assert_eq!(response.content[0]["text"], "from mcp");
+    assert_eq!(dialer.urls.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn caching_tool_connector_dials_once_per_url_and_evicts() {
+    let dialer = Arc::new(RecordingConnector {
+        urls: Mutex::new(Vec::new()),
+        output: mcp_output(),
+    });
+    let connector = CachingToolConnector::new(dialer.clone());
+
+    let first = connector.connect_tool_host(TEST_MCP_URL).await.unwrap();
+    let second = connector.connect_tool_host(TEST_MCP_URL).await.unwrap();
+    assert!(Arc::ptr_eq(&first, &second));
+    assert_eq!(dialer.urls.lock().unwrap().len(), 1);
+
+    connector.evict_tool_host(TEST_MCP_URL).await;
+    let third = connector.connect_tool_host(TEST_MCP_URL).await.unwrap();
+    assert!(!Arc::ptr_eq(&first, &third));
+    assert_eq!(dialer.urls.lock().unwrap().len(), 2);
+}
 #[tokio::test]
 async fn service_registers_lists_previews_and_stops_http_services() {
     let service = with_test_runtime_auth(ProjectSandboxService::new(

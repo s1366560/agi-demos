@@ -62,7 +62,9 @@ impl ProjectSandboxService {
     }
 
     pub(crate) fn with_ws_mcp_connector(mut self) -> Self {
-        self.tool_connector = Some(Arc::new(WsMcpToolConnector));
+        self.tool_connector = Some(Arc::new(CachingToolConnector::new(Arc::new(
+            WsMcpToolConnector,
+        ))));
         self
     }
 
@@ -82,6 +84,11 @@ impl ProjectSandboxService {
             Some(record) => {
                 let status = self.status_or_gone(&record).await?;
                 let Some(status) = status else {
+                    self.evict_cached_tool_host(
+                        record.websocket_url().as_deref(),
+                        record.endpoint().as_deref(),
+                    )
+                    .await;
                     self.registry.delete(project_id).await?;
                     return Ok(None);
                 };
@@ -112,6 +119,11 @@ impl ProjectSandboxService {
         for record in records {
             let project_id = record.project_id.clone();
             let Some(status) = self.status_or_gone(&record).await? else {
+                self.evict_cached_tool_host(
+                    record.websocket_url().as_deref(),
+                    record.endpoint().as_deref(),
+                )
+                .await;
                 self.registry.delete(&project_id).await?;
                 continue;
             };
@@ -151,6 +163,8 @@ impl ProjectSandboxService {
                     .ensure_local(project_id, tenant_id, profile, info.local_config)
                     .await;
             }
+            self.evict_cached_tool_host(info.websocket_url.as_deref(), info.endpoint.as_deref())
+                .await;
             self.runtime
                 .start(&info.sandbox_id)
                 .await
@@ -242,6 +256,11 @@ impl ProjectSandboxService {
         let existing = self.registry.get(project_id).await?;
         let existing_local = if let Some(existing) = existing {
             if !existing.is_local() {
+                self.evict_cached_tool_host(
+                    existing.websocket_url().as_deref(),
+                    existing.endpoint().as_deref(),
+                )
+                .await;
                 self.runtime
                     .stop(&existing.sandbox_id)
                     .await
@@ -293,6 +312,11 @@ impl ProjectSandboxService {
             return Ok(());
         };
         if record.is_local() {
+            self.evict_cached_tool_host(
+                record.websocket_url().as_deref(),
+                record.endpoint().as_deref(),
+            )
+            .await;
             self.registry.delete(project_id).await?;
         }
         Ok(())
@@ -313,6 +337,11 @@ impl ProjectSandboxService {
                 record.synthetic_container_status(),
             ));
         }
+        self.evict_cached_tool_host(
+            record.websocket_url().as_deref(),
+            record.endpoint().as_deref(),
+        )
+        .await;
         self.runtime
             .stop(&record.sandbox_id)
             .await
@@ -331,6 +360,11 @@ impl ProjectSandboxService {
         let Some(record) = record else {
             return Ok(false);
         };
+        self.evict_cached_tool_host(
+            record.websocket_url().as_deref(),
+            record.endpoint().as_deref(),
+        )
+        .await;
         if record.is_local() {
             self.registry.save(&record, "terminated", None).await?;
             self.registry.delete(project_id).await?;
@@ -452,6 +486,19 @@ impl ProjectSandboxService {
         self.tool_host
             .clone()
             .ok_or_else(|| SandboxApiError::internal("Sandbox tool host is not configured"))
+    }
+
+    /// Drop the cached tool-host connection for a sandbox whose runtime state
+    /// is about to be torn down (stop/restart/terminate/gone). Mirrors
+    /// `tool_host_for`'s endpoint precedence so the evicted key matches the
+    /// one the connection was cached under.
+    async fn evict_cached_tool_host(&self, websocket_url: Option<&str>, endpoint: Option<&str>) {
+        let Some(connector) = self.tool_connector.as_ref() else {
+            return;
+        };
+        if let Some(url) = websocket_url.or(endpoint) {
+            connector.evict_tool_host(url).await;
+        }
     }
 
     async fn status_or_gone(
