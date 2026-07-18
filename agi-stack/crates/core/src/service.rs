@@ -4,6 +4,7 @@
 //! wired with server adapters (Postgres/pgvector), device adapters
 //! (SQLite/sqlite-vec) or browser adapters — without touching this code.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::model::{Episode, Memory};
@@ -176,9 +177,20 @@ impl MemoryService {
         };
         let qvec = self.embedding.embed(query).await?;
         let hits = vectors.query(project_id, &qvec, k).await?;
+        // Hydrate in one batch instead of k sequential lookups. `find_by_ids`
+        // order is unspecified, so re-key by id and re-emit in vector-rank
+        // order (`remove` moves the memory out without cloning).
+        let ids: Vec<String> = hits.iter().map(|hit| hit.id.clone()).collect();
+        let mut by_id: HashMap<String, Memory> = self
+            .repo
+            .find_by_ids(&ids)
+            .await?
+            .into_iter()
+            .map(|memory| (memory.id.clone(), memory))
+            .collect();
         let mut out = Vec::with_capacity(hits.len());
-        for hit in hits {
-            if let Some(memory) = self.repo.find_by_id(&hit.id).await? {
+        for hit in &hits {
+            if let Some(memory) = by_id.remove(&hit.id) {
                 if memory.project_id == project_id {
                     out.push(memory);
                 }

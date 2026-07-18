@@ -439,6 +439,22 @@ pub trait EmailSender: Send + Sync {
 pub trait MemoryRepository: Send + Sync {
     async fn save(&self, memory: Memory) -> CoreResult<Memory>;
     async fn find_by_id(&self, id: &str) -> CoreResult<Option<Memory>>;
+
+    /// Batch fetch by ids — backs semantic-search hydration, which needs k rows
+    /// per query. Returned order is **unspecified**: callers that need a
+    /// specific order (e.g. vector rank) must reorder themselves. The default
+    /// loops [`find_by_id`](Self::find_by_id); adapters over network storage
+    /// override it with a single round-trip (`WHERE id = ANY(...)`).
+    async fn find_by_ids(&self, ids: &[String]) -> CoreResult<Vec<Memory>> {
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            if let Some(memory) = self.find_by_id(id).await? {
+                out.push(memory);
+            }
+        }
+        Ok(out)
+    }
+
     async fn list_by_project(
         &self,
         project_id: &str,

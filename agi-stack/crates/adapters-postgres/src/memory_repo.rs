@@ -171,6 +171,22 @@ impl MemoryRepository for PgMemoryRepository {
         Ok(row.map(MemoryRow::into_core))
     }
 
+    /// Override the per-id loop with a single round-trip: semantic-search
+    /// hydration fetches k rows per query, so k sequential `find_by_id`s would
+    /// cost k network RTTs.
+    async fn find_by_ids(&self, ids: &[String]) -> CoreResult<Vec<Memory>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let sql = format!("SELECT {SELECT_COLS} FROM memories WHERE id = ANY($1)");
+        let rows = sqlx::query_as::<_, MemoryRow>(&sql)
+            .bind(ids)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage_err)?;
+        Ok(rows.into_iter().map(MemoryRow::into_core).collect())
+    }
+
     async fn list_by_project(
         &self,
         project_id: &str,
