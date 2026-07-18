@@ -195,6 +195,7 @@ import {
   readLegacyPlanApprovalRecovery,
   type NewTaskAgentTurnOutcome,
 } from './features/task/newTaskPlanModel';
+import { resolveNewTaskWorkspaceAuthority } from './features/task/newTaskSessionModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import {
@@ -2615,6 +2616,11 @@ export function App() {
       : !config.tenantId.trim() || !config.projectId.trim()
         ? 'Select an account and project before loading workspaces.'
         : null;
+  const newTaskWorkspaces = dataset.workspacesByProject[config.projectId] ?? [];
+  const newTaskWorkspaceAuthority = resolveNewTaskWorkspaceAuthority(
+    dataset.nodeState.projects[config.projectId],
+    newTaskWorkspaces,
+  );
   const newTaskDisabledReason = !identityAuthenticated
     ? t('task.disabledSignIn')
     : !showRuntimeConfig
@@ -5618,7 +5624,7 @@ export function App() {
         <NewTaskFlow
           open={newTaskOpen}
           config={config}
-          workspaces={dataset.workspacesByProject[config.projectId] ?? []}
+          workspaceAuthority={newTaskWorkspaceAuthority}
           resumeDraft={newTaskResumeDraft}
           preferredWorkspaceId={newTaskPreferredWorkspaceId}
           preferredKind={preferredTaskMode === 'code' ? 'programming' : 'general'}

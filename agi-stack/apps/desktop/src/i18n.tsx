@@ -1606,6 +1606,12 @@ const enUS: Record<string, string> = {
   'task.codeAgentDescription': 'Repository-aware implementation and verification',
   'task.workspace': 'Workspace',
   'task.createWorkspace': 'Create a new workspace',
+  'task.workspaceAuthorityLoading':
+    'Workspace options are still loading. Wait for project authority before creating a task.',
+  'task.workspaceAuthorityError':
+    'Workspace options could not be verified. Refresh the project before creating a task.',
+  'task.workspaceSelectionStale':
+    'The selected workspace is no longer available. Choose another workspace or create a new one.',
   'task.codeRoot': 'Code workspace root',
   'task.environment': 'Execution environment',
   'task.isolatedWorktree': 'Isolated worktree',
@@ -3232,6 +3238,9 @@ const zhCN: Record<string, string> = {
   'task.codeAgentDescription': '理解代码仓库的实现与验证',
   'task.workspace': '工作空间',
   'task.createWorkspace': '创建新工作空间',
+  'task.workspaceAuthorityLoading': '工作空间选项仍在加载，请等待项目权威状态就绪后再创建任务。',
+  'task.workspaceAuthorityError': '无法验证工作空间选项，请刷新项目后再创建任务。',
+  'task.workspaceSelectionStale': '所选工作空间已不可用，请选择其他工作空间或创建新工作空间。',
   'task.codeRoot': '代码工作区根目录',
   'task.environment': '执行环境',
   'task.isolatedWorktree': '隔离 Worktree',

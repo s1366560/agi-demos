@@ -69,6 +69,7 @@ mod run_control;
 mod session_projection;
 mod session_store;
 mod steering;
+mod task_session;
 mod tool_authority;
 mod worktree;
 
@@ -103,6 +104,9 @@ use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
 };
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
+use task_session::{
+    workspace_value, WorkspaceCollaborationMode, WorkspaceCreateAttributes, WorkspaceUseCase,
+};
 use worktree::WorktreeManager;
 
 #[derive(Clone)]
@@ -2307,6 +2311,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces",
             get(list_workspaces).post(create_workspace),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/task-sessions",
+            post(task_session::create_task_session),
         )
         .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/messages",
@@ -4856,39 +4864,64 @@ async fn list_project_my_work(
 
 async fn list_workspaces(
     State(state): State<Arc<LocalRuntimeState>>,
-    Path((_tenant_id, project_id)): Path<(String, String)>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((tenant_id, project_id)): Path<(String, String)>,
 ) -> LocalJsonResult {
+    if tenant_id != authenticated.workspace.tenant_id {
+        return Err(active_workspace_scope_error());
+    }
+    ensure_active_project(&authenticated, &project_id)?;
     let workspaces = state
         .session_store
         .list_workspaces(&project_id)
-        .map_err(local_store_error)?;
+        .map_err(local_store_error)?
+        .into_iter()
+        .filter(|workspace| workspace["tenant_id"] == tenant_id)
+        .collect::<Vec<_>>();
     Ok(Json(json!({ "items": workspaces })))
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CreateWorkspaceBody {
     name: Option<String>,
     description: Option<String>,
-    metadata: Option<Value>,
+    metadata: Option<serde_json::Map<String, Value>>,
+    use_case: Option<WorkspaceUseCase>,
+    collaboration_mode: Option<WorkspaceCollaborationMode>,
+    sandbox_code_root: Option<String>,
 }
 
 async fn create_workspace(
     State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
     Path((tenant_id, project_id)): Path<(String, String)>,
     Json(body): Json<CreateWorkspaceBody>,
 ) -> LocalJsonResult {
+    if tenant_id != authenticated.workspace.tenant_id {
+        return Err(active_workspace_scope_error());
+    }
+    ensure_active_project(&authenticated, &project_id)?;
     let now = now_iso();
-    let workspace = json!({
-        "id": format!("local-workspace-{}", Uuid::new_v4()),
-        "tenant_id": tenant_id,
-        "project_id": project_id,
-        "name": body.name.unwrap_or_else(|| "Local workspace".to_string()),
-        "description": body.description,
-        "status": "open",
-        "created_at": now,
-        "updated_at": now,
-        "metadata": body.metadata.unwrap_or_else(|| json!({ "runtime": "local" })),
-    });
+    let name = body
+        .name
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "Local workspace".to_string());
+    let workspace = workspace_value(
+        format!("local-workspace-{}", Uuid::new_v4()),
+        &tenant_id,
+        &project_id,
+        WorkspaceCreateAttributes {
+            name,
+            description: body.description,
+            metadata: body.metadata,
+            use_case: body.use_case.unwrap_or_default(),
+            collaboration_mode: body.collaboration_mode.unwrap_or_default(),
+            sandbox_code_root: body.sandbox_code_root,
+        },
+        &now,
+    );
     state
         .session_store
         .insert_workspace(&workspace)
@@ -10286,7 +10319,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -10296,6 +10329,24 @@ mod tests {
             )
             .expect("provider selection table count");
         assert_eq!(selection_table, 1);
+        let task_session_table: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'desktop_new_task_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("task session table count");
+        assert_eq!(task_session_table, 1);
+        let task_session_response_column: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('desktop_new_task_sessions')
+                 WHERE name = 'response_json' AND \"notnull\" = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("task session response column count");
+        assert_eq!(task_session_response_column, 1);
         let stored_installation_id: String = connection
             .query_row(
                 "SELECT value_text FROM desktop_runtime_metadata WHERE key = 'installation_id'",
@@ -10320,13 +10371,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 14;")
+                .execute_batch("PRAGMA user_version = 15;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 13"));
+        assert!(error.contains("newer than supported schema version 14"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -11025,7 +11076,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 13);
+        assert_eq!(schema_version, 14);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -11554,6 +11605,737 @@ mod tests {
             projection["conversation"]["workspace_id"],
             "local-demo-desktop-client-main"
         );
+    }
+
+    fn create_task_session_request(idempotency_key: &str, title: &str) -> Value {
+        json!({
+            "idempotency_key": idempotency_key,
+            "workspace": {
+                "kind": "create",
+                "name": title,
+                "description": "An atomic desktop task session",
+                "metadata": {
+                    "source": "desktop",
+                    "retained": true,
+                    "use_case": "research",
+                    "collaboration_mode": "autonomous",
+                    "sandbox_code_root": "/tmp/untrusted-task-root",
+                },
+                "use_case": "programming",
+                "collaboration_mode": "multi_agent_shared",
+                "sandbox_code_root": "/tmp/atomic-task-session",
+            },
+            "conversation": {
+                "title": title,
+                "capability_mode": "code",
+            },
+            "initial_message": {
+                "content": "Build the approved desktop task flow",
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn task_session_route_creates_bound_metadata_complete_session_and_replays() {
+        let state = test_state("task-session-replay-secret");
+        let app = local_router(Arc::clone(&state));
+        let request = create_task_session_request("task-session-replay", "Atomic task session");
+
+        let first = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-replay-secret",
+                request.clone(),
+            ))
+            .await
+            .expect("first task session response");
+        assert_eq!(first.status(), StatusCode::OK);
+        let first = response_json(first).await;
+        assert_eq!(first["replayed"], false);
+        assert_eq!(first["workspace"]["name"], "Atomic task session");
+        assert_eq!(
+            first["workspace"]["description"],
+            "An atomic desktop task session"
+        );
+        assert_eq!(first["workspace"]["metadata"]["source"], "desktop");
+        assert_eq!(first["workspace"]["metadata"]["retained"], true);
+        assert_eq!(first["workspace"]["metadata"]["use_case"], "programming");
+        assert_eq!(
+            first["workspace"]["metadata"]["collaboration_mode"],
+            "multi_agent_shared"
+        );
+        assert_eq!(
+            first["workspace"]["metadata"]["sandbox_code_root"],
+            "/tmp/atomic-task-session"
+        );
+        assert_eq!(first["workspace"]["use_case"], "programming");
+        assert_eq!(
+            first["workspace"]["collaboration_mode"],
+            "multi_agent_shared"
+        );
+        assert_eq!(
+            first["workspace"]["sandbox_code_root"],
+            "/tmp/atomic-task-session"
+        );
+        assert_eq!(first["conversation"]["current_mode"], "plan");
+        assert_eq!(
+            first["conversation"]["workspace_id"],
+            first["workspace"]["id"]
+        );
+        assert_eq!(
+            first["initial_message"]["workspace_id"],
+            first["workspace"]["id"]
+        );
+        assert_eq!(
+            first["initial_message"]["content"],
+            "Build the approved desktop task flow"
+        );
+        let original_conversation = first["conversation"].clone();
+
+        let conversation_id = first["conversation"]["id"]
+            .as_str()
+            .expect("created conversation id");
+        let mut persisted_conversation = state
+            .session_store
+            .conversation(conversation_id)
+            .expect("query created conversation")
+            .expect("created conversation");
+        persisted_conversation.current_mode = ConversationRunMode::Build;
+        persisted_conversation.updated_at = now_iso();
+        state
+            .session_store
+            .update_conversation(&persisted_conversation)
+            .expect("mutate conversation after task session creation");
+
+        let replay = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-replay-secret",
+                request,
+            ))
+            .await
+            .expect("replayed task session response");
+        assert_eq!(replay.status(), StatusCode::OK);
+        let replay = response_json(replay).await;
+        assert_eq!(replay["replayed"], true);
+        assert_eq!(replay["workspace"]["id"], first["workspace"]["id"]);
+        assert_eq!(replay["conversation"]["id"], first["conversation"]["id"]);
+        assert_eq!(replay["conversation"]["current_mode"], "plan");
+        assert_eq!(replay["conversation"], original_conversation);
+        assert_eq!(
+            replay["initial_message"]["id"],
+            first["initial_message"]["id"]
+        );
+        assert_eq!(
+            state
+                .session_store
+                .conversation(conversation_id)
+                .expect("query mutated conversation")
+                .expect("mutated conversation")
+                .current_mode,
+            ConversationRunMode::Build
+        );
+
+        assert_eq!(
+            state
+                .session_store
+                .list_workspaces("local-project")
+                .expect("workspaces")
+                .iter()
+                .filter(|workspace| workspace["name"] == "Atomic task session")
+                .count(),
+            1
+        );
+        assert_eq!(
+            state
+                .session_store
+                .list_conversations("local-project", None)
+                .expect("conversations")
+                .iter()
+                .filter(|conversation| conversation.title == "Atomic task session")
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn task_session_route_rejects_changed_payload_for_idempotency_key() {
+        let state = test_state("task-session-conflict-secret");
+        let app = local_router(Arc::clone(&state));
+        let first_request = create_task_session_request("task-session-conflict", "First title");
+        let first = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-conflict-secret",
+                first_request,
+            ))
+            .await
+            .expect("first conflict fixture response");
+        assert_eq!(first.status(), StatusCode::OK);
+
+        let conflict = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-conflict-secret",
+                create_task_session_request("task-session-conflict", "Changed title"),
+            ))
+            .await
+            .expect("task session conflict response");
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response_json(conflict).await["code"],
+            "TASK_SESSION_IDEMPOTENCY_CONFLICT"
+        );
+        assert_eq!(
+            state
+                .session_store
+                .list_conversations("local-project", None)
+                .expect("conversations")
+                .iter()
+                .filter(|conversation| {
+                    matches!(conversation.title.as_str(), "First title" | "Changed title")
+                })
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn task_session_receipt_replays_and_conflicts_after_store_reopen() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create task session restart root");
+        let store_path = root.join("task-session-restart.db");
+        let credential = "task-session-restart-secret";
+        let request = create_task_session_request("task-session-restart", "Restart-safe task");
+
+        let (workspace_id, conversation_id, initial_message_id) = {
+            let state = Arc::new(
+                LocalRuntimeState::new(
+                    root.clone(),
+                    LocalToolHost::new(&root).expect("restart tool host"),
+                    Arc::new(SqliteCheckpointStore::in_memory().expect("restart checkpoint store")),
+                    credential.to_string(),
+                    DesktopSessionStore::open(&store_path).expect("open restart session store"),
+                )
+                .expect("restart local runtime state"),
+            );
+            state
+                .session_store
+                .seed_test_session(credential)
+                .expect("seed restart session");
+            let response = local_router(state)
+                .oneshot(authenticated_json_request(
+                    "POST",
+                    "/api/v1/tenants/local/projects/local-project/task-sessions",
+                    credential,
+                    request.clone(),
+                ))
+                .await
+                .expect("create restart task session");
+            assert_eq!(response.status(), StatusCode::OK);
+            let response = response_json(response).await;
+            (
+                response["workspace"]["id"]
+                    .as_str()
+                    .expect("restart workspace id")
+                    .to_string(),
+                response["conversation"]["id"]
+                    .as_str()
+                    .expect("restart conversation id")
+                    .to_string(),
+                response["initial_message"]["id"]
+                    .as_str()
+                    .expect("restart initial message id")
+                    .to_string(),
+            )
+        };
+
+        {
+            let state = Arc::new(
+                LocalRuntimeState::new(
+                    root.clone(),
+                    LocalToolHost::new(&root).expect("reopened tool host"),
+                    Arc::new(
+                        SqliteCheckpointStore::in_memory().expect("reopened checkpoint store"),
+                    ),
+                    credential.to_string(),
+                    DesktopSessionStore::open(&store_path).expect("reopen task session store"),
+                )
+                .expect("reopened local runtime state"),
+            );
+            let app = local_router(state);
+            let replay = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "POST",
+                    "/api/v1/tenants/local/projects/local-project/task-sessions",
+                    credential,
+                    request,
+                ))
+                .await
+                .expect("replay reopened task session");
+            assert_eq!(replay.status(), StatusCode::OK);
+            let replay = response_json(replay).await;
+            assert_eq!(replay["replayed"], true);
+            assert_eq!(replay["workspace"]["id"], workspace_id);
+            assert_eq!(replay["conversation"]["id"], conversation_id);
+            assert_eq!(replay["initial_message"]["id"], initial_message_id);
+
+            let conflict = app
+                .oneshot(authenticated_json_request(
+                    "POST",
+                    "/api/v1/tenants/local/projects/local-project/task-sessions",
+                    credential,
+                    create_task_session_request("task-session-restart", "Changed after restart"),
+                ))
+                .await
+                .expect("conflict reopened task session");
+            assert_eq!(conflict.status(), StatusCode::CONFLICT);
+        }
+
+        std::fs::remove_dir_all(root).expect("remove task session restart root");
+    }
+
+    #[tokio::test]
+    async fn task_session_route_rejects_unknown_request_fields() {
+        let state = test_state("task-session-strict-secret");
+        let app = local_router(state);
+        for object_pointer in ["", "/workspace", "/conversation", "/initial_message"] {
+            let mut request = create_task_session_request("task-session-strict", "Strict request");
+            request
+                .pointer_mut(object_pointer)
+                .expect("strict request object")["unexpected"] = json!(true);
+            let response = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "POST",
+                    "/api/v1/tenants/local/projects/local-project/task-sessions",
+                    "task-session-strict-secret",
+                    request,
+                ))
+                .await
+                .expect("strict task session response");
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        }
+
+        let mut request = create_task_session_request("task-session-strict", "Strict request");
+        request["conversation"]["capability_mode"] = json!("unavailable");
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-strict-secret",
+                request,
+            ))
+            .await
+            .expect("strict task session capability response");
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn task_session_route_supports_existing_workspace_without_duplicate_workspace() {
+        let state = test_state("task-session-existing-secret");
+        let workspace_count = state
+            .session_store
+            .list_workspaces("local-project")
+            .expect("workspaces before task session")
+            .len();
+        let response = local_router(Arc::clone(&state))
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-existing-secret",
+                json!({
+                    "idempotency_key": "task-session-existing",
+                    "workspace": {
+                        "kind": "existing",
+                        "workspace_id": "local-workspace",
+                    },
+                    "conversation": {
+                        "title": "Existing workspace task",
+                        "capability_mode": "work",
+                    },
+                    "initial_message": {
+                        "content": "Continue in the selected workspace",
+                    },
+                }),
+            ))
+            .await
+            .expect("existing workspace task session response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = response_json(response).await;
+        assert_eq!(payload["workspace"]["id"], "local-workspace");
+        assert_eq!(payload["conversation"]["workspace_id"], "local-workspace");
+        assert_eq!(payload["conversation"]["current_mode"], "plan");
+        assert_eq!(
+            state
+                .session_store
+                .list_workspaces("local-project")
+                .expect("workspaces after task session")
+                .len(),
+            workspace_count
+        );
+    }
+
+    #[tokio::test]
+    async fn task_session_and_workspace_routes_reject_inactive_scope_without_writes() {
+        let state = test_state("task-session-scope-secret");
+        state
+            .session_store
+            .insert_workspace(&json!({
+                "id": "outside-tenant-same-project",
+                "tenant_id": "outside",
+                "project_id": "local-project",
+                "name": "Outside tenant workspace",
+            }))
+            .expect("insert outside tenant workspace");
+        let app = local_router(Arc::clone(&state));
+        let wrong_tenant = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/outside/projects/local-project/task-sessions",
+                "task-session-scope-secret",
+                create_task_session_request("wrong-tenant-task-session", "Wrong tenant"),
+            ))
+            .await
+            .expect("wrong tenant task session response");
+        assert_eq!(wrong_tenant.status(), StatusCode::FORBIDDEN);
+
+        let wrong_project = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/outside/task-sessions",
+                "task-session-scope-secret",
+                create_task_session_request("wrong-project-task-session", "Wrong project"),
+            ))
+            .await
+            .expect("wrong project task session response");
+        assert_eq!(wrong_project.status(), StatusCode::FORBIDDEN);
+
+        let foreign_existing_workspace = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-scope-secret",
+                json!({
+                    "idempotency_key": "foreign-existing-workspace",
+                    "workspace": {
+                        "kind": "existing",
+                        "workspace_id": "outside-tenant-same-project",
+                    },
+                    "conversation": {
+                        "title": "Foreign existing workspace task",
+                        "capability_mode": "work",
+                    },
+                    "initial_message": { "content": "Must remain tenant scoped" },
+                }),
+            ))
+            .await
+            .expect("foreign existing workspace response");
+        assert_eq!(foreign_existing_workspace.status(), StatusCode::FORBIDDEN);
+
+        let wrong_workspace_create = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/outside/projects/local-project/workspaces",
+                "task-session-scope-secret",
+                json!({ "name": "Wrong scoped workspace" }),
+            ))
+            .await
+            .expect("wrong scope workspace create response");
+        assert_eq!(wrong_workspace_create.status(), StatusCode::FORBIDDEN);
+
+        let wrong_workspace_list = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/tenants/local/projects/outside/workspaces",
+                "task-session-scope-secret",
+                json!({}),
+            ))
+            .await
+            .expect("wrong scope workspace list response");
+        assert_eq!(wrong_workspace_list.status(), StatusCode::FORBIDDEN);
+
+        let active_workspace_list = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/tenants/local/projects/local-project/workspaces",
+                "task-session-scope-secret",
+                json!({}),
+            ))
+            .await
+            .expect("active scope workspace list response");
+        assert_eq!(active_workspace_list.status(), StatusCode::OK);
+        assert!(!response_json(active_workspace_list).await["items"]
+            .as_array()
+            .expect("workspace items")
+            .iter()
+            .any(|workspace| workspace["id"] == "outside-tenant-same-project"));
+
+        assert!(!state
+            .session_store
+            .list_workspaces("local-project")
+            .expect("workspaces")
+            .iter()
+            .any(|workspace| workspace["name"] == "Wrong scoped workspace"));
+        assert!(!state
+            .session_store
+            .list_conversations("local-project", None)
+            .expect("conversations")
+            .iter()
+            .any(|conversation| {
+                matches!(
+                    conversation.title.as_str(),
+                    "Wrong tenant" | "Wrong project" | "Foreign existing workspace task"
+                )
+            }));
+
+        let stale_context = state
+            .session_store
+            .validate_session_credential("task-session-scope-secret", Utc::now().timestamp_millis())
+            .expect("validate stale context fixture")
+            .expect("stale context fixture");
+        state
+            .session_store
+            .connection()
+            .expect("workspace context connection")
+            .execute(
+                "UPDATE desktop_workspace_contexts SET revision = revision + 1 WHERE user_id = ?1",
+                [&stale_context.user.user_id],
+            )
+            .expect("advance authoritative workspace context revision");
+        let stale_body = serde_json::from_value(create_task_session_request(
+            "stale-context-task-session",
+            "Stale context task",
+        ))
+        .expect("deserialize stale task session body");
+        let stale_response = task_session::create_task_session(
+            State(Arc::clone(&state)),
+            Extension(stale_context),
+            Path(("local".to_string(), "local-project".to_string())),
+            Json(stale_body),
+        )
+        .await
+        .expect_err("stale context must fail transaction validation");
+        assert_eq!(stale_response.0, StatusCode::FORBIDDEN);
+        assert!(!state
+            .session_store
+            .list_conversations("local-project", None)
+            .expect("conversations after stale context")
+            .iter()
+            .any(|conversation| conversation.title == "Stale context task"));
+        assert!(!state
+            .session_store
+            .list_workspaces("local-project")
+            .expect("workspaces after stale context")
+            .iter()
+            .any(|workspace| workspace["name"] == "Stale context task"));
+        let stale_receipt_count: i64 = state
+            .session_store
+            .connection()
+            .expect("stale receipt connection")
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_new_task_sessions WHERE idempotency_key = ?1",
+                ["stale-context-task-session"],
+                |row| row.get(0),
+            )
+            .expect("count stale context receipts");
+        assert_eq!(stale_receipt_count, 0);
+    }
+
+    #[tokio::test]
+    async fn workspace_create_route_preserves_typed_metadata_and_rejects_unknown_fields() {
+        let state = test_state("workspace-create-contract-secret");
+        let app = local_router(state);
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/workspaces",
+                "workspace-create-contract-secret",
+                json!({
+                    "name": "Typed workspace",
+                    "description": "Preserve the desktop contract",
+                    "metadata": {
+                        "source": "desktop",
+                        "retained": true,
+                        "use_case": "general",
+                        "collaboration_mode": "autonomous",
+                        "sandbox_code_root": "/tmp/untrusted-workspace-root",
+                    },
+                    "use_case": "research",
+                    "collaboration_mode": "multi_agent_shared",
+                    "sandbox_code_root": "/tmp/typed-workspace",
+                }),
+            ))
+            .await
+            .expect("typed workspace response");
+        assert_eq!(created.status(), StatusCode::OK);
+        let created = response_json(created).await;
+        assert_eq!(created["use_case"], "research");
+        assert_eq!(created["collaboration_mode"], "multi_agent_shared");
+        assert_eq!(created["sandbox_code_root"], "/tmp/typed-workspace");
+        assert_eq!(created["metadata"]["retained"], true);
+        assert_eq!(created["metadata"]["use_case"], "research");
+        assert_eq!(
+            created["metadata"]["collaboration_mode"],
+            "multi_agent_shared"
+        );
+        assert_eq!(
+            created["metadata"]["sandbox_code_root"],
+            "/tmp/typed-workspace"
+        );
+
+        let without_sandbox = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/workspaces",
+                "workspace-create-contract-secret",
+                json!({
+                    "name": "Workspace without sandbox",
+                    "metadata": { "sandbox_code_root": "/tmp/untrusted-workspace-root" },
+                    "use_case": "conversation",
+                    "collaboration_mode": "single_agent",
+                }),
+            ))
+            .await
+            .expect("workspace without sandbox response");
+        assert_eq!(without_sandbox.status(), StatusCode::OK);
+        let without_sandbox = response_json(without_sandbox).await;
+        assert!(without_sandbox["sandbox_code_root"].is_null());
+        assert!(without_sandbox["metadata"]["sandbox_code_root"].is_null());
+
+        let invalid = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/workspaces",
+                "workspace-create-contract-secret",
+                json!({
+                    "name": "Invalid workspace",
+                    "unexpected": true,
+                }),
+            ))
+            .await
+            .expect("strict workspace response");
+        assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn task_session_transaction_rolls_back_workspace_when_conversation_insert_fails() {
+        let state = test_state("task-session-conversation-failure-secret");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            connection
+                .execute_batch(
+                    "CREATE TEMP TRIGGER fail_task_session_conversation
+                     BEFORE INSERT ON desktop_conversations
+                     WHEN NEW.id LIKE 'local-conversation-%'
+                     BEGIN
+                       SELECT RAISE(ABORT, 'forced task session conversation failure');
+                     END;",
+                )
+                .expect("install conversation failure");
+        }
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-conversation-failure-secret",
+                create_task_session_request(
+                    "task-session-conversation-failure",
+                    "Rolled back workspace",
+                ),
+            ))
+            .await
+            .expect("conversation failure response");
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(!state
+            .session_store
+            .list_workspaces("local-project")
+            .expect("workspaces")
+            .iter()
+            .any(|workspace| workspace["name"] == "Rolled back workspace"));
+        assert!(!state
+            .session_store
+            .list_conversations("local-project", None)
+            .expect("conversations")
+            .iter()
+            .any(|conversation| conversation.title == "Rolled back workspace"));
+    }
+
+    #[tokio::test]
+    async fn task_session_transaction_rolls_back_all_rows_when_receipt_insert_fails() {
+        let state = test_state("task-session-receipt-failure-secret");
+        {
+            let connection = state.session_store.connection().expect("connection");
+            connection
+                .execute_batch(
+                    "CREATE TEMP TRIGGER fail_task_session_receipt
+                     BEFORE INSERT ON desktop_new_task_sessions
+                     BEGIN
+                       SELECT RAISE(ABORT, 'forced task session receipt failure');
+                     END;",
+                )
+                .expect("install receipt failure");
+        }
+
+        let response = local_router(Arc::clone(&state))
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/tenants/local/projects/local-project/task-sessions",
+                "task-session-receipt-failure-secret",
+                create_task_session_request(
+                    "task-session-receipt-failure",
+                    "Receipt rollback task",
+                ),
+            ))
+            .await
+            .expect("receipt failure response");
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(!state
+            .session_store
+            .list_workspaces("local-project")
+            .expect("workspaces")
+            .iter()
+            .any(|workspace| workspace["name"] == "Receipt rollback task"));
+        assert!(!state
+            .session_store
+            .list_conversations("local-project", None)
+            .expect("conversations")
+            .iter()
+            .any(|conversation| conversation.title == "Receipt rollback task"));
+        let connection = state.session_store.connection().expect("connection");
+        let initial_message_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_workspace_messages
+                 WHERE json_extract(value_json, '$.content') = ?1",
+                ["Build the approved desktop task flow"],
+                |row| row.get(0),
+            )
+            .expect("count rolled back initial messages");
+        let receipt_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_new_task_sessions
+                 WHERE idempotency_key = ?1",
+                ["task-session-receipt-failure"],
+                |row| row.get(0),
+            )
+            .expect("count rolled back receipts");
+        assert_eq!(initial_message_count, 0);
+        assert_eq!(receipt_count, 0);
     }
 
     #[test]

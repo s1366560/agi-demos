@@ -294,6 +294,44 @@ export type AgentPlanMode = 'plan' | 'build';
 export type AgentRuntimeMode = AgentPlanMode | 'explore';
 export type AgentCapabilityMode = 'work' | 'code';
 
+export type TaskSessionWorkspaceCreateInput = {
+  kind: 'create';
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  use_case?: 'general' | 'programming' | 'conversation' | 'research' | 'operations';
+  collaboration_mode?:
+    | 'single_agent'
+    | 'multi_agent_shared'
+    | 'multi_agent_isolated'
+    | 'autonomous';
+  sandbox_code_root?: string;
+};
+
+export type TaskSessionWorkspaceExistingInput = {
+  kind: 'existing';
+  workspace_id: string;
+};
+
+export type CreateTaskSessionRequest = {
+  idempotency_key: string;
+  workspace: TaskSessionWorkspaceCreateInput | TaskSessionWorkspaceExistingInput;
+  conversation: {
+    title: string;
+    capability_mode: AgentCapabilityMode;
+  };
+  initial_message: {
+    content: string;
+  };
+};
+
+export type CreateTaskSessionResponse = {
+  replayed: boolean;
+  workspace: WorkspaceSummary;
+  conversation: AgentConversation;
+  initial_message: WorkspaceMessage;
+};
+
 export type AgentPlanModeResponse = {
   conversation_id: string;
   mode: AgentPlanMode;

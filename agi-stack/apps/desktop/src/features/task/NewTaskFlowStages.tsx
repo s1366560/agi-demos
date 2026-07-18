@@ -2,8 +2,6 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import {
   CheckCircledIcon,
   CodeIcon,
-  DesktopIcon,
-  EnterFullScreenIcon,
   FileTextIcon,
   LightningBoltIcon,
   LockClosedIcon,
@@ -32,7 +30,6 @@ import {
   type ReviewPlanStep,
 } from './newTaskPlanModel';
 import {
-  EnvironmentButton,
   handleRadioArrowKey,
   ModeCard,
   PlanningCheck,
@@ -92,19 +89,16 @@ type DefinitionStageProps = {
   objective: string;
   kind: NewTaskKind;
   contextSources: NewTaskContextSource[];
-  workspaceRoot: string;
   workspaceSelection: string;
   newWorkspaceValue: string;
   workspaces: WorkspaceSummary[];
-  environmentKind: DesktopExecutionEnvironmentKind;
+  workspaceSelectionDisabled: boolean;
   titleInputRef: React.RefObject<HTMLInputElement | null>;
   onTitleChange: (value: string) => void;
   onObjectiveChange: (value: string) => void;
   onKindChange: (value: NewTaskKind) => void;
   onContextSourcesChange: (value: NewTaskContextSource[]) => void;
-  onWorkspaceRootChange: (value: string) => void;
   onWorkspaceSelectionChange: (value: string) => void;
-  onEnvironmentKindChange: (value: DesktopExecutionEnvironmentKind) => void;
 };
 
 export function NewTaskDefinitionStage({
@@ -112,19 +106,16 @@ export function NewTaskDefinitionStage({
   objective,
   kind,
   contextSources,
-  workspaceRoot,
   workspaceSelection,
   newWorkspaceValue,
   workspaces,
-  environmentKind,
+  workspaceSelectionDisabled,
   titleInputRef,
   onTitleChange,
   onObjectiveChange,
   onKindChange,
   onContextSourcesChange,
-  onWorkspaceRootChange,
   onWorkspaceSelectionChange,
-  onEnvironmentKindChange,
 }: DefinitionStageProps) {
   const { t } = useI18n();
   const toggleContext = (value: NewTaskContextSource) => {
@@ -194,6 +185,7 @@ export function NewTaskDefinitionStage({
           <span>{t('task.workspace')}</span>
           <select
             value={workspaceSelection}
+            disabled={workspaceSelectionDisabled}
             onChange={(event) => onWorkspaceSelectionChange(event.target.value)}
           >
             <option value={newWorkspaceValue}>{t('task.createWorkspace')}</option>
@@ -229,37 +221,6 @@ export function NewTaskDefinitionStage({
             })}
           </div>
         </fieldset>
-        {kind === 'programming' ? (
-          <div className="new-task-code-boundary">
-            <label className="new-task-field">
-              <span>{t('task.codeRoot')}</span>
-              <input
-                value={workspaceRoot}
-                placeholder="/workspace/repository"
-                onChange={(event) => onWorkspaceRootChange(event.target.value)}
-              />
-            </label>
-            <fieldset className="new-task-environment-field">
-              <legend>{t('task.environment')}</legend>
-              <div role="radiogroup">
-                <EnvironmentButton
-                  selected={environmentKind === 'worktree'}
-                  icon={<EnterFullScreenIcon />}
-                  title={t('task.isolatedWorktree')}
-                  description={t('task.isolatedWorktreeDescription')}
-                  onSelect={() => onEnvironmentKindChange('worktree')}
-                />
-                <EnvironmentButton
-                  selected={environmentKind === 'local'}
-                  icon={<DesktopIcon />}
-                  title={t('task.currentWorkspace')}
-                  description={t('task.currentWorkspaceDescription')}
-                  onSelect={() => onEnvironmentKindChange('local')}
-                />
-              </div>
-            </fieldset>
-          </div>
-        ) : null}
         <div className="new-task-protection-note">
           <LockClosedIcon />
           <span>
@@ -297,13 +258,21 @@ export function NewTaskPlanningStage({
   return (
     <div className="new-task-planning">
       <section className="new-task-planning-main" aria-live="polite">
-        <span className="new-task-planning-icon" aria-hidden>
+        <span
+          className={`new-task-planning-icon ${kind === 'programming' ? 'code' : 'work'}`}
+          aria-hidden
+        >
           <MagicWandIcon />
         </span>
         <span className="new-task-eyebrow">{t('task.agentPlanning')}</span>
         <h2>{t('task.planningFor', { title })}</h2>
         <p>{t('task.planningSafety')}</p>
-        <div className="new-task-planning-progress" aria-label={t('task.waitingForPlan')}>
+        <div
+          className="new-task-planning-progress"
+          role="progressbar"
+          aria-label={t('task.waitingForPlan')}
+          aria-valuetext={t('task.waitingForPlan')}
+        >
           <i />
         </div>
         <div className="new-task-planning-checks">

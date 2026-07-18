@@ -29,7 +29,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 13;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 14;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 
@@ -42,6 +42,53 @@ pub(super) struct PreparedToolInvocation {
 pub(super) enum DesktopClientTurnClaimError {
     PayloadConflict,
     Storage(String),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum DesktopTaskSessionError {
+    IdempotencyConflict,
+    WorkspaceNotFound,
+    ScopeMismatch,
+    Storage(String),
+}
+
+impl std::fmt::Display for DesktopTaskSessionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IdempotencyConflict => formatter
+                .write_str("task session idempotency key is already bound to a different request"),
+            Self::WorkspaceNotFound => formatter.write_str("workspace not found"),
+            Self::ScopeMismatch => {
+                formatter.write_str("resource is outside the active workspace context")
+            }
+            Self::Storage(error) => formatter.write_str(error),
+        }
+    }
+}
+
+pub(super) enum TaskSessionWorkspaceInput {
+    Create(Value),
+    Existing(String),
+}
+
+pub(super) struct CreateTaskSessionInput {
+    pub(super) user_id: String,
+    pub(super) expected_context_revision: u64,
+    pub(super) tenant_id: String,
+    pub(super) project_id: String,
+    pub(super) idempotency_key: String,
+    pub(super) payload_hash: String,
+    pub(super) workspace: TaskSessionWorkspaceInput,
+    pub(super) conversation: LocalConversation,
+    pub(super) initial_message: Value,
+    pub(super) now: String,
+}
+
+pub(super) struct CreateTaskSessionOutcome {
+    pub(super) replayed: bool,
+    pub(super) workspace: Value,
+    pub(super) conversation: Value,
+    pub(super) initial_message: Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -312,6 +359,20 @@ impl DesktopSessionStore {
                    FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id)
                      ON DELETE CASCADE
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_new_task_sessions (
+                   idempotency_key TEXT PRIMARY KEY,
+                   payload_hash TEXT NOT NULL,
+                   tenant_id TEXT NOT NULL,
+                   project_id TEXT NOT NULL,
+                   workspace_id TEXT NOT NULL,
+                   conversation_id TEXT NOT NULL UNIQUE,
+                   initial_message_id TEXT NOT NULL UNIQUE,
+                   response_json TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   FOREIGN KEY(workspace_id) REFERENCES desktop_workspaces(id),
+                   FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id),
+                   FOREIGN KEY(initial_message_id) REFERENCES desktop_workspace_messages(id)
+                 );
                  CREATE TABLE IF NOT EXISTS desktop_run_inputs (
                    id TEXT PRIMARY KEY,
                    conversation_id TEXT NOT NULL,
@@ -431,6 +492,8 @@ impl DesktopSessionStore {
                    ON desktop_run_events(run_id, revision);
                  CREATE INDEX IF NOT EXISTS idx_desktop_client_turns_conversation
                    ON desktop_client_turns(conversation_id, created_at);
+                 CREATE INDEX IF NOT EXISTS idx_desktop_new_task_sessions_scope
+                   ON desktop_new_task_sessions(tenant_id, project_id, created_at);
                  CREATE INDEX IF NOT EXISTS idx_desktop_run_inputs_run
                    ON desktop_run_inputs(run_id, sequence);
                  CREATE INDEX IF NOT EXISTS idx_desktop_run_inputs_pending
@@ -892,16 +955,163 @@ impl DesktopSessionStore {
     }
 
     pub(super) fn insert_workspace(&self, workspace: &Value) -> Result<(), String> {
-        let id = required_string(workspace, "id")?;
-        let project_id = required_string(workspace, "project_id")?;
-        let value_json = serde_json::to_string(workspace).map_err(|error| error.to_string())?;
-        self.connection()?
+        let connection = self.connection()?;
+        insert_workspace_record(&connection, workspace)
+    }
+
+    pub(super) fn create_task_session(
+        &self,
+        input: CreateTaskSessionInput,
+    ) -> Result<CreateTaskSessionOutcome, DesktopTaskSessionError> {
+        let CreateTaskSessionInput {
+            user_id,
+            expected_context_revision,
+            tenant_id,
+            project_id,
+            idempotency_key,
+            payload_hash,
+            workspace,
+            conversation,
+            initial_message,
+            now,
+        } = input;
+        let mut connection = self
+            .connection()
+            .map_err(DesktopTaskSessionError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+
+        validate_task_session_context(
+            &transaction,
+            &user_id,
+            expected_context_revision,
+            &tenant_id,
+            &project_id,
+        )?;
+
+        if let Some(receipt) = query_task_session_receipt(&transaction, &idempotency_key)? {
+            if receipt.payload_hash != payload_hash
+                || receipt.tenant_id != tenant_id
+                || receipt.project_id != project_id
+            {
+                return Err(DesktopTaskSessionError::IdempotencyConflict);
+            }
+            let TaskSessionResponseSnapshot {
+                workspace,
+                conversation,
+                initial_message,
+            } = receipt.response;
+            validate_workspace_scope_value(&workspace, &tenant_id, &project_id)?;
+            if required_string(&workspace, "id").map_err(DesktopTaskSessionError::Storage)?
+                != receipt.workspace_id
+                || required_string(&conversation, "id").map_err(DesktopTaskSessionError::Storage)?
+                    != receipt.conversation_id
+                || required_string(&conversation, "tenant_id")
+                    .map_err(DesktopTaskSessionError::Storage)?
+                    != tenant_id
+                || required_string(&conversation, "project_id")
+                    .map_err(DesktopTaskSessionError::Storage)?
+                    != project_id
+                || required_string(&conversation, "workspace_id")
+                    .map_err(DesktopTaskSessionError::Storage)?
+                    != receipt.workspace_id
+                || required_string(&conversation, "current_mode")
+                    .map_err(DesktopTaskSessionError::Storage)?
+                    != "plan"
+                || required_string(&initial_message, "id")
+                    .map_err(DesktopTaskSessionError::Storage)?
+                    != receipt.initial_message_id
+                || required_string(&initial_message, "workspace_id")
+                    .map_err(DesktopTaskSessionError::Storage)?
+                    != receipt.workspace_id
+            {
+                return Err(DesktopTaskSessionError::ScopeMismatch);
+            }
+            transaction
+                .commit()
+                .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+            return Ok(CreateTaskSessionOutcome {
+                replayed: true,
+                workspace,
+                conversation,
+                initial_message,
+            });
+        }
+
+        let workspace = match workspace {
+            TaskSessionWorkspaceInput::Create(workspace) => {
+                validate_workspace_scope_value(&workspace, &tenant_id, &project_id)?;
+                insert_workspace_record(&transaction, &workspace)
+                    .map_err(DesktopTaskSessionError::Storage)?;
+                workspace
+            }
+            TaskSessionWorkspaceInput::Existing(workspace_id) => {
+                let workspace = query_workspace_record(&transaction, &workspace_id)
+                    .map_err(DesktopTaskSessionError::Storage)?
+                    .ok_or(DesktopTaskSessionError::WorkspaceNotFound)?;
+                validate_workspace_scope_value(&workspace, &tenant_id, &project_id)?;
+                workspace
+            }
+        };
+        let workspace_id =
+            required_string(&workspace, "id").map_err(DesktopTaskSessionError::Storage)?;
+        if conversation.tenant_id != tenant_id
+            || conversation.project_id != project_id
+            || conversation.workspace_id.as_deref() != Some(workspace_id.as_str())
+            || conversation.current_mode != super::ConversationRunMode::Plan
+        {
+            return Err(DesktopTaskSessionError::ScopeMismatch);
+        }
+        insert_conversation_record(&transaction, &conversation)
+            .map_err(DesktopTaskSessionError::Storage)?;
+        let conversation_response =
+            task_session_conversation_value(&conversation, &workspace, &user_id);
+
+        let message_workspace_id = required_string(&initial_message, "workspace_id")
+            .map_err(DesktopTaskSessionError::Storage)?;
+        if message_workspace_id != workspace_id {
+            return Err(DesktopTaskSessionError::ScopeMismatch);
+        }
+        insert_workspace_message_record(&transaction, &workspace_id, &initial_message)
+            .map_err(DesktopTaskSessionError::Storage)?;
+        let initial_message_id =
+            required_string(&initial_message, "id").map_err(DesktopTaskSessionError::Storage)?;
+        let response_json = serde_json::to_string(&TaskSessionResponseSnapshot {
+            workspace: workspace.clone(),
+            conversation: conversation_response.clone(),
+            initial_message: initial_message.clone(),
+        })
+        .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+
+        transaction
             .execute(
-                "INSERT INTO desktop_workspaces(id, project_id, value_json) VALUES (?1, ?2, ?3)",
-                params![id, project_id, value_json],
+                "INSERT INTO desktop_new_task_sessions(
+                   idempotency_key, payload_hash, tenant_id, project_id, workspace_id,
+                   conversation_id, initial_message_id, response_json, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    idempotency_key,
+                    payload_hash,
+                    tenant_id,
+                    project_id,
+                    workspace_id,
+                    conversation.id,
+                    initial_message_id,
+                    response_json,
+                    now,
+                ],
             )
-            .map_err(|error| error.to_string())?;
-        Ok(())
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        Ok(CreateTaskSessionOutcome {
+            replayed: false,
+            workspace,
+            conversation: conversation_response,
+            initial_message,
+        })
     }
 
     pub(super) fn list_workspaces(&self, project_id: &str) -> Result<Vec<Value>, String> {
@@ -1255,25 +1465,8 @@ impl DesktopSessionStore {
         workspace_id: &str,
         message: &Value,
     ) -> Result<(), String> {
-        let id = required_string(message, "id")?;
-        let value_json = serde_json::to_string(message).map_err(|error| error.to_string())?;
         let connection = self.connection()?;
-        let position: i64 = connection
-            .query_row(
-                "SELECT COALESCE(MAX(position), 0) + 1 FROM desktop_workspace_messages
-                 WHERE workspace_id = ?1",
-                [workspace_id],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
-        connection
-            .execute(
-                "INSERT INTO desktop_workspace_messages(id, workspace_id, position, value_json)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![id, workspace_id, position, value_json],
-            )
-            .map_err(|error| error.to_string())?;
-        Ok(())
+        insert_workspace_message_record(&connection, workspace_id, message)
     }
 
     pub(super) fn list_workspace_messages(&self, workspace_id: &str) -> Result<Vec<Value>, String> {
@@ -1291,22 +1484,8 @@ impl DesktopSessionStore {
         &self,
         conversation: &LocalConversation,
     ) -> Result<(), String> {
-        let value_json = serde_json::to_string(conversation).map_err(|error| error.to_string())?;
-        self.connection()?
-            .execute(
-                "INSERT INTO desktop_conversations(
-                   id, project_id, workspace_id, updated_at, value_json
-                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![
-                    conversation.id,
-                    conversation.project_id,
-                    conversation.workspace_id,
-                    conversation.updated_at,
-                    value_json
-                ],
-            )
-            .map_err(|error| error.to_string())?;
-        Ok(())
+        let connection = self.connection()?;
+        insert_conversation_record(&connection, conversation)
     }
 
     pub(super) fn update_conversation(
@@ -3729,6 +3908,235 @@ fn query_artifact_delivery_by_idempotency(
     value_json
         .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
         .transpose()
+}
+
+struct TaskSessionReceipt {
+    payload_hash: String,
+    tenant_id: String,
+    project_id: String,
+    workspace_id: String,
+    conversation_id: String,
+    initial_message_id: String,
+    response: TaskSessionResponseSnapshot,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TaskSessionResponseSnapshot {
+    workspace: Value,
+    conversation: Value,
+    initial_message: Value,
+}
+
+fn validate_task_session_context(
+    connection: &Connection,
+    user_id: &str,
+    expected_revision: u64,
+    tenant_id: &str,
+    project_id: &str,
+) -> Result<(), DesktopTaskSessionError> {
+    let context = connection
+        .query_row(
+            "SELECT tenant_id, project_id, revision
+             FROM desktop_workspace_contexts WHERE user_id = ?1",
+            [user_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+    let Some((active_tenant_id, active_project_id, active_revision)) = context else {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    };
+    let active_revision = u64::try_from(active_revision).map_err(|_| {
+        DesktopTaskSessionError::Storage("workspace context revision is invalid".to_string())
+    })?;
+    if active_tenant_id != tenant_id
+        || active_project_id != project_id
+        || active_revision != expected_revision
+    {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    }
+    Ok(())
+}
+
+fn query_task_session_receipt(
+    connection: &Connection,
+    idempotency_key: &str,
+) -> Result<Option<TaskSessionReceipt>, DesktopTaskSessionError> {
+    let row = connection
+        .query_row(
+            "SELECT payload_hash, tenant_id, project_id, workspace_id, conversation_id,
+                    initial_message_id, response_json
+             FROM desktop_new_task_sessions WHERE idempotency_key = ?1",
+            [idempotency_key],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+    let Some((
+        payload_hash,
+        tenant_id,
+        project_id,
+        workspace_id,
+        conversation_id,
+        initial_message_id,
+        response_json,
+    )) = row
+    else {
+        return Ok(None);
+    };
+    let response = serde_json::from_str(&response_json)
+        .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+    Ok(Some(TaskSessionReceipt {
+        payload_hash,
+        tenant_id,
+        project_id,
+        workspace_id,
+        conversation_id,
+        initial_message_id,
+        response,
+    }))
+}
+
+fn validate_workspace_scope_value(
+    workspace: &Value,
+    tenant_id: &str,
+    project_id: &str,
+) -> Result<(), DesktopTaskSessionError> {
+    let workspace_tenant_id =
+        required_string(workspace, "tenant_id").map_err(DesktopTaskSessionError::Storage)?;
+    let workspace_project_id =
+        required_string(workspace, "project_id").map_err(DesktopTaskSessionError::Storage)?;
+    if workspace_tenant_id != tenant_id || workspace_project_id != project_id {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    }
+    Ok(())
+}
+
+fn task_session_conversation_value(
+    conversation: &LocalConversation,
+    workspace: &Value,
+    user_id: &str,
+) -> Value {
+    json!({
+        "id": conversation.id,
+        "project_id": conversation.project_id,
+        "tenant_id": conversation.tenant_id,
+        "user_id": user_id,
+        "title": conversation.title,
+        "status": "active",
+        "message_count": 0,
+        "created_at": conversation.created_at,
+        "updated_at": conversation.updated_at,
+        "summary": Value::Null,
+        "agent_config": {
+            "selected_agent_id": "builtin:all-access",
+            "capability_mode": conversation.capability_mode,
+        },
+        "metadata": {
+            "runtime": "local",
+            "capability_mode": conversation.capability_mode,
+            "run": Value::Null,
+            "environment": { "kind": "local", "label": "Local runtime" },
+        },
+        "conversation_mode": "workspace",
+        "current_mode": conversation.current_mode,
+        "workspace_id": conversation.workspace_id,
+        "linked_workspace_task_id": Value::Null,
+        "workspace_name": optional_string(workspace, "name"),
+        "participant_agents": ["local-agent"],
+        "coordinator_agent_id": "local-agent",
+        "focused_agent_id": "local-agent",
+    })
+}
+
+fn insert_workspace_record(connection: &Connection, workspace: &Value) -> Result<(), String> {
+    let id = required_string(workspace, "id")?;
+    let project_id = required_string(workspace, "project_id")?;
+    let value_json = serde_json::to_string(workspace).map_err(|error| error.to_string())?;
+    connection
+        .execute(
+            "INSERT INTO desktop_workspaces(id, project_id, value_json) VALUES (?1, ?2, ?3)",
+            params![id, project_id, value_json],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn query_workspace_record(connection: &Connection, id: &str) -> Result<Option<Value>, String> {
+    let value_json = connection
+        .query_row(
+            "SELECT value_json FROM desktop_workspaces WHERE id = ?1",
+            [id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    value_json
+        .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+        .transpose()
+}
+
+fn insert_workspace_message_record(
+    connection: &Connection,
+    workspace_id: &str,
+    message: &Value,
+) -> Result<(), String> {
+    let id = required_string(message, "id")?;
+    let value_json = serde_json::to_string(message).map_err(|error| error.to_string())?;
+    let position: i64 = connection
+        .query_row(
+            "SELECT COALESCE(MAX(position), 0) + 1 FROM desktop_workspace_messages
+             WHERE workspace_id = ?1",
+            [workspace_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    connection
+        .execute(
+            "INSERT INTO desktop_workspace_messages(id, workspace_id, position, value_json)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![id, workspace_id, position, value_json],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn insert_conversation_record(
+    connection: &Connection,
+    conversation: &LocalConversation,
+) -> Result<(), String> {
+    let value_json = serde_json::to_string(conversation).map_err(|error| error.to_string())?;
+    connection
+        .execute(
+            "INSERT INTO desktop_conversations(
+               id, project_id, workspace_id, updated_at, value_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                conversation.id,
+                conversation.project_id,
+                conversation.workspace_id,
+                conversation.updated_at,
+                value_json,
+            ],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 pub(super) fn required_string(value: &Value, key: &str) -> Result<String, String> {

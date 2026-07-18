@@ -16,6 +16,8 @@ import type {
   AutomationRunListResponse,
   ConversationMessagesResponse,
   ChangeSnapshot,
+  CreateTaskSessionRequest,
+  CreateTaskSessionResponse,
   CreateRunInputRequest,
   CurrentUser,
   DesktopRuntimeConfig,
@@ -322,6 +324,20 @@ export class DesktopApiClient {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const projectId = requireValue(this.config.projectId, 'project id');
     return this.createWorkspaceForProject(projectId, name, description, tenantId);
+  }
+
+  async createTaskSession(input: CreateTaskSessionRequest): Promise<CreateTaskSessionResponse> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const projectId = requireValue(this.config.projectId, 'project id');
+    return this.request<CreateTaskSessionResponse>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+        projectId,
+      )}/task-sessions`,
+      {
+        method: 'POST',
+        body: input,
+      },
+    );
   }
 
   async createWorkspaceForProject(

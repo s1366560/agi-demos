@@ -89,6 +89,151 @@ final result: passed
 
 ---
 
+# New Task → Agent Plan → Human Review design QA
+
+Date: 2026-07-18
+
+Scope: General Agent and Code Agent task definition, atomic local task-session creation, read-only
+planning, persisted structured-plan polling, human plan preview, and the explicit approval boundary.
+
+## Visual truth and implementation evidence
+
+- Source component: `design-prototype/memstack-desktop-agent-mission-control/src/components/NewTaskFlow.jsx`
+- Source styles: `design-prototype/memstack-desktop-agent-mission-control/src/styles.css`
+- Production component: `agi-stack/apps/desktop/src/features/task/NewTaskFlow.tsx`
+- Production stages: `agi-stack/apps/desktop/src/features/task/NewTaskFlowStages.tsx`
+- QA route: `http://127.0.0.1:5173/qa/new-task-flow.html`
+- Viewport: `1280 x 720`, device scale factor `1`, English, dark theme.
+- Full-view comparisons:
+  - `qa/new-task-atomic/comparison-define-2560x720.jpg`
+  - `qa/new-task-atomic/comparison-generating-2560x720.jpg`
+  - `qa/new-task-atomic/comparison-review-2560x720.jpg`
+  - `qa/new-task-atomic/comparison-code-define-2560x720.jpg`
+- Focused review comparison:
+  `qa/new-task-atomic/comparison-review-focused-1640x560.jpg`
+
+Every comparison places the live prototype on the left and the production component on the right
+at the same viewport and state. The implementation capture uses the production `NewTaskFlow`
+component with a strict diagnostic adapter that validates the scoped request, dual credentials,
+mutation count, callbacks, immutable approval, and runtime errors; it is not a hand-built visual
+substitute.
+
+## Full-view comparison evidence
+
+- Define: header height, 3-step progress geometry, 64.5/35.5 content split, field widths, sidecar,
+  mode cards, footer, and primary action align with the source. General and Code both render the
+  source composition; the production copy truthfully names Workspace and planning authority.
+- Planning: the source and implementation share the same 70/30 canvas, title scale, progress line,
+  four-stage stack, task brief, read-only authority statement, and footer. Code tasks retain the
+  purple identity token rather than inheriting the General Agent cyan identity.
+- Review: the 70/30 canvas, title block, summary card, 74-pixel plan rows, add-step control,
+  authority sidecar, and footer align. The implementation retains a permission-profile choice
+  because approval must bind an explicit runtime authority profile.
+- No source-visible code-root or environment controls remain in Define. Those execution choices
+  are intentionally deferred until after the plan boundary instead of expanding the source form.
+
+## Focused-region comparison evidence
+
+The review heading, work-task summary, four plan rows, and Add step action were cropped from both
+current-run screenshots and placed together. Geometry and hierarchy match, while the comparison
+also exposes the remaining authoritative-data gap: the source rows contain semantic descriptions,
+expected outputs, and duration estimates, whereas the current persisted local plan tasks contain
+only content, priority, and status.
+
+## Required fidelity surfaces
+
+- Typography: heading scale, eyebrow tracking, field labels, helper copy, task-row hierarchy, and
+  footer labels now follow the source. Factual production wording is retained where the source
+  simulates capabilities.
+- Spacing and layout: header, split canvases, gutters, panel padding, row heights, footer, and
+  responsive breakpoint pass current-run side-by-side inspection and have source-contract
+  tripwires. The fixed in-app Browser
+  viewport supplied the current-run 1280-pixel evidence; the source 1100-pixel breakpoint remains
+  protected by the CSS contract test.
+- Colors and tokens: flat near-black surfaces, slate borders, cyan planning/selection state, green
+  completion state, and purple Code Agent identity match the source token roles. No gradient or
+  invented elevation was added.
+- Images and icons: the production flow uses the existing MemStack image asset and the project's
+  Radix icon family. No text glyph, CSS-art, placeholder, or handcrafted SVG replacement was added.
+- Copy and content: the brief and plan-authority copy are accurate. Complete review-row content,
+  output labels, per-step duration, plan-level duration, and estimated cost are blocked by the
+  authoritative plan-version schema rather than fabricated in the client.
+- Accessibility: semantic labels, radio groups, progressbar values, live status, review focus, and
+  keyboard-restored step editing remain present. Eight-pixel helper copy now exceeds 4.5:1 contrast.
+  Programmatic pointer-driven review focus stays source-aligned; keyboard-driven review focus gets
+  an explicit cyan indicator.
+
+## Interaction and runtime verification
+
+- Selected General Agent and Code Agent modes and entered realistic task briefs: passed.
+- Generate plan synchronous double-click guard: passed.
+- Local initialization produced exactly one `POST` to the scoped `task-sessions` endpoint: passed.
+- No client-side Workspace create, Conversation create, mode PATCH, or initial-message replay was
+  emitted after the atomic response: passed.
+- Agent planning appeared before review, and review opened only after persisted versioned plan
+  tasks arrived: passed.
+- Approval remains a separate immutable-plan-version action; planning never grants write authority:
+  passed.
+- Current-run strict Browser trace: one task-session POST, one persisted-session callback, one Agent
+  planning turn, and one Plan-ready activation before Review. A separate approval run emitted one
+  approval POST bound to the previewed version and one Build-ready activation.
+- Continue in background and Escape during the pending 600-millisecond atomic response both closed
+  the dialog while the same session persisted, the Agent turn ran, and Plan activation completed:
+  passed.
+- Stable idempotency replay, changed-payload conflict, restart recovery, and transaction rollback:
+  passed in Rust tests.
+- Runtime and strict-contract diagnostics recorded by the QA page: no errors.
+- Desktop tests: 401 passed. Source-contract tests are treated as tripwires, not substitutes for
+  the Browser interaction and image-comparison evidence above.
+- TypeScript type check and Vite production build: passed.
+- Rust tests: 197 passed, including loopback probe cases.
+- Rust formatting and Clippy with warnings denied: passed.
+
+## Comparison history
+
+### Iteration 1 — blocked
+
+- [P1] Local initialization used multiple client mutations, allowing partial Workspace,
+  Conversation, mode, or message state after a failed request.
+- [P1] Idempotency replay rebuilt a response from mutable conversation state instead of preserving
+  the original immutable response snapshot.
+- [P1] Define showed code-root and environment controls absent from the approved source.
+- [P2] Header height, Define and Review column ratios, plan-row height, planning title wrapping,
+  Code Agent identity, and review focus treatment visibly diverged.
+- [P2] Workspace metadata mixed untyped JSON values with typed fields and list/create routes did
+  not consistently reject inactive tenant/project scope.
+
+Fixes: added one strict Rust task-session transaction and immutable receipt snapshot; revalidated
+user, tenant, project, context revision, and active scope inside the transaction; made typed fields
+authoritative; replaced the local split mutation chain with one idempotent POST; removed the
+source-inconsistent Define controls; and aligned the measured geometry, tokens, and focus behavior.
+
+### Iteration 2 — blocked on authoritative plan richness
+
+An independent regression review found that Continue in background and Escape could invalidate the
+pending operation after the task-session transaction committed, and that the original visual
+harness did not exercise authority callbacks or approval. The close boundary now preserves only
+submitted work, while external closure still invalidates its epoch. The strict QA adapter now
+checks production workspace authority, one scoped mutation, session persistence, Agent dispatch,
+activation, version-bound approval, and errors. Browser runs cover normal approval plus both
+background-close paths.
+
+Current-run side-by-side comparisons close the remaining actionable layout and interaction differences.
+The remaining P1 is not safe to solve as presentation-only data: the persisted plan version does
+not yet carry structured step detail, expected output, estimated minutes, or plan-level time/cost.
+Showing the source values would require fabricating execution evidence in the client.
+
+## Remaining blocker
+
+- [P1] Extend the immutable plan-version contract with structured `detail`, `expected_output`, and
+  `estimated_minutes` fields per step plus authoritative plan-level time/cost or an explicit
+  unavailable state. Populate those fields through the Agent structured tool call, persist them,
+  bind approval to that exact version, and render them in the review surface.
+
+final result: blocked
+
+---
+
 # Tenant → project → workspace → conversation hierarchy authority design QA
 
 Date: 2026-07-18

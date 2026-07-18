@@ -1184,6 +1184,70 @@ test('updateAgentConversationMode can switch the active capability explicitly', 
   }
 });
 
+test('createTaskSession posts one strictly scoped atomic task-session contract', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        replayed: false,
+        workspace: { id: 'workspace-1', name: 'Atomic task' },
+        conversation: {
+          id: 'conversation-1',
+          project_id: 'project/1',
+          workspace_id: 'workspace-1',
+          current_mode: 'plan',
+        },
+        initial_message: {
+          id: 'message-1',
+          workspace_id: 'workspace-1',
+          content: 'Create the reviewable plan',
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      localApiToken: 'local-session-token',
+    });
+    const request = {
+      idempotency_key: 'desktop-task-session-1',
+      workspace: {
+        kind: 'create',
+        name: 'Atomic task',
+        description: 'Create the reviewable plan',
+        metadata: { source: 'desktop' },
+        use_case: 'programming',
+        collaboration_mode: 'multi_agent_shared',
+        sandbox_code_root: '/workspace/repository',
+      },
+      conversation: { title: 'Atomic task', capability_mode: 'code' },
+      initial_message: { content: 'Create the reviewable plan' },
+    };
+
+    const result = await client.createTaskSession(request);
+
+    assert.equal(result.replayed, false);
+    assert.equal(result.conversation.workspace_id, result.workspace.id);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.init?.method, 'POST');
+    assert.equal(
+      String(calls[0]?.input),
+      'http://127.0.0.1:8088/api/v1/tenants/tenant%2F1/projects/project%2F1/task-sessions',
+    );
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), request);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('switchPlanMode persists the explicit plan authority contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

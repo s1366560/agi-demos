@@ -18,48 +18,103 @@ const runTurnSource =
   runTurnStart >= 0 && runTurnEnd > runTurnStart
     ? appSource.slice(runTurnStart, runTurnEnd)
     : '';
+const localCreationStart = generatePlanSource.indexOf("if (config.mode === 'local') {");
+const localCreationEnd = generatePlanSource.indexOf('\n        } else {', localCreationStart);
+const localCreationSource =
+  localCreationStart >= 0 && localCreationEnd > localCreationStart
+    ? generatePlanSource.slice(localCreationStart, localCreationEnd)
+    : '';
+const cloudCreationStart = localCreationEnd;
+const cloudCreationEnd = generatePlanSource.indexOf(
+  '\n        }\n        planningConversationIdRef.current',
+  cloudCreationStart,
+);
+const cloudCreationSource =
+  cloudCreationStart >= 0 && cloudCreationEnd > cloudCreationStart
+    ? generatePlanSource.slice(cloudCreationStart, cloudCreationEnd)
+    : '';
+const cloudPreparationStart = generatePlanSource.indexOf("if (config.mode === 'cloud') {");
+const cloudPreparationEnd = generatePlanSource.indexOf(
+  '\n      }\n      expectedPlanSignatureRef.current',
+  cloudPreparationStart,
+);
+const cloudPreparationSource =
+  cloudPreparationStart >= 0 && cloudPreparationEnd > cloudPreparationStart
+    ? generatePlanSource.slice(cloudPreparationStart, cloudPreparationEnd)
+    : '';
+const closeFlowSource =
+  taskFlowSource.match(/const closeFlow = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
 
-test('new task planning proves Plan support before creating any workspace or conversation', () => {
-  const probeIndex = generatePlanSource.indexOf('await baseClient.supportsAgentPlanWorkflow()');
-  const workspaceCreateIndex = generatePlanSource.indexOf('createWorkspaceForProject(');
-  const conversationCreateIndex = generatePlanSource.indexOf('createAgentConversation(');
+test('local new-task creation uses one atomic task-session mutation', () => {
+  assert.notEqual(localCreationSource, '');
+  assert.equal((localCreationSource.match(/createTaskSession\(/g) ?? []).length, 1);
+  assert.doesNotMatch(localCreationSource, /supportsAgentPlanWorkflow\(/);
+  assert.doesNotMatch(localCreationSource, /createWorkspaceForProject\(/);
+  assert.doesNotMatch(localCreationSource, /createAgentConversation\(/);
+  assert.doesNotMatch(localCreationSource, /updateAgentConversationMode\(/);
+  assert.doesNotMatch(localCreationSource, /switchPlanMode\(/);
+  assert.doesNotMatch(localCreationSource, /sendMessage\(/);
+
+  const atomicIndex = generatePlanSource.indexOf('createTaskSession(');
+  const persistedIndex = generatePlanSource.indexOf('onSessionPersisted(readySession);');
+  const agentTurnIndex = generatePlanSource.indexOf('runAgentTurn(');
+  assert.ok(atomicIndex < persistedIndex);
+  assert.ok(persistedIndex < agentTurnIndex);
+});
+
+test('cloud new-task creation retains the split compatibility path', () => {
+  const probeIndex = cloudCreationSource.indexOf('await baseClient.supportsAgentPlanWorkflow()');
+  const workspaceCreateIndex = cloudCreationSource.indexOf('createWorkspaceForProject(');
+  const conversationCreateIndex = cloudCreationSource.indexOf('createAgentConversation(');
 
   assert.notEqual(probeIndex, -1);
   assert.ok(probeIndex < workspaceCreateIndex);
   assert.ok(probeIndex < conversationCreateIndex);
-  assert.match(generatePlanSource, /throw new Error\(t\('task\.planRuntimeUnsupported'\)\)/);
+  assert.match(cloudCreationSource, /throw new Error\(t\('task\.planRuntimeUnsupported'\)\)/);
+  assert.match(cloudPreparationSource, /updateAgentConversationMode\(/);
+  assert.match(cloudPreparationSource, /switchPlanMode\(/);
+  assert.match(cloudPreparationSource, /sendMessage\(/);
 });
 
-test('new task planning persists early but activates only after binding and Agent dispatch', () => {
-  const sessionReuseIndex = generatePlanSource.indexOf('let readySession =');
-  const sessionCreationGuardIndex = generatePlanSource.indexOf('if (!readySession) {');
-  const persistIndex = generatePlanSource.indexOf('setSession(readySession);');
-  const catalogIndex = generatePlanSource.indexOf('onSessionPersisted(readySession);');
-  const workspaceLinkIndex = generatePlanSource.indexOf('updateAgentConversationMode(');
-  const planModeIndex = generatePlanSource.indexOf('switchPlanMode(');
-  const agentTurnIndex = generatePlanSource.indexOf('runAgentTurn(');
-  const activateIndex = generatePlanSource.lastIndexOf('onSessionReady(readySession);');
+test('new task planning blocks duplicate submission and keeps one creation key for retry', () => {
+  assert.match(taskFlowSource, /const generatePlanPendingRef = useRef\(false\)/);
+  assert.match(generatePlanSource, /if \(!canGenerate \|\| generatePlanPendingRef\.current\) return/);
+  assert.match(generatePlanSource, /generatePlanPendingRef\.current = true/);
+  assert.match(generatePlanSource, /finally \{[\s\S]*generatePlanPendingRef\.current = false/);
+  assert.match(taskFlowSource, /taskSessionCreationAttempt\(/);
+  assert.match(taskFlowSource, /taskSessionCreationAttemptRef\.current = creationAttempt/);
+});
 
-  assert.notEqual(sessionReuseIndex, -1);
-  assert.ok(sessionReuseIndex < sessionCreationGuardIndex);
-  assert.ok(sessionCreationGuardIndex < persistIndex);
-  assert.ok(persistIndex < workspaceLinkIndex);
-  assert.ok(catalogIndex < workspaceLinkIndex);
-  assert.ok(persistIndex < planModeIndex);
-  assert.ok(agentTurnIndex < activateIndex);
-  assert.ok(workspaceLinkIndex < activateIndex);
-  assert.equal((generatePlanSource.match(/createAgentConversation\(/g) ?? []).length, 1);
+test('closing a submitted task keeps planning alive in the background', () => {
+  assert.notEqual(closeFlowSource, '');
+  assert.match(
+    closeFlowSource,
+    /if \(phase === 'define'\)[\s\S]*?flowEpochRef\.current \+= 1[\s\S]*?preserveSubmittedWorkRef\.current = true/,
+  );
+  assert.match(closeFlowSource, /onClose\(\)/);
+  assert.match(
+    taskFlowSource,
+    /phase === 'planning'[\s\S]*?onClick=\{closeFlow\}[\s\S]*?task\.continueBackground/,
+  );
+  assert.match(
+    taskFlowSource,
+    /if \(phaseRef\.current === 'define'\)[\s\S]*?flowEpochRef\.current \+= 1[\s\S]*?preserveSubmittedWorkRef\.current = true[\s\S]*?onCloseRef\.current\(\)/,
+  );
+  assert.match(
+    taskFlowSource,
+    /if \(!open && preserveSubmittedWorkRef\.current\)[\s\S]*?preserveSubmittedWorkRef\.current = false;[\s\S]*?return;/,
+  );
 });
 
 test('a fresh planning attempt clears local and shell errors', () => {
   const localClearIndex = generatePlanSource.indexOf('setFlowError(null);');
   const shellClearIndex = generatePlanSource.indexOf('onError(null);');
-  const planModeIndex = generatePlanSource.indexOf('switchPlanMode(');
+  const firstCreationIndex = generatePlanSource.indexOf("if (config.mode === 'local') {");
 
   assert.notEqual(localClearIndex, -1);
   assert.notEqual(shellClearIndex, -1);
-  assert.ok(localClearIndex < planModeIndex);
-  assert.ok(shellClearIndex < planModeIndex);
+  assert.ok(localClearIndex < firstCreationIndex);
+  assert.ok(shellClearIndex < firstCreationIndex);
 });
 
 test('unsupported Plan runtime guidance is localized and actionable', () => {
@@ -86,13 +141,30 @@ test('unsupported Plan runtime guidance is localized and actionable', () => {
 
 test('Plan capability network failures expose connection recovery before any write', () => {
   const capabilityProbe =
-    generatePlanSource.match(
+    cloudCreationSource.match(
       /try \{[\s\S]*?supportsAgentPlanWorkflow\(\)[\s\S]*?\} catch \(error\) \{[\s\S]*?setRuntimeRecoveryAvailable\(true\);[\s\S]*?throw error;[\s\S]*?\}/,
     )?.[0] ?? '';
-  const workspaceCreateIndex = generatePlanSource.indexOf('createWorkspaceForProject(');
+  const workspaceCreateIndex = cloudCreationSource.indexOf('createWorkspaceForProject(');
 
   assert.notEqual(capabilityProbe, '');
-  assert.ok(generatePlanSource.indexOf(capabilityProbe) < workspaceCreateIndex);
+  assert.ok(cloudCreationSource.indexOf(capabilityProbe) < workspaceCreateIndex);
+});
+
+test('App passes structured workspace authority and stale selection cannot silently create', () => {
+  assert.match(appSource, /workspaceAuthority=\{newTaskWorkspaceAuthority\}/);
+  assert.match(appSource, /resolveNewTaskWorkspaceAuthority\(/);
+  assert.match(taskFlowSource, /canUseNewTaskWorkspaceSelection\(/);
+  assert.doesNotMatch(generatePlanSource, /selectedWorkspace \?\?[\s\S]*createWorkspaceForProject/);
+  assert.equal((i18nSource.match(/'task\.workspaceAuthorityLoading'/g) ?? []).length, 2);
+  assert.equal((i18nSource.match(/'task\.workspaceAuthorityError'/g) ?? []).length, 2);
+  assert.equal((i18nSource.match(/'task\.workspaceSelectionStale'/g) ?? []).length, 2);
+});
+
+test('planning workspace label uses the atomic session before the workspace catalog refreshes', () => {
+  assert.match(
+    taskFlowSource,
+    /newTaskWorkspaceLabel\([\s\S]*session\?\.workspace \?\? null,[\s\S]*selectedWorkspace,[\s\S]*workspaceSelection/,
+  );
 });
 
 test('catalog persistence does not switch transport while activation selects the bound session', () => {

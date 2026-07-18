@@ -17,6 +17,7 @@ import type {
   DesktopPermissionProfile,
   DesktopPlanVersion,
   DesktopRuntimeConfig,
+  WorkspaceAuthorityCollection,
   WorkspaceSummary,
 } from '../../types';
 import {
@@ -57,6 +58,14 @@ import {
   type ReviewPlanStep,
 } from './newTaskPlanModel';
 import {
+  buildLocalTaskSessionRequest,
+  canUseNewTaskWorkspaceSelection,
+  NEW_WORKSPACE_VALUE,
+  newTaskWorkspaceLabel,
+  taskSessionCreationAttempt,
+  type TaskSessionCreationAttempt,
+} from './newTaskSessionModel';
+import {
   NewTaskDefinitionStage,
   NewTaskPlanningStage,
   NewTaskReviewStage,
@@ -90,7 +99,8 @@ export type NewTaskResumeDraft = {
 type NewTaskFlowProps = {
   open: boolean;
   config: DesktopRuntimeConfig;
-  workspaces: WorkspaceSummary[];
+  workspaceAuthority?: WorkspaceAuthorityCollection<WorkspaceSummary>;
+  workspaces?: WorkspaceSummary[];
   resumeDraft?: NewTaskResumeDraft | null;
   preferredWorkspaceId?: string;
   preferredKind?: NewTaskKind;
@@ -103,7 +113,6 @@ type NewTaskFlowProps = {
   onError: (message: string | null) => void;
 };
 
-const NEW_WORKSPACE_VALUE = '__new_workspace__';
 const PLAN_POLL_INTERVAL_MS = 1_500;
 const DEFAULT_CONTEXT_SOURCES: NewTaskContextSource[] = [
   'project_memory',
@@ -113,6 +122,7 @@ const DEFAULT_CONTEXT_SOURCES: NewTaskContextSource[] = [
 export function NewTaskFlow({
   open,
   config,
+  workspaceAuthority,
   workspaces,
   resumeDraft = null,
   preferredWorkspaceId,
@@ -166,6 +176,11 @@ export function NewTaskFlow({
   const sessionWorkspaceSelectionRef = useRef('');
   const emptyPlanPollCountRef = useRef(0);
   const flowEpochRef = useRef(0);
+  const phaseRef = useRef(phase);
+  const keyboardNavigationRef = useRef(false);
+  const preserveSubmittedWorkRef = useRef(false);
+  const generatePlanPendingRef = useRef(false);
+  const taskSessionCreationAttemptRef = useRef<TaskSessionCreationAttempt | null>(null);
   const wasOpenRef = useRef(false);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -174,11 +189,20 @@ export function NewTaskFlow({
   const legacyBuildRecoveryRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
+  phaseRef.current = phase;
   onCloseRef.current = onClose;
 
+  const resolvedWorkspaceAuthority = workspaceAuthority ?? {
+    status: workspaces ? ('ready' as const) : ('unavailable' as const),
+    items: workspaces ?? [],
+    error: null,
+  };
   const selectedWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.id === workspaceSelection) ?? null,
-    [workspaceSelection, workspaces],
+    () =>
+      resolvedWorkspaceAuthority.items.find(
+        (workspace) => workspace.id === workspaceSelection,
+      ) ?? null,
+    [resolvedWorkspaceAuthority.items, workspaceSelection],
   );
   const orderedTasks = useMemo(() => orderedPlanTasks(planTasks), [planTasks]);
   const reviewDirty = useMemo(
@@ -198,24 +222,40 @@ export function NewTaskFlow({
     ) &&
     !reviewDirty &&
     enabledStepCount > 0;
+  const workspaceAuthorityDisabledReason =
+    resolvedWorkspaceAuthority.status === 'loading' ||
+    resolvedWorkspaceAuthority.status === 'unavailable'
+      ? t('task.workspaceAuthorityLoading')
+      : resolvedWorkspaceAuthority.status === 'error'
+        ? t('task.workspaceAuthorityError')
+        : workspaceSelection !== NEW_WORKSPACE_VALUE && !selectedWorkspace
+          ? t('task.workspaceSelectionStale')
+          : null;
+  const effectiveDisabledReason = disabledReason ?? workspaceAuthorityDisabledReason;
   const canGenerate =
     title.trim().length > 0 &&
     objective.trim().length > 0 &&
     contextSources.length > 0 &&
     Boolean(config.projectId.trim()) &&
-    !disabledReason;
-  const workspaceLabel =
-    selectedWorkspace?.name ||
-    selectedWorkspace?.title ||
-    (workspaceSelection === NEW_WORKSPACE_VALUE
-      ? t('task.createWorkspace')
-      : workspaceSelection);
+    canUseNewTaskWorkspaceSelection(resolvedWorkspaceAuthority, workspaceSelection) &&
+    !effectiveDisabledReason;
+  const workspaceLabel = newTaskWorkspaceLabel(
+    session?.workspace ?? null,
+    selectedWorkspace,
+    workspaceSelection,
+    t('task.createWorkspace'),
+  );
 
   useEffect(() => {
     if (wasOpenRef.current === open) return;
     wasOpenRef.current = open;
+    if (!open && preserveSubmittedWorkRef.current) {
+      preserveSubmittedWorkRef.current = false;
+      return;
+    }
     flowEpochRef.current += 1;
     if (!open) return;
+    preserveSubmittedWorkRef.current = false;
     const recoveredDefinition = resumeDraft?.definition ?? null;
     const recoveredTasks = resumeDraft ? orderedPlanTasks(resumeDraft.tasks) : [];
     const nextKind = recoveredDefinition?.kind ?? preferredKind ?? 'general';
@@ -256,6 +296,8 @@ export function NewTaskFlow({
     displayedPlanVersionRef.current = null;
     lastPlanningPromptRef.current = '';
     planningAttemptRef.current = null;
+    taskSessionCreationAttemptRef.current = null;
+    generatePlanPendingRef.current = false;
     planningConversationIdRef.current = '';
     sessionDefinitionSignatureRef.current = recoveredSignature;
     sessionWorkspaceSelectionRef.current = resumeDraft ? nextWorkspaceSelection : '';
@@ -301,9 +343,14 @@ export function NewTaskFlow({
     if (!open) return;
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') keyboardNavigationRef.current = true;
       if (event.key === 'Escape') {
         event.preventDefault();
-        flowEpochRef.current += 1;
+        if (phaseRef.current === 'define') {
+          flowEpochRef.current += 1;
+        } else {
+          preserveSubmittedWorkRef.current = true;
+        }
         onCloseRef.current();
         return;
       }
@@ -322,17 +369,30 @@ export function NewTaskFlow({
         first?.focus();
       }
     };
+    const handlePointerDown = () => {
+      keyboardNavigationRef.current = false;
+    };
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('pointerdown', handlePointerDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('pointerdown', handlePointerDown);
       window.setTimeout(() => previousFocusRef.current?.focus(), 0);
     };
   }, [open]);
 
   useEffect(() => {
     if (!open || phase !== 'review') return;
-    const frame = window.requestAnimationFrame(() => reviewHeadingRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
+    const frame = window.requestAnimationFrame(() => {
+      const heading = reviewHeadingRef.current;
+      if (!heading) return;
+      heading.dataset.keyboardFocus = keyboardNavigationRef.current ? 'true' : 'false';
+      reviewHeadingRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      reviewHeadingRef.current?.removeAttribute('data-keyboard-focus');
+    };
   }, [open, phase]);
 
   useEffect(() => {
@@ -434,7 +494,11 @@ export function NewTaskFlow({
   if (!open) return null;
 
   const closeFlow = () => {
-    flowEpochRef.current += 1;
+    if (phase === 'define') {
+      flowEpochRef.current += 1;
+    } else {
+      preserveSubmittedWorkRef.current = true;
+    }
     onClose();
   };
 
@@ -477,7 +541,8 @@ export function NewTaskFlow({
   };
 
   const generatePlan = async () => {
-    if (!canGenerate) return;
+    if (!canGenerate || generatePlanPendingRef.current) return;
+    generatePlanPendingRef.current = true;
     const operationEpoch = flowEpochRef.current;
     setPhase('planning');
     setFlowError(null);
@@ -514,51 +579,80 @@ export function NewTaskFlow({
       let readySession = sessionMatchesDefinition ? session : null;
       if (!readySession) {
         const baseClient = new DesktopApiClient(config);
-        try {
-          if (!(await baseClient.supportsAgentPlanWorkflow())) {
-            throw new Error(t('task.planRuntimeUnsupported'));
-          }
-        } catch (error) {
-          setRuntimeRecoveryAvailable(true);
-          throw error;
-        }
-        const reusableCreatedWorkspace =
-          workspaceSelection === NEW_WORKSPACE_VALUE &&
-          sessionWorkspaceSelectionRef.current === NEW_WORKSPACE_VALUE
-            ? session?.workspace
-            : null;
-        const workspace =
-          selectedWorkspace ??
-          reusableCreatedWorkspace ??
-          (await baseClient.createWorkspaceForProject(
-            config.projectId,
-            title.trim(),
-            objective.trim(),
+        if (config.mode === 'local') {
+          const creationFingerprint = [
             config.tenantId,
-            {
-              useCase: kind,
-              collaborationMode: 'multi_agent_shared',
-              sandboxCodeRoot: kind === 'programming' ? workspaceRoot.trim() : undefined,
-            },
-          ));
-        const scopedConfig = { ...config, workspaceId: workspace.id };
-        const client = new DesktopApiClient(scopedConfig);
-        const created = await client.createAgentConversation(
-          title.trim(),
-          config.projectId,
-          kind === 'programming' ? 'code' : 'work',
-        );
-        readySession = { workspace, conversation: created, config: scopedConfig };
+            config.projectId,
+            definitionSignature,
+          ].join(':');
+          const creationAttempt = taskSessionCreationAttempt(
+            taskSessionCreationAttemptRef.current,
+            creationFingerprint,
+            () => `desktop-task-session-${crypto.randomUUID()}`,
+          );
+          taskSessionCreationAttemptRef.current = creationAttempt;
+          const result = await baseClient.createTaskSession(
+            buildLocalTaskSessionRequest(
+              definition,
+              workspaceSelection,
+              creationAttempt.idempotencyKey,
+            ),
+          );
+          readySession = {
+            workspace: result.workspace,
+            conversation: result.conversation,
+            config: { ...config, workspaceId: result.workspace.id },
+          };
+        } else {
+          try {
+            if (!(await baseClient.supportsAgentPlanWorkflow())) {
+              throw new Error(t('task.planRuntimeUnsupported'));
+            }
+          } catch (error) {
+            setRuntimeRecoveryAvailable(true);
+            throw error;
+          }
+          const reusableCreatedWorkspace =
+            workspaceSelection === NEW_WORKSPACE_VALUE &&
+            sessionWorkspaceSelectionRef.current === NEW_WORKSPACE_VALUE
+              ? session?.workspace
+              : null;
+          let workspace = selectedWorkspace;
+          if (workspaceSelection === NEW_WORKSPACE_VALUE) {
+            workspace =
+              reusableCreatedWorkspace ??
+              (await baseClient.createWorkspaceForProject(
+                config.projectId,
+                title.trim(),
+                objective.trim(),
+                config.tenantId,
+                {
+                  useCase: kind,
+                  collaborationMode: 'multi_agent_shared',
+                  sandboxCodeRoot: kind === 'programming' ? workspaceRoot.trim() : undefined,
+                },
+              ));
+          }
+          if (!workspace) throw new Error(t('task.workspaceSelectionStale'));
+          const scopedConfig = { ...config, workspaceId: workspace.id };
+          const client = new DesktopApiClient(scopedConfig);
+          const created = await client.createAgentConversation(
+            title.trim(),
+            config.projectId,
+            kind === 'programming' ? 'code' : 'work',
+          );
+          readySession = { workspace, conversation: created, config: scopedConfig };
+        }
         planningConversationIdRef.current = readySession.conversation.id;
         onSessionPersisted(readySession);
         if (flowEpochRef.current !== operationEpoch) return;
         setSession(readySession);
-        setWorkspaceSelection(workspace.id);
+        setWorkspaceSelection(readySession.workspace.id);
         sessionDefinitionSignatureRef.current = newTaskDefinitionSignature(
           definition,
-          workspace.id,
+          readySession.workspace.id,
         );
-        sessionWorkspaceSelectionRef.current = workspace.id;
+        sessionWorkspaceSelectionRef.current = readySession.workspace.id;
         displayedPlanSignatureRef.current = '';
         displayedPlanVersionRef.current = null;
         expectedPlanSignatureRef.current = '';
@@ -568,19 +662,21 @@ export function NewTaskFlow({
         setPlanApproval(null);
       }
       const client = new DesktopApiClient(readySession.config);
-      if (readySession.conversation.workspace_id !== readySession.workspace.id) {
-        const conversation = await client.updateAgentConversationMode(
-          readySession.conversation.id,
-          { workspace_id: readySession.workspace.id },
-          readySession.config.projectId,
-        );
-        readySession = { ...readySession, conversation };
-        onSessionPersisted(readySession);
-        if (flowEpochRef.current !== operationEpoch) return;
-        setSession(readySession);
+      if (config.mode === 'cloud') {
+        if (readySession.conversation.workspace_id !== readySession.workspace.id) {
+          const conversation = await client.updateAgentConversationMode(
+            readySession.conversation.id,
+            { workspace_id: readySession.workspace.id },
+            readySession.config.projectId,
+          );
+          readySession = { ...readySession, conversation };
+          onSessionPersisted(readySession);
+          if (flowEpochRef.current !== operationEpoch) return;
+          setSession(readySession);
+        }
+        await client.switchPlanMode(readySession.conversation.id, 'plan');
+        await client.sendMessage(objective.trim());
       }
-      await client.switchPlanMode(readySession.conversation.id, 'plan');
-      await client.sendMessage(objective.trim());
       expectedPlanSignatureRef.current = displayedPlanSignatureRef.current;
       const outcome = await runAgentTurn(
         readySession,
@@ -601,9 +697,12 @@ export function NewTaskFlow({
     } catch (error) {
       if (flowEpochRef.current !== operationEpoch) return;
       const message = error instanceof Error ? error.message : String(error);
+      if (config.mode === 'local') setRuntimeRecoveryAvailable(true);
       setFlowError(message);
       setPhase('define');
       onError(message);
+    } finally {
+      generatePlanPendingRef.current = false;
     }
   };
 
@@ -915,19 +1014,16 @@ export function NewTaskFlow({
                 objective={objective}
                 kind={kind}
                 contextSources={contextSources}
-                workspaceRoot={workspaceRoot}
                 workspaceSelection={workspaceSelection}
                 newWorkspaceValue={NEW_WORKSPACE_VALUE}
-                workspaces={workspaces}
-                environmentKind={environmentKind}
+                workspaces={resolvedWorkspaceAuthority.items}
+                workspaceSelectionDisabled={resolvedWorkspaceAuthority.status !== 'ready'}
                 titleInputRef={titleInputRef}
                 onTitleChange={setTitle}
                 onObjectiveChange={setObjective}
                 onKindChange={changeKind}
                 onContextSourcesChange={setContextSources}
-                onWorkspaceRootChange={setWorkspaceRoot}
                 onWorkspaceSelectionChange={setWorkspaceSelection}
-                onEnvironmentKindChange={setEnvironmentKind}
               />
             ) : null}
             {phase === 'planning' ? (
@@ -981,7 +1077,7 @@ export function NewTaskFlow({
             {phase === 'define' ? (
               <>
                 <span>
-                  <MagicWandIcon /> {disabledReason ?? t('task.generatePlanHint')}
+                  <MagicWandIcon /> {effectiveDisabledReason ?? t('task.generatePlanHint')}
                 </span>
                 <div className="new-task-review-footer-actions">
                   {runtimeRecoveryAvailable ? (
