@@ -529,6 +529,43 @@ class ProviderConfigCreate(ProviderConfigBase):
         return self
 
 
+class ProviderProbeRequest(BaseModel):
+    """Connection fields accepted when probing a provider without persisting it."""
+
+    name: str = Field(..., min_length=1, description="Human-readable provider name")
+    provider_type: ProviderType = Field(..., description="Provider type to probe")
+    api_key: str | None = Field(None, description="Ephemeral API key used only for this probe")
+    base_url: str | None = Field(None, description="Custom provider endpoint")
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional connection fields required by the provider",
+    )
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_empty(cls, value: str) -> str:
+        """Normalize the display name while rejecting whitespace-only values."""
+        if not value.strip():
+            raise ValueError("Provider name cannot be empty")
+        return value.strip()
+
+    @field_validator("api_key")
+    @classmethod
+    def normalize_api_key(cls, value: str | None) -> str | None:
+        """Normalize an ephemeral API key before the connection attempt."""
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_api_key_requirement(self) -> "ProviderProbeRequest":
+        """Require credentials for remote providers without requiring a model."""
+        if (
+            self.provider_type not in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}
+            and not self.api_key
+        ):
+            raise ValueError("API key cannot be empty")
+        return self
+
+
 class ProviderConfigUpdate(BaseModel):
     """Model for updating an existing provider"""
 
@@ -715,6 +752,42 @@ class ProviderHealth(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ProviderValidationResponse(BaseModel):
+    """Result of an explicit provider connection probe."""
+
+    provider: ProviderConfigResponse | None
+    provider_id: UUID
+    status: ProviderStatus
+    probed: bool
+    detail: str | None
+    last_check: datetime
+    response_time_ms: int | None = Field(..., ge=0)
+    error_message: str | None
+    catalog: dict[str, Any] | None
+
+    @classmethod
+    def from_health(
+        cls,
+        health: ProviderHealth,
+        *,
+        probed: bool,
+        detail: str | None,
+        catalog: dict[str, Any] | None,
+    ) -> "ProviderValidationResponse":
+        """Adapt an internal health result to the explicit validation contract."""
+        return cls(
+            provider=None,
+            provider_id=health.provider_id,
+            status=health.status,
+            probed=probed,
+            detail=detail,
+            last_check=health.last_check,
+            response_time_ms=health.response_time_ms,
+            error_message=health.error_message,
+            catalog=catalog,
+        )
 
 
 # ============================================================================

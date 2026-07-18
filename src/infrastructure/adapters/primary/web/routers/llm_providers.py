@@ -24,8 +24,10 @@ from src.domain.llm_providers.models import (
     ProviderConfigResponse,
     ProviderConfigUpdate,
     ProviderHealth,
+    ProviderProbeRequest,
     ProviderType,
     ProviderTypeDescriptor,
+    ProviderValidationResponse,
     TenantProviderMapping,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -587,26 +589,26 @@ async def delete_provider(
 # Health Check Endpoints
 
 
-@router.post("/test-connection", response_model=ProviderHealth)
+@router.post("/test-connection", response_model=ProviderValidationResponse)
 async def test_provider_connection(
-    config: ProviderConfigCreate,
+    config: ProviderProbeRequest,
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
-) -> ProviderHealth:
+) -> ProviderValidationResponse:
     """
     Test an LLM provider configuration without saving it.
 
     Requires admin access.
     """
     try:
-        health = await service.test_provider_connection(config)
+        validation = await service.test_provider_connection(config)
         logger.info(
             "Provider connection test completed for %s by user %s: %s",
             config.provider_type,
             current_user.id,
-            health.status,
+            validation.status,
         )
-        return health
+        return validation
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -614,12 +616,12 @@ async def test_provider_connection(
         ) from e
 
 
-@router.post("/{provider_id}/health-check", response_model=ProviderHealth)
+@router.post("/{provider_id}/health-check", response_model=ProviderValidationResponse)
 async def check_provider_health(
     provider_id: UUID,
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
-) -> ProviderHealth:
+) -> ProviderValidationResponse:
     """
     Trigger a health check for a provider.
 
@@ -628,7 +630,12 @@ async def check_provider_health(
     try:
         health = await service.check_provider_health(provider_id)
         logger.info(f"Health check completed for provider {provider_id}: {health.status}")
-        return health
+        return ProviderValidationResponse.from_health(
+            health,
+            probed=True,
+            detail=None,
+            catalog=None,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

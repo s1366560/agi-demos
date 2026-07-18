@@ -1707,6 +1707,7 @@ test('draft validation requires explicit probe evidence and can return a discove
       provider_type: 'custom_gateway',
       base_url: 'https://gateway.example.test/v1',
       is_active: true,
+      auth_method: 'api_key',
       api_key: 'draft-secret',
     });
   } finally {
@@ -1723,23 +1724,34 @@ test('provider validation rejects responses without explicit probe evidence', as
     });
 
   try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      mode: 'local',
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      apiKey: 'local-user-session',
-      localApiToken: 'launch-capability',
-    });
-    await assert.rejects(
-      client.testLlmProviderDraft({
-        name: 'Draft provider',
-        providerType: 'openai',
-        authMethod: 'none',
-        baseUrl: 'http://127.0.0.1:11434/v1',
-        active: true,
+    const clients = [
+      new DesktopApiClient({
+        ...DEFAULT_CONFIG,
+        mode: 'local',
+        apiBaseUrl: 'http://127.0.0.1:8088',
+        apiKey: 'local-user-session',
+        localApiToken: 'launch-capability',
       }),
-      /Invalid provider validation response/,
-    );
+      new DesktopApiClient({
+        ...DEFAULT_CONFIG,
+        mode: 'cloud',
+        apiBaseUrl: 'https://api.example.test',
+        apiKey: 'cloud-user-session',
+      }),
+    ];
+
+    for (const client of clients) {
+      await assert.rejects(
+        client.testLlmProviderDraft({
+          name: 'Draft provider',
+          providerType: 'openai',
+          authMethod: 'none',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          active: true,
+        }),
+        /Invalid provider validation response/,
+      );
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }

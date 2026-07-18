@@ -789,8 +789,8 @@ async fn detect_env_providers(
 async fn test_provider_connection(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
-    Json(request): Json<ProviderCreateRequest>,
-) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+    Json(request): Json<ProviderProbeRequest>,
+) -> Result<Json<ProviderValidationResponse>, LlmProvidersApiError> {
     ensure_admin_access(&app, &identity.user_id).await?;
     Ok(Json(execute_provider_connection_test(request).await?))
 }
@@ -799,7 +799,7 @@ async fn check_provider_health(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
     Path(provider_id): Path<String>,
-) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+) -> Result<Json<ProviderValidationResponse>, LlmProvidersApiError> {
     ensure_admin_access(&app, &identity.user_id).await?;
     Ok(Json(
         execute_persisted_provider_health_check(
@@ -813,15 +813,15 @@ async fn check_provider_health(
 }
 
 async fn execute_provider_connection_test(
-    request: ProviderCreateRequest,
-) -> Result<ProviderHealthResponse, LlmProvidersApiError> {
-    let config = ProviderProbeConfig::from_create_record(provider_create_record(request)?);
+    request: ProviderProbeRequest,
+) -> Result<ProviderValidationResponse, LlmProvidersApiError> {
+    let config = ProviderProbeConfig::from_probe_request(request)?;
     if !provider_probe_supported(&config.provider_type) {
         return Err(LlmProvidersApiError::bad_request(
             "Provider health check is not supported for this provider type",
         ));
     }
-    Ok(ProviderHealthResponse::from(
+    Ok(ProviderValidationResponse::from_health(
         probe_provider_connection(&config).await,
     ))
 }
@@ -831,7 +831,7 @@ async fn execute_persisted_provider_health_check(
     health_service: &SharedLlmProviderHealth,
     user_id: &str,
     provider_id: &str,
-) -> Result<ProviderHealthResponse, LlmProvidersApiError> {
+) -> Result<ProviderValidationResponse, LlmProvidersApiError> {
     let provider_id = validate_provider_id(provider_id)?;
     let config = providers
         .provider_probe_config(user_id, &provider_id)
@@ -862,7 +862,7 @@ async fn execute_persisted_provider_health_check(
             "Provider configuration changed during health check; retry the check",
         ));
     }
-    Ok(ProviderHealthResponse::from(health))
+    Ok(ProviderValidationResponse::from_health(health))
 }
 
 async fn get_provider_health(
@@ -963,6 +963,18 @@ pub(crate) struct ProviderCreateRequest {
     pool_enabled: Option<bool>,
     model_tier: Option<String>,
     secondary_models: Option<Vec<String>>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderProbeRequest {
+    name: String,
+    provider_type: String,
+    auth_method: Option<String>,
+    api_key: Option<String>,
+    base_url: Option<String>,
+    operation_type: Option<String>,
+    is_active: Option<bool>,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -1085,6 +1097,19 @@ pub(crate) struct ProviderHealthResponse {
     response_time_ms: Option<i32>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+struct ProviderValidationResponse {
+    provider: Option<ProviderConfigResponse>,
+    provider_id: String,
+    status: String,
+    probed: bool,
+    detail: Option<String>,
+    last_check: String,
+    response_time_ms: Option<i32>,
+    error_message: Option<String>,
+    catalog: Option<Value>,
+}
+
 pub(crate) struct ProviderProbeConfig {
     provider_id: String,
     provider_type: String,
@@ -1095,15 +1120,36 @@ pub(crate) struct ProviderProbeConfig {
 }
 
 impl ProviderProbeConfig {
-    fn from_create_record(record: LlmProviderCreateRecord) -> Self {
-        Self {
-            provider_id: uuid::Uuid::new_v4().to_string(),
-            provider_type: record.provider_type,
-            base_url: record.base_url,
-            llm_model: record.llm_model,
-            api_key: usable_probe_api_key(Some(record.api_key_plaintext)),
-            revision: None,
+    fn from_probe_request(request: ProviderProbeRequest) -> Result<Self, LlmProvidersApiError> {
+        let _name = normalize_required_name(request.name)?;
+        let provider_type = normalize_provider_type(request.provider_type)?;
+        let _operation_type = effective_operation_type(&provider_type, request.operation_type)?;
+        let expected_auth_method = provider_auth_method(&provider_type);
+        let auth_method = request
+            .auth_method
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(expected_auth_method)
+            .to_lowercase();
+        if auth_method != expected_auth_method {
+            return Err(LlmProvidersApiError::unprocessable(
+                "Authentication method is not supported for this provider type",
+            ));
         }
+        let api_key = usable_probe_api_key(request.api_key);
+        if expected_auth_method == "api_key" && api_key.is_none() {
+            return Err(LlmProvidersApiError::unprocessable("API key is required"));
+        }
+        let _is_active = request.is_active;
+        Ok(Self {
+            provider_id: uuid::Uuid::new_v4().to_string(),
+            provider_type,
+            base_url: request.base_url,
+            llm_model: None,
+            api_key,
+            revision: None,
+        })
     }
 
     fn from_persisted_record(record: LlmProviderRecord) -> Self {
@@ -1451,6 +1497,24 @@ impl From<ProviderHealthRecord> for ProviderHealthResponse {
                 .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
             error_message: record.error_message,
             response_time_ms: record.response_time_ms,
+        }
+    }
+}
+
+impl ProviderValidationResponse {
+    fn from_health(record: ProviderHealthRecord) -> Self {
+        Self {
+            provider: None,
+            provider_id: record.provider_id,
+            status: record.status,
+            probed: true,
+            detail: None,
+            last_check: record
+                .last_check
+                .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+            response_time_ms: record.response_time_ms,
+            error_message: record.error_message,
+            catalog: None,
         }
     }
 }
@@ -3024,8 +3088,8 @@ mod tests {
     }
 
     async fn unguarded_test_connection_route(
-        Json(request): Json<ProviderCreateRequest>,
-    ) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+        Json(request): Json<ProviderProbeRequest>,
+    ) -> Result<Json<ProviderValidationResponse>, LlmProvidersApiError> {
         execute_provider_connection_test(request).await.map(Json)
     }
 
@@ -3060,7 +3124,7 @@ mod tests {
     async fn unguarded_persisted_health_check_route(
         State(state): State<TestHealthCheckState>,
         Path(provider_id): Path<String>,
-    ) -> Result<Json<ProviderHealthResponse>, LlmProvidersApiError> {
+    ) -> Result<Json<ProviderValidationResponse>, LlmProvidersApiError> {
         execute_persisted_provider_health_check(
             &state.providers,
             &state.health,
@@ -3199,14 +3263,19 @@ mod tests {
             json!({
                 "name": "Ollama test",
                 "provider_type": "ollama",
+                "auth_method": "none",
                 "base_url": server.base_url.clone(),
-                "llm_model": "llama3.1:8b"
+                "is_active": true
             }),
         )
         .await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "healthy");
+        assert_eq!(body["probed"], true);
+        assert_eq!(body["provider"], Value::Null);
+        assert_eq!(body["detail"], Value::Null);
+        assert_eq!(body["catalog"], Value::Null);
         assert_eq!(body["error_message"], Value::Null);
         let requests = server
             .requests
@@ -3227,15 +3296,18 @@ mod tests {
             json!({
                 "name": "OpenAI rejected",
                 "provider_type": "openai",
+                "auth_method": "api_key",
                 "api_key": secret,
                 "base_url": format!("{}/v1", server.base_url),
-                "llm_model": "gpt-4o"
+                "is_active": true
             }),
         )
         .await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "unhealthy");
+        assert_eq!(body["probed"], true);
+        assert_eq!(body["detail"], Value::Null);
         assert_eq!(
             body["error_message"],
             "HTTPS is required for credentialed providers"
@@ -3260,14 +3332,16 @@ mod tests {
             json!({
                 "name": "Ollama local",
                 "provider_type": "ollama",
+                "auth_method": "none",
                 "base_url": server.base_url.clone(),
-                "llm_model": "llama3.1:8b"
+                "is_active": true
             }),
         )
         .await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "healthy");
+        assert_eq!(body["probed"], true);
         let requests = server
             .requests
             .lock()
@@ -3316,8 +3390,12 @@ mod tests {
 
         assert_eq!(ollama_status, StatusCode::OK);
         assert_eq!(ollama_body["status"], "healthy");
+        assert_eq!(ollama_body["probed"], true);
+        assert_eq!(ollama_body["provider"], Value::Null);
         assert_eq!(lmstudio_status, StatusCode::OK);
         assert_eq!(lmstudio_body["status"], "unhealthy");
+        assert_eq!(lmstudio_body["probed"], true);
+        assert_eq!(lmstudio_body["detail"], Value::Null);
         assert_eq!(lmstudio_body["error_message"], "HTTP 503");
         let stored_ollama = health_service
             .latest_health(&ollama.id)
@@ -3430,12 +3508,15 @@ mod tests {
 
     #[tokio::test]
     async fn provider_connection_test_rejects_unsupported_provider_types() {
-        let error = execute_provider_connection_test(provider_create_request(
-            "azure_openai",
-            "https://example.openai.azure.com".to_string(),
-            Some("test-secret"),
-            "gpt-4o",
-        ))
+        let error = execute_provider_connection_test(ProviderProbeRequest {
+            name: "Azure OpenAI test".to_string(),
+            provider_type: "azure_openai".to_string(),
+            auth_method: Some("api_key".to_string()),
+            api_key: Some("test-secret".to_string()),
+            base_url: Some("https://example.openai.azure.com".to_string()),
+            operation_type: None,
+            is_active: Some(true),
+        })
         .await
         .expect_err("unsupported provider probe must fail before network I/O");
 
@@ -3632,6 +3713,28 @@ mod tests {
             ..current_config
         };
         assert!(!provider_health_matches_config(&response, &stale_config));
+    }
+
+    #[test]
+    fn provider_validation_response_matches_desktop_and_python_shape() {
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/llm_provider_validation_response.json"
+        ))
+        .expect("llm provider validation golden must be valid JSON");
+
+        let response = ProviderValidationResponse::from_health(ProviderHealthRecord {
+            provider_id: "11111111-2222-4333-8444-555555555555".to_string(),
+            status: "healthy".to_string(),
+            last_check: Utc
+                .with_ymd_and_hms(2026, 1, 2, 3, 4, 5)
+                .single()
+                .expect("fixture timestamp is valid"),
+            error_message: None,
+            response_time_ms: Some(88),
+        });
+        let value = serde_json::to_value(response).expect("response serializes");
+
+        agistack_parity::assert_parity(&golden, &value);
     }
 
     #[test]

@@ -13,6 +13,7 @@ from src.domain.llm_providers.models import (
     ProviderHealth,
     ProviderStatus,
     ProviderType,
+    ProviderValidationResponse,
 )
 
 
@@ -467,14 +468,19 @@ class TestLLMProvidersRouterHealthCheck:
     @pytest.mark.asyncio
     async def test_test_provider_connection_success(self, llm_client, mock_provider_service):
         """Test a provider connection without saving it."""
-        mock_health = ProviderHealth(
+        checked_at = datetime.now(UTC)
+        mock_validation = ProviderValidationResponse(
+            provider=None,
             provider_id=uuid4(),
             status=ProviderStatus.HEALTHY,
+            probed=True,
+            detail=None,
+            catalog=None,
             response_time_ms=120,
-            last_check=datetime.now(UTC),
+            last_check=checked_at,
             error_message=None,
         )
-        mock_provider_service.test_provider_connection.return_value = mock_health
+        mock_provider_service.test_provider_connection.return_value = mock_validation
 
         response = llm_client.post(
             "/api/v1/llm-providers/test-connection",
@@ -482,13 +488,26 @@ class TestLLMProvidersRouterHealthCheck:
                 "name": "test-openai",
                 "provider_type": "openai",
                 "api_key": "sk-test-key-12345",
-                "llm_model": "gpt-4o",
             },
         )
 
         assert response.status_code == status.HTTP_200_OK
         mock_provider_service.test_provider_connection.assert_called_once()
-        assert response.json()["status"] == "healthy"
+        data = response.json()
+        assert data == {
+            "provider": None,
+            "provider_id": str(mock_validation.provider_id),
+            "status": "healthy",
+            "probed": True,
+            "detail": None,
+            "last_check": checked_at.isoformat().replace("+00:00", "Z"),
+            "response_time_ms": 120,
+            "error_message": None,
+            "catalog": None,
+        }
+        submitted = mock_provider_service.test_provider_connection.call_args.args[0]
+        assert submitted.name == "test-openai"
+        assert not hasattr(submitted, "llm_model")
 
     @pytest.mark.asyncio
     async def test_test_provider_connection_validation_error(
@@ -536,6 +555,9 @@ class TestLLMProvidersRouterHealthCheck:
         mock_provider_service.check_provider_health.assert_called_once()
         data = response.json()
         assert data["status"] == "healthy"
+        assert data["probed"] is True
+        assert data["detail"] is None
+        assert data["catalog"] is None
 
     @pytest.mark.asyncio
     async def test_check_provider_health_not_found(self, llm_client, mock_provider_service):

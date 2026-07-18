@@ -26,8 +26,10 @@ from src.domain.llm_providers.models import (
     ProviderConfigResponse,
     ProviderConfigUpdate,
     ProviderHealth,
+    ProviderProbeRequest,
     ProviderStatus,
     ProviderType,
+    ProviderValidationResponse,
     RateLimitStats,
     ResilienceStatus,
     TenantProviderMapping,
@@ -278,7 +280,10 @@ class ProviderService:
         logger.info(f"Health check complete for {provider_id}: {status}")
         return health
 
-    async def test_provider_connection(self, config: ProviderConfigCreate) -> ProviderHealth:
+    async def test_provider_connection(
+        self,
+        config: ProviderProbeRequest,
+    ) -> ProviderValidationResponse:
         """Run a live provider health check from form data without persisting it."""
         import time
 
@@ -308,12 +313,18 @@ class ProviderService:
             error_message = str(e)
             response_time_ms = int((time.time() - start_time) * 1000)
 
-        return ProviderHealth(
+        health = ProviderHealth(
             provider_id=provider_id,
             status=ProviderStatus(status),
             last_check=datetime.now(UTC),
             error_message=error_message,
             response_time_ms=response_time_ms,
+        )
+        return ProviderValidationResponse.from_health(
+            health,
+            probed=True,
+            detail=None,
+            catalog=None,
         )
 
     async def _check_provider_endpoint(

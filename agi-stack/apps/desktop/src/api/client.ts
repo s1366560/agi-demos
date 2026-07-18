@@ -888,7 +888,7 @@ export class DesktopApiClient {
         provider_type: input.providerType,
         base_url: input.baseUrl,
         is_active: input.active,
-        ...(this.config.mode === 'local' ? { auth_method: input.authMethod } : {}),
+        auth_method: input.authMethod,
         ...(apiKey ? { api_key: apiKey } : {}),
       },
     });

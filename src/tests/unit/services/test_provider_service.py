@@ -18,6 +18,7 @@ from src.domain.llm_providers.models import (
     ProviderConfigCreate,
     ProviderConfigUpdate,
     ProviderHealth,
+    ProviderProbeRequest,
     ProviderStatus,
     ProviderType,
 )
@@ -391,11 +392,10 @@ class TestProviderService:
     @pytest.mark.asyncio
     async def test_test_provider_connection_checks_form_config_without_persisting(self, service):
         """Connection tests should use submitted config and avoid writing health rows."""
-        config = ProviderConfigCreate(
+        config = ProviderProbeRequest(
             name="draft-openai",
             provider_type=ProviderType.OPENAI,
             api_key="sk-test",
-            llm_model="gpt-4o",
         )
 
         with patch.object(
@@ -403,14 +403,17 @@ class TestProviderService:
             "_check_provider_endpoint",
             new=AsyncMock(return_value=("healthy", None)),
         ) as mock_check:
-            health = await service.test_provider_connection(config)
+            validation = await service.test_provider_connection(config)
 
-        assert health.status.value == "healthy"
-        assert health.error_message is None
+        assert validation.status.value == "healthy"
+        assert validation.probed is True
+        assert validation.detail is None
+        assert validation.catalog is None
+        assert validation.error_message is None
         mock_check.assert_awaited_once()
         checked_provider = mock_check.await_args.args[0]
         assert checked_provider.name == "draft-openai"
-        assert checked_provider.llm_model == "gpt-4o"
+        assert checked_provider.llm_model is None
         assert mock_check.await_args.args[1] == "sk-test"
         service.repository.create_health_check.assert_not_called()
 
