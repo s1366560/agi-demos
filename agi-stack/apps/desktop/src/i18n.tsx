@@ -1388,7 +1388,13 @@ const enUS: Record<string, string> = {
   'session.structuredEvidenceCount':
     '{artifactCount} artifacts · {checkCount} checks · {toolActivityCount} tool activities',
   'session.loadingEarlierHistory': 'Loading earlier history…',
-  'session.scrollForEarlierHistory': 'Scroll up for earlier history',
+  'session.loadEarlierHistory': 'Load earlier history',
+  'session.retryHistory': 'Retry history',
+  'session.retryEarlierHistory': 'Retry earlier history',
+  'session.jumpToLatest': 'Jump to latest',
+  'session.timelineScrollRegion': 'Conversation history',
+  'session.earlierHistoryNoProgress':
+    'Earlier history did not advance. Refresh the session, then retry.',
   'session.runActivity': 'Run activity',
   'session.runActivityCount': '{count} structured events',
   'session.inspect': 'Inspect',
@@ -2990,7 +2996,12 @@ const zhCN: Record<string, string> = {
   'session.structuredEvidenceCount':
     '{artifactCount} 个产物 · {checkCount} 项检查 · {toolActivityCount} 次工具活动',
   'session.loadingEarlierHistory': '正在加载更早记录…',
-  'session.scrollForEarlierHistory': '向上滚动以加载更早记录',
+  'session.loadEarlierHistory': '加载更早记录',
+  'session.retryHistory': '重试加载记录',
+  'session.retryEarlierHistory': '重试加载更早记录',
+  'session.jumpToLatest': '跳至最新',
+  'session.timelineScrollRegion': '会话记录',
+  'session.earlierHistoryNoProgress': '未获得更早记录。请刷新会话后重试。',
   'session.runActivity': '运行活动',
   'session.runActivityCount': '{count} 个结构化事件',
   'session.inspect': '查看',

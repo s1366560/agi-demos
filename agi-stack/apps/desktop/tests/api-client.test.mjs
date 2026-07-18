@@ -15,6 +15,46 @@ const {
 } = clientModule;
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
+test('conversation history requests preserve forward and backward cursor pairs', async () => {
+  let requestUrl = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    requestUrl = new URL(String(input));
+    return new Response(JSON.stringify({ conversationId: 'conversation/1', timeline: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      projectId: 'project/1',
+    });
+    await client.getConversationMessages('conversation/1', 'project/1', {
+      limit: 75,
+      fromTimeUs: 1_000,
+      fromCounter: 4,
+      beforeTimeUs: 2_000,
+      beforeCounter: 7,
+    });
+
+    assert.equal(requestUrl?.pathname, '/api/v1/agent/conversations/conversation%2F1/messages');
+    assert.deepEqual(Object.fromEntries(requestUrl?.searchParams ?? []), {
+      project_id: 'project/1',
+      limit: '75',
+      from_time_us: '1000',
+      from_counter: '4',
+      before_time_us: '2000',
+      before_counter: '7',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace context requests preserve the authoritative revision contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

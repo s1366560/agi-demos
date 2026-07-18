@@ -175,11 +175,100 @@ const timelineState: ConversationTimelineState = {
   lastCursor: null,
 };
 
+const earlierTimelineItem: ConversationTimelineState['items'][number] = {
+  id: 'message-earlier-context',
+  type: 'assistant_message',
+  eventTimeUs: 1_784_282_022_000_000,
+  eventCounter: 0,
+  role: 'assistant',
+  content: 'I am checking the pipeline fixture ownership before reproducing the race.',
+};
+
+const anchorTimelineItems: ConversationTimelineState['items'] = [
+  ...Array.from({ length: 18 }, (_, index) => ({
+    id: `message-recorded-checkpoint-${index + 1}`,
+    type: 'assistant_message',
+    eventTimeUs: 1_784_282_023_000_000 + index * 1_000_000,
+    eventCounter: index,
+    role: 'assistant',
+    content: `Recorded checkpoint ${index + 1}: pipeline ownership remained isolated.`,
+  })),
+  ...timelineState.items,
+];
+
+const concurrentTailItem: ConversationTimelineState['items'][number] = {
+  id: 'message-concurrent-live-tail',
+  type: 'assistant_message',
+  eventTimeUs: 1_784_282_044_000_000,
+  eventCounter: 4,
+  role: 'assistant',
+  content: 'A concurrent live update arrived while earlier history was loading.',
+};
+
 function SessionSteeringQa() {
+  const historyMode = new URLSearchParams(window.location.search).get('history');
   const [input, setInput] = useState('Keep the public API stable and add the missing revision test.');
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+  const [timeline, setTimeline] = useState<ConversationTimelineState>(() => {
+    const items = historyMode === 'anchor' ? anchorTimelineItems : timelineState.items;
+    return {
+      ...timelineState,
+      items,
+      hasMore:
+        historyMode === 'pagination' || historyMode === 'error' || historyMode === 'anchor',
+      firstCursor: {
+        timeUs: items[0]?.eventTimeUs ?? 0,
+        counter: items[0]?.eventCounter ?? 0,
+      },
+      lastCursor: {
+        timeUs: items[items.length - 1]?.eventTimeUs ?? 0,
+        counter: items[items.length - 1]?.eventCounter ?? 0,
+      },
+    };
+  });
+
+  const loadEarlierHistory = () => {
+    setTimeline((current) => ({ ...current, loadingEarlier: true, error: null }));
+    if (historyMode === 'anchor') {
+      window.setTimeout(() => {
+        setTimeline((current) => ({
+          ...current,
+          items: current.items.some((item) => item.id === concurrentTailItem.id)
+            ? current.items
+            : [...current.items, concurrentTailItem],
+        }));
+      }, 1000);
+    }
+    window.setTimeout(() => {
+      if (historyMode === 'error' && historyAttempt === 0) {
+        setHistoryAttempt(1);
+        setTimeline((current) => ({
+          ...current,
+          loadingEarlier: false,
+          error: 'Earlier history could not be loaded. Retry without losing this page.',
+          hasMore: false,
+        }));
+        return;
+      }
+      setTimeline((current) => ({
+        ...current,
+        items: current.items.some((item) => item.id === earlierTimelineItem.id)
+          ? current.items
+          : [earlierTimelineItem, ...current.items],
+        loadingEarlier: false,
+        error: null,
+        hasMore: false,
+        firstCursor: {
+          timeUs: earlierTimelineItem.eventTimeUs ?? 0,
+          counter: earlierTimelineItem.eventCounter ?? 0,
+        },
+      }));
+    }, historyMode === 'anchor' ? 2000 : 180);
+  };
+
   return (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="session-steering-qa-shell">
@@ -209,7 +298,7 @@ function SessionSteeringQa() {
           <div className="session-steering-qa-content">
             <ChatPanel
               messages={messages}
-              timelineState={timelineState}
+              timelineState={timeline}
               agentTaskSignals={[]}
               workflowCounts={{ changes: 2, plan: 'ready' }}
               sessionTitle="Conversation"
@@ -249,7 +338,7 @@ function SessionSteeringQa() {
               }
               onSend={() => undefined}
               onRefresh={() => undefined}
-              onLoadEarlier={() => undefined}
+              onLoadEarlier={loadEarlierHistory}
               onRespondToHitl={async () => undefined}
               onWorkflowSelect={() => undefined}
               onRuntimeTargetChange={() => undefined}

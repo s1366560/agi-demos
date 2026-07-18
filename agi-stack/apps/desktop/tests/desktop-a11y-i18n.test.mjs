@@ -9,6 +9,10 @@ const appSource = readSource('App.tsx');
 const flowSource = readSource('features/task/NewTaskFlow.tsx');
 const stagesSource = readSource('features/task/NewTaskFlowStages.tsx');
 const runtimeSource = readSource('features/runtime/RuntimeConfigPanel.tsx');
+const chatPanelCssSource = readSource('features/chat/ChatPanel.css');
+const chatPanelSource = readSource('features/chat/ChatPanel.tsx');
+const chatTimelineSource = readSource('features/chat/ChatTimeline.tsx');
+const chatTranscriptSource = readSource('features/chat/ChatTranscript.tsx');
 const i18nSource = readSource('i18n.tsx');
 
 test('session canvas implements an arrow-key navigable tab pattern', () => {
@@ -62,4 +66,36 @@ test('command palette and recovery affordances use localized, accurate copy', ()
   assert.match(i18nSource, /打开连接恢复/);
   assert.doesNotMatch(appSource, /aria-label="Command palette"/);
   assert.doesNotMatch(appSource, /placeholder="Search commands/);
+});
+
+test('session history exposes keyboard recovery and preserves manual reading position', () => {
+  assert.match(chatPanelSource, /aria-label=\{t\('session\.timelineScrollRegion'\)\}/);
+  assert.match(chatPanelSource, /aria-busy=\{timelineLoading \|\| timelineLoadingEarlier\}/);
+  assert.match(chatPanelSource, /tabIndex=\{0\}/);
+  assert.match(chatPanelSource, /if \(!hasTimelineState \|\| timelineError\) return;/);
+  assert.match(chatPanelSource, /isSessionTimelinePinnedToLatest\(viewport\)/);
+  assert.match(chatPanelSource, /snapshot\.conversationId !== timelineConversationId/);
+  assert.doesNotMatch(chatPanelSource, /scrollHeight - snapshot\.height/);
+  assert.match(chatPanelSource, /timelineAnchorMemberIds\(candidate\)\.includes/);
+  assert.match(chatPanelCssSource, /overflow-anchor: none/);
+  assert.match(chatPanelSource, /t\('session\.jumpToLatest'\)/);
+  assert.match(chatTimelineSource, /className="timeline-error" role="alert"/);
+  assert.match(chatTimelineSource, /data-timeline-anchor-id=/);
+  assert.match(chatTimelineSource, /data-timeline-anchor-members=/);
+  assert.match(chatTimelineSource, /open=\{open\}/);
+  assert.match(chatTimelineSource, /timelineGroupIdentity\(narrative, index\)/);
+  assert.match(chatTranscriptSource, /data-timeline-anchor-id=\{timelineItemId\}/);
+  assert.match(chatTimelineSource, /onClick=\{state\.items\.length \? onLoadEarlier : onRetry\}/);
+  assert.match(chatTimelineSource, /t\('session\.loadEarlierHistory'\)/);
+
+  for (const key of [
+    'session.loadEarlierHistory',
+    'session.retryHistory',
+    'session.retryEarlierHistory',
+    'session.jumpToLatest',
+    'session.timelineScrollRegion',
+    'session.earlierHistoryNoProgress',
+  ]) {
+    assert.equal((i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length, 2);
+  }
 });

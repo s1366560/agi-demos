@@ -56,6 +56,7 @@ export function NarrativeMessageFrame({
   content,
   badge,
   className,
+  timelineItemId,
   children,
 }: {
   kind: 'user' | 'agent' | 'runtime';
@@ -64,10 +65,14 @@ export function NarrativeMessageFrame({
   content: string;
   badge: string | null;
   className: string;
+  timelineItemId?: string;
   children: ReactNode;
 }) {
   return (
-    <article className={`message transcript-message session-thread-message ${className} ${kind}`}>
+    <article
+      className={`message transcript-message session-thread-message ${className} ${kind}`}
+      data-timeline-anchor-id={timelineItemId}
+    >
       <span className="session-thread-avatar" aria-hidden="true">
         {kind === 'user' ? (
           <PersonIcon />

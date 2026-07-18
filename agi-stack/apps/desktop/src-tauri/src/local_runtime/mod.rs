@@ -72,6 +72,8 @@ const CHECKPOINT_TERMINALIZATION_RECOVERY_ERROR_PREFIX: &str =
     "authoritative checkpoint terminalization failed; checkpoint quarantined";
 const CHECKPOINT_CONTROL_AUTHORITY_ERROR: &str =
     "checkpoint authority does not match the requested run";
+const DEFAULT_TIMELINE_LIMIT: i64 = 50;
+const MAX_TIMELINE_LIMIT: i64 = 500;
 
 use auth_context::{
     AuthContextError, AuthenticatedContext, ContextSwitchRequest, LocalSessionRequest,
@@ -85,7 +87,9 @@ use authority_store::{
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
 use resource_registry::{ManagedResourceKind, ResourceRegistryError};
-use session_store::{DesktopClientTurnClaimError, DesktopSessionStore};
+use session_store::{
+    DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
+};
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
 use worktree::WorktreeManager;
 
@@ -4155,7 +4159,71 @@ async fn update_conversation_mode(
 
 #[derive(Deserialize)]
 struct ConversationMessagesQuery {
-    limit: Option<usize>,
+    project_id: String,
+    limit: Option<i64>,
+    from_time_us: Option<i64>,
+    from_counter: Option<i64>,
+    before_time_us: Option<i64>,
+    before_counter: Option<i64>,
+}
+
+struct ValidatedConversationMessagesQuery {
+    project_id: String,
+    limit: usize,
+    from: Option<DesktopTimelineCursor>,
+    before: Option<DesktopTimelineCursor>,
+}
+
+impl ConversationMessagesQuery {
+    fn validated(&self) -> Result<ValidatedConversationMessagesQuery, (StatusCode, Json<Value>)> {
+        let project_id = self.project_id.trim();
+        if project_id.is_empty() {
+            return Err(conversation_messages_query_error("project_id is required"));
+        }
+        let limit = self.limit.unwrap_or(DEFAULT_TIMELINE_LIMIT);
+        if !(1..=MAX_TIMELINE_LIMIT).contains(&limit) {
+            return Err(conversation_messages_query_error(
+                "limit must be between 1 and 500",
+            ));
+        }
+        let from_time_us = self.from_time_us.unwrap_or_default();
+        let from_counter = self.from_counter.unwrap_or_default();
+        if from_time_us < 0 || from_counter < 0 {
+            return Err(conversation_messages_query_error(
+                "from cursors must be greater than or equal to 0",
+            ));
+        }
+        if self.before_time_us.is_some_and(|value| value < 0)
+            || self.before_counter.is_some_and(|value| value < 0)
+        {
+            return Err(conversation_messages_query_error(
+                "before cursors must be greater than or equal to 0",
+            ));
+        }
+        let limit = usize::try_from(limit)
+            .map_err(|_| conversation_messages_query_error("limit must be between 1 and 500"))?;
+        let before = self.before_time_us.map(|time_us| DesktopTimelineCursor {
+            time_us,
+            counter: self.before_counter.unwrap_or_default(),
+        });
+        let from = (from_time_us > 0).then_some(DesktopTimelineCursor {
+            time_us: from_time_us,
+            counter: from_counter,
+        });
+        Ok(ValidatedConversationMessagesQuery {
+            project_id: project_id.to_string(),
+            limit,
+            from,
+            before,
+        })
+    }
+}
+
+fn conversation_messages_query_error(detail: &str) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({ "detail": detail })),
+    )
 }
 
 #[derive(Deserialize)]
@@ -4235,15 +4303,17 @@ async fn conversation_messages(
     Path(conversation_id): Path<String>,
     Query(query): Query<ConversationMessagesQuery>,
 ) -> LocalJsonResult {
+    let query = query.validated()?;
+    ensure_active_project(&authenticated, &query.project_id)?;
     scoped_conversation(&state, &authenticated, &conversation_id)?;
-    let limit = query.limit.unwrap_or(50);
-    let items = state
+    let DesktopTimelinePage {
+        items,
+        has_more,
+        first_cursor,
+        last_cursor,
+    } = state
         .session_store
-        .timeline(&conversation_id, limit)
-        .map_err(local_store_error)?;
-    let total = state
-        .session_store
-        .timeline_count(&conversation_id)
+        .timeline_page(&conversation_id, query.limit, query.from, query.before)
         .map_err(local_store_error)?;
     let approval_requests = state
         .session_store
@@ -4280,8 +4350,7 @@ async fn conversation_messages(
         .session_store
         .list_tool_invocations(&conversation_id)
         .map_err(local_store_error)?;
-    let first = items.first().cloned();
-    let last = items.last().cloned();
+    let total = items.len();
     Ok(Json(json!({
         "conversationId": conversation_id,
         "timeline": items,
@@ -4290,11 +4359,11 @@ async fn conversation_messages(
         "artifact_deliveries": artifact_deliveries,
         "tool_invocations": tool_invocations,
         "total": total,
-        "has_more": total > items.len(),
-        "first_time_us": first.as_ref().and_then(|item| item["eventTimeUs"].as_i64()),
-        "first_counter": first.as_ref().and_then(|item| item["eventCounter"].as_u64()),
-        "last_time_us": last.as_ref().and_then(|item| item["eventTimeUs"].as_i64()),
-        "last_counter": last.as_ref().and_then(|item| item["eventCounter"].as_u64()),
+        "has_more": has_more,
+        "first_time_us": first_cursor.map(|cursor| cursor.time_us),
+        "first_counter": first_cursor.map(|cursor| cursor.counter),
+        "last_time_us": last_cursor.map(|cursor| cursor.time_us),
+        "last_counter": last_cursor.map(|cursor| cursor.counter),
     })))
 }
 
@@ -6875,6 +6944,24 @@ mod tests {
         serde_json::from_slice(&body).expect("response JSON")
     }
 
+    fn timeline_test_item(id: &str, time_us: i64, counter: i64) -> Value {
+        json!({
+            "id": id,
+            "type": "assistant_message",
+            "eventTimeUs": time_us,
+            "eventCounter": counter,
+        })
+    }
+
+    fn timeline_response_ids(payload: &Value) -> Vec<&str> {
+        payload["timeline"]
+            .as_array()
+            .expect("timeline array")
+            .iter()
+            .map(|item| item["id"].as_str().expect("timeline item id"))
+            .collect()
+    }
+
     fn test_decision_context() -> agistack_core::agent::types::DecisionContext {
         use agistack_core::agent::types::{
             DecisionAction, DecisionContext, DecisionData, DecisionEvidence, DecisionReversibility,
@@ -6918,6 +7005,155 @@ mod tests {
                 digest: Some("sha256:test".to_string()),
             }],
         }
+    }
+
+    #[tokio::test]
+    async fn conversation_messages_api_paginates_with_exclusive_tuple_cursors() {
+        let state = test_state("timeline-secret");
+        let conversation_id = "conversation-timeline-pagination";
+        seed_plan_conversation(&state, conversation_id);
+        for item in [
+            timeline_test_item("event-1", 100, 0),
+            timeline_test_item("event-2", 200, 0),
+            timeline_test_item("event-3", 300, 0),
+            timeline_test_item("event-4", 400, 0),
+            timeline_test_item("event-5", 400, 1),
+        ] {
+            state
+                .session_store
+                .append_timeline(conversation_id, &item)
+                .expect("append timeline item");
+        }
+        let app = local_router(Arc::clone(&state));
+
+        let latest = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=local-project&limit=2"
+                    ))
+                    .header("authorization", "Bearer timeline-secret")
+                    .body(Body::empty())
+                    .expect("latest page request"),
+            )
+            .await
+            .expect("latest page response");
+        assert_eq!(latest.status(), StatusCode::OK);
+        let latest = response_json(latest).await;
+        assert_eq!(timeline_response_ids(&latest), vec!["event-4", "event-5"]);
+        assert_eq!(latest["total"], 2);
+        assert_eq!(latest["has_more"], true);
+        assert_eq!(latest["first_time_us"], 400);
+        assert_eq!(latest["first_counter"], 0);
+        assert_eq!(latest["last_time_us"], 400);
+        assert_eq!(latest["last_counter"], 1);
+
+        let middle = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=local-project&limit=2&before_time_us=400&before_counter=0&from_time_us=100&from_counter=0"
+                    ))
+                    .header("authorization", "Bearer timeline-secret")
+                    .body(Body::empty())
+                    .expect("middle page request"),
+            )
+            .await
+            .expect("middle page response");
+        assert_eq!(middle.status(), StatusCode::OK);
+        let middle = response_json(middle).await;
+        assert_eq!(timeline_response_ids(&middle), vec!["event-2", "event-3"]);
+        assert_eq!(middle["total"], 2);
+        assert_eq!(middle["has_more"], true);
+
+        let oldest = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=local-project&limit=2&before_time_us=200&before_counter=0"
+                    ))
+                    .header("authorization", "Bearer timeline-secret")
+                    .body(Body::empty())
+                    .expect("oldest page request"),
+            )
+            .await
+            .expect("oldest page response");
+        assert_eq!(oldest.status(), StatusCode::OK);
+        let oldest = response_json(oldest).await;
+        assert_eq!(timeline_response_ids(&oldest), vec!["event-1"]);
+        assert_eq!(oldest["total"], 1);
+        assert_eq!(oldest["has_more"], false);
+
+        let forward = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=local-project&limit=2&from_time_us=200&from_counter=0"
+                    ))
+                    .header("authorization", "Bearer timeline-secret")
+                    .body(Body::empty())
+                    .expect("forward page request"),
+            )
+            .await
+            .expect("forward page response");
+        assert_eq!(forward.status(), StatusCode::OK);
+        let forward = response_json(forward).await;
+        assert_eq!(timeline_response_ids(&forward), vec!["event-3", "event-4"]);
+        assert_eq!(forward["has_more"], true);
+    }
+
+    #[tokio::test]
+    async fn conversation_messages_api_validates_project_limit_and_cursors() {
+        let state = test_state("timeline-validation-secret");
+        let conversation_id = "conversation-timeline-validation";
+        seed_plan_conversation(&state, conversation_id);
+        let app = local_router(state);
+        let invalid_queries = [
+            "project_id=local-project&limit=0",
+            "project_id=local-project&limit=501",
+            "project_id=local-project&from_time_us=-1",
+            "project_id=local-project&from_counter=-1",
+            "project_id=local-project&before_time_us=-1",
+            "project_id=local-project&before_counter=-1",
+            "project_id=%20",
+        ];
+        for query in invalid_queries {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!(
+                            "/api/v1/agent/conversations/{conversation_id}/messages?{query}"
+                        ))
+                        .header("authorization", "Bearer timeline-validation-secret")
+                        .body(Body::empty())
+                        .expect("invalid query request"),
+                )
+                .await
+                .expect("invalid query response");
+            assert_eq!(
+                response.status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "query should be rejected: {query}"
+            );
+        }
+
+        let wrong_project = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=desktop-client"
+                    ))
+                    .header("authorization", "Bearer timeline-validation-secret")
+                    .body(Body::empty())
+                    .expect("wrong project request"),
+            )
+            .await
+            .expect("wrong project response");
+        assert_eq!(wrong_project.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -8848,7 +9084,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!(
-                        "/api/v1/agent/conversations/{conversation_id}/messages"
+                        "/api/v1/agent/conversations/{conversation_id}/messages?project_id=local-project"
                     ))
                     .header("x-agistack-launch", "launch-secret")
                     .header("authorization", format!("Bearer {credential}"))
@@ -12232,7 +12468,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!(
-                        "/api/v1/agent/conversations/{}/messages",
+                        "/api/v1/agent/conversations/{}/messages?project_id=local-project",
                         conversation.id
                     ))
                     .header("authorization", "Bearer artifact-secret")
@@ -12447,7 +12683,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!(
-                        "/api/v1/agent/conversations/{}/messages",
+                        "/api/v1/agent/conversations/{}/messages?project_id=local-project",
                         conversation.id
                     ))
                     .header("authorization", "Bearer launch-secret")

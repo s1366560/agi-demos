@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
-import { Text } from '@radix-ui/themes';
+import { useMemo, useState } from 'react';
+import { Button, Text } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CodeIcon,
+  ReloadIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -56,12 +57,16 @@ export function AgentTimeline({
   state,
   expandedItems,
   onToggleItem,
+  onLoadEarlier,
+  onRetry,
   onRespondToHitl,
   respondableHitlRequestIds,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
   onToggleItem: (item: AgentTimelineItem) => void;
+  onLoadEarlier: () => void;
+  onRetry: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
 }) {
@@ -83,6 +88,19 @@ export function AgentTimeline({
     () => groupNarrativeActivity(buildSessionNarrative(state.items)),
     [state.items],
   );
+  const [expandedGroupItems, setExpandedGroupItems] = useState<Record<string, boolean>>({});
+  const setGroupOpen = (items: AgentTimelineItem[], open: boolean) => {
+    setExpandedGroupItems((current) => {
+      const next = { ...current };
+      let changed = false;
+      items.forEach((item) => {
+        if (next[item.id] === open) return;
+        next[item.id] = open;
+        changed = true;
+      });
+      return changed ? next : current;
+    });
+  };
 
   if (state.loading) {
     return (
@@ -101,26 +119,57 @@ export function AgentTimeline({
   return (
     <div className="agent-timeline" aria-label={t('session.conversationTimeline')}>
       {state.error ? (
-        <div className="timeline-error" role="status">
+        <div className="timeline-error" role="alert" aria-live="assertive">
           <Text size="2" color="red">
             {state.error}
           </Text>
+          <Button
+            type="button"
+            size="1"
+            variant="surface"
+            className="timeline-history-action"
+            onClick={state.items.length ? onLoadEarlier : onRetry}
+          >
+            <ReloadIcon aria-hidden="true" />
+            {t(state.items.length ? 'session.retryEarlierHistory' : 'session.retryHistory')}
+          </Button>
         </div>
       ) : null}
-      {state.hasMore || state.loadingEarlier ? (
-        <div className="timeline-load-earlier" role="status" aria-live="polite">
-          {state.loadingEarlier
-            ? t('session.loadingEarlierHistory')
-            : t('session.scrollForEarlierHistory')}
+      {!state.error && (state.hasMore || state.loadingEarlier) ? (
+        <div className="timeline-history-control" aria-live="polite">
+          {state.loadingEarlier ? (
+            <Text size="1" color="gray" role="status">
+              {t('session.loadingEarlierHistory')}
+            </Text>
+          ) : (
+            <Button
+              type="button"
+              size="1"
+              variant="ghost"
+              className="timeline-history-action"
+              onClick={onLoadEarlier}
+            >
+              {t('session.loadEarlierHistory')}
+            </Button>
+          )}
         </div>
       ) : null}
       {state.items.length === 0 && !state.error ? (
         <SessionEmptyState />
       ) : (
-        narrative.map((node) => {
+        narrative.map((node, index) => {
           if (node.kind === 'activity_group') {
+            const groupId = timelineGroupIdentity(narrative, index);
+            const open = node.items.some((item) => expandedGroupItems[item.id]);
             return (
-              <details className="timeline-debug-group" key={node.id}>
+              <details
+                className="timeline-debug-group"
+                data-timeline-anchor-id={groupId}
+                data-timeline-anchor-members={JSON.stringify(node.items.map((item) => item.id))}
+                key={groupId}
+                open={open}
+                onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
+              >
                 <summary>
                   <span className="timeline-debug-group-icon" aria-hidden="true">
                     <ActivityLogIcon />
@@ -148,8 +197,17 @@ export function AgentTimeline({
             );
           }
           if (node.kind === 'tool_group') {
+            const groupId = timelineGroupIdentity(narrative, index);
+            const open = node.items.some((item) => expandedGroupItems[item.id]);
             return (
-              <details className={`timeline-tool-group status-${node.status}`} key={node.id}>
+              <details
+                className={`timeline-tool-group status-${node.status}`}
+                data-timeline-anchor-id={groupId}
+                data-timeline-anchor-members={JSON.stringify(node.items.map((item) => item.id))}
+                key={groupId}
+                open={open}
+                onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
+              >
                 <summary>
                   <span className="timeline-tool-group-icon" aria-hidden>
                     <CodeIcon />
@@ -237,6 +295,7 @@ function TimelineItemView({
         content={item.content ?? ''}
         badge={kind === 'agent' ? t('session.workspaceAgent') : null}
         className="timeline-item"
+        timelineItemId={item.id}
       >
         <TimelineItemBody
           item={item}
@@ -258,6 +317,7 @@ function TimelineItemView({
       className={`message timeline-row timeline-item ${kind} ${expanded ? 'is-expanded' : ''} ${
         approvalRequest ? 'has-approval-evidence' : ''
       }`}
+      data-timeline-anchor-id={item.id}
     >
       {hasDetails ? (
         <button
@@ -467,6 +527,39 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
   flushActivityItems();
 
   return grouped;
+}
+
+function timelineGroupIdentity(narrative: TimelinePresentationNode[], index: number): string {
+  const node = narrative[index];
+  if (!node || node.kind === 'item') return node?.id ?? `timeline-node:${index}`;
+
+  const previousItem = narrative
+    .slice(0, index)
+    .reverse()
+    .find((candidate) => candidate.kind === 'item');
+  if (previousItem) {
+    const ordinal = narrative
+      .slice(narrative.indexOf(previousItem) + 1, index)
+      .filter((candidate) => candidate.kind === node.kind).length;
+    return `${node.kind}:after:${previousItem.id}:${ordinal}`;
+  }
+
+  const nextItemOffset = narrative
+    .slice(index + 1)
+    .findIndex((candidate) => candidate.kind === 'item');
+  if (nextItemOffset >= 0) {
+    const nextItemIndex = index + nextItemOffset + 1;
+    const nextItem = narrative[nextItemIndex];
+    const ordinalFromNext = narrative
+      .slice(index + 1, nextItemIndex)
+      .filter((candidate) => candidate.kind === node.kind).length;
+    return `${node.kind}:before:${nextItem.id}:${ordinalFromNext}`;
+  }
+
+  const ordinalFromEnd = narrative
+    .slice(index + 1)
+    .filter((candidate) => candidate.kind === node.kind).length;
+  return `${node.kind}:unbounded:${ordinalFromEnd}`;
 }
 
 function isCollapsibleRuntimeItem(item: AgentTimelineItem): boolean {

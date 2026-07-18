@@ -1,17 +1,48 @@
+.workspace-chat-panel {
+  position: relative;
+}
+
 .workspace-chat-panel .session-composer-editor {
   display: contents;
 }
 
 .session-chat-narrative {
+  position: relative;
   min-width: 0;
   overflow: hidden;
   background: #0b1017;
   container-type: inline-size;
 }
 
+.chat-shell .session-jump-latest {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  border-color: rgba(73, 177, 207, 0.35);
+  background: rgba(15, 28, 38, 0.96);
+  color: #c9e9f2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.session-chat-narrative .session-jump-latest {
+  bottom: 132px;
+}
+
+.chat-shell .session-jump-latest:hover,
+.chat-shell .session-jump-latest:focus-visible {
+  border-color: rgba(83, 208, 239, 0.58);
+  background: #132a35;
+}
+
 .session-workspace-thread .session-chat-narrative .message-scroll {
   min-width: 0;
   background: #0b1017;
+}
+
+.chat-shell .message-scroll [data-radix-scroll-area-viewport] {
+  overflow-anchor: none;
 }
 
 .session-workspace-thread .session-chat-narrative .message-stack {

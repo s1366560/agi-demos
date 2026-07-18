@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Flex, Heading, ScrollArea, Text, TextArea } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
   ArrowUpIcon,
+  ChevronDownIcon,
   CodeIcon,
   Cross2Icon,
   Link2Icon,
@@ -17,6 +18,12 @@ import type {
   SessionActivityPresence,
   SessionActivityStructuredEvidence,
 } from '../session/sessionNarrativeModel';
+import {
+  classifySessionTimelineWindowChange,
+  isSessionTimelinePinnedToLatest,
+  shouldFollowSessionTimeline,
+} from '../session/sessionTimelineScrollModel';
+import type { SessionTimelineWindow } from '../session/sessionTimelineScrollModel';
 import type {
   AgentTimelineItem,
   ConversationTimelineState,
@@ -102,6 +109,27 @@ export type AgentTaskSignal = {
   eventType?: string;
 };
 
+type EarlierTimelineScrollAnchor = {
+  conversationId: string;
+  anchorId: string | null;
+  anchorMemberId: string | null;
+  anchorOffset: number;
+  top: number;
+};
+
+function timelineAnchorMemberIds(anchor: HTMLElement): string[] {
+  const serialized = anchor.dataset.timelineAnchorMembers;
+  if (!serialized) return [];
+  try {
+    const parsed: unknown = JSON.parse(serialized);
+    return Array.isArray(parsed) && parsed.every((value) => typeof value === 'string')
+      ? parsed
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export function ChatPanel({
   messages,
   timelineState,
@@ -148,24 +176,39 @@ export function ChatPanel({
   const composerPresentation = chatComposerPresentation(composerVariant);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
-  const timelineWindowRef = useRef<{ firstId: string; lastId: string; count: number } | null>(null);
-  const earlierScrollRef = useRef<{ height: number; top: number } | null>(null);
+  const timelineWindowRef = useRef<SessionTimelineWindow | null>(null);
+  const workspaceTailKeyRef = useRef<string | null>(null);
+  const pinnedToLatestRef = useRef(true);
+  const earlierScrollRef = useRef<EarlierTimelineScrollAnchor | null>(null);
   const [expandedTimelineItems, setExpandedTimelineItems] = useState<Record<string, boolean>>({});
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
   const signalStateKey = useMemo(
     () => agentTaskSignals.map((signal) => `${signal.id}:${signal.status}`).join('|'),
     [agentTaskSignals],
   );
   const timelineItemCount = timelineState?.items.length ?? 0;
+  const timelineConversationId = timelineState?.conversationId ?? '';
   const timelineFirstId = timelineState?.items[0]?.id ?? '';
-  const timelineLastId = timelineState?.items[timelineItemCount - 1]?.id ?? '';
+  const timelineTailItem = timelineState?.items[timelineItemCount - 1];
+  const timelineLastId = timelineTailItem?.id ?? '';
+  const timelineTailRevision =
+    timelineTailItem?.content ?? timelineTailItem?.display?.summary ?? timelineTailItem?.error ?? '';
+  const timelineHasMore = timelineState?.hasMore ?? false;
+  const timelineLoading = timelineState?.loading ?? false;
+  const timelineLoadingEarlier = timelineState?.loadingEarlier ?? false;
+  const timelineError = timelineState?.error ?? null;
+  const timelineItems = timelineState?.items ?? null;
+  const hasTimelineState = timelineState !== null;
+  const workspaceFirstMessageId = messages[0]?.id ?? '';
+  const workspaceLastMessageId = messages[messages.length - 1]?.id ?? '';
   const activitySummary = useMemo(() => {
-    if (!timelineState?.items.length) return null;
+    if (!timelineItems?.length) return null;
     return sessionActivitySummary({
-      items: timelineState.items,
+      items: timelineItems,
       structuredEvidence: activityStructuredEvidence,
     });
-  }, [activityStructuredEvidence, timelineState]);
+  }, [activityStructuredEvidence, timelineItems]);
   const activityEvidence = useMemo(() => {
     if (!activitySummary) return '';
     if (activitySummary.evidence.kind === 'structured') {
@@ -196,77 +239,188 @@ export function ChatPanel({
       scrollAreaRef.current
     );
   }, []);
+  const captureEarlierScrollAnchor = useCallback((): EarlierTimelineScrollAnchor | null => {
+    const viewport = scrollViewport();
+    if (!viewport) return null;
+    const viewportTop = viewport.getBoundingClientRect().top;
+    const anchors = viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]');
+    let visibleAnchor: HTMLElement | null = null;
+    let intersectingAnchor: HTMLElement | null = null;
+    for (const anchor of anchors) {
+      const bounds = anchor.getBoundingClientRect();
+      if (bounds.bottom <= viewportTop + 1) continue;
+      if (bounds.top >= viewportTop - 1) {
+        visibleAnchor = anchor;
+        break;
+      }
+      intersectingAnchor = anchor;
+    }
+    visibleAnchor ??= intersectingAnchor;
+    return {
+      conversationId: timelineConversationId,
+      anchorId: visibleAnchor?.dataset.timelineAnchorId ?? null,
+      anchorMemberId: visibleAnchor ? (timelineAnchorMemberIds(visibleAnchor)[0] ?? null) : null,
+      anchorOffset: visibleAnchor ? visibleAnchor.getBoundingClientRect().top - viewportTop : 0,
+      top: viewport.scrollTop,
+    };
+  }, [scrollViewport, timelineConversationId]);
+  const followLatest = useCallback(() => {
+    pinnedToLatestRef.current = true;
+    setShowJumpToLatest(false);
+    scrollToLatest();
+  }, [scrollToLatest]);
 
   useEffect(() => {
-    if (timelineState) {
-      const previous = timelineWindowRef.current;
-      const current = {
+    if (hasTimelineState) {
+      workspaceTailKeyRef.current = null;
+      const current: SessionTimelineWindow = {
+        conversationId: timelineConversationId,
         firstId: timelineFirstId,
         lastId: timelineLastId,
+        tailRevision: timelineTailRevision,
         count: timelineItemCount,
       };
+      const change = classifySessionTimelineWindowChange(timelineWindowRef.current, current);
       timelineWindowRef.current = current;
-      const prependedEarlier =
-        previous &&
-        current.count > previous.count &&
-        current.lastId === previous.lastId &&
-        current.firstId !== previous.firstId;
-      if (prependedEarlier) return;
-    } else {
+      if (shouldFollowSessionTimeline(change, pinnedToLatestRef.current)) {
+        pinnedToLatestRef.current = true;
+        setShowJumpToLatest(false);
+        window.requestAnimationFrame(scrollToLatest);
+      } else if (change === 'appended' || change === 'updated') {
+        setShowJumpToLatest(true);
+      }
+      return;
+    } else if (timelineWindowRef.current) {
       timelineWindowRef.current = null;
+      pinnedToLatestRef.current = true;
+      setShowJumpToLatest(false);
     }
-    scrollToLatest();
+
+    const workspaceTailKey = [
+      sessionTitle,
+      workspaceFirstMessageId,
+      workspaceLastMessageId,
+      messages.length,
+      signalStateKey,
+    ].join(':');
+    const workspaceTailChanged = workspaceTailKeyRef.current !== workspaceTailKey;
+    workspaceTailKeyRef.current = workspaceTailKey;
+    if (workspaceTailChanged && pinnedToLatestRef.current) {
+      window.requestAnimationFrame(scrollToLatest);
+    } else if (workspaceTailChanged) {
+      setShowJumpToLatest(true);
+    }
   }, [
     messages.length,
     scrollToLatest,
+    sessionTitle,
     signalStateKey,
+    timelineConversationId,
     timelineFirstId,
     timelineItemCount,
     timelineLastId,
-    timelineState,
+    timelineTailRevision,
+    hasTimelineState,
+    workspaceFirstMessageId,
+    workspaceLastMessageId,
   ]);
 
-  useEffect(() => {
-    if (timelineState?.loadingEarlier) return;
+  useLayoutEffect(() => {
+    if (timelineLoadingEarlier) return;
     const snapshot = earlierScrollRef.current;
     if (!snapshot) return;
     earlierScrollRef.current = null;
+    if (snapshot.conversationId !== timelineConversationId) return;
+    const viewport = scrollViewport();
+    if (!viewport) return;
+    const candidates = Array.from(
+      viewport.querySelectorAll<HTMLElement>('[data-timeline-anchor-id]'),
+    );
+    const exactAnchor = snapshot.anchorId
+      ? candidates.find(
+          (candidate) =>
+            candidate.dataset.timelineAnchorId === snapshot.anchorId &&
+            candidate.getClientRects().length > 0,
+        )
+      : null;
+    const anchor =
+      exactAnchor ??
+      (snapshot.anchorMemberId
+        ? candidates.find(
+            (candidate) =>
+              candidate.getClientRects().length > 0 &&
+              timelineAnchorMemberIds(candidate).includes(snapshot.anchorMemberId ?? ''),
+          )
+        : null);
+    if (!anchor || !snapshot.anchorId) {
+      viewport.scrollTop = snapshot.top;
+      return;
+    }
+    const restoreAnchorOffset = () => {
+      if (!anchor.isConnected || timelineWindowRef.current?.conversationId !== snapshot.conversationId) {
+        return;
+      }
+      const nextOffset = anchor.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+      viewport.scrollTop += nextOffset - snapshot.anchorOffset;
+    };
+    restoreAnchorOffset();
     window.requestAnimationFrame(() => {
-      const viewport = scrollViewport();
-      if (!viewport) return;
-      const delta = viewport.scrollHeight - snapshot.height;
-      viewport.scrollTop = snapshot.top + delta;
+      restoreAnchorOffset();
+      window.requestAnimationFrame(restoreAnchorOffset);
     });
-  }, [scrollViewport, timelineItemCount, timelineState?.loadingEarlier]);
+  }, [scrollViewport, timelineConversationId, timelineItemCount, timelineLoadingEarlier]);
+
+  const requestEarlierTimeline = useCallback(() => {
+    if (timelineLoading || timelineLoadingEarlier || earlierScrollRef.current) return;
+    earlierScrollRef.current = captureEarlierScrollAnchor() ?? {
+      conversationId: timelineConversationId,
+      anchorId: null,
+      anchorMemberId: null,
+      anchorOffset: 0,
+      top: 0,
+    };
+    onLoadEarlier();
+  }, [
+    captureEarlierScrollAnchor,
+    onLoadEarlier,
+    timelineConversationId,
+    timelineLoading,
+    timelineLoadingEarlier,
+  ]);
 
   useEffect(() => {
     const viewport = scrollViewport();
-    if (!viewport || !timelineState) return undefined;
+    if (!viewport) return undefined;
     const handleScroll = () => {
-      if (!timelineState.hasMore || timelineState.loading || timelineState.loadingEarlier) return;
-      if (earlierScrollRef.current) return;
-      if (viewport.scrollTop > 96) return;
-      earlierScrollRef.current = {
-        height: viewport.scrollHeight,
-        top: viewport.scrollTop,
-      };
-      onLoadEarlier();
+      const pinnedToLatest = isSessionTimelinePinnedToLatest(viewport);
+      pinnedToLatestRef.current = pinnedToLatest;
+      setShowJumpToLatest(!pinnedToLatest && viewport.scrollHeight > viewport.clientHeight);
+
+      if (timelineLoadingEarlier && earlierScrollRef.current) {
+        const nextAnchor = captureEarlierScrollAnchor();
+        if (nextAnchor) earlierScrollRef.current = nextAnchor;
+      }
+
+      if (!hasTimelineState || timelineError) return;
+      if (!timelineHasMore || timelineLoading || timelineLoadingEarlier) return;
+      if (viewport.scrollTop <= 96) requestEarlierTimeline();
     };
     viewport.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
     return () => viewport.removeEventListener('scroll', handleScroll);
   }, [
-    onLoadEarlier,
+    captureEarlierScrollAnchor,
+    requestEarlierTimeline,
     scrollViewport,
-    timelineState,
-    timelineState?.hasMore,
-    timelineState?.loading,
-    timelineState?.loadingEarlier,
+    timelineError,
+    timelineHasMore,
+    timelineLoading,
+    timelineLoadingEarlier,
+    hasTimelineState,
   ]);
 
   useEffect(() => {
     const handleResize = () => {
-      window.requestAnimationFrame(scrollToLatest);
+      if (pinnedToLatestRef.current) window.requestAnimationFrame(scrollToLatest);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -274,8 +428,11 @@ export function ChatPanel({
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
+    pinnedToLatestRef.current = true;
+    setShowJumpToLatest(false);
     onSend();
-  }, [canSend, onSend]);
+    window.requestAnimationFrame(scrollToLatest);
+  }, [canSend, onSend, scrollToLatest]);
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
       const currentValue = current[item.id] ?? isImportantTimelineItem(item);
@@ -310,7 +467,13 @@ export function ChatPanel({
           </Button>
         </header>
       ) : null}
-      <ScrollArea className="message-scroll" ref={scrollAreaRef}>
+      <ScrollArea
+        className="message-scroll"
+        ref={scrollAreaRef}
+        aria-label={t('session.timelineScrollRegion')}
+        aria-busy={timelineLoading || timelineLoadingEarlier}
+        tabIndex={0}
+      >
         <div className="message-stack">
           {timelineState ? (
             <>
@@ -364,6 +527,8 @@ export function ChatPanel({
                 state={timelineState}
                 expandedItems={expandedTimelineItems}
                 onToggleItem={toggleTimelineItem}
+                onLoadEarlier={requestEarlierTimeline}
+                onRetry={onRefresh}
                 onRespondToHitl={onRespondToHitl}
                 respondableHitlRequestIds={respondableHitlRequestIds}
               />
@@ -412,6 +577,18 @@ export function ChatPanel({
           <div ref={scrollAnchorRef} aria-hidden="true" />
         </div>
       </ScrollArea>
+      {showJumpToLatest ? (
+        <Button
+          type="button"
+          size="1"
+          variant="surface"
+          className="session-jump-latest"
+          onClick={followLatest}
+        >
+          <ChevronDownIcon aria-hidden="true" />
+          {t('session.jumpToLatest')}
+        </Button>
+      ) : null}
       <form
         className="composer chat-composer"
         onSubmit={(event) => {

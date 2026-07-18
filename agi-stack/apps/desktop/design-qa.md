@@ -84,6 +84,100 @@ final result: passed
 
 ---
 
+# Long-session history recovery design QA
+
+Date: 2026-07-18
+
+Scope: bounded conversation history, backward cursor pagination, failure recovery, manual reading
+position, and live-tail following.
+
+## Visual sources
+
+- Prototype at `1375 x 939`:
+  `agi-stack/apps/desktop/qa/session-history-source-1375x939.png`
+- Current production-component capture at `1375 x 939`:
+  `agi-stack/apps/desktop/qa/session-history-implementation-1375x939.png`
+- Exact same-viewport full comparison:
+  `agi-stack/apps/desktop/qa/session-history-comparison-1375x939.jpg`
+- Focused conversation-region comparison:
+  `agi-stack/apps/desktop/qa/session-history-focused-comparison.jpg`
+- Pagination control state:
+  `agi-stack/apps/desktop/qa/session-history-pagination-control-1375x939.png`
+- Recoverable failure state:
+  `agi-stack/apps/desktop/qa/session-history-error-retry-1375x939.png`
+
+The default implementation capture keeps the approved session narrative unchanged. The two
+conditional captures use the production `ChatPanel` inside its deterministic session QA host so the
+new controls can be reviewed without fabricating native runtime data. The focused conversation
+comparison is the visual authority for this iteration; the wider comparison is supporting evidence
+for density and theme rather than a new full-shell fidelity claim.
+
+## Same-viewport review
+
+- Both source and implementation were measured at `1375 x 939`, device scale factor `1`.
+- Both documents report `scrollWidth = clientWidth = 1375` and `scrollHeight = clientHeight = 939`;
+  no page-level overflow hides controls.
+- The existing flat dark-slate surface, cyan activity treatment, compact metadata, message-card
+  hierarchy, and fixed composer remain unchanged in the default state.
+- `Load earlier` is a quiet text action above the narrative and does not compete with the current
+  activity card or composer.
+- A failed earlier page remains inline with the retained conversation window, uses alert semantics,
+  and exposes one explicit retry action. It does not replace the session with a generic empty state.
+- The `Jump to latest` action is conditional and overlays the lower narrative edge only after a
+  reader has moved away from the live tail; it is absent while the view is pinned.
+
+## Interaction and accessibility verification
+
+- The pagination QA state exposed `加载更早记录`; activating it prepended the earlier event and
+  removed the exhausted control.
+- The failure QA state retained every loaded message, announced the error through an alert, and
+  exposed `重试加载更早记录`; activating retry loaded the earlier event and cleared the alert.
+- The scroll viewport exposes the localized `会话记录` accessible name, `aria-busy`, and keyboard
+  focus. Loading, retry, and jump actions use native buttons.
+- Automatic backward pagination stops after a missing, repeated, or non-monotonic cursor. Manual
+  retry remains available and does not discard the current page.
+- Prepending history restores the previous DOM anchor by conversation and stable member identity.
+  The clean concurrent-tail scenario preserved the pre-load anchor within `0.125` CSS pixels while
+  one live event arrived before the earlier page; both events remained visible after settlement.
+- New live events follow only while the reader is pinned near the bottom; changing sessions still
+  opens at the latest event. Expanded tool/activity groups retain their disclosure state when a
+  page merge changes the rendered group boundary.
+- Browser warning/error log in a fresh tab after the concurrent-tail and prepend flow: empty.
+
+## Findings resolved
+
+- P0: none.
+- P1: local Rust previously returned an unbounded timeline and ignored cursor query parameters.
+  It now validates the exact project scope, bounds `limit`, applies exclusive tuple cursors, returns
+  oldest-first pages, supports the bounded `from + before` range, and computes `has_more` from rows
+  that actually precede the page. Legacy rows without counters receive position-backed cursors;
+  explicit duplicate cursor tuples fail closed instead of silently skipping an event.
+- P1: the React client could silently accept repeated or non-monotonic pages. Pagination now fails
+  closed unless the item window grows and the first cursor moves strictly backward.
+- P1: prepend, refresh, and live append updates previously shared one unconditional scroll-to-bottom
+  behavior. The scroll model now distinguishes replacement, prepend, append, and stable updates.
+- P2: history failures previously had no targeted recovery path. The retained window now has a
+  localized retry action, while a full initial-load failure continues to refresh the whole session.
+- P2: keyboard readers now receive a named, busy-state-aware scroll region and native actions for
+  earlier history, retry, and the live tail.
+- P2: DOM height-delta anchoring could include a concurrent tail append and cross conversation
+  boundaries. Restoration now uses a conversation-scoped visible anchor, stable group identity,
+  member-lineage fallback, and a post-layout correction.
+
+## Verification
+
+- Desktop tests: 377 passed.
+- Desktop TypeScript and production build: passed; the existing large-chunk advisory remains P3.
+- Rust library tests: 156 passed.
+- Rust formatting and Clippy with warnings denied: passed.
+- Same-viewport browser QA: no page overflow and no warning/error console entries.
+
+No actionable P0, P1, or P2 finding remains in this iteration's history-recovery scope.
+
+final result: passed
+
+---
+
 # Local workspace-to-session continuity design QA
 
 Date: 2026-07-17

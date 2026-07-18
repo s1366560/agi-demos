@@ -27,6 +27,8 @@
     "src/features/session/sessionViewModel.ts",
     "src/features/session/sessionScope.ts",
     "src/features/session/sessionSelectionModel.ts",
+    "src/features/session/sessionTimelinePaginationModel.ts",
+    "src/features/session/sessionTimelineScrollModel.ts",
     "src/features/session/sessionLayoutModel.ts",
     "src/features/session/workspaceReviewPanelModel.ts",
     "src/features/session/sessionCanvasModel.ts",

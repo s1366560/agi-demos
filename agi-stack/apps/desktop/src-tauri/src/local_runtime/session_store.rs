@@ -30,6 +30,7 @@ use super::{
 };
 
 const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 12;
+const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 
 pub(super) struct PreparedToolInvocation {
     pub(super) invocation: ToolInvocation,
@@ -88,6 +89,20 @@ impl DesktopCheckpointAuthority {
 #[derive(Clone)]
 pub(super) struct DesktopSessionStore {
     connection: Arc<Mutex<Connection>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct DesktopTimelineCursor {
+    pub(super) time_us: i64,
+    pub(super) counter: i64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct DesktopTimelinePage {
+    pub(super) items: Vec<Value>,
+    pub(super) has_more: bool,
+    pub(super) first_cursor: Option<DesktopTimelineCursor>,
+    pub(super) last_cursor: Option<DesktopTimelineCursor>,
 }
 
 pub(super) struct ApprovePlanStartInput<'a> {
@@ -1360,6 +1375,8 @@ impl DesktopSessionStore {
         Ok(())
     }
 
+    // Keep the legacy unpaginated store API available while HTTP consumers migrate to cursors.
+    #[allow(dead_code)]
     pub(super) fn timeline(
         &self,
         conversation_id: &str,
@@ -1379,6 +1396,152 @@ impl DesktopSessionStore {
         )?;
         values.reverse();
         Ok(values)
+    }
+
+    pub(super) fn timeline_page(
+        &self,
+        conversation_id: &str,
+        limit: usize,
+        from: Option<DesktopTimelineCursor>,
+        before: Option<DesktopTimelineCursor>,
+    ) -> Result<DesktopTimelinePage, String> {
+        if !(1..=MAX_TIMELINE_PAGE_LIMIT).contains(&limit) {
+            return Err("timeline page limit must be between 1 and 500".to_string());
+        }
+        let limit = i64::try_from(limit).map_err(|error| error.to_string())?;
+        let connection = self.connection()?;
+        if timeline_has_cursor_collision(&connection, conversation_id)? {
+            return Err("desktop timeline contains duplicate cursors".to_string());
+        }
+        let (mut rows, reverse) = if let Some(before) = before {
+            let mut statement = connection
+                .prepare(
+                    "WITH timeline_rows AS (
+                       SELECT position,
+                              value_json,
+                              COALESCE(
+                                CAST(json_extract(value_json, '$.eventTimeUs') AS INTEGER),
+                                CAST(json_extract(value_json, '$.event_time_us') AS INTEGER),
+                                CAST(json_extract(value_json, '$.time_us') AS INTEGER),
+                                position
+                              ) AS cursor_time,
+                              COALESCE(
+                                CAST(json_extract(value_json, '$.eventCounter') AS INTEGER),
+                                CAST(json_extract(value_json, '$.event_counter') AS INTEGER),
+                                CAST(json_extract(value_json, '$.counter') AS INTEGER),
+                                position
+                              ) AS cursor_counter
+                       FROM desktop_timeline
+                       WHERE conversation_id = ?1
+                     )
+                     SELECT value_json, cursor_time, cursor_counter
+                     FROM timeline_rows
+                     WHERE (cursor_time, cursor_counter) < (?2, ?3)
+                       AND (?4 IS NULL OR (cursor_time, cursor_counter) > (?4, ?5))
+                     ORDER BY cursor_time DESC, cursor_counter DESC, position DESC
+                     LIMIT ?6",
+                )
+                .map_err(|error| error.to_string())?;
+            let from_time_us = from.map(|cursor| cursor.time_us);
+            let from_counter = from.map(|cursor| cursor.counter);
+            (
+                timeline_page_rows(statement.query_map(
+                    params![
+                        conversation_id,
+                        before.time_us,
+                        before.counter,
+                        from_time_us,
+                        from_counter,
+                        limit
+                    ],
+                    timeline_page_row,
+                ))?,
+                true,
+            )
+        } else if let Some(from) = from {
+            let mut statement = connection
+                .prepare(
+                    "WITH timeline_rows AS (
+                       SELECT position,
+                              value_json,
+                              COALESCE(
+                                CAST(json_extract(value_json, '$.eventTimeUs') AS INTEGER),
+                                CAST(json_extract(value_json, '$.event_time_us') AS INTEGER),
+                                CAST(json_extract(value_json, '$.time_us') AS INTEGER),
+                                position
+                              ) AS cursor_time,
+                              COALESCE(
+                                CAST(json_extract(value_json, '$.eventCounter') AS INTEGER),
+                                CAST(json_extract(value_json, '$.event_counter') AS INTEGER),
+                                CAST(json_extract(value_json, '$.counter') AS INTEGER),
+                                position
+                              ) AS cursor_counter
+                       FROM desktop_timeline
+                       WHERE conversation_id = ?1
+                     )
+                     SELECT value_json, cursor_time, cursor_counter
+                     FROM timeline_rows
+                     WHERE (cursor_time, cursor_counter) > (?2, ?3)
+                     ORDER BY cursor_time ASC, cursor_counter ASC, position ASC
+                     LIMIT ?4",
+                )
+                .map_err(|error| error.to_string())?;
+            (
+                timeline_page_rows(statement.query_map(
+                    params![conversation_id, from.time_us, from.counter, limit],
+                    timeline_page_row,
+                ))?,
+                false,
+            )
+        } else {
+            let mut statement = connection
+                .prepare(
+                    "WITH timeline_rows AS (
+                       SELECT position,
+                              value_json,
+                              COALESCE(
+                                CAST(json_extract(value_json, '$.eventTimeUs') AS INTEGER),
+                                CAST(json_extract(value_json, '$.event_time_us') AS INTEGER),
+                                CAST(json_extract(value_json, '$.time_us') AS INTEGER),
+                                position
+                              ) AS cursor_time,
+                              COALESCE(
+                                CAST(json_extract(value_json, '$.eventCounter') AS INTEGER),
+                                CAST(json_extract(value_json, '$.event_counter') AS INTEGER),
+                                CAST(json_extract(value_json, '$.counter') AS INTEGER),
+                                position
+                              ) AS cursor_counter
+                       FROM desktop_timeline
+                       WHERE conversation_id = ?1
+                     )
+                     SELECT value_json, cursor_time, cursor_counter
+                     FROM timeline_rows
+                     ORDER BY cursor_time DESC, cursor_counter DESC, position DESC
+                     LIMIT ?2",
+                )
+                .map_err(|error| error.to_string())?;
+            (
+                timeline_page_rows(
+                    statement.query_map(params![conversation_id, limit], timeline_page_row),
+                )?,
+                true,
+            )
+        };
+        if reverse {
+            rows.reverse();
+        }
+        let first_cursor = rows.first().map(|(_, cursor)| *cursor);
+        let last_cursor = rows.last().map(|(_, cursor)| *cursor);
+        let has_more = first_cursor
+            .map(|cursor| timeline_has_rows_before(&connection, conversation_id, cursor))
+            .transpose()?
+            .unwrap_or(false);
+        Ok(DesktopTimelinePage {
+            items: rows.into_iter().map(|(item, _)| item).collect(),
+            has_more,
+            first_cursor,
+            last_cursor,
+        })
     }
 
     pub(super) fn timeline_count(&self, conversation_id: &str) -> Result<usize, String> {
@@ -3561,4 +3724,250 @@ where
             serde_json::from_str(&value).map_err(|error| error.to_string())
         })
         .collect()
+}
+
+fn timeline_page_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(String, i64, i64)> {
+    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+}
+
+fn timeline_page_rows<T>(
+    rows: Result<rusqlite::MappedRows<'_, T>, rusqlite::Error>,
+) -> Result<Vec<(Value, DesktopTimelineCursor)>, String>
+where
+    T: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<(String, i64, i64)>,
+{
+    rows.map_err(|error| error.to_string())?
+        .map(|row| {
+            let (value_json, time_us, counter) = row.map_err(|error| error.to_string())?;
+            let mut value: Value =
+                serde_json::from_str(&value_json).map_err(|error| error.to_string())?;
+            let object = value
+                .as_object_mut()
+                .ok_or_else(|| "desktop timeline item must be a JSON object".to_string())?;
+            object.insert("eventTimeUs".to_string(), json!(time_us));
+            object.insert("eventCounter".to_string(), json!(counter));
+            object.insert("event_time_us".to_string(), json!(time_us));
+            object.insert("event_counter".to_string(), json!(counter));
+            object.insert("time_us".to_string(), json!(time_us));
+            object.insert("counter".to_string(), json!(counter));
+            Ok((value, DesktopTimelineCursor { time_us, counter }))
+        })
+        .collect()
+}
+
+fn timeline_has_rows_before(
+    connection: &Connection,
+    conversation_id: &str,
+    cursor: DesktopTimelineCursor,
+) -> Result<bool, String> {
+    connection
+        .query_row(
+            "WITH timeline_rows AS (
+               SELECT COALESCE(
+                        CAST(json_extract(value_json, '$.eventTimeUs') AS INTEGER),
+                        CAST(json_extract(value_json, '$.event_time_us') AS INTEGER),
+                        CAST(json_extract(value_json, '$.time_us') AS INTEGER),
+                        position
+                      ) AS cursor_time,
+                      COALESCE(
+                        CAST(json_extract(value_json, '$.eventCounter') AS INTEGER),
+                        CAST(json_extract(value_json, '$.event_counter') AS INTEGER),
+                        CAST(json_extract(value_json, '$.counter') AS INTEGER),
+                        position
+                      ) AS cursor_counter
+               FROM desktop_timeline
+               WHERE conversation_id = ?1
+             )
+             SELECT EXISTS(
+               SELECT 1 FROM timeline_rows
+               WHERE (cursor_time, cursor_counter) < (?2, ?3)
+             )",
+            params![conversation_id, cursor.time_us, cursor.counter],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
+}
+
+fn timeline_has_cursor_collision(
+    connection: &Connection,
+    conversation_id: &str,
+) -> Result<bool, String> {
+    connection
+        .query_row(
+            "WITH timeline_rows AS (
+               SELECT COALESCE(
+                        CAST(json_extract(value_json, '$.eventTimeUs') AS INTEGER),
+                        CAST(json_extract(value_json, '$.event_time_us') AS INTEGER),
+                        CAST(json_extract(value_json, '$.time_us') AS INTEGER),
+                        position
+                      ) AS cursor_time,
+                      COALESCE(
+                        CAST(json_extract(value_json, '$.eventCounter') AS INTEGER),
+                        CAST(json_extract(value_json, '$.event_counter') AS INTEGER),
+                        CAST(json_extract(value_json, '$.counter') AS INTEGER),
+                        position
+                      ) AS cursor_counter
+               FROM desktop_timeline
+               WHERE conversation_id = ?1
+             )
+             SELECT EXISTS(
+               SELECT 1
+               FROM timeline_rows
+               GROUP BY cursor_time, cursor_counter
+               HAVING COUNT(*) > 1
+             )",
+            [conversation_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn timeline_item(id: &str, time_us: i64, counter: i64) -> Value {
+        json!({
+            "id": id,
+            "type": "assistant_message",
+            "eventTimeUs": time_us,
+            "eventCounter": counter,
+        })
+    }
+
+    fn timeline_ids(page: &DesktopTimelinePage) -> Vec<&str> {
+        page.items
+            .iter()
+            .map(|item| item["id"].as_str().expect("timeline item id"))
+            .collect()
+    }
+
+    #[test]
+    fn timeline_page_uses_exclusive_tuple_cursors_and_exact_has_more() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let conversation_id = "timeline-pagination";
+        for item in [
+            timeline_item("event-1", 100, 0),
+            timeline_item("event-2", 200, 0),
+            timeline_item("event-3", 300, 0),
+            timeline_item("event-4", 400, 0),
+            timeline_item("event-5", 400, 1),
+        ] {
+            store
+                .append_timeline(conversation_id, &item)
+                .expect("append timeline item");
+        }
+
+        let latest = store
+            .timeline_page(conversation_id, 2, None, None)
+            .expect("latest timeline page");
+        assert_eq!(timeline_ids(&latest), vec!["event-4", "event-5"]);
+        assert!(latest.has_more);
+        assert_eq!(
+            latest.first_cursor,
+            Some(DesktopTimelineCursor {
+                time_us: 400,
+                counter: 0,
+            })
+        );
+        assert_eq!(
+            latest.last_cursor,
+            Some(DesktopTimelineCursor {
+                time_us: 400,
+                counter: 1,
+            })
+        );
+
+        let middle = store
+            .timeline_page(
+                conversation_id,
+                2,
+                Some(DesktopTimelineCursor {
+                    time_us: 100,
+                    counter: 0,
+                }),
+                latest.first_cursor,
+            )
+            .expect("middle timeline page");
+        assert_eq!(timeline_ids(&middle), vec!["event-2", "event-3"]);
+        assert!(middle.has_more);
+
+        let oldest = store
+            .timeline_page(conversation_id, 2, None, middle.first_cursor)
+            .expect("oldest timeline page");
+        assert_eq!(timeline_ids(&oldest), vec!["event-1"]);
+        assert!(!oldest.has_more);
+
+        let forward = store
+            .timeline_page(
+                conversation_id,
+                2,
+                Some(DesktopTimelineCursor {
+                    time_us: 200,
+                    counter: 0,
+                }),
+                None,
+            )
+            .expect("forward timeline page");
+        assert_eq!(timeline_ids(&forward), vec!["event-3", "event-4"]);
+        assert!(forward.has_more);
+
+        assert!(store.timeline_page(conversation_id, 0, None, None).is_err());
+        assert!(store
+            .timeline_page(conversation_id, 501, None, None)
+            .is_err());
+    }
+
+    #[test]
+    fn timeline_page_assigns_unique_cursors_to_legacy_items_without_counters() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let conversation_id = "timeline-legacy-cursors";
+        for id in ["event-1", "event-2", "event-3"] {
+            store
+                .append_timeline(
+                    conversation_id,
+                    &json!({
+                        "id": id,
+                        "type": "assistant_message",
+                        "eventTimeUs": 100,
+                    }),
+                )
+                .expect("append legacy timeline item");
+        }
+
+        let latest = store
+            .timeline_page(conversation_id, 2, None, None)
+            .expect("latest legacy timeline page");
+        assert_eq!(timeline_ids(&latest), vec!["event-2", "event-3"]);
+        assert_eq!(
+            latest.first_cursor,
+            Some(DesktopTimelineCursor {
+                time_us: 100,
+                counter: 2,
+            })
+        );
+        assert!(latest.has_more);
+
+        let oldest = store
+            .timeline_page(conversation_id, 2, None, latest.first_cursor)
+            .expect("oldest legacy timeline page");
+        assert_eq!(timeline_ids(&oldest), vec!["event-1"]);
+        assert!(!oldest.has_more);
+    }
+
+    #[test]
+    fn timeline_page_rejects_explicit_duplicate_cursor_tuples() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let conversation_id = "timeline-duplicate-cursors";
+        for id in ["event-1", "event-2"] {
+            store
+                .append_timeline(conversation_id, &timeline_item(id, 100, 0))
+                .expect("append duplicate cursor tuple");
+        }
+
+        let error = store
+            .timeline_page(conversation_id, 1, None, None)
+            .expect_err("duplicate cursor tuples must fail closed");
+        assert!(error.contains("duplicate cursors"));
+    }
 }

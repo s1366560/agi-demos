@@ -3917,19 +3917,39 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   gap: 2px;
 }
 
-.timeline-load-earlier {
-  justify-self: center;
-  min-height: 26px;
+.timeline-history-control {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0 6px;
+}
+
+.timeline-history-action {
+  min-height: 28px;
   border-color: rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.04);
   color: var(--desktop-muted);
 }
 
 .timeline-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 10px;
   border: 1px solid rgba(255, 105, 120, 0.36);
   border-radius: 7px;
   background: rgba(255, 105, 120, 0.08);
+}
+
+.timeline-error > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.timeline-error .timeline-history-action {
+  flex: 0 0 auto;
+  border-color: rgba(255, 105, 120, 0.3);
 }
 
 .message.timeline-item.tool {

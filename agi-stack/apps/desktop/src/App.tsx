@@ -159,6 +159,10 @@ import {
   sessionSelectionRequiresRuntimeRefresh,
   sessionTimelineRequestIsCurrent,
 } from './features/session/sessionSelectionModel';
+import {
+  failEarlierTimelinePage,
+  resolveEarlierTimelinePage,
+} from './features/session/sessionTimelinePaginationModel';
 import { MyWorkQueue } from './features/my-work/MyWorkQueue';
 import { runtimeTransportIdentityChanged } from './features/runtime/runtimeConfigModel';
 import {
@@ -2226,6 +2230,16 @@ export function App() {
       setConversationTimeline((current) => {
         if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
         const items = mergeTimelineItems(response.timeline ?? [], current.items);
+        const pageResolution = resolveEarlierTimelinePage({
+          requestedCursor: cursor,
+          previousItemCount: current.items.length,
+          nextItemCount: items.length,
+          nextFirstCursor: timelineCursorFromFirst(items),
+          responseHasMore: Boolean(response.has_more),
+        });
+        if (pageResolution.kind === 'stalled') {
+          return failEarlierTimelinePage(current, t('session.earlierHistoryNoProgress'));
+        }
         return {
           ...current,
           items,
@@ -2234,22 +2248,19 @@ export function App() {
           artifactDeliveries: response.artifact_deliveries ?? current.artifactDeliveries,
           toolInvocations: response.tool_invocations ?? current.toolInvocations,
           loadingEarlier: false,
-          hasMore: Boolean(response.has_more),
-          firstCursor:
-            typeof response.first_time_us === 'number' && typeof response.first_counter === 'number'
-              ? { timeUs: response.first_time_us, counter: response.first_counter }
-              : timelineCursorFromFirst(items),
+          error: null,
+          hasMore: pageResolution.hasMore,
+          firstCursor: pageResolution.firstCursor,
           lastCursor: timelineCursorFromLast(items),
         };
       });
     } catch (caught) {
       setConversationTimeline((current) =>
         requestIsCurrent() && current.conversationId === conversation.id
-          ? {
-              ...current,
-              loadingEarlier: false,
-              error: formatConnectionError(caught, config.apiBaseUrl),
-            }
+          ? failEarlierTimelinePage(
+              current,
+              formatConnectionError(caught, config.apiBaseUrl),
+            )
           : current,
       );
     }
@@ -2260,6 +2271,7 @@ export function App() {
     conversationTimeline.firstCursor,
     conversationTimeline.loadingEarlier,
     scopedConversation,
+    t,
   ]);
 
   const respondToHitl = useCallback(
