@@ -73,6 +73,7 @@ export function WorkspaceDock({
   const projectState = nodeState.projects[currentProjectId];
   const tree = buildWorkspaceTree(workspaces, conversationsByWorkspace, 'project');
   const availability = workspaceTreeAvailability(projectState, tree.length);
+  const hasProjectScope = Boolean(currentProjectId.trim());
 
   return (
     <nav
@@ -84,7 +85,12 @@ export function WorkspaceDock({
     >
       <ScrollArea className="dock-list">
         <div>
-          {availability === 'loading' ? (
+          {!hasProjectScope ? (
+            <WorkspaceTreeState
+              title={t('settings.noProjectSelected')}
+              detail={t('workspaceTree.selectProjectDescription')}
+            />
+          ) : availability === 'loading' ? (
             <WorkspaceTreeState
               title={t('workspaceTree.loading')}
               detail={t('workspaceTree.loadingDescription')}

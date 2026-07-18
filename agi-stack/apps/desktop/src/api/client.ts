@@ -87,6 +87,13 @@ export class DesktopApiError extends Error {
   }
 }
 
+export function isWorkspaceContextUnavailableError(error: unknown): boolean {
+  if (!(error instanceof DesktopApiError) || error.status !== 404) return false;
+  if (!isRecord(error.payload)) return false;
+  const detail = error.payload.detail;
+  return isRecord(detail) && detail.code === 'workspace_context_unavailable';
+}
+
 export class DesktopApiClient {
   private readonly config: DesktopRuntimeConfig;
 

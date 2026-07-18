@@ -406,8 +406,8 @@ export function SettingsWindow({
               <div>
                 <strong>{t('settings.title')}</strong>
                 <small>
-                  {selectedTenant?.name || config.tenantId || t('settings.signedOut')} /{' '}
-                  {selectedProject?.name || config.projectId || t('settings.project')}
+                  {selectedTenant?.name || config.tenantId || t('settings.noTenantSelected')} /{' '}
+                  {selectedProject?.name || config.projectId || t('settings.noProjectSelected')}
                 </small>
               </div>
             </div>
@@ -457,10 +457,10 @@ export function SettingsWindow({
                 <LockClosedIcon />
                 <span>
                   <strong>
-                    {selectedTenant?.name || config.tenantId || t('settings.signedOut')}
+                    {selectedTenant?.name || config.tenantId || t('settings.noTenantSelected')}
                   </strong>
                   <small>
-                    {selectedProject?.name || config.projectId || t('settings.project')}
+                    {selectedProject?.name || config.projectId || t('settings.noProjectSelected')}
                   </small>
                 </span>
               </div>

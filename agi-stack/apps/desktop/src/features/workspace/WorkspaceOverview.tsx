@@ -92,6 +92,46 @@ export function WorkspaceOverview({
     ? workspaceStatusPresentation(model.officeStatus)
     : null;
 
+  if (!project) {
+    return (
+      <main className="workspace-design-overview empty-project">
+        <header className="workspace-design-header">
+          <div>
+            <span className="workspace-design-eyebrow">{tenantName}</span>
+            <div className="workspace-design-title-line">
+              <h1>{t('overview.noProjectTitle')}</h1>
+            </div>
+            <p>{t('overview.noProjectDescription')}</p>
+          </div>
+          <div className="workspace-design-header-actions">
+            <Button variant="surface" color="gray" onClick={onOpenSettings}>
+              <GearIcon /> {t('overview.configure')}
+            </Button>
+            <Button disabled title={newTaskDisabledReason ?? t('task.disabledProjectRequired')}>
+              <PlusIcon /> {t('overview.newTask')}
+            </Button>
+          </div>
+        </header>
+
+        <div className="workspace-design-content">
+          <section className="workspace-design-context-empty" role="status">
+            <span>
+              <CubeIcon />
+            </span>
+            <div>
+              <small>{t('settings.workspaceContextEyebrow')}</small>
+              <h2>{t('overview.noProjectCardTitle')}</h2>
+              <p>{t('overview.noProjectCardDescription')}</p>
+            </div>
+            <Button variant="surface" color="gray" onClick={onOpenSettings}>
+              <GearIcon /> {t('settings.workspace')}
+            </Button>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="workspace-design-overview">
       <header className="workspace-design-header">

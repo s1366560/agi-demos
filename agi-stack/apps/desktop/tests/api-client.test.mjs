@@ -11,8 +11,37 @@ const {
   desktopLaunchCapability,
   DesktopApiClient,
   DesktopApiError,
+  isWorkspaceContextUnavailableError,
 } = clientModule;
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+
+test('workspace context unavailable detection requires the structured server code', () => {
+  assert.equal(
+    isWorkspaceContextUnavailableError(
+      new DesktopApiError('workspace unavailable', 404, {
+        detail: { code: 'workspace_context_unavailable' },
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    isWorkspaceContextUnavailableError(
+      new DesktopApiError('project unavailable', 404, {
+        detail: { code: 'workspace_context_project_unavailable' },
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    isWorkspaceContextUnavailableError(
+      new DesktopApiError('workspace unavailable', 500, {
+        detail: { code: 'workspace_context_unavailable' },
+      }),
+    ),
+    false,
+  );
+  assert.equal(isWorkspaceContextUnavailableError(new Error('workspace_context_unavailable')), false);
+});
 
 test('conversation history requests preserve forward and backward cursor pairs', async () => {
   let requestUrl = null;

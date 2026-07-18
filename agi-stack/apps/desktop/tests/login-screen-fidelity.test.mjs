@@ -72,7 +72,6 @@ test('authentication and workspace context failures are localized at their sourc
     'login.localProjectUnavailable',
     'login.localRuntimeNotReady',
     'login.manualApiKeyRequiresValidation',
-    'settings.authenticatedContextRequired',
     'settings.selectedTenantUnavailable',
     'settings.selectedProjectUnavailable',
     'settings.contextResponseMismatch',
@@ -82,6 +81,8 @@ test('authentication and workspace context failures are localized at their sourc
     assert.match(appSource, new RegExp(`t\\('${key.replaceAll('.', '\\.')}'\\)`));
     assert.equal((i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length, 2);
   }
+
+  assert.doesNotMatch(appSource, /settings\.authenticatedContextRequired/);
 
   assert.doesNotMatch(
     appSource,

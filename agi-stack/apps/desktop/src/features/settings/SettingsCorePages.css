@@ -282,6 +282,38 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.settings-project-empty {
+  display: grid;
+  min-height: 75px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin-top: 11px;
+  color: #657487;
+  background: #0a0f15;
+  border: 1px solid #2b3643;
+  border-radius: 7px;
+}
+
+.settings-project-empty > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-project-empty strong {
+  color: #b9c4cf;
+  font-size: 8px;
+}
+
+.settings-project-empty small {
+  color: #627185;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
 .settings-tenant-list > button,
 .settings-project-grid > button {
   display: grid;
@@ -377,7 +409,7 @@ button.active > .settings-choice-icon {
 
 .settings-context-apply {
   position: sticky;
-  bottom: -50px;
+  bottom: 0;
   display: flex;
   min-height: 58px;
   align-items: center;

@@ -275,9 +275,9 @@ export function WorkspaceSettingsPage({
         <span>
           <small>{t('settings.currentContext')}</small>
           <strong>
-            {currentTenant?.name || config.tenantId || t('settings.notAvailable')}
+            {currentTenant?.name || config.tenantId || t('settings.noTenantSelected')}
             <i>/</i>
-            {currentProject?.name || config.projectId || t('settings.notAvailable')}
+            {currentProject?.name || config.projectId || t('settings.noProjectSelected')}
           </strong>
         </span>
         <em>
@@ -320,8 +320,27 @@ export function WorkspaceSettingsPage({
         description={t('settings.chooseProjectDescription')}
       >
         {loading ? <SettingsState text={t('settings.loading')} /> : null}
-        {!loading && projects.length === 0 && !error ? (
-          <SettingsState text={t('settings.noProjects')} />
+        {!loading && !tenantId && !error ? (
+          <div className="settings-project-empty" role="status">
+            <span className="settings-choice-icon">
+              <CubeIcon />
+            </span>
+            <span>
+              <strong>{t('settings.noTenantSelected')}</strong>
+              <small>{t('settings.chooseTenantFirst')}</small>
+            </span>
+          </div>
+        ) : null}
+        {!loading && tenantId && projects.length === 0 && !error ? (
+          <div className="settings-project-empty" role="status">
+            <span className="settings-choice-icon">
+              <CubeIcon />
+            </span>
+            <span>
+              <strong>{t('settings.noProjects')}</strong>
+              <small>{t('settings.noProjectsDescription')}</small>
+            </span>
+          </div>
         ) : null}
         {!loading && projects.length > 0 ? (
           <div className="settings-project-grid">
@@ -361,7 +380,7 @@ export function WorkspaceSettingsPage({
 
       <span className="settings-context-preview" aria-live="polite">
         {selectedTenant?.name || t('settings.notAvailable')} /{' '}
-        {selectedProject?.name || t('settings.notAvailable')}
+        {selectedProject?.name || t('settings.noProjectSelected')}
       </span>
     </SettingsPage>
   );

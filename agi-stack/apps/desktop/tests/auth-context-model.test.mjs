@@ -66,7 +66,7 @@ test('manual mode cannot bypass authenticated identity and workspace context', (
 test('an authenticated identity without a project enters project selection', () => {
   const withoutProject = {
     ...authenticated,
-    context: { ...authenticated.context, project_id: '' },
+    context: null,
     projects: [],
   };
 

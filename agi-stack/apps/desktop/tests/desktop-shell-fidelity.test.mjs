@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
 const globalStyles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const sessionStyles = readFileSync(
   new URL('../src/features/session/SessionWorkspace.css', import.meta.url),
   'utf8'
@@ -45,12 +46,32 @@ const workspaceDockStyles = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.css', import.meta.url),
   'utf8'
 );
+const workspaceOverviewSource = readFileSync(
+  new URL('../src/features/workspace/WorkspaceOverview.tsx', import.meta.url),
+  'utf8'
+);
+const workspaceOverviewStyles = readFileSync(
+  new URL('../src/features/workspace/WorkspaceOverview.css', import.meta.url),
+  'utf8'
+);
 const settingsCoreSource = readFileSync(
   new URL('../src/features/settings/SettingsCorePages.tsx', import.meta.url),
   'utf8'
 );
+const settingsCoreStyles = readFileSync(
+  new URL('../src/features/settings/SettingsCorePages.css', import.meta.url),
+  'utf8'
+);
 const chatPanelSource = readFileSync(
   new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
+  'utf8'
+);
+const noProjectQaSource = readFileSync(
+  new URL('../src/qa/NoProjectEntryQa.tsx', import.meta.url),
+  'utf8'
+);
+const noProjectQaHtml = readFileSync(
+  new URL('../qa/workspace-no-project.html', import.meta.url),
   'utf8'
 );
 
@@ -93,6 +114,29 @@ test('authenticated identities without a project remain inside the desktop shell
   assert.doesNotMatch(renderWorkbench, /<SignedOutPanel/);
 });
 
+test('authenticated identities without a project get a source-aligned selection state', () => {
+  assert.match(settingsCoreSource, /className="settings-project-empty"/);
+  assert.match(settingsCoreSource, /settings\.noProjectSelected/);
+  assert.match(settingsCoreSource, /settings\.noProjectsDescription/);
+  assert.match(workspaceOverviewSource, /if \(!project\) \{/);
+  assert.match(workspaceOverviewSource, /className="workspace-design-context-empty"/);
+  assert.match(workspaceOverviewSource, /overview\.noProjectTitle/);
+  assert.match(workspaceOverviewStyles, /\.workspace-design-context-empty\s*\{/);
+  assert.match(workspaceDockSource, /const hasProjectScope = Boolean\(currentProjectId\.trim\(\)\)/);
+  assert.match(workspaceDockSource, /workspaceTree\.selectProjectDescription/);
+});
+
+test('the no-project QA route renders the production shell from a real unavailable context', () => {
+  assert.match(noProjectQaHtml, /\/src\/qa\/NoProjectEntryQa\.tsx/);
+  assert.match(noProjectQaSource, /context: null/);
+  assert.match(noProjectQaSource, /tenantId: '',[\s\S]*projectId: '',[\s\S]*workspaceId: ''/);
+  assert.match(noProjectQaSource, /'tenant-northstar': \[\]/);
+  assert.match(noProjectQaSource, /<DesktopSidebar/);
+  assert.match(noProjectQaSource, /<WorkspaceOverview/);
+  assert.match(noProjectQaSource, /<SettingsWindow/);
+  assert.match(noProjectQaSource, /get\('state'\) !== 'closed'/);
+});
+
 test('login is the only signed-out surface retained by the desktop shell', () => {
   assert.doesNotMatch(appSource, /function SignedOutPanel\b/);
   assert.doesNotMatch(appSource, /function SignedOutSessionTree\b/);
@@ -104,6 +148,10 @@ test('login is the only signed-out surface retained by the desktop shell', () =>
 });
 
 test('workspace hydration and refresh fail closed across tenant boundaries', () => {
+  assert.match(
+    appSource,
+    /const projects = tenantId \? await projectClient\.listProjects\(tenantId\) : \[\];[\s\S]*?if \(authAttemptRevisionRef\.current !== authAttemptRevision\) return false;[\s\S]*?if \(tenantId && !tenants\.some/,
+  );
   assert.match(
     appSource,
     /const scopedProjects = projects\.filter\(\s*\(project\) => project\.tenant_id === tenantId\s*\)/,
@@ -131,8 +179,31 @@ test('tenant and project changes require server-issued workspace context authori
     )?.[0] ?? '';
 
   assert.match(hydrateCloudSession, /identityClient\.getWorkspaceContext\(\)/);
-  assert.doesNotMatch(hydrateCloudSession, /isLegacyWorkspaceContextRouteMissing|return null/);
-  assert.match(applySettingsContext, /await api\.switchWorkspaceContext\(/);
+  assert.match(hydrateCloudSession, /isWorkspaceContextUnavailableError\(caught\)/);
+  assert.match(hydrateCloudSession, /context: null/);
+  assert.match(hydrateCloudSession, /tenantId: '',[\s\S]*projectId: '',[\s\S]*workspaceId: ''/);
+  assert.doesNotMatch(hydrateCloudSession, /isLegacyWorkspaceContextRouteMissing/);
+  assert.match(
+    applySettingsContext,
+    /const requestConfig = configRef\.current/,
+  );
+  assert.match(
+    applySettingsContext,
+    /const requestIsCurrent = \(\) =>[\s\S]*?authAttemptRevisionRef\.current === authAttemptRevision[\s\S]*?isSameDesktopRequestScope\(requestConfig, configRef\.current\)/,
+  );
+  assert.match(
+    applySettingsContext,
+    /await contextClient\.listProjects\(tenantId\);\s*if \(!requestIsCurrent\(\)\) return;/,
+  );
+  assert.match(
+    applySettingsContext,
+    /await contextClient\.getWorkspaceContext\(\);\s*if \(!requestIsCurrent\(\)\) return;/,
+  );
+  assert.match(
+    applySettingsContext,
+    /await contextClient\.switchWorkspaceContext\([\s\S]*?\);\s*if \(!requestIsCurrent\(\)\) return;/,
+  );
+  assert.match(applySettingsContext, /contextClient\.switchWorkspaceContext\(/);
   assert.doesNotMatch(
     applySettingsContext,
     /isLegacyWorkspaceContextRouteMissing|nextRemoteWorkspaceContext|new Date\(\)\.toISOString\(\)/,
@@ -148,7 +219,37 @@ test('workspace settings freeze and expose selection semantics while a switch is
   assert.match(workspaceSettingsPage, /disabled=\{loading \|\| applying\}/);
   assert.match(workspaceSettingsPage, /aria-pressed=\{tenant\.id === tenantId\}/);
   assert.match(workspaceSettingsPage, /disabled=\{applying\}/);
+  assert.match(workspaceSettingsPage, /!loading && !tenantId && !error/);
+  assert.match(workspaceSettingsPage, /settings\.chooseTenantFirst/);
   assert.match(settingsCoreSource, /aria-pressed=\{selected\}/);
+  assert.match(
+    settingsCoreStyles,
+    /\.settings-context-apply\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?bottom:\s*0;/,
+  );
+  assert.match(
+    i18nSource,
+    /'settings\.tenantProjectDescription':\s*'Choose the organization boundary first, then the project whose tasks, memory, and permissions should be active\.'/,
+  );
+  assert.match(
+    i18nSource,
+    /'settings\.chooseTenantDescription':\s*'Tenants define members, billing, credentials, memory, and policy boundaries\.'/,
+  );
+  assert.match(
+    i18nSource,
+    /'settings\.chooseProjectDescription':\s*'Only projects available to your role in the selected tenant are shown\.'/,
+  );
+  assert.match(
+    i18nSource,
+    /'settings\.tenantProjectDescription': '先选择组织边界，再选择需要激活任务、记忆与权限的项目。'/,
+  );
+  assert.match(
+    i18nSource,
+    /'settings\.chooseTenantDescription': '租户定义成员、计费、凭据、记忆与策略边界。'/,
+  );
+  assert.match(
+    i18nSource,
+    /'settings\.chooseProjectDescription': '仅显示你在所选租户中有权访问的项目。'/,
+  );
 });
 
 test('workspace and session creation remain inside the new task flow', () => {

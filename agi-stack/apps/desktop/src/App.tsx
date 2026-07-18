@@ -43,6 +43,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
   DesktopApiClient,
+  isWorkspaceContextUnavailableError,
 } from './api/client';
 import {
   ingestLocalMemory,
@@ -3272,8 +3273,42 @@ export function App() {
     const [user, tenants, authoritativeContextResponse] = await Promise.all([
       identityClient.currentUser(),
       identityClient.listTenants(),
-      identityClient.getWorkspaceContext(),
+      identityClient.getWorkspaceContext().catch((caught) => {
+        if (isWorkspaceContextUnavailableError(caught)) return null;
+        throw caught;
+      }),
     ]);
+    if (authAttemptRevisionRef.current !== authAttemptRevision) return false;
+    if (!authoritativeContextResponse) {
+      const nextConfig = {
+        ...tokenConfig,
+        tenantId: '',
+        projectId: '',
+        workspaceId: '',
+      };
+      contextRevisionRef.current = 0;
+      resetProjectScopedState();
+      commitRuntimeConfig(nextConfig);
+      setAuth({
+        status: 'signed_in',
+        credentialKind: 'cloud_session',
+        session: outcome.session ?? null,
+        context: null,
+        user,
+        tenants,
+        projects: [],
+        mustChangePassword: outcome.must_change_password,
+        error: null,
+      });
+      setLoginPassword('');
+      setDataset(emptyDataset);
+      setConnection('idle');
+      setLastSync(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      applySectionSideEffects('workspace');
+      setSettingsInitialSection('workspace');
+      setSettingsWindowOpen(true);
+      return true;
+    }
     const authoritativeContext = authoritativeContextResponse.context;
     const tenantId = authoritativeContext.tenant_id;
     const projectClient = new DesktopApiClient({ ...tokenConfig, tenantId });
@@ -5004,37 +5039,50 @@ export function App() {
   };
 
   const applySettingsContext = async (tenantId: string, projectId: string) => {
-    if (!auth.context) {
-      throw new Error(t('settings.authenticatedContextRequired'));
-    }
+    const requestConfig = configRef.current;
+    const authAttemptRevision = authAttemptRevisionRef.current;
+    const requestIsCurrent = () =>
+      authAttemptRevisionRef.current === authAttemptRevision &&
+      isSameDesktopRequestScope(requestConfig, configRef.current);
     if (!auth.tenants.some((tenant) => tenant.id === tenantId)) {
       throw new Error(t('settings.selectedTenantUnavailable'));
     }
     const contextClient = new DesktopApiClient({
-      ...config,
+      ...requestConfig,
       tenantId,
       projectId: '',
       workspaceId: '',
     });
     const listedProjects = await contextClient.listProjects(tenantId);
+    if (!requestIsCurrent()) return;
     const scopedProjects = listedProjects.filter((project) => project.tenant_id === tenantId);
     const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
     if (!selectedProject) {
       throw new Error(t('settings.selectedProjectUnavailable'));
     }
 
-    const nextContext = (
-      await api.switchWorkspaceContext(
+    let currentContext = auth.context;
+    if (!currentContext) {
+      const currentContextResponse = await contextClient.getWorkspaceContext();
+      if (!requestIsCurrent()) return;
+      currentContext = currentContextResponse.context;
+    }
+    let nextContext = currentContext;
+    if (!workspaceContextMatchesSelection(currentContext, tenantId, projectId)) {
+      const nextContextResponse = await contextClient.switchWorkspaceContext(
         tenantId,
         projectId,
-        auth.context.revision,
+        currentContext.revision,
         globalThis.crypto.randomUUID(),
-      )
-    ).context;
+      );
+      if (!requestIsCurrent()) return;
+      nextContext = nextContextResponse.context;
+    }
     if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
       throw new Error(t('settings.contextResponseMismatch'));
     }
-    const nextConfig = { ...config, tenantId, projectId, workspaceId: '' };
+    if (!requestIsCurrent()) return;
+    const nextConfig = { ...requestConfig, tenantId, projectId, workspaceId: '' };
     contextRevisionRef.current = nextContext.revision;
     resetProjectScopedState();
     commitRuntimeConfig(nextConfig);
@@ -5258,9 +5306,9 @@ export function App() {
         workspace={selectedWorkspace}
         project={selectedProject}
         tenantName={
-          auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ??
-          config.tenantId ??
-          t('overview.none')
+          auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
+          config.tenantId ||
+          t('settings.noTenantSelected')
         }
         conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
         members={dataset.workspaceMembers}
@@ -5525,10 +5573,13 @@ export function App() {
             mode={preferredTaskMode}
             taskCount={dataset.myWork.length}
             tenantName={
-              auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ??
-              config.tenantId
+              auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
+              config.tenantId ||
+              t('settings.noTenantSelected')
             }
-            projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
+            projectName={
+              selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected')
+            }
             user={auth.user}
             workspaces={dataset.workspacesByProject[config.projectId] ?? []}
             conversationsByWorkspace={dataset.conversationsByWorkspace}

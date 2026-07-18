@@ -882,51 +882,90 @@ provider credential persistence result: passed; overall provider settings result
 
 # Authenticated no-project entry design QA
 
-## Comparison target
+Date: 2026-07-18
 
-- Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/settings-popup-workspace.png`
-- Compact source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/settings-popup-workspace-1100.png`
-- Implementation screenshot: unavailable in this iteration
-- Intended viewports: `1440 × 1024` and `1100 × 782`, device scale factor `1`
-- Intended state: authenticated cloud identity, tenant list available, no current project, Workspace Settings automatically open above the existing workspace overview
+Scope: authenticated cloud identity with an available tenant roster but no authoritative project
+context. Workspace Settings opens automatically above a truthful no-project workspace overview.
 
-## Full-view comparison evidence
+## Reference roles
 
-Blocked. The application source and automated tests verify the intended entry state, but the in-app Browser control required to capture the rendered implementation is not callable in this Codex session. No screenshot, HTTP health check, or source inspection is being substituted for visible comparison evidence.
+- Large-screen design-language and geometry reference:
+  `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/settings-popup-workspace.png`
+  (`1440 × 1024`).
+- Compact design-language and geometry reference:
+  `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control/qa/settings-popup-workspace-1100.png`
+  (`1100 × 800`).
+- Both source references contain a selected project and populated project cards. They are not
+  same-state visual truth for the no-project flow. They validate window placement, rail/content
+  proportions, spacing, typography, borders, density, and responsive behavior only.
+- Empty-project copy, automatic entry, disabled actions, and close-to-overview continuity are a
+  source-language extension required by the real Rust API contract.
 
-## Focused-region comparison evidence
+## Implementation evidence
 
-Blocked for the same reason. The workspace selector, current-context card, project empty state, apply control, close action, sidebar task action, and underlying overview cannot be judged from a same-viewport combined image in this iteration.
+- Automatic entry, `1440 × 1024`:
+  `qa/workspace-no-project/implementation-auto-open-1440x1024.png`
+- Empty tenant project list, `1440 × 1024`:
+  `qa/workspace-no-project/implementation-empty-project-1440x1024.png`
+- Closed settings and truthful overview, `1440 × 1024`:
+  `qa/workspace-no-project/implementation-closed-1440x1024.png`
+- Source-matched compact viewport, `1100 × 800`:
+  `qa/workspace-no-project/implementation-auto-open-1100x800.png`
+- Additional product target, `1100 × 782`:
+  `qa/workspace-no-project/implementation-auto-open-1100x782.png`
 
-## Findings
+The source and implementation captures were reviewed together at both source viewports. At
+`1440 × 1024`, the implementation window is `1180 × 820` at `(130, 102)`. At `1100 × 800`, it is
+`1072 × 772` at `(14, 14)`. These match the source geometry. The compact rail remains `148 px`, the
+tenant and project choices collapse to one column, and the `58 px` context action remains visible at
+the bottom of the window. Document width equals viewport width in all three implementation captures;
+there is no page-level horizontal overflow.
 
-- [P1] Rendered no-project state has not completed the visual comparison gate.
-  - Location: authenticated desktop shell with Workspace Settings open.
-  - Evidence: both source captures are available, but there is no current implementation capture to place beside them.
-  - Impact: layout, disabled-state contrast, popup placement, copy wrapping, and close-to-overview continuity remain visually unverified.
-  - Fix: capture the authenticated no-project state at both target viewports in the in-app Browser, combine each capture with its matching source, and resolve any P0/P1/P2 differences.
+## Interaction evidence
+
+- The first authenticated no-project render automatically opens Workspace Settings and focuses the
+  settings search field.
+- Selecting Northstar Labs produces the explicit “no projects available” state and keeps Switch
+  workspace disabled.
+- Closing settings retains the signed-in shell, renders a dedicated no-project overview, and keeps
+  both New Task entry points disabled.
+- Configure reopens Workspace Settings. Escape closes it and returns focus to Configure when a
+  trigger exists.
+- Browser console verification completed with zero warnings and zero errors.
+
+## Findings resolved
+
+- [P1] Consumed only the structured Rust `404 workspace_context_unavailable` response as an
+  authenticated no-project state; unrelated authentication and context failures still fail closed.
+- [P1] Added deterministic real-component QA coverage for automatic entry, empty tenant projects,
+  closed overview continuity, and disabled task creation.
+- [P1] Restored authentication-generation and request-scope fences after asynchronous project and
+  context reads so logout or account replacement cannot receive stale context writes.
+- [P1] Corrected the compact sticky action from an off-canvas offset to `bottom: 0`, matching the
+  source compact layout.
+- [P2] Replaced misleading current-project and empty-workspace language across the title bar,
+  sidebar, workspace tree, overview, and settings content.
+- P0: none. No remaining actionable P1 or P2 visual finding was observed in the implemented state.
 
 ## Comparison history
 
-### Iteration 1 — blocked
+### Iteration 1 — evidence audit
 
-- The identity/workspace boundary, automatic Workspace Settings entry, project-scoped connection gate, and disabled New Task actions were implemented and passed automated tests.
-- Visual comparison could not begin because the selected in-app Browser control is unavailable to this session.
-- No visual pass is claimed from code or build evidence alone.
+- Corrected the earlier claim that the two populated source captures were no-project visual truth.
+- Confirmed that neither the source prototype nor the existing Provider fixture could render the
+  required state.
 
-## Implementation checklist
+### Iteration 2 — rendered extension pass
 
-- Capture the automatic Workspace Settings state at `1440 × 1024` and `1100 × 782`.
-- Close the popup and capture the authenticated workspace overview with New Task visibly disabled.
-- Reopen Workspace Settings from Configure and verify tenant switching, empty-project copy, and apply-button states.
-- Check keyboard dismissal, focus, browser console errors, horizontal overflow, and copy wrapping.
-- Compare source and implementation on one canvas and fix every P0/P1/P2 difference.
+- Added a deterministic authenticated no-project fixture backed by the production components.
+- Completed full-view and focused interaction review at `1440 × 1024`, `1100 × 800`, and
+  `1100 × 782`.
+- Fixed the compact sticky action and repeated the responsive and console checks.
 
-## Follow-up polish
+Same-state source truth remains unavailable by source design; this pass validates a faithful
+source-language extension and must not be cited as pixel identity for state-specific source content.
 
-- Defer P3 polish until the blocking comparison pass is available.
-
-final result: blocked
+final result: passed
 
 ---
 
