@@ -863,6 +863,20 @@ function mergeStreamingTextEvent(
       metadata: { ...(item.metadata ?? {}), streaming: type !== 'text_end' },
     };
   });
+  let alreadySorted = true;
+  for (let index = 1; index < updated.length; index += 1) {
+    const previous = updated[index - 1];
+    const current = updated[index];
+    if (
+      previous.eventTimeUs > current.eventTimeUs ||
+      (previous.eventTimeUs === current.eventTimeUs &&
+        previous.eventCounter > current.eventCounter)
+    ) {
+      alreadySorted = false;
+      break;
+    }
+  }
+  if (alreadySorted) return updated;
   return updated.sort((a, b) => {
     if (a.eventTimeUs !== b.eventTimeUs) return a.eventTimeUs - b.eventTimeUs;
     return a.eventCounter - b.eventCounter;

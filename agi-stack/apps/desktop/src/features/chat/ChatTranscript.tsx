@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
@@ -97,13 +97,21 @@ export function NarrativeMessageFrame({
   );
 }
 
-export function MarkdownContent({ content, className }: { content: string; className: string }) {
+const REMARK_PLUGINS = [remarkGfm];
+
+export const MarkdownContent = memo(function MarkdownContent({
+  content,
+  className,
+}: {
+  content: string;
+  className: string;
+}) {
   return (
     <div className={`markdown-content ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{content}</ReactMarkdown>
     </div>
   );
-}
+});
 
 function MessageActionMenu({ content }: { content: string }) {
   const { t } = useI18n();

@@ -90,5 +90,9 @@ test('narrative content is bounded without discarding authoritative markdown', (
   assert.match(chatStyles, /\.session-message-body[\s\S]*max-width: 100%/);
   assert.match(chatStyles, /\.markdown-content table[\s\S]*overflow-x: auto/);
   assert.match(chatStyles, /\.timeline-details pre[\s\S]*overflow: auto/);
-  assert.match(chatSource, /<ReactMarkdown remarkPlugins=\{\[remarkGfm\]\}>\{content\}<\/ReactMarkdown>/);
+  assert.match(chatSource, /const REMARK_PLUGINS = \[remarkGfm\]/);
+  assert.match(
+    chatSource,
+    /<ReactMarkdown remarkPlugins=\{REMARK_PLUGINS\}>\{content\}<\/ReactMarkdown>/,
+  );
 });
