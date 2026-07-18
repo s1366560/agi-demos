@@ -24,8 +24,15 @@ impl HashEmbedding {
 impl EmbeddingPort for HashEmbedding {
     async fn embed(&self, text: &str) -> CoreResult<Vec<f32>> {
         let mut v = vec![0f32; self.dim];
+        // Scratch buffer reused across tokens: one allocation per embed call
+        // instead of one `to_lowercase()` String per token. Same Unicode
+        // lowercase semantics (`to_lowercase` is `flat_map(char::to_lowercase)`
+        // collected), so hashes — and thus vectors — are unchanged.
+        let mut scratch = String::new();
         for token in text.split_whitespace() {
-            let h = fnv1a(&token.to_lowercase());
+            scratch.clear();
+            scratch.extend(token.chars().flat_map(char::to_lowercase));
+            let h = fnv1a(&scratch);
             v[(h as usize) % self.dim] += 1.0;
         }
         let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -65,15 +72,24 @@ impl EmbeddingPort for NgramHashEmbedding {
     async fn embed(&self, text: &str) -> CoreResult<Vec<f32>> {
         let mut v = vec![0f32; self.dim];
         let lower = text.to_lowercase();
+        // Scratch buffers reused across tokens/windows: the per-token `Vec<char>`
+        // and per-window `String` allocations are hoisted out of the loop.
+        // Gram bytes are unchanged, so hashes — and thus vectors — are unchanged.
+        let mut chars: Vec<char> = Vec::new();
+        let mut gram = String::new();
         for token in lower.split_whitespace() {
             // Whole-token feature (word-level signal).
             v[(fnv1a(token) as usize) % self.dim] += 1.0;
             // Space-padded character n-grams (sub-word signal). Padding marks
             // word boundaries so prefixes/suffixes are distinguishable.
-            let chars: Vec<char> = format!(" {token} ").chars().collect();
+            chars.clear();
+            chars.push(' ');
+            chars.extend(token.chars());
+            chars.push(' ');
             if chars.len() >= self.n {
                 for window in chars.windows(self.n) {
-                    let gram: String = window.iter().collect();
+                    gram.clear();
+                    gram.extend(window);
                     v[(fnv1a(&gram) as usize) % self.dim] += 1.0;
                 }
             }

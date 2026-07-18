@@ -5,8 +5,9 @@
 //!
 //! Ids are zero-padded monotonic counters (`{:020}`) so lexical string ordering
 //! equals append ordering — the same property Redis stream ids have — which makes
-//! `read_after` a simple "id greater than `after_id`" scan. Ids are per-adapter
-//! opaque handles; callers echo them back and never compare them across adapters.
+//! `read_after` a binary search for the first id greater than `after_id`. Ids are
+//! per-adapter opaque handles; callers echo them back and never compare them
+//! across adapters.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -79,12 +80,10 @@ impl EventStream for InMemoryEventStream {
         let Some(entries) = inner.topics.get(topic) else {
             return Ok(Vec::new());
         };
-        Ok(entries
-            .iter()
-            .filter(|e| e.id.as_str() > after)
-            .take(limit)
-            .cloned()
-            .collect())
+        // Ids are zero-padded monotonic, so entries are sorted by id: binary
+        // search the first entry past `after` instead of scanning the topic.
+        let start = entries.partition_point(|e| e.id.as_str() <= after);
+        Ok(entries[start..].iter().take(limit).cloned().collect())
     }
 }
 
