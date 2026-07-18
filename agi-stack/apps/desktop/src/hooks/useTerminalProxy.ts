@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { TerminalConnectionStatus } from '../types';
 
@@ -20,9 +20,30 @@ export function useTerminalProxy(
 ): TerminalProxyState {
   const socketRef = useRef<WebSocket | null>(null);
   const generationRef = useRef(0);
+  const pendingLinesRef = useRef<string[]>([]);
+  const linesFlushCancelRef = useRef<(() => void) | null>(null);
   const [status, setStatus] = useState<TerminalConnectionStatus>('idle');
   const [lines, setLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const flushPendingLines = useCallback(() => {
+    linesFlushCancelRef.current = null;
+    const pending = pendingLinesRef.current;
+    if (!pending.length) return;
+    pendingLinesRef.current = [];
+    setLines((current) => [...current, ...pending].slice(-300));
+  }, []);
+
+  const scheduleLinesFlush = useCallback(() => {
+    if (linesFlushCancelRef.current) return;
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(flushPendingLines);
+      linesFlushCancelRef.current = () => cancelAnimationFrame(frame);
+    } else {
+      const timer = setTimeout(flushPendingLines, 16);
+      linesFlushCancelRef.current = () => clearTimeout(timer);
+    }
+  }, [flushPendingLines]);
 
   useEffect(() => {
     const generation = generationRef.current + 1;
@@ -63,7 +84,8 @@ export function useTerminalProxy(
     socket.onmessage = (message) => {
       if (!isCurrent()) return;
       const frame = terminalFrame(message.data);
-      setLines((current) => [...current, frame.line].slice(-300));
+      pendingLinesRef.current.push(frame.line);
+      scheduleLinesFlush();
       if (frame.error) {
         failed = true;
         setStatus('error');
@@ -75,9 +97,12 @@ export function useTerminalProxy(
     return () => {
       if (generationRef.current === generation) generationRef.current += 1;
       if (socketRef.current === socket) socketRef.current = null;
+      linesFlushCancelRef.current?.();
+      linesFlushCancelRef.current = null;
+      pendingLinesRef.current = [];
       socket.close();
     };
-  }, [credential, launchCapability, url]);
+  }, [credential, launchCapability, scheduleLinesFlush, url]);
 
   return {
     status,
@@ -103,6 +128,9 @@ export function useTerminalProxy(
       setStatus('closed');
     },
     clear() {
+      linesFlushCancelRef.current?.();
+      linesFlushCancelRef.current = null;
+      pendingLinesRef.current = [];
       setLines([]);
     },
   };
