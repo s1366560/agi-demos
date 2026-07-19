@@ -5,21 +5,11 @@ impl SupervisorTickAdmissionHandler {
         &self,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let now = Utc::now();
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
+        for node in ctx.nodes.iter_mut() {
             if node.intent == "done" {
                 continue;
             }

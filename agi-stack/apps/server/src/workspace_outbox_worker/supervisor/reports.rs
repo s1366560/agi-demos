@@ -182,26 +182,16 @@ impl SupervisorTickAdmissionHandler {
         payload: &Map<String, Value>,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
+        for node in ctx.nodes.iter_mut() {
             if supervisor_blocked_human_metadata_present(&object_or_empty(
                 node.metadata_json.clone(),
             )) {
                 continue;
             }
-            let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
+            let Some(attempt_id) = recoverable_node_attempt_id(node) else {
                 continue;
             };
             if self
@@ -213,7 +203,7 @@ impl SupervisorTickAdmissionHandler {
                 continue;
             }
             let Some(context) = self
-                .retry_context_for_node(payload, workspace_id, &node)
+                .retry_context_for_node(payload, workspace_id, node)
                 .await?
             else {
                 continue;
@@ -222,12 +212,12 @@ impl SupervisorTickAdmissionHandler {
             let now = Utc::now();
             let node_id = node.id.clone();
             let retry_exhausted = release_node_for_terminal_retry(
-                &mut node,
+                node,
                 "missing_attempt",
                 now,
                 plan_terminal_attempt_max_retries(),
             );
-            self.store.save_plan_node(node).await?;
+            self.store.save_plan_node(node.clone()).await?;
             changed += 1;
 
             if retry_exhausted {

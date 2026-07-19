@@ -66,35 +66,56 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                     reason: Some("supervisor_tick_requires_full_runtime".to_string()),
                 });
             };
+            let plan = self.store.get_plan(&plan_id).await?.ok_or_else(|| {
+                CoreError::Storage(format!(
+                    "workspace plan {plan_id} not found for workspace {workspace_id}"
+                ))
+            })?;
+            let mut ctx = SupervisorTickContext {
+                plan,
+                nodes: Vec::new(),
+            };
+            if ctx.plan.workspace_id != workspace_id {
+                return Err(CoreError::Storage(format!(
+                    "workspace plan {plan_id} not found for workspace {workspace_id}"
+                )));
+            }
+            ctx.nodes = self.store.list_plan_nodes(&plan_id).await?;
             let changed_worktree_failed = self
-                .reopen_failed_worktree_integration_nodes(&item, &payload, &workspace_id, &plan_id)
+                .reopen_failed_worktree_integration_nodes(
+                    &item,
+                    &payload,
+                    &workspace_id,
+                    &plan_id,
+                    &mut ctx,
+                )
                 .await?;
             let changed_missing = self
-                .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
+                .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_blocked_human = self
-                .reconcile_supervisor_blocked_human_nodes(&workspace_id, &plan_id)
+                .reconcile_supervisor_blocked_human_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_request_pipeline = self
-                .reconcile_supervisor_request_pipeline_nodes(&workspace_id, &plan_id)
+                .reconcile_supervisor_request_pipeline_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_wait_pipeline = self
-                .reconcile_supervisor_wait_pipeline_nodes(&workspace_id, &plan_id)
+                .reconcile_supervisor_wait_pipeline_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_noop = self
-                .reconcile_supervisor_noop_nodes(&workspace_id, &plan_id)
+                .reconcile_supervisor_noop_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_create_repair = self
-                .reconcile_supervisor_create_repair_nodes(&workspace_id, &plan_id)
+                .reconcile_supervisor_create_repair_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_replan = self
-                .reconcile_supervisor_replan_nodes(&workspace_id, &plan_id)
+                .reconcile_supervisor_replan_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_disposed = self
-                .reconcile_supervisor_disposed_nodes(&workspace_id, &plan_id)
+                .reconcile_supervisor_disposed_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_accepted = self
-                .reconcile_accepted_terminal_attempt_nodes(&workspace_id, &plan_id)
+                .reconcile_accepted_terminal_attempt_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_supervisor_retry = self
                 .reconcile_supervisor_retry_same_node_attempt_nodes(
@@ -102,16 +123,29 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                     &payload,
                     &workspace_id,
                     &plan_id,
+                    &mut ctx,
                 )
                 .await?;
             let changed_terminal = self
-                .reconcile_terminal_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
+                .reconcile_terminal_attempt_nodes(
+                    &item,
+                    &payload,
+                    &workspace_id,
+                    &plan_id,
+                    &mut ctx,
+                )
                 .await?;
             let changed_reported = self
-                .reconcile_reported_attempt_nodes(&workspace_id, &plan_id)
+                .reconcile_reported_attempt_nodes(&workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_dirty_main_dependency_dispatch = self
-                .dispatch_ready_dirty_main_dependency_node(&item, &payload, &workspace_id, &plan_id)
+                .dispatch_ready_dirty_main_dependency_node(
+                    &item,
+                    &payload,
+                    &workspace_id,
+                    &plan_id,
+                    &mut ctx,
+                )
                 .await?;
             if changed_worktree_failed
                 + changed_missing
@@ -266,6 +300,11 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
 
         Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
     }
+}
+
+pub(super) struct SupervisorTickContext {
+    pub(super) plan: WorkspacePlanRecord,
+    pub(super) nodes: Vec<WorkspacePlanNodeRecord>,
 }
 
 struct SupervisorRetryContext {

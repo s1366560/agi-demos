@@ -7,21 +7,11 @@ impl SupervisorTickAdmissionHandler {
         &self,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let now = Utc::now();
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
+        for node in ctx.nodes.iter_mut() {
             if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
                 continue;
             }
@@ -88,7 +78,7 @@ impl SupervisorTickAdmissionHandler {
             let task_projected = self
                 .project_supervisor_replan_to_task(
                     workspace_id,
-                    &node,
+                    node,
                     previous_attempt_id.as_deref(),
                     &summary,
                     &evidence_refs,
@@ -154,7 +144,8 @@ impl SupervisorTickAdmissionHandler {
             });
             node.assignee_agent_id = None;
             node.current_attempt_id = None;
-            node.feature_checkpoint_json = reset_feature_checkpoint(node.feature_checkpoint_json);
+            node.feature_checkpoint_json =
+                reset_feature_checkpoint(node.feature_checkpoint_json.clone());
             node.metadata_json = Value::Object(metadata);
             node.completed_at = None;
             node.updated_at = Some(now);

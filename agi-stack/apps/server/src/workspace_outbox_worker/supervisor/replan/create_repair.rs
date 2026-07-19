@@ -5,26 +5,17 @@ impl SupervisorTickAdmissionHandler {
         &self,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let now = Utc::now();
-        let nodes = self.store.list_plan_nodes(plan_id).await?;
-        let nodes_by_id = nodes
+        let nodes_by_id = ctx
+            .nodes
             .iter()
             .map(|node| (node.id.clone(), node.clone()))
             .collect::<HashMap<_, _>>();
+        let mut created_nodes = Vec::new();
         let mut changed = 0;
-        for mut node in nodes {
+        for node in ctx.nodes.iter_mut() {
             if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
                 continue;
             }
@@ -32,7 +23,7 @@ impl SupervisorTickAdmissionHandler {
             if !supervisor_create_repair_metadata_present(&metadata) {
                 continue;
             }
-            if supervisor_create_repair_projection_complete(&node, &metadata, &nodes_by_id) {
+            if supervisor_create_repair_projection_complete(node, &metadata, &nodes_by_id) {
                 continue;
             }
 
@@ -83,7 +74,7 @@ impl SupervisorTickAdmissionHandler {
             let task_projected = self
                 .project_supervisor_create_repair_to_task(
                     workspace_id,
-                    &node,
+                    node,
                     previous_attempt_id.as_deref(),
                     &summary,
                     &evidence_refs,
@@ -98,7 +89,7 @@ impl SupervisorTickAdmissionHandler {
                 } else {
                     let repair_node_id = generated_repair_node_id();
                     let repair_node = supervisor_repair_plan_node(
-                        &node,
+                        node,
                         &metadata,
                         &repair_node_id,
                         &summary,
@@ -106,7 +97,8 @@ impl SupervisorTickAdmissionHandler {
                         previous_attempt_id.as_deref(),
                         now,
                     );
-                    self.store.create_plan_node(repair_node).await?;
+                    self.store.create_plan_node(repair_node.clone()).await?;
+                    created_nodes.push(repair_node);
                     (repair_node_id, true)
                 };
 
@@ -202,6 +194,7 @@ impl SupervisorTickAdmissionHandler {
                 .await?;
             changed += 1;
         }
+        ctx.nodes.extend(created_nodes);
         Ok(changed)
     }
 

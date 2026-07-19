@@ -7,21 +7,11 @@ impl SupervisorTickAdmissionHandler {
         payload: &Map<String, Value>,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
-            if !supervisor_retry_same_node_reconcilable_node(&node) {
+        for node in ctx.nodes.iter_mut() {
+            if !supervisor_retry_same_node_reconcilable_node(node) {
                 continue;
             }
             let mut metadata = object_or_empty(node.metadata_json.clone());
@@ -43,7 +33,7 @@ impl SupervisorTickAdmissionHandler {
                 continue;
             }
             let Some(context) = self
-                .retry_context_for_node(payload, workspace_id, &node)
+                .retry_context_for_node(payload, workspace_id, node)
                 .await?
             else {
                 continue;
@@ -69,7 +59,7 @@ impl SupervisorTickAdmissionHandler {
 
             let node_id = node.id.clone();
             let retry_exhausted = release_node_for_terminal_retry(
-                &mut node,
+                node,
                 SUPERVISOR_DECISION_RETRY_SAME_NODE_REASON,
                 now,
                 plan_terminal_attempt_max_retries(),
@@ -88,7 +78,7 @@ impl SupervisorTickAdmissionHandler {
                 json!(REJECTED_ATTEMPT_STATUS),
             );
             node.metadata_json = Value::Object(metadata.clone());
-            self.store.save_plan_node(node).await?;
+            self.store.save_plan_node(node.clone()).await?;
             changed += 1;
 
             self.store

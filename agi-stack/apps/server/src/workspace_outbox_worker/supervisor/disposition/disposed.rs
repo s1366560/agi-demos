@@ -5,25 +5,15 @@ impl SupervisorTickAdmissionHandler {
         &self,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let now = Utc::now();
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
+        for node in ctx.nodes.iter_mut() {
             if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
                 continue;
             }
-            let has_dispose_metadata = supervisor_dispose_metadata_present(&node);
+            let has_dispose_metadata = supervisor_dispose_metadata_present(node);
             let has_dispose_event = self
                 .store
                 .has_supervisor_dispose_decision_for_node(workspace_id, plan_id, &node.id)
@@ -66,6 +56,7 @@ impl SupervisorTickAdmissionHandler {
                 "workspace_task_projected_at".to_string(),
                 json!(now.to_rfc3339()),
             );
+            let original_node = node.clone();
             node.intent = "done".to_string();
             node.execution = "idle".to_string();
             node.metadata_json = Value::Object(metadata.clone());
@@ -77,7 +68,7 @@ impl SupervisorTickAdmissionHandler {
             let task_projected = self
                 .project_supervisor_disposition_to_task(
                     workspace_id,
-                    &node,
+                    node,
                     &summary,
                     &disposition,
                     now,
@@ -107,6 +98,8 @@ impl SupervisorTickAdmissionHandler {
                     })
                     .await?;
                 changed += 1;
+            } else {
+                *node = original_node;
             }
         }
         Ok(changed)

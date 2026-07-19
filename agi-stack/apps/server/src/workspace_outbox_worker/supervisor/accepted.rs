@@ -9,25 +9,15 @@ impl SupervisorTickAdmissionHandler {
         payload: &Map<String, Value>,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
-            if !done_node_needs_worktree_integration_retry(&node) {
+        for node in ctx.nodes.iter_mut() {
+            if !done_node_needs_worktree_integration_retry(node) {
                 continue;
             }
             let Some(context) = self
-                .retry_context_for_node(payload, workspace_id, &node)
+                .retry_context_for_node(payload, workspace_id, node)
                 .await?
             else {
                 continue;
@@ -38,7 +28,7 @@ impl SupervisorTickAdmissionHandler {
             let previous_attempt_id =
                 metadata_string(previous_metadata.get("worktree_integration_attempt_id"))
                     .or_else(|| node.current_attempt_id.clone());
-            let previous_commit_ref = node_verified_commit_ref(&node);
+            let previous_commit_ref = node_verified_commit_ref(node);
             let previous_summary =
                 metadata_string(previous_metadata.get("worktree_integration_summary"))
                     .unwrap_or_else(|| "accepted worktree integration failed".to_string());
@@ -137,35 +127,30 @@ impl SupervisorTickAdmissionHandler {
         payload: &Map<String, Value>,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
-        let mut nodes = self.store.list_plan_nodes(plan_id).await?;
-        nodes.sort_by(|left, right| {
-            left.priority
-                .cmp(&right.priority)
-                .then_with(|| left.id.cmp(&right.id))
-        });
-        let nodes_by_id = nodes
+        let mut sorted_node_ids = ctx
+            .nodes
+            .iter()
+            .map(|node| (node.priority, node.id.clone()))
+            .collect::<Vec<_>>();
+        sorted_node_ids
+            .sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+        let nodes_by_id = ctx
+            .nodes
             .iter()
             .map(|node| (node.id.clone(), node.clone()))
             .collect::<HashMap<_, _>>();
 
-        for mut node in nodes {
-            if !dirty_main_dependency_dispatch_candidate(&node) {
+        for (_, node_id) in sorted_node_ids {
+            let Some(node) = ctx.nodes.iter_mut().find(|node| node.id == node_id) else {
+                continue;
+            };
+            if !dirty_main_dependency_dispatch_candidate(node) {
                 continue;
             }
             let Some(context) = self
-                .retry_context_for_node(payload, workspace_id, &node)
+                .retry_context_for_node(payload, workspace_id, node)
                 .await?
             else {
                 continue;
@@ -179,12 +164,12 @@ impl SupervisorTickAdmissionHandler {
                 continue;
             }
             let (blocking_dependencies, dirty_main_seed_dependencies) =
-                dependency_dispatch_blockers(&node, &nodes_by_id);
+                dependency_dispatch_blockers(node, &nodes_by_id);
             if !blocking_dependencies.is_empty() || dirty_main_seed_dependencies.is_empty() {
                 continue;
             }
 
-            let dependency_base_ref = dependency_base_ref_for_dispatch(&node, &nodes_by_id);
+            let dependency_base_ref = dependency_base_ref_for_dispatch(node, &nodes_by_id);
             if let Some(base_ref) = dependency_base_ref.as_deref() {
                 node.feature_checkpoint_json = feature_checkpoint_with_base_ref(
                     node.feature_checkpoint_json.clone(),
@@ -244,38 +229,28 @@ impl SupervisorTickAdmissionHandler {
     pub(super) async fn reconcile_accepted_terminal_attempt_nodes(
         &self,
         workspace_id: &str,
-        plan_id: &str,
+        _plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let now = Utc::now();
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
+        for node in ctx.nodes.iter_mut() {
             if supervisor_blocked_human_metadata_present(&object_or_empty(
                 node.metadata_json.clone(),
             )) {
                 continue;
             }
-            let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
+            let Some(attempt_id) = recoverable_node_attempt_id(node) else {
                 continue;
             };
             let Some(mut attempt) = self.store.get_task_session_attempt(&attempt_id).await? else {
                 continue;
             };
             if attempt.status.trim().to_ascii_lowercase() != ACCEPTED_ATTEMPT_STATUS {
-                if !done_idle_node_has_accepted_supervisor_judge(&node) {
+                if !done_idle_node_has_accepted_supervisor_judge(node) {
                     continue;
                 }
-                let summary = accepted_supervisor_judge_summary(&node, &attempt);
+                let summary = accepted_supervisor_judge_summary(node, &attempt);
                 let Some(updated) = self
                     .store
                     .finish_task_session_attempt(
@@ -292,12 +267,12 @@ impl SupervisorTickAdmissionHandler {
                 attempt = updated;
             }
             if self
-                .accepted_projection_already_complete(workspace_id, &node, &attempt)
+                .accepted_projection_already_complete(workspace_id, node, &attempt)
                 .await?
             {
                 continue;
             }
-            if !accepted_attempt_matches_node_expected_commit(&node, &attempt) {
+            if !accepted_attempt_matches_node_expected_commit(node, &attempt) {
                 continue;
             }
 
@@ -309,7 +284,7 @@ impl SupervisorTickAdmissionHandler {
             let Some(integration_metadata) = self
                 .project_accepted_attempt_to_task(AcceptedAttemptTaskProjection {
                     workspace_id,
-                    node: &node,
+                    node,
                     attempt: &attempt,
                     summary: &summary,
                     evidence_refs: &evidence_refs,
@@ -323,7 +298,7 @@ impl SupervisorTickAdmissionHandler {
                 continue;
             };
 
-            let mut metadata = accepted_attempt_projection_base_metadata(&node, &attempt);
+            let mut metadata = accepted_attempt_projection_base_metadata(node, &attempt);
             metadata.insert(
                 "terminal_attempt_status".to_string(),
                 json!(ACCEPTED_ATTEMPT_STATUS),
@@ -360,10 +335,10 @@ impl SupervisorTickAdmissionHandler {
             node.execution = "idle".to_string();
             node.current_attempt_id = Some(attempt.id.clone());
             node.feature_checkpoint_json =
-                accepted_attempt_projection_feature_checkpoint(&node, &attempt);
+                accepted_attempt_projection_feature_checkpoint(node, &attempt);
             node.metadata_json = Value::Object(metadata);
             node.updated_at = Some(now);
-            self.store.save_plan_node(node).await?;
+            self.store.save_plan_node(node.clone()).await?;
             changed += 1;
         }
         Ok(changed)

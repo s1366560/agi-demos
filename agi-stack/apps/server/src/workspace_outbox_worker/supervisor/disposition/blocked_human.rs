@@ -5,21 +5,11 @@ impl SupervisorTickAdmissionHandler {
         &self,
         workspace_id: &str,
         plan_id: &str,
+        ctx: &mut SupervisorTickContext,
     ) -> CoreResult<usize> {
-        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            ))
-        })?;
-        if plan.workspace_id != workspace_id {
-            return Err(CoreError::Storage(format!(
-                "workspace plan {plan_id} not found for workspace {workspace_id}"
-            )));
-        }
-
         let now = Utc::now();
         let mut changed = 0;
-        for mut node in self.store.list_plan_nodes(plan_id).await? {
+        for node in ctx.nodes.iter_mut() {
             if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
                 continue;
             }
@@ -118,13 +108,14 @@ impl SupervisorTickAdmissionHandler {
                 );
             }
 
+            let original_node = node.clone();
             node.intent = "blocked".to_string();
             node.execution = "idle".to_string();
             node.metadata_json = Value::Object(metadata.clone());
             node.updated_at = Some(now);
 
             let task_projected = self
-                .project_supervisor_blocked_human_to_task(workspace_id, &node, &summary, now)
+                .project_supervisor_blocked_human_to_task(workspace_id, node, &summary, now)
                 .await?;
             if !already_projected_node || task_projected || attempt_projected {
                 self.store.save_plan_node(node.clone()).await?;
@@ -150,6 +141,8 @@ impl SupervisorTickAdmissionHandler {
                     })
                     .await?;
                 changed += 1;
+            } else {
+                *node = original_node;
             }
         }
         Ok(changed)
