@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Badge, Flex, Heading, ScrollArea, Tabs, Text } from '@radix-ui/themes';
 
+import { socketEventKey } from '../../hooks/useAgentSocket';
 import { useI18n } from '../../i18n';
 import type {
   AgentWsEvent,
@@ -17,6 +18,23 @@ import { SandboxPanel } from '../sandbox/SandboxPanel';
 import type { TerminalBindingState } from '../session/sessionTerminalModel';
 
 const MAX_RENDERED_EVENTS = 50;
+
+// Events are prepended newest-first, so an index-derived key shifts on every
+// flush and remounts every row. Prefer the stream identity the deduper already
+// computes; events without one keep a per-object fallback key via WeakMap.
+const fallbackEventKeys = new WeakMap<AgentWsEvent, string>();
+let nextFallbackEventKey = 0;
+
+function stableEventKey(event: AgentWsEvent): string {
+  const key = socketEventKey(event);
+  if (key) return key;
+  let fallback = fallbackEventKeys.get(event);
+  if (!fallback) {
+    fallback = `local:${nextFallbackEventKey++}`;
+    fallbackEventKeys.set(event, fallback);
+  }
+  return fallback;
+}
 
 type StatusPanelProps = {
   selectedTask: WorkspaceTask | null;
@@ -57,19 +75,10 @@ type StatusPanelProps = {
 export function StatusPanel(props: StatusPanelProps) {
   const { t } = useI18n();
   // Events arrive newest-first and the rAF-batched array identity changes at most
-  // once per frame, so serialize the rendered rows only when the buffer changes.
-  const renderedEvents = useMemo(
-    () =>
-      props.events
-        .slice(0, MAX_RENDERED_EVENTS)
-        .map((event, index) => ({
-          event,
-          badge: props.events.length - index,
-          key: `${event.type ?? 'event'}-${index}`,
-          detail: JSON.stringify(event, null, 2),
-        })),
-    [props.events],
-  );
+  // once per frame, so slice the rendered window only when the buffer changes.
+  // Serialization lives in EventRow, which Radix only mounts while the events
+  // tab is active — no JSON.stringify work happens for hidden tabs.
+  const renderedEvents = useMemo(() => props.events.slice(0, MAX_RENDERED_EVENTS), [props.events]);
   const terminalStatus =
     props.terminalBinding === 'connected'
       ? t('session.terminalConnected')
@@ -188,18 +197,8 @@ export function StatusPanel(props: StatusPanelProps) {
                       })}
                     </Text>
                   ) : null}
-                  {renderedEvents.map((row) => (
-                    <article className="event-row" key={row.key}>
-                      <Flex align="center" justify="between" gap="2" mb="1">
-                        <Text size="2" weight="bold">
-                          {String(row.event.type ?? row.event.event_type ?? 'event')}
-                        </Text>
-                        <Badge color="gray" variant="soft">
-                          #{row.badge}
-                        </Badge>
-                      </Flex>
-                      <pre>{row.detail}</pre>
-                    </article>
+                  {renderedEvents.map((event) => (
+                    <EventRow key={stableEventKey(event)} event={event} />
                   ))}
                 </>
               )}
@@ -210,6 +209,30 @@ export function StatusPanel(props: StatusPanelProps) {
     </section>
   );
 }
+
+// Memoized per event identity, which is stable across flushes: a streaming
+// flush renders only the newly arrived rows instead of re-serializing all 50.
+// The badge shows the stream's own monotonic counter (the old reverse index
+// changed for every row on every flush, defeating the memo).
+const EventRow = memo(function EventRow({ event }: { event: AgentWsEvent }) {
+  const detail = useMemo(() => JSON.stringify(event, null, 2), [event]);
+  const counter = typeof event.event_counter === 'number' ? event.event_counter : null;
+  return (
+    <article className="event-row">
+      <Flex align="center" justify="between" gap="2" mb="1">
+        <Text size="2" weight="bold">
+          {String(event.type ?? event.event_type ?? 'event')}
+        </Text>
+        {counter !== null ? (
+          <Badge color="gray" variant="soft">
+            #{counter}
+          </Badge>
+        ) : null}
+      </Flex>
+      <pre>{detail}</pre>
+    </article>
+  );
+});
 
 function TaskSummary({ task }: { task: WorkspaceTask | null }) {
   const { t } = useI18n();
