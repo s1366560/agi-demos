@@ -778,11 +778,7 @@ impl PgWorkspaceRepository {
                 .push("now()")
                 .push_bind(Option::<DateTime<Utc>>::None);
         });
-        builder
-            .build()
-            .execute(&self.pool)
-            .await
-            .map_err(storage)?;
+        builder.build().execute(&self.pool).await.map_err(storage)?;
         Ok(())
     }
 }
