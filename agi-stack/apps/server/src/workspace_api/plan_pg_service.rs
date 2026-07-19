@@ -33,13 +33,22 @@ impl PgWorkspaceService {
         } else {
             plans[0].id.clone()
         };
+        // One batch fetch for all plans' nodes instead of a sequential query
+        // per plan (this endpoint is polled by the UI). Grouping preserves the
+        // batch query's per-plan row order.
+        let plan_ids: Vec<String> = plans.iter().map(|plan| plan.id.clone()).collect();
+        let all_nodes = self
+            .repo
+            .list_plan_nodes_by_plan_ids(&plan_ids)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let mut nodes_by_plan: HashMap<String, Vec<WorkspacePlanNodeRecord>> = HashMap::new();
+        for node in all_nodes {
+            nodes_by_plan.entry(node.plan_id.clone()).or_default().push(node);
+        }
         let mut plans_with_nodes = Vec::with_capacity(plans.len());
         for plan in plans {
-            let nodes = self
-                .repo
-                .list_plan_nodes(&plan.id)
-                .await
-                .map_err(WorkspaceApiError::internal)?;
+            let nodes = nodes_by_plan.remove(&plan.id).unwrap_or_default();
             plans_with_nodes.push((plan, nodes));
         }
         let include_details = query.include_details.unwrap_or(true);
