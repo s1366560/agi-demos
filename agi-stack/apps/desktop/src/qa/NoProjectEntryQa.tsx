@@ -110,7 +110,16 @@ async function noProjectQaFetch(input: RequestInfo | URL): Promise<Response> {
   const url = new URL(String(input), QA_API_ORIGIN);
   if (url.origin === QA_API_ORIGIN && url.pathname === '/api/v1/projects') {
     const tenantId = url.searchParams.get('tenant_id') ?? '';
-    return jsonResponse(projectsByTenant[tenantId] ?? []);
+    const page = Number(url.searchParams.get('page'));
+    const pageSize = Number(url.searchParams.get('page_size'));
+    const projects = projectsByTenant[tenantId] ?? [];
+    const start = (page - 1) * pageSize;
+    return jsonResponse({
+      projects: projects.slice(start, start + pageSize),
+      total: projects.length,
+      page,
+      page_size: pageSize,
+    });
   }
   return jsonResponse({ detail: `Unhandled QA route: GET ${url.pathname}` }, 404);
 }

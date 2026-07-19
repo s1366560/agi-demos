@@ -279,11 +279,28 @@ overview entry, and settings context-switch interaction.
 - Rust formatting and Clippy with warnings denied: passed.
 - The existing Vite large-chunk advisory remains P3 performance follow-up work.
 
+### Iteration 2 — passed: authoritative identity catalogs
+
+Cloud and local Rust tenant/project catalogs now request every backend page at the declared 100-row
+maximum before login hydration or Workspace Settings resolves the active context. Each page must
+preserve the requested page number and size, a stable total, forward progress, unique IDs, and valid
+typed rows. Project rows must match the requested tenant exactly. Missing metadata, duplicate rows,
+changing totals, malformed records, and cross-tenant projects fail closed with a gateway-contract
+error instead of becoming an empty or incomplete context.
+
+The authenticated no-project QA adapter now implements the real page contract. No component, style,
+or visible state changed, so the existing same-viewport hierarchy comparison remains current; this
+iteration corrects the data boundary underneath that approved UI.
+
+Verification: the new contract tests failed against the prior first-page and permissive parsing
+behavior, then passed after implementation. The complete Desktop suite passes 425/425, along with
+production TypeScript and the Vite build. The existing Vite large-chunk advisory is unchanged.
+
 ## Remaining architecture work outside this slice
 
 - Make workspace creation metadata and initial conversation binding one atomic Rust transaction.
-- Add authoritative workspace roster/agent endpoints and bounded pagination where collection sizes can
-  grow.
+- Add authoritative workspace roster/agent endpoints plus bounded pagination and strict scope
+  validation for workspace and conversation collections.
 - Replace remaining demo execution phases with structured run-state projection as those backend
   contracts become available.
 

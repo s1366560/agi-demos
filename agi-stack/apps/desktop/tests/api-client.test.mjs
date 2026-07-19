@@ -44,6 +44,222 @@ test('workspace context unavailable detection requires the structured server cod
   assert.equal(isWorkspaceContextUnavailableError(new Error('workspace_context_unavailable')), false);
 });
 
+test('identity catalogs exhaust every authoritative page before resolving context', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const tenants = Array.from({ length: 101 }, (_, index) => ({
+    id: `tenant-${index + 1}`,
+    name: `Tenant ${index + 1}`,
+  }));
+  const projects = Array.from({ length: 101 }, (_, index) => ({
+    id: `project-${index + 1}`,
+    tenant_id: 'tenant-101',
+    name: `Project ${index + 1}`,
+  }));
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    const page = Number(url.searchParams.get('page'));
+    const pageSize = Number(url.searchParams.get('page_size'));
+    const start = (page - 1) * pageSize;
+    const items = url.pathname.endsWith('/tenants') ? tenants : projects;
+    const key = url.pathname.endsWith('/tenants') ? 'tenants' : 'projects';
+    return new Response(
+      JSON.stringify({
+        [key]: items.slice(start, start + pageSize),
+        total: items.length,
+        page,
+        page_size: pageSize,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+    });
+    assert.equal((await client.listTenants()).at(-1)?.id, 'tenant-101');
+    assert.equal((await client.listProjects('tenant-101')).at(-1)?.id, 'project-101');
+    assert.deepEqual(
+      calls.map((url) => ({
+        path: url.pathname,
+        tenantId: url.searchParams.get('tenant_id'),
+        page: url.searchParams.get('page'),
+        pageSize: url.searchParams.get('page_size'),
+      })),
+      [
+        { path: '/api/v1/tenants', tenantId: null, page: '1', pageSize: '100' },
+        { path: '/api/v1/tenants', tenantId: null, page: '2', pageSize: '100' },
+        {
+          path: '/api/v1/projects',
+          tenantId: 'tenant-101',
+          page: '1',
+          pageSize: '100',
+        },
+        {
+          path: '/api/v1/projects',
+          tenantId: 'tenant-101',
+          page: '2',
+          pageSize: '100',
+        },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('identity catalogs fail closed on malformed pages and cross-tenant projects', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    mode: 'cloud',
+    apiBaseUrl: 'https://api.memstack.test',
+    apiKey: 'cloud-session',
+  });
+
+  try {
+    for (const payload of [
+      { tenants: [{ id: 'tenant-1', name: 'Tenant 1' }], total: 2, page: 2, page_size: 100 },
+      { tenants: [{ id: 'tenant-1', name: 'Tenant 1' }], total: 1, page: 1 },
+      { tenants: [{ id: '', name: 'Tenant 1' }], total: 1, page: 1, page_size: 100 },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.listTenants(), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      });
+    }
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          projects: [
+            { id: 'project-cross-scope', tenant_id: 'tenant-b', name: 'Foreign project' },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 100,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    await assert.rejects(client.listProjects('tenant-a'), (error) => {
+      assert.equal(error instanceof DesktopApiError, true);
+      assert.equal(error.status, 502);
+      return true;
+    });
+
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input));
+      const page = Number(url.searchParams.get('page'));
+      const firstPage = Array.from({ length: 100 }, (_, index) => ({
+        id: `tenant-${index + 1}`,
+        name: `Tenant ${index + 1}`,
+      }));
+      return new Response(
+        JSON.stringify({
+          tenants: page === 1 ? firstPage : [firstPage[0]],
+          total: 101,
+          page,
+          page_size: 100,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+    await assert.rejects(client.listTenants(), (error) => {
+      assert.equal(error instanceof DesktopApiError, true);
+      assert.equal(error.status, 502);
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('local identity catalogs use the same authoritative page contract', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    const page = Number(url.searchParams.get('page'));
+    const pageSize = Number(url.searchParams.get('page_size'));
+    const payload = url.pathname.endsWith('/tenants')
+      ? {
+          tenants: [{ id: 'tenant-local', name: 'Local tenant', role: 'owner' }],
+          total: 1,
+          page,
+          page_size: pageSize,
+        }
+      : {
+          projects: [
+            {
+              id: 'project-local',
+              tenant_id: 'tenant-local',
+              name: 'Local project',
+              stats: {},
+            },
+          ],
+          total: 1,
+          page,
+          page_size: pageSize,
+        };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-session',
+      localApiToken: 'launch-capability',
+    });
+    assert.deepEqual(await client.listTenants(), [
+      { id: 'tenant-local', name: 'Local tenant' },
+    ]);
+    assert.deepEqual(await client.listProjects('tenant-local'), [
+      {
+        id: 'project-local',
+        tenant_id: 'tenant-local',
+        name: 'Local project',
+        stats: {},
+      },
+    ]);
+    assert.deepEqual(
+      calls.map((url) => ({
+        path: url.pathname,
+        tenantId: url.searchParams.get('tenant_id'),
+        page: url.searchParams.get('page'),
+        pageSize: url.searchParams.get('page_size'),
+      })),
+      [
+        { path: '/api/v1/tenants', tenantId: null, page: '1', pageSize: '100' },
+        {
+          path: '/api/v1/projects',
+          tenantId: 'tenant-local',
+          page: '1',
+          pageSize: '100',
+        },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('device authorization client preserves the exact unauthenticated server contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

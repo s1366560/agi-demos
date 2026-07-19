@@ -76,6 +76,8 @@ type RequestOptions = {
 };
 
 const WORKSPACE_ROSTER_PAGE_SIZE = 500;
+const IDENTITY_CATALOG_PAGE_SIZE = 100;
+const IDENTITY_CATALOG_MAX_PAGES = 1_000;
 
 export class DesktopApiError extends Error {
   readonly status: number;
@@ -200,18 +202,36 @@ export class DesktopApiClient {
   }
 
   async listTenants(signal?: AbortSignal): Promise<TenantSummary[]> {
-    const payload = await this.request<unknown>('/api/v1/tenants', { signal });
-    return readArray<TenantSummary>(payload, ['tenants', 'items', 'data']);
+    return loadPagedIdentityCatalog(
+      'tenant catalog',
+      'tenants',
+      (page, pageSize) => {
+        const params = new URLSearchParams({
+          page: String(page),
+          page_size: String(pageSize),
+        });
+        return this.request<unknown>(`/api/v1/tenants?${params.toString()}`, { signal });
+      },
+      normalizeTenantSummary,
+    );
   }
 
   async listProjects(tenantId?: string, signal?: AbortSignal): Promise<ProjectSummary[]> {
-    const params = new URLSearchParams();
-    if (tenantId) params.set('tenant_id', tenantId);
-    const query = params.toString();
-    const payload = await this.request<unknown>(`/api/v1/projects${query ? `?${query}` : ''}`, {
-      signal,
-    });
-    return readArray<ProjectSummary>(payload, ['projects', 'items', 'data']);
+    const requiredTenantId = tenantId?.trim() ?? '';
+    const parseProject = (value: unknown) => normalizeProjectSummary(value, requiredTenantId);
+    return loadPagedIdentityCatalog(
+      'project catalog',
+      'projects',
+      (page, pageSize) => {
+        const params = new URLSearchParams({
+          page: String(page),
+          page_size: String(pageSize),
+        });
+        if (requiredTenantId) params.set('tenant_id', requiredTenantId);
+        return this.request<unknown>(`/api/v1/projects?${params.toString()}`, { signal });
+      },
+      parseProject,
+    );
   }
 
   async getWorkspaceContext(signal?: AbortSignal): Promise<WorkspaceContextResponse> {
@@ -1289,6 +1309,148 @@ function readArray<T>(payload: unknown, keys: string[]): T[] {
   return [];
 }
 
+async function loadPagedIdentityCatalog<T extends { id: string }>(
+  label: string,
+  itemKey: string,
+  requestPage: (page: number, pageSize: number) => Promise<unknown>,
+  normalizeItem: (value: unknown) => T | null,
+): Promise<T[]> {
+  const items: T[] = [];
+  const seenIds = new Set<string>();
+  let expectedTotal: number | null = null;
+
+  for (let page = 1; page <= IDENTITY_CATALOG_MAX_PAGES; page += 1) {
+    const payload = await requestPage(page, IDENTITY_CATALOG_PAGE_SIZE);
+    const current = requireIdentityCatalogPage(
+      payload,
+      label,
+      itemKey,
+      page,
+      IDENTITY_CATALOG_PAGE_SIZE,
+      normalizeItem,
+    );
+    if (expectedTotal === null) {
+      expectedTotal = current.total;
+      if (
+        Math.ceil(expectedTotal / IDENTITY_CATALOG_PAGE_SIZE) >
+        IDENTITY_CATALOG_MAX_PAGES
+      ) {
+        throw invalidIdentityCatalogResponse(label, payload);
+      }
+    } else if (current.total !== expectedTotal) {
+      throw invalidIdentityCatalogResponse(label, payload);
+    }
+
+    for (const item of current.items) {
+      if (seenIds.has(item.id)) throw invalidIdentityCatalogResponse(label, payload);
+      seenIds.add(item.id);
+      items.push(item);
+    }
+    if (items.length === expectedTotal) return items;
+    if (
+      items.length > expectedTotal ||
+      current.items.length === 0 ||
+      current.items.length < IDENTITY_CATALOG_PAGE_SIZE
+    ) {
+      throw invalidIdentityCatalogResponse(label, payload);
+    }
+  }
+  throw invalidIdentityCatalogResponse(label, {
+    detail: 'identity_catalog_page_limit_exceeded',
+  });
+}
+
+function requireIdentityCatalogPage<T>(
+  payload: unknown,
+  label: string,
+  itemKey: string,
+  expectedPage: number,
+  expectedPageSize: number,
+  normalizeItem: (value: unknown) => T | null,
+): { items: T[]; total: number } {
+  if (
+    !isRecord(payload) ||
+    !Array.isArray(payload[itemKey]) ||
+    !isUnsignedSafeInteger(payload.total) ||
+    payload.page !== expectedPage ||
+    payload.page_size !== expectedPageSize ||
+    payload[itemKey].length > expectedPageSize ||
+    payload[itemKey].length > payload.total
+  ) {
+    throw invalidIdentityCatalogResponse(label, payload);
+  }
+  const items = payload[itemKey].map(normalizeItem);
+  if (items.some((item) => item === null)) {
+    throw invalidIdentityCatalogResponse(label, payload);
+  }
+  return { items: items as T[], total: payload.total };
+}
+
+function invalidIdentityCatalogResponse(label: string, payload: unknown): DesktopApiError {
+  return new DesktopApiError(`Invalid ${label} response`, 502, payload);
+}
+
+function normalizeTenantSummary(value: unknown): TenantSummary | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.id) ||
+    !isNonEmptyString(value.name) ||
+    !isOptionalString(value.slug) ||
+    !isOptionalNullableString(value.description) ||
+    !isOptionalString(value.owner_id) ||
+    !isOptionalString(value.plan) ||
+    !isOptionalString(value.created_at) ||
+    !isOptionalNullableString(value.updated_at)
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    ...(value.slug === undefined ? {} : { slug: value.slug }),
+    ...(value.description === undefined ? {} : { description: value.description }),
+    ...(value.owner_id === undefined ? {} : { owner_id: value.owner_id }),
+    ...(value.plan === undefined ? {} : { plan: value.plan }),
+    ...(value.created_at === undefined ? {} : { created_at: value.created_at }),
+    ...(value.updated_at === undefined ? {} : { updated_at: value.updated_at }),
+  };
+}
+
+function normalizeProjectSummary(value: unknown, tenantId: string): ProjectSummary | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.id) ||
+    !isNonEmptyString(value.tenant_id) ||
+    (tenantId && value.tenant_id !== tenantId) ||
+    !isNonEmptyString(value.name) ||
+    !isOptionalNullableString(value.description) ||
+    !isOptionalString(value.owner_id) ||
+    !isOptionalStringArray(value.member_ids) ||
+    (value.is_public !== undefined && typeof value.is_public !== 'boolean') ||
+    !isOptionalString(value.agent_conversation_mode) ||
+    !isOptionalString(value.created_at) ||
+    !isOptionalNullableString(value.updated_at) ||
+    !isOptionalNullableRecord(value.stats)
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    tenant_id: value.tenant_id,
+    name: value.name,
+    ...(value.description === undefined ? {} : { description: value.description }),
+    ...(value.owner_id === undefined ? {} : { owner_id: value.owner_id }),
+    ...(value.member_ids === undefined ? {} : { member_ids: value.member_ids }),
+    ...(value.is_public === undefined ? {} : { is_public: value.is_public }),
+    ...(value.agent_conversation_mode === undefined
+      ? {}
+      : { agent_conversation_mode: value.agent_conversation_mode }),
+    ...(value.created_at === undefined ? {} : { created_at: value.created_at }),
+    ...(value.updated_at === undefined ? {} : { updated_at: value.updated_at }),
+    ...(value.stats === undefined ? {} : { stats: value.stats }),
+  };
+}
+
 function requireWorkspaceRosterPage<T>(
   payload: unknown,
   label: string,
@@ -1432,6 +1594,13 @@ function isUnsignedSafeInteger(value: unknown): value is number {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isOptionalStringArray(value: unknown): value is string[] | undefined {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+  );
 }
 
 function isOptionalNullableString(value: unknown): value is string | null | undefined {
