@@ -31,6 +31,9 @@ const MAX_SUBSCRIPTIONS_PER_CONNECTION: usize = 64;
 /// (a cache miss only costs a re-parse).
 const WS_MESSAGE_CACHE_CAP: usize = 4096;
 
+/// (topic, entry_id) → built WS message.
+type WsMessageCacheMap = HashMap<(String, String), Arc<Value>>;
+
 /// Shared cache of parsed stream-entry WS messages. Every connection used to
 /// re-parse the same payloads during its own flush — with C viewers on one hot
 /// conversation that is C parses of the same (potentially large) JSON every
@@ -40,7 +43,7 @@ const WS_MESSAGE_CACHE_CAP: usize = 4096;
 /// (via `AppState`) share one backing map.
 #[derive(Clone, Default)]
 pub(crate) struct WsMessageCache {
-    messages: Arc<Mutex<HashMap<(String, String), Arc<Value>>>>,
+    messages: Arc<Mutex<WsMessageCacheMap>>,
 }
 
 impl WsMessageCache {

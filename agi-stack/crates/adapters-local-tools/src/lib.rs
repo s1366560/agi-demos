@@ -1737,13 +1737,17 @@ fn slice_chars(text: &str, offset: usize, limit: usize) -> String {
 fn make_simple_diff(old: &str, new: &str) -> String {
     let old_lines: Vec<&str> = old.lines().collect();
     let new_lines: Vec<&str> = new.lines().collect();
+    // Membership sets: the previous per-line `Vec::contains` made this O(n²)
+    // in line count (~10^8 string comparisons on a 10k-line file edit).
+    let old_set: std::collections::HashSet<&&str> = old_lines.iter().collect();
+    let new_set: std::collections::HashSet<&&str> = new_lines.iter().collect();
     let mut diff = String::new();
-    for line in old_lines.iter().filter(|line| !new_lines.contains(line)) {
+    for line in old_lines.iter().filter(|line| !new_set.contains(*line)) {
         diff.push_str("- ");
         diff.push_str(line);
         diff.push('\n');
     }
-    for line in new_lines.iter().filter(|line| !old_lines.contains(line)) {
+    for line in new_lines.iter().filter(|line| !old_set.contains(*line)) {
         diff.push_str("+ ");
         diff.push_str(line);
         diff.push('\n');
