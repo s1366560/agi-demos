@@ -12,14 +12,27 @@ export type WorkspaceTreeNode = {
 
 export type WorkspaceTreeSelectionMode = 'overview' | 'conversation' | 'my-work' | 'none';
 
-export type WorkspaceTreeAvailability = 'loading' | 'error' | 'empty' | 'ready';
+export type WorkspaceTreeAvailability =
+  | 'loading'
+  | 'refreshing'
+  | 'error'
+  | 'stale-error'
+  | 'empty'
+  | 'ready';
 
 export type WorkspaceTreeSessionAvailability =
   | 'deferred'
   | 'loading'
+  | 'refreshing'
   | 'error'
+  | 'stale-error'
   | 'empty'
   | 'ready';
+
+export type WorkspaceConversationSelection = {
+  scopeKey: string;
+  conversationId: string;
+};
 
 export type WorkspaceTreeStatusTone =
   | 'active'
@@ -134,6 +147,8 @@ export function workspaceTreeAvailability(
   projectState: RuntimeNodeState | undefined,
   workspaceCount: number,
 ): WorkspaceTreeAvailability {
+  if (workspaceCount > 0 && projectState?.loading) return 'refreshing';
+  if (workspaceCount > 0 && projectState?.error) return 'stale-error';
   if (workspaceCount > 0) return 'ready';
   if (projectState?.loading) return 'loading';
   if (projectState?.error) return 'error';
@@ -194,11 +209,40 @@ export function workspaceTreeSessionAvailability(
   workspaceState: RuntimeNodeState | undefined,
   conversationCount: number,
 ): WorkspaceTreeSessionAvailability {
+  if (conversationCount > 0 && workspaceState?.loading) return 'refreshing';
+  if (conversationCount > 0 && workspaceState?.error) return 'stale-error';
   if (conversationCount > 0) return 'ready';
   if (!workspaceState) return 'deferred';
   if (workspaceState.loading) return 'loading';
   if (workspaceState.error) return 'error';
   return 'empty';
+}
+
+export function reconcileWorkspaceConversationRowsAfterRefresh(
+  currentRows: AgentConversation[],
+  refreshedRows: AgentConversation[],
+  refreshError: string | null,
+): AgentConversation[] {
+  return refreshError === null ? refreshedRows : currentRows;
+}
+
+export function shouldClearConversationSelectionAfterRefresh(
+  selectionAtRequest: WorkspaceConversationSelection | null,
+  currentSelection: WorkspaceConversationSelection | null,
+  refreshedScopeKey: string,
+  conversations: readonly AgentConversation[],
+): boolean {
+  if (!selectionAtRequest || !currentSelection) return false;
+  if (
+    selectionAtRequest.scopeKey !== currentSelection.scopeKey ||
+    selectionAtRequest.conversationId !== currentSelection.conversationId ||
+    currentSelection.scopeKey !== refreshedScopeKey
+  ) {
+    return false;
+  }
+  return !conversations.some(
+    (conversation) => conversation.id === currentSelection.conversationId,
+  );
 }
 
 export function conversationTreeStatusValue(conversation: AgentConversation): string {

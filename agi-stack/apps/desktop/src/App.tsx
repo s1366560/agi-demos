@@ -213,6 +213,8 @@ import {
   beginWorkspaceConversationRequest,
   isCurrentWorkspaceConversationRequest,
   reconcileExpandedWorkspaceIds,
+  reconcileWorkspaceConversationRowsAfterRefresh,
+  shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
   supersedeWorkspaceConversationRequests,
   workspaceConversationLoadTargets,
@@ -492,6 +494,12 @@ type AgentConversationSession = {
   scopeKey: string;
   conversation: AgentConversation;
 };
+
+function agentConversationSelectionIdentity(session: AgentConversationSession | null) {
+  return session
+    ? { scopeKey: session.scopeKey, conversationId: session.conversation.id }
+    : null;
+}
 
 type AgentTaskSignalPatch = Partial<Omit<AgentTaskSignal, 'id'>> & {
   id: string;
@@ -1720,6 +1728,7 @@ export function App() {
   const [memoryResult, setMemoryResult] = useState<LocalMemoryResult | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
+  const agentConversationSessionRef = useRef(agentConversationSession);
   const [sessionProjectionState, setSessionProjectionState] =
     useState<SessionProjectionLoadState>(emptySessionProjectionState);
   const [sessionDisplayProjection, setSessionDisplayProjection] =
@@ -1792,6 +1801,10 @@ export function App() {
   useEffect(() => {
     datasetRef.current = dataset;
   }, [dataset]);
+
+  useEffect(() => {
+    agentConversationSessionRef.current = agentConversationSession;
+  }, [agentConversationSession]);
 
   useEffect(() => {
     expandedWorkspaceIdsRef.current = expandedWorkspaceIds;
@@ -2212,6 +2225,36 @@ export function App() {
     timelineRequestRef.current += 1;
     setConversationTimeline(emptyConversationTimeline);
   }, []);
+
+  const clearMissingConversationSelection = useCallback(
+    (
+      selectionAtRequest: ReturnType<typeof agentConversationSelectionIdentity>,
+      refreshedScopeKey: string,
+      conversations: readonly AgentConversation[],
+    ) => {
+      if (
+        !shouldClearConversationSelectionAfterRefresh(
+          selectionAtRequest,
+          agentConversationSelectionIdentity(agentConversationSessionRef.current),
+          refreshedScopeKey,
+          conversations,
+        )
+      ) {
+        return;
+      }
+      agentConversationSessionRef.current = null;
+      setAgentConversationSession(null);
+      resetConversationTimeline();
+      setAgentTaskSignals([]);
+      if (activeSectionRef.current === 'chat') {
+        activeSectionRef.current = 'workspace';
+        setActiveSection('workspace');
+        setReviewTab('overview');
+        workbenchRef.current?.focus();
+      }
+    },
+    [resetConversationTimeline],
+  );
 
   const loadConversationTimeline = useCallback(
     async (
@@ -2988,6 +3031,9 @@ export function App() {
               : unavailableWorkspaceAuthority(),
           };
         });
+        const selectionAtRequest = agentConversationSelectionIdentity(
+          agentConversationSessionRef.current,
+        );
         const conversationResultsPromise = Promise.all(
           conversationLoadTargets.map(async (targetWorkspaceId) => {
             const requestGeneration = conversationRequestGenerations.get(targetWorkspaceId);
@@ -3069,13 +3115,17 @@ export function App() {
               ),
             ),
             ...Object.fromEntries(
-              currentConversationResults.map((result) => [
-                result.workspaceId,
-                mergeConversationListWithCurrentRunAuthority(
-                  result.conversations,
-                  current.conversationsByWorkspace[result.workspaceId] ?? [],
-                ),
-              ]),
+              currentConversationResults.map((result) => {
+                const currentRows = current.conversationsByWorkspace[result.workspaceId] ?? [];
+                return [
+                  result.workspaceId,
+                  reconcileWorkspaceConversationRowsAfterRefresh(
+                    currentRows,
+                    mergeConversationListWithCurrentRunAuthority(result.conversations, currentRows),
+                    result.error,
+                  ),
+                ];
+              }),
             ),
           };
           const workspaceNodeState = {
@@ -3107,6 +3157,14 @@ export function App() {
           } satisfies RuntimeDataset;
           return nextDataset;
         });
+        for (const result of currentConversationResults) {
+          if (result.error !== null) continue;
+          clearMissingConversationSelection(
+            selectionAtRequest,
+            agentConversationScopeKeyFor(resolvedProjectId, result.workspaceId),
+            result.conversations,
+          );
+        }
         const committedExpandedWorkspaceIds = reconcileExpandedWorkspaceIds(
           expandedWorkspaceIdsRef.current,
           projectWorkspaces.map((workspace) => workspace.id),
@@ -3171,6 +3229,7 @@ export function App() {
       auth.projects,
       auth.status,
       auth.tenants,
+      clearMissingConversationSelection,
       commitRuntimeConfig,
       config,
       syncLocalRuntimeConfig,
@@ -3191,6 +3250,9 @@ export function App() {
     if (!shouldLoadWorkspaceConversations(currentDataset.nodeState.workspaces[workspaceId])) {
       return;
     }
+    const selectionAtRequest = agentConversationSelectionIdentity(
+      agentConversationSessionRef.current,
+    );
 
     const requestGeneration = beginWorkspaceConversationRequest(
       workspaceConversationRequestGenerationsRef.current,
@@ -3248,6 +3310,11 @@ export function App() {
         };
         return nextDataset;
       });
+      clearMissingConversationSelection(
+        selectionAtRequest,
+        agentConversationScopeKeyFor(projectId, workspaceId),
+        response.items,
+      );
     } catch (caught) {
       if (!requestIsCurrent()) return;
       updateDataset((current) => {
@@ -3272,7 +3339,7 @@ export function App() {
         return nextDataset;
       });
     }
-  }, [updateDataset]);
+  }, [clearMissingConversationSelection, updateDataset]);
 
   const refreshMyWork = useCallback(async (scheduledScope?: MyWorkRefreshScope) => {
     const projectId = config.projectId.trim();

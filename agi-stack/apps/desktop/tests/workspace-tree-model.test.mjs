@@ -3,6 +3,13 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
+const React = require('react');
+const { renderToStaticMarkup } = require('react-dom/server');
+const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
+const { WorkspaceDock } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/workspace/WorkspaceDock.js'
+);
 const {
   beginWorkspaceConversationRequest,
   buildWorkspaceTree,
@@ -13,6 +20,8 @@ const {
   isCurrentWorkspaceConversationRequest,
   isWorkspaceOverviewSelected,
   reconcileExpandedWorkspaceIds,
+  reconcileWorkspaceConversationRowsAfterRefresh,
+  shouldClearConversationSelectionAfterRefresh,
   shouldLoadWorkspaceConversations,
   supersedeWorkspaceConversationRequests,
   workspaceConversationLoadTargets,
@@ -34,6 +43,37 @@ function conversation(id, title, updatedAt) {
     created_at: '2026-07-01T00:00:00Z',
     updated_at: updatedAt,
   };
+}
+
+function renderWorkspaceDock(nodeState, conversationsByWorkspace) {
+  return renderToStaticMarkup(
+    React.createElement(
+      I18nProvider,
+      null,
+      React.createElement(WorkspaceDock, {
+        workspaces: [
+          {
+            id: 'workspace-a',
+            tenant_id: 'tenant-1',
+            project_id: 'project-1',
+            name: 'Desktop Client',
+          },
+        ],
+        conversationsByWorkspace,
+        nodeState,
+        currentProjectId: 'project-1',
+        currentWorkspaceId: 'workspace-a',
+        currentConversationId: 'conversation-a',
+        selectionMode: 'conversation',
+        expandedWorkspaceIds: new Set(['workspace-a']),
+        onToggleWorkspace: () => {},
+        onRetryProject: () => {},
+        onRetryWorkspace: () => {},
+        onSelectWorkspace: () => {},
+        onSelectConversation: () => {},
+      })
+    )
+  );
 }
 
 test('workspace tree preserves the authoritative server order within the current project', () => {
@@ -145,9 +185,47 @@ test('same-project refresh preserves a manual collapse of the selected workspace
   );
 });
 
-test('same-project refresh keeps an already loaded tree visible', () => {
-  assert.equal(workspaceTreeAvailability({ loading: true, error: null }, 3), 'ready');
-  assert.equal(workspaceTreeAvailability({ loading: false, error: 'offline' }, 3), 'ready');
+test('same-project refresh keeps cached roots visible without presenting them as current', () => {
+  assert.equal(workspaceTreeAvailability({ loading: true, error: null }, 3), 'refreshing');
+  assert.equal(
+    workspaceTreeAvailability({ loading: false, error: 'offline' }, 3),
+    'stale-error'
+  );
+  assert.equal(workspaceTreeAvailability({ loading: false, error: null }, 3), 'ready');
+});
+
+test('stale project and session notices retain the last verified hierarchy and retry actions', () => {
+  const conversations = {
+    'workspace-a': [
+      {
+        ...conversation('conversation-a', 'Review auth middleware', '2026-07-14T09:30:00Z'),
+        workspace_id: 'workspace-a',
+      },
+    ],
+  };
+  const staleProjectMarkup = renderWorkspaceDock(
+    {
+      projects: { 'project-1': { loading: false, error: 'Project refresh failed' } },
+      workspaces: { 'workspace-a': { loading: false, error: null } },
+    },
+    conversations
+  );
+  assert.match(staleProjectMarkup, /Refresh failed · showing last verified workspaces/);
+  assert.match(staleProjectMarkup, /Desktop Client/);
+  assert.match(staleProjectMarkup, /Review auth middleware/);
+  assert.match(staleProjectMarkup, />Retry<\/button>/);
+
+  const staleSessionsMarkup = renderWorkspaceDock(
+    {
+      projects: { 'project-1': { loading: false, error: null } },
+      workspaces: { 'workspace-a': { loading: false, error: 'Session refresh failed' } },
+    },
+    conversations
+  );
+  assert.match(staleSessionsMarkup, /Refresh failed · showing last verified sessions/);
+  assert.match(staleSessionsMarkup, /1 verified sessions · refresh failed/);
+  assert.match(staleSessionsMarkup, /Review auth middleware/);
+  assert.match(staleSessionsMarkup, />Retry<\/button>/);
 });
 
 test('empty tree renders the authoritative loading, error, or empty state', () => {
@@ -219,6 +297,88 @@ test('workspace conversations load once and can retry after a node error', () =>
   assert.equal(
     workspaceTreeSessionAvailability({ loading: false, error: null }, 2),
     'ready'
+  );
+  assert.equal(
+    workspaceTreeSessionAvailability({ loading: true, error: null }, 2),
+    'refreshing'
+  );
+  assert.equal(
+    workspaceTreeSessionAvailability({ loading: false, error: 'offline' }, 2),
+    'stale-error'
+  );
+});
+
+test('failed workspace conversation refresh retains the last verified rows', () => {
+  const cached = [conversation('conversation-a', 'Cached', '2026-07-14T09:30:00Z')];
+  const refreshed = [conversation('conversation-b', 'Fresh', '2026-07-15T09:30:00Z')];
+
+  assert.equal(
+    reconcileWorkspaceConversationRowsAfterRefresh(cached, [], 'offline'),
+    cached,
+  );
+  assert.equal(
+    reconcileWorkspaceConversationRowsAfterRefresh(cached, refreshed, null),
+    refreshed,
+  );
+});
+
+test('a completed workspace refresh clears only the unchanged missing selection', () => {
+  const selected = {
+    scopeKey: 'project-1\u0000workspace-a',
+    conversationId: 'conversation-a',
+  };
+  const changedSelection = {
+    scopeKey: 'project-1\u0000workspace-a',
+    conversationId: 'conversation-b',
+  };
+  const refreshed = [
+    conversation('conversation-b', 'Still here', '2026-07-14T09:30:00Z'),
+  ];
+
+  assert.equal(
+    shouldClearConversationSelectionAfterRefresh(
+      selected,
+      selected,
+      'project-1\u0000workspace-a',
+      refreshed
+    ),
+    true
+  );
+  assert.equal(
+    shouldClearConversationSelectionAfterRefresh(
+      selected,
+      changedSelection,
+      'project-1\u0000workspace-a',
+      refreshed
+    ),
+    false
+  );
+  assert.equal(
+    shouldClearConversationSelectionAfterRefresh(
+      selected,
+      selected,
+      'project-1\u0000workspace-b',
+      refreshed
+    ),
+    false
+  );
+  assert.equal(
+    shouldClearConversationSelectionAfterRefresh(
+      changedSelection,
+      changedSelection,
+      'project-1\u0000workspace-a',
+      refreshed
+    ),
+    false
+  );
+  assert.equal(
+    shouldClearConversationSelectionAfterRefresh(
+      null,
+      selected,
+      'project-1\u0000workspace-a',
+      refreshed
+    ),
+    false
   );
 });
 

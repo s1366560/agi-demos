@@ -316,11 +316,37 @@ client and Tauri route changes. The complete Desktop suite passes 430/430 and Ru
 along with production TypeScript, Vite, Rust formatting, and Clippy. The existing Vite large-chunk
 advisory is unchanged.
 
+### Iteration 4 — passed: stale hierarchy truth and selection reconciliation
+
+Refreshing a populated project or workspace now keeps the last verified workspace and session rows
+visible while explicitly labeling them as refreshing. A failed refresh keeps the same rows visible,
+marks them as stale, exposes the authoritative error detail, and provides a scoped Retry action at
+both the project and workspace levels. Empty loading, failure, and authoritative-empty states remain
+distinct, so cached content is never presented as current and a failed request does not masquerade
+as an empty hierarchy.
+
+After a successful same-scope refresh, the desktop clears a selected conversation only when that
+exact request began with the same selection and the returned authoritative catalog no longer
+contains it. Failed refreshes and user selections changed while the request was in flight are
+preserved. Clearing a missing selection also resets its timeline and task signals; if the user was
+viewing that conversation, the canvas returns to the workspace overview and restores keyboard focus
+there.
+
+The production QA route exposes deterministic `stale-project` and `stale-sessions` scenarios. An
+in-app Browser pass at `http://127.0.0.1:5173/qa/workspace-execution.html` confirmed that both stale
+states retain their prior rows, show the compact retry notice inside the approved sidebar, and leave
+the workspace canvas geometry unchanged. These states extend the prototype's design language; the
+prototype does not contain same-state stale-refresh source truth.
+
+Contract tests first reproduced stale rows presented as current, cached rows discarded on failure,
+and the unchanged missing-selection race, then passed after implementation. The complete Desktop
+suite passes 435/435, along with the production TypeScript check and Vite build. The existing Vite
+large-chunk advisory is unchanged.
+
 ## Remaining architecture work outside this slice
 
 - Make workspace creation metadata and initial conversation binding one atomic Rust transaction.
-- Complete authoritative Tauri workspace roster/agent endpoints and expose stale refresh failures
-  without presenting retained hierarchy rows as current.
+- Complete authoritative Tauri workspace roster and agent endpoints.
 - Replace remaining demo execution phases with structured run-state projection as those backend
   contracts become available.
 

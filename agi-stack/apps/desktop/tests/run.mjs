@@ -39,6 +39,13 @@ copyFileSync(
   join(compiledMyWorkDirectory, 'MyWorkQueue.css'),
 );
 
+const compiledWorkspaceDirectory = join(compiledRoot, 'src', 'features', 'workspace');
+mkdirSync(compiledWorkspaceDirectory, { recursive: true });
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'workspace', 'WorkspaceDock.css'),
+  join(compiledWorkspaceDirectory, 'WorkspaceDock.css'),
+);
+
 const testFiles = [
   'a2ui-action.test.mjs',
   'api-client.test.mjs',

@@ -51,6 +51,24 @@ test('workspace overview QA renders the production hierarchy sidebar', () => {
   assert.doesNotMatch(qaSource, /workspace-execution-qa-sidebar/);
 });
 
+test('workspace overview QA exposes stale project and session states without invalid rows', () => {
+  assert.match(qaSource, /scenario === 'stale-project'/);
+  assert.match(qaSource, /scenario === 'stale-sessions'/);
+  assert.match(qaSource, /nodeState=\{scenarioNodeState\}/);
+  for (const conversationId of ['conversation-1', 'conversation-2', 'conversation-3']) {
+    assert.match(
+      qaSource,
+      new RegExp(
+        `id: '${conversationId}'[\\s\\S]{0,420}workspace_id: 'desktop-client'`,
+      ),
+    );
+  }
+  assert.match(
+    qaSource,
+    /id: 'conversation-4'[\s\S]{0,420}workspace_id: 'release-reliability'/,
+  );
+});
+
 test('workspace overview locks the approved prototype geometry', () => {
   assert.match(
     cssRule('.workspace-design-overview'),

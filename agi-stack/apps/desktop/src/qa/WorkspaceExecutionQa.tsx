@@ -52,6 +52,7 @@ const conversations: AgentConversation[] = [
     message_count: 24,
     created_at: now,
     updated_at: now,
+    workspace_id: 'desktop-client',
     conversation_mode: 'code',
     agent_config: { capability_mode: 'code' },
     participant_agents: ['planner', 'coder'],
@@ -67,6 +68,7 @@ const conversations: AgentConversation[] = [
     message_count: 12,
     created_at: now,
     updated_at: '2026-07-13T10:10:00Z',
+    workspace_id: 'desktop-client',
     conversation_mode: 'work',
     agent_config: { capability_mode: 'work' },
     participant_agents: ['researcher', 'reviewer'],
@@ -82,6 +84,7 @@ const conversations: AgentConversation[] = [
     message_count: 8,
     created_at: now,
     updated_at: '2026-07-13T09:58:00Z',
+    workspace_id: 'desktop-client',
     conversation_mode: 'code',
     agent_config: { capability_mode: 'code' },
     participant_agents: ['planner', 'coder'],
@@ -99,6 +102,7 @@ const reliabilityConversation: AgentConversation = {
   message_count: 17,
   created_at: now,
   updated_at: '2026-07-13T09:31:00Z',
+  workspace_id: 'release-reliability',
   conversation_mode: 'code',
   agent_config: { capability_mode: 'code' },
   participant_agents: ['planner', 'coder'],
@@ -279,6 +283,7 @@ const plan: PlanSnapshot = {
 };
 
 function WorkspaceExecutionQa() {
+  const scenario = new URLSearchParams(window.location.search).get('scenario');
   const [mode, setMode] = useState<'work' | 'code'>('work');
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(workspaces[0].id);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -288,6 +293,23 @@ function WorkspaceExecutionQa() {
   const selectedWorkspace =
     workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? workspaces[0];
   const selectedConversations = conversationsByWorkspace[selectedWorkspace.id] ?? [];
+  const scenarioNodeState: RuntimeNodeLoadState =
+    scenario === 'stale-project'
+      ? {
+          projects: {
+            'northstar-project': { loading: false, error: '工作空间刷新失败，请重试。' },
+          },
+          workspaces: nodeState.workspaces,
+        }
+      : scenario === 'stale-sessions'
+        ? {
+            projects: nodeState.projects,
+            workspaces: {
+              ...nodeState.workspaces,
+              'desktop-client': { loading: false, error: '会话刷新失败，请重试。' },
+            },
+          }
+        : nodeState;
 
   const selectWorkspace = (workspaceId: string) => {
     setSelectedWorkspaceId(workspaceId);
@@ -313,7 +335,7 @@ function WorkspaceExecutionQa() {
           user={currentUser}
           workspaces={workspaces}
           conversationsByWorkspace={conversationsByWorkspace}
-          nodeState={nodeState}
+          nodeState={scenarioNodeState}
           currentProjectId="northstar-project"
           currentWorkspaceId={selectedWorkspace.id}
           currentConversationId={selectedConversationId}

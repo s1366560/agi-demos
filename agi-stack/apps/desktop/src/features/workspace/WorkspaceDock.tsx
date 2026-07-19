@@ -90,6 +90,20 @@ export function WorkspaceDock({
     >
       <ScrollArea className="dock-list">
         <div>
+          {hasProjectScope && availability === 'refreshing' ? (
+            <WorkspaceTreeState compact title={t('workspaceTree.refreshing')} />
+          ) : hasProjectScope && availability === 'stale-error' ? (
+            <WorkspaceTreeState
+              compact
+              title={t('workspaceTree.refreshFailed')}
+              detail={projectState?.error ?? undefined}
+              actionLabel={t('workspaceTree.retry')}
+              onAction={() => {
+                navigationRef.current?.focus();
+                onRetryProject();
+              }}
+            />
+          ) : null}
           {!hasProjectScope ? (
             <WorkspaceTreeState
               title={t('settings.noProjectSelected')}
@@ -140,7 +154,15 @@ export function WorkspaceDock({
                     ? t('workspaceTree.loadingSessions')
                     : sessionAvailability === 'error'
                       ? t('workspaceTree.sessionsUnavailable')
-                      : t('workspaceTree.sessionCount', { count: conversations.length });
+                      : sessionAvailability === 'refreshing'
+                        ? t('workspaceTree.refreshingSessionCount', {
+                            count: conversations.length,
+                          })
+                        : sessionAvailability === 'stale-error'
+                          ? t('workspaceTree.staleSessionCount', {
+                              count: conversations.length,
+                            })
+                          : t('workspaceTree.sessionCount', { count: conversations.length });
 
               return (
                 <section
@@ -191,6 +213,23 @@ export function WorkspaceDock({
 
                   {workspaceExpanded ? (
                     <div className="workspace-tree-session-children">
+                      {sessionAvailability === 'refreshing' ? (
+                        <WorkspaceTreeState
+                          compact
+                          title={t('workspaceTree.refreshingSessions')}
+                        />
+                      ) : sessionAvailability === 'stale-error' ? (
+                        <WorkspaceTreeState
+                          compact
+                          title={t('workspaceTree.sessionRefreshFailed')}
+                          detail={workspaceState?.error ?? undefined}
+                          actionLabel={t('workspaceTree.retry')}
+                          onAction={() => {
+                            workspaceToggleRefs.current.get(workspace.id)?.focus();
+                            onRetryWorkspace(workspace.id);
+                          }}
+                        />
+                      ) : null}
                       {sessionAvailability === 'deferred' ? (
                         <WorkspaceTreeState compact title={t('workspaceTree.sessionsDeferred')} />
                       ) : sessionAvailability === 'loading' ? (

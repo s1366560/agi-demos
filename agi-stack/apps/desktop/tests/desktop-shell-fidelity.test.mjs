@@ -313,6 +313,10 @@ test('workspace tree loading and error states announce changes and expose explic
   assert.match(appSource, /onRetryProject=\{\(\) => void refreshRuntime\(\)\}/);
   assert.match(appSource, /onRetryWorkspace=\{\(workspaceId\) => void loadWorkspaceConversations\(workspaceId\)\}/);
   assert.match(workspaceDockStyles, /\.workspace-tree-state > button/);
+  assert.match(workspaceDockSource, /availability === 'refreshing'/);
+  assert.match(workspaceDockSource, /availability === 'stale-error'/);
+  assert.match(workspaceDockSource, /sessionAvailability === 'refreshing'/);
+  assert.match(workspaceDockSource, /sessionAvailability === 'stale-error'/);
   assert.match(
     workspaceDockSource,
     /navigationRef\.current\?\.focus\(\);[\s\S]*onRetryProject\(\)/
@@ -321,6 +325,32 @@ test('workspace tree loading and error states announce changes and expose explic
     workspaceDockSource,
     /workspaceToggleRefs\.current\.get\(workspace\.id\)\?\.focus\(\);[\s\S]*onRetryWorkspace\(workspace\.id\)/
   );
+});
+
+test('authoritative conversation refresh removes only an unchanged missing selection', () => {
+  const refreshRuntime =
+    appSource.match(
+      /const refreshRuntime = useCallback\([\s\S]*?\n  const loadWorkspaceConversations = useCallback/
+    )?.[0] ?? '';
+  const loader =
+    appSource.match(
+      /const loadWorkspaceConversations = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+    )?.[0] ?? '';
+
+  assert.match(appSource, /const clearMissingConversationSelection = useCallback/);
+  assert.match(refreshRuntime, /selectionAtRequest/);
+  assert.match(refreshRuntime, /reconcileWorkspaceConversationRowsAfterRefresh\(/);
+  assert.match(refreshRuntime, /if \(result\.error !== null\) continue;/);
+  assert.match(refreshRuntime, /clearMissingConversationSelection\(/);
+  assert.match(loader, /selectionAtRequest/);
+  assert.match(loader, /clearMissingConversationSelection\(/);
+  assert.match(
+    appSource,
+    /shouldClearConversationSelectionAfterRefresh\([\s\S]*agentConversationSessionRef\.current/
+  );
+  assert.match(appSource, /resetConversationTimeline\(\);[\s\S]*setAgentTaskSignals\(\[\]\)/);
+  assert.match(appSource, /activeSectionRef\.current === 'chat'/);
+  assert.match(appSource, /setReviewTab\('overview'\);[\s\S]*workbenchRef\.current\?\.focus\(\)/);
 });
 
 test('workspace hierarchy uses native navigation controls instead of an incomplete ARIA tree', () => {
