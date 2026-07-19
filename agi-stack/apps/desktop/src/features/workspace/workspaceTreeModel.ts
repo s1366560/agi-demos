@@ -13,6 +13,7 @@ export type WorkspaceTreeNode = {
 export type WorkspaceTreeSelectionMode = 'overview' | 'conversation' | 'my-work' | 'none';
 
 export type WorkspaceTreeAvailability =
+  | 'unavailable'
   | 'loading'
   | 'refreshing'
   | 'error'
@@ -147,6 +148,7 @@ export function workspaceTreeAvailability(
   projectState: RuntimeNodeState | undefined,
   workspaceCount: number,
 ): WorkspaceTreeAvailability {
+  if (!projectState) return 'unavailable';
   if (workspaceCount > 0 && projectState?.loading) return 'refreshing';
   if (workspaceCount > 0 && projectState?.error) return 'stale-error';
   if (workspaceCount > 0) return 'ready';

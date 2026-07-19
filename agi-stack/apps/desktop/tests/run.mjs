@@ -45,6 +45,10 @@ copyFileSync(
   join(desktopRoot, 'src', 'features', 'workspace', 'WorkspaceDock.css'),
   join(compiledWorkspaceDirectory, 'WorkspaceDock.css'),
 );
+copyFileSync(
+  join(desktopRoot, 'src', 'features', 'workspace', 'WorkspaceOverview.css'),
+  join(compiledWorkspaceDirectory, 'WorkspaceOverview.css'),
+);
 
 const testFiles = [
   'a2ui-action.test.mjs',

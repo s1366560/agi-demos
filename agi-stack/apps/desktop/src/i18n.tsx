@@ -143,8 +143,10 @@ const enUS: Record<string, string> = {
   'workspaceTree.refreshing': 'Refreshing workspaces…',
   'workspaceTree.refreshFailed': 'Refresh failed · showing last verified workspaces',
   'workspaceTree.unavailable': 'Workspaces are unavailable',
+  'workspaceTree.unavailableDescription':
+    'The authoritative workspace catalog has not been loaded.',
   'workspaceTree.empty': 'No workspaces in this project',
-  'workspaceTree.emptyDescription': 'Create a workspace before starting a task.',
+  'workspaceTree.emptyDescription': 'Start a new task to create the first workspace.',
   'workspaceTree.selectProjectDescription': 'Choose a project in Settings to load its workspaces.',
   'workspaceTree.expand': 'Expand {name}',
   'workspaceTree.collapse': 'Collapse {name}',
@@ -730,6 +732,37 @@ const enUS: Record<string, string> = {
   'overview.noProjectCardTitle': 'No active project',
   'overview.noProjectCardDescription':
     'Open Workspace settings to choose a project available to your role.',
+  'overview.loadingWorkspacesTitle': 'Loading workspaces…',
+  'overview.loadingWorkspacesDescription':
+    'Reading the authoritative workspace catalog for this project.',
+  'overview.loadingWorkspacesCardTitle': 'Loading project workspaces',
+  'overview.loadingWorkspacesCardDescription':
+    'The overview will appear after the current project scope is verified.',
+  'overview.workspacesUnavailableTitle': 'Workspaces are unavailable',
+  'overview.workspacesUnavailableDescription':
+    'The workspace catalog could not be verified, so last-known metrics are hidden.',
+  'overview.workspaceCatalogErrorTitle': 'Workspace catalog could not be loaded',
+  'overview.workspaceCatalogErrorDescription':
+    'Retry before creating or opening work in this project.',
+  'overview.workspaceCatalogUnavailableTitle': 'Workspace catalog is unavailable',
+  'overview.workspaceCatalogUnavailableDescription':
+    'No authoritative workspace catalog has been loaded for this project.',
+  'overview.workspaceCatalogUnavailableCardTitle': 'Load project workspaces',
+  'overview.workspaceCatalogUnavailableCardDescription':
+    'Refresh the project to verify its available workspaces.',
+  'overview.noWorkspacesTitle': 'No workspaces yet',
+  'overview.noWorkspacesDescription':
+    'This project has no workspaces. A new task will create one before the Agent proposes a plan for your review.',
+  'overview.firstTaskTitle': 'Start with your first task',
+  'overview.firstTaskDescription':
+    'Describe the goal and choose a general or programming scenario. Nothing runs until you approve the plan.',
+  'overview.workspaceSelectionUnavailableTitle': 'Selected workspace is unavailable',
+  'overview.workspaceSelectionUnavailableDescription':
+    'The current selection no longer matches the verified project catalog.',
+  'overview.workspaceSelectionUnavailableCardTitle': 'Choose a verified workspace',
+  'overview.workspaceSelectionUnavailableCardDescription':
+    'Refresh the project before continuing.',
+  'overview.retryWorkspaces': 'Retry',
   'overview.description':
     'Authoritative plans, runs, human gates, tasks, and delivery evidence for this workspace.',
   'overview.configure': 'Configure',
@@ -1948,8 +1981,9 @@ const zhCN: Record<string, string> = {
   'workspaceTree.refreshing': '正在刷新工作空间…',
   'workspaceTree.refreshFailed': '刷新失败 · 正在显示上次确认的工作空间',
   'workspaceTree.unavailable': '工作空间不可用',
+  'workspaceTree.unavailableDescription': '尚未加载权威工作空间目录。',
   'workspaceTree.empty': '当前项目没有工作空间',
-  'workspaceTree.emptyDescription': '请先创建工作空间，再开始任务。',
+  'workspaceTree.emptyDescription': '新建任务以创建第一个工作空间。',
   'workspaceTree.selectProjectDescription': '请在设置中选择项目，以加载工作空间。',
   'workspaceTree.expand': '展开 {name}',
   'workspaceTree.collapse': '折叠 {name}',
@@ -2484,6 +2518,29 @@ const zhCN: Record<string, string> = {
   'overview.noProjectDescription': '选择项目上下文后，才能打开工作空间、会话与任务。',
   'overview.noProjectCardTitle': '尚未激活项目',
   'overview.noProjectCardDescription': '打开工作区设置，选择当前角色可访问的项目。',
+  'overview.loadingWorkspacesTitle': '正在加载工作空间…',
+  'overview.loadingWorkspacesDescription': '正在读取此项目的权威工作空间目录。',
+  'overview.loadingWorkspacesCardTitle': '正在加载项目工作空间',
+  'overview.loadingWorkspacesCardDescription': '确认当前项目范围后，将显示工作空间概况。',
+  'overview.workspacesUnavailableTitle': '工作空间不可用',
+  'overview.workspacesUnavailableDescription': '无法确认工作空间目录，因此不会显示旧指标。',
+  'overview.workspaceCatalogErrorTitle': '无法加载工作空间目录',
+  'overview.workspaceCatalogErrorDescription': '请先重试，再在此项目中创建或打开工作。',
+  'overview.workspaceCatalogUnavailableTitle': '工作空间目录不可用',
+  'overview.workspaceCatalogUnavailableDescription': '尚未加载此项目的权威工作空间目录。',
+  'overview.workspaceCatalogUnavailableCardTitle': '加载项目工作空间',
+  'overview.workspaceCatalogUnavailableCardDescription': '刷新项目以确认可用的工作空间。',
+  'overview.noWorkspacesTitle': '尚无工作空间',
+  'overview.noWorkspacesDescription':
+    '此项目还没有工作空间。新建任务会先创建一个，再由智能体生成计划供你预览。',
+  'overview.firstTaskTitle': '从第一个任务开始',
+  'overview.firstTaskDescription':
+    '描述目标并选择通用或编程场景；计划经你确认后才会执行。',
+  'overview.workspaceSelectionUnavailableTitle': '所选工作空间不可用',
+  'overview.workspaceSelectionUnavailableDescription': '当前选择与已确认的项目目录不再匹配。',
+  'overview.workspaceSelectionUnavailableCardTitle': '选择已确认的工作空间',
+  'overview.workspaceSelectionUnavailableCardDescription': '刷新项目后再继续。',
+  'overview.retryWorkspaces': '重试',
   'overview.description': '汇总此工作空间的权威计划、运行、人工关卡、任务与交付证据。',
   'overview.configure': '配置',
   'overview.newTask': '新建任务',

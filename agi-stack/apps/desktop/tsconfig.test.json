@@ -53,6 +53,7 @@
     "src/features/task/newTaskPlanModel.ts",
     "src/features/task/newTaskSessionModel.ts",
     "src/features/workspace/WorkspaceDock.tsx",
+    "src/features/workspace/WorkspaceOverview.tsx",
     "src/features/workspace/workspaceTreeModel.ts",
     "src/features/workspace/workspaceOverviewModel.ts",
     "src/features/workspace/workspaceExecutionModel.ts",

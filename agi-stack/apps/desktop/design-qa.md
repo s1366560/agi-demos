@@ -343,6 +343,32 @@ and the unchanged missing-selection race, then passed after implementation. The 
 suite passes 435/435, along with the production TypeScript check and Vite build. The existing Vite
 large-chunk advisory is unchanged.
 
+### Iteration 5 — passed: truthful zero-workspace entry
+
+The workspace canvas now consumes the same authoritative workspace catalog as the hierarchy tree.
+It distinguishes unavailable, loading, failed, authoritative-empty, selected, and selection-drift
+states instead of rendering a fabricated workspace summary when no workspace exists. Loading is
+announced as busy; unavailable and failed states retain a scoped Retry action; failures preserve the
+server detail; and selection drift is exposed without inventing operational metrics, a root goal, or
+recent sessions.
+
+An authoritative `ready + []` project now presents a focused first-workspace entry. Its New Task
+action opens the production three-step New Task → Agent Plan → Human Review flow with “create new
+workspace” selected, so workspace creation and the initial session remain one governed product
+journey rather than a parallel creation form. When the task dialog closes, keyboard focus returns to
+the New Task button that opened it. Settings remains independently operable and restores focus to
+its Configure trigger.
+
+The in-app Browser compared the production source workspace and the new empty-project extension at
+the same `1280 x 720` viewport. The empty state keeps the approved 220-pixel sidebar, flat canvas,
+card border/radius, typography, and action treatment, with no horizontal or vertical page overflow.
+The source prototype has no equivalent zero-workspace screen, so this is a source-language
+extension rather than a claim of same-state pixel identity.
+
+Failure-first coverage reproduced the prior false-empty and fabricated-summary behavior. The
+complete Desktop suite now passes 439/439, the production TypeScript check passes, and the Vite
+production build passes. The existing Vite large-chunk advisory is unchanged.
+
 ## Remaining architecture work outside this slice
 
 - Make workspace creation metadata and initial conversation binding one atomic Rust transaction.

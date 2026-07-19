@@ -5801,6 +5801,7 @@ export function App() {
           config.tenantId ||
           t('settings.noTenantSelected')
         }
+        workspaceAuthority={newTaskWorkspaceAuthority}
         conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
         members={dataset.workspaceMembers}
         agents={dataset.workspaceAgents}
@@ -5808,6 +5809,7 @@ export function App() {
         sandboxStatus={dataset.sandbox?.status ?? null}
         newTaskDisabledReason={newTaskDisabledReason}
         onNewTask={() => openNewTask(config.workspaceId)}
+        onRetryWorkspaces={() => void refreshRuntime()}
         onOpenConversation={(conversationId) => {
           const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
             (item) => item.id === conversationId,

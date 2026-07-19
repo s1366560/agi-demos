@@ -37,12 +37,14 @@ import {
   conversationTreeStatusPresentation,
   type WorkspaceTreeStatusTone,
 } from './workspaceTreeModel';
+import { WorkspaceContextState } from './WorkspaceContextState';
 import './WorkspaceOverview.css';
 
 type WorkspaceOverviewProps = {
   workspace: WorkspaceSummary | null;
   project: ProjectSummary | null;
   tenantName: string;
+  workspaceAuthority: WorkspaceAuthorityCollection<WorkspaceSummary>;
   conversations: AgentConversation[];
   members: WorkspaceAuthorityCollection<WorkspaceMemberSummary>;
   agents: WorkspaceAuthorityCollection<WorkspaceAgentBinding>;
@@ -50,6 +52,7 @@ type WorkspaceOverviewProps = {
   sandboxStatus: string | null;
   newTaskDisabledReason: string | null;
   onNewTask: () => void;
+  onRetryWorkspaces: () => void;
   onOpenConversation: (conversationId: string) => void;
   onOpenSettings: () => void;
 };
@@ -58,6 +61,7 @@ export function WorkspaceOverview({
   workspace,
   project,
   tenantName,
+  workspaceAuthority,
   conversations,
   members,
   agents,
@@ -65,6 +69,7 @@ export function WorkspaceOverview({
   sandboxStatus,
   newTaskDisabledReason,
   onNewTask,
+  onRetryWorkspaces,
   onOpenConversation,
   onOpenSettings,
 }: WorkspaceOverviewProps) {
@@ -94,7 +99,7 @@ export function WorkspaceOverview({
 
   if (!project) {
     return (
-      <main className="workspace-design-overview empty-project">
+      <section className="workspace-design-overview empty-project">
         <header className="workspace-design-header">
           <div>
             <span className="workspace-design-eyebrow">{tenantName}</span>
@@ -128,12 +133,104 @@ export function WorkspaceOverview({
             </Button>
           </section>
         </div>
-      </main>
+      </section>
+    );
+  }
+
+  if (!workspace) {
+    if (workspaceAuthority.status === 'loading') {
+      return (
+        <WorkspaceContextState
+          tenantName={tenantName}
+          projectName={projectName}
+          title={t('overview.loadingWorkspacesTitle')}
+          description={t('overview.loadingWorkspacesDescription')}
+          cardTitle={t('overview.loadingWorkspacesCardTitle')}
+          cardDescription={t('overview.loadingWorkspacesCardDescription')}
+          state="loading"
+          primaryAction="none"
+          newTaskDisabledReason={newTaskDisabledReason}
+          onNewTask={onNewTask}
+          onRetry={onRetryWorkspaces}
+          onOpenSettings={onOpenSettings}
+        />
+      );
+    }
+    if (workspaceAuthority.status === 'error') {
+      return (
+        <WorkspaceContextState
+          tenantName={tenantName}
+          projectName={projectName}
+          title={t('overview.workspacesUnavailableTitle')}
+          description={t('overview.workspacesUnavailableDescription')}
+          cardTitle={t('overview.workspaceCatalogErrorTitle')}
+          cardDescription={t('overview.workspaceCatalogErrorDescription')}
+          detail={workspaceAuthority.error}
+          state="error"
+          primaryAction="retry"
+          newTaskDisabledReason={newTaskDisabledReason}
+          onNewTask={onNewTask}
+          onRetry={onRetryWorkspaces}
+          onOpenSettings={onOpenSettings}
+        />
+      );
+    }
+    if (workspaceAuthority.status === 'unavailable') {
+      return (
+        <WorkspaceContextState
+          tenantName={tenantName}
+          projectName={projectName}
+          title={t('overview.workspaceCatalogUnavailableTitle')}
+          description={t('overview.workspaceCatalogUnavailableDescription')}
+          cardTitle={t('overview.workspaceCatalogUnavailableCardTitle')}
+          cardDescription={t('overview.workspaceCatalogUnavailableCardDescription')}
+          state="error"
+          primaryAction="retry"
+          newTaskDisabledReason={newTaskDisabledReason}
+          onNewTask={onNewTask}
+          onRetry={onRetryWorkspaces}
+          onOpenSettings={onOpenSettings}
+        />
+      );
+    }
+    if (workspaceAuthority.items.length === 0) {
+      return (
+        <WorkspaceContextState
+          tenantName={tenantName}
+          projectName={projectName}
+          title={t('overview.noWorkspacesTitle')}
+          description={t('overview.noWorkspacesDescription')}
+          cardTitle={t('overview.firstTaskTitle')}
+          cardDescription={t('overview.firstTaskDescription')}
+          state="empty"
+          primaryAction="new-task"
+          newTaskDisabledReason={newTaskDisabledReason}
+          onNewTask={onNewTask}
+          onRetry={onRetryWorkspaces}
+          onOpenSettings={onOpenSettings}
+        />
+      );
+    }
+    return (
+      <WorkspaceContextState
+        tenantName={tenantName}
+        projectName={projectName}
+        title={t('overview.workspaceSelectionUnavailableTitle')}
+        description={t('overview.workspaceSelectionUnavailableDescription')}
+        cardTitle={t('overview.workspaceSelectionUnavailableCardTitle')}
+        cardDescription={t('overview.workspaceSelectionUnavailableCardDescription')}
+        state="error"
+        primaryAction="retry"
+        newTaskDisabledReason={newTaskDisabledReason}
+        onNewTask={onNewTask}
+        onRetry={onRetryWorkspaces}
+        onOpenSettings={onOpenSettings}
+      />
     );
   }
 
   return (
-    <main className="workspace-design-overview">
+    <section className="workspace-design-overview">
       <header className="workspace-design-header">
         <div>
           <span className="workspace-design-eyebrow">
@@ -359,7 +456,7 @@ export function WorkspaceOverview({
           </article>
         </section>
       </div>
-    </main>
+    </section>
   );
 }
 

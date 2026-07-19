@@ -231,7 +231,8 @@ test('stale project and session notices retain the last verified hierarchy and r
 test('empty tree renders the authoritative loading, error, or empty state', () => {
   assert.equal(workspaceTreeAvailability({ loading: true, error: null }, 0), 'loading');
   assert.equal(workspaceTreeAvailability({ loading: false, error: 'offline' }, 0), 'error');
-  assert.equal(workspaceTreeAvailability(undefined, 0), 'empty');
+  assert.equal(workspaceTreeAvailability(undefined, 0), 'unavailable');
+  assert.equal(workspaceTreeAvailability({ loading: false, error: null }, 0), 'empty');
 });
 
 test('refresh failure settles the active project without discarding workspace node state', () => {

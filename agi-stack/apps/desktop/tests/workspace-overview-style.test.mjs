@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
+
+const require = createRequire(import.meta.url);
+require.extensions['.css'] = () => {};
+const React = require('react');
+const { renderToStaticMarkup } = require('react-dom/server');
+const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
+const { WorkspaceOverview } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/workspace/WorkspaceOverview.js'
+);
 
 const stylesheet = readFileSync(
   new URL('../src/features/workspace/WorkspaceOverview.css', import.meta.url),
@@ -30,6 +40,110 @@ function cssRule(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return stylesheet.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\}`))?.[1] ?? '';
 }
+
+const project = {
+  id: 'project-1',
+  tenant_id: 'tenant-1',
+  name: 'Desktop Client',
+  description: 'Desktop project',
+  member_ids: [],
+  is_public: false,
+};
+
+const workspace = {
+  id: 'workspace-1',
+  tenant_id: 'tenant-1',
+  project_id: 'project-1',
+  name: 'Mission Control',
+};
+
+function renderWorkspaceOverview({
+  workspaceValue = null,
+  workspaceAuthority = { status: 'unavailable', items: [], error: null },
+} = {}) {
+  const authority = { status: 'ready', items: [], error: null };
+  return renderToStaticMarkup(
+    React.createElement(
+      I18nProvider,
+      null,
+      React.createElement(WorkspaceOverview, {
+        workspace: workspaceValue,
+        project,
+        tenantName: 'Northstar Labs',
+        workspaceAuthority,
+        conversations: [],
+        members: authority,
+        agents: authority,
+        plan: null,
+        sandboxStatus: null,
+        newTaskDisabledReason: null,
+        onNewTask: () => {},
+        onRetryWorkspaces: () => {},
+        onOpenConversation: () => {},
+        onOpenSettings: () => {},
+      }),
+    ),
+  );
+}
+
+function assertSingleWorkbenchMain(markup) {
+  assert.doesNotMatch(markup, /<main\b/);
+}
+
+test('workspace overview distinguishes catalog loading from an authoritative empty project', () => {
+  const unavailableMarkup = renderWorkspaceOverview();
+  assertSingleWorkbenchMain(unavailableMarkup);
+  assert.match(unavailableMarkup, /Workspace catalog is unavailable/);
+  assert.match(unavailableMarkup, /Retry<\/button>/);
+  assert.doesNotMatch(unavailableMarkup, /workspace-design-summary-grid/);
+
+  const loadingMarkup = renderWorkspaceOverview({
+    workspaceAuthority: { status: 'loading', items: [], error: null },
+  });
+  assertSingleWorkbenchMain(loadingMarkup);
+  assert.match(loadingMarkup, /Loading workspaces/);
+  assert.match(loadingMarkup, /aria-busy="true"/);
+  assert.doesNotMatch(loadingMarkup, /Not selected/);
+  assert.doesNotMatch(loadingMarkup, /workspace-design-summary-grid/);
+
+  const emptyMarkup = renderWorkspaceOverview({
+    workspaceAuthority: { status: 'ready', items: [], error: null },
+  });
+  assertSingleWorkbenchMain(emptyMarkup);
+  assert.match(emptyMarkup, /No workspaces yet/);
+  assert.match(emptyMarkup, /Start with your first task/);
+  assert.match(emptyMarkup, /New task<\/button>/);
+  assert.doesNotMatch(emptyMarkup, /workspace-design-summary-grid/);
+});
+
+test('workspace overview exposes catalog failure and selection drift without fake metrics', () => {
+  const errorMarkup = renderWorkspaceOverview({
+    workspaceAuthority: { status: 'error', items: [], error: 'Catalog unavailable' },
+  });
+  assertSingleWorkbenchMain(errorMarkup);
+  assert.match(errorMarkup, /Workspaces are unavailable/);
+  assert.match(errorMarkup, /Catalog unavailable/);
+  assert.match(errorMarkup, /Retry<\/button>/);
+  assert.doesNotMatch(errorMarkup, /workspace-design-summary-grid/);
+
+  const mismatchMarkup = renderWorkspaceOverview({
+    workspaceAuthority: { status: 'ready', items: [workspace], error: null },
+  });
+  assertSingleWorkbenchMain(mismatchMarkup);
+  assert.match(mismatchMarkup, /Selected workspace is unavailable/);
+  assert.match(mismatchMarkup, /Retry<\/button>/);
+  assert.doesNotMatch(mismatchMarkup, /workspace-design-summary-grid/);
+});
+
+test('workspace overview keeps the approved canvas when an authoritative workspace exists', () => {
+  const markup = renderWorkspaceOverview({
+    workspaceValue: workspace,
+    workspaceAuthority: { status: 'ready', items: [workspace], error: null },
+  });
+  assertSingleWorkbenchMain(markup);
+  assert.match(markup, /Mission Control/);
+  assert.match(markup, /workspace-design-summary-grid/);
+});
 
 test('workspace overview keeps the prototype flat canvas without an invented gradient', () => {
   const overviewRule = cssRule('.workspace-design-overview');

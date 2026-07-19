@@ -109,6 +109,16 @@ export function WorkspaceDock({
               title={t('settings.noProjectSelected')}
               detail={t('workspaceTree.selectProjectDescription')}
             />
+          ) : availability === 'unavailable' ? (
+            <WorkspaceTreeState
+              title={t('workspaceTree.unavailable')}
+              detail={t('workspaceTree.unavailableDescription')}
+              actionLabel={t('workspaceTree.retry')}
+              onAction={() => {
+                navigationRef.current?.focus();
+                onRetryProject();
+              }}
+            />
           ) : availability === 'loading' ? (
             <WorkspaceTreeState
               title={t('workspaceTree.loading')}

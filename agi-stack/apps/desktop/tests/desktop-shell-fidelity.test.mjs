@@ -134,7 +134,28 @@ test('the no-project QA route renders the production shell from a real unavailab
   assert.match(noProjectQaSource, /<DesktopSidebar/);
   assert.match(noProjectQaSource, /<WorkspaceOverview/);
   assert.match(noProjectQaSource, /<SettingsWindow/);
-  assert.match(noProjectQaSource, /get\('state'\) !== 'closed'/);
+  assert.match(
+    noProjectQaSource,
+    /qaWindowState === 'open'[\s\S]*qaScenario !== 'empty-workspaces'[\s\S]*qaWindowState !== 'closed'/,
+  );
+});
+
+test('the hierarchy QA exposes an authoritative empty-workspace project state', () => {
+  assert.match(noProjectQaSource, /qaScenario === 'empty-workspaces'/);
+  assert.match(noProjectQaSource, /projectId: 'project-orbital-signals'/);
+  assert.match(
+    noProjectQaSource,
+    /const workspaceAuthority:[\s\S]*?= selectedProject[\s\S]*?status: 'ready', items: \[\]/,
+  );
+  assert.match(noProjectQaSource, /nodeState=\{\{ projects: projectNodeState, workspaces: \{\} \}\}/);
+  assert.match(noProjectQaSource, /<NewTaskFlow/);
+  assert.match(noProjectQaSource, /workspaceAuthority=\{workspaceAuthority\}/);
+  assert.match(noProjectQaSource, /preferredWorkspaceId=""/);
+  assert.match(noProjectQaSource, /onNewTask=\{\(\) => setNewTaskOpen\(true\)\}/);
+  assert.match(
+    appSource,
+    /<WorkspaceOverview[\s\S]*workspaceAuthority=\{newTaskWorkspaceAuthority\}[\s\S]*onRetryWorkspaces=\{\(\) => void refreshRuntime\(\)\}/,
+  );
 });
 
 test('login is the only signed-out surface retained by the desktop shell', () => {

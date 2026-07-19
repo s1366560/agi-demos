@@ -382,6 +382,7 @@ function WorkspaceExecutionQa() {
               },
             }}
             tenantName="Northstar Labs"
+            workspaceAuthority={{ status: 'ready', items: workspaces, error: null }}
             conversations={selectedConversations}
             members={{
               status: 'ready',
@@ -437,6 +438,7 @@ function WorkspaceExecutionQa() {
             sandboxStatus="connected"
             newTaskDisabledReason={null}
             onNewTask={() => undefined}
+            onRetryWorkspaces={() => undefined}
             onOpenConversation={(conversationId) => {
               const conversation = selectedConversations.find((item) => item.id === conversationId);
               if (conversation) selectConversation(selectedWorkspace.id, conversation);

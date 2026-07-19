@@ -5,6 +5,7 @@ import { Theme } from '@radix-ui/themes';
 
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
+import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { I18nProvider, useI18n } from '../i18n';
 import type {
@@ -12,6 +13,8 @@ import type {
   DesktopRuntimeConfig,
   ProjectSummary,
   TenantSummary,
+  WorkspaceAuthorityCollection,
+  WorkspaceSummary,
 } from '../types';
 import '../styles.css';
 
@@ -21,6 +24,9 @@ declare global {
 
 const QA_API_ORIGIN = 'https://no-project.qa.memstack.invalid';
 const NOW = '2026-07-18T08:00:00.000Z';
+const qaSearchParams = new URLSearchParams(window.location.search);
+const qaScenario = qaSearchParams.get('scenario');
+const qaWindowState = qaSearchParams.get('state');
 
 const tenants: TenantSummary[] = [
   {
@@ -140,18 +146,48 @@ try {
 
 function NoProjectEntryQa() {
   const { t } = useI18n();
-  const [auth, setAuth] = useState<AuthState>(initialAuth);
-  const [config, setConfig] = useState<DesktopRuntimeConfig>(initialConfig);
+  const [auth, setAuth] = useState<AuthState>(() =>
+    qaScenario === 'empty-workspaces'
+      ? {
+          ...initialAuth,
+          context: {
+            tenant_id: 'tenant-orbital',
+            project_id: 'project-orbital-signals',
+            revision: 1,
+            updated_at: NOW,
+          },
+          projects: projectsByTenant['tenant-orbital'],
+        }
+      : initialAuth,
+  );
+  const [config, setConfig] = useState<DesktopRuntimeConfig>(() =>
+    qaScenario === 'empty-workspaces'
+      ? {
+          ...initialConfig,
+          tenantId: 'tenant-orbital',
+          projectId: 'project-orbital-signals',
+        }
+      : initialConfig,
+  );
   const [mode, setMode] = useState<'work' | 'code'>('work');
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('workspace');
   const [settingsOpen, setSettingsOpen] = useState(
-    () => new URLSearchParams(window.location.search).get('state') !== 'closed',
+    () =>
+      qaWindowState === 'open' ||
+      (qaScenario !== 'empty-workspaces' && qaWindowState !== 'closed'),
   );
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
   const tenantName = selectedTenant?.name || t('settings.noTenantSelected');
   const projectName = selectedProject?.name || t('settings.noProjectSelected');
   const newTaskDisabledReason = selectedProject ? null : t('task.disabledProjectRequired');
+  const workspaceAuthority: WorkspaceAuthorityCollection<WorkspaceSummary> = selectedProject
+    ? { status: 'ready', items: [], error: null }
+    : { status: 'unavailable', items: [], error: null };
+  const projectNodeState = selectedProject
+    ? { [selectedProject.id]: { loading: false, error: null } }
+    : {};
   const unavailableRoster = useMemo(
     () => ({ status: 'unavailable' as const, items: [], error: null }),
     [],
@@ -197,7 +233,7 @@ function NoProjectEntryQa() {
             user={auth.user}
             workspaces={[]}
             conversationsByWorkspace={{}}
-            nodeState={{ projects: {}, workspaces: {} }}
+            nodeState={{ projects: projectNodeState, workspaces: {} }}
             currentProjectId={config.projectId}
             currentWorkspaceId=""
             currentConversationId={null}
@@ -211,7 +247,7 @@ function NoProjectEntryQa() {
             onRetryWorkspace={() => undefined}
             onSelectWorkspace={() => undefined}
             onSelectConversation={() => undefined}
-            onNewTask={() => undefined}
+            onNewTask={() => setNewTaskOpen(true)}
             onOpenAccountSettings={() => openSettings('account')}
             onSwitchWorkspace={() => openSettings('workspace')}
             onSignOut={() => undefined}
@@ -222,18 +258,35 @@ function NoProjectEntryQa() {
               workspace={null}
               project={selectedProject}
               tenantName={tenantName}
+              workspaceAuthority={workspaceAuthority}
               conversations={[]}
               members={unavailableRoster}
               agents={unavailableRoster}
               plan={null}
               sandboxStatus={null}
               newTaskDisabledReason={newTaskDisabledReason}
-              onNewTask={() => undefined}
+              onNewTask={() => setNewTaskOpen(true)}
+              onRetryWorkspaces={() => undefined}
               onOpenConversation={() => undefined}
               onOpenSettings={() => openSettings('workspace')}
             />
           </main>
         </section>
+
+        <NewTaskFlow
+          open={newTaskOpen}
+          config={config}
+          workspaceAuthority={workspaceAuthority}
+          preferredWorkspaceId=""
+          preferredKind={mode === 'code' ? 'programming' : 'general'}
+          disabledReason={newTaskDisabledReason}
+          onClose={() => setNewTaskOpen(false)}
+          onSessionPersisted={() => undefined}
+          onSessionReady={() => setNewTaskOpen(false)}
+          onRunAgentTurn={async () => 'acknowledged'}
+          onOpenRuntimeSettings={() => openSettings('workspace')}
+          onError={() => undefined}
+        />
 
         <SettingsWindow
           open={settingsOpen}

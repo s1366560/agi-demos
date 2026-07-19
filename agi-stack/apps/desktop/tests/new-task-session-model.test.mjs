@@ -30,6 +30,10 @@ test('workspace authority fails closed while loading, errored, unavailable, or s
     { loading: false, error: null },
     workspaces,
   );
+  const readyEmpty = resolveNewTaskWorkspaceAuthority(
+    { loading: false, error: null },
+    [],
+  );
 
   assert.equal(unavailable.status, 'unavailable');
   assert.equal(loading.status, 'loading');
@@ -41,6 +45,8 @@ test('workspace authority fails closed while loading, errored, unavailable, or s
   assert.equal(canUseNewTaskWorkspaceSelection(ready, 'workspace-stale'), false);
   assert.equal(canUseNewTaskWorkspaceSelection(ready, 'workspace-a'), true);
   assert.equal(canUseNewTaskWorkspaceSelection(ready, '__new_workspace__'), true);
+  assert.equal(readyEmpty.status, 'ready');
+  assert.equal(canUseNewTaskWorkspaceSelection(readyEmpty, '__new_workspace__'), true);
 });
 
 test('task-session idempotency remains stable for one unchanged creation attempt', () => {
