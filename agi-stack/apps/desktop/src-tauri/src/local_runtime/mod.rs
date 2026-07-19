@@ -4360,6 +4360,7 @@ async fn get_llm_provider_usage(
     Ok(Json(json!({
         "provider_id": provider_id,
         "tenant_id": tenant_id,
+        "availability": "unavailable",
         "statistics": [],
     })))
 }
@@ -9895,6 +9896,7 @@ mod tests {
             json!({
                 "provider_id": "local-runtime",
                 "tenant_id": "local",
+                "availability": "unavailable",
                 "statistics": []
             })
         );

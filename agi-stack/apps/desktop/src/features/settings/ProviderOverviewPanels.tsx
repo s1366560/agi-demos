@@ -37,7 +37,6 @@ type ProviderOverviewPanelProps = {
   providers: ManagedLlmProvider[];
   policy: LlmProviderRoutingPolicy | null;
   mode: RuntimeMode;
-  runtimeSelected: boolean;
   onTabChange: (tab: ProviderTab) => void;
 };
 
@@ -46,7 +45,6 @@ export function ProviderOverviewPanel({
   providers,
   policy,
   mode,
-  runtimeSelected,
   onTabChange,
 }: ProviderOverviewPanelProps) {
   const { locale, t } = useI18n();
@@ -180,9 +178,7 @@ export function ProviderOverviewPanel({
             <em>
               {policyBacked
                 ? t('providers.workspaceRoutingPolicy')
-                : mode === 'local' && runtimeSelected
-                  ? t('providers.localRuntimeSelected')
-                  : t('providers.providerPrimaryModel')}
+                : t('providers.providerPrimaryModel')}
             </em>
           </div>
           <div>
@@ -655,13 +651,11 @@ export function ProviderRoutingPanel({
 
 type ProviderUsagePanelProps = {
   provider: ManagedLlmProvider;
-  canReadUsage: boolean;
   onLoadUsage: (providerId: string, signal?: AbortSignal) => Promise<LlmProviderUsage>;
 };
 
 export function ProviderUsagePanel({
   provider,
-  canReadUsage,
   onLoadUsage,
 }: ProviderUsagePanelProps) {
   const { locale, t } = useI18n();
@@ -673,7 +667,6 @@ export function ProviderUsagePanel({
     const controller = new AbortController();
     setUsage(null);
     setError(null);
-    if (!canReadUsage) return () => controller.abort();
     setLoading(true);
     void onLoadUsage(provider.id, controller.signal)
       .then((nextUsage) => {
@@ -688,7 +681,7 @@ export function ProviderUsagePanel({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [canReadUsage, onLoadUsage, provider.id]);
+  }, [onLoadUsage, provider.id]);
 
   const totals = useMemo(() => {
     const statistics = usage?.statistics ?? [];
@@ -707,7 +700,7 @@ export function ProviderUsagePanel({
     };
   }, [usage]);
 
-  if (!canReadUsage || usage?.availability === 'unavailable') {
+  if (usage?.availability === 'unavailable') {
     return (
       <section className="provider-activity-card provider-unavailable-card">
         <InfoCircledIcon />

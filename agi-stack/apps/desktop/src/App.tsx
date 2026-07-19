@@ -187,6 +187,7 @@ import {
   type SettingsEntry,
 } from './features/settings/settingsEntryRouting';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
+import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
 import { StatusPanel } from './features/status/StatusPanel';
 import {
   NewTaskFlow,
@@ -256,7 +257,7 @@ import type {
   WorkspaceSummary,
   WorkspaceTask,
 } from './types';
-import { DEFAULT_CONFIG, mergeLocalRuntimeStatus, runtimeProviderForTenant } from './types';
+import { DEFAULT_CONFIG, mergeLocalRuntimeStatus } from './types';
 
 const emptyDataset: RuntimeDataset = {
   workspaces: [],
@@ -1677,6 +1678,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>('never');
   const [localRuntimeStatus, setLocalRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
+  const [runtimeProjectionRefreshRevision, setRuntimeProjectionRefreshRevision] = useState(0);
   const [selectedSidebarRunId, setSelectedSidebarRunId] = useState('');
   const [runStateById, setRunStateById] = useState<Record<string, RunControlState>>({});
   const [runControlState, setRunControlState] = useState<RunControlState>('running');
@@ -1857,10 +1859,11 @@ export function App() {
     localRuntimeStatus,
     runsInTauri,
   );
-  const runtimeProvider =
-    config.mode === 'local'
-      ? runtimeProviderForTenant(localRuntimeStatus, config.tenantId)
-      : null;
+  const runtimeProvider = useWorkspaceRuntimeProvider(
+    config,
+    identityAuthenticated && localRuntimeMode && localRuntimeAuthorityReady,
+    runtimeProjectionRefreshRevision,
+  );
 
   const syncLocalRuntimeConfig = useCallback(
     async (nextConfig: DesktopRuntimeConfig): Promise<DesktopRuntimeConfig> => {
@@ -1884,6 +1887,7 @@ export function App() {
       const status = await invoke<LocalRuntimeStatus>('local_runtime_status');
       if (configRef.current.mode !== 'local') return;
       setLocalRuntimeStatus(status);
+      setRuntimeProjectionRefreshRevision((current) => current + 1);
       commitRuntimeConfig(mergeLocalRuntimeStatus(configRef.current, status));
     } catch (caught) {
       const message = formatError(caught);
@@ -6137,7 +6141,6 @@ export function App() {
           initialSection={settingsInitialSection}
           auth={auth}
           config={config}
-          runtimeProvider={runtimeProvider}
           connection={connection}
           wsConnected={socket.connected}
           wsError={socket.error}

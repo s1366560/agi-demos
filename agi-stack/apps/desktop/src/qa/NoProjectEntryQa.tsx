@@ -231,7 +231,6 @@ function NoProjectEntryQa() {
           initialSection={settingsSection}
           auth={auth}
           config={config}
-          runtimeProvider={null}
           connection="idle"
           wsConnected={false}
           wsError={null}

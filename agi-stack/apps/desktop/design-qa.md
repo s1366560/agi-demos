@@ -973,6 +973,38 @@ worktree's full Web type check still has the
 three unrelated `useUnifiedAgentStatus.ts` errors, and full Mypy currently reports four unrelated
 baseline errors in agent client-turn persistence and chat acknowledgement handling.
 
+### Iteration 9 — passed: workspace-route authority and truthful usage availability
+
+The Desktop now derives its current LLM projection from the selected workspace routing policy for
+all four consumers: execution, Settings, the runtime monitor, and the session composer. The previous
+tenant-level runtime selection is no longer exposed by the frontend client or Provider model. Its
+Rust route and persistence record remain compatibility-only so existing installations can migrate a
+baseline once without overwriting a workspace policy.
+
+Provider usage reads are available to every tenant member with Provider read access; mutation
+controls remain manager-only. The local Rust compatibility endpoint now returns
+`availability: unavailable` when no authoritative aggregate source exists. Frontend normalization
+preserves that state and never turns an empty payload into zero requests, tokens, latency, or spend.
+Settings navigation copy was also aligned with the current source in English and Simplified Chinese.
+
+Current same-viewport evidence from the user-selected in-app Browser:
+
+- Source: `qa/provider-settings-authority-source-1280x720.jpg`
+- Implementation: `qa/provider-settings-authority-implementation-1280x720.jpg`
+- Combined review input: `qa/provider-settings-authority-comparison-final-2560x720.jpg`
+- Viewport: `1280 × 720`, Models / Provider Overview state
+
+The combined image was opened and reviewed as one canvas. Popup geometry, settings rail, Provider
+catalog, selected-row treatment, detail hierarchy, tabs, cards, spacing, borders, typography, and
+actions remain source aligned. The implementation intentionally shows three authoritative Provider
+records instead of the source fixture's five mock records, together with their real identifiers and
+dates. Overview → Usage → Overview interaction passed, and no runtime error overlay appeared.
+
+Verification: 422/422 Desktop UI and contract tests, Desktop TypeScript, Vite production build,
+Rustfmt, Clippy with warnings denied, and 215/215 Desktop Rust tests passed. The existing Vite
+large-chunk advisory remains unchanged. This iteration has no remaining P0/P1/P2 regression; the
+separate P1 for authoritative usage aggregation and Provider audit events remains open.
+
 ## Copy differences from the visual prototype
 
 - Configuration-only fallback results remain explicitly labeled when an outbound probe is unavailable.

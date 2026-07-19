@@ -66,6 +66,7 @@ const providerSettingsQaSource = readFileSync(
   'utf8',
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const apiClientSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8');
 
 test('provider management permissions keep local owner and cloud admin boundaries explicit', () => {
   assert.equal(providerManagementAllowed('local', ['owner']), true);
@@ -80,6 +81,14 @@ test('provider type labels preserve public brand spelling', () => {
   assert.equal(providerTypeDisplayName('openai_compatible'), 'OpenAI-compatible');
   assert.equal(providerTypeDisplayName('lmstudio'), 'LM Studio');
   assert.equal(providerTypeDisplayName('custom_gateway'), 'Custom Gateway');
+});
+
+test('Settings model navigation copy matches the approved provider-first source', () => {
+  assert.match(i18nSource, /'settings\.modelsDescription': 'Providers, routing, and budgets'/);
+  assert.match(i18nSource, /'settings\.modelsDescription': '供应商、路由与预算'/);
+  assert.match(i18nSource, /'settings\.accountContext': '账号与上下文'/);
+  assert.match(i18nSource, /'settings\.account': '账号'/);
+  assert.doesNotMatch(i18nSource, /Provider、模型与健康状态|你的账户/);
 });
 
 test('provider setup fails closed when the server does not declare an auth capability', () => {
@@ -770,11 +779,10 @@ test('provider routing is policy-backed, cross-provider, and context safe', () =
     providerOverviewPanelsSource,
     /providerDraftFromProvider|providerMutationFromDraft|onRuntimeSelected/,
   );
-  assert.match(
-    modelProviderWorkspaceSource,
-    /config\.mode === 'local'[\s\S]{0,80}\? runtimeProvider\?\.provider_id === provider\.id[\s\S]{0,80}: provider\.runtime_selected === true/,
-  );
-  assert.match(modelProviderWorkspaceSource, /provider\.runtime_selected === true/);
+  assert.doesNotMatch(modelProviderWorkspaceSource, /runtimeProvider|runtime_selected/);
+  assert.doesNotMatch(providerOverviewPanelsSource, /runtimeSelected|localRuntimeSelected/);
+  assert.match(modelProviderWorkspaceSource, /<ProviderUsagePanel[\s\S]{0,160}onLoadUsage=/);
+  assert.doesNotMatch(modelProviderWorkspaceSource, /canReadUsage=\{canManage\}/);
   assert.match(
     modelProviderWorkspaceSource,
     /const configurationOnlyValidated =\s*!draftValidation\.probed && draftValidation\.status === 'configuration_valid'/,
@@ -1000,63 +1008,20 @@ test('routing policy client normalizes targets and sends optimistic revisions', 
   }
 });
 
-test('runtime selection is guarded by both provider and routing-policy revisions', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input: String(input), init });
-    const selected = String(input).endsWith('/runtime-selection');
-    return new Response(
-      JSON.stringify({
-        id: 'provider-local',
-        name: 'Local provider',
-        provider_type: 'openai',
-        runtime_selected: selected,
-        revision: selected ? 9 : 8,
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    );
-  };
+test('Desktop client exposes workspace routing without a second runtime-selection mutation', () => {
+  const local = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    mode: 'local',
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    apiKey: 'local-user-session',
+    localApiToken: 'launch-capability',
+  });
 
-  try {
-    const local = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      mode: 'local',
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      apiKey: 'local-user-session',
-      localApiToken: 'launch-capability',
-    });
-    const mutation = {
-      name: 'Local provider',
-      providerType: 'openai',
-      authMethod: 'api_key',
-      baseUrl: 'https://llm.example.test/v1',
-      primaryModel: 'gpt-test',
-      allowedModels: ['gpt-test'],
-      active: true,
-      expectedRevision: 7,
-    };
-
-    const updated = await local.updateLlmProvider('provider-local', mutation);
-    assert.equal(updated.runtime_selected, false);
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0]?.input.endsWith('/provider-local'), true);
-
-    const selected = await local.selectLlmRuntimeProvider(
-      'provider-local',
-      updated.revision ?? 0,
-      0,
-    );
-    assert.equal(selected.runtime_selected, true);
-    assert.equal(calls[1]?.input.endsWith('/provider-local/runtime-selection'), true);
-    assert.equal(calls[1]?.init?.method, 'PUT');
-    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
-      expected_revision: 8,
-      expected_policy_revision: 0,
-    });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.equal(typeof local.getLlmProviderRoutingPolicy, 'function');
+  assert.equal(typeof local.updateLlmProviderRoutingPolicy, 'function');
+  assert.equal(typeof local.selectLlmRuntimeProvider, 'undefined');
+  assert.doesNotMatch(apiClientSource, /runtime-selection/);
+  assert.doesNotMatch(apiClientSource, /runtime_selected|runtimeSelected/);
 });
 
 test('provider adapters use PUT, Rust revision guards, and canonical health checks', async () => {
@@ -1091,13 +1056,11 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
           ? {
               authMethod: 'api_key',
               credentialConfigured: true,
-              runtimeSelected: true,
               version: 8,
             }
           : {
               auth_method: 'api_key',
               credential_configured: true,
-              runtime_selected: false,
               revision: 8,
             }),
       }),
@@ -1152,13 +1115,11 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
         authMethod: localUpdated.auth_method,
         credentialConfigured: localUpdated.credential_configured,
         revision: localUpdated.revision,
-        runtimeSelected: localUpdated.runtime_selected,
       },
       {
         authMethod: 'api_key',
         credentialConfigured: true,
         revision: 8,
-        runtimeSelected: true,
       },
     );
     assert.equal(String(calls[1]?.input).endsWith('/local-runtime/health-check'), true);
@@ -1505,7 +1466,6 @@ test('provider responses normalize compatibility fields explicitly', async () =>
         providerType: provider.provider_type,
         authMethod: provider.auth_method,
         credentialConfigured: provider.credential_configured,
-        runtimeSelected: provider.runtime_selected,
         revision: provider.revision,
       })),
       [
@@ -1514,7 +1474,6 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           providerType: 'ollama',
           authMethod: 'none',
           credentialConfigured: false,
-          runtimeSelected: true,
           revision: 12,
         },
         {
@@ -1522,7 +1481,6 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           providerType: 'openai',
           authMethod: undefined,
           credentialConfigured: false,
-          runtimeSelected: false,
           revision: 0,
         },
         {
@@ -1530,7 +1488,6 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           providerType: 'openai',
           authMethod: 'api_key',
           credentialConfigured: true,
-          runtimeSelected: false,
           revision: 4,
         },
         {
@@ -1538,7 +1495,6 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           providerType: 'openai',
           authMethod: 'api_key',
           credentialConfigured: undefined,
-          runtimeSelected: false,
           revision: 0,
         },
         {
@@ -1546,7 +1502,6 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           providerType: 'openai',
           authMethod: 'environment',
           credentialConfigured: true,
-          runtimeSelected: false,
           revision: 0,
         },
         {
@@ -1554,11 +1509,11 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           providerType: 'anthropic',
           authMethod: 'oauth',
           credentialConfigured: true,
-          runtimeSelected: false,
           revision: 0,
         },
       ],
     );
+    assert.equal(Object.hasOwn(providers[0], 'runtime_selected'), false);
     const legacy = providers[1];
     assert.equal(legacy.api_key_masked, null);
     for (const forbiddenKey of ['api_key', 'api_key_encrypted', 'credential', 'secret']) {
@@ -1899,6 +1854,38 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
       'https://api.example.test/api/v1/llm-providers/models/anthropic',
       'https://api.example.test/api/v1/llm-providers/provider-cloud/usage',
     ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('provider usage preserves an authoritative unavailable state instead of inventing zero usage', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        provider_id: 'provider-local',
+        tenant_id: 'tenant-a',
+        availability: 'unavailable',
+        statistics: [],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const local = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-user-session',
+      localApiToken: 'launch-capability',
+    });
+    assert.deepEqual(await local.getLlmProviderUsage('provider-local'), {
+      provider_id: 'provider-local',
+      tenant_id: 'tenant-a',
+      availability: 'unavailable',
+      statistics: [],
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

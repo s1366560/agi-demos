@@ -965,25 +965,6 @@ export class DesktopApiClient {
     return normalizeManagedLlmProvider(payload);
   }
 
-  async selectLlmRuntimeProvider(
-    providerId: string,
-    expectedRevision: number,
-    expectedPolicyRevision: number,
-  ): Promise<ManagedLlmProvider> {
-    const normalizedProviderId = requireValue(providerId, 'provider id');
-    const payload = await this.request<unknown>(
-      `/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}/runtime-selection`,
-      {
-        method: 'PUT',
-        body: {
-          expected_revision: expectedRevision,
-          expected_policy_revision: expectedPolicyRevision,
-        },
-      },
-    );
-    return normalizeManagedLlmProvider(payload);
-  }
-
   async checkLlmProvider(
     providerId: string,
     expectedRevision: number,
@@ -1541,8 +1522,6 @@ function normalizeManagedLlmProvider(payload: unknown): ManagedLlmProvider {
     'credential_configured',
     'credentialConfigured',
   );
-  const runtimeSelected =
-    readCompatBoolean(payload, 'runtime_selected', 'runtimeSelected') ?? false;
   const revision = readCompatInteger(payload, 'revision', 'version') ?? 0;
 
   return {
@@ -1569,7 +1548,6 @@ function normalizeManagedLlmProvider(payload: unknown): ManagedLlmProvider {
       authMethod === 'environment'
         ? readCompatString(payload, 'environment_variable', 'environmentVariable') || null
         : null,
-    runtime_selected: runtimeSelected,
     api_key_masked: credentialConfigured && maskedCredential ? '••••••••••••' : null,
     health_last_check: readCompatNullableString(
       payload,
@@ -1904,6 +1882,21 @@ function normalizeProviderUsage(payload: unknown, providerId: string): LlmProvid
     (record.tenant_id !== null && typeof record.tenant_id !== 'string')
   ) {
     return unavailableProviderUsage(providerId);
+  }
+  if (
+    record.availability !== undefined &&
+    record.availability !== 'available' &&
+    record.availability !== 'unavailable'
+  ) {
+    return unavailableProviderUsage(providerId);
+  }
+  if (record.availability === 'unavailable') {
+    return {
+      provider_id: record.provider_id,
+      tenant_id: record.tenant_id,
+      availability: 'unavailable',
+      statistics: [],
+    };
   }
   const statistics = record.statistics.filter(isLlmProviderUsageStatistic);
   if (statistics.length !== record.statistics.length) return unavailableProviderUsage(providerId);

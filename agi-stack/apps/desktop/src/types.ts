@@ -40,6 +40,11 @@ export type LocalRuntimeProvider = {
   credential_configured: boolean;
 };
 
+export type WorkspaceRuntimeProvider = LocalRuntimeProvider & {
+  project_id: string;
+  workspace_id: string;
+};
+
 export type LocalRuntimeStatus = {
   running: boolean;
   api_base_url: string;
@@ -52,16 +57,6 @@ export type LocalRuntimeStatus = {
   };
   runtime_providers: LocalRuntimeProvider[];
 };
-
-export function runtimeProviderForTenant(
-  status: LocalRuntimeStatus | null,
-  tenantId: string,
-): LocalRuntimeProvider | null {
-  if (!status || !tenantId) return null;
-  const matches =
-    status.runtime_providers?.filter((provider) => provider.tenant_id === tenantId) ?? [];
-  return matches.length === 1 ? matches[0] : null;
-}
 
 export function mergeLocalRuntimeStatus(
   config: DesktopRuntimeConfig,
@@ -723,7 +718,6 @@ export type ManagedLlmProvider = {
   credential_source?: string | null;
   credential_configured?: boolean;
   environment_variable?: string | null;
-  runtime_selected?: boolean;
   api_key_masked?: string | null;
   health_last_check?: string | null;
   response_time_ms?: number | null;

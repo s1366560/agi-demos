@@ -798,7 +798,6 @@ function ProviderSettingsQa() {
       initialSection={initialSection}
       auth={qaAuth}
       config={config}
-      runtimeProvider={null}
       connection="ready"
       wsConnected
       wsError={null}

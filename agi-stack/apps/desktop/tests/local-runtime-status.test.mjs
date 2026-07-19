@@ -8,8 +8,10 @@ const {
   DEFAULT_CONFIG,
   LOCAL_DEV_SERVER_PRESETS,
   mergeLocalRuntimeStatus,
-  runtimeProviderForTenant,
 } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+const { workspaceRuntimeProviderFromAuthority } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/settings/workspaceRuntimeProviderModel.js'
+);
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const typesSource = readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8');
 const providerSettingsQaSource = readFileSync(
@@ -69,42 +71,62 @@ test('local runtime status replaces transport authority without carrying an LLM 
   }
 });
 
-test('runtime provider projection resolves only one exact tenant match', () => {
-  const status = {
-    running: true,
-    api_base_url: 'http://127.0.0.1:54321',
-    api_token: 'fresh-local-capability',
-    workspace_root: '/tmp/workspace',
-    tool_count: 0,
-    tools: [],
-    config: { workspace_root: '/tmp/workspace' },
-    runtime_providers: [
-      {
-        tenant_id: 'tenant-a',
-        provider_id: 'provider-a',
-        provider_type: 'openai',
-        model: 'gpt-authoritative',
-        credential_configured: true,
-      },
-      {
-        tenant_id: 'tenant-b',
-        provider_id: 'provider-b',
-        provider_type: 'anthropic',
-        model: 'claude-authoritative',
-        credential_configured: true,
-      },
-    ],
+test('workspace runtime projection follows only the selected workspace default route', () => {
+  const config = {
+    ...DEFAULT_CONFIG,
+    tenantId: 'tenant-a',
+    projectId: 'project-a',
+    workspaceId: 'workspace-a',
   };
+  const policy = {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    workspace_id: 'workspace-a',
+    revision: 3,
+    roles: {
+      default: { provider_id: 'provider-a', model_id: 'gpt-authoritative' },
+      fast: null,
+      coding: null,
+      vision: null,
+    },
+    fallbacks: [],
+    updated_at: '2026-07-19T00:00:00Z',
+  };
+  const providers = [
+    {
+      id: 'provider-a',
+      name: 'OpenAI production',
+      provider_type: 'openai',
+      auth_method: 'api_key',
+      credential_configured: true,
+    },
+    {
+      id: 'provider-b',
+      name: 'Anthropic production',
+      provider_type: 'anthropic',
+      auth_method: 'api_key',
+      credential_configured: true,
+    },
+  ];
 
-  assert.equal(runtimeProviderForTenant(status, 'tenant-a')?.provider_id, 'provider-a');
-  assert.equal(runtimeProviderForTenant(status, 'missing'), null);
+  assert.deepEqual(workspaceRuntimeProviderFromAuthority(config, policy, providers), {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    workspace_id: 'workspace-a',
+    provider_id: 'provider-a',
+    provider_type: 'openai',
+    model: 'gpt-authoritative',
+    credential_configured: true,
+  });
   assert.equal(
-    runtimeProviderForTenant(
-      { ...status, runtime_providers: [...status.runtime_providers, status.runtime_providers[0]] },
-      'tenant-a',
+    workspaceRuntimeProviderFromAuthority(
+      { ...config, workspaceId: 'workspace-b' },
+      policy,
+      providers,
     ),
     null,
   );
+  assert.equal(workspaceRuntimeProviderFromAuthority(config, policy, providers.slice(1)), null);
 });
 
 test('Desktop runtime configuration and Tauri configure payload contain no LLM authority', () => {
@@ -123,10 +145,8 @@ test('Desktop runtime configuration and Tauri configure payload contain no LLM a
   assert.doesNotMatch(tauriConfig, forbidden);
   assert.doesNotMatch(logout, /llmProvider|llmBaseUrl|llmModel|llmApiKey/);
   assert.doesNotMatch(providerSettingsQaSource, /llmProvider|llmBaseUrl|llmModel|llmApiKey/);
-  assert.match(
-    appSource,
-    /runtimeProviderForTenant\(localRuntimeStatus, config\.tenantId\)/,
-  );
+  assert.doesNotMatch(appSource, /runtimeProviderForTenant/);
+  assert.match(appSource, /useWorkspaceRuntimeProvider\(/);
   assert.match(
     appSource,
     /value: config\.mode === 'local' \? localRuntimeProviderLabel : config\.mode/,

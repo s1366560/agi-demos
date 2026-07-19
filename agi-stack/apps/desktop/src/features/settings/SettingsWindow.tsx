@@ -21,7 +21,6 @@ import type {
   AuthState,
   ConnectionState,
   DesktopRuntimeConfig,
-  LocalRuntimeProvider,
   ManagedAgentDefinition,
   ManagedPlugin,
   ManagedSkill,
@@ -66,7 +65,6 @@ type SettingsWindowProps = {
   initialSection?: SettingsSection;
   auth: AuthState;
   config: DesktopRuntimeConfig;
-  runtimeProvider: LocalRuntimeProvider | null;
   connection: ConnectionState;
   wsConnected: boolean;
   wsError: string | null;
@@ -129,7 +127,6 @@ export function SettingsWindow({
   initialSection = 'account',
   auth,
   config,
-  runtimeProvider,
   connection,
   wsConnected,
   wsError,
@@ -519,7 +516,6 @@ export function SettingsWindow({
                 <ModelProviderWorkspace
                   key={`${config.mode}|${config.apiBaseUrl}|${config.tenantId}|${config.projectId}|${config.workspaceId}`}
                   config={config}
-                  runtimeProvider={runtimeProvider}
                   canManage={canManageProviders}
                   onRuntimeStatusRefresh={onRuntimeStatusRefresh}
                   onCountChange={updateModelCount}

@@ -14,7 +14,6 @@ import { DesktopApiClient, DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   DesktopRuntimeConfig,
-  LocalRuntimeProvider,
   LlmProviderCreateInput,
   LlmProviderModelCatalog,
   LlmProviderMutationInput,
@@ -44,7 +43,6 @@ import './ModelProviderWorkspace.css';
 
 type ModelProviderWorkspaceProps = {
   config: DesktopRuntimeConfig;
-  runtimeProvider: LocalRuntimeProvider | null;
   canManage: boolean;
   onRuntimeStatusRefresh: () => Promise<void>;
   onCountChange?: (count: number | null) => void;
@@ -87,7 +85,6 @@ function endpointLabel(provider: ManagedLlmProvider, fallback: string): string {
 
 export function ModelProviderWorkspace({
   config,
-  runtimeProvider,
   canManage,
   onRuntimeStatusRefresh,
   onCountChange,
@@ -502,13 +499,6 @@ export function ModelProviderWorkspace({
     }
   };
 
-  const providerRuntimeSelected = Boolean(
-    provider &&
-    (config.mode === 'local'
-      ? runtimeProvider?.provider_id === provider.id
-      : provider.runtime_selected === true),
-  );
-
   return (
     <main className="model-provider-workspace">
       <section className="provider-catalog">
@@ -731,7 +721,6 @@ export function ModelProviderWorkspace({
                   providers={providers}
                   policy={routingPolicy}
                   mode={config.mode}
-                  runtimeSelected={providerRuntimeSelected}
                   onTabChange={setTab}
                 />
               ) : null}
@@ -770,7 +759,6 @@ export function ModelProviderWorkspace({
               {tab === 'usage' ? (
                 <ProviderUsagePanel
                   provider={provider}
-                  canReadUsage={canManage}
                   onLoadUsage={client.getLlmProviderUsage.bind(client)}
                 />
               ) : null}
