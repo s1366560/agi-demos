@@ -34,12 +34,14 @@ use serde_json::{json, Map, Value};
 use agistack_adapters_mem::InMemoryObjectStore;
 use agistack_adapters_postgres::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
-    PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceAgentDetailRecord, WorkspaceAgentRecord, WorkspaceMemberRecord,
-    WorkspaceMessageRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
-    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
-    WorkspaceTaskSessionAttemptRecord,
+    CreateTaskSessionRecord, PgWorkspaceRepository,
+    TaskSessionCapabilityMode as RepoTaskSessionCapabilityMode, TaskSessionConversationRecord,
+    TaskSessionCreationOutcome, TaskSessionRepositoryError, TaskSessionWorkspaceRecord,
+    TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess, WorkspaceAgentDetailRecord,
+    WorkspaceAgentRecord, WorkspaceMemberRecord, WorkspaceMessageRecord,
+    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::ObjectStore;
@@ -64,6 +66,7 @@ mod routes;
 mod service;
 mod shared;
 mod task_service;
+mod task_session;
 mod topology_service;
 mod types;
 mod views;
@@ -84,13 +87,16 @@ use types::{
     BlackboardFileListView, BlackboardFileView, BlackboardPostCreatePayload,
     BlackboardPostListView, BlackboardPostUpdatePayload, BlackboardPostView,
     BlackboardReplyCreatePayload, BlackboardReplyListView, BlackboardReplyUpdatePayload,
-    BlackboardReplyView, BlackboardUpload, CopyFilePayload, DeleteFileQuery, DeletedView,
-    LimitOffset, MessageListQuery, MessageListView, MessageMentionQuery, MessageView, MkdirPayload,
-    MyWorkAuthorityKind, MyWorkCapabilityMode, MyWorkGroup, MyWorkRequiredAction, MyWorkStatus,
-    ProjectMyWorkResponse, ProjectWorkItem, RenameOrMoveFilePayload, SendMessagePayload,
-    TaskListQuery, TaskTransitionAction, TopologyEdgeCreatePayload, TopologyEdgeUpdatePayload,
-    TopologyEdgeView, TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView,
-    WorkspaceAgentListQuery, WorkspaceAgentView, WorkspaceApiError, WorkspaceCreatePayload,
+    BlackboardReplyView, BlackboardUpload, CopyFilePayload, CreateTaskSessionPayload,
+    CreateTaskSessionView, DeleteFileQuery, DeletedView, LimitOffset, MessageListQuery,
+    MessageListView, MessageMentionQuery, MessageView, MkdirPayload, MyWorkAuthorityKind,
+    MyWorkCapabilityMode, MyWorkGroup, MyWorkRequiredAction, MyWorkStatus, ProjectMyWorkResponse,
+    ProjectWorkItem, RenameOrMoveFilePayload, SendMessagePayload, TaskListQuery,
+    TaskSessionCapabilityMode, TaskSessionConversationPayload, TaskSessionInitialMessagePayload,
+    TaskSessionWorkspacePayload, TaskTransitionAction, TopologyEdgeCreatePayload,
+    TopologyEdgeUpdatePayload, TopologyEdgeView, TopologyNodeCreatePayload,
+    TopologyNodeUpdatePayload, TopologyNodeView, WorkspaceAgentListQuery, WorkspaceAgentView,
+    WorkspaceApiError, WorkspaceCollaborationMode, WorkspaceCreatePayload,
     WorkspaceDeliverySummaryView, WorkspaceListQuery, WorkspaceMemberView,
     WorkspacePlanActionCapabilityView, WorkspacePlanActionRequest, WorkspacePlanActionResultView,
     WorkspacePlanBlackboardEntryView, WorkspacePlanEventView, WorkspacePlanEvidenceBundleView,
@@ -99,7 +105,8 @@ use types::{
     WorkspacePlanPhaseContractView, WorkspacePlanPipelineRunRequest,
     WorkspacePlanRunAssessmentView, WorkspacePlanSnapshotQuery, WorkspacePlanSnapshotView,
     WorkspacePlanView, WorkspaceReplyUpdateInput, WorkspaceTaskCreatePayload,
-    WorkspaceTaskUpdatePayload, WorkspaceTaskView, WorkspaceUpdatePayload, WorkspaceView,
+    WorkspaceTaskUpdatePayload, WorkspaceTaskView, WorkspaceUpdatePayload, WorkspaceUseCase,
+    WorkspaceView,
 };
 
 #[cfg(test)]
@@ -116,8 +123,8 @@ pub(crate) use service::{SharedWorkspaces, WorkspaceService};
 use shared::{
     apply_task_transition, apply_task_update, clamp_limit, compose_workspace_metadata,
     priority_rank, validate_node_type, validate_non_empty, validate_post_status,
-    validate_task_status, BLOCKED_FILE_SEGMENTS, MAX_COPY_ENTRIES, MAX_FILE_SIZE,
-    OPERATOR_CLEARED_ATTEMPT_KEYS, OPERATOR_CLEARED_RETRY_KEYS,
+    validate_task_status, BLOCKED_FILE_SEGMENTS, COPY_FANOUT_CONCURRENCY, MAX_COPY_ENTRIES,
+    MAX_FILE_SIZE, OPERATOR_CLEARED_ATTEMPT_KEYS, OPERATOR_CLEARED_RETRY_KEYS,
 };
 
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
@@ -288,6 +295,8 @@ struct DevWorkspaceState {
     plan_blackboard: Vec<WorkspacePlanBlackboardEntryRecord>,
     plan_events: Vec<WorkspacePlanEventRecord>,
     plan_outbox: Vec<WorkspacePlanOutboxRecord>,
+    task_session_receipts:
+        HashMap<task_session::DevTaskSessionReceiptKey, task_session::DevTaskSessionReceipt>,
 }
 
 pub(crate) struct DevWorkspaceService {

@@ -86,6 +86,9 @@ pub(in crate::workspace_api) const BLOCKED_FILE_SEGMENTS: &[&str] = &[
 ];
 pub(in crate::workspace_api) const MAX_FILE_SIZE: usize = 100 * 1024 * 1024;
 pub(in crate::workspace_api) const MAX_COPY_ENTRIES: usize = 500;
+/// How many file copies run concurrently inside one directory copy (each
+/// copy is an object-store get+put plus a DB row).
+pub(in crate::workspace_api) const COPY_FANOUT_CONCURRENCY: usize = 4;
 
 pub(in crate::workspace_api) fn compose_workspace_metadata(body: WorkspaceCreatePayload) -> Value {
     let mut metadata = object_or_empty(body.metadata);

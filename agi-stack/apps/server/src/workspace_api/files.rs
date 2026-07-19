@@ -370,7 +370,13 @@ pub(super) async fn copy_directory_pg(
         .await
         .map_err(map_file_storage_error)?;
     let new_prefix = join_child_path(target_parent, copy_name)?;
-    for descendant in descendants {
+    // Directory rows are cheap DB inserts — create them sequentially in
+    // descendant order. File copies each pay an object-store get+put plus the
+    // DB row, so run them in bounded concurrent chunks instead of strictly
+    // serially (a large directory copy was user-visible latency). Chunk-local
+    // first error still aborts; the copy was never atomic to begin with.
+    let mut pending_files = Vec::new();
+    for descendant in &descendants {
         let target_desc_parent =
             replace_parent_prefix(&descendant.parent_path, &old_prefix, &new_prefix);
         if descendant.is_directory {
@@ -378,7 +384,7 @@ pub(super) async fn copy_directory_pg(
                 id: new_id(),
                 workspace_id: workspace_id.to_string(),
                 parent_path: target_desc_parent,
-                name: descendant.name,
+                name: descendant.name.clone(),
                 is_directory: true,
                 file_size: 0,
                 content_type: String::new(),
@@ -393,17 +399,26 @@ pub(super) async fn copy_directory_pg(
             .await
             .map_err(map_file_storage_error)?;
         } else {
-            copy_single_file_pg(
+            pending_files.push((descendant, target_desc_parent));
+        }
+    }
+    for chunk in pending_files.chunks(COPY_FANOUT_CONCURRENCY) {
+        let mut pending = Vec::with_capacity(chunk.len());
+        for (descendant, target_desc_parent) in chunk {
+            pending.push(copy_single_file_pg(
                 repo,
                 Arc::clone(&object_store),
                 workspace_id,
                 user_id,
-                &descendant,
-                &target_desc_parent,
+                descendant,
+                target_desc_parent,
                 &descendant.name,
-            )
-            .await?;
+            ));
         }
+        futures_util::future::join_all(pending)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
     }
     Ok(root)
 }
