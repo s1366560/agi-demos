@@ -16,6 +16,49 @@ const {
 } = clientModule;
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
+function workspaceRecord(index, overrides = {}) {
+  return {
+    id: `workspace-${index}`,
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    name: `Workspace ${index}`,
+    created_by: 'user-1',
+    description: null,
+    is_archived: false,
+    metadata: {},
+    office_status: 'idle',
+    hex_layout_config: {},
+    created_at: '2026-07-19T00:00:00Z',
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function conversationRecord(index, overrides = {}) {
+  return {
+    id: `conversation-${index}`,
+    project_id: 'project-1',
+    tenant_id: 'tenant-1',
+    user_id: 'user-1',
+    title: `Conversation ${index}`,
+    status: 'active',
+    message_count: 0,
+    created_at: '2026-07-19T00:00:00Z',
+    updated_at: null,
+    summary: null,
+    agent_config: null,
+    metadata: null,
+    conversation_mode: 'single_agent',
+    workspace_id: 'workspace-1',
+    linked_workspace_task_id: null,
+    workspace_name: 'Workspace 1',
+    participant_agents: [],
+    coordinator_agent_id: null,
+    focused_agent_id: null,
+    ...overrides,
+  };
+}
+
 test('workspace context unavailable detection requires the structured server code', () => {
   assert.equal(
     isWorkspaceContextUnavailableError(
@@ -255,6 +298,359 @@ test('local identity catalogs use the same authoritative page contract', async (
         },
       ],
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace catalog exhausts every scoped limit-offset page', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const workspaces = Array.from({ length: 501 }, (_, index) =>
+    workspaceRecord(index + 1, { ignored_server_field: 'drop-me' }),
+  );
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    const limit = Number(url.searchParams.get('limit'));
+    const offset = Number(url.searchParams.get('offset'));
+    return new Response(JSON.stringify(workspaces.slice(offset, offset + limit)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    });
+    const result = await client.listWorkspacesForProject('project-1', 'tenant-1');
+
+    assert.equal(result.length, 501);
+    assert.equal(result.at(-1)?.id, 'workspace-501');
+    assert.equal(Object.hasOwn(result[0], 'ignored_server_field'), false);
+    assert.deepEqual(
+      calls.map((url) => ({
+        path: url.pathname,
+        limit: url.searchParams.get('limit'),
+        offset: url.searchParams.get('offset'),
+      })),
+      [
+        {
+          path: '/api/v1/tenants/tenant-1/projects/project-1/workspaces',
+          limit: '500',
+          offset: '0',
+        },
+        {
+          path: '/api/v1/tenants/tenant-1/projects/project-1/workspaces',
+          limit: '500',
+          offset: '500',
+        },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace catalog fails closed on wrapped, malformed, duplicate, or cross-scope rows', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    apiKey: 'authenticated-session',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+  });
+
+  try {
+    for (const payload of [
+      { items: [] },
+      [workspaceRecord(1, { name: '' })],
+      [workspaceRecord(1, { tenant_id: 'tenant-2' })],
+      [workspaceRecord(1, { project_id: 'project-2' })],
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(
+        client.listWorkspacesForProject('project-1', 'tenant-1'),
+        (error) => {
+          assert.equal(error instanceof DesktopApiError, true);
+          assert.equal(error.status, 502);
+          return true;
+        },
+      );
+    }
+
+    globalThis.fetch = async (input) => {
+      const offset = Number(new URL(String(input)).searchParams.get('offset'));
+      const page =
+        offset === 0
+          ? Array.from({ length: 500 }, (_, index) => workspaceRecord(index + 1))
+          : [workspaceRecord(1)];
+      return new Response(JSON.stringify(page), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    await assert.rejects(
+      client.listWorkspacesForProject('project-1', 'tenant-1'),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conversation catalog exhausts every authoritative scoped page', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const conversations = Array.from({ length: 501 }, (_, index) =>
+    conversationRecord(index + 1, { ignored_server_field: 'drop-me' }),
+  );
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    const limit = Number(url.searchParams.get('limit'));
+    const offset = Number(url.searchParams.get('offset'));
+    const items = conversations.slice(offset, offset + limit);
+    const nextOffset = Math.min(offset + limit, conversations.length);
+    return new Response(
+      JSON.stringify({
+        items,
+        total: conversations.length,
+        has_more: nextOffset < conversations.length,
+        offset,
+        limit,
+        next_offset: nextOffset,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      workspaceId: 'workspace-1',
+    });
+    const result = await client.listConversations('project-1', 'workspace-1');
+
+    assert.equal(result.items.length, 501);
+    assert.equal(result.total, 501);
+    assert.equal(Object.hasOwn(result.items[0], 'ignored_server_field'), false);
+    assert.deepEqual(
+      calls.map((url) => ({
+        projectId: url.searchParams.get('project_id'),
+        workspaceId: url.searchParams.get('workspace_id'),
+        status: url.searchParams.get('status'),
+        limit: url.searchParams.get('limit'),
+        offset: url.searchParams.get('offset'),
+      })),
+      [
+        {
+          projectId: 'project-1',
+          workspaceId: 'workspace-1',
+          status: 'active',
+          limit: '500',
+          offset: '0',
+        },
+        {
+          projectId: 'project-1',
+          workspaceId: 'workspace-1',
+          status: 'active',
+          limit: '500',
+          offset: '500',
+        },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conversation catalog accepts the Rust null terminal cursor', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        items: [conversationRecord(1)],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      workspaceId: 'workspace-1',
+    });
+    const result = await client.listConversations('project-1', 'workspace-1');
+    assert.deepEqual(result.items.map((item) => item.id), ['conversation-1']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conversation catalog fails closed on malformed pagination and scope drift', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    apiKey: 'authenticated-session',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  });
+
+  try {
+    for (const payload of [
+      {
+        items: [],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      },
+      {
+        items: [conversationRecord(1)],
+        total: 2,
+        has_more: true,
+        offset: 0,
+        limit: 500,
+        next_offset: 0,
+      },
+      {
+        items: [conversationRecord(1)],
+        total: 1,
+        has_more: false,
+        offset: 1,
+        limit: 500,
+        next_offset: null,
+      },
+      {
+        items: [conversationRecord(1)],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 100,
+        next_offset: null,
+      },
+      {
+        items: [conversationRecord(1)],
+        total: Number.MAX_SAFE_INTEGER + 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      },
+      {
+        items: [conversationRecord(1)],
+        total: 1,
+        has_more: 'false',
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      },
+      {
+        items: [conversationRecord(1)],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+      },
+      {
+        items: [conversationRecord(1, { tenant_id: 'tenant-2' })],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      },
+      {
+        items: [conversationRecord(1, { project_id: 'project-2' })],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      },
+      {
+        items: [conversationRecord(1, { workspace_id: 'workspace-2' })],
+        total: 1,
+        has_more: false,
+        offset: 0,
+        limit: 500,
+        next_offset: null,
+      },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.listConversations('project-1', 'workspace-1'), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      });
+    }
+
+    for (const secondPageKind of ['duplicate', 'total-drift']) {
+      globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+        const offset = Number(url.searchParams.get('offset'));
+        const firstPage = Array.from({ length: 500 }, (_, index) =>
+          conversationRecord(index + 1),
+        );
+        const items =
+          offset === 0
+            ? firstPage
+            : secondPageKind === 'duplicate'
+              ? [conversationRecord(1)]
+              : [conversationRecord(501), conversationRecord(502)];
+        const total = offset === 500 && secondPageKind === 'total-drift' ? 502 : 501;
+        return new Response(
+          JSON.stringify({
+            items,
+            total,
+            has_more: offset === 0,
+            offset,
+            limit: 500,
+            next_offset: offset === 0 ? 500 : null,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      };
+      await assert.rejects(client.listConversations('project-1', 'workspace-1'), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      });
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }

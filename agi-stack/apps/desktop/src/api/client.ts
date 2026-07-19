@@ -78,6 +78,8 @@ type RequestOptions = {
 const WORKSPACE_ROSTER_PAGE_SIZE = 500;
 const IDENTITY_CATALOG_PAGE_SIZE = 100;
 const IDENTITY_CATALOG_MAX_PAGES = 1_000;
+const HIERARCHY_CATALOG_PAGE_SIZE = 500;
+const HIERARCHY_CATALOG_MAX_PAGES = 1_000;
 
 export class DesktopApiError extends Error {
   readonly status: number;
@@ -349,13 +351,22 @@ export class DesktopApiClient {
   ): Promise<WorkspaceSummary[]> {
     const requiredTenantId = requireValue(tenantId, 'tenant id');
     const requiredProjectId = requireValue(projectId, 'project id');
-    const payload = await this.request<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(requiredTenantId)}/projects/${encodeURIComponent(
-        requiredProjectId,
-      )}/workspaces`,
-      { signal },
+    return loadScopedWorkspaceCatalog(
+      requiredTenantId,
+      requiredProjectId,
+      (offset) => {
+        const params = new URLSearchParams({
+          limit: String(HIERARCHY_CATALOG_PAGE_SIZE),
+          offset: String(offset),
+        });
+        return this.request<unknown>(
+          `/api/v1/tenants/${encodeURIComponent(requiredTenantId)}/projects/${encodeURIComponent(
+            requiredProjectId,
+          )}/workspaces?${params.toString()}`,
+          { signal },
+        );
+      },
     );
-    return readArray<WorkspaceSummary>(payload, ['workspaces', 'items', 'data']);
   }
 
   async listWorkspaceMembers(signal?: AbortSignal): Promise<WorkspaceMemberSummary[]> {
@@ -527,42 +538,69 @@ export class DesktopApiClient {
     workspaceId?: string | null,
     signal?: AbortSignal,
   ): Promise<PaginatedConversationsResponse> {
+    const requiredTenantId = requireValue(this.config.tenantId, 'tenant id');
     const requiredProjectId = requireValue(projectId, 'project id');
+    const requiredWorkspaceId = workspaceId?.trim() || null;
     const items: AgentConversation[] = [];
+    const seenIds = new Set<string>();
     let offset = 0;
-    let total = 0;
-    let hasMore = true;
-    let nextOffset: number | null | undefined = null;
+    let expectedTotal: number | null = null;
 
-    while (hasMore) {
+    for (let pageNumber = 0; pageNumber < HIERARCHY_CATALOG_MAX_PAGES; pageNumber += 1) {
       const params = new URLSearchParams({
         project_id: requiredProjectId,
         status: 'active',
-        limit: '100',
+        limit: String(HIERARCHY_CATALOG_PAGE_SIZE),
         offset: String(offset),
       });
-      if (workspaceId) params.set('workspace_id', workspaceId);
-      const page = await this.request<PaginatedConversationsResponse>(
+      if (requiredWorkspaceId) params.set('workspace_id', requiredWorkspaceId);
+      const payload = await this.request<unknown>(
         `/api/v1/agent/conversations?${params.toString()}`,
         { signal },
       );
-      const pageItems = Array.isArray(page.items) ? page.items : [];
-      items.push(...pageItems);
-      total = typeof page.total === 'number' ? page.total : items.length;
-      nextOffset =
-        typeof page.next_offset === 'number' ? page.next_offset : offset + pageItems.length;
-      hasMore = Boolean(page.has_more) && nextOffset > offset;
-      offset = nextOffset ?? offset;
+      const page = requireConversationCatalogPage(
+        payload,
+        offset,
+        requiredTenantId,
+        requiredProjectId,
+        requiredWorkspaceId,
+      );
+      if (expectedTotal === null) {
+        expectedTotal = page.total;
+        if (
+          Math.ceil(expectedTotal / HIERARCHY_CATALOG_PAGE_SIZE) >
+          HIERARCHY_CATALOG_MAX_PAGES
+        ) {
+          throw invalidHierarchyCatalogResponse('conversation catalog', payload);
+        }
+      } else if (page.total !== expectedTotal) {
+        throw invalidHierarchyCatalogResponse('conversation catalog', payload);
+      }
+      for (const item of page.items) {
+        if (seenIds.has(item.id)) {
+          throw invalidHierarchyCatalogResponse('conversation catalog', payload);
+        }
+        seenIds.add(item.id);
+        items.push(item);
+      }
+      if (!page.hasMore) {
+        if (items.length !== expectedTotal) {
+          throw invalidHierarchyCatalogResponse('conversation catalog', payload);
+        }
+        return {
+          items,
+          total: expectedTotal,
+          has_more: false,
+          offset: 0,
+          limit: HIERARCHY_CATALOG_PAGE_SIZE,
+          next_offset: null,
+        };
+      }
+      offset = page.nextOffset;
     }
-
-    return {
-      items,
-      total,
-      has_more: false,
-      offset: 0,
-      limit: Math.max(items.length, 100),
-      next_offset: null,
-    };
+    throw invalidHierarchyCatalogResponse('conversation catalog', {
+      detail: 'hierarchy_catalog_page_limit_exceeded',
+    });
   }
 
   async getConversationMessages(
@@ -1451,6 +1489,208 @@ function normalizeProjectSummary(value: unknown, tenantId: string): ProjectSumma
   };
 }
 
+async function loadScopedWorkspaceCatalog(
+  tenantId: string,
+  projectId: string,
+  requestPage: (offset: number) => Promise<unknown>,
+): Promise<WorkspaceSummary[]> {
+  const items: WorkspaceSummary[] = [];
+  const seenIds = new Set<string>();
+  for (let pageNumber = 0; pageNumber < HIERARCHY_CATALOG_MAX_PAGES; pageNumber += 1) {
+    const payload = await requestPage(pageNumber * HIERARCHY_CATALOG_PAGE_SIZE);
+    if (!Array.isArray(payload) || payload.length > HIERARCHY_CATALOG_PAGE_SIZE) {
+      throw invalidHierarchyCatalogResponse('workspace catalog', payload);
+    }
+    const page = payload.map((value) => normalizeWorkspaceSummary(value, tenantId, projectId));
+    if (page.some((item) => item === null)) {
+      throw invalidHierarchyCatalogResponse('workspace catalog', payload);
+    }
+    for (const item of page as WorkspaceSummary[]) {
+      if (seenIds.has(item.id)) {
+        throw invalidHierarchyCatalogResponse('workspace catalog', payload);
+      }
+      seenIds.add(item.id);
+      items.push(item);
+    }
+    if (page.length < HIERARCHY_CATALOG_PAGE_SIZE) return items;
+  }
+  throw invalidHierarchyCatalogResponse('workspace catalog', {
+    detail: 'hierarchy_catalog_page_limit_exceeded',
+  });
+}
+
+function normalizeWorkspaceSummary(
+  value: unknown,
+  tenantId: string,
+  projectId: string,
+): WorkspaceSummary | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.id) ||
+    value.tenant_id !== tenantId ||
+    value.project_id !== projectId ||
+    !isNonEmptyString(value.name) ||
+    !isOptionalString(value.title) ||
+    !isOptionalString(value.created_by) ||
+    !isOptionalNullableString(value.description) ||
+    !isOptionalString(value.status) ||
+    !isOptionalBoolean(value.is_archived) ||
+    !isOptionalString(value.office_status) ||
+    !isOptionalNullableRecord(value.hex_layout_config) ||
+    !isOptionalString(value.created_at) ||
+    !isOptionalNullableString(value.updated_at) ||
+    !isOptionalNullableRecord(value.metadata)
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    tenant_id: value.tenant_id,
+    project_id: value.project_id,
+    name: value.name,
+    ...(value.title === undefined ? {} : { title: value.title }),
+    ...(value.created_by === undefined ? {} : { created_by: value.created_by }),
+    ...(value.description === undefined ? {} : { description: value.description }),
+    ...(value.status === undefined ? {} : { status: value.status }),
+    ...(value.is_archived === undefined ? {} : { is_archived: value.is_archived }),
+    ...(value.office_status === undefined ? {} : { office_status: value.office_status }),
+    ...(value.hex_layout_config === undefined
+      ? {}
+      : { hex_layout_config: value.hex_layout_config }),
+    ...(value.created_at === undefined ? {} : { created_at: value.created_at }),
+    ...(value.updated_at === undefined ? {} : { updated_at: value.updated_at }),
+    ...(value.metadata === undefined ? {} : { metadata: value.metadata }),
+  };
+}
+
+function requireConversationCatalogPage(
+  payload: unknown,
+  expectedOffset: number,
+  tenantId: string,
+  projectId: string,
+  workspaceId: string | null,
+): {
+  items: AgentConversation[];
+  total: number;
+  hasMore: boolean;
+  nextOffset: number;
+} {
+  if (
+    !isRecord(payload) ||
+    !Array.isArray(payload.items) ||
+    !isUnsignedSafeInteger(payload.total) ||
+    typeof payload.has_more !== 'boolean' ||
+    payload.offset !== expectedOffset ||
+    payload.limit !== HIERARCHY_CATALOG_PAGE_SIZE ||
+    (payload.next_offset !== null && !isUnsignedSafeInteger(payload.next_offset))
+  ) {
+    throw invalidHierarchyCatalogResponse('conversation catalog', payload);
+  }
+  const expectedItemCount = Math.min(
+    HIERARCHY_CATALOG_PAGE_SIZE,
+    Math.max(payload.total - expectedOffset, 0),
+  );
+  const expectedNextOffset = Math.min(
+    expectedOffset + HIERARCHY_CATALOG_PAGE_SIZE,
+    payload.total,
+  );
+  const expectedHasMore = expectedNextOffset < payload.total;
+  if (
+    payload.items.length !== expectedItemCount ||
+    payload.has_more !== expectedHasMore ||
+    (expectedHasMore && payload.next_offset !== expectedNextOffset) ||
+    (!expectedHasMore &&
+      payload.next_offset !== null &&
+      payload.next_offset !== expectedNextOffset)
+  ) {
+    throw invalidHierarchyCatalogResponse('conversation catalog', payload);
+  }
+  const items = payload.items.map((value) =>
+    normalizeAgentConversation(value, tenantId, projectId, workspaceId),
+  );
+  if (items.some((item) => item === null)) {
+    throw invalidHierarchyCatalogResponse('conversation catalog', payload);
+  }
+  return {
+    items: items as AgentConversation[],
+    total: payload.total,
+    hasMore: payload.has_more,
+    nextOffset: expectedNextOffset,
+  };
+}
+
+function normalizeAgentConversation(
+  value: unknown,
+  tenantId: string,
+  projectId: string,
+  workspaceId: string | null,
+): AgentConversation | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.id) ||
+    value.tenant_id !== tenantId ||
+    value.project_id !== projectId ||
+    (workspaceId !== null && value.workspace_id !== workspaceId) ||
+    !isNonEmptyString(value.user_id) ||
+    !isNonEmptyString(value.title) ||
+    value.status !== 'active' ||
+    !isUnsignedSafeInteger(value.message_count) ||
+    !isNonEmptyString(value.created_at) ||
+    !isOptionalNullableString(value.updated_at) ||
+    !isOptionalNullableString(value.summary) ||
+    !isOptionalNullableRecord(value.agent_config) ||
+    !isOptionalNullableRecord(value.metadata) ||
+    !isOptionalNullableString(value.conversation_mode) ||
+    !isOptionalNullableString(value.current_mode) ||
+    !isOptionalNullableString(value.workspace_id) ||
+    !isOptionalNullableString(value.linked_workspace_task_id) ||
+    !isOptionalNullableString(value.workspace_name) ||
+    !isOptionalStringArray(value.participant_agents) ||
+    !isOptionalNullableString(value.coordinator_agent_id) ||
+    !isOptionalNullableString(value.focused_agent_id)
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    tenant_id: value.tenant_id,
+    project_id: value.project_id,
+    user_id: value.user_id,
+    title: value.title,
+    status: value.status,
+    message_count: value.message_count,
+    created_at: value.created_at,
+    ...(value.updated_at === undefined ? {} : { updated_at: value.updated_at }),
+    ...(value.summary === undefined ? {} : { summary: value.summary }),
+    ...(value.agent_config === undefined ? {} : { agent_config: value.agent_config }),
+    ...(value.metadata === undefined ? {} : { metadata: value.metadata }),
+    ...(value.conversation_mode === undefined
+      ? {}
+      : { conversation_mode: value.conversation_mode }),
+    ...(value.current_mode === undefined
+      ? {}
+      : { current_mode: value.current_mode as AgentConversation['current_mode'] }),
+    ...(value.workspace_id === undefined ? {} : { workspace_id: value.workspace_id }),
+    ...(value.linked_workspace_task_id === undefined
+      ? {}
+      : { linked_workspace_task_id: value.linked_workspace_task_id }),
+    ...(value.workspace_name === undefined ? {} : { workspace_name: value.workspace_name }),
+    ...(value.participant_agents === undefined
+      ? {}
+      : { participant_agents: value.participant_agents }),
+    ...(value.coordinator_agent_id === undefined
+      ? {}
+      : { coordinator_agent_id: value.coordinator_agent_id }),
+    ...(value.focused_agent_id === undefined
+      ? {}
+      : { focused_agent_id: value.focused_agent_id }),
+  };
+}
+
+function invalidHierarchyCatalogResponse(label: string, payload: unknown): DesktopApiError {
+  return new DesktopApiError(`Invalid ${label} response`, 502, payload);
+}
+
 function requireWorkspaceRosterPage<T>(
   payload: unknown,
   label: string,
@@ -1594,6 +1834,10 @@ function isUnsignedSafeInteger(value: unknown): value is number {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isOptionalBoolean(value: unknown): value is boolean | undefined {
+  return value === undefined || typeof value === 'boolean';
 }
 
 function isOptionalStringArray(value: unknown): value is string[] | undefined {

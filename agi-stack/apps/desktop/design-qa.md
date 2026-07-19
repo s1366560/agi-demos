@@ -296,11 +296,31 @@ Verification: the new contract tests failed against the prior first-page and per
 behavior, then passed after implementation. The complete Desktop suite passes 425/425, along with
 production TypeScript and the Vite build. The existing Vite large-chunk advisory is unchanged.
 
+### Iteration 3 — passed: bounded workspace and session catalogs
+
+Workspace discovery now exhausts the real bare-array `limit/offset` contract in 500-row pages for
+both FastAPI and the embedded Tauri runtime. The Tauri route now matches the cloud response shape,
+validates bounded pagination, and uses checked offset arithmetic. Workspace rows must carry the
+requested tenant, project, unique ID, and non-empty name; optional cross-runtime fields are validated
+when present and only known fields cross the client boundary.
+
+Session discovery now validates every pagination field, a stable total, exact forward progress,
+unique IDs, active status, and the requested tenant/project/workspace scope. The terminal cursor
+accepts the two authoritative forms used by the current backends: FastAPI returns the exact terminal
+offset, while Rust returns `null`. Malformed, truncated, duplicated, drifting, or cross-scope pages
+fail closed instead of rendering a partial or misplaced hierarchy.
+
+No component or style changed, so the existing same-viewport hierarchy comparison remains current.
+Contract tests first reproduced first-page truncation and permissive parsing, then passed after the
+client and Tauri route changes. The complete Desktop suite passes 430/430 and Rust passes 216/216,
+along with production TypeScript, Vite, Rust formatting, and Clippy. The existing Vite large-chunk
+advisory is unchanged.
+
 ## Remaining architecture work outside this slice
 
 - Make workspace creation metadata and initial conversation binding one atomic Rust transaction.
-- Add authoritative workspace roster/agent endpoints plus bounded pagination and strict scope
-  validation for workspace and conversation collections.
+- Complete authoritative Tauri workspace roster/agent endpoints and expose stale refresh failures
+  without presenting retained hierarchy rows as current.
 - Replace remaining demo execution phases with structured run-state projection as those backend
   contracts become available.
 

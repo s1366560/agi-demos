@@ -5246,23 +5246,57 @@ async fn list_project_my_work(
     })))
 }
 
+const HIERARCHY_DEFAULT_PAGE_SIZE: usize = 50;
+const HIERARCHY_MAX_PAGE_SIZE: usize = 500;
+
+#[derive(Debug, Default, Deserialize)]
+struct HierarchyListQuery {
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+fn hierarchy_page_bounds(
+    query: &HierarchyListQuery,
+    default_limit: usize,
+) -> Result<(usize, usize, usize), (StatusCode, Json<Value>)> {
+    let limit = query.limit.unwrap_or(default_limit);
+    let offset = query.offset.unwrap_or_default();
+    if !(1..=HIERARCHY_MAX_PAGE_SIZE).contains(&limit) {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "invalid hierarchy pagination" })),
+        ));
+    }
+    let end = offset.checked_add(limit).ok_or_else(|| {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "invalid hierarchy pagination" })),
+        )
+    })?;
+    Ok((limit, offset, end))
+}
+
 async fn list_workspaces(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path((tenant_id, project_id)): Path<(String, String)>,
+    Query(query): Query<HierarchyListQuery>,
 ) -> LocalJsonResult {
     if tenant_id != authenticated.workspace.tenant_id {
         return Err(active_workspace_scope_error());
     }
     ensure_active_project(&authenticated, &project_id)?;
+    let (limit, offset, _) = hierarchy_page_bounds(&query, HIERARCHY_DEFAULT_PAGE_SIZE)?;
     let workspaces = state
         .session_store
         .list_workspaces(&project_id)
         .map_err(local_store_error)?
         .into_iter()
         .filter(|workspace| workspace["tenant_id"] == tenant_id)
+        .skip(offset)
+        .take(limit)
         .collect::<Vec<_>>();
-    Ok(Json(json!({ "items": workspaces })))
+    Ok(Json(Value::Array(workspaces)))
 }
 
 #[derive(Deserialize)]
@@ -5439,8 +5473,11 @@ async fn list_conversations(
     if let Some(workspace_id) = workspace_id.as_deref() {
         ensure_active_workspace(&state, &authenticated, workspace_id)?;
     }
-    let offset = query.offset.unwrap_or(0);
-    let limit = query.limit.unwrap_or(100);
+    let page_query = HierarchyListQuery {
+        limit: query.limit,
+        offset: query.offset,
+    };
+    let (limit, offset, end) = hierarchy_page_bounds(&page_query, 100)?;
     let values: Vec<Value> = state
         .session_store
         .list_conversations(&project_id, workspace_id.as_deref())
@@ -5454,13 +5491,14 @@ async fn list_conversations(
         .skip(offset)
         .take(limit)
         .collect::<Vec<_>>();
+    let next_offset = end.min(total);
     Ok(Json(json!({
         "items": items,
         "total": total,
-        "has_more": offset + limit < total,
+        "has_more": next_offset < total,
         "offset": offset,
         "limit": limit,
-        "next_offset": if offset + limit < total { Some(offset + limit) } else { None },
+        "next_offset": if next_offset < total { Some(next_offset) } else { None },
     })))
 }
 
@@ -12813,7 +12851,9 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/api/v1/tenants/northstar/projects/desktop-client/workspaces")
+                    .uri(
+                        "/api/v1/tenants/northstar/projects/desktop-client/workspaces?limit=1&offset=1",
+                    )
                     .header("authorization", "Bearer local-demo-route-secret")
                     .body(Body::empty())
                     .expect("workspace list request"),
@@ -12822,7 +12862,27 @@ mod tests {
             .expect("workspace list response");
         assert_eq!(workspaces_response.status(), StatusCode::OK);
         let workspaces = response_json(workspaces_response).await;
-        assert_eq!(workspaces["items"].as_array().map(Vec::len), Some(2));
+        assert_eq!(workspaces.as_array().map(Vec::len), Some(1));
+        assert_eq!(workspaces[0]["tenant_id"], "northstar");
+        assert_eq!(workspaces[0]["project_id"], "desktop-client");
+
+        let invalid_workspace_page = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(
+                        "/api/v1/tenants/northstar/projects/desktop-client/workspaces?limit=0&offset=0",
+                    )
+                    .header("authorization", "Bearer local-demo-route-secret")
+                    .body(Body::empty())
+                    .expect("invalid workspace page request"),
+            )
+            .await
+            .expect("invalid workspace page response");
+        assert_eq!(
+            invalid_workspace_page.status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
 
         let conversations_response = app
             .clone()
@@ -13340,7 +13400,8 @@ mod tests {
             .await
             .expect("active scope workspace list response");
         assert_eq!(active_workspace_list.status(), StatusCode::OK);
-        assert!(!response_json(active_workspace_list).await["items"]
+        assert!(!response_json(active_workspace_list)
+            .await
             .as_array()
             .expect("workspace items")
             .iter()
