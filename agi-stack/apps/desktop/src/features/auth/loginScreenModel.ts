@@ -19,10 +19,11 @@ export function validateLoginCredentials(
 export function resolveWorkspaceSsoAction(
   mode: RuntimeMode,
   localReady: boolean,
+  trustedDevice: boolean,
 ): WorkspaceSsoAction {
   if (mode !== 'local') return { kind: 'workspace_sso' };
   if (!localReady) return { kind: 'unavailable', capability: 'local_workspace' };
-  return { kind: 'local_session', trustedDevice: true };
+  return { kind: 'local_session', trustedDevice };
 }
 
 export function resolveWorkspaceContinueLabelKey(mode: RuntimeMode): WorkspaceContinueLabelKey {

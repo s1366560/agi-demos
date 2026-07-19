@@ -124,7 +124,7 @@ export function LoginScreen({
 
   const continueWithWorkspace = () => {
     setInteractionError(null);
-    const action = resolveWorkspaceSsoAction(mode, localReady);
+    const action = resolveWorkspaceSsoAction(mode, localReady, trustedDevice);
     if (action.kind === 'local_session') {
       onLocalSession(action.trustedDevice);
       return;

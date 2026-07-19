@@ -2301,7 +2301,6 @@ fn hitl_timeline_type(kind: HitlKind) -> &'static str {
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
     let protected = Router::new()
         .route("/api/v1/auth/me", get(auth_me))
-        .route("/api/v1/auth/signout", post(sign_out))
         .route("/api/v1/tenants", get(list_tenants))
         .route("/api/v1/projects", get(list_projects))
         .route("/api/v1/workspace-context", get(get_workspace_context))
@@ -2504,6 +2503,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             "/api/v1/auth/local-session/resume",
             post(resume_local_session),
         )
+        .route("/api/v1/auth/signout", post(sign_out))
         .merge(protected)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -2904,12 +2904,24 @@ async fn resume_local_session(
 
 async fn sign_out(
     State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
+    headers: HeaderMap,
 ) -> LocalJsonResult {
-    state
+    let Some(credential) = bearer_credential(&headers) else {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "detail": "authenticated desktop session required" })),
+        ));
+    };
+    let revoked = state
         .session_store
-        .revoke_session(&authenticated.session_id, Utc::now().timestamp_millis())
+        .revoke_session(credential, Utc::now().timestamp_millis())
         .map_err(local_store_error)?;
+    if !revoked {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "detail": "authenticated desktop session required" })),
+        ));
+    }
     Ok(Json(json!({ "success": true })))
 }
 
@@ -6047,9 +6059,10 @@ async fn get_run_changes(
             })),
         ));
     }
-    let snapshot = tokio::task::spawn_blocking(move || GitChangesInspector::inspect(&run, &now_iso()))
-        .await
-        .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
+    let snapshot =
+        tokio::task::spawn_blocking(move || GitChangesInspector::inspect(&run, &now_iso()))
+            .await
+            .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
     Ok(Json(
         serde_json::to_value(snapshot).map_err(|error| local_store_error(error.to_string()))?,
     ))
@@ -8906,6 +8919,165 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn signout_retries_after_response_loss_without_revoking_other_sessions() {
+        let state = test_state_without_session("launch-secret");
+        let now_ms = Utc::now().timestamp_millis();
+        state
+            .session_store
+            .create_local_session("revoked-session-secret".to_string(), true, now_ms)
+            .expect("create revoked session");
+        state
+            .session_store
+            .create_local_session("active-session-secret".to_string(), true, now_ms)
+            .expect("create active session");
+        state
+            .session_store
+            .create_local_session("expired-session-secret".to_string(), false, 0)
+            .expect("create expired session");
+        let app = local_router(state);
+
+        let missing_launch = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/signout")
+                    .header("authorization", "Bearer revoked-session-secret")
+                    .body(Body::empty())
+                    .expect("signout without launch capability"),
+            )
+            .await
+            .expect("missing launch response");
+        assert_eq!(
+            missing_launch.status(),
+            axum::http::StatusCode::UNAUTHORIZED
+        );
+
+        let still_active = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("x-agistack-launch", "launch-secret")
+                    .header("authorization", "Bearer revoked-session-secret")
+                    .body(Body::empty())
+                    .expect("session after rejected signout request"),
+            )
+            .await
+            .expect("session after rejected signout response");
+        assert_eq!(still_active.status(), axum::http::StatusCode::OK);
+
+        let launch_bearer_only = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/signout")
+                    .header("authorization", "Bearer launch-secret")
+                    .body(Body::empty())
+                    .expect("launch bearer signout request"),
+            )
+            .await
+            .expect("launch bearer signout response");
+        assert_eq!(
+            launch_bearer_only.status(),
+            axum::http::StatusCode::UNAUTHORIZED
+        );
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/signout")
+                    .header("x-agistack-launch", "launch-secret")
+                    .header("authorization", "Bearer revoked-session-secret")
+                    .body(Body::empty())
+                    .expect("first signout request"),
+            )
+            .await
+            .expect("first signout response");
+        assert_eq!(first.status(), axum::http::StatusCode::OK);
+
+        let retry = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/signout")
+                    .header("x-agistack-launch", "launch-secret")
+                    .header("authorization", "Bearer revoked-session-secret")
+                    .body(Body::empty())
+                    .expect("retry signout request"),
+            )
+            .await
+            .expect("retry signout response");
+        assert_eq!(retry.status(), axum::http::StatusCode::OK);
+
+        let expired = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/signout")
+                    .header("x-agistack-launch", "launch-secret")
+                    .header("authorization", "Bearer expired-session-secret")
+                    .body(Body::empty())
+                    .expect("expired session signout request"),
+            )
+            .await
+            .expect("expired session signout response");
+        assert_eq!(expired.status(), axum::http::StatusCode::OK);
+
+        for credential in ["unknown-session-secret", ""] {
+            let mut builder = Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/signout")
+                .header("x-agistack-launch", "launch-secret");
+            if !credential.is_empty() {
+                builder = builder.header("authorization", format!("Bearer {credential}"));
+            }
+            let response = app
+                .clone()
+                .oneshot(
+                    builder
+                        .body(Body::empty())
+                        .expect("invalid signout request"),
+                )
+                .await
+                .expect("invalid signout response");
+            assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+        }
+
+        let revoked = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("x-agistack-launch", "launch-secret")
+                    .header("authorization", "Bearer revoked-session-secret")
+                    .body(Body::empty())
+                    .expect("revoked session request"),
+            )
+            .await
+            .expect("revoked session response");
+        assert_eq!(revoked.status(), axum::http::StatusCode::UNAUTHORIZED);
+
+        let active = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("x-agistack-launch", "launch-secret")
+                    .header("authorization", "Bearer active-session-secret")
+                    .body(Body::empty())
+                    .expect("active session request"),
+            )
+            .await
+            .expect("active session response");
+        assert_eq!(active.status(), axum::http::StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn trusted_local_session_resume_requires_reference_and_rotates_the_bearer() {
         let state = test_state_without_session("launch-secret");
         let app = local_router(state);
@@ -11231,7 +11403,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 14);
+        assert_eq!(version, 15);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -11241,6 +11413,15 @@ mod tests {
             )
             .expect("provider selection table count");
         assert_eq!(selection_table, 1);
+        let credential_alias_table: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'desktop_session_credential_aliases'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("session credential alias table count");
+        assert_eq!(credential_alias_table, 1);
         let task_session_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -11283,13 +11464,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 15;")
+                .execute_batch("PRAGMA user_version = 16;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 14"));
+        assert!(error.contains("newer than supported schema version 15"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -12025,7 +12206,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 14);
+        assert_eq!(schema_version, 15);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }

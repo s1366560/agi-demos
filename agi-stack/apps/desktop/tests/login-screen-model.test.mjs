@@ -13,21 +13,25 @@ const {
   '/tmp/agistack-desktop-test-dist/src/features/auth/loginScreenModel.js',
 );
 
-test('local workspace continue uses one trusted native session when the runtime is ready', () => {
+test('local workspace continue preserves the trusted-device choice when the runtime is ready', () => {
   assert.equal(resolveWorkspaceContinueLabelKey('local'), 'login.localWorkspace');
-  assert.deepEqual(resolveWorkspaceSsoAction('local', true), {
+  assert.deepEqual(resolveWorkspaceSsoAction('local', true, true), {
     kind: 'local_session',
     trustedDevice: true,
+  });
+  assert.deepEqual(resolveWorkspaceSsoAction('local', true, false), {
+    kind: 'local_session',
+    trustedDevice: false,
   });
 });
 
 test('workspace continue starts device authorization in cloud and fails closed for local startup', () => {
   assert.equal(resolveWorkspaceContinueLabelKey('cloud'), 'login.workspaceSso');
-  assert.deepEqual(resolveWorkspaceSsoAction('local', false), {
+  assert.deepEqual(resolveWorkspaceSsoAction('local', false, false), {
     kind: 'unavailable',
     capability: 'local_workspace',
   });
-  assert.deepEqual(resolveWorkspaceSsoAction('cloud', true), {
+  assert.deepEqual(resolveWorkspaceSsoAction('cloud', true, false), {
     kind: 'workspace_sso',
   });
 });

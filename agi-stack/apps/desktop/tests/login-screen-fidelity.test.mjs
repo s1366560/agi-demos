@@ -59,6 +59,20 @@ test('login validation remains localized in English and Simplified Chinese', () 
 
 test('the workspace continue action exposes local and cloud authority without a fake success path', () => {
   assert.match(loginSource, /resolveWorkspaceContinueLabelKey\(mode\)/);
+  assert.match(
+    loginSource,
+    /resolveWorkspaceSsoAction\(mode, localReady, trustedDevice\)/,
+  );
+  assert.match(loginSource, /onLocalSession\(action\.trustedDevice\)/);
+  assert.match(
+    appSource,
+    /onLocalSession=\{\(trustedDevice\) => void loginLocalSession\(trustedDevice\)\}/,
+  );
+  assert.match(appSource, /createLocalSession\(trustedDevice\)/);
+  assert.match(
+    appSource,
+    /if \(trustedDevice && hasNativeTrustedSessionBroker\(\) && sessionId\)/,
+  );
   assert.match(loginSource, /action\.kind === 'workspace_sso'/);
   assert.match(loginSource, /t\('login\.localWorkspaceUnavailable'\)/);
   assert.match(loginSource, /onWorkspaceSso\(trustedDevice\)/);

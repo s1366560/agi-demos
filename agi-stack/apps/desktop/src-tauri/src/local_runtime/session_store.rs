@@ -29,7 +29,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 14;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 15;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 

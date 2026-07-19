@@ -194,6 +194,12 @@ pub(super) fn initialize_auth_context_schema(connection: &Connection) -> Result<
                revoked_at_ms INTEGER,
                FOREIGN KEY(user_id) REFERENCES desktop_users(id)
              );
+             CREATE TABLE IF NOT EXISTS desktop_session_credential_aliases (
+               token_digest TEXT PRIMARY KEY,
+               session_id TEXT NOT NULL,
+               rotated_at_ms INTEGER NOT NULL,
+               FOREIGN KEY(session_id) REFERENCES desktop_user_sessions(id) ON DELETE CASCADE
+             );
              CREATE TABLE IF NOT EXISTS desktop_workspace_contexts (
                user_id TEXT PRIMARY KEY,
                tenant_id TEXT NOT NULL,
@@ -424,7 +430,7 @@ impl DesktopSessionStore {
             .map_err(|error| AuthContextError::Storage(error.to_string()))?;
         let session = transaction
             .query_row(
-                "SELECT s.id, s.user_id, s.expires_at_ms
+                "SELECT s.id, s.user_id, s.expires_at_ms, s.token_digest
                  FROM desktop_user_sessions s
                  JOIN desktop_users u ON u.id = s.user_id
                  JOIN desktop_workspace_contexts c ON c.user_id = s.user_id
@@ -442,12 +448,13 @@ impl DesktopSessionStore {
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, i64>(2)?,
+                        row.get::<_, String>(3)?,
                     ))
                 },
             )
             .optional()
             .map_err(|error| AuthContextError::Storage(error.to_string()))?;
-        let Some((session_id, user_id, expires_at_ms)) = session else {
+        let Some((session_id, user_id, expires_at_ms, previous_digest)) = session else {
             transaction
                 .commit()
                 .map_err(|error| AuthContextError::Storage(error.to_string()))?;
@@ -455,6 +462,14 @@ impl DesktopSessionStore {
         };
 
         let context = query_workspace_context(&transaction, &user_id)?;
+        transaction
+            .execute(
+                "INSERT OR IGNORE INTO desktop_session_credential_aliases(
+                   token_digest, session_id, rotated_at_ms
+                 ) VALUES (?1, ?2, ?3)",
+                params![previous_digest, session_id, now_ms],
+            )
+            .map_err(|error| AuthContextError::Storage(error.to_string()))?;
         transaction
             .execute(
                 "UPDATE desktop_user_sessions
@@ -532,20 +547,40 @@ impl DesktopSessionStore {
         }))
     }
 
-    pub(super) fn revoke_session(&self, session_id: &str, now_ms: i64) -> Result<(), String> {
-        let changed = self
-            .connection()?
+    pub(super) fn revoke_session(&self, credential: &str, now_ms: i64) -> Result<bool, String> {
+        if credential.trim().is_empty() {
+            return Ok(false);
+        }
+        let digest = credential_digest(credential);
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let session_id = transaction
+            .query_row(
+                "SELECT id FROM desktop_user_sessions WHERE token_digest = ?1
+                 UNION ALL
+                 SELECT session_id FROM desktop_session_credential_aliases WHERE token_digest = ?1
+                 LIMIT 1",
+                [digest.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        let Some(session_id) = session_id else {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(false);
+        };
+        transaction
             .execute(
                 "UPDATE desktop_user_sessions
-                 SET status = 'revoked', revoked_at_ms = ?1
-                 WHERE id = ?2 AND status = 'active'",
+                 SET status = 'revoked', revoked_at_ms = COALESCE(revoked_at_ms, ?1)
+                 WHERE id = ?2",
                 params![now_ms, session_id],
             )
             .map_err(|error| error.to_string())?;
-        if changed == 0 {
-            return Err("active authenticated session not found".to_string());
-        }
-        Ok(())
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(true)
     }
 
     pub(super) fn session_context_is_current(
@@ -987,17 +1022,93 @@ mod tests {
         drop(connection);
         assert!(persisted.starts_with("sha256:"));
         assert!(!persisted.contains("raw-session-secret"));
-        let authenticated = store
-            .validate_session_credential("raw-session-secret", now_ms)
-            .expect("validate")
-            .expect("authenticated");
         store
-            .revoke_session(&authenticated.session_id, now_ms + 1)
+            .revoke_session("raw-session-secret", now_ms + 1)
             .expect("revoke");
         assert!(store
             .validate_session_credential("raw-session-secret", now_ms + 2)
             .expect("validate revoked")
             .is_none());
+    }
+
+    #[test]
+    fn session_revocation_by_credential_is_idempotent_and_scoped() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let now_ms = Utc::now().timestamp_millis();
+        store
+            .create_local_session("revoked-session-secret".to_string(), true, now_ms)
+            .expect("create revoked session");
+        store
+            .create_local_session("active-session-secret".to_string(), true, now_ms)
+            .expect("create active session");
+
+        assert!(store
+            .revoke_session("revoked-session-secret", now_ms + 1)
+            .expect("first revoke"));
+        let first_revoked_at: i64 = store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT revoked_at_ms FROM desktop_user_sessions WHERE token_digest = ?1",
+                [credential_digest("revoked-session-secret")],
+                |row| row.get(0),
+            )
+            .expect("first revoked timestamp");
+
+        assert!(store
+            .revoke_session("revoked-session-secret", now_ms + 2)
+            .expect("idempotent revoke"));
+        let retried_revoked_at: i64 = store
+            .connection()
+            .expect("connection")
+            .query_row(
+                "SELECT revoked_at_ms FROM desktop_user_sessions WHERE token_digest = ?1",
+                [credential_digest("revoked-session-secret")],
+                |row| row.get(0),
+            )
+            .expect("retried revoked timestamp");
+
+        assert_eq!(retried_revoked_at, first_revoked_at);
+        assert!(!store
+            .revoke_session("unknown-session-secret", now_ms + 3)
+            .expect("unknown credential"));
+        assert!(store
+            .validate_session_credential("revoked-session-secret", now_ms + 3)
+            .expect("validate revoked session")
+            .is_none());
+        assert!(store
+            .validate_session_credential("active-session-secret", now_ms + 3)
+            .expect("validate active session")
+            .is_some());
+    }
+
+    #[test]
+    fn session_revocation_retry_survives_store_reopen() {
+        let path = std::env::temp_dir().join(format!(
+            "agistack-session-revocation-{}.sqlite3",
+            Uuid::new_v4()
+        ));
+        let now_ms = Utc::now().timestamp_millis();
+        {
+            let store = DesktopSessionStore::open(&path).expect("open session store");
+            store
+                .create_local_session("restart-revocation-secret".to_string(), true, now_ms)
+                .expect("create session");
+            assert!(store
+                .revoke_session("restart-revocation-secret", now_ms + 1)
+                .expect("first revoke"));
+        }
+
+        let reopened = DesktopSessionStore::open(&path).expect("reopen session store");
+        assert!(reopened
+            .revoke_session("restart-revocation-secret", now_ms + 2)
+            .expect("retry revoke after reopen"));
+        assert!(reopened
+            .validate_session_credential("restart-revocation-secret", now_ms + 3)
+            .expect("validate revoked session")
+            .is_none());
+        drop(reopened);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
@@ -1027,9 +1138,13 @@ mod tests {
             .expect("validate resumed credential")
             .is_some());
 
-        store
-            .revoke_session(&resumed.session.session_id, now_ms + 3)
-            .expect("revoke trusted session");
+        assert!(store
+            .revoke_session("trusted-original", now_ms + 3)
+            .expect("revoke trusted session through rotated credential alias"));
+        assert!(store
+            .validate_session_credential("trusted-rotated", now_ms + 3)
+            .expect("validate revoked rotated credential")
+            .is_none());
         let untrusted = store
             .create_local_session("untrusted".to_string(), false, now_ms + 4)
             .expect("create untrusted session");
@@ -1076,6 +1191,16 @@ mod tests {
             .expect("validate rotated bearer")
             .is_some());
         drop(reopened);
+        let reopened_after_rotation =
+            DesktopSessionStore::open(&path).expect("reopen rotated session store");
+        assert!(reopened_after_rotation
+            .revoke_session("restart-original", now_ms + 3)
+            .expect("revoke through persisted rotated credential alias"));
+        assert!(reopened_after_rotation
+            .validate_session_credential("restart-rotated", now_ms + 4)
+            .expect("validate revoked rotated bearer")
+            .is_none());
+        drop(reopened_after_rotation);
         let _ = std::fs::remove_file(path);
     }
 
