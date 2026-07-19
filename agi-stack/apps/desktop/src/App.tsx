@@ -442,20 +442,6 @@ type SidebarRunItem = {
   conversation?: AgentConversation;
 };
 type ReviewTab = SessionCanvasTabId | 'pull' | 'background';
-type WorkspaceEventKind = 'Tools' | 'Reasoning' | 'Messages' | 'System' | 'Errors';
-type WorkspaceEventRecord = {
-  id: string;
-  kind: WorkspaceEventKind;
-  eventType: string;
-  source: string;
-  status: string;
-  detail: string;
-  time: string;
-  latency: string;
-  sortTime: number;
-  raw: unknown;
-  searchableText: string;
-};
 type WorkspaceArtifactKind = 'Files' | 'Patches' | 'Reports' | 'Logs' | 'Events';
 type WorkspaceArtifact = {
   id: string;
@@ -914,15 +900,6 @@ function numberField(payload: Record<string, unknown>, key: string): number | nu
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function buildWorkspaceEvents(socketEvents: unknown[]): WorkspaceEventRecord[] {
-  return socketEvents
-    .map((event, index) => workspaceEventFromSocketEvent(event, index))
-    .sort((left, right) => {
-      if (left.sortTime !== right.sortTime) return right.sortTime - left.sortTime;
-      return left.id.localeCompare(right.id);
-    });
-}
-
 function buildReviewDecisionSummary(
   approvalRequest: DesktopApprovalRequest | null,
 ): ReviewDecisionSummary {
@@ -970,208 +947,6 @@ function buildReviewDecisionSummary(
       hasPendingHitlRequest: Boolean(approvalRequest),
     }),
   };
-}
-
-function workspaceEventFromSocketEvent(event: unknown, index: number): WorkspaceEventRecord {
-  const record = asRecordValue(event);
-  const payload = record ? objectField(record, 'payload') ?? objectField(record, 'data') ?? record : {};
-  const eventType =
-    (record && (readStringField(record, 'type') ?? readStringField(record, 'event_type'))) ??
-    'event';
-  const action = record ? readStringField(record, 'action') : undefined;
-  const source = workspaceEventSource(eventType, payload, record);
-  const detail = workspaceEventDetail(eventType, payload, record, event);
-  const eventTimeUs = record ? numberField(record, 'time_us') ?? numberField(record, 'event_time_us') : null;
-  const timestamp = record
-    ? numberField(record, 'timestamp') ??
-      numberField(payload, 'timestamp') ??
-      readStringField(payload, 'timestamp')
-    : null;
-  const sortTime =
-    typeof eventTimeUs === 'number' ? Math.floor(eventTimeUs / 1000) : normalizeTimestamp(timestamp);
-  const status = workspaceEventStatus(eventType, payload, record);
-  const kind = workspaceEventKind(eventType, status, payload);
-  const latency = workspaceEventLatency(payload, record);
-  return makeWorkspaceEventRecord({
-    id: `${eventType}-${action ?? 'event'}-${index}-${sortTime}`,
-    kind,
-    eventType: action ? `${eventType}:${action}` : eventType,
-    source,
-    status,
-    detail,
-    time: formatArtifactTime(sortTime),
-    latency,
-    sortTime,
-    raw: event,
-  });
-}
-
-function makeWorkspaceEventRecord(
-  input: Omit<WorkspaceEventRecord, 'searchableText'>,
-): WorkspaceEventRecord {
-  return {
-    ...input,
-    searchableText: [
-      input.kind,
-      input.eventType,
-      input.source,
-      input.status,
-      input.detail,
-      input.time,
-      input.latency,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase(),
-  };
-}
-
-function workspaceEventKind(
-  eventType: string,
-  status: string,
-  payload: Record<string, unknown>,
-): WorkspaceEventKind {
-  const value = `${eventType} ${status}`.toLowerCase();
-  if (value.includes('error') || status.toLowerCase() === 'failed') return 'Errors';
-  if (['act', 'observe', 'tool.call', 'tool_call', 'sandbox_event'].some((type) => value.includes(type))) {
-    return 'Tools';
-  }
-  if (
-    ['thought', 'reasoning', 'work_plan', 'chain_', 'subagent_'].some((type) => value.includes(type))
-  ) {
-    return 'Reasoning';
-  }
-  if (
-    ['message', 'ack', 'text_', 'user_message', 'assistant_message', 'decision', 'selection'].some((type) =>
-      value.includes(type),
-    ) ||
-    readStringField(payload, 'content')
-  ) {
-    return 'Messages';
-  }
-  return 'System';
-}
-
-function workspaceEventStatus(
-  eventType: string,
-  payload: Record<string, unknown>,
-  record: Record<string, unknown> | null,
-): string {
-  if (eventType.toLowerCase().includes('error')) return 'error';
-  const direct =
-    readStringField(payload, 'status') ??
-    readStringField(payload, 'state') ??
-    (record ? readStringField(record, 'status') ?? readStringField(record, 'state') : undefined);
-  if (direct) return direct;
-  if (payload.is_error === true || payload.isError === true) return 'error';
-  const action = record ? readStringField(record, 'action') : undefined;
-  if (action) return action;
-  return 'received';
-}
-
-function workspaceEventLatency(
-  payload: Record<string, unknown>,
-  record: Record<string, unknown> | null,
-): string {
-  const direct =
-    readStringField(payload, 'latency') ??
-    readStringField(payload, 'duration') ??
-    (record ? readStringField(record, 'latency') ?? readStringField(record, 'duration') : undefined);
-  if (direct) return direct;
-  const milliseconds =
-    numberField(payload, 'latency_ms') ??
-    numberField(payload, 'duration_ms') ??
-    numberField(payload, 'elapsed_ms') ??
-    (record
-      ? numberField(record, 'latency_ms') ??
-        numberField(record, 'duration_ms') ??
-        numberField(record, 'elapsed_ms')
-      : null);
-  if (typeof milliseconds === 'number') return `${Math.round(milliseconds)} ms`;
-  const seconds =
-    numberField(payload, 'latency_s') ??
-    numberField(payload, 'duration_s') ??
-    (record ? numberField(record, 'latency_s') ?? numberField(record, 'duration_s') : null);
-  if (typeof seconds === 'number') return `${Math.round(seconds * 1000)} ms`;
-  return '-';
-}
-
-function workspaceEventSource(
-  eventType: string,
-  payload: Record<string, unknown>,
-  record: Record<string, unknown> | null,
-): string {
-  const payloadType = readStringField(payload, 'type');
-  const nested = objectField(payload, 'data');
-  const nestedType = nested ? readStringField(nested, 'type') : undefined;
-  return (
-    readStringField(payload, 'source') ??
-    readStringField(payload, 'agent') ??
-    readStringField(payload, 'agent_id') ??
-    readStringField(payload, 'tool_name') ??
-    readStringField(payload, 'toolName') ??
-    payloadType ??
-    nestedType ??
-    (record ? readStringField(record, 'source') : undefined) ??
-    eventType
-  );
-}
-
-function workspaceEventDirectDetail(
-  payload: Record<string, unknown>,
-  record: Record<string, unknown> | null,
-): string | undefined {
-  return (
-    readStringField(payload, 'detail') ??
-    readStringField(payload, 'summary') ??
-    readStringField(payload, 'message') ??
-    readStringField(payload, 'content') ??
-    readStringField(payload, 'delta') ??
-    readStringField(payload, 'text') ??
-    readStringField(payload, 'answer') ??
-    (record ? readStringField(record, 'message') : undefined)
-  );
-}
-
-function workspaceEventDetail(
-  eventType: string,
-  payload: Record<string, unknown>,
-  record: Record<string, unknown> | null,
-  raw: unknown,
-): string {
-  const error = record ? socketErrorDetail(record) : undefined;
-  if (error) return error;
-  const direct = workspaceEventDirectDetail(payload, record);
-  if (['message', 'decision', 'selection'].includes(eventType.toLowerCase()) && direct) {
-    return direct;
-  }
-  const payloadType = readStringField(payload, 'type');
-  if (payloadType) {
-    const payloadData = objectField(payload, 'data') ?? payload;
-    const payloadName =
-      readStringField(payloadData, 'filename') ??
-      readStringField(payloadData, 'artifact_id') ??
-      readStringField(payloadData, 'tool_execution_id') ??
-      readStringField(payloadData, 'sandbox_id');
-    return payloadName ? `${payloadType}: ${payloadName}` : payloadType;
-  }
-  const nested = objectField(payload, 'data');
-  if (nested) {
-    const nestedType = readStringField(nested, 'type');
-    const nestedData = objectField(nested, 'data') ?? nested;
-    const nestedName =
-      readStringField(nestedData, 'filename') ??
-      readStringField(nestedData, 'artifact_id') ??
-      readStringField(nestedData, 'tool_execution_id') ??
-      readStringField(nestedData, 'sandbox_id');
-    if (nestedType) return nestedName ? `${nestedType}: ${nestedName}` : nestedType;
-  }
-  if (direct) return direct;
-  const toolName = readStringField(payload, 'tool_name') ?? readStringField(payload, 'toolName');
-  if (toolName) return `Tool ${toolName}`;
-  const conversationId = record ? readStringField(record, 'conversation_id') : undefined;
-  if (conversationId) return `Conversation ${conversationId.slice(0, 8)}`;
-  return compactArtifactValue(raw);
 }
 
 function buildWorkspaceArtifacts(
@@ -6392,7 +6167,6 @@ function WorkspaceReviewPanel({
   const { t } = useI18n();
   const [focusedArtifactVersionId, setFocusedArtifactVersionId] = useState<string | null>(null);
   const sessionTabListRef = useRef<HTMLElement>(null);
-  const workspaceEvents = useMemo(() => buildWorkspaceEvents(socketEvents), [socketEvents]);
   const invocationLedger = useMemo(
     () =>
       buildSessionInvocationLedger(timelineItems, {
@@ -6629,7 +6403,7 @@ function WorkspaceReviewPanel({
                     artifacts: sessionDataAvailable
                       ? artifactVersions.length || artifacts.length
                       : t('session.notAvailable'),
-                    events: workspaceEvents.length,
+                    events: socketEvents.length,
                   })}
                 </strong>
                 <small>{sessionViewModel?.usageLabel ?? t('session.notAvailable')}</small>

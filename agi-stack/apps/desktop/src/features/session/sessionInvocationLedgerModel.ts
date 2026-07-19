@@ -90,7 +90,7 @@ export function buildSessionInvocationLedger(
   const orderedItems = [...items].sort(compareTimelineItems);
 
   for (const item of orderedItems) {
-    const parsed = parseInvocationEvent(item);
+    const parsed = parseInvocationEventCached(item);
     if (!parsed) continue;
 
     const explicitKey = parsed.invocationId ? `invocation:${parsed.invocationId}` : null;
@@ -174,6 +174,21 @@ export function sessionInvocationLedgerSummary(
   }
   summary.blocked = summary.unknownOutcome > 0;
   return summary;
+}
+
+// Parse results are pure per item and item identities are stable across
+// streaming merges (a text-delta merge replaces only the merged item), so
+// cache them per item object: a rebuild after a delta re-parses only the
+// items whose identity changed instead of every item — the input fingerprint
+// JSON.stringify's tool inputs, which can be whole file contents.
+const parseCache = new WeakMap<AgentTimelineItem, ParsedInvocationEvent | null>();
+
+function parseInvocationEventCached(item: AgentTimelineItem): ParsedInvocationEvent | null {
+  const hit = parseCache.get(item);
+  if (hit !== undefined) return hit;
+  const parsed = parseInvocationEvent(item);
+  parseCache.set(item, parsed);
+  return parsed;
 }
 
 function parseInvocationEvent(item: AgentTimelineItem): ParsedInvocationEvent | null {
