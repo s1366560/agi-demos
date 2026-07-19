@@ -127,11 +127,15 @@ impl WorkspacePlanOutboxWorker {
             return Ok(());
         };
 
-        match handler.handle(item.clone()).await {
+        // The handlers below only need the id after `handle` takes the record;
+        // keep that instead of cloning the whole record (mention payloads
+        // carry up to 64 KB of token chunks) per processed event.
+        let item_id = item.id.clone();
+        match handler.handle(item).await {
             Ok(WorkspacePlanOutboxHandlerOutcome::Complete) => {
                 if self
                     .store
-                    .mark_completed(&item.id, Some(&self.config.worker_id), Utc::now())
+                    .mark_completed(&item_id, Some(&self.config.worker_id), Utc::now())
                     .await?
                 {
                     report.completed += 1;
@@ -143,7 +147,7 @@ impl WorkspacePlanOutboxWorker {
                 if self
                     .store
                     .release_processing(
-                        &item.id,
+                        &item_id,
                         reason.as_deref(),
                         Some(&self.config.worker_id),
                         Utc::now(),
@@ -162,7 +166,7 @@ impl WorkspacePlanOutboxWorker {
                 if self
                     .store
                     .park_processing(
-                        &item.id,
+                        &item_id,
                         &status,
                         &metadata_patch,
                         Some(&self.config.worker_id),
@@ -183,7 +187,7 @@ impl WorkspacePlanOutboxWorker {
                 if self
                     .store
                     .park_processing_with_payload_patch(
-                        &item.id,
+                        &item_id,
                         &status,
                         &metadata_patch,
                         &payload_patch,
@@ -201,7 +205,7 @@ impl WorkspacePlanOutboxWorker {
                 if self
                     .store
                     .mark_failed(
-                        &item.id,
+                        &item_id,
                         &err.to_string(),
                         Some(&self.config.worker_id),
                         Utc::now(),
@@ -223,6 +227,17 @@ pub(super) fn object_or_empty(value: Value) -> Map<String, Value> {
         Value::Object(map) => map,
         _ => Map::new(),
     }
+}
+
+/// Borrowing variant of [`object_or_empty`] for read-only access: non-object
+/// payloads share one static empty map instead of deep-cloning the whole
+/// `Value` (mention payloads carry up to 64 KB of token chunks, and the
+/// reconcile loops re-read node metadata per node per dependency).
+pub(super) fn object_as_map(value: &Value) -> &Map<String, Value> {
+    static EMPTY_MAP: std::sync::OnceLock<Map<String, Value>> = std::sync::OnceLock::new();
+    value
+        .as_object()
+        .unwrap_or_else(|| EMPTY_MAP.get_or_init(Map::new))
 }
 
 pub(super) fn string_from_map(map: &Map<String, Value>, key: &str) -> Option<String> {

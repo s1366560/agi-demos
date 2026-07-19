@@ -11,12 +11,12 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
         &self,
         item: WorkspacePlanOutboxRecord,
     ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
-        let payload = object_or_empty(item.payload_json.clone());
+        let payload = object_as_map(&item.payload_json);
         let workspace_id =
-            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
-        let task_id = required_string(&payload, "task_id")?;
-        let actor_user_id = required_string(&payload, "actor_user_id")?;
-        let leader_agent_id = string_from_map(&payload, "leader_agent_id")
+            string_from_map(payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let task_id = required_string(payload, "task_id")?;
+        let actor_user_id = required_string(payload, "actor_user_id")?;
+        let leader_agent_id = string_from_map(payload, "leader_agent_id")
             .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
         let mut task = self
             .store
@@ -28,7 +28,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                 ))
             })?;
         let mut task_metadata = object_or_empty(task.metadata_json.clone());
-        let worker_agent_id = string_from_map(&payload, "worker_agent_id")
+        let worker_agent_id = string_from_map(payload, "worker_agent_id")
             .or_else(|| task.assignee_agent_id.clone())
             .ok_or_else(|| {
                 CoreError::Storage(format!("workspace task {task_id} has no worker agent"))
@@ -36,12 +36,12 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
         let plan_id = item
             .plan_id
             .clone()
-            .or_else(|| string_from_map(&payload, "plan_id"))
+            .or_else(|| string_from_map(payload, "plan_id"))
             .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_ID));
-        let node_id = string_from_map(&payload, "node_id")
+        let node_id = string_from_map(payload, "node_id")
             .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_NODE_ID));
-        let attempt_id = string_from_map(&payload, "attempt_id");
-        let is_stream_poll = bool_from_map(&payload, "worker_stream_poll");
+        let attempt_id = string_from_map(payload, "attempt_id");
+        let is_stream_poll = bool_from_map(payload, "worker_stream_poll");
 
         if self
             .stale_worker_launch_reason(
@@ -64,7 +64,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                 self.store
                     .enqueue_plan_outbox(deferred_worker_launch_outbox(
                         &item,
-                        &payload,
+                        payload,
                         active_count,
                         self.config.max_active_worker_conversations,
                         self.config.defer_seconds,
@@ -128,7 +128,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                         "workspace task session attempt {attempt_id} not found"
                     ))
                 })?;
-            let reuse_conversation_id = string_from_map(&payload, "reuse_conversation_id");
+            let reuse_conversation_id = string_from_map(payload, "reuse_conversation_id");
             let conversation_id = reuse_conversation_id
                 .clone()
                 .or_else(|| attempt.conversation_id.clone())
@@ -158,7 +158,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                 "cooldown_claimed": admission.cooldown_claimed,
                 "control_plane": "worker_launch",
             }));
-            apply_attempt_retry_context(&mut task_metadata, &payload, now);
+            apply_attempt_retry_context(&mut task_metadata, payload, now);
             let agent_config = json!({
                 "selected_agent_id": worker_agent_id,
                 "agent_definition_id": worker_agent_id,
@@ -289,9 +289,9 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             current_attempt_conversation_id.as_deref(),
             attempt_id.as_deref(),
         ) {
-            let stream_after_id = string_from_map(&payload, "stream_after_id")
-                .or_else(|| string_from_map(&payload, "worker_stream_after_id"));
-            let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID);
+            let stream_after_id = string_from_map(payload, "stream_after_id")
+                .or_else(|| string_from_map(payload, "worker_stream_after_id"));
+            let root_goal_task_id = string_from_map(payload, ROOT_GOAL_TASK_ID);
             let replay = self
                 .replay_bound_worker_stream_once(WorkerStreamReplayInput {
                     workspace_id: &workspace_id,
@@ -310,7 +310,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                 .await?;
             self.enqueue_worker_stream_poll_if_needed(
                 &item,
-                &payload,
+                payload,
                 &replay,
                 conversation_id,
                 now,

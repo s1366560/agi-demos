@@ -16,10 +16,10 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
         &self,
         item: WorkspacePlanOutboxRecord,
     ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
-        let payload = object_or_empty(item.payload_json.clone());
+        let payload = object_as_map(&item.payload_json);
         let workspace_id =
-            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
-        let task_id = required_string(&payload, "task_id")?;
+            string_from_map(payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let task_id = required_string(payload, "task_id")?;
         let mut task = self
             .store
             .get_task(&workspace_id, &task_id)
@@ -31,17 +31,17 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
             })?;
         let mut task_metadata = object_or_empty(task.metadata_json.clone());
         let actor_user_id =
-            string_from_map(&payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
-        let leader_agent_id = string_from_map(&payload, "leader_agent_id")
+            string_from_map(payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
+        let leader_agent_id = string_from_map(payload, "leader_agent_id")
             .or_else(|| string_from_map(&task_metadata, "leader_agent_id"))
             .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
-        let worker_agent_id = string_from_map(&payload, "worker_agent_id")
+        let worker_agent_id = string_from_map(payload, "worker_agent_id")
             .or_else(|| task.assignee_agent_id.clone())
             .ok_or_else(|| {
                 CoreError::Storage(format!("workspace task {task_id} has no worker agent"))
             })?;
-        let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID)
-            .or_else(|| string_from_map(&payload, "root_task_id"))
+        let root_goal_task_id = string_from_map(payload, ROOT_GOAL_TASK_ID)
+            .or_else(|| string_from_map(payload, "root_task_id"))
             .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID))
             .ok_or_else(|| {
                 CoreError::Storage(format!("workspace task {task_id} has no root goal task"))
@@ -49,12 +49,12 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
         let plan_id = item
             .plan_id
             .clone()
-            .or_else(|| string_from_map(&payload, "plan_id"))
+            .or_else(|| string_from_map(payload, "plan_id"))
             .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_ID));
-        let node_id = string_from_map(&payload, "node_id")
+        let node_id = string_from_map(payload, "node_id")
             .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_NODE_ID));
-        let previous_attempt_id = string_from_map(&payload, "previous_attempt_id");
-        let force_schedule = bool_from_map(&payload, "force_schedule");
+        let previous_attempt_id = string_from_map(payload, "previous_attempt_id");
+        let force_schedule = bool_from_map(payload, "force_schedule");
 
         let mut should_schedule = force_schedule;
         let mut attempt = self
@@ -130,7 +130,7 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
                 plan_id,
                 node_id,
                 item: &item,
-                payload: &payload,
+                payload,
                 attempt: &attempt,
                 worker_agent_id: &worker_agent_id,
             })
@@ -149,11 +149,11 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
         task_metadata.insert(CURRENT_ATTEMPT_WORKER_BINDING_ID.to_string(), Value::Null);
         task_metadata.insert("last_attempt_status".to_string(), json!("running"));
         task_metadata.insert("launch_state".to_string(), json!("scheduled"));
-        if should_reset_attempt_retry_worker_state(&item.event_type, &payload) {
+        if should_reset_attempt_retry_worker_state(&item.event_type, payload) {
             clear_attempt_retry_worker_stream_state(&mut task_metadata);
             task.blocker_reason = None;
         }
-        apply_attempt_retry_context(&mut task_metadata, &payload, now);
+        apply_attempt_retry_context(&mut task_metadata, payload, now);
         task_metadata.insert(
             "execution_state".to_string(),
             json!({
@@ -179,7 +179,7 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
                     plan_id.as_deref(),
                     &workspace_id,
                     &item.event_type,
-                    &payload,
+                    payload,
                     &task_id,
                     &worker_agent_id,
                     &actor_user_id,

@@ -10,9 +10,9 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 
 use super::{
-    compact_text, metadata_string_values, object_or_empty, required_string, string_from_map,
-    workspace_event_iso, workspace_message_event_payload, WorkspacePlanDispatchStore,
-    WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
+    compact_text, metadata_string_values, object_as_map, object_or_empty, required_string,
+    string_from_map, workspace_event_iso, workspace_message_event_payload,
+    WorkspacePlanDispatchStore, WorkspacePlanOutboxHandler, WorkspacePlanOutboxHandlerOutcome,
 };
 
 mod chain;
@@ -331,22 +331,22 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
         &self,
         item: WorkspacePlanOutboxRecord,
     ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
-        let payload = object_or_empty(item.payload_json.clone());
+        let payload = object_as_map(&item.payload_json);
         let now = Utc::now();
         let workspace_id =
-            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
-        let project_id = required_string(&payload, "project_id")?;
-        let tenant_id = required_string(&payload, "tenant_id")?;
-        let sender_user_id = required_string(&payload, "sender_user_id")?;
-        let target_agent_id = required_string(&payload, "target_agent_id")?;
-        let conversation_id = required_string(&payload, "conversation_id")?;
-        let agent_name = string_from_map(&payload, "agent_name")
-            .or_else(|| string_from_map(&payload, "agent_display_name"))
+            string_from_map(payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let project_id = required_string(payload, "project_id")?;
+        let tenant_id = required_string(payload, "tenant_id")?;
+        let sender_user_id = required_string(payload, "sender_user_id")?;
+        let target_agent_id = required_string(payload, "target_agent_id")?;
+        let conversation_id = required_string(payload, "conversation_id")?;
+        let agent_name = string_from_map(payload, "agent_name")
+            .or_else(|| string_from_map(payload, "agent_display_name"))
             .unwrap_or_else(|| target_agent_id.clone());
-        if let Some(error_detail) = workspace_agent_mention_error_detail(&payload) {
+        if let Some(error_detail) = workspace_agent_mention_error_detail(payload) {
             return self
                 .post_terminal_message(
-                    &payload,
+                    payload,
                     &workspace_id,
                     &tenant_id,
                     &project_id,
@@ -358,10 +358,10 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
                 )
                 .await;
         }
-        if let Some(final_content) = workspace_agent_mention_final_content(&payload) {
+        if let Some(final_content) = workspace_agent_mention_final_content(payload) {
             return self
                 .post_terminal_message(
-                    &payload,
+                    payload,
                     &workspace_id,
                     &tenant_id,
                     &project_id,
@@ -373,10 +373,10 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
                 )
                 .await;
         }
-        let linked_workspace_task_id = string_from_map(&payload, "linked_workspace_task_id")
-            .or_else(|| string_from_map(&payload, "workspace_task_id"));
-        let source = string_from_map(&payload, "source");
-        let workspace_llm_stage = string_from_map(&payload, "workspace_llm_stage");
+        let linked_workspace_task_id = string_from_map(payload, "linked_workspace_task_id")
+            .or_else(|| string_from_map(payload, "workspace_task_id"));
+        let source = string_from_map(payload, "source");
+        let workspace_llm_stage = string_from_map(payload, "workspace_llm_stage");
 
         let mut conversation_metadata = Map::new();
         conversation_metadata.insert("workspace_id".to_string(), json!(workspace_id));
@@ -417,7 +417,7 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
             "workspace_llm_stage": workspace_llm_stage,
         });
         if let Some(runtime) = self.runtime.as_ref() {
-            let user_prompt = workspace_agent_mention_user_prompt(&payload);
+            let user_prompt = workspace_agent_mention_user_prompt(payload);
             let status;
             let payload_patch;
             let mut metadata_patch = object_or_empty(base_metadata_patch);
@@ -429,7 +429,7 @@ impl WorkspacePlanOutboxHandler for WorkspaceAgentMentionBindingHandler {
                     conversation_id: conversation_id.clone(),
                     target_agent_id: target_agent_id.clone(),
                     agent_name: agent_name.clone(),
-                    sender_name: string_from_map(&payload, "sender_name"),
+                    sender_name: string_from_map(payload, "sender_name"),
                     user_prompt,
                 })
                 .await

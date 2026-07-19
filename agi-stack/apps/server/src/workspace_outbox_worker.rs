@@ -77,8 +77,8 @@ const REJECTED_ATTEMPT_STATUS: &str = "rejected";
 
 mod outbox_core;
 use outbox_core::{
-    bool_env, i64_env, merge_metadata_patch, object_or_empty, positive_i64_env, string_from_map,
-    string_from_value_object, ATTEMPT_RETRY_EVENT, HANDOFF_RESUME_EVENT,
+    bool_env, i64_env, merge_metadata_patch, object_as_map, object_or_empty, positive_i64_env,
+    string_from_map, string_from_value_object, ATTEMPT_RETRY_EVENT, HANDOFF_RESUME_EVENT,
     PIPELINE_RUN_REQUESTED_EVENT, SUPERVISOR_TICK_EVENT, WORKER_LAUNCH_EVENT,
 };
 #[cfg(test)]

@@ -6,11 +6,11 @@ pub(in crate::workspace_outbox_worker) fn done_node_needs_worktree_integration_r
     if node.intent != "done" || node.execution != "idle" {
         return false;
     }
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     if metadata_string(metadata.get("worktree_integration_status")).as_deref() != Some("failed") {
         return false;
     }
-    dependency_commit_needs_integration(node, &metadata)
+    dependency_commit_needs_integration(node, metadata)
 }
 
 fn dependency_commit_needs_integration(
@@ -67,7 +67,8 @@ pub(in crate::workspace_outbox_worker) fn dirty_main_dependency_dispatch_candida
         return false;
     }
     metadata_string(
-        object_or_empty(node.metadata_json.clone()).get("dirty_main_dependency_dispatch_outbox_id"),
+        node.metadata_json
+            .get("dirty_main_dependency_dispatch_outbox_id"),
     )
     .is_none()
 }
@@ -76,7 +77,7 @@ pub(in crate::workspace_outbox_worker) fn dependency_dispatch_blockers(
     node: &WorkspacePlanNodeRecord,
     nodes_by_id: &HashMap<String, WorkspacePlanNodeRecord>,
 ) -> (Vec<String>, Vec<String>) {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     let repair_dependency = metadata_string(metadata.get("blocked_by_repair_node_id"));
     let mut dependency_ids = node.depends_on_json.clone();
     if let Some(repair_dependency) = repair_dependency.as_deref() {
@@ -98,14 +99,14 @@ pub(in crate::workspace_outbox_worker) fn dependency_dispatch_blockers(
             blocking.push(dependency_id);
             continue;
         }
-        let dependency_metadata = object_or_empty(dependency.metadata_json.clone());
-        if dependency_commit_needs_integration(dependency, &dependency_metadata) {
+        let dependency_metadata = object_as_map(&dependency.metadata_json);
+        if dependency_commit_needs_integration(dependency, dependency_metadata) {
             if repair_dependency_can_seed_downstream_worktree(
                 node,
                 &dependency_id,
                 repair_dependency.as_deref(),
                 dependency,
-                &dependency_metadata,
+                dependency_metadata,
             ) {
                 dirty_main_seed_dependencies.push(dependency_id);
                 continue;
@@ -132,8 +133,7 @@ fn repair_dependency_can_seed_downstream_worktree(
         return false;
     }
     repair_dependency.is_some_and(|repair_dependency| repair_dependency == dependency_id)
-        || metadata_string(object_or_empty(node.metadata_json.clone()).get("repair_for_node_id"))
-            .is_some()
+        || metadata_string(node.metadata_json.get("repair_for_node_id")).is_some()
         || node_is_iteration_artifact(node, "plan", "sprint_backlog")
         || node_is_iteration_artifact(node, "implement", "increment")
         || node_is_iteration_artifact(node, "test", "verification")
@@ -143,7 +143,7 @@ fn repair_dependency_can_seed_downstream_worktree(
 }
 
 fn node_is_iteration_artifact(node: &WorkspacePlanNodeRecord, phase: &str, artifact: &str) -> bool {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = &node.metadata_json;
     metadata_string(metadata.get("iteration_phase")).as_deref() == Some(phase)
         && metadata_string(metadata.get("scrum_artifact")).as_deref() == Some(artifact)
 }
@@ -152,8 +152,8 @@ fn nodes_repair_same_original(
     node: &WorkspacePlanNodeRecord,
     dependency: &WorkspacePlanNodeRecord,
 ) -> bool {
-    let node_metadata = object_or_empty(node.metadata_json.clone());
-    let dependency_metadata = object_or_empty(dependency.metadata_json.clone());
+    let node_metadata = object_as_map(&node.metadata_json);
+    let dependency_metadata = object_as_map(&dependency.metadata_json);
     let Some(node_repair_for) = metadata_string(node_metadata.get("repair_for_node_id")) else {
         return false;
     };
@@ -191,7 +191,7 @@ pub(in crate::workspace_outbox_worker) fn dependency_base_ref_for_dispatch(
 pub(in crate::workspace_outbox_worker) fn dependency_dispatch_commit_ref(
     node: &WorkspacePlanNodeRecord,
 ) -> Option<String> {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     if metadata_string(metadata.get("worktree_integration_status")).as_deref()
         == Some("blocked_dirty_main")
     {
@@ -238,7 +238,7 @@ fn node_disposition_satisfies_dependency_without_integration(
 pub(in crate::workspace_outbox_worker) fn node_verified_commit_ref(
     node: &WorkspacePlanNodeRecord,
 ) -> Option<String> {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = &node.metadata_json;
     metadata
         .get("verified_commit_ref")
         .and_then(Value::as_str)

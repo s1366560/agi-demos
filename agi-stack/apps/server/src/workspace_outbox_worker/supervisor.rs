@@ -51,15 +51,15 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
         &self,
         item: WorkspacePlanOutboxRecord,
     ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
-        let payload = object_or_empty(item.payload_json.clone());
+        let payload = object_as_map(&item.payload_json);
         let workspace_id =
-            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
-        let node_id = string_from_map(&payload, "retry_node_id")
-            .or_else(|| string_from_map(&payload, "node_id"));
+            string_from_map(payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+        let node_id = string_from_map(payload, "retry_node_id")
+            .or_else(|| string_from_map(payload, "node_id"));
         let plan_id = item
             .plan_id
             .clone()
-            .or_else(|| string_from_map(&payload, "plan_id"));
+            .or_else(|| string_from_map(payload, "plan_id"));
         let Some(node_id) = node_id else {
             let Some(plan_id) = plan_id else {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
@@ -84,14 +84,14 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_worktree_failed = self
                 .reopen_failed_worktree_integration_nodes(
                     &item,
-                    &payload,
+                    payload,
                     &workspace_id,
                     &plan_id,
                     &mut ctx,
                 )
                 .await?;
             let changed_missing = self
-                .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id, &mut ctx)
+                .recover_missing_attempt_nodes(&item, payload, &workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_blocked_human = self
                 .reconcile_supervisor_blocked_human_nodes(&workspace_id, &plan_id, &mut ctx)
@@ -120,20 +120,14 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_supervisor_retry = self
                 .reconcile_supervisor_retry_same_node_attempt_nodes(
                     &item,
-                    &payload,
+                    payload,
                     &workspace_id,
                     &plan_id,
                     &mut ctx,
                 )
                 .await?;
             let changed_terminal = self
-                .reconcile_terminal_attempt_nodes(
-                    &item,
-                    &payload,
-                    &workspace_id,
-                    &plan_id,
-                    &mut ctx,
-                )
+                .reconcile_terminal_attempt_nodes(&item, payload, &workspace_id, &plan_id, &mut ctx)
                 .await?;
             let changed_reported = self
                 .reconcile_reported_attempt_nodes(&workspace_id, &plan_id, &mut ctx)
@@ -141,7 +135,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_dirty_main_dependency_dispatch = self
                 .dispatch_ready_dirty_main_dependency_node(
                     &item,
-                    &payload,
+                    payload,
                     &workspace_id,
                     &plan_id,
                     &mut ctx,
@@ -190,8 +184,8 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
         if node.intent == "done" {
             return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
         }
-        let retry_attempt_id = string_from_map(&payload, "retry_attempt_id")
-            .or_else(|| string_from_map(&payload, "attempt_id"));
+        let retry_attempt_id = string_from_map(payload, "retry_attempt_id")
+            .or_else(|| string_from_map(payload, "attempt_id"));
         if retry_attempt_id.is_some()
             && node.current_attempt_id.as_deref().is_some()
             && node.current_attempt_id.as_deref() != retry_attempt_id.as_deref()
@@ -199,7 +193,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
         }
 
-        let task_id = string_from_map(&payload, "task_id")
+        let task_id = string_from_map(payload, "task_id")
             .or_else(|| node.workspace_task_id.clone())
             .ok_or_else(|| {
                 CoreError::Storage(format!(
@@ -216,7 +210,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                 ))
             })?;
         let task_metadata = object_or_empty(task.metadata_json.clone());
-        let Some(worker_agent_id) = string_from_map(&payload, "worker_agent_id")
+        let Some(worker_agent_id) = string_from_map(payload, "worker_agent_id")
             .or_else(|| node.assignee_agent_id.clone())
             .or_else(|| task.assignee_agent_id.clone())
         else {
@@ -225,18 +219,18 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             });
         };
         let actor_user_id =
-            string_from_map(&payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
-        let leader_agent_id = string_from_map(&payload, "leader_agent_id")
+            string_from_map(payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
+        let leader_agent_id = string_from_map(payload, "leader_agent_id")
             .or_else(|| string_from_map(&task_metadata, "leader_agent_id"))
             .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
-        let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID)
-            .or_else(|| string_from_map(&payload, "root_task_id"))
+        let root_goal_task_id = string_from_map(payload, ROOT_GOAL_TASK_ID)
+            .or_else(|| string_from_map(payload, "root_task_id"))
             .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID));
-        if is_worker_report_supervisor_tick(&item, &payload) {
+        if is_worker_report_supervisor_tick(&item, payload) {
             return self
                 .handle_worker_report_supervisor_tick(
                     &item,
-                    &payload,
+                    payload,
                     &workspace_id,
                     &plan_id,
                     node,
@@ -249,7 +243,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                 )
                 .await;
         }
-        let retry_reason = string_from_map(&payload, "retry_reason")
+        let retry_reason = string_from_map(payload, "retry_reason")
             .unwrap_or_else(|| "supervisor_tick_retry".to_string());
 
         let now = Utc::now();
@@ -283,7 +277,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
         self.store
             .enqueue_plan_outbox(supervisor_retry_attempt_outbox(
                 &item,
-                &payload,
+                payload,
                 &workspace_id,
                 &plan_id,
                 &node_id,

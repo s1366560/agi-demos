@@ -27,21 +27,21 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
         &self,
         item: WorkspacePlanOutboxRecord,
     ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
-        let payload = object_or_empty(item.payload_json.clone());
+        let payload = object_as_map(&item.payload_json);
         let workspace_id =
-            string_from_map(&payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
+            string_from_map(payload, "workspace_id").unwrap_or_else(|| item.workspace_id.clone());
         let plan_id = item
             .plan_id
             .clone()
-            .or_else(|| string_from_map(&payload, "plan_id"))
+            .or_else(|| string_from_map(payload, "plan_id"))
             .ok_or_else(|| {
                 CoreError::Storage(
                     "pipeline_run_requested requires plan_id and node_id".to_string(),
                 )
             })?;
-        let node_id = required_string(&payload, "node_id")?;
-        let attempt_id = string_from_map(&payload, "attempt_id");
-        let reason = string_from_map(&payload, "reason")
+        let node_id = required_string(payload, "node_id")?;
+        let attempt_id = string_from_map(payload, "attempt_id");
+        let reason = string_from_map(payload, "reason")
             .unwrap_or_else(|| "pipeline_gate_required".to_string());
 
         let plan = self.store.get_plan(&plan_id).await?.ok_or_else(|| {
