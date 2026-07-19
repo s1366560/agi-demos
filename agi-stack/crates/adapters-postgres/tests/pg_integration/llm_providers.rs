@@ -69,6 +69,29 @@ async fn llm_provider_latest_health_matches_python_ordering() {
         .expect("missing provider health query succeeds")
         .is_none());
 
+    // Batch variant: one DISTINCT ON query yields each provider's latest row.
+    let batch = repo
+        .latest_health_batch(&[
+            PROVIDER_ID.to_string(),
+            OTHER_PROVIDER_ID.to_string(),
+            "31111111-2222-4333-8444-555555555555".to_string(),
+        ])
+        .await
+        .expect("batch provider health query succeeds");
+    assert_eq!(batch.len(), 2);
+    let primary = batch
+        .iter()
+        .find(|health| health.provider_id == PROVIDER_ID)
+        .expect("batch includes primary provider");
+    assert_eq!(primary.status, "healthy");
+    assert_eq!(primary.last_check, ts(2026, 1, 2, 0, 0, 0));
+    let other = batch
+        .iter()
+        .find(|health| health.provider_id == OTHER_PROVIDER_ID)
+        .expect("batch includes other provider");
+    assert_eq!(other.status, "unhealthy");
+    assert_eq!(other.last_check, ts(2026, 1, 3, 0, 0, 0));
+
     let recorded = repo
         .record_health(&ProviderHealthRecord {
             provider_id: PROVIDER_ID.to_string(),

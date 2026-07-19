@@ -8,7 +8,7 @@
 //! assignment mutations/provider resolution, system resilience runtime, and
 //! usage writes remain Python-owned.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -281,9 +281,21 @@ impl PgLlmProviderCatalogService {
         &self,
         records: Vec<LlmProviderRecord>,
     ) -> Result<Vec<ProviderConfigResponse>, LlmProvidersApiError> {
+        // One batch query for every provider's latest health instead of one
+        // round-trip per provider.
+        let ids: Vec<String> = records.iter().map(|record| record.id.clone()).collect();
+        let mut health_by_provider: HashMap<String, ProviderHealthRecord> = self
+            .repo
+            .latest_health_batch(&ids)
+            .await
+            .map_err(LlmProvidersApiError::internal)?
+            .into_iter()
+            .map(|health| (health.provider_id.clone(), health))
+            .collect();
         let mut responses = Vec::with_capacity(records.len());
         for record in records {
-            responses.push(self.record_to_response(record).await?);
+            let health = health_by_provider.remove(&record.id);
+            responses.push(provider_response_from_record(record, health));
         }
         Ok(responses)
     }

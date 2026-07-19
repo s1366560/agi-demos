@@ -472,6 +472,41 @@ impl PgLlmProviderRepository {
         .map_err(|e: sqlx::Error| CoreError::Storage(format!("decode latest provider health: {e}")))
     }
 
+    /// Batch variant of [`latest_health`](Self::latest_health): one
+    /// `DISTINCT ON` query for every provider's latest health row instead of
+    /// one round-trip per provider (the list endpoint calls this per row).
+    pub async fn latest_health_batch(
+        &self,
+        provider_ids: &[String],
+    ) -> CoreResult<Vec<ProviderHealthRecord>> {
+        if provider_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query(
+            "SELECT DISTINCT ON (provider_id) provider_id::text AS provider_id, status, last_check, error_message, response_time_ms \
+             FROM provider_health \
+             WHERE provider_id = ANY($1::uuid[]) \
+             ORDER BY provider_id, last_check DESC",
+        )
+        .bind(provider_ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(format!("read latest provider health batch: {e}")))?;
+
+        rows.into_iter()
+            .map(|row| {
+                Ok(ProviderHealthRecord {
+                    provider_id: row.try_get("provider_id")?,
+                    status: row.try_get("status")?,
+                    last_check: row.try_get("last_check")?,
+                    error_message: row.try_get("error_message")?,
+                    response_time_ms: row.try_get("response_time_ms")?,
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()
+            .map_err(|e| CoreError::Storage(format!("decode latest provider health batch: {e}")))
+    }
+
     pub async fn record_health(
         &self,
         record: &ProviderHealthRecord,
