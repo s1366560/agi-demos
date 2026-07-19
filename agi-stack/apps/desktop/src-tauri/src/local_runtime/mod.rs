@@ -2931,20 +2931,78 @@ async fn auth_me(Extension(authenticated): Extension<AuthenticatedContext>) -> L
         .map_err(|error| local_store_error(error.to_string()))
 }
 
+const IDENTITY_CATALOG_DEFAULT_PAGE_SIZE: usize = 20;
+const IDENTITY_CATALOG_MAX_PAGE_SIZE: usize = 100;
+
+fn default_identity_catalog_page() -> usize {
+    1
+}
+
+fn default_identity_catalog_page_size() -> usize {
+    IDENTITY_CATALOG_DEFAULT_PAGE_SIZE
+}
+
+#[derive(Debug, Deserialize)]
+struct TenantListQuery {
+    #[serde(default = "default_identity_catalog_page")]
+    page: usize,
+    #[serde(default = "default_identity_catalog_page_size")]
+    page_size: usize,
+}
+
+fn identity_catalog_page_bounds(
+    page: usize,
+    page_size: usize,
+) -> Result<(usize, usize), (StatusCode, Json<Value>)> {
+    if page == 0 || !(1..=IDENTITY_CATALOG_MAX_PAGE_SIZE).contains(&page_size) {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "invalid identity catalog pagination" })),
+        ));
+    }
+    let offset = page
+        .checked_sub(1)
+        .and_then(|value| value.checked_mul(page_size))
+        .ok_or_else(|| {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({ "detail": "invalid identity catalog pagination" })),
+            )
+        })?;
+    Ok((offset, page_size))
+}
+
 async fn list_tenants(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    Query(query): Query<TenantListQuery>,
 ) -> LocalJsonResult {
     let tenants = state
         .session_store
         .list_user_tenants(&authenticated.user.user_id)
         .map_err(local_store_error)?;
-    Ok(Json(json!({ "items": tenants })))
+    let total = tenants.len();
+    let (offset, page_size) = identity_catalog_page_bounds(query.page, query.page_size)?;
+    let tenants = tenants
+        .into_iter()
+        .skip(offset)
+        .take(page_size)
+        .collect::<Vec<_>>();
+    Ok(Json(json!({
+        "tenants": tenants,
+        "total": total,
+        "page": query.page,
+        "page_size": query.page_size,
+    })))
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ProjectListQuery {
     tenant_id: Option<String>,
+    #[serde(default = "default_identity_catalog_page")]
+    page: usize,
+    #[serde(default = "default_identity_catalog_page_size")]
+    page_size: usize,
 }
 
 async fn list_projects(
@@ -2960,7 +3018,19 @@ async fn list_projects(
         .session_store
         .list_user_projects(&authenticated.user.user_id, tenant_id)
         .map_err(auth_context_error)?;
-    Ok(Json(json!({ "items": projects })))
+    let total = projects.len();
+    let (offset, page_size) = identity_catalog_page_bounds(query.page, query.page_size)?;
+    let projects = projects
+        .into_iter()
+        .skip(offset)
+        .take(page_size)
+        .collect::<Vec<_>>();
+    Ok(Json(json!({
+        "projects": projects,
+        "total": total,
+        "page": query.page,
+        "page_size": query.page_size,
+    })))
 }
 
 async fn get_workspace_context(
@@ -8727,6 +8797,67 @@ mod tests {
             .await
             .expect("wrong project response");
         assert_eq!(wrong_project.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn identity_catalogs_match_the_cloud_pagination_contract() {
+        let app = local_router(test_state("identity-pagination-secret"));
+
+        let tenants = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/tenants?page=2&page_size=2")
+                    .header("authorization", "Bearer identity-pagination-secret")
+                    .body(Body::empty())
+                    .expect("tenant page request"),
+            )
+            .await
+            .expect("tenant page response");
+        assert_eq!(tenants.status(), StatusCode::OK);
+        let tenants = response_json(tenants).await;
+        assert_eq!(tenants["page"], 2);
+        assert_eq!(tenants["page_size"], 2);
+        assert_eq!(tenants["total"], 4);
+        assert_eq!(tenants["tenants"].as_array().map(Vec::len), Some(2));
+        assert!(tenants.get("items").is_none());
+
+        let projects = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/projects?tenant_id=northstar&page=2&page_size=2")
+                    .header("authorization", "Bearer identity-pagination-secret")
+                    .body(Body::empty())
+                    .expect("project page request"),
+            )
+            .await
+            .expect("project page response");
+        assert_eq!(projects.status(), StatusCode::OK);
+        let projects = response_json(projects).await;
+        assert_eq!(projects["page"], 2);
+        assert_eq!(projects["page_size"], 2);
+        assert_eq!(projects["total"], 3);
+        assert_eq!(projects["projects"].as_array().map(Vec::len), Some(1));
+        assert!(projects.get("items").is_none());
+
+        for path in [
+            "/api/v1/tenants?page=0&page_size=20",
+            "/api/v1/projects?tenant_id=northstar&page=1&page_size=101",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .header("authorization", "Bearer identity-pagination-secret")
+                        .body(Body::empty())
+                        .expect("invalid identity page request"),
+                )
+                .await
+                .expect("invalid identity page response");
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        }
     }
 
     #[tokio::test]
