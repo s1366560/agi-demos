@@ -124,6 +124,7 @@ fn test_state() -> AppState {
         events,
         agent_event_writer: None,
         event_counter: Arc::new(AtomicU64::new(0)),
+        ws_messages: Default::default(),
         registry: registry.clone(),
         plugins: Arc::new(PluginHost::new(registry.clone())),
         control: Arc::new(Mutex::new(ControlPlane::new())),

@@ -9,8 +9,7 @@
 //! after project access is checked, which lets P6 mention token chunks replay over
 //! the same WebSocket transport without broad workspace endpoint takeover.
 
-mod subscriptions;
-
+pub(crate) mod subscriptions;
 use std::sync::Arc;
 
 use async_trait::async_trait;

@@ -1,7 +1,11 @@
 mod authorization;
 mod scope_validation;
 
-use std::{collections::HashMap, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use axum::extract::ws::{Message, WebSocket};
 use serde_json::{json, Value};
@@ -23,6 +27,43 @@ use scope_validation::{sandbox_message_matches_scope, workspace_message_matches_
 const EVENT_REPLAY_BATCH: usize = 100;
 const MAX_EVENTS_PER_FLUSH: usize = 256;
 const MAX_SUBSCRIPTIONS_PER_CONNECTION: usize = 64;
+/// Bound on the shared parsed-message cache; when full it is cleared wholesale
+/// (a cache miss only costs a re-parse).
+const WS_MESSAGE_CACHE_CAP: usize = 4096;
+
+/// Shared cache of parsed stream-entry WS messages. Every connection used to
+/// re-parse the same payloads during its own flush — with C viewers on one hot
+/// conversation that is C parses of the same (potentially large) JSON every
+/// 250 ms. Stream entries are immutable once appended, so
+/// (topic, entry_id) → message is a pure function and safe to share
+/// process-wide. Serialization still happens per socket (inherent). Clones
+/// (via `AppState`) share one backing map.
+#[derive(Clone, Default)]
+pub(crate) struct WsMessageCache {
+    messages: Arc<Mutex<HashMap<(String, String), Arc<Value>>>>,
+}
+
+impl WsMessageCache {
+    pub(crate) fn get_or_parse(
+        &self,
+        topic: &str,
+        entry_id: &str,
+        build: impl FnOnce() -> Value,
+    ) -> Arc<Value> {
+        let key = (topic.to_string(), entry_id.to_string());
+        // A poisoned lock must not kill event delivery: recover the inner map.
+        let mut messages = self.messages.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(message) = messages.get(&key) {
+            return Arc::clone(message);
+        }
+        if messages.len() >= WS_MESSAGE_CACHE_CAP {
+            messages.clear();
+        }
+        let message = Arc::new(build());
+        messages.insert(key, Arc::clone(&message));
+        message
+    }
+}
 
 #[derive(Debug, Clone)]
 struct SubscriptionScope {
@@ -221,20 +262,21 @@ async fn flush_conversation_subscriptions(
         let Some(limit) = replay_limit(*sent_this_flush) else {
             break;
         };
+        let topic = agent_stream_topic(conversation_id);
         let entries = app
             .events
-            .read_after(
-                &agent_stream_topic(conversation_id),
-                &subscription.last_id,
-                limit,
-            )
+            .read_after(&topic, &subscription.last_id, limit)
             .await
             .map_err(|_| ())?;
         for entry in entries {
             let entry_id = entry.id;
-            let message = conversation_entry_to_ws_message(conversation_id, &entry.payload);
+            // Parse each stream entry once per process (entries are immutable),
+            // not once per attached connection.
+            let message = app.ws_messages.get_or_parse(&topic, &entry_id, || {
+                conversation_entry_to_ws_message(conversation_id, &entry.payload)
+            });
             if subscription_allows(subscription, &message) {
-                send_json(socket, message).await?;
+                send_json_ref(socket, &message).await?;
                 *sent_this_flush += 1;
             }
             subscription.last_id = entry_id;
@@ -439,6 +481,15 @@ async fn send_json(socket: &mut WebSocket, value: Value) -> Result<(), ()> {
         .map_err(|_| ())
 }
 
+/// Borrowing variant for messages shared across connections (the parsed-entry
+/// cache): serializes per socket without taking ownership of the `Value`.
+async fn send_json_ref(socket: &mut WebSocket, value: &Value) -> Result<(), ()> {
+    socket
+        .send(Message::Text(value.to_string()))
+        .await
+        .map_err(|_| ())
+}
+
 fn agent_stream_topic(conversation_id: &str) -> String {
     format!("agent:events:{conversation_id}")
 }
@@ -458,6 +509,40 @@ mod tests {
     use crate::agent_conversations_api::{AgentConversationsApiError, ConversationSocketAccess};
 
     use super::*;
+
+    #[test]
+    fn ws_message_cache_parses_once_per_entry_and_recovers_after_clear() {
+        let cache = WsMessageCache::default();
+        let mut builds = 0;
+        let first = cache.get_or_parse("agent:events:c1", "00000000000000000001", || {
+            builds += 1;
+            json!({"seq": 1})
+        });
+        let second = cache.get_or_parse("agent:events:c1", "00000000000000000001", || {
+            builds += 1;
+            json!({"seq": 2})
+        });
+        assert_eq!(builds, 1, "second lookup must be a cache hit");
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(first["seq"], 1);
+
+        // A different entry id parses independently, and clearing at capacity
+        // only costs a re-parse (never a wrong value).
+        let other = cache.get_or_parse("agent:events:c1", "00000000000000000002", || {
+            builds += 1;
+            json!({"seq": 2})
+        });
+        assert_eq!(builds, 2);
+        assert_eq!(other["seq"], 2);
+
+        cache.messages.lock().unwrap().clear();
+        let rebuilt = cache.get_or_parse("agent:events:c1", "00000000000000000001", || {
+            builds += 1;
+            json!({"seq": 1})
+        });
+        assert_eq!(builds, 3);
+        assert_eq!(rebuilt["seq"], 1);
+    }
 
     #[test]
     fn stream_payload_matches_frontend_contract() {

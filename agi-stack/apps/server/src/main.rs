@@ -206,6 +206,10 @@ pub(crate) struct AppState {
     pub(crate) events: Arc<dyn EventStream>,
     pub(crate) agent_event_writer: Option<PgAgentExecutionEventRepository>,
     pub(crate) event_counter: Arc<AtomicU64>,
+    /// Process-wide cache of parsed stream-entry WS messages (entries are
+    /// immutable, so parsing is shared across connections instead of repeated
+    /// per subscriber per flush). See [`crate::agent_ws::subscriptions`].
+    pub(crate) ws_messages: agent_ws::subscriptions::WsMessageCache,
     registry: HotPlugRegistry,
     plugins: Arc<PluginHost>,
     control: Arc<Mutex<ControlPlane>>,
@@ -1120,6 +1124,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         events,
         agent_event_writer,
         event_counter: Arc::new(AtomicU64::new(0)),
+        ws_messages: Default::default(),
         registry,
         plugins,
         control,

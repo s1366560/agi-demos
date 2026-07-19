@@ -1,4 +1,7 @@
-use std::sync::{atomic::{AtomicU64, AtomicUsize, Ordering}, Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 
 use async_trait::async_trait;
 use axum::extract::{Path, Query, State};
@@ -127,6 +130,7 @@ fn test_state() -> AppState {
         events,
         agent_event_writer: None,
         event_counter: Arc::new(AtomicU64::new(0)),
+        ws_messages: Default::default(),
         registry: registry.clone(),
         plugins: Arc::new(PluginHost::new(registry.clone())),
         control: Arc::new(Mutex::new(ControlPlane::new())),
@@ -966,7 +970,9 @@ impl GraphStore for CountingGraphStore {
         scope: GraphStatsScope,
         cutoff_ms: i64,
     ) -> CoreResult<usize> {
-        self.inner.delete_episodes_older_than(scope, cutoff_ms).await
+        self.inner
+            .delete_episodes_older_than(scope, cutoff_ms)
+            .await
     }
 }
 
