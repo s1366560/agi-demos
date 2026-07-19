@@ -225,6 +225,20 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
 
     async fn enqueue_blackboard_outbox(&self, outbox: BlackboardOutboxRecord) -> CoreResult<()>;
 
+    /// Batch variant of [`enqueue_blackboard_outbox`](Self::enqueue_blackboard_outbox):
+    /// the default loops the single-row insert; the Postgres store overrides
+    /// with one multi-row INSERT (the agent-mention terminal path enqueues up
+    /// to 128 token-chunk rows per response).
+    async fn enqueue_blackboard_outbox_batch(
+        &self,
+        outbox: Vec<BlackboardOutboxRecord>,
+    ) -> CoreResult<()> {
+        for record in outbox {
+            self.enqueue_blackboard_outbox(record).await?;
+        }
+        Ok(())
+    }
+
     async fn bind_task_session_attempt_conversation(
         &self,
         attempt_id: &str,

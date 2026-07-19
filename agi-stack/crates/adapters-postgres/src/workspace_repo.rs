@@ -744,6 +744,47 @@ impl PgWorkspaceRepository {
         .map_err(storage)?;
         Ok(())
     }
+
+    /// Batch variant of [`enqueue_blackboard_outbox`](Self::enqueue_blackboard_outbox):
+    /// one multi-row INSERT instead of one round-trip per row (the agent-mention
+    /// terminal path enqueues up to 128 token-chunk rows per response). Rows
+    /// carry the same constants (`'pending', 0, 10, now(), NULL`) as the
+    /// single-row insert; the whole batch is one statement, so it commits or
+    /// fails atomically.
+    pub async fn enqueue_blackboard_outbox_batch(
+        &self,
+        outbox: Vec<BlackboardOutboxRecord>,
+    ) -> CoreResult<()> {
+        if outbox.is_empty() {
+            return Ok(());
+        }
+        let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "INSERT INTO workspace_blackboard_outbox \
+                (id, workspace_id, tenant_id, project_id, event_type, payload_json, metadata_json, \
+                 correlation_id, status, attempt_count, max_attempts, created_at, updated_at)",
+        );
+        builder.push_values(outbox, |mut row, record| {
+            row.push_bind(record.id)
+                .push_bind(record.workspace_id)
+                .push_bind(record.tenant_id)
+                .push_bind(record.project_id)
+                .push_bind(record.event_type)
+                .push_bind(Json(record.payload_json))
+                .push_bind(Json(record.metadata_json))
+                .push_bind(record.correlation_id)
+                .push_bind("pending")
+                .push_bind(0_i32)
+                .push_bind(10_i32)
+                .push("now()")
+                .push_bind(Option::<DateTime<Utc>>::None);
+        });
+        builder
+            .build()
+            .execute(&self.pool)
+            .await
+            .map_err(storage)?;
+        Ok(())
+    }
 }
 
 fn storage(e: impl std::fmt::Display) -> CoreError {

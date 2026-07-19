@@ -1465,6 +1465,32 @@ impl EventStream for RedisEventStream {
         Ok(id)
     }
 
+    /// Override the per-append loop with one pipelined round-trip for the whole
+    /// batch (same XADD + exact-MAXLEN command per payload, same id order).
+    async fn append_batch(
+        &self,
+        topic: &str,
+        payloads: &[String],
+        max_len: usize,
+    ) -> CoreResult<Vec<String>> {
+        if payloads.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut conn = self.conn.clone();
+        let mut pipe = redis::pipe();
+        for payload in payloads {
+            let mut cmd = redis::cmd("XADD");
+            cmd.arg(topic);
+            if max_len > 0 {
+                cmd.arg("MAXLEN").arg(max_len);
+            }
+            cmd.arg("*").arg(PAYLOAD_FIELD).arg(payload);
+            pipe.add_command(cmd);
+        }
+        let ids: Vec<String> = pipe.query_async(&mut conn).await.map_err(gerr)?;
+        Ok(ids)
+    }
+
     async fn read_after(
         &self,
         topic: &str,

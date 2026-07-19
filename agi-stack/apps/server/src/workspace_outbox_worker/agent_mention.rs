@@ -112,16 +112,7 @@ impl WorkspaceAgentMentionBindingHandler {
         let Some(event_stream) = self.event_stream.as_ref() else {
             return;
         };
-        let payload = json!({
-            "type": record.event_type,
-            "workspace_id": record.workspace_id,
-            "tenant_id": record.tenant_id,
-            "project_id": record.project_id,
-            "data": record.payload_json,
-            "metadata": record.metadata_json,
-            "correlation_id": record.correlation_id,
-            "event_time_us": now.timestamp_micros(),
-        });
+        let payload = live_workspace_event_payload(record, now);
         if let Err(err) = event_stream
             .append(
                 &workspace_agent_mention_event_stream_topic(&record.workspace_id),
@@ -133,6 +124,30 @@ impl WorkspaceAgentMentionBindingHandler {
             eprintln!(
                 "[agistack] workspace mention stream append failed for workspace {}: {err}",
                 record.workspace_id
+            );
+        }
+    }
+
+    /// Batch variant of [`append_live_workspace_event`](Self::append_live_workspace_event):
+    /// one pipelined append for a whole token-chunk burst (up to 128 events)
+    /// instead of one round-trip per chunk. Still best-effort.
+    async fn append_live_workspace_events_batch(&self, workspace_id: &str, payloads: &[String]) {
+        let Some(event_stream) = self.event_stream.as_ref() else {
+            return;
+        };
+        if payloads.is_empty() {
+            return;
+        }
+        if let Err(err) = event_stream
+            .append_batch(
+                &workspace_agent_mention_event_stream_topic(workspace_id),
+                payloads,
+                WORKSPACE_AGENT_MENTION_EVENT_STREAM_MAX_LEN,
+            )
+            .await
+        {
+            eprintln!(
+                "[agistack] workspace mention stream batch append failed for workspace {workspace_id}: {err}"
             );
         }
     }
@@ -192,6 +207,7 @@ impl WorkspaceAgentMentionBindingHandler {
             .await?;
         if token_chunk_count > 0 {
             let conversation_id = string_from_map(payload, "conversation_id");
+            let mut records = Vec::with_capacity(token_chunk_count);
             for (index, chunk) in token_stream.chunks.iter().enumerate() {
                 let is_final = index + 1 == token_chunk_count && !token_stream.is_truncated();
                 let mut chunk_payload = object_or_empty(json!({
@@ -223,22 +239,31 @@ impl WorkspaceAgentMentionBindingHandler {
                     "runtime_token_chunk_count": token_chunk_count
                 }));
                 add_token_stream_backpressure_fields(&mut chunk_metadata, &token_stream);
-                self.enqueue_blackboard_outbox_with_live_stream(
-                    BlackboardOutboxRecord {
-                        id: try_generate_uuid_v4()
-                            .map_err(|err| CoreError::Storage(err.to_string()))?,
-                        workspace_id: workspace_id.to_string(),
-                        tenant_id: tenant_id.to_string(),
-                        project_id: project_id.to_string(),
-                        event_type: WORKSPACE_AGENT_MENTION_TOKEN_CHUNK_EVENT.to_string(),
-                        payload_json: Value::Object(chunk_payload),
-                        metadata_json: Value::Object(chunk_metadata),
-                        correlation_id: Some(message.id.clone()),
-                    },
-                    now,
-                )
-                .await?;
+                records.push(BlackboardOutboxRecord {
+                    id: try_generate_uuid_v4()
+                        .map_err(|err| CoreError::Storage(err.to_string()))?,
+                    workspace_id: workspace_id.to_string(),
+                    tenant_id: tenant_id.to_string(),
+                    project_id: project_id.to_string(),
+                    event_type: WORKSPACE_AGENT_MENTION_TOKEN_CHUNK_EVENT.to_string(),
+                    payload_json: Value::Object(chunk_payload),
+                    metadata_json: Value::Object(chunk_metadata),
+                    correlation_id: Some(message.id.clone()),
+                });
             }
+            // Live-stream payloads are built before the batch insert so the
+            // records can move into it without a clone; the live fan-out still
+            // happens strictly after the outbox rows exist, as before.
+            let live_payloads: Vec<String> = records
+                .iter()
+                .map(|record| live_workspace_event_payload(record, now).to_string())
+                .collect();
+            // One multi-row INSERT plus one pipelined stream append for the
+            // whole chunk burst (up to 128) instead of 2 serialized
+            // round-trips per chunk.
+            self.store.enqueue_blackboard_outbox_batch(records).await?;
+            self.append_live_workspace_events_batch(workspace_id, &live_payloads)
+                .await;
         }
         self.enqueue_blackboard_outbox_with_live_stream(
             BlackboardOutboxRecord {
@@ -283,6 +308,21 @@ impl WorkspaceAgentMentionBindingHandler {
 
 pub(super) fn workspace_agent_mention_event_stream_topic(workspace_id: &str) -> String {
     format!("workspace:events:{workspace_id}")
+}
+
+/// The live-stream wire form for one outbox record (shared by the single and
+/// batch append paths).
+fn live_workspace_event_payload(record: &BlackboardOutboxRecord, now: DateTime<Utc>) -> Value {
+    json!({
+        "type": record.event_type,
+        "workspace_id": record.workspace_id,
+        "tenant_id": record.tenant_id,
+        "project_id": record.project_id,
+        "data": record.payload_json,
+        "metadata": record.metadata_json,
+        "correlation_id": record.correlation_id,
+        "event_time_us": now.timestamp_micros(),
+    })
 }
 
 #[async_trait]

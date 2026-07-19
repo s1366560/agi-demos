@@ -303,6 +303,13 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         PgWorkspaceRepository::enqueue_blackboard_outbox(self, outbox).await
     }
 
+    async fn enqueue_blackboard_outbox_batch(
+        &self,
+        outbox: Vec<BlackboardOutboxRecord>,
+    ) -> CoreResult<()> {
+        PgWorkspaceRepository::enqueue_blackboard_outbox_batch(self, outbox).await
+    }
+
     async fn bind_task_session_attempt_conversation(
         &self,
         attempt_id: &str,

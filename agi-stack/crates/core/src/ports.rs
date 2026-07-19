@@ -246,6 +246,23 @@ pub trait EventStream: Send + Sync {
     /// most-recent entries (`0` = unbounded). Returns the new entry's id.
     async fn append(&self, topic: &str, payload: &str, max_len: usize) -> CoreResult<String>;
 
+    /// Append several payloads to `topic` in order, returning the assigned
+    /// ids. The default loops [`append`](Self::append); adapters over network
+    /// storage override it with a single pipelined round-trip (the workspace
+    /// mention path appends up to 128 token-chunk events per response).
+    async fn append_batch(
+        &self,
+        topic: &str,
+        payloads: &[String],
+        max_len: usize,
+    ) -> CoreResult<Vec<String>> {
+        let mut ids = Vec::with_capacity(payloads.len());
+        for payload in payloads {
+            ids.push(self.append(topic, payload, max_len).await?);
+        }
+        Ok(ids)
+    }
+
     /// Read up to `limit` entries from `topic` strictly after `after_id`
     /// (empty string or `"0"` = from the beginning), in append order.
     async fn read_after(

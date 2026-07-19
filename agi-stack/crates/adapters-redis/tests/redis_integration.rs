@@ -291,6 +291,35 @@ async fn redis_matches_in_memory_maxlen_trim() {
 }
 
 #[tokio::test]
+async fn redis_append_batch_matches_in_memory_order_and_trim() {
+    let Some(redis) = redis_or_skip().await else {
+        return;
+    };
+    let mem = InMemoryEventStream::new();
+    let topic = unique_topic("batch");
+    del(&redis, &topic).await;
+
+    // One pipelined batch of 5 with max_len 3 → same retained payloads, in the
+    // same order, as the in-memory oracle's sequential appends; ids come back
+    // in append order.
+    let payloads: Vec<String> = ["1", "2", "3", "4", "5"].map(str::to_string).into();
+    let redis_ids = redis.append_batch(&topic, &payloads, 3).await.unwrap();
+    let mem_ids = mem.append_batch(&topic, &payloads, 3).await.unwrap();
+    assert_eq!(redis_ids.len(), 5);
+    assert_eq!(mem_ids.len(), 5);
+
+    let r = payloads_after(&redis, &topic, "", 100).await;
+    let m = payloads_after(&mem, &topic, "", 100).await;
+    assert_eq!(r, vec!["3", "4", "5"], "redis batch exact MAXLEN trim");
+    assert_eq!(r, m, "redis vs in-memory batch parity");
+
+    // Empty batch is a no-op on both tiers.
+    assert!(redis.append_batch(&topic, &[], 3).await.unwrap().is_empty());
+
+    del(&redis, &topic).await;
+}
+
+#[tokio::test]
 async fn redis_device_grants_match_python_keys_and_lifecycle() {
     let Some(store) = redis_grants_or_skip().await else {
         return;
