@@ -904,7 +904,12 @@ impl RedisDlqRepository {
             .map_err(gerr)?;
 
         let mut count = 0_i64;
-        for message in self.fetch_messages_chunked(&ids).await?.into_iter().flatten() {
+        for message in self
+            .fetch_messages_chunked(&ids)
+            .await?
+            .into_iter()
+            .flatten()
+        {
             if message_matches(&message, query.status, query.routing_key_pattern) {
                 count += 1;
             }
@@ -1067,7 +1072,12 @@ impl RedisDlqRepository {
         let cutoff = unix_now_seconds() - (older_than_hours.max(1) * 3600) as f64;
         let ids = self.pending_ids_older_than(cutoff).await?;
         let mut cleaned = 0_i64;
-        for message in self.fetch_messages_chunked(&ids).await?.into_iter().flatten() {
+        for message in self
+            .fetch_messages_chunked(&ids)
+            .await?
+            .into_iter()
+            .flatten()
+        {
             let mut message = message;
             message.status = "expired".to_string();
             self.write_message(&message).await?;
@@ -1085,7 +1095,12 @@ impl RedisDlqRepository {
         let cutoff = unix_now_seconds() - (older_than_hours.max(1) * 3600) as f64;
         let ids = self.pending_ids_older_than(cutoff).await?;
         let mut cleaned = 0_i64;
-        for message in self.fetch_messages_chunked(&ids).await?.into_iter().flatten() {
+        for message in self
+            .fetch_messages_chunked(&ids)
+            .await?
+            .into_iter()
+            .flatten()
+        {
             if message.status == "resolved" {
                 self.delete_message_data(&message.id).await?;
                 self.remove_from_indexes(&message).await?;
