@@ -10,6 +10,11 @@ use agistack_adapters_postgres::{ChannelOutboxRecord, PgChannelRepository};
 
 use super::error::ChannelApiError;
 
+/// How many claimed outbox rows are delivered concurrently in one tick.
+/// `buffered` keeps results in row order, so the mark-outbox pass below runs
+/// in the exact sequence the old serial loop did.
+const DELIVERY_FANOUT_CONCURRENCY: usize = 8;
+
 const CHANNEL_OUTBOX_DELIVERY_AUTOSTART_ENV: &str = "AGISTACK_CHANNEL_OUTBOX_DELIVERY_AUTOSTART";
 const CHANNEL_OUTBOX_DELIVERY_PRODUCTION_READY_ENV: &str =
     "AGISTACK_CHANNEL_OUTBOX_DELIVERY_PRODUCTION_READY";
@@ -278,9 +283,12 @@ impl ChannelMessageDeliverer for FeishuWebhookDeliverer {
             ChannelDeliveryError::new(format!("Feishu webhook response read failed: {error}"))
         })?;
 
-        if status.is_success() && feishu_webhook_response_succeeded(&body) {
+        // Parse the response body once and share the Value between the success
+        // check and the message-id extraction (it was parsed twice per delivery).
+        let parsed_body = serde_json::from_str::<Value>(body.trim()).ok();
+        if status.is_success() && feishu_webhook_response_succeeded(parsed_body.as_ref()) {
             Ok(ChannelDeliveryOutcome::Sent {
-                channel_message_id: feishu_channel_message_id(request, &body),
+                channel_message_id: feishu_channel_message_id(request, parsed_body.as_ref()),
             })
         } else {
             Ok(ChannelDeliveryOutcome::Failed {
@@ -321,12 +329,10 @@ fn retry_after_seconds(headers: &reqwest::header::HeaderMap) -> Option<i64> {
         .filter(|seconds| *seconds > 0)
 }
 
-fn feishu_webhook_response_succeeded(body: &str) -> bool {
-    let trimmed = body.trim();
-    if trimmed.is_empty() {
-        return true;
-    }
-    let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
+fn feishu_webhook_response_succeeded(parsed: Option<&Value>) -> bool {
+    // Empty / non-JSON / non-object bodies are treated as success (some
+    // webhook deployments answer with a bare 200 and no payload).
+    let Some(value) = parsed else {
         return true;
     };
     let Some(object) = value.as_object() else {
@@ -340,9 +346,8 @@ fn feishu_webhook_response_succeeded(body: &str) -> bool {
     true
 }
 
-fn feishu_channel_message_id(request: &ChannelDeliveryRequest, body: &str) -> String {
-    serde_json::from_str::<Value>(body)
-        .ok()
+fn feishu_channel_message_id(request: &ChannelDeliveryRequest, parsed: Option<&Value>) -> String {
+    parsed
         .and_then(|value| {
             value
                 .pointer("/data/message_id")
@@ -365,19 +370,24 @@ fn feishu_provider_error(status: reqwest::StatusCode, body: &str) -> String {
 
 pub(crate) struct ChannelOutboxDeliveryRuntime<S, D> {
     store: S,
-    deliverer: D,
+    /// `Arc` so each in-flight delivery future can own its handle (needed for
+    /// the concurrent fan-out in `run_once`).
+    deliverer: Arc<D>,
     config: ChannelOutboxDeliveryConfig,
 }
 
 impl<S, D> ChannelOutboxDeliveryRuntime<S, D>
 where
     S: ChannelOutboxDeliveryStore,
-    D: ChannelMessageDeliverer,
+    // `'static`: the concurrent delivery fan-out in `run_once` captures the
+    // deliverer in per-row futures, which only generalizes over row lifetimes
+    // once the deliverer itself is free of elided regions.
+    D: ChannelMessageDeliverer + 'static,
 {
     pub(crate) fn new(store: S, deliverer: D, config: ChannelOutboxDeliveryConfig) -> Self {
         Self {
             store,
-            deliverer,
+            deliverer: Arc::new(deliverer),
             config,
         }
     }
@@ -396,54 +406,76 @@ where
             ..ChannelOutboxDeliverySummary::default()
         };
 
-        for row in rows {
-            let request = ChannelDeliveryRequest::from_outbox(&row);
-            match self.deliverer.deliver(&request).await {
-                Ok(ChannelDeliveryOutcome::Sent { channel_message_id }) => {
-                    if self
-                        .store
-                        .mark_outbox_sent(&row.id, &self.config.worker_id, &channel_message_id)
-                        .await?
-                        .is_some()
-                    {
-                        summary.sent += 1;
-                    } else {
-                        summary.lost_lease += 1;
+        // Deliver the claimed rows concurrently in bounded chunks: one slow or
+        // dead webhook used to stall the whole batch (its lease ticking)
+        // behind it. `join_all` preserves row order within each chunk, so the
+        // mark-outbox pass below is byte-for-byte the sequence the serial loop
+        // produced. Futures are built in a plain loop (no closure-returning-
+        // future): the async_trait lifetime bounds only infer this way.
+        for chunk in rows.chunks(DELIVERY_FANOUT_CONCURRENCY) {
+            let mut pending = Vec::with_capacity(chunk.len());
+            for row in chunk {
+                let deliverer = Arc::clone(&self.deliverer);
+                let request = ChannelDeliveryRequest::from_outbox(row);
+                let row_id = row.id.clone();
+                pending.push(async move {
+                    let outcome = deliverer.deliver(&request).await;
+                    (row_id, outcome)
+                });
+            }
+            for (row_id, outcome) in futures_util::future::join_all(pending).await {
+                match outcome {
+                    Ok(ChannelDeliveryOutcome::Sent { channel_message_id }) => {
+                        if self
+                            .store
+                            .mark_outbox_sent(&row_id, &self.config.worker_id, &channel_message_id)
+                            .await?
+                            .is_some()
+                        {
+                            summary.sent += 1;
+                        } else {
+                            summary.lost_lease += 1;
+                        }
                     }
-                }
-                Ok(ChannelDeliveryOutcome::Failed {
-                    error,
-                    retry_after_seconds,
-                }) => {
-                    let retry_after =
-                        retry_after_seconds.unwrap_or(self.config.default_retry_after_seconds);
-                    if self
-                        .store
-                        .mark_outbox_failed(&row.id, &self.config.worker_id, &error, retry_after)
-                        .await?
-                        .is_some()
-                    {
-                        summary.failed += 1;
-                    } else {
-                        summary.lost_lease += 1;
+                    Ok(ChannelDeliveryOutcome::Failed {
+                        error,
+                        retry_after_seconds,
+                    }) => {
+                        let retry_after =
+                            retry_after_seconds.unwrap_or(self.config.default_retry_after_seconds);
+                        if self
+                            .store
+                            .mark_outbox_failed(
+                                &row_id,
+                                &self.config.worker_id,
+                                &error,
+                                retry_after,
+                            )
+                            .await?
+                            .is_some()
+                        {
+                            summary.failed += 1;
+                        } else {
+                            summary.lost_lease += 1;
+                        }
                     }
-                }
-                Err(error) => {
-                    summary.delivery_errors += 1;
-                    if self
-                        .store
-                        .mark_outbox_failed(
-                            &row.id,
-                            &self.config.worker_id,
-                            &error.message,
-                            self.config.default_retry_after_seconds,
-                        )
-                        .await?
-                        .is_some()
-                    {
-                        summary.failed += 1;
-                    } else {
-                        summary.lost_lease += 1;
+                    Err(error) => {
+                        summary.delivery_errors += 1;
+                        if self
+                            .store
+                            .mark_outbox_failed(
+                                &row_id,
+                                &self.config.worker_id,
+                                &error.message,
+                                self.config.default_retry_after_seconds,
+                            )
+                            .await?
+                            .is_some()
+                        {
+                            summary.failed += 1;
+                        } else {
+                            summary.lost_lease += 1;
+                        }
                     }
                 }
             }
