@@ -55,9 +55,10 @@ pub use routing::{
 };
 use routing::{is_preview_host_headers, upstream_for_request_with_preview};
 
-/// Max proxied body size (request or response) — 25 MiB, generous for JSON
-/// payloads while bounding memory. Larger streaming bodies (e.g. agent token
-/// streams, P3) will need a streaming path; not required for P1.
+/// Max proxied *request* body size — 25 MiB, generous for JSON payloads while
+/// bounding memory (the 413 contract requires measuring the body before
+/// forwarding). Response bodies are streamed, not buffered, so they need no
+/// cap.
 const MAX_BODY_BYTES: usize = 25 * 1024 * 1024;
 /// Shared gateway state: a reusable HTTP client + the upstream addresses.
 #[derive(Clone)]
@@ -326,17 +327,12 @@ pub async fn proxy(State(state): State<GatewayState>, req: Request<Body>) -> Res
     let mut response_headers = HeaderMap::new();
     copy_end_to_end_headers(resp.headers(), &mut response_headers);
 
-    let resp_bytes = match resp.bytes().await {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            return error_response(
-                StatusCode::BAD_GATEWAY,
-                &format!("reading upstream response failed: {err}"),
-            )
-        }
-    };
-
-    let mut out = Response::new(Body::from(resp_bytes));
+    // Stream the upstream response body instead of materializing it: large
+    // payloads (event replays, file downloads) no longer sit fully buffered in
+    // gateway memory, and the first byte reaches the client immediately.
+    // Trade-off: a mid-stream upstream failure now truncates the body instead
+    // of producing a clean 502 — the standard behaviour of streaming gateways.
+    let mut out = Response::new(Body::from_stream(resp.bytes_stream()));
     *out.status_mut() = status;
     *out.headers_mut() = response_headers;
     out
