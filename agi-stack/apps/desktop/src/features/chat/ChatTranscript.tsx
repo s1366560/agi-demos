@@ -26,7 +26,14 @@ export function SessionEmptyState() {
   );
 }
 
-export function WorkspaceTranscriptMessage({ message }: { message: WorkspaceMessage }) {
+// Memoized on message identity (stable in `dataset.messages`): any ChatPanel
+// re-render — e.g. every rAF-batched socket flush during streaming — used to
+// reconcile the entire transcript; now unchanged rows bail out immediately.
+export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessage({
+  message,
+}: {
+  message: WorkspaceMessage;
+}) {
   const { t } = useI18n();
   const kind = messageKind(message);
   return (
@@ -47,7 +54,7 @@ export function WorkspaceTranscriptMessage({ message }: { message: WorkspaceMess
       <MarkdownContent content={message.content} className="transcript-content" />
     </NarrativeMessageFrame>
   );
-}
+});
 
 export function NarrativeMessageFrame({
   kind,

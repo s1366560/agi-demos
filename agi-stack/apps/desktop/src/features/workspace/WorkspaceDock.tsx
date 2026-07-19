@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 
 import { ScrollArea } from '@radix-ui/themes';
 import {
@@ -71,7 +71,12 @@ export function WorkspaceDock({
   const navigationRef = useRef<HTMLElement>(null);
   const workspaceToggleRefs = useRef(new Map<string, HTMLButtonElement>());
   const projectState = nodeState.projects[currentProjectId];
-  const tree = buildWorkspaceTree(workspaces, conversationsByWorkspace, 'project');
+  // The dock re-renders with the App on every socket flush; the tree only
+  // changes with the workspace/conversation data, so rebuild it only then.
+  const tree = useMemo(
+    () => buildWorkspaceTree(workspaces, conversationsByWorkspace, 'project'),
+    [workspaces, conversationsByWorkspace],
+  );
   const availability = workspaceTreeAvailability(projectState, tree.length);
   const hasProjectScope = Boolean(currentProjectId.trim());
 
