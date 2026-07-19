@@ -44,7 +44,10 @@ impl PgWorkspaceService {
             .map_err(WorkspaceApiError::internal)?;
         let mut nodes_by_plan: HashMap<String, Vec<WorkspacePlanNodeRecord>> = HashMap::new();
         for node in all_nodes {
-            nodes_by_plan.entry(node.plan_id.clone()).or_default().push(node);
+            nodes_by_plan
+                .entry(node.plan_id.clone())
+                .or_default()
+                .push(node);
         }
         let mut plans_with_nodes = Vec::with_capacity(plans.len());
         for plan in plans {

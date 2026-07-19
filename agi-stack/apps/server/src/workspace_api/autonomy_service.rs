@@ -424,7 +424,10 @@ fn first_plan_linking_root(
 ) -> Option<WorkspacePlanRecord> {
     let mut nodes_by_plan: HashMap<String, Vec<WorkspacePlanNodeRecord>> = HashMap::new();
     for node in nodes {
-        nodes_by_plan.entry(node.plan_id.clone()).or_default().push(node);
+        nodes_by_plan
+            .entry(node.plan_id.clone())
+            .or_default()
+            .push(node);
     }
     plans.into_iter().find(|plan| {
         let nodes = nodes_by_plan.remove(&plan.id).unwrap_or_default();
