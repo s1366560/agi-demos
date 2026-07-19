@@ -230,20 +230,44 @@ export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
 }
 
 export function timelineDetailLineCount(item: AgentTimelineItem, kind: TimelineKind): number {
+  const display = timelineToolDisplay(item);
+  const fileMetadata = timelineFileMetadata(item);
   const values: string[] = [];
   if (item.content) values.push(item.content);
-  if (timelineToolDisplay(item)?.summary) values.push(timelineToolDisplay(item)?.summary ?? '');
-  if (timelineFileMetadata(item)) values.push(formatTimelineValue(timelineFileMetadata(item)));
+  if (display?.summary) values.push(display.summary);
+  if (fileMetadata) values.push(formatTimelineValue(fileMetadata));
   if (item.toolInput !== undefined) values.push(formatTimelineValue(item.toolInput));
   if (item.toolOutput !== undefined) values.push(formatTimelineValue(item.toolOutput));
   if (item.payload !== undefined) values.push(formatTimelineValue(item.payload));
   if (item.question) values.push(item.question);
   if (item.error) values.push(item.error);
   if (kind === 'artifact') values.push(item.filename || item.artifactId || '');
-  return values
-    .join('\n')
-    .split('\n')
-    .filter((line) => line.trim().length > 0).length;
+  // Count non-empty lines across the values directly: the previous
+  // join('\n').split('\n') copied every payload into one big string and then
+  // allocated a substring per line — significant on a cold load of ~150
+  // tool-heavy items whose outputs run to tens of KB.
+  let count = 0;
+  for (const value of values) count += countNonEmptyLines(value);
+  return count;
+}
+
+const WHITESPACE_CHAR = /\s/;
+
+/** Number of lines containing at least one non-whitespace character. */
+function countNonEmptyLines(text: string): number {
+  let count = 0;
+  let hasContent = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '\n') {
+      if (hasContent) count += 1;
+      hasContent = false;
+    } else if (!WHITESPACE_CHAR.test(ch)) {
+      hasContent = true;
+    }
+  }
+  if (hasContent) count += 1;
+  return count;
 }
 
 export function formatTimelineTime(item: AgentTimelineItem): string {
