@@ -156,9 +156,13 @@ impl AgistackCore {
                 ));
             }
 
-            repo.replace_all(snapshot.memories.clone()).map_err(to_js)?;
+            // Index by reference before moving the vec into the repo:
+            // restores no longer deep-clone the whole snapshot (2× peak
+            // memory on large imports). Order flips to index-then-replace;
+            // that failure state is the safer one (stale vector entries
+            // resolve to no rows instead of rows missing from the index).
             vectors.clear().map_err(to_js)?;
-            for memory in snapshot.memories {
+            for memory in &snapshot.memories {
                 if let Some(embedding) = memory.embedding.as_deref() {
                     vectors
                         .upsert(&memory.project_id, &memory.id, embedding)
@@ -166,6 +170,7 @@ impl AgistackCore {
                         .map_err(to_js)?;
                 }
             }
+            repo.replace_all(snapshot.memories).map_err(to_js)?;
             Ok(JsValue::UNDEFINED)
         })
     }
