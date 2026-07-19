@@ -270,6 +270,15 @@ function countNonEmptyLines(text: string): number {
   return count;
 }
 
+// Shared formatter: constructing an Intl.DateTimeFormat per call (what
+// toLocaleTimeString with options does internally) costs far more than
+// formatting — and this runs for every visible timeline row on every
+// streaming chunk. Same locale/options => identical output.
+const TIMELINE_TIME_FORMAT = new Intl.DateTimeFormat([], {
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 export function formatTimelineTime(item: AgentTimelineItem): string {
   const value =
     typeof item.timestamp === 'number'
@@ -278,7 +287,7 @@ export function formatTimelineTime(item: AgentTimelineItem): string {
         ? Math.floor(item.eventTimeUs / 1000)
         : null;
   if (!value) return '';
-  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return TIMELINE_TIME_FORMAT.format(new Date(value));
 }
 
 export function timelinePayloadPreview(item: AgentTimelineItem): string {
