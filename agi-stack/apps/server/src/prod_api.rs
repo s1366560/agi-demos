@@ -324,6 +324,7 @@ async fn project_memory_extraction_to_graph(
 
     let mut projected_entity_ids = BTreeSet::new();
     let mut projected_entities_by_name = BTreeMap::new();
+    let mut entity_projections = Vec::new();
     for entity in &memory.entities {
         let name = entity.name.trim();
         if name.is_empty() {
@@ -342,32 +343,47 @@ async fn project_memory_extraction_to_graph(
         projected_entities_by_name
             .entry(normalized_graph_entity_name(name))
             .or_insert_with(|| entity_uuid.clone());
-
-        app.graph
-            .upsert_entity(GraphEntity {
-                uuid: entity_uuid.clone(),
-                name: name.to_string(),
-                entity_type: entity_type.to_string(),
-                summary: format!("Mentioned by {episode_name}"),
-                project_id: project_id.to_string(),
-                tenant_id: None,
-                created_at_ms: memory.created_at_ms,
-                name_embedding: None,
-            })
-            .await?;
-        app.graph
-            .upsert_relationship(Relationship {
-                uuid: graph_mention_relationship_uuid(&episode_uuid, &entity_uuid),
-                source_uuid: episode_uuid.clone(),
-                target_uuid: entity_uuid,
-                relation_type: EPISODIC_MENTION_RELATION_TYPE.to_string(),
-                fact: format!("{episode_name} mentions {name}"),
-                score: 1.0,
-                project_id: project_id.to_string(),
-                created_at_ms: memory.created_at_ms,
-            })
-            .await?;
+        entity_projections.push((entity_uuid, name.to_string(), entity_type.to_string()));
     }
+
+    // Entity projections are independent of one another (dedup and the
+    // first-wins name map are computed above, in order), so fan the graph
+    // writes out concurrently instead of paying two serial Bolt round-trips
+    // per entity. Each entity keeps its own upsert_entity → mention-edge
+    // ordering. The caller discards the result and the writes are idempotent
+    // MERGEs, so concurrent partial application on error is equivalent.
+    let graph = &app.graph;
+    let episode_uuid_ref = &episode_uuid;
+    futures_util::future::try_join_all(entity_projections.into_iter().map(
+        |(entity_uuid, name, entity_type)| async move {
+            graph
+                .upsert_entity(GraphEntity {
+                    uuid: entity_uuid.clone(),
+                    name: name.clone(),
+                    entity_type,
+                    summary: format!("Mentioned by {episode_name}"),
+                    project_id: project_id.to_string(),
+                    tenant_id: None,
+                    created_at_ms: memory.created_at_ms,
+                    name_embedding: None,
+                })
+                .await?;
+            graph
+                .upsert_relationship(Relationship {
+                    uuid: graph_mention_relationship_uuid(episode_uuid_ref, &entity_uuid),
+                    source_uuid: episode_uuid_ref.clone(),
+                    target_uuid: entity_uuid,
+                    relation_type: EPISODIC_MENTION_RELATION_TYPE.to_string(),
+                    fact: format!("{episode_name} mentions {name}"),
+                    score: 1.0,
+                    project_id: project_id.to_string(),
+                    created_at_ms: memory.created_at_ms,
+                })
+                .await?;
+            Ok::<(), agistack_core::ports::CoreError>(())
+        },
+    ))
+    .await?;
 
     if graph_relationship_extraction_enabled() && projected_entities_by_name.len() >= 2 {
         let relationships = app.memory.extract_relationships(memory).await?;
@@ -390,7 +406,10 @@ async fn project_memory_relationship_drafts_to_graph(
     projected_entities_by_name: &BTreeMap<String, String>,
     relationships: Vec<RelationshipDraft>,
 ) -> agistack_core::CoreResult<()> {
+    // Resolve + dedup in order first (cheap, in-memory; a duplicate uuid means
+    // identical content, so the dedup choice is irrelevant to the outcome).
     let mut projected_relationship_ids = BTreeSet::new();
+    let mut records = Vec::new();
     for draft in relationships {
         let Some(source_uuid) =
             projected_entities_by_name.get(&normalized_graph_entity_name(&draft.source))
@@ -426,19 +445,27 @@ async fn project_memory_relationship_drafts_to_graph(
         if !projected_relationship_ids.insert(uuid.clone()) {
             continue;
         }
-        app.graph
-            .upsert_relationship(Relationship {
-                uuid,
-                source_uuid: source_uuid.clone(),
-                target_uuid: target_uuid.clone(),
-                relation_type,
-                fact,
-                score: clamped_relationship_score(draft.score),
-                project_id: project_id.to_string(),
-                created_at_ms,
-            })
-            .await?;
+        records.push(Relationship {
+            uuid,
+            source_uuid: source_uuid.clone(),
+            target_uuid: target_uuid.clone(),
+            relation_type,
+            fact,
+            score: clamped_relationship_score(draft.score),
+            project_id: project_id.to_string(),
+            created_at_ms,
+        });
     }
+
+    // Draft upserts are independent — fan them out concurrently instead of
+    // one serial Bolt round-trip per relationship.
+    let graph = &app.graph;
+    futures_util::future::try_join_all(
+        records
+            .into_iter()
+            .map(|record| async move { graph.upsert_relationship(record).await }),
+    )
+    .await?;
     Ok(())
 }
 
