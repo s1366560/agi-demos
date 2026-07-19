@@ -33,7 +33,7 @@ pub(in crate::workspace_outbox_worker) fn existing_repair_node_id_for_original(
     let mut ids = nodes_by_id
         .values()
         .filter_map(|node| {
-            let metadata = object_or_empty(node.metadata_json.clone());
+            let metadata = object_as_map(&node.metadata_json);
             (metadata_string(metadata.get("repair_for_node_id")).as_deref()
                 == Some(original_node_id))
             .then_some(node.id.clone())

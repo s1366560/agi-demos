@@ -47,9 +47,9 @@ pub(super) struct DroneDeployConfig {
 pub(super) async fn drone_pipeline_config(
     contract: &PipelineContractFoundation,
 ) -> CoreResult<Option<DronePipelineConfig>> {
-    let provider_config = object_or_empty(contract.provider_config_json.clone());
-    let Some(repo_slug) = string_from_map(&provider_config, "repo")
-        .or_else(|| string_from_map(&provider_config, "repository"))
+    let provider_config = object_as_map(&contract.provider_config_json);
+    let Some(repo_slug) = string_from_map(provider_config, "repo")
+        .or_else(|| string_from_map(provider_config, "repository"))
     else {
         return Ok(None);
     };
@@ -66,11 +66,11 @@ pub(super) async fn drone_pipeline_config(
         )));
     }
 
-    let server_env = string_from_map(&provider_config, "drone_server_env")
-        .or_else(|| string_from_map(&provider_config, "server_env"))
-        .or_else(|| string_from_map(&provider_config, "server_url_env"))
+    let server_env = string_from_map(provider_config, "drone_server_env")
+        .or_else(|| string_from_map(provider_config, "server_env"))
+        .or_else(|| string_from_map(provider_config, "server_url_env"))
         .unwrap_or_else(|| DRONE_SERVER_ENV.to_string());
-    let server_url = if let Some(server_url) = string_from_map(&provider_config, "server_url") {
+    let server_url = if let Some(server_url) = string_from_map(provider_config, "server_url") {
         Some(server_url)
     } else if let Some(server_url) = drone_config_value_env(&server_env).await {
         Some(server_url)
@@ -83,8 +83,8 @@ pub(super) async fn drone_pipeline_config(
         return Ok(None);
     };
 
-    let token_env = string_from_map(&provider_config, "drone_token_env")
-        .or_else(|| string_from_map(&provider_config, "token_env"))
+    let token_env = string_from_map(provider_config, "drone_token_env")
+        .or_else(|| string_from_map(provider_config, "token_env"))
         .unwrap_or_else(|| DRONE_TOKEN_ENV.to_string());
     let Some(token) = drone_config_value_env(&token_env).await else {
         return Ok(None);
@@ -96,7 +96,7 @@ pub(super) async fn drone_pipeline_config(
             .get("params")
             .or_else(|| provider_config.get("build_params")),
     );
-    let target = string_from_map(&provider_config, "target")
+    let target = string_from_map(provider_config, "target")
         .or_else(|| deploy.as_ref().and_then(|deploy| deploy.target.clone()));
     if let Some(target) = target {
         insert_default_param(&mut params, "target", target);
@@ -109,19 +109,19 @@ pub(super) async fn drone_pipeline_config(
         repo: repo.to_string(),
         server_url: server_url.trim_end_matches('/').to_string(),
         token,
-        client: drone_client_from_config(&provider_config),
-        cli_command: drone_cli_command_from_config(&provider_config).await,
+        client: drone_client_from_config(provider_config),
+        cli_command: drone_cli_command_from_config(provider_config).await,
         host_code_root: contract.host_code_root.as_deref().map(PathBuf::from),
-        branch: string_from_map(&provider_config, "branch"),
-        commit: string_from_map(&provider_config, "commit"),
+        branch: string_from_map(provider_config, "branch"),
+        commit: string_from_map(provider_config, "commit"),
         params,
         deploy,
         timeout_seconds: positive_u64_from_map(
-            &provider_config,
+            provider_config,
             "timeout_seconds",
             contract.timeout_seconds.max(1) as u64,
         ),
-        poll_interval_seconds: positive_u64_from_map(&provider_config, "poll_interval_seconds", 5),
+        poll_interval_seconds: positive_u64_from_map(provider_config, "poll_interval_seconds", 5),
     }))
 }
 

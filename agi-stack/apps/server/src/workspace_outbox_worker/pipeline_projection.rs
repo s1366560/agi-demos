@@ -54,7 +54,7 @@ pub(super) fn pipeline_run_matches_node_expected_commit(
 }
 
 fn pipeline_run_source_commit_ref(run: &WorkspacePipelineRunRecord) -> Option<String> {
-    let metadata = object_or_empty(run.metadata_json.clone());
+    let metadata = object_as_map(&run.metadata_json);
     metadata
         .get("source_publish_source_commit_ref")
         .and_then(Value::as_str)

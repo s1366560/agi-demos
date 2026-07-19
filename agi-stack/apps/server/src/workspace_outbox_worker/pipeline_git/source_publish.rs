@@ -78,23 +78,23 @@ pub(in crate::workspace_outbox_worker) async fn prepare_drone_source_publish(
     if contract.provider != DRONE_PROVIDER {
         return Ok(None);
     }
-    let provider_config = object_or_empty(contract.provider_config_json.clone());
-    let workspace_metadata = object_or_empty(workspace.metadata_json.clone());
-    let source_control = drone_source_control_config(&workspace_metadata, &provider_config);
-    let branch = drone_source_branch(&source_control, &provider_config);
+    let provider_config = object_as_map(&contract.provider_config_json);
+    let workspace_metadata = object_as_map(&workspace.metadata_json);
+    let source_control = drone_source_control_config(workspace_metadata, provider_config);
+    let branch = drone_source_branch(&source_control, provider_config);
     let token_env = source_control_token_env(&source_control);
 
     if attempt_id.is_none() {
         let metadata = source_publish_metadata(
             "skipped",
             Some("missing attempt_id; using remote branch head"),
-            pipeline_contract_commit_ref(&provider_config).as_deref(),
+            pipeline_contract_commit_ref(provider_config).as_deref(),
             branch.as_deref(),
             None,
             token_env.as_deref(),
         );
         if let Some(branch) = branch.as_deref() {
-            if string_from_map(&provider_config, "branch").is_none() {
+            if string_from_map(provider_config, "branch").is_none() {
                 let mut patched = provider_config.clone();
                 patched.insert("branch".to_string(), json!(branch));
                 apply_drone_provider_config(contract, patched);

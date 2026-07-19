@@ -37,18 +37,16 @@ pub(in crate::workspace_outbox_worker) fn done_idle_node_has_accepted_supervisor
     if node.intent != "done" || node.execution != "idle" || node.current_attempt_id.is_none() {
         return false;
     }
-    metadata_string(
-        object_or_empty(node.metadata_json.clone()).get("last_verification_judge_verdict"),
-    )
-    .map(|value| value.eq_ignore_ascii_case(ACCEPTED_ATTEMPT_STATUS))
-    .unwrap_or(false)
+    metadata_string(node.metadata_json.get("last_verification_judge_verdict"))
+        .map(|value| value.eq_ignore_ascii_case(ACCEPTED_ATTEMPT_STATUS))
+        .unwrap_or(false)
 }
 
 pub(in crate::workspace_outbox_worker) fn accepted_supervisor_judge_summary(
     node: &WorkspacePlanNodeRecord,
     attempt: &WorkspaceTaskSessionAttemptRecord,
 ) -> String {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     metadata_string(metadata.get("last_verification_summary"))
         .or_else(|| attempt.leader_feedback.clone())
         .or_else(|| attempt.candidate_summary.clone())

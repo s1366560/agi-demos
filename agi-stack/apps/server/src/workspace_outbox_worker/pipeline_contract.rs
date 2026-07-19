@@ -48,7 +48,7 @@ impl PipelineContractFoundation {
 pub(super) fn pipeline_contract_foundation(
     workspace: &WorkspaceRecord,
 ) -> PipelineContractFoundation {
-    let workspace_metadata = object_or_empty(workspace.metadata_json.clone());
+    let workspace_metadata = object_as_map(&workspace.metadata_json);
     let delivery = workspace_metadata
         .get("delivery_cicd")
         .cloned()
@@ -87,7 +87,7 @@ pub(super) fn pipeline_contract_foundation(
         .unwrap_or(1.0);
     let host_code_root = host_code_root_from_workspace(&workspace.metadata_json);
     let code_root = string_from_map(&delivery, "code_root")
-        .or_else(|| string_from_map(&workspace_metadata, "sandbox_code_root"))
+        .or_else(|| string_from_map(workspace_metadata, "sandbox_code_root"))
         .or_else(|| {
             workspace_metadata
                 .get("code_context")

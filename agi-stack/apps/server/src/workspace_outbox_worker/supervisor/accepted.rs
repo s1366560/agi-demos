@@ -235,9 +235,7 @@ impl SupervisorTickAdmissionHandler {
         let now = Utc::now();
         let mut changed = 0;
         for node in ctx.nodes.iter_mut() {
-            if supervisor_blocked_human_metadata_present(&object_or_empty(
-                node.metadata_json.clone(),
-            )) {
+            if supervisor_blocked_human_metadata_present(object_as_map(&node.metadata_json)) {
                 continue;
             }
             let Some(attempt_id) = recoverable_node_attempt_id(node) else {

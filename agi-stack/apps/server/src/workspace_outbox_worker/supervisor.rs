@@ -209,7 +209,7 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
                     "workspace task {task_id} not found for workspace {workspace_id}"
                 ))
             })?;
-        let task_metadata = object_or_empty(task.metadata_json.clone());
+        let task_metadata = object_as_map(&task.metadata_json);
         let Some(worker_agent_id) = string_from_map(payload, "worker_agent_id")
             .or_else(|| node.assignee_agent_id.clone())
             .or_else(|| task.assignee_agent_id.clone())
@@ -221,11 +221,11 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
         let actor_user_id =
             string_from_map(payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
         let leader_agent_id = string_from_map(payload, "leader_agent_id")
-            .or_else(|| string_from_map(&task_metadata, "leader_agent_id"))
+            .or_else(|| string_from_map(task_metadata, "leader_agent_id"))
             .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
         let root_goal_task_id = string_from_map(payload, ROOT_GOAL_TASK_ID)
             .or_else(|| string_from_map(payload, "root_task_id"))
-            .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID));
+            .or_else(|| string_from_map(task_metadata, ROOT_GOAL_TASK_ID));
         if is_worker_report_supervisor_tick(&item, payload) {
             return self
                 .handle_worker_report_supervisor_tick(

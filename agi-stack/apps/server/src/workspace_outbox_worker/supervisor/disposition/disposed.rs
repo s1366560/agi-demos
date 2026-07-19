@@ -162,7 +162,7 @@ impl SupervisorTickAdmissionHandler {
             metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
         }
         copy_supervisor_disposition_event_payload_fields(
-            &object_or_empty(node.metadata_json.clone()),
+            object_as_map(&node.metadata_json),
             &mut metadata,
         );
 

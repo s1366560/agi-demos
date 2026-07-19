@@ -203,7 +203,7 @@ impl SupervisorTickAdmissionHandler {
             metadata.insert("last_attempt_id".to_string(), json!(attempt_id));
             metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
         }
-        let node_metadata = object_or_empty(node.metadata_json.clone());
+        let node_metadata = object_as_map(&node.metadata_json);
         let evidence_refs = metadata_string_values(node_metadata.get("verification_evidence_refs"));
         if !evidence_refs.is_empty() {
             metadata.insert("evidence_refs".to_string(), json!(evidence_refs));

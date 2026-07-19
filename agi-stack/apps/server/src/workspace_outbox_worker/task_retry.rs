@@ -54,7 +54,7 @@ pub(super) fn terminal_attempt_pending_pipeline_verification(
     if node.execution != "reported" || status == "accepted" {
         return false;
     }
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     let pipeline_status = metadata_string(metadata.get("pipeline_status"))
         .unwrap_or_default()
         .to_ascii_lowercase();
@@ -70,7 +70,8 @@ pub(super) fn terminal_attempt_pending_pipeline_verification(
 
 pub(super) fn node_waiting_for_verification_retry(node: &WorkspacePlanNodeRecord) -> bool {
     node.execution == "reported"
-        && object_or_empty(node.metadata_json.clone())
+        && node
+            .metadata_json
             .get("retry_verification_only")
             .and_then(Value::as_bool)
             == Some(true)
@@ -83,7 +84,7 @@ pub(super) fn node_has_pipeline_gate_in_flight(
     if status == "accepted" || node.intent != "in_progress" {
         return false;
     }
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     let pipeline_status = metadata_string(metadata.get("pipeline_status"))
         .unwrap_or_default()
         .to_ascii_lowercase();

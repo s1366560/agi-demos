@@ -248,8 +248,8 @@ impl SupervisorTickAdmissionHandler {
         node: &WorkspacePlanNodeRecord,
         attempt: &WorkspaceTaskSessionAttemptRecord,
     ) -> CoreResult<bool> {
-        let metadata = object_or_empty(node.metadata_json.clone());
-        if !accepted_projection_already_complete_base(node, attempt, &metadata) {
+        let metadata = object_as_map(&node.metadata_json);
+        if !accepted_projection_already_complete_base(node, attempt, metadata) {
             return Ok(false);
         }
         if metadata_string(metadata.get("worktree_integration_status")).as_deref()
@@ -257,7 +257,7 @@ impl SupervisorTickAdmissionHandler {
         {
             return Ok(true);
         }
-        self.blocked_dirty_main_projection_still_current(workspace_id, node, attempt, &metadata)
+        self.blocked_dirty_main_projection_still_current(workspace_id, node, attempt, metadata)
             .await
     }
 
@@ -278,7 +278,7 @@ impl SupervisorTickAdmissionHandler {
         if task.workspace_id != workspace_id {
             return Ok(false);
         }
-        let task_metadata = object_or_empty(task.metadata_json.clone());
+        let task_metadata = object_as_map(&task.metadata_json);
         let Some(stored_signature) =
             metadata_string(metadata.get("worktree_integration_dirty_signature")).or_else(|| {
                 metadata_string(task_metadata.get("worktree_integration_dirty_signature"))

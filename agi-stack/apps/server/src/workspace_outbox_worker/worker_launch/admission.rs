@@ -174,8 +174,8 @@ impl WorkerLaunchAdmissionHandler {
             }
         }
 
-        let task_metadata = object_or_empty(task.metadata_json.clone());
-        let current_task_attempt_id = string_from_map(&task_metadata, CURRENT_ATTEMPT_ID);
+        let task_metadata = object_as_map(&task.metadata_json);
+        let current_task_attempt_id = string_from_map(task_metadata, CURRENT_ATTEMPT_ID);
         if reason.is_none()
             && current_task_attempt_id.is_some()
             && current_task_attempt_id.as_deref() != attempt_id

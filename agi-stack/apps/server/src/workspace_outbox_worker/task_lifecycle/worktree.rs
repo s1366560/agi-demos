@@ -144,7 +144,7 @@ pub(in crate::workspace_outbox_worker) fn apply_attempt_worktree_checkpoint(
 }
 
 fn attempt_retry_base_ref(node: &WorkspacePlanNodeRecord) -> Option<String> {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     for key in [
         "source_publish_commit_ref",
         "source_publish_source_commit_ref",

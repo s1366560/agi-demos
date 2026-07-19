@@ -14,9 +14,7 @@ impl SupervisorTickAdmissionHandler {
     ) -> CoreResult<usize> {
         let mut changed = 0;
         for node in ctx.nodes.iter_mut() {
-            if supervisor_blocked_human_metadata_present(&object_or_empty(
-                node.metadata_json.clone(),
-            )) {
+            if supervisor_blocked_human_metadata_present(object_as_map(&node.metadata_json)) {
                 continue;
             }
             let Some(attempt_id) = recoverable_node_attempt_id(node) else {
@@ -274,7 +272,7 @@ impl SupervisorTickAdmissionHandler {
         let Some(task) = self.store.get_task(workspace_id, &task_id).await? else {
             return Ok(None);
         };
-        let task_metadata = object_or_empty(task.metadata_json.clone());
+        let task_metadata = object_as_map(&task.metadata_json);
         let Some(worker_agent_id) = string_from_map(payload, "worker_agent_id")
             .or_else(|| node.assignee_agent_id.clone())
             .or_else(|| task.assignee_agent_id.clone())
@@ -284,11 +282,11 @@ impl SupervisorTickAdmissionHandler {
         let actor_user_id =
             string_from_map(payload, "actor_user_id").unwrap_or_else(|| task.created_by.clone());
         let leader_agent_id = string_from_map(payload, "leader_agent_id")
-            .or_else(|| string_from_map(&task_metadata, "leader_agent_id"))
+            .or_else(|| string_from_map(task_metadata, "leader_agent_id"))
             .unwrap_or_else(|| WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string());
         let root_goal_task_id = string_from_map(payload, ROOT_GOAL_TASK_ID)
             .or_else(|| string_from_map(payload, "root_task_id"))
-            .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID));
+            .or_else(|| string_from_map(task_metadata, ROOT_GOAL_TASK_ID));
         Ok(Some(SupervisorRetryContext {
             task_id,
             worker_agent_id,

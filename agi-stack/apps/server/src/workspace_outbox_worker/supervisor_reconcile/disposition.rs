@@ -48,7 +48,7 @@ pub(in crate::workspace_outbox_worker) fn supervisor_blocked_human_summary(
 pub(in crate::workspace_outbox_worker) fn supervisor_dispose_metadata_present(
     node: &WorkspacePlanNodeRecord,
 ) -> bool {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     metadata_string(metadata.get("last_supervisor_decision_action")).as_deref()
         == Some(SUPERVISOR_DECISION_DISPOSE_NODE_ACTION)
         || metadata_string(metadata.get("verification_feedback_disposition")).as_deref()

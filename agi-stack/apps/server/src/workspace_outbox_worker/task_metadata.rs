@@ -104,7 +104,7 @@ pub(super) fn node_expected_commit_ref(node: &WorkspacePlanNodeRecord) -> Option
             return Some(token);
         }
     }
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     for key in [
         "source_publish_source_commit_ref",
         "verified_commit_ref",
@@ -126,7 +126,7 @@ pub(super) fn last_verified_attempt_matches_expected_commit(
     attempt: &WorkspaceTaskSessionAttemptRecord,
     expected: &str,
 ) -> bool {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     if metadata
         .get("last_verification_passed")
         .and_then(Value::as_bool)
@@ -138,7 +138,7 @@ pub(super) fn last_verified_attempt_matches_expected_commit(
     {
         return false;
     }
-    let mut refs = node_metadata_commit_refs(&metadata);
+    let mut refs = node_metadata_commit_refs(metadata);
     for key in [
         "source_publish_source_commit_ref",
         "source_publish_commit_ref",
@@ -163,7 +163,7 @@ pub(super) fn last_verified_attempt_contains_attempt_commit(
     attempt: &WorkspaceTaskSessionAttemptRecord,
     actual_refs: &[String],
 ) -> bool {
-    let metadata = object_or_empty(node.metadata_json.clone());
+    let metadata = object_as_map(&node.metadata_json);
     if metadata
         .get("last_verification_passed")
         .and_then(Value::as_bool)
@@ -175,7 +175,7 @@ pub(super) fn last_verified_attempt_contains_attempt_commit(
     {
         return false;
     }
-    let metadata_refs = node_metadata_commit_refs(&metadata);
+    let metadata_refs = node_metadata_commit_refs(metadata);
     metadata_refs.iter().any(|metadata_ref| {
         actual_refs
             .iter()

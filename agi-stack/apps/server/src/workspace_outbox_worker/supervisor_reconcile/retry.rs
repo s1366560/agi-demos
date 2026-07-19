@@ -11,8 +11,8 @@ pub(in crate::workspace_outbox_worker) fn reported_reconcilable_node(
     {
         return false;
     }
-    let metadata = object_or_empty(node.metadata_json.clone());
-    if supervisor_noop_metadata_present(&metadata) {
+    let metadata = object_as_map(&node.metadata_json);
+    if supervisor_noop_metadata_present(metadata) {
         return false;
     }
     if node_has_pipeline_gate_in_flight(node, AWAITING_LEADER_ADJUDICATION_STATUS) {

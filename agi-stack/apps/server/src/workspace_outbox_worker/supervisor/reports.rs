@@ -29,9 +29,9 @@ impl SupervisorTickAdmissionHandler {
         }
 
         let now = Utc::now();
-        let node_metadata = object_or_empty(node.metadata_json.clone());
+        let node_metadata = object_as_map(&node.metadata_json);
         if let Some(retry_reason) =
-            worker_stream_orphan_report_retry_reason(&node_metadata, &attempt)
+            worker_stream_orphan_report_retry_reason(node_metadata, &attempt)
         {
             self.store
                 .finish_task_session_attempt(
@@ -186,9 +186,7 @@ impl SupervisorTickAdmissionHandler {
     ) -> CoreResult<usize> {
         let mut changed = 0;
         for node in ctx.nodes.iter_mut() {
-            if supervisor_blocked_human_metadata_present(&object_or_empty(
-                node.metadata_json.clone(),
-            )) {
+            if supervisor_blocked_human_metadata_present(object_as_map(&node.metadata_json)) {
                 continue;
             }
             let Some(attempt_id) = recoverable_node_attempt_id(node) else {

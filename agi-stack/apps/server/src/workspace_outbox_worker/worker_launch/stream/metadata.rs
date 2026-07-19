@@ -12,13 +12,13 @@ impl WorkerLaunchAdmissionHandler {
         else {
             return Ok((worker_stream_watchdog::StreamState::default(), None));
         };
-        let metadata = object_or_empty(task.metadata_json);
-        if !worker_stream_replay_metadata_matches_attempt(&metadata, input.attempt_id) {
+        let metadata = object_as_map(&task.metadata_json);
+        if !worker_stream_replay_metadata_matches_attempt(metadata, input.attempt_id) {
             return Ok((worker_stream_watchdog::StreamState::default(), None));
         }
         let state = worker_stream_watchdog::StreamState {
-            stream_message_id: string_from_map(&metadata, "worker_stream_message_id"),
-            last_stream_event_type: string_from_map(&metadata, "worker_stream_last_event_type"),
+            stream_message_id: string_from_map(metadata, "worker_stream_message_id"),
+            last_stream_event_type: string_from_map(metadata, "worker_stream_last_event_type"),
             ..Default::default()
         };
         let last_event_time_us = metadata
@@ -42,8 +42,8 @@ impl WorkerLaunchAdmissionHandler {
             .get_task(input.workspace_id, input.task_id)
             .await?
             .and_then(|task| {
-                let metadata = object_or_empty(task.metadata_json);
-                if !worker_stream_replay_metadata_matches_attempt(&metadata, input.attempt_id) {
+                let metadata = object_as_map(&task.metadata_json);
+                if !worker_stream_replay_metadata_matches_attempt(metadata, input.attempt_id) {
                     return None;
                 }
                 metadata
