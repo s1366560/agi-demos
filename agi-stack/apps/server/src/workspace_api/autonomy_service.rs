@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use super::*;
 
@@ -127,20 +127,17 @@ impl PgWorkspaceService {
             return Ok(RootTaskProgressSelection::NoOpenRoot);
         }
         root_tasks.sort_by(root_task_priority_cmp);
-        for root_task in root_tasks {
-            let children = self
-                .repo
-                .list_tasks_by_root_goal_task_id(workspace_id, &root_task.id)
-                .await
-                .map_err(WorkspaceApiError::internal)?;
-            if root_task_needs_progress(&root_task, &children, force) {
-                return Ok(RootTaskProgressSelection::Selected {
-                    root_task: Box::new(root_task),
-                    children,
-                });
-            }
-        }
-        Ok(RootTaskProgressSelection::NoRootNeedsProgress)
+        // One batch fetch for every open root's children instead of a
+        // sequential query per root (up to 100 round-trips per tick).
+        let root_ids: Vec<String> = root_tasks.iter().map(|task| task.id.clone()).collect();
+        let children = self
+            .repo
+            .list_tasks_by_root_goal_task_ids(workspace_id, &root_ids)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(select_root_from_grouped_children(
+            root_tasks, children, force,
+        ))
     }
 
     async fn pg_find_root_plan(
@@ -170,20 +167,22 @@ impl PgWorkspaceService {
             .list_plans(workspace_id, 50)
             .await
             .map_err(WorkspaceApiError::internal)?;
-        for plan in plans {
-            if !DEDUP_PLAN_STATUSES.contains(&plan.status.as_str()) {
-                continue;
-            }
-            let nodes = self
-                .repo
-                .list_plan_nodes(&plan.id)
-                .await
-                .map_err(WorkspaceApiError::internal)?;
-            if plan_nodes_link_root(&nodes, root_task) {
-                return Ok(Some(plan));
-            }
+        let candidates: Vec<WorkspacePlanRecord> = plans
+            .into_iter()
+            .filter(|plan| DEDUP_PLAN_STATUSES.contains(&plan.status.as_str()))
+            .collect();
+        if candidates.is_empty() {
+            return Ok(None);
         }
-        Ok(None)
+        // One batch fetch for all candidate plans' nodes instead of a
+        // sequential query per plan (up to 50 round-trips per tick).
+        let plan_ids: Vec<String> = candidates.iter().map(|plan| plan.id.clone()).collect();
+        let nodes = self
+            .repo
+            .list_plan_nodes_by_plan_ids(&plan_ids)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(first_plan_linking_root(candidates, nodes, root_task))
     }
 
     async fn pg_enqueue_supervisor_tick_if_needed(
@@ -387,6 +386,52 @@ fn dev_find_root_plan(
     })
 }
 
+/// Pick the first root task — in the caller's priority order — that needs
+/// progress, using children batch-fetched for all open roots (one query)
+/// instead of a per-root early-exit loop (one query per root). Grouping
+/// preserves the batch query's per-root row order, so the selected root and
+/// its children are identical to the loop form.
+fn select_root_from_grouped_children(
+    root_tasks: Vec<WorkspaceTaskRecord>,
+    children: Vec<WorkspaceTaskRecord>,
+    force: bool,
+) -> RootTaskProgressSelection {
+    let mut children_by_root: HashMap<String, Vec<WorkspaceTaskRecord>> = HashMap::new();
+    for child in children {
+        if let Some(root_id) = metadata_string(&child.metadata_json, ROOT_TASK_METADATA_KEY) {
+            children_by_root.entry(root_id).or_default().push(child);
+        }
+    }
+    for root_task in root_tasks {
+        let children = children_by_root.remove(&root_task.id).unwrap_or_default();
+        if root_task_needs_progress(&root_task, &children, force) {
+            return RootTaskProgressSelection::Selected {
+                root_task: Box::new(root_task),
+                children,
+            };
+        }
+    }
+    RootTaskProgressSelection::NoRootNeedsProgress
+}
+
+/// First candidate plan — in the caller's list order — whose nodes link
+/// `root_task`, using nodes batch-fetched for all candidates (one query)
+/// instead of a per-plan loop. Same first-match semantics as the loop form.
+fn first_plan_linking_root(
+    plans: Vec<WorkspacePlanRecord>,
+    nodes: Vec<WorkspacePlanNodeRecord>,
+    root_task: &WorkspaceTaskRecord,
+) -> Option<WorkspacePlanRecord> {
+    let mut nodes_by_plan: HashMap<String, Vec<WorkspacePlanNodeRecord>> = HashMap::new();
+    for node in nodes {
+        nodes_by_plan.entry(node.plan_id.clone()).or_default().push(node);
+    }
+    plans.into_iter().find(|plan| {
+        let nodes = nodes_by_plan.remove(&plan.id).unwrap_or_default();
+        plan_nodes_link_root(&nodes, root_task)
+    })
+}
+
 fn open_root_task(task: &WorkspaceTaskRecord) -> bool {
     task.archived_at.is_none()
         && !NON_OPEN_ROOT_STATUSES.contains(&task.status.as_str())
@@ -535,4 +580,180 @@ fn autonomy_supervisor_tick_outbox(
         }),
         created_at,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn now() -> DateTime<Utc> {
+        "2026-01-02T03:04:05Z".parse().unwrap()
+    }
+
+    fn root_task(id: &str) -> WorkspaceTaskRecord {
+        WorkspaceTaskRecord {
+            id: id.to_string(),
+            workspace_id: "ws".to_string(),
+            title: format!("root {id}"),
+            description: None,
+            created_by: "user-1".to_string(),
+            assignee_user_id: None,
+            assignee_agent_id: None,
+            status: "todo".to_string(),
+            priority: 1,
+            estimated_effort: None,
+            blocker_reason: None,
+            metadata_json: json!({"task_role": "goal_root"}),
+            created_at: now(),
+            updated_at: None,
+            completed_at: None,
+            archived_at: None,
+        }
+    }
+
+    fn child_task(id: &str, root_id: &str, status: &str) -> WorkspaceTaskRecord {
+        WorkspaceTaskRecord {
+            id: id.to_string(),
+            workspace_id: "ws".to_string(),
+            title: format!("child {id}"),
+            description: None,
+            created_by: "user-1".to_string(),
+            assignee_user_id: None,
+            assignee_agent_id: None,
+            status: status.to_string(),
+            priority: 1,
+            estimated_effort: None,
+            blocker_reason: None,
+            metadata_json: json!({
+                "task_role": "execution_task",
+                "root_goal_task_id": root_id,
+            }),
+            created_at: now(),
+            updated_at: None,
+            completed_at: None,
+            archived_at: None,
+        }
+    }
+
+    fn plan(id: &str, status: &str) -> WorkspacePlanRecord {
+        WorkspacePlanRecord {
+            id: id.to_string(),
+            workspace_id: "ws".to_string(),
+            goal_id: format!("goal-{id}"),
+            status: status.to_string(),
+            created_at: now(),
+            updated_at: None,
+        }
+    }
+
+    fn plan_node(id: &str, plan_id: &str, root_id: Option<&str>) -> WorkspacePlanNodeRecord {
+        WorkspacePlanNodeRecord {
+            id: id.to_string(),
+            plan_id: plan_id.to_string(),
+            parent_id: None,
+            kind: "goal".to_string(),
+            title: format!("node {id}"),
+            description: String::new(),
+            depends_on_json: Vec::new(),
+            inputs_schema_json: json!({}),
+            outputs_schema_json: json!({}),
+            acceptance_criteria_json: Vec::new(),
+            feature_checkpoint_json: None,
+            handoff_package_json: None,
+            recommended_capabilities_json: Vec::new(),
+            preferred_agent_id: None,
+            estimated_effort_json: json!({}),
+            priority: 0,
+            intent: "todo".to_string(),
+            execution: "idle".to_string(),
+            progress_json: json!({}),
+            assignee_agent_id: None,
+            current_attempt_id: None,
+            workspace_task_id: root_id.map(str::to_string),
+            metadata_json: json!({}),
+            created_at: now(),
+            updated_at: None,
+            completed_at: None,
+        }
+    }
+
+    #[test]
+    fn select_root_skips_roots_not_needing_progress_and_groups_children() {
+        // r1's only child is past pre-execution, so r1 needs no progress;
+        // r2 has a todo child. Children arrive interleaved from the batch
+        // query and must be grouped back under their own root.
+        let roots = vec![root_task("r1"), root_task("r2")];
+        let children = vec![
+            child_task("c2-a", "r2", "todo"),
+            child_task("c1-a", "r1", "in_progress"),
+            child_task("c2-b", "r2", "dispatched"),
+        ];
+        match select_root_from_grouped_children(roots, children, false) {
+            RootTaskProgressSelection::Selected {
+                root_task,
+                children,
+            } => {
+                assert_eq!(root_task.id, "r2");
+                let ids: Vec<&str> = children.iter().map(|c| c.id.as_str()).collect();
+                assert_eq!(ids, vec!["c2-a", "c2-b"], "group keeps batch row order");
+            }
+            _ => panic!("expected r2 selected"),
+        }
+    }
+
+    #[test]
+    fn select_root_with_empty_children_needs_progress() {
+        // Same as the loop form: a root without children always needs progress.
+        let roots = vec![root_task("r1")];
+        match select_root_from_grouped_children(roots, Vec::new(), false) {
+            RootTaskProgressSelection::Selected {
+                root_task,
+                children,
+            } => {
+                assert_eq!(root_task.id, "r1");
+                assert!(children.is_empty());
+            }
+            _ => panic!("expected r1 selected"),
+        }
+    }
+
+    #[test]
+    fn select_root_returns_no_progress_when_all_roots_satisfied() {
+        let roots = vec![root_task("r1")];
+        let children = vec![child_task("c1", "r1", "in_progress")];
+        assert!(matches!(
+            select_root_from_grouped_children(roots, children, false),
+            RootTaskProgressSelection::NoRootNeedsProgress
+        ));
+    }
+
+    #[test]
+    fn first_plan_linking_root_matches_loop_first_match_order() {
+        let root = root_task("r1");
+        let plans = vec![
+            plan("p1", "active"),
+            plan("p2", "draft"),
+            plan("p3", "active"),
+        ];
+        // Interleaved batch rows: p1 does not link the root; p2 links via
+        // metadata; p3 also links but must lose to p2 (list order wins).
+        let nodes = vec![
+            plan_node("n3", "p3", Some("r1")),
+            plan_node("n1", "p1", Some("other-root")),
+            WorkspacePlanNodeRecord {
+                metadata_json: json!({"root_goal_task_id": "r1"}),
+                ..plan_node("n2", "p2", None)
+            },
+        ];
+        let found = first_plan_linking_root(plans, nodes, &root);
+        assert_eq!(found.map(|p| p.id), Some("p2".to_string()));
+    }
+
+    #[test]
+    fn first_plan_linking_root_returns_none_without_link() {
+        let root = root_task("r1");
+        let plans = vec![plan("p1", "active")];
+        let nodes = vec![plan_node("n1", "p1", Some("other-root"))];
+        assert!(first_plan_linking_root(plans, nodes, &root).is_none());
+    }
 }

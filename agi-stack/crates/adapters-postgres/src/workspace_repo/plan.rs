@@ -175,6 +175,28 @@ impl PgWorkspaceRepository {
         rows.into_iter().map(row_to_plan_node).collect()
     }
 
+    /// Batch variant of [`list_plan_nodes`](Self::list_plan_nodes): one
+    /// round-trip for many plans instead of one per plan (the autonomy tick
+    /// scans up to 50 candidate plans). Same per-plan ordering
+    /// (`kind ASC, priority ASC, id ASC`); callers group rows by `plan_id`.
+    pub async fn list_plan_nodes_by_plan_ids(
+        &self,
+        plan_ids: &[String],
+    ) -> CoreResult<Vec<WorkspacePlanNodeRecord>> {
+        if plan_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query(&format!(
+            "SELECT {PLAN_NODE_COLS} FROM workspace_plan_nodes \
+             WHERE plan_id = ANY($1) ORDER BY kind ASC, priority ASC, id ASC"
+        ))
+        .bind(plan_ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_plan_node).collect()
+    }
+
     pub async fn create_plan_blackboard_entry(
         &self,
         entry: WorkspacePlanBlackboardEntryRecord,

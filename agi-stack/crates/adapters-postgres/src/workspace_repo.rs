@@ -612,6 +612,33 @@ impl PgWorkspaceRepository {
         rows.into_iter().map(row_to_task).collect()
     }
 
+    /// Batch variant of [`list_tasks_by_root_goal_task_id`](Self::list_tasks_by_root_goal_task_id):
+    /// one round-trip for every open root instead of one per root (the autonomy
+    /// tick evaluates up to 100 roots). Same filter and per-root ordering
+    /// (`created_at ASC, id ASC`); callers group rows by `root_goal_task_id`.
+    pub async fn list_tasks_by_root_goal_task_ids(
+        &self,
+        workspace_id: &str,
+        root_goal_task_ids: &[String],
+    ) -> CoreResult<Vec<WorkspaceTaskRecord>> {
+        if root_goal_task_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query(&format!(
+            "SELECT {TASK_COLS} FROM workspace_tasks \
+             WHERE workspace_id = $1 \
+               AND metadata_json->>'root_goal_task_id' = ANY($2) \
+               AND archived_at IS NULL \
+             ORDER BY created_at ASC, id ASC"
+        ))
+        .bind(workspace_id)
+        .bind(root_goal_task_ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_task).collect()
+    }
+
     pub async fn list_current_plan_child_tasks_by_root_goal_task_id(
         &self,
         workspace_id: &str,
