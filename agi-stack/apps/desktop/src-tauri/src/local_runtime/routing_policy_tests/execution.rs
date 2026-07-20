@@ -1,4 +1,122 @@
 use super::*;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+async fn spawn_openai_decision_server() -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("OpenAI-compatible test listener");
+    let address = listener.local_addr().expect("test listener address");
+    let captured = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    let requests = Arc::clone(&captured);
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("test provider request");
+        let mut buffer = vec![0; 16 * 1024];
+        let read = socket
+            .read(&mut buffer)
+            .await
+            .expect("read provider request");
+        requests
+            .lock()
+            .await
+            .push(String::from_utf8_lossy(&buffer[..read]).to_string());
+        let body = json!({
+            "choices": [{
+                "message": {
+                    "content": r#"{"kind":"finish","answer":"glm-ready"}"#
+                }
+            }]
+        })
+        .to_string();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        socket
+            .write_all(response.as_bytes())
+            .await
+            .expect("write provider response");
+    });
+    (format!("http://{address}/v1"), captured)
+}
+
+#[tokio::test]
+async fn configured_api_key_provider_executes_the_selected_coding_model() {
+    let credential = "coding-provider-routing-secret";
+    let provider_api_key = "test-glm-provider-key";
+    let (base_url, captured) = spawn_openai_decision_server().await;
+    let state = test_state(credential);
+    let app = local_router(Arc::clone(&state));
+
+    let created = app
+        .clone()
+        .oneshot(authenticated_json_request(
+            "POST",
+            "/api/v1/llm-providers/",
+            credential,
+            json!({
+                "name": "OpenAI-compatible",
+                "provider_type": "openai_compatible",
+                "base_url": base_url,
+                "auth_method": "api_key",
+                "api_key": provider_api_key,
+                "llm_model": "glm-5.2",
+                "allowed_models": ["glm-5.2"],
+                "is_active": true
+            }),
+        ))
+        .await
+        .expect("create configured provider");
+    assert_eq!(created.status(), StatusCode::OK);
+    let created = response_json(created).await;
+    let provider_id = created["id"].as_str().expect("created provider id");
+    assert_eq!(created["credential_configured"], true);
+    assert_eq!(created["health_status"], "configuration_valid");
+
+    let saved = app
+        .oneshot(authenticated_json_request(
+            "PUT",
+            LOCAL_ROUTING_POLICY_URI,
+            credential,
+            json!({
+                "project_id": "local-project",
+                "workspace_id": "local-workspace",
+                "expected_revision": 0,
+                "roles": {
+                    "default": {"provider_id": provider_id, "model_id": "glm-5.2"},
+                    "fast": null,
+                    "coding": {"provider_id": provider_id, "model_id": "glm-5.2"},
+                    "vision": null
+                },
+                "fallbacks": []
+            }),
+        ))
+        .await
+        .expect("save coding route");
+    assert_eq!(saved.status(), StatusCode::OK);
+
+    let action = state
+        .llm_for_scope(
+            "local",
+            "local-project",
+            "local-workspace",
+            LlmWorkloadRole::Coding,
+        )
+        .decide("verify selected model", 0, &[], &[])
+        .await
+        .expect("configured coding model response");
+    assert_eq!(
+        action,
+        AgentAction::Finish {
+            answer: "glm-ready".to_string()
+        }
+    );
+
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].contains("POST /v1/chat/completions"));
+    assert!(requests[0].contains("authorization: Bearer test-glm-provider-key"));
+    assert!(requests[0].contains(r#""model":"glm-5.2""#));
+}
 
 #[tokio::test]
 async fn routing_policy_persists_published_role_targets_and_builds_ordered_workload_plans() {
