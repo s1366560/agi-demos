@@ -1122,6 +1122,61 @@ describe('TenantChatSidebar', () => {
     expect(screen.getByTestId('location-probe')).not.toHaveTextContent('workspaceId=');
   });
 
+  it('renders the selected conversation background as a full-width block', () => {
+    const selectedConversationId =
+      'workspace-verifier:ws-current:node-b2768f4c07e7:agent-1:attempt-1';
+    conversationsState.conversations = [
+      {
+        id: selectedConversationId,
+        title: 'Workspace Verification Gate - node-b2768f4c07e7',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'active',
+        workspace_id: 'ws-current',
+        linked_workspace_task_id: 'node-b2768f4c07e7',
+      },
+    ];
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: `/tenant/tenant-1/agent-workspace/${selectedConversationId}?projectId=project-1`,
+    });
+
+    const selectedConversation = screen.getByText('Fix Drone deploy pipeline').closest('a');
+
+    expect(selectedConversation).toHaveAttribute('aria-current', 'page');
+    expect(selectedConversation).toHaveClass('block', 'w-full', 'bg-slate-50');
+  });
+
+  it('keeps conversation actions out of the layout until hover or focus', () => {
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1',
+    });
+
+    const actions = screen.getByRole('button', { name: 'Rename' }).parentElement;
+
+    expect(actions).toHaveClass(
+      'absolute',
+      'pointer-events-none',
+      'opacity-0',
+      'group-hover:pointer-events-auto',
+      'group-hover:opacity-100',
+      'group-focus-within:pointer-events-auto',
+      'group-focus-within:opacity-100'
+    );
+  });
+
+  it('places activity time below the title so the title uses the full row width', () => {
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1',
+    });
+
+    const title = screen.getByText('Conversation One');
+    const time = screen.getByText('just now');
+
+    expect(title).toHaveClass('w-full', 'truncate');
+    expect(title.nextElementSibling).toContainElement(time);
+    expect(time.parentElement).toHaveClass('shrink-0');
+  });
+
   it('groups workspace conversations by workspace only with collapsible sections', () => {
     conversationsState.conversations = [
       {

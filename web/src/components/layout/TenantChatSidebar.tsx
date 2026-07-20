@@ -391,7 +391,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
         onClick={onSelect}
         aria-current={isActive ? 'page' : undefined}
         className={`
-        group relative p-3 rounded-xl mb-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
+        group relative block w-full p-3 rounded-xl mb-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
         transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 border no-underline
         ${
           isActive
@@ -403,41 +403,50 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
         <div className="flex items-start gap-2">
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-medium text-sm truncate" title={primaryTitle}>
-                {primaryTitle}
-              </p>
-              <div className="flex shrink-0 items-center gap-1 text-xs text-slate-400">
+            <p className="w-full truncate text-sm font-medium" title={primaryTitle}>
+              {primaryTitle}
+            </p>
+            <div className="mt-1 flex min-w-0 items-center justify-between gap-2 text-[11px] leading-4 text-slate-400">
+              {contextParts.length > 0 ? (
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {contextParts.map((part, index) => (
+                    <React.Fragment key={`${part}-${index.toString()}`}>
+                      {index > 0 ? (
+                        <span className="shrink-0 text-slate-300 dark:text-slate-600">·</span>
+                      ) : null}
+                      <span
+                        className={
+                          index === 0 && display.roleLabel === part
+                            ? 'shrink-0 font-medium uppercase'
+                            : 'truncate'
+                        }
+                      >
+                        {part}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              ) : (
+                <span aria-hidden />
+              )}
+              <div className="flex shrink-0 items-center gap-1">
                 {conversation.status === 'active' ? (
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
                 ) : null}
                 <span>{display.timeAgo}</span>
               </div>
             </div>
-            {contextParts.length > 0 ? (
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-slate-400">
-                {contextParts.map((part, index) => (
-                  <React.Fragment key={`${part}-${index.toString()}`}>
-                    {index > 0 ? (
-                      <span className="shrink-0 text-slate-300 dark:text-slate-600">·</span>
-                    ) : null}
-                    <span
-                      className={
-                        index === 0 && display.roleLabel === part
-                          ? 'shrink-0 font-medium uppercase'
-                          : 'truncate'
-                      }
-                    >
-                      {part}
-                    </span>
-                  </React.Fragment>
-                ))}
-              </div>
-            ) : null}
           </div>
 
           {/* Actions */}
-          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <div
+            className="pointer-events-none absolute right-2 top-1/2 z-10 flex -translate-y-1/2
+              items-center gap-0.5 rounded-lg bg-slate-50/95 p-0.5 opacity-0 shadow-sm
+              ring-1 ring-slate-200/80 backdrop-blur-sm transition-opacity
+              group-hover:pointer-events-auto group-hover:opacity-100
+              group-focus-within:pointer-events-auto group-focus-within:opacity-100
+              dark:bg-slate-800/95 dark:ring-slate-700/80"
+          >
             {onRename ? (
               <button
                 type="button"
