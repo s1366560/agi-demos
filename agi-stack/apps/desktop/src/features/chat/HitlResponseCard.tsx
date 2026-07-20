@@ -40,12 +40,11 @@ export function HitlResponseCard({
   const [answer, setAnswer] = useState('');
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const requestId = timelineHitlRequestId(item);
   const options = timelineHitlOptions(item);
   const fields = timelineHitlFields(item);
-  const answered = Boolean(item.answered) || submitted;
+  const answered = Boolean(item.answered);
   const authorityDisabled = !answered && !canRespond;
   const allowCustom =
     item.allowCustom ?? booleanPayloadField(item, 'allow_custom') ?? options.length === 0;
@@ -65,7 +64,6 @@ export function HitlResponseCard({
         ...(typeof expectedRevision === 'number' ? { expectedRevision } : {}),
         idempotencyKey: [requestId, expectedRevision ?? 'unversioned', hitlType].join(':'),
       });
-      setSubmitted(true);
     } catch (caught) {
       setSubmitError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -79,7 +77,6 @@ export function HitlResponseCard({
     setSubmitError(null);
     try {
       await onRespond(approvalResponseSubmission(approvalRequest, action));
-      setSubmitted(true);
     } catch (caught) {
       setSubmitError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -171,9 +168,29 @@ export function HitlResponseCard({
             color="green"
             disabled={authorityDisabled || !requestId || busy || !approvalValidation?.canApprove}
             loading={busy}
-            onClick={() => void submitApproval('approve')}
+            onClick={() => void submit({ action: 'allow', granted: true, scope: 'once' })}
           >
             {t('chat.allowOnce')}
+          </Button>
+          <Button
+            size="1"
+            color="green"
+            variant="soft"
+            disabled={
+              authorityDisabled ||
+              !requestId ||
+              busy ||
+              !approvalValidation?.canApprove ||
+              !(
+                approvalRequest?.permission?.allow_remember ||
+                approvalRequest?.decision?.action?.name
+              )
+            }
+            onClick={() =>
+              void submit({ action: 'allow_always', granted: true, scope: 'workspace_tool' })
+            }
+          >
+            {t('chat.allowAlways')}
           </Button>
           <Button
             size="1"
@@ -181,9 +198,7 @@ export function HitlResponseCard({
             variant="soft"
             disabled={authorityDisabled || !requestId || busy}
             onClick={() =>
-              void (approvalRequest
-                ? submitApproval('request_changes')
-                : submit({ granted: false, action: 'deny' }))
+              void submit({ action: 'deny', granted: false, scope: 'once' })
             }
           >
             {t('chat.deny')}

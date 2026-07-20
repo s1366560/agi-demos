@@ -70,10 +70,8 @@ test('auxiliary navigation uses the shared prototype overview surface', () => {
   assert.match(auxiliaryViewStyles, /grid-template-columns:\s*2fr 1fr 1fr/);
 });
 
-test('Work and Code mode controls both select the preferred mode and open My Work', () => {
-  const modeHandler = appSource.match(/onModeChange=\{[\s\S]*?\n\s*\}\}/)?.[0] ?? '';
-
-  assert.match(modeHandler, /setPreferredTaskMode\(mode\)/);
-  assert.match(modeHandler, /switchSection\('board'\)/);
-  assert.doesNotMatch(appSource, /onModeChange=\{setPreferredTaskMode\}/);
+test('Work and Code mode controls live in the new-thread composer', () => {
+  assert.match(appSource, /<NewThreadComposer/);
+  assert.match(appSource, /onModeChange=\{setPreferredTaskMode\}/);
+  assert.doesNotMatch(appSource, /setPreferredTaskMode\(mode\)[\s\S]*switchSection\('board'\)/);
 });

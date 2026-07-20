@@ -33,6 +33,8 @@ class WorkspaceAttemptAuthority:
     workspace_metadata: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime | None
+    workspace_name: str | None = None
+    plan_tasks: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,6 +50,8 @@ class HITLRequestAuthority:
     workspace_metadata: dict[str, Any] | None
     created_at: datetime
     expires_at: datetime
+    workspace_name: str | None = None
+    plan_tasks: tuple[dict[str, Any], ...] = ()
 
 
 class ProjectMyWorkReader(Protocol):
@@ -138,6 +142,7 @@ class ProjectMyWorkService:
             return None
 
         updated_at = source.updated_at or source.created_at
+        summary, phase, progress = cls._plan_projection(source.plan_tasks)
         return ProjectWorkItem(
             id=f"workspace_attempt:{source.id}",
             authority_kind="workspace_attempt",
@@ -162,6 +167,10 @@ class ProjectMyWorkService:
             created_at=source.created_at,
             updated_at=updated_at,
             last_heartbeat_at=None,
+            workspace_name=source.workspace_name,
+            summary=summary,
+            phase=phase,
+            progress=progress,
         )
 
     @classmethod
@@ -181,6 +190,7 @@ class ProjectMyWorkService:
         else:
             return None
 
+        summary, phase, progress = cls._plan_projection(source.plan_tasks)
         return ProjectWorkItem(
             id=f"hitl_request:{source.id}",
             authority_kind="hitl_request",
@@ -205,7 +215,31 @@ class ProjectMyWorkService:
             created_at=source.created_at,
             updated_at=source.created_at,
             last_heartbeat_at=None,
+            workspace_name=source.workspace_name,
+            summary=summary,
+            phase=phase,
+            progress=progress,
         )
+
+    @staticmethod
+    def _plan_projection(
+        tasks: tuple[dict[str, Any], ...],
+    ) -> tuple[str | None, str | None, int | None]:
+        if not tasks:
+            return None, None, None
+        completed = sum(task.get("status") == "completed" for task in tasks)
+        current = next(
+            (task for task in tasks if task.get("status") == "in_progress"),
+            None,
+        ) or next((task for task in tasks if task.get("status") == "pending"), tasks[-1])
+
+        def text(field: str) -> str | None:
+            value = current.get(field)
+            return value.strip() if isinstance(value, str) and value.strip() else None
+
+        phase = text("title") or text("content")
+        summary = text("result_summary") or text("description") or phase
+        return summary, phase, completed * 100 // len(tasks)
 
     @staticmethod
     def _capability_mode(*structured_values: dict[str, Any] | None) -> MyWorkCapabilityMode | None:

@@ -19,9 +19,13 @@ use super::{
         ApprovePlanOutcome, DesktopArtifactDelivery, DesktopArtifactStatus, DesktopArtifactVersion,
         DesktopAuthorityError, DesktopExecutionEnvironment, DesktopHitlRequest, DesktopHitlStatus,
         DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
-        DesktopRunStatus,
+        DesktopRunStatus, WorkspaceToolGrant,
     },
     provider_usage_store::{self, ProviderUsageRecord, ProviderUsageStatistic},
+    resource_registry::{
+        apply_workspace_agent_policy_mutation, ensure_workspace_agent_policy_in_transaction,
+        ResourceRegistryError, WorkspaceAgentPolicyMutation,
+    },
     steering::{DesktopRunInput, RunInputDelivery, RunInputReference, RunInputStatus},
     tool_authority::{
         GrantConsumption, InvocationStatus, PermissionGrant, ToolInvocation, ToolInvocationRequest,
@@ -30,7 +34,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 18;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 19;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
@@ -60,6 +64,15 @@ pub(super) struct PreparedToolInvocation {
     pub(super) existing: bool,
 }
 
+pub(super) struct HitlResponseCommit<'a> {
+    pub(super) response_data: &'a Value,
+    pub(super) response_actor: &'a str,
+    pub(super) response_revision: Option<u64>,
+    pub(super) idempotency_key: Option<&'a str>,
+    pub(super) workspace_tool_grant: Option<&'a WorkspaceToolGrant>,
+    pub(super) now: &'a str,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum DesktopClientTurnClaimError {
     PayloadConflict,
@@ -71,6 +84,7 @@ pub(super) enum DesktopTaskSessionError {
     IdempotencyConflict,
     WorkspaceNotFound,
     ScopeMismatch,
+    Policy(ResourceRegistryError),
     Storage(String),
 }
 
@@ -83,6 +97,7 @@ impl std::fmt::Display for DesktopTaskSessionError {
             Self::ScopeMismatch => {
                 formatter.write_str("resource is outside the active workspace context")
             }
+            Self::Policy(error) => error.fmt(formatter),
             Self::Storage(error) => formatter.write_str(error),
         }
     }
@@ -103,6 +118,7 @@ pub(super) struct CreateTaskSessionInput {
     pub(super) workspace: TaskSessionWorkspaceInput,
     pub(super) conversation: LocalConversation,
     pub(super) initial_message: Value,
+    pub(super) workspace_policy: Option<WorkspaceAgentPolicyMutation>,
     pub(super) now: String,
 }
 
@@ -111,6 +127,7 @@ pub(super) struct CreateTaskSessionOutcome {
     pub(super) workspace: Value,
     pub(super) conversation: Value,
     pub(super) initial_message: Value,
+    pub(super) policy: Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -461,6 +478,18 @@ impl DesktopSessionStore {
                    created_at_ms INTEGER NOT NULL,
                    value_json TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_workspace_tool_grants (
+                   id TEXT PRIMARY KEY,
+                   workspace_id TEXT NOT NULL,
+                   canonical_tool_name TEXT NOT NULL,
+                   source_hitl_request_id TEXT NOT NULL,
+                   revision INTEGER NOT NULL,
+                   created_by TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   revoked_by TEXT,
+                   revoked_at TEXT,
+                   value_json TEXT NOT NULL
+                 );
                  CREATE TABLE IF NOT EXISTS desktop_tool_invocations (
                    id TEXT PRIMARY KEY,
                    run_id TEXT NOT NULL,
@@ -514,6 +543,10 @@ impl DesktopSessionStore {
                    ON desktop_artifact_deliveries(conversation_id, created_at DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_permission_grants_run
                    ON desktop_permission_grants(run_id, created_at_ms DESC);
+                 CREATE INDEX IF NOT EXISTS idx_desktop_workspace_tool_grants_active
+                   ON desktop_workspace_tool_grants(
+                     workspace_id, canonical_tool_name, revoked_at, created_at DESC
+                   );
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_run
                    ON desktop_tool_invocations(run_id, prepared_at_ms DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_status
@@ -1017,6 +1050,7 @@ impl DesktopSessionStore {
             workspace,
             conversation,
             initial_message,
+            workspace_policy,
             now,
         } = input;
         let mut connection = self
@@ -1049,7 +1083,20 @@ impl DesktopSessionStore {
                 workspace,
                 conversation,
                 initial_message,
+                mut policy,
             } = receipt.response;
+            if policy.is_null() {
+                policy = ensure_workspace_agent_policy_in_transaction(
+                    &transaction,
+                    &tenant_id,
+                    &project_id,
+                    &receipt.workspace_id,
+                    chrono::DateTime::parse_from_rfc3339(&now)
+                        .map(|value| value.timestamp_millis())
+                        .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?,
+                )
+                .map_err(DesktopTaskSessionError::Policy)?;
+            }
             transaction
                 .commit()
                 .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
@@ -1058,6 +1105,7 @@ impl DesktopSessionStore {
                 workspace,
                 conversation,
                 initial_message,
+                policy,
             });
         }
 
@@ -1078,6 +1126,27 @@ impl DesktopSessionStore {
         };
         let workspace_id =
             required_string(&workspace, "id").map_err(DesktopTaskSessionError::Storage)?;
+        let now_ms = chrono::DateTime::parse_from_rfc3339(&now)
+            .map(|value| value.timestamp_millis())
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        let policy = match workspace_policy.as_ref() {
+            Some(mutation) => apply_workspace_agent_policy_mutation(
+                &transaction,
+                &tenant_id,
+                &project_id,
+                &workspace_id,
+                mutation,
+                now_ms,
+            ),
+            None => ensure_workspace_agent_policy_in_transaction(
+                &transaction,
+                &tenant_id,
+                &project_id,
+                &workspace_id,
+                now_ms,
+            ),
+        }
+        .map_err(DesktopTaskSessionError::Policy)?;
         if conversation.tenant_id != tenant_id
             || conversation.project_id != project_id
             || conversation.workspace_id.as_deref() != Some(workspace_id.as_str())
@@ -1103,6 +1172,7 @@ impl DesktopSessionStore {
             workspace: workspace.clone(),
             conversation: conversation_response.clone(),
             initial_message: initial_message.clone(),
+            policy: policy.clone(),
         })
         .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
 
@@ -1134,6 +1204,7 @@ impl DesktopSessionStore {
             workspace,
             conversation: conversation_response,
             initial_message,
+            policy,
         })
     }
 
@@ -1870,6 +1941,20 @@ impl DesktopSessionStore {
             .map_err(|error| error.to_string())?;
         let plan = query_latest_draft_plan(&transaction, conversation_id)
             .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(plan)
+    }
+
+    pub(super) fn plan_version_for_projection(
+        &self,
+        plan_version_id: &str,
+    ) -> Result<Option<DesktopPlanVersion>, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let plan =
+            query_plan_version(&transaction, plan_version_id).map_err(|error| error.to_string())?;
         transaction.commit().map_err(|error| error.to_string())?;
         Ok(plan)
     }
@@ -3435,11 +3520,7 @@ impl DesktopSessionStore {
     pub(super) fn mark_hitl_responded(
         &self,
         request_id: &str,
-        response_data: &Value,
-        response_actor: &str,
-        response_revision: Option<u64>,
-        idempotency_key: Option<&str>,
-        now: &str,
+        response: HitlResponseCommit<'_>,
     ) -> Result<DesktopHitlRequest, String> {
         let mut connection = self.connection()?;
         let transaction = connection
@@ -3460,11 +3541,44 @@ impl DesktopSessionStore {
             return Ok(request);
         }
         request.status = DesktopHitlStatus::Responded;
-        request.responded_at = Some(now.to_string());
-        request.response_data = Some(response_data.clone());
-        request.response_actor = Some(response_actor.to_string());
-        request.response_revision = response_revision;
-        request.idempotency_key = idempotency_key.map(ToString::to_string);
+        request.responded_at = Some(response.now.to_string());
+        request.response_data = Some(response.response_data.clone());
+        request.response_actor = Some(response.response_actor.to_string());
+        request.response_revision = response.response_revision;
+        request.idempotency_key = response.idempotency_key.map(ToString::to_string);
+        if let Some(grant) = response.workspace_tool_grant {
+            let active_grant = transaction
+                .query_row(
+                    "SELECT id FROM desktop_workspace_tool_grants
+                     WHERE workspace_id = ?1 AND canonical_tool_name = ?2
+                       AND revoked_at IS NULL
+                     ORDER BY created_at DESC LIMIT 1",
+                    params![grant.workspace_id, grant.canonical_tool_name],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|error| error.to_string())?;
+            if active_grant.is_none() {
+                transaction
+                    .execute(
+                        "INSERT INTO desktop_workspace_tool_grants(
+                           id, workspace_id, canonical_tool_name, source_hitl_request_id,
+                           revision, created_by, created_at, revoked_by, revoked_at, value_json
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, ?8)",
+                        params![
+                            grant.id,
+                            grant.workspace_id,
+                            grant.canonical_tool_name,
+                            grant.source_hitl_request_id,
+                            grant.revision as i64,
+                            grant.created_by,
+                            grant.created_at,
+                            serde_json::to_string(grant).map_err(|error| error.to_string())?,
+                        ],
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+        }
         transaction
             .execute(
                 "UPDATE desktop_hitl_requests
@@ -3472,13 +3586,98 @@ impl DesktopSessionStore {
                  WHERE id = ?1 AND status = 'pending'",
                 params![
                     request_id,
-                    now,
+                    response.now,
                     serde_json::to_string(&request).map_err(|error| error.to_string())?,
                 ],
             )
             .map_err(|error| error.to_string())?;
         transaction.commit().map_err(|error| error.to_string())?;
         Ok(request)
+    }
+
+    pub(super) fn workspace_tool_grant_active(
+        &self,
+        conversation_id: &str,
+        canonical_tool_name: &str,
+    ) -> Result<bool, String> {
+        let connection = self.connection()?;
+        let count = connection
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM desktop_workspace_tool_grants grant_authority
+                 JOIN desktop_conversations conversation
+                   ON conversation.workspace_id = grant_authority.workspace_id
+                 WHERE conversation.id = ?1
+                   AND grant_authority.canonical_tool_name = ?2
+                   AND grant_authority.revoked_at IS NULL",
+                params![conversation_id, canonical_tool_name],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(count > 0)
+    }
+
+    pub(super) fn list_workspace_tool_grants(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<WorkspaceToolGrant>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT value_json FROM desktop_workspace_tool_grants
+                 WHERE workspace_id = ?1 AND revoked_at IS NULL
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        typed_rows(statement.query_map([workspace_id], |row| row.get::<_, String>(0)))
+    }
+
+    pub(super) fn revoke_workspace_tool_grant(
+        &self,
+        workspace_id: &str,
+        grant_id: &str,
+        revoked_by: &str,
+        revoked_at: &str,
+    ) -> Result<Option<WorkspaceToolGrant>, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let value_json = transaction
+            .query_row(
+                "SELECT value_json FROM desktop_workspace_tool_grants
+                 WHERE id = ?1 AND workspace_id = ?2 AND revoked_at IS NULL",
+                params![grant_id, workspace_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        let Some(value_json) = value_json else {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(None);
+        };
+        let mut grant: WorkspaceToolGrant =
+            serde_json::from_str(&value_json).map_err(|error| error.to_string())?;
+        grant.revision = grant.revision.saturating_add(1);
+        grant.revoked_by = Some(revoked_by.to_string());
+        grant.revoked_at = Some(revoked_at.to_string());
+        transaction
+            .execute(
+                "UPDATE desktop_workspace_tool_grants
+                 SET revision = ?3, revoked_by = ?4, revoked_at = ?5, value_json = ?6
+                 WHERE id = ?1 AND workspace_id = ?2 AND revoked_at IS NULL",
+                params![
+                    grant_id,
+                    workspace_id,
+                    grant.revision as i64,
+                    revoked_by,
+                    revoked_at,
+                    serde_json::to_string(&grant).map_err(|error| error.to_string())?,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(Some(grant))
     }
 
     pub(super) fn authorize_and_prepare_tool_invocation(
@@ -3500,6 +3699,27 @@ impl DesktopSessionStore {
                 invocation,
                 existing: true,
             });
+        }
+
+        if grant_source == "workspace_tool_grant" {
+            let active_count = transaction
+                .query_row(
+                    "SELECT COUNT(*)
+                     FROM desktop_workspace_tool_grants grant_authority
+                     JOIN desktop_conversations conversation
+                       ON conversation.workspace_id = grant_authority.workspace_id
+                     JOIN desktop_runs active_run
+                       ON active_run.conversation_id = conversation.id
+                     WHERE active_run.id = ?1
+                       AND grant_authority.canonical_tool_name = ?2
+                       AND grant_authority.revoked_at IS NULL",
+                    params![request.run_id, request.tool_name],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(|error| error.to_string())?;
+            if active_count == 0 {
+                return Err("workspace tool grant is no longer active".to_string());
+            }
         }
 
         let run = query_run(&transaction, &request.run_id)
@@ -3966,6 +4186,8 @@ struct TaskSessionResponseSnapshot {
     workspace: Value,
     conversation: Value,
     initial_message: Value,
+    #[serde(default)]
+    policy: Value,
 }
 
 struct LegacyTaskSessionReceipt {
@@ -4687,6 +4909,7 @@ mod tests {
                 "workspace_id": workspace_id,
                 "content": format!("Objective {suffix}"),
             }),
+            policy: Value::Null,
         }
     }
 
@@ -4930,6 +5153,7 @@ mod tests {
                     "sender_id": "local-user",
                     "workspace_id": "workspace-legacy",
                 }),
+                workspace_policy: None,
                 now: "2026-07-19T00:00:00Z".to_string(),
             })
             .expect("replay migrated task session receipt");
@@ -5124,5 +5348,101 @@ mod tests {
             .timeline_page(conversation_id, 1, None, None)
             .expect_err("duplicate cursor tuples must fail closed");
         assert!(error.contains("duplicate cursors"));
+    }
+
+    #[test]
+    fn workspace_tool_grant_is_cross_conversation_revocable_and_survives_reopen() {
+        let path = std::env::temp_dir().join(format!(
+            "agistack-workspace-tool-grant-{}.db",
+            Uuid::new_v4()
+        ));
+        let grant_id;
+        {
+            let store = DesktopSessionStore::open(&path).expect("session store");
+            let connection = store.connection().expect("connection");
+            for conversation_id in ["grant-conversation-a", "grant-conversation-b"] {
+                connection
+                    .execute(
+                        "INSERT INTO desktop_conversations(
+                           id, project_id, workspace_id, updated_at, value_json
+                         ) VALUES (?1, 'project', 'workspace', '2026-07-20T00:00:00Z', '{}')",
+                        [conversation_id],
+                    )
+                    .expect("insert conversation");
+            }
+            drop(connection);
+            let request = DesktopHitlRequest {
+                id: "grant-hitl".to_string(),
+                conversation_id: "grant-conversation-a".to_string(),
+                run_id: None,
+                round: 1,
+                kind: agistack_core::agent::types::HitlKind::Permission,
+                prompt: "Allow write".to_string(),
+                decision: None,
+                status: DesktopHitlStatus::Pending,
+                created_at: "2026-07-20T00:00:00Z".to_string(),
+                responded_at: None,
+                response_data: None,
+                response_actor: None,
+                response_revision: None,
+                idempotency_key: None,
+            };
+            store.insert_hitl_request(&request).expect("insert HITL");
+            let grant = WorkspaceToolGrant {
+                id: format!("grant-{}", Uuid::new_v4()),
+                workspace_id: "workspace".to_string(),
+                canonical_tool_name: "write".to_string(),
+                source_hitl_request_id: request.id.clone(),
+                revision: 1,
+                created_by: "owner".to_string(),
+                created_at: "2026-07-20T00:00:01Z".to_string(),
+                revoked_by: None,
+                revoked_at: None,
+            };
+            grant_id = grant.id.clone();
+            store
+                .mark_hitl_responded(
+                    &request.id,
+                    HitlResponseCommit {
+                        response_data: &json!({
+                            "action": "allow_always",
+                            "granted": true,
+                            "scope": "workspace_tool",
+                        }),
+                        response_actor: "owner",
+                        response_revision: None,
+                        idempotency_key: Some("grant-hitl:1"),
+                        workspace_tool_grant: Some(&grant),
+                        now: "2026-07-20T00:00:01Z",
+                    },
+                )
+                .expect("persist response and grant");
+            assert!(store
+                .workspace_tool_grant_active("grant-conversation-b", "write")
+                .expect("cross-conversation grant"));
+            assert!(!store
+                .workspace_tool_grant_active("grant-conversation-b", "edit")
+                .expect("different tool"));
+        }
+        {
+            let store = DesktopSessionStore::open(&path).expect("reopen session store");
+            assert!(store
+                .workspace_tool_grant_active("grant-conversation-b", "write")
+                .expect("reopened grant"));
+            let revoked = store
+                .revoke_workspace_tool_grant(
+                    "workspace",
+                    &grant_id,
+                    "owner",
+                    "2026-07-20T00:00:02Z",
+                )
+                .expect("revoke grant")
+                .expect("active grant");
+            assert_eq!(revoked.revision, 2);
+            assert!(!store
+                .workspace_tool_grant_active("grant-conversation-b", "write")
+                .expect("revoked grant"));
+        }
+        let _ = std::fs::remove_file(path);
     }
 }

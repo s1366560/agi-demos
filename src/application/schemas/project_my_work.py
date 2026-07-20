@@ -41,6 +41,10 @@ class ProjectWorkItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_heartbeat_at: datetime | None = None
+    workspace_name: str | None = None
+    summary: str | None = None
+    phase: str | None = None
+    progress: int | None = None
 
 
 class ProjectMyWorkResponse(BaseModel):

@@ -48,6 +48,62 @@ final result: passed
 
 ---
 
+# Desktop Mission Control Design QA
+
+## Verdict
+
+- P0: none.
+- P1: none.
+- P2: none after the My Work width, copy, action, and density corrections.
+- P3: the implementation renders authoritative workspace, model, permission, plan, and run data, so thread titles and counts differ from the prototype's illustrative fixtures. The prototype-only Attach control is intentionally omitted because no backend action exists for it.
+
+## Comparison setup
+
+- Source visual truth: `/Users/tiejunsun/github/agi-demos/design-prototype/memstack-desktop-agent-mission-control`
+- Implementation harness: `/Users/tiejunsun/github/agi-demos/agi-stack/apps/desktop/qa/mission-control.html`
+- Desktop source: `/Users/tiejunsun/github/agi-demos/agi-stack/apps/desktop/src`
+- Rust authority source: `/Users/tiejunsun/github/agi-demos/agi-stack/apps/desktop/src-tauri/src`
+- Python/cloud source: `/Users/tiejunsun/github/agi-demos/src`
+- Viewports: `1440 × 1024` and `1100 × 800`.
+- States: composer-first Home and grouped My Work inbox, authenticated dark desktop shell.
+- Home 1440 comparison: `/Users/tiejunsun/github/agi-demos/artifacts/design-qa/compare-home-1440-final.png`
+- Home 1100 comparison: `/Users/tiejunsun/github/agi-demos/artifacts/design-qa/compare-home-1100-final.png`
+- My Work 1440 comparison: `/Users/tiejunsun/github/agi-demos/artifacts/design-qa/compare-my-work-1440-final.png`
+- My Work 1100 comparison: `/Users/tiejunsun/github/agi-demos/artifacts/design-qa/compare-my-work-1100-final.png`
+
+Each comparison places the source prototype and implementation side by side at their exact native viewport size. The native-resolution full-view evidence keeps the sidebar, typography, composer controls, cards, status icons, spacing, and copy legible, so a separate focused crop would not reveal additional visual information.
+
+## Visual review
+
+- Typography: heading scale, uppercase eyebrow treatment, muted metadata, and compact card labels align with the prototype hierarchy.
+- Spacing and geometry: the 220px sidebar, centered 680px composer, 365px inbox cards, section rhythm, and both responsive breakpoints align without clipping or horizontal overflow.
+- Colors and decoration: flat near-black surfaces, cyan active accents, governed amber/cyan/green status colors, subtle borders, and restrained radii match the prototype direction.
+- Icons and image quality: vector icons remain crisp at both viewports; no stretched, blurred, or synthetic bitmap UI assets are present.
+- Copy: the New thread, My Work, Inbox, mode, effort, permission, and workspace labels follow the current product contract. Model names, counts, durations, and statuses come from authoritative data rather than prototype fiction.
+
+## Primary interactions verified
+
+- Enter a composer prompt, switch Work/Code, select a real provider model, change reasoning effort and permission mode, and submit one atomic task-session request.
+- Preserve Workspace policy permissions: non-managers can inspect policy values but cannot mutate them; manager changes carry the expected revision.
+- Restore failure and old-capability states without creating a half-finished thread, and expose the upgrade notice for legacy services.
+- Navigate the Workspace-grouped thread tree and open My Work cards directly into the authoritative conversation.
+- Render plan replacement and approval against the current immutable version only.
+- Keep the latest permission HITL above the composer and submit `allow`, `allow_always`, or `deny` without optimistic completion.
+- Native Tauri acceptance launched through `make -C agi-stack run-desktop`; the app shell reported no fatal runtime state.
+- Browser console warnings and errors in the final QA harness: none.
+
+## Comparison history
+
+1. The first My Work comparison found 1440px cards stretching beyond the prototype grid; the wide layout was capped at two 365px columns while the narrower breakpoint remains fluid.
+2. The initial implementation retained search and refresh controls and used a Mission Control eyebrow that did not exist in the latest source state; those controls were removed and the authoritative My Work copy was restored.
+3. My Work cards were approximately 50px taller than the source. Minimum height, internal spacing, and inter-section rhythm were tightened to the prototype's dense inbox treatment.
+4. The sidebar primary action still said New task. English and Chinese labels now consistently say New thread / 新建线程.
+5. Final same-input comparisons at both requested viewports show no remaining P0, P1, or P2 visual, responsive, accessibility, or interaction findings.
+
+final result: passed
+
+---
+
 # Desktop Plan-first Task and Recovery Design QA
 
 ## Verdict

@@ -22,9 +22,15 @@ from src.application.services.trust_service import TrustService
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
+from src.infrastructure.adapters.primary.web.routers.workspace_agent_policy import (
+    _require_workspace_access,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import WorkspaceModel
+from src.infrastructure.adapters.secondary.persistence.models import (
+    TrustPolicyModel,
+    WorkspaceModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_decision_record_repository import (
     SqlDecisionRecordRepository,
 )
@@ -39,6 +45,12 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/trust",
     tags=["trust"],
 )
+workspace_router = APIRouter(
+    prefix=(
+        "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/tool-grants"
+    ),
+    tags=["trust"],
+)
 
 
 def _build_service(db: AsyncSession) -> TrustService:
@@ -46,6 +58,10 @@ def _build_service(db: AsyncSession) -> TrustService:
         policy_repo=SqlTrustPolicyRepository(db),
         record_repo=SqlDecisionRecordRepository(db),
     )
+
+
+def _policy_response(policy: object) -> TrustPolicyResponse:
+    return TrustPolicyResponse.model_validate(policy)
 
 
 async def _require_tenant_access(
@@ -66,10 +82,12 @@ async def _require_workspace_in_tenant(
     workspace_id: str,
 ) -> None:
     result = await db.execute(
-        refresh_select_statement(select(WorkspaceModel.id).where(
-            WorkspaceModel.id == workspace_id,
-            WorkspaceModel.tenant_id == tenant_id,
-        ))
+        refresh_select_statement(
+            select(WorkspaceModel.id).where(
+                WorkspaceModel.id == workspace_id,
+                WorkspaceModel.tenant_id == tenant_id,
+            )
+        )
     )
     if result.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail=_("Workspace not found"))
@@ -92,22 +110,7 @@ async def list_trust_policies(
     await _require_workspace_in_tenant(db, tenant_id, workspace_id)
     service = _build_service(db)
     items = await service.list_policies(workspace_id, agent_instance_id=agent_instance_id)
-    return TrustPolicyListResponse(
-        items=[
-            TrustPolicyResponse(
-                id=p.id,
-                tenant_id=p.tenant_id,
-                workspace_id=p.workspace_id,
-                agent_instance_id=p.agent_instance_id,
-                action_type=p.action_type,
-                granted_by=p.granted_by,
-                grant_type=p.grant_type,
-                created_at=p.created_at,
-                deleted_at=p.deleted_at,
-            )
-            for p in items
-        ]
-    )
+    return TrustPolicyListResponse(items=[_policy_response(p) for p in items])
 
 
 @router.post("/policies", response_model=TrustPolicyResponse, status_code=201)
@@ -129,17 +132,95 @@ async def create_trust_policy(
         grant_type=body.grant_type,
     )
     await db.commit()
-    return TrustPolicyResponse(
-        id=policy.id,
-        tenant_id=policy.tenant_id,
-        workspace_id=policy.workspace_id,
-        agent_instance_id=policy.agent_instance_id,
-        action_type=policy.action_type,
-        granted_by=policy.granted_by,
-        grant_type=policy.grant_type,
-        created_at=policy.created_at,
-        deleted_at=policy.deleted_at,
+    return _policy_response(policy)
+
+
+@router.delete("/policies/{policy_id}", response_model=TrustPolicyResponse)
+async def revoke_trust_policy(
+    tenant_id: str,
+    policy_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    workspace_id: str = Query(...),
+) -> TrustPolicyResponse:
+    await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
+    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
+    scoped_policy = await db.execute(
+        refresh_select_statement(
+            select(TrustPolicyModel.id).where(
+                TrustPolicyModel.id == policy_id,
+                TrustPolicyModel.tenant_id == tenant_id,
+                TrustPolicyModel.workspace_id == workspace_id,
+                TrustPolicyModel.deleted_at.is_(None),
+            )
+        )
     )
+    if scoped_policy.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail=_("Trust policy not found"))
+    policy = await _build_service(db).revoke_policy(policy_id, revoked_by=str(current_user.id))
+    if policy is None:
+        raise HTTPException(status_code=409, detail=_("Trust policy is no longer active"))
+    await db.commit()
+    return _policy_response(policy)
+
+
+@workspace_router.get("", response_model=TrustPolicyListResponse)
+async def list_workspace_tool_grants(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TrustPolicyListResponse:
+    await _require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_manager=False,
+    )
+    policies = await _build_service(db).list_policies(workspace_id)
+    return TrustPolicyListResponse(
+        items=[_policy_response(policy) for policy in policies if policy.scope == "workspace_tool"]
+    )
+
+
+@workspace_router.delete("/{policy_id}", response_model=TrustPolicyResponse)
+async def revoke_workspace_tool_grant(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    policy_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TrustPolicyResponse:
+    await _require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_manager=True,
+    )
+    result = await db.execute(
+        refresh_select_statement(
+            select(TrustPolicyModel.id).where(
+                TrustPolicyModel.id == policy_id,
+                TrustPolicyModel.tenant_id == tenant_id,
+                TrustPolicyModel.workspace_id == workspace_id,
+                TrustPolicyModel.scope == "workspace_tool",
+                TrustPolicyModel.deleted_at.is_(None),
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail=_("Workspace tool grant not found"))
+    policy = await _build_service(db).revoke_policy(policy_id, revoked_by=str(current_user.id))
+    if policy is None:
+        raise HTTPException(status_code=409, detail=_("Workspace tool grant is no longer active"))
+    await db.commit()
+    return _policy_response(policy)
 
 
 @router.get("/policies/check", response_model=TrustCheckResponse)

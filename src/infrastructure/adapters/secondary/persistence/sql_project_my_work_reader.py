@@ -14,6 +14,7 @@ from src.application.services.project_my_work_service import (
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentPlanVersionModel,
     Conversation,
     HITLRequest,
     Project,
@@ -66,6 +67,13 @@ class SqlProjectMyWorkReader:
         task = WorkspaceTaskModel
         workspace = WorkspaceModel
         conversation = Conversation
+        latest_plan_tasks = (
+            select(AgentPlanVersionModel.tasks_json)
+            .where(AgentPlanVersionModel.conversation_id == conversation.id)
+            .order_by(AgentPlanVersionModel.version.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
 
         ranked_attempts = select(
             attempt.id.label("authority_id"),
@@ -98,6 +106,8 @@ class SqlProjectMyWorkReader:
                 ranked_attempts.c.attempt_number,
                 conversation.agent_config.label("conversation_agent_config"),
                 workspace.metadata_json.label("workspace_metadata"),
+                workspace.name.label("workspace_name"),
+                latest_plan_tasks.label("plan_tasks"),
                 ranked_attempts.c.created_at,
                 ranked_attempts.c.updated_at,
             )
@@ -167,6 +177,8 @@ class SqlProjectMyWorkReader:
                 workspace_metadata=self._json_object(row.workspace_metadata),
                 created_at=row.created_at,
                 updated_at=row.updated_at,
+                workspace_name=row.workspace_name,
+                plan_tasks=self._json_task_list(row.plan_tasks),
             )
             for row in result.all()
         ]
@@ -180,6 +192,13 @@ class SqlProjectMyWorkReader:
     ) -> list[HITLRequestAuthority]:
         conversation = Conversation
         workspace = WorkspaceModel
+        latest_plan_tasks = (
+            select(AgentPlanVersionModel.tasks_json)
+            .where(AgentPlanVersionModel.conversation_id == conversation.id)
+            .order_by(AgentPlanVersionModel.version.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
         statement = (
             select(
                 HITLRequest.id.label("authority_id"),
@@ -191,6 +210,8 @@ class SqlProjectMyWorkReader:
                 conversation.agent_config.label("conversation_agent_config"),
                 HITLRequest.request_metadata,
                 workspace.metadata_json.label("workspace_metadata"),
+                workspace.name.label("workspace_name"),
+                latest_plan_tasks.label("plan_tasks"),
                 HITLRequest.created_at,
                 HITLRequest.expires_at,
             )
@@ -260,6 +281,8 @@ class SqlProjectMyWorkReader:
                 workspace_metadata=self._json_object(row.workspace_metadata),
                 created_at=row.created_at,
                 expires_at=row.expires_at,
+                workspace_name=row.workspace_name,
+                plan_tasks=self._json_task_list(row.plan_tasks),
             )
             for row in result.all()
         ]
@@ -267,3 +290,9 @@ class SqlProjectMyWorkReader:
     @staticmethod
     def _json_object(value: object) -> dict[str, Any] | None:
         return cast(dict[str, Any], value) if isinstance(value, dict) else None
+
+    @staticmethod
+    def _json_task_list(value: object) -> tuple[dict[str, Any], ...]:
+        if not isinstance(value, list):
+            return ()
+        return tuple(cast(dict[str, Any], item) for item in value if isinstance(item, dict))

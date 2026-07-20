@@ -96,6 +96,29 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
             detail=_("cancelled/timeout responses are only supported for env_var HITL"),
         )
 
+    if hitl_type == "permission":
+        action = response_data.get("action")
+        granted = response_data.get("granted")
+        scope = response_data.get("scope")
+        if action is None and isinstance(granted, bool):
+            return
+        expected = {
+            "allow": (True, "once"),
+            "allow_always": (True, "workspace_tool"),
+            "deny": (False, "once"),
+        }
+        if action not in expected or (granted, scope) != expected[action]:
+            raise HTTPException(
+                status_code=400,
+                detail=_("Invalid permission response"),
+            )
+        if {"tool", "tool_name", "canonical_tool_name"}.intersection(response_data):
+            raise HTTPException(
+                status_code=400,
+                detail=_("Permission response must not provide a tool name"),
+            )
+        return
+
     if hitl_type != "env_var":
         return
 
@@ -112,6 +135,121 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
             status_code=400,
             detail=_("env_var values must be an object"),
         )
+
+
+async def _persist_workspace_tool_grant_if_requested(
+    *,
+    db: AsyncSession,
+    hitl_request: HITLRequest,
+    response_data: dict[str, Any],
+    current_user: User,
+) -> None:
+    if response_data.get("action") != "allow_always":
+        return
+
+    from src.domain.model.trust.trust_policy import TrustPolicy
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        Conversation,
+        TrustPolicyModel,
+        UserProject,
+        WorkspaceMemberModel,
+        WorkspaceModel,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_trust_policy_repository import (
+        SqlTrustPolicyRepository,
+    )
+    from src.infrastructure.agent.hitl.utils import build_hitl_request_data_from_record
+
+    request_data = build_hitl_request_data_from_record(hitl_request)
+    canonical_tool_name = request_data.get("tool_name")
+    if not isinstance(canonical_tool_name, str) or not canonical_tool_name.strip():
+        raise HTTPException(status_code=400, detail=_("Permission request has no canonical tool"))
+    if request_data.get("allow_remember") is not True:
+        raise HTTPException(status_code=403, detail=_("This permission cannot be remembered"))
+
+    conversation_result = await db.execute(
+        refresh_select_statement(
+            select(Conversation.workspace_id).where(
+                Conversation.id == hitl_request.conversation_id,
+                Conversation.tenant_id == hitl_request.tenant_id,
+                Conversation.project_id == hitl_request.project_id,
+            )
+        )
+    )
+    workspace_id = conversation_result.scalar_one_or_none()
+    if not workspace_id:
+        raise HTTPException(status_code=400, detail=_("Conversation has no workspace"))
+    workspace_result = await db.execute(
+        refresh_select_statement(
+            select(WorkspaceModel).where(
+                WorkspaceModel.id == workspace_id,
+                WorkspaceModel.tenant_id == hitl_request.tenant_id,
+                WorkspaceModel.project_id == hitl_request.project_id,
+                WorkspaceModel.is_archived.is_(False),
+            )
+        )
+    )
+    workspace = workspace_result.scalar_one_or_none()
+    if workspace is None:
+        raise HTTPException(status_code=404, detail=_("Workspace not found"))
+
+    user_id = str(current_user.id)
+    if workspace.created_by != user_id:
+        workspace_role_result = await db.execute(
+            refresh_select_statement(
+                select(WorkspaceMemberModel.role).where(
+                    WorkspaceMemberModel.workspace_id == workspace_id,
+                    WorkspaceMemberModel.user_id == user_id,
+                )
+            )
+        )
+        project_role_result = await db.execute(
+            refresh_select_statement(
+                select(UserProject.role).where(
+                    UserProject.project_id == hitl_request.project_id,
+                    UserProject.user_id == user_id,
+                )
+            )
+        )
+        if workspace_role_result.scalar_one_or_none() not in {
+            "manager",
+            "owner",
+        } and project_role_result.scalar_one_or_none() not in {"admin", "owner"}:
+            raise HTTPException(
+                status_code=403,
+                detail=_("Workspace manager permission is required"),
+            )
+
+    canonical_tool_name = canonical_tool_name.strip()
+    existing_result = await db.execute(
+        refresh_select_statement(
+            select(TrustPolicyModel.id).where(
+                TrustPolicyModel.tenant_id == hitl_request.tenant_id,
+                TrustPolicyModel.workspace_id == workspace_id,
+                TrustPolicyModel.scope == "workspace_tool",
+                TrustPolicyModel.canonical_tool_name == canonical_tool_name,
+                TrustPolicyModel.grant_type == "always",
+                TrustPolicyModel.revoked_at.is_(None),
+                TrustPolicyModel.deleted_at.is_(None),
+            )
+        )
+    )
+    if existing_result.scalar_one_or_none() is not None:
+        return
+    await SqlTrustPolicyRepository(db).save(
+        TrustPolicy(
+            tenant_id=hitl_request.tenant_id,
+            workspace_id=workspace_id,
+            agent_instance_id="*",
+            action_type=canonical_tool_name,
+            granted_by=user_id,
+            grant_type="always",
+            scope="workspace_tool",
+            canonical_tool_name=canonical_tool_name,
+            source_hitl_request_id=hitl_request.id,
+            revision=1,
+        )
+    )
 
 
 async def _mark_hitl_timeout_if_expired(
@@ -464,6 +602,14 @@ async def respond_to_hitl(
             tenant_id=tenant_id,
         )
         hitl_label = stored_hitl_type.replace("_", " ").title()
+
+        if stored_hitl_type == "permission":
+            await _persist_workspace_tool_grant_if_requested(
+                db=db,
+                hitl_request=hitl_request,
+                response_data=request.response_data,
+                current_user=current_user,
+            )
 
         updated_request = await repo.update_response(
             request.request_id,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from src.domain.model.trust.trust_policy import TrustPolicy
 
@@ -26,3 +27,12 @@ class TrustPolicyRepository(ABC):
         agent_instance_id: str,
         action_type: str,
     ) -> bool: ...
+
+    @abstractmethod
+    async def revoke(
+        self,
+        policy_id: str,
+        *,
+        revoked_by: str,
+        revoked_at: datetime,
+    ) -> TrustPolicy | None: ...

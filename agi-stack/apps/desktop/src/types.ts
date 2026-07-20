@@ -326,6 +326,7 @@ export type CreateTaskSessionRequest = {
   initial_message: {
     content: string;
   };
+  workspace_policy?: WorkspaceAgentPolicySelection;
 };
 
 export type CreateTaskSessionResponse = {
@@ -333,6 +334,8 @@ export type CreateTaskSessionResponse = {
   workspace: WorkspaceSummary;
   conversation: AgentConversation;
   initial_message: WorkspaceMessage;
+  policy?: WorkspaceAgentPolicy;
+  capability_version?: string;
 };
 
 export type AgentPlanModeResponse = {
@@ -345,6 +348,13 @@ export type AgentPlanTask = {
   id: string;
   conversation_id: string;
   content: string;
+  title?: string;
+  description?: string | null;
+  estimated_duration_seconds?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  result_summary?: string | null;
+  evidence_refs?: string[];
   status: string;
   priority: string;
   order_index: number;
@@ -573,6 +583,10 @@ type ProjectWorkItemBase = {
   created_at: string;
   updated_at: string;
   last_heartbeat_at?: string | null;
+  workspace_name?: string | null;
+  summary?: string | null;
+  phase?: string | null;
+  progress?: number | null;
 };
 
 type DesktopRunWorkItem = ProjectWorkItemBase & {
@@ -762,6 +776,41 @@ export type LlmProviderRoutingPolicy = {
   roles: LlmProviderRoutingRoles;
   fallbacks: LlmRouteTarget[];
   updated_at: string;
+};
+
+export type WorkspaceReasoningEffort = 'low' | 'medium' | 'high';
+export type WorkspacePermissionMode = 'ask' | 'automatic' | 'full_access';
+
+export type WorkspaceAgentPolicy = LlmProviderRoutingPolicy & {
+  reasoning_effort: WorkspaceReasoningEffort;
+  permission_mode: WorkspacePermissionMode;
+  capability_version: string;
+};
+
+export type WorkspaceToolGrant = {
+  id: string;
+  workspace_id: string;
+  canonical_tool_name: string;
+  source_hitl_request_id: string;
+  revision: number;
+  created_by?: string;
+  granted_by?: string;
+  created_at: string;
+  revoked_by?: string | null;
+  revoked_at?: string | null;
+};
+
+export type WorkspaceAgentPolicySelection = {
+  expected_revision: number;
+  route: LlmRouteTarget;
+  reasoning_effort: WorkspaceReasoningEffort;
+  permission_mode: WorkspacePermissionMode;
+};
+
+export type WorkspaceAgentPolicyMutationInput = WorkspaceAgentPolicySelection & {
+  projectId: string;
+  workspaceId: string;
+  capabilityMode: AgentCapabilityMode;
 };
 
 export type LlmProviderRoutingPolicyMutationInput = {

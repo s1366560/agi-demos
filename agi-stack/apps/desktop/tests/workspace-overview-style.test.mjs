@@ -112,7 +112,7 @@ test('workspace overview distinguishes catalog loading from an authoritative emp
   assertSingleWorkbenchMain(emptyMarkup);
   assert.match(emptyMarkup, /No workspaces yet/);
   assert.match(emptyMarkup, /Start with your first task/);
-  assert.match(emptyMarkup, /New task<\/button>/);
+  assert.match(emptyMarkup, /New thread<\/button>/);
   assert.doesNotMatch(emptyMarkup, /workspace-design-summary-grid/);
 });
 

@@ -34,7 +34,7 @@ use axum::{
     },
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use chrono::{Duration as ChronoDuration, Utc};
@@ -94,7 +94,7 @@ use auth_context::{
 use authority_store::{
     DesktopArtifactStatus, DesktopArtifactVersion, DesktopAuthorityError,
     DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind, DesktopHitlRequest,
-    DesktopHitlStatus, DesktopPermissionProfile, DesktopRun, DesktopRunStatus,
+    DesktopHitlStatus, DesktopPermissionProfile, DesktopRun, DesktopRunStatus, WorkspaceToolGrant,
 };
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
@@ -105,9 +105,10 @@ use provider_credentials::{
 };
 use provider_probe::{ProviderProbeOutcome, ProviderProbeRequest, ProviderProbeService};
 use provider_usage_store::ProviderUsageRecord;
-use resource_registry::{ManagedResourceKind, ResourceRegistryError};
+use resource_registry::{ManagedResourceKind, ResourceRegistryError, WorkspaceAgentPolicyMutation};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
+    HitlResponseCommit,
 };
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
 use task_session::{
@@ -1911,9 +1912,33 @@ impl LocalRuntimeState {
             || self.llm_for_capability(conversation),
             |role| self.llm_for_role(conversation, role),
         );
+        let max_rounds = conversation
+            .workspace_id
+            .as_deref()
+            .and_then(|workspace_id| {
+                self.session_store
+                    .workspace_llm_routing_policy(
+                        &conversation.tenant_id,
+                        &conversation.project_id,
+                        workspace_id,
+                        Utc::now().timestamp_millis(),
+                    )
+                    .ok()
+            })
+            .and_then(|policy| {
+                policy
+                    .get("reasoning_effort")
+                    .and_then(Value::as_str)
+                    .map(|effort| match effort {
+                        "low" => 4,
+                        "high" => 16,
+                        _ => 8,
+                    })
+            })
+            .unwrap_or(8);
         Ok(
             ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
-                .with_max_rounds(8),
+                .with_max_rounds(max_rounds),
         )
     }
 
@@ -2358,6 +2383,18 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/llm-providers/routing-policy",
             get(get_llm_routing_policy).put(put_llm_routing_policy),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/agent-policy",
+            get(get_workspace_agent_policy).patch(patch_workspace_agent_policy),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants",
+            get(list_workspace_tool_grants),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants/:grant_id",
+            delete(revoke_workspace_tool_grant),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/runtime-selection",
@@ -3498,6 +3535,107 @@ async fn put_llm_routing_policy(
         )
         .map_err(resource_registry_error)?;
     Ok(Json(policy))
+}
+
+async fn get_workspace_agent_policy(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+) -> LocalJsonResult {
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        &tenant_id,
+        &project_id,
+        &workspace_id,
+    )?;
+    state
+        .session_store
+        .workspace_llm_routing_policy(
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            Utc::now().timestamp_millis(),
+        )
+        .map(Json)
+        .map_err(resource_registry_error)
+}
+
+async fn patch_workspace_agent_policy(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    Json(mutation): Json<WorkspaceAgentPolicyMutation>,
+) -> LocalJsonResult {
+    ensure_provider_manager(&authenticated)?;
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        &tenant_id,
+        &project_id,
+        &workspace_id,
+    )?;
+    state
+        .session_store
+        .patch_workspace_agent_policy(
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            &mutation,
+            Utc::now().timestamp_millis(),
+        )
+        .map(Json)
+        .map_err(resource_registry_error)
+}
+
+async fn list_workspace_tool_grants(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+) -> LocalJsonResult {
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        &tenant_id,
+        &project_id,
+        &workspace_id,
+    )?;
+    let items = state
+        .session_store
+        .list_workspace_tool_grants(&workspace_id)
+        .map_err(local_store_error)?;
+    Ok(Json(json!({ "items": items })))
+}
+
+async fn revoke_workspace_tool_grant(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path((tenant_id, project_id, workspace_id, grant_id)): Path<(String, String, String, String)>,
+) -> LocalJsonResult {
+    ensure_provider_manager(&authenticated)?;
+    ensure_workspace_scope(
+        &state,
+        &authenticated,
+        &tenant_id,
+        &project_id,
+        &workspace_id,
+    )?;
+    let grant = state
+        .session_store
+        .revoke_workspace_tool_grant(
+            &workspace_id,
+            &grant_id,
+            &authenticated.user.user_id,
+            &now_iso(),
+        )
+        .map_err(local_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "detail": "workspace tool grant not found" })),
+            )
+        })?;
+    Ok(Json(json!(grant)))
 }
 
 fn normalized_routing_policy(
@@ -5257,6 +5395,10 @@ struct DesktopMyWorkItem {
     created_at: String,
     updated_at: String,
     last_heartbeat_at: Option<String>,
+    workspace_name: Option<String>,
+    summary: Option<String>,
+    phase: Option<String>,
+    progress: Option<u64>,
 }
 
 async fn list_project_my_work(
@@ -5288,6 +5430,18 @@ async fn list_project_my_work(
                 Json(json!({ "detail": "run conversation project mismatch" })),
             ));
         }
+        let workspace_name = match conversation.workspace_id.as_deref() {
+            Some(workspace_id) => state
+                .session_store
+                .workspace_name(workspace_id)
+                .map_err(local_store_error)?,
+            None => None,
+        };
+        let plan = state
+            .session_store
+            .plan_version_for_projection(&run.plan_version_id)
+            .map_err(local_store_error)?;
+        let (summary, phase, progress) = my_work_plan_projection(plan.as_ref());
         items.push(DesktopMyWorkItem {
             id: run.id.clone(),
             authority_kind: DesktopMyWorkAuthorityKind::DesktopRun,
@@ -5309,6 +5463,10 @@ async fn list_project_my_work(
             created_at: run.created_at,
             updated_at: run.updated_at,
             last_heartbeat_at: run.last_heartbeat_at,
+            workspace_name,
+            summary,
+            phase,
+            progress,
         });
     }
 
@@ -5317,6 +5475,48 @@ async fn list_project_my_work(
         "items": items,
         "total": items.len(),
     })))
+}
+
+fn my_work_plan_projection(
+    plan: Option<&authority_store::DesktopPlanVersion>,
+) -> (Option<String>, Option<String>, Option<u64>) {
+    let Some(plan) = plan else {
+        return (None, None, None);
+    };
+    let completed = plan
+        .tasks
+        .iter()
+        .filter(|task| task.get("status").and_then(Value::as_str) == Some("completed"))
+        .count();
+    let progress =
+        (!plan.tasks.is_empty()).then_some(((completed as u64) * 100) / (plan.tasks.len() as u64));
+    let current = plan
+        .tasks
+        .iter()
+        .find(|task| task.get("status").and_then(Value::as_str) == Some("in_progress"))
+        .or_else(|| {
+            plan.tasks
+                .iter()
+                .find(|task| task.get("status").and_then(Value::as_str) == Some("pending"))
+        })
+        .or_else(|| plan.tasks.last());
+    let structured_text = |task: &Value, field: &str| {
+        task.get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+    };
+    let phase = current.and_then(|task| {
+        structured_text(task, "title").or_else(|| structured_text(task, "content"))
+    });
+    let summary = current.and_then(|task| {
+        structured_text(task, "result_summary")
+            .or_else(|| structured_text(task, "description"))
+            .or_else(|| structured_text(task, "title"))
+            .or_else(|| structured_text(task, "content"))
+    });
+    (summary, phase, progress)
 }
 
 const HIERARCHY_DEFAULT_PAGE_SIZE: usize = 50;
@@ -7013,6 +7213,12 @@ async fn respond_to_hitl(
             })),
         ));
     }
+    if request.kind == HitlKind::Permission && !valid_permission_response(&body.response_data) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "detail": "invalid permission response" })),
+        ));
+    }
     if request.status == DesktopHitlStatus::Responded {
         let same_payload = request.response_data.as_ref() == Some(&body.response_data);
         let same_key = body.idempotency_key.as_deref().is_none()
@@ -7101,6 +7307,12 @@ async fn respond_to_hitl(
     } else {
         None
     };
+    let workspace_tool_grant = workspace_tool_grant_from_hitl(
+        &authenticated,
+        &request,
+        &conversation,
+        &body.response_data,
+    )?;
     let engine = state
         .agent_engine(&conversation, engine_run.as_ref())
         .map_err(execution_environment_error)?;
@@ -7180,11 +7392,14 @@ async fn respond_to_hitl(
 
     if let Err(error) = state.session_store.mark_hitl_responded(
         &request.id,
-        &body.response_data,
-        "local_user",
-        authoritative_run.as_ref().map(|run| run.revision),
-        body.idempotency_key.as_deref(),
-        &now_iso(),
+        HitlResponseCommit {
+            response_data: &body.response_data,
+            response_actor: "local_user",
+            response_revision: authoritative_run.as_ref().map(|run| run.revision),
+            idempotency_key: body.idempotency_key.as_deref(),
+            workspace_tool_grant: workspace_tool_grant.as_ref(),
+            now: &now_iso(),
+        },
     ) {
         state.release_agent_run(&conversation.id);
         return Err(local_store_error(error));
@@ -7226,6 +7441,85 @@ async fn respond_to_hitl(
             .await;
     });
     Ok(Json(response))
+}
+
+fn valid_permission_response(response_data: &Value) -> bool {
+    let Some(object) = response_data.as_object() else {
+        return false;
+    };
+    let Some(granted) = object.get("granted").and_then(Value::as_bool) else {
+        return false;
+    };
+    let Some(action) = object.get("action").and_then(Value::as_str) else {
+        return true;
+    };
+    if object.contains_key("tool")
+        || object.contains_key("tool_name")
+        || object.contains_key("canonical_tool_name")
+    {
+        return false;
+    }
+    let scope = object.get("scope").and_then(Value::as_str);
+    matches!(
+        (action, granted, scope),
+        ("allow", true, Some("once"))
+            | ("allow_always", true, Some("workspace_tool"))
+            | ("deny", false, Some("once"))
+    )
+}
+
+fn workspace_tool_grant_from_hitl(
+    authenticated: &AuthenticatedContext,
+    request: &DesktopHitlRequest,
+    conversation: &LocalConversation,
+    response_data: &Value,
+) -> Result<Option<WorkspaceToolGrant>, (StatusCode, Json<Value>)> {
+    if request.kind != HitlKind::Permission
+        || response_data.get("action").and_then(Value::as_str) != Some("allow_always")
+    {
+        return Ok(None);
+    }
+    if !matches!(
+        authenticated.membership_role.as_str(),
+        "manager" | "owner" | "admin"
+    ) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({ "detail": "workspace manager permission is required" })),
+        ));
+    }
+    let workspace_id = conversation.workspace_id.clone().ok_or_else(|| {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "conversation has no workspace" })),
+        )
+    })?;
+    let decision = request.decision.as_ref().filter(|decision| decision.is_complete()).ok_or_else(
+        || {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({ "detail": "workspace grant requires complete server-side permission context" })),
+            )
+        },
+    )?;
+    let canonical_tool_name = decision.action.name.trim();
+    if canonical_tool_name.is_empty() {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "permission context has no canonical tool" })),
+        ));
+    }
+    Ok(Some(WorkspaceToolGrant {
+        id: format!("local-workspace-tool-grant-{}", Uuid::new_v4()),
+        workspace_id,
+        canonical_tool_name: canonical_tool_name.to_string(),
+        source_hitl_request_id: request.id.clone(),
+        revision: 1,
+        created_by: authenticated.user.user_id.clone(),
+        created_at: now_iso(),
+        revoked_by: None,
+        revoked_at: None,
+    }))
 }
 
 fn hitl_response_answer(kind: HitlKind, response_data: &Value) -> Option<String> {
@@ -11801,7 +12095,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 18);
+        assert_eq!(version, 19);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -11890,13 +12184,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 19;")
+                .execute_batch("PRAGMA user_version = 20;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 18"));
+        assert!(error.contains("newer than supported schema version 19"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -12632,7 +12926,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 18);
+        assert_eq!(schema_version, 19);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }

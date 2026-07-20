@@ -211,6 +211,19 @@ pub(super) struct DesktopHitlRequest {
     pub idempotency_key: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct WorkspaceToolGrant {
+    pub id: String,
+    pub workspace_id: String,
+    pub canonical_tool_name: String,
+    pub source_hitl_request_id: String,
+    pub revision: u64,
+    pub created_by: String,
+    pub created_at: String,
+    pub revoked_by: Option<String>,
+    pub revoked_at: Option<String>,
+}
+
 #[derive(Debug)]
 pub(super) enum DesktopAuthorityError {
     ConversationNotFound,

@@ -9,6 +9,7 @@ use super::{
     active_workspace_scope_error,
     auth_context::AuthenticatedContext,
     local_store_error, now_iso,
+    resource_registry::{WorkspaceAgentPolicyMutation, WORKSPACE_AGENT_POLICY_CAPABILITY_VERSION},
     session_store::{CreateTaskSessionInput, DesktopTaskSessionError, TaskSessionWorkspaceInput},
     tool_authority::canonical_json_digest,
     ConversationCapabilityMode, ConversationRunMode, LocalConversation, LocalRuntimeState,
@@ -93,6 +94,7 @@ pub(super) struct CreateTaskSessionBody {
     workspace: TaskSessionWorkspaceBody,
     conversation: TaskSessionConversationBody,
     initial_message: TaskSessionInitialMessageBody,
+    workspace_policy: Option<WorkspaceAgentPolicyMutation>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -241,6 +243,7 @@ pub(super) async fn create_task_session(
             workspace,
             conversation,
             initial_message,
+            workspace_policy: body.workspace_policy,
             now,
         })
         .map_err(task_session_error)?;
@@ -256,6 +259,8 @@ pub(super) async fn create_task_session(
             "workspace": outcome.workspace,
             "conversation": outcome.conversation,
             "initial_message": outcome.initial_message,
+            "policy": outcome.policy,
+            "capability_version": WORKSPACE_AGENT_POLICY_CAPABILITY_VERSION,
         })),
     ))
 }
@@ -291,6 +296,7 @@ fn task_session_error(error: DesktopTaskSessionError) -> (StatusCode, Json<Value
             Json(json!({ "detail": error.to_string() })),
         ),
         DesktopTaskSessionError::ScopeMismatch => active_workspace_scope_error(),
+        DesktopTaskSessionError::Policy(error) => super::resource_registry_error(error),
         DesktopTaskSessionError::Storage(error) => local_store_error(error),
     }
 }

@@ -40,10 +40,15 @@ impl AuthorizedRunToolHost {
     }
 
     fn allows(&self, tool: &str, effect: ToolEffect) -> bool {
+        let workspace_granted = self.run.authorization_snapshot["mode"].as_str() == Some("build")
+            && self
+                .session_store
+                .workspace_tool_grant_active(&self.run.conversation_id, tool)
+                .unwrap_or(false);
         match self.run.permission_profile {
-            DesktopPermissionProfile::ReadOnly => effect == ToolEffect::Read,
+            DesktopPermissionProfile::ReadOnly => effect == ToolEffect::Read || workspace_granted,
             DesktopPermissionProfile::WorkspaceWrite => {
-                effect == ToolEffect::Read || is_workspace_write_tool(tool)
+                effect == ToolEffect::Read || is_workspace_write_tool(tool) || workspace_granted
             }
             DesktopPermissionProfile::FullAccess => true,
         }
@@ -101,6 +106,11 @@ impl ToolHost for AuthorizedRunToolHost {
         let identity_digest = canonical_json_digest(&identity).map_err(authority_error)?;
         let invocation_id = format!("local-invocation-{identity_digest}");
         let now_ms = Utc::now().timestamp_millis();
+        let workspace_granted = self.run.authorization_snapshot["mode"].as_str() == Some("build")
+            && self
+                .session_store
+                .workspace_tool_grant_active(&self.run.conversation_id, tool)
+                .map_err(CoreError::Tool)?;
         let grant = if metadata.requires_grant() {
             Some(PermissionGrant {
                 grant_id: format!("local-profile-grant-{identity_digest}"),
@@ -125,7 +135,11 @@ impl ToolHost for AuthorizedRunToolHost {
                 &request,
                 &metadata,
                 grant,
-                "plan_permission_profile",
+                if workspace_granted {
+                    "workspace_tool_grant"
+                } else {
+                    "plan_permission_profile"
+                },
                 now_ms,
             )
             .map_err(CoreError::Tool)?;

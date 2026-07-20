@@ -12,6 +12,7 @@ import json
 import logging
 import uuid
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from typing import Any, cast
 
 from src.application.services.workspace_task_service import (
@@ -117,6 +118,14 @@ def _todo_status_value(todo: dict[str, Any]) -> str | None:
         return None
     normalized = str(raw).strip().lower()
     return normalized or None
+
+
+def _todo_optional_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        return datetime.fromisoformat(value)
+    return None
 
 
 def _looks_like_list_position(todo_id: str | None) -> bool:
@@ -359,6 +368,9 @@ async def _todowrite_handle_update(
     if todos and len(todos) > 0:
         updates = {k: v for k, v in todos[0].items() if k != "id"}
     updated = await repo.update(todo_id, **updates)
+    if updated:
+        replacement = await repo.find_by_conversation(conversation_id)
+        await repo.save_all(conversation_id, replacement)
     await session.commit()
 
     if updated:
@@ -399,6 +411,13 @@ async def _todowrite_replace(
             id=str(uuid.uuid4()),
             conversation_id=conversation_id,
             content=td.get("content", ""),
+            title=td.get("title") or td.get("content", ""),
+            description=td.get("description"),
+            estimated_duration_seconds=td.get("estimated_duration_seconds"),
+            started_at=_todo_optional_datetime(td.get("started_at")),
+            completed_at=_todo_optional_datetime(td.get("completed_at")),
+            result_summary=td.get("result_summary"),
+            evidence_refs=[str(value) for value in td.get("evidence_refs", [])],
             status=TaskStatus(td.get("status", "pending")),
             priority=TaskPriority(td.get("priority", "medium")),
             order_index=i,
@@ -445,13 +464,20 @@ async def _todowrite_add(
             id=str(uuid.uuid4()),
             conversation_id=conversation_id,
             content=td.get("content", ""),
+            title=td.get("title") or td.get("content", ""),
+            description=td.get("description"),
+            estimated_duration_seconds=td.get("estimated_duration_seconds"),
+            started_at=_todo_optional_datetime(td.get("started_at")),
+            completed_at=_todo_optional_datetime(td.get("completed_at")),
+            result_summary=td.get("result_summary"),
+            evidence_refs=[str(value) for value in td.get("evidence_refs", [])],
             status=TaskStatus(td.get("status", "pending")),
             priority=TaskPriority(td.get("priority", "medium")),
             order_index=next_order + i,
         )
         if task.validate():
-            await repo.save(task)
             added.append(task)
+    await repo.save_all(conversation_id, [*existing, *added])
     await session.commit()
 
     all_tasks = await repo.find_by_conversation(conversation_id)
@@ -588,9 +614,7 @@ async def _workspace_todowrite_replace(
 ) -> tuple[list[WorkspaceTask], list[WorkspaceTask], list[str]]:
     existing_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
     existing_by_key = {
-        key: task
-        for task in existing_tasks
-        for key in _workspace_task_match_keys(task)
+        key: task for task in existing_tasks for key in _workspace_task_match_keys(task)
     }
     matched_keys: set[str] = set()
     updated_tasks: list[WorkspaceTask] = []
@@ -715,11 +739,7 @@ async def _workspace_todowrite_add(
     workspace id, internal plan step id, or content against existing tasks on the root goal.
     """
     existing_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
-    existing_keys = {
-        key
-        for task in existing_tasks
-        for key in _workspace_task_match_keys(task)
-    }
+    existing_keys = {key for task in existing_tasks for key in _workspace_task_match_keys(task)}
 
     created_tasks: list[WorkspaceTask] = []
     skipped_titles: list[str] = []
@@ -881,6 +901,30 @@ async def _dispatch_created_workspace_tasks(
                             "type": "string",
                             "description": "Task description",
                         },
+                        "title": {"type": "string", "description": "Short step title"},
+                        "description": {
+                            "type": "string",
+                            "description": "Optional detailed step description",
+                        },
+                        "estimated_duration_seconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Optional estimated duration in seconds",
+                        },
+                        "started_at": {"type": "string", "description": "ISO-8601 start time"},
+                        "completed_at": {
+                            "type": "string",
+                            "description": "ISO-8601 completion time",
+                        },
+                        "result_summary": {
+                            "type": "string",
+                            "description": "Agent-authored semantic result summary",
+                        },
+                        "evidence_refs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Structured artifact or evidence references",
+                        },
                         "id": {
                             "type": "string",
                             "description": (
@@ -1020,9 +1064,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
             command_service = WorkspaceTaskCommandService(task_service)
             runtime_ctx = ctx.runtime_context or {}
             leader_agent_id_raw = runtime_ctx.get("selected_agent_id")
-            leader_agent_id = (
-                leader_agent_id_raw if isinstance(leader_agent_id_raw, str) else None
-            )
+            leader_agent_id = leader_agent_id_raw if isinstance(leader_agent_id_raw, str) else None
             preferred_language = _preferred_language_from_runtime(runtime_ctx)
             if action in {"replace", "add"}:
                 skipped_titles: list[str] = []
@@ -1113,9 +1155,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     "total_count": len(all_tasks),
                     "dispatched": dispatch_result.get("dispatched", False),
                     "dispatch_started_count": dispatch_result.get("started_count", 0),
-                    "dispatch_start_failed_count": dispatch_result.get(
-                        "start_failed_count", 0
-                    ),
+                    "dispatch_start_failed_count": dispatch_result.get("start_failed_count", 0),
                     "message": (
                         "Workspace-authoritative "
                         f"{action} reconciled tasks "
@@ -1178,9 +1218,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                     get_redis_client,
                                 )
 
-                                publisher = WorkspaceTaskEventPublisher(
-                                    await get_redis_client()
-                                )
+                                publisher = WorkspaceTaskEventPublisher(await get_redis_client())
                                 await publisher.publish_pending_events(
                                     command_service.consume_pending_events()
                                 )
@@ -1197,9 +1235,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                 {
                                     "type": "task_list_updated",
                                     "conversation_id": conversation_id,
-                                    "tasks": [
-                                        _workspace_task_to_todo(task) for task in all_tasks
-                                    ],
+                                    "tasks": [_workspace_task_to_todo(task) for task in all_tasks],
                                 }
                             )
                             result = {

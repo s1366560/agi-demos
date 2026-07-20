@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import override
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.trust.trust_policy import TrustPolicy
@@ -56,13 +57,49 @@ class SqlTrustPolicyRepository(TrustPolicyRepository):
     ) -> bool:
         stmt = select(TrustPolicyModel).where(
             TrustPolicyModel.workspace_id == workspace_id,
-            TrustPolicyModel.agent_instance_id == agent_instance_id,
-            TrustPolicyModel.action_type == action_type,
+            or_(
+                (
+                    (TrustPolicyModel.scope == "workspace_tool")
+                    & (TrustPolicyModel.canonical_tool_name == action_type)
+                ),
+                (
+                    (TrustPolicyModel.agent_instance_id == agent_instance_id)
+                    & (TrustPolicyModel.action_type == action_type)
+                ),
+            ),
             TrustPolicyModel.grant_type == "always",
+            TrustPolicyModel.revoked_at.is_(None),
             TrustPolicyModel.deleted_at.is_(None),
         )
         result = await self._session.execute(refresh_select_statement(stmt))
         return result.scalars().first() is not None
+
+    @override
+    async def revoke(
+        self,
+        policy_id: str,
+        *,
+        revoked_by: str,
+        revoked_at: datetime,
+    ) -> TrustPolicy | None:
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(TrustPolicyModel).where(
+                    TrustPolicyModel.id == policy_id,
+                    TrustPolicyModel.deleted_at.is_(None),
+                    TrustPolicyModel.revoked_at.is_(None),
+                )
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        row.revoked_by = revoked_by
+        row.revoked_at = revoked_at
+        row.deleted_at = revoked_at
+        row.revision += 1
+        await self._session.flush()
+        return self._to_domain(row)
 
     @staticmethod
     def _to_domain(row: TrustPolicyModel) -> TrustPolicy:
@@ -74,6 +111,12 @@ class SqlTrustPolicyRepository(TrustPolicyRepository):
             action_type=row.action_type,
             granted_by=row.granted_by,
             grant_type=row.grant_type,
+            scope=row.scope,
+            canonical_tool_name=row.canonical_tool_name,
+            source_hitl_request_id=row.source_hitl_request_id,
+            revision=row.revision,
+            revoked_by=row.revoked_by,
+            revoked_at=row.revoked_at,
             created_at=row.created_at,
             deleted_at=row.deleted_at,
         )
@@ -88,6 +131,12 @@ class SqlTrustPolicyRepository(TrustPolicyRepository):
             action_type=policy.action_type,
             granted_by=policy.granted_by,
             grant_type=policy.grant_type,
+            scope=policy.scope,
+            canonical_tool_name=policy.canonical_tool_name,
+            source_hitl_request_id=policy.source_hitl_request_id,
+            revision=policy.revision,
+            revoked_by=policy.revoked_by,
+            revoked_at=policy.revoked_at,
             created_at=policy.created_at,
             deleted_at=policy.deleted_at,
         )

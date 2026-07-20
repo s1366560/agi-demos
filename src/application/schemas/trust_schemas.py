@@ -21,6 +21,12 @@ class TrustPolicyResponse(BaseModel):
     action_type: str
     granted_by: str
     grant_type: str
+    scope: str = "agent"
+    canonical_tool_name: str | None = None
+    source_hitl_request_id: str | None = None
+    revision: int = 0
+    revoked_by: str | None = None
+    revoked_at: datetime | None = None
     created_at: datetime
     deleted_at: datetime | None = None
 
