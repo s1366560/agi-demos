@@ -57,6 +57,7 @@ use agistack_core::model::Entity;
 mod auth_context;
 mod authority_store;
 mod authorized_tool_host;
+mod automation;
 mod changes;
 #[cfg(test)]
 mod managed_resource_tests;
@@ -2370,6 +2371,22 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/projects/:project_id/my-work",
             get(list_project_my_work),
+        )
+        .route(
+            "/api/v1/projects/:project_id/cron-jobs",
+            get(automation::list),
+        )
+        .route(
+            "/api/v1/projects/:project_id/cron-jobs/capabilities",
+            get(automation::capabilities),
+        )
+        .route(
+            "/api/v1/projects/:project_id/cron-jobs/:automation_id",
+            get(automation::get),
+        )
+        .route(
+            "/api/v1/projects/:project_id/cron-jobs/:automation_id/runs",
+            get(automation::list_runs),
         )
         .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces",
@@ -14609,6 +14626,118 @@ mod tests {
         );
         assert_eq!(payload["items"][0]["group"], "needs_approval");
         assert_eq!(payload["items"][0]["required_action"], "review_approval");
+    }
+
+    #[tokio::test]
+    async fn local_automation_read_contract_is_project_scoped_and_fail_closed() {
+        let state = test_state("automation-read-secret");
+        let app = local_router(state);
+
+        let jobs = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/local-project/cron-jobs?include_disabled=true&limit=100&offset=0",
+                "automation-read-secret",
+                json!({}),
+            ))
+            .await
+            .expect("automation list response");
+        assert_eq!(jobs.status(), StatusCode::OK);
+        assert_eq!(
+            response_json(jobs).await,
+            json!({ "items": [], "total": 0 })
+        );
+
+        let capabilities = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/local-project/cron-jobs/capabilities",
+                "automation-read-secret",
+                json!({}),
+            ))
+            .await
+            .expect("automation capabilities response");
+        assert_eq!(capabilities.status(), StatusCode::OK);
+        assert_eq!(
+            response_json(capabilities).await,
+            json!({
+                "schema_version": 1,
+                "read": true,
+                "revision_guarded": false,
+                "idempotency_guarded": false,
+                "durable_execution": false,
+                "supported_read_trigger_kinds": ["manual", "schedule", "event"],
+                "create": {
+                    "allowed": false,
+                    "reason_code": "durable_automation_runtime_unavailable",
+                },
+                "edit": {
+                    "allowed": false,
+                    "reason_code": "durable_automation_runtime_unavailable",
+                },
+                "toggle": {
+                    "allowed": false,
+                    "reason_code": "durable_automation_runtime_unavailable",
+                },
+                "run_now": {
+                    "allowed": false,
+                    "reason_code": "durable_automation_runtime_unavailable",
+                },
+                "delete": {
+                    "allowed": false,
+                    "reason_code": "durable_automation_runtime_unavailable",
+                },
+            })
+        );
+
+        let missing_job = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/local-project/cron-jobs/missing-job",
+                "automation-read-secret",
+                json!({}),
+            ))
+            .await
+            .expect("missing automation response");
+        assert_eq!(missing_job.status(), StatusCode::NOT_FOUND);
+
+        let missing_runs = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/local-project/cron-jobs/missing-job/runs?limit=50&offset=0",
+                "automation-read-secret",
+                json!({}),
+            ))
+            .await
+            .expect("missing automation runs response");
+        assert_eq!(missing_runs.status(), StatusCode::NOT_FOUND);
+
+        let invalid_page = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/local-project/cron-jobs?limit=-1",
+                "automation-read-secret",
+                json!({}),
+            ))
+            .await
+            .expect("invalid automation page response");
+        assert_eq!(invalid_page.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let foreign_project = app
+            .oneshot(authenticated_json_request(
+                "GET",
+                "/api/v1/projects/foreign-project/cron-jobs",
+                "automation-read-secret",
+                json!({}),
+            ))
+            .await
+            .expect("foreign project automation response");
+        assert_eq!(foreign_project.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
