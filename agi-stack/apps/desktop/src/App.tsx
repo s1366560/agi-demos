@@ -68,6 +68,7 @@ import {
   LoginScreen,
   type WorkspaceSsoPresentation,
 } from './features/auth/LoginScreen';
+import { AutomationsPage } from './features/automations/AutomationsPage';
 import {
   normalizeDeviceAuthorizationInterval,
   resolveDeviceAuthorizationUrl,
@@ -5594,7 +5595,7 @@ export function App() {
     />
   );
 
-  const renderAuxiliaryView = (section: 'home' | 'automations' | 'search') => (
+  const renderAuxiliaryView = (section: 'home' | 'search') => (
     <AuxiliaryView
       section={section}
       userName={auxiliaryUserName}
@@ -5604,6 +5605,17 @@ export function App() {
       metricStatus={myWorkMetricStatus}
       onOpenMyWork={() => switchSection('board')}
       onRetryMyWork={() => void refreshMyWork()}
+    />
+  );
+
+  const renderAutomationsPage = () => (
+    <AutomationsPage
+      key={config.projectId || 'no-project'}
+      api={api}
+      projectId={config.projectId}
+      projectName={selectedProject?.name ?? selectedProject?.id ?? null}
+      onOpenProjectSettings={openWorkspaceSettings}
+      onOpenConnection={openConnectionSettings}
     />
   );
 
@@ -5668,11 +5680,8 @@ export function App() {
     if (activeSection === 'workspace') return renderWorkspaceOverview();
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
-    if (
-      activeSection === 'home' ||
-      activeSection === 'automations' ||
-      activeSection === 'search'
-    ) {
+    if (activeSection === 'automations') return renderAutomationsPage();
+    if (activeSection === 'home' || activeSection === 'search') {
       return renderAuxiliaryView(activeSection);
     }
     return renderWorkspaceOverview();

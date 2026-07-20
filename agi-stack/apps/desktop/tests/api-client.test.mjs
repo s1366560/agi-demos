@@ -1770,6 +1770,78 @@ test('automation reads and capability authority stay project scoped', async () =
   }
 });
 
+test('automation mutations carry idempotency and revision authority in the request body', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+    return new Response(JSON.stringify({ id: 'automation/1', revision: 2 }), {
+      status: init?.method === 'POST' && !String(input).endsWith('/toggle') ? 201 : 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      projectId: 'project/1',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+    });
+    const create = {
+      idempotency_key: 'create-1',
+      name: 'Daily brief',
+      schedule: { kind: 'cron', config: { expression: '0 9 * * *' } },
+      payload: { kind: 'agent_turn', config: { message: 'Prepare brief' } },
+    };
+
+    await client.createAutomation(create);
+    await client.updateAutomation('automation/1', {
+      idempotency_key: 'update-1',
+      expected_revision: 1,
+      name: 'Weekday brief',
+    });
+    await client.toggleAutomation('automation/1', {
+      idempotency_key: 'toggle-1',
+      expected_revision: 2,
+      enabled: false,
+    });
+    await client.deleteAutomation('automation/1', {
+      idempotency_key: 'delete-1',
+      expected_revision: 3,
+    });
+
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method, JSON.parse(call.init?.body)]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs',
+          'POST',
+          create,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs/automation%2F1',
+          'PATCH',
+          { idempotency_key: 'update-1', expected_revision: 1, name: 'Weekday brief' },
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs/automation%2F1/toggle',
+          'POST',
+          { idempotency_key: 'toggle-1', expected_revision: 2, enabled: false },
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/projects/project%2F1/cron-jobs/automation%2F1',
+          'DELETE',
+          { idempotency_key: 'delete-1', expected_revision: 3 },
+        ],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('listMyWork loads the project-scoped authoritative attention queue', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

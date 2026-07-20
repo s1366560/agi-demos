@@ -7,6 +7,7 @@ import {
   automationCapabilityReasonCode,
   automationEnvironmentId,
   automationLastRunAt,
+  automationMutationKey,
   automationNextRunAt,
   automationPermissionProfile,
   automationRunStatus,
@@ -117,6 +118,55 @@ test('mutation controls require server guards and an implemented client handler'
     ),
     { allowed: false, reason_code: 'revision_guard_required' },
   );
+});
+
+test('persistent CRUD stays available when durable execution is intentionally absent', () => {
+  const guarded = {
+    schema_version: 1,
+    read: true,
+    revision_guarded: true,
+    idempotency_guarded: true,
+    durable_execution: false,
+    create: { allowed: true },
+    edit: { allowed: true },
+    toggle: { allowed: true },
+    run_now: { allowed: false, reason_code: 'durable_automation_execution_unavailable' },
+    delete: { allowed: true },
+  };
+
+  assert.deepEqual(
+    automationActionAvailability(guarded, 'edit', {
+      handler_available: true,
+      revision_required: true,
+      durable_execution_required: false,
+    }),
+    { allowed: true },
+  );
+  assert.deepEqual(
+    automationActionAvailability(
+      { ...guarded, run_now: { allowed: true } },
+      'run_now',
+      {
+        handler_available: true,
+        revision_required: true,
+        durable_execution_required: true,
+      },
+    ),
+    { allowed: false, reason_code: 'durable_execution_required' },
+  );
+});
+
+test('lost-response retries reuse an idempotency key until the structural request changes', () => {
+  const keys = new Map();
+  let sequence = 0;
+  const createKey = () => `uuid-${++sequence}`;
+  const first = automationMutationKey(keys, 'create', { name: 'Brief' }, createKey);
+  const retry = automationMutationKey(keys, 'create', { name: 'Brief' }, createKey);
+  const changed = automationMutationKey(keys, 'create', { name: 'Updated brief' }, createKey);
+
+  assert.equal(first, 'create-uuid-1');
+  assert.equal(retry, first);
+  assert.equal(changed, 'create-uuid-2');
 });
 
 test('unknown capability reasons map to a stable localized fallback', () => {

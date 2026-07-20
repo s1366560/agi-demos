@@ -11,9 +11,13 @@ import type {
   ApprovePlanAndStartRequest,
   ApprovePlanAndStartResponse,
   AutomationCapabilities,
+  AutomationCreateInput,
+  AutomationDeleteInput,
   AutomationJob,
   AutomationJobListResponse,
   AutomationRunListResponse,
+  AutomationToggleInput,
+  AutomationUpdateInput,
   ConversationMessagesResponse,
   ChangeSnapshot,
   CreateTaskSessionRequest,
@@ -317,6 +321,17 @@ export class DesktopApiClient {
     );
   }
 
+  async createAutomation(
+    input: AutomationCreateInput,
+    projectId = this.config.projectId,
+  ): Promise<AutomationJob> {
+    const resolvedProjectId = requireValue(projectId, 'project id');
+    return this.request<AutomationJob>(
+      `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/cron-jobs`,
+      { method: 'POST', body: input },
+    );
+  }
+
   async getAutomation(
     automationId: string,
     projectId = this.config.projectId,
@@ -328,6 +343,48 @@ export class DesktopApiClient {
         automationId,
       )}`,
       { signal },
+    );
+  }
+
+  async updateAutomation(
+    automationId: string,
+    input: AutomationUpdateInput,
+    projectId = this.config.projectId,
+  ): Promise<AutomationJob> {
+    const resolvedProjectId = requireValue(projectId, 'project id');
+    return this.request<AutomationJob>(
+      `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/cron-jobs/${encodeURIComponent(
+        automationId,
+      )}`,
+      { method: 'PATCH', body: input },
+    );
+  }
+
+  async toggleAutomation(
+    automationId: string,
+    input: AutomationToggleInput,
+    projectId = this.config.projectId,
+  ): Promise<AutomationJob> {
+    const resolvedProjectId = requireValue(projectId, 'project id');
+    return this.request<AutomationJob>(
+      `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/cron-jobs/${encodeURIComponent(
+        automationId,
+      )}/toggle`,
+      { method: 'POST', body: input },
+    );
+  }
+
+  async deleteAutomation(
+    automationId: string,
+    input: AutomationDeleteInput,
+    projectId = this.config.projectId,
+  ): Promise<void> {
+    const resolvedProjectId = requireValue(projectId, 'project id');
+    await this.request<unknown>(
+      `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/cron-jobs/${encodeURIComponent(
+        automationId,
+      )}`,
+      { method: 'DELETE', body: input },
     );
   }
 

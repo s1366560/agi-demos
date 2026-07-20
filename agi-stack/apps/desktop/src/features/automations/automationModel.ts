@@ -13,10 +13,12 @@ export type AutomationAction = 'create' | 'edit' | 'toggle' | 'run_now' | 'delet
 export type AutomationActionRequirements = {
   handler_available: boolean;
   revision_required: boolean;
+  durable_execution_required?: boolean;
 };
 
 export type AutomationCapabilityReasonCode =
   | 'durable_automation_runtime_unavailable'
+  | 'durable_automation_execution_unavailable'
   | 'project_write_required'
   | 'capability_contract_unavailable'
   | 'client_handler_unavailable'
@@ -43,6 +45,7 @@ const LEGACY_MUTATION_CAPABILITY: AutomationActionCapability = {
 
 const CAPABILITY_REASON_CODES = new Set<AutomationCapabilityReasonCode>([
   'durable_automation_runtime_unavailable',
+  'durable_automation_execution_unavailable',
   'project_write_required',
   'capability_contract_unavailable',
   'client_handler_unavailable',
@@ -103,7 +106,7 @@ export function automationActionAvailability(
   if (!capabilities?.idempotency_guarded) {
     return { allowed: false, reason_code: 'idempotency_guard_required' };
   }
-  if (!capabilities.durable_execution) {
+  if (requirements.durable_execution_required && !capabilities.durable_execution) {
     return { allowed: false, reason_code: 'durable_execution_required' };
   }
   if (requirements.revision_required && !capabilities.revision_guarded) {
@@ -162,11 +165,22 @@ export function automationPermissionProfile(job: AutomationJob): string | null {
   return stringValue(job.state.permission_profile);
 }
 
-export function automationRunsForJob(
-  job: AutomationJob,
-  runs: AutomationRun[],
-): AutomationRun[] {
+export function automationRunsForJob(job: AutomationJob, runs: AutomationRun[]): AutomationRun[] {
   return runs.filter((run) => run.job_id === job.id && run.project_id === job.project_id);
+}
+
+export function automationMutationKey(
+  keys: Map<string, string>,
+  operation: string,
+  payload: unknown,
+  createKey: () => string = () => crypto.randomUUID(),
+): string {
+  const fingerprint = `${operation}:${JSON.stringify(payload)}`;
+  const existing = keys.get(fingerprint);
+  if (existing) return existing;
+  const key = `${operation.split(':', 1)[0]}-${createKey()}`;
+  keys.set(fingerprint, key);
+  return key;
 }
 
 function stringValue(value: unknown): string | null {

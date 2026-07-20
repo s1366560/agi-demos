@@ -42,9 +42,11 @@ test('primary navigation opens section-based auxiliary views', () => {
   assert.match(renderWorkbench, /activeSection === 'home'/);
   assert.match(renderWorkbench, /activeSection === 'automations'/);
   assert.match(renderWorkbench, /activeSection === 'search'/);
+  assert.match(appSource, /from '\.\/features\/automations\/AutomationsPage'/);
+  assert.match(appSource, /<AutomationsPage/);
   assert.match(appSource, /<AuxiliaryView/);
   assert.match(renderWorkbench, /(?:<AuxiliaryView|renderAuxiliaryView)/);
-  assert.doesNotMatch(renderWorkbench, /renderAutomationsPage|<AutomationsPage/);
+  assert.match(renderWorkbench, /renderAutomationsPage/);
 });
 
 test('auxiliary navigation uses the shared prototype overview surface', () => {

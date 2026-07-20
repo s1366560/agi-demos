@@ -14671,6 +14671,13 @@ mod tests {
         assert_eq!(created["revision"], 1);
         assert_eq!(created["schedule_revision"], 1);
         assert_eq!(created["project_id"], "local-project");
+        assert_eq!(
+            created["trigger"],
+            json!({
+                "kind": "schedule",
+                "schedule": { "kind": "cron", "config": { "expression": "0 9 * * 1-5" } }
+            })
+        );
 
         let replay = app
             .clone()

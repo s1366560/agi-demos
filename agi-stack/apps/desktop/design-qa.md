@@ -86,6 +86,43 @@ final result: passed
 
 ---
 
+# Automations management design QA
+
+Date: 2026-07-20
+
+Scope: production Automations navigation, project-scoped create/edit/toggle/delete controls,
+schedule editor, capability boundary, and run-history presentation.
+
+## Source and fallback
+
+- The desktop prototype declares Automations in navigation but does not contain a detailed
+  management surface.
+- Per the desktop redesign brief, field structure and interaction behavior follow the Web cron
+  experience while retaining the desktop Mission Control visual language.
+- `Run now` remains disabled because the local runtime does not yet expose recoverable execution;
+  the UI never fabricates a successful run.
+
+## Evidence
+
+- Populated management surface at `1325 x 900`:
+  `qa/automations-crud-final-1325.png`.
+- Compact surface at `1100 x 800`: `qa/automations-crud-final-1100.png`.
+- Create editor at `1325 x 900`: `qa/automations-create-dialog-1325.png`.
+- Both native viewports have equal document and client widths and no document-level overflow.
+- Create, edit, and delete dialogs open with semantic labels, Escape closes and restores the
+  underlying surface, and the browser reports no runtime or console errors.
+
+## Verification
+
+- Desktop tests: 462 passed.
+- TypeScript type check and production Vite build: passed.
+- Local Rust runtime tests: 218 passed.
+- Rust formatting and Clippy with warnings denied: passed.
+
+final result: passed
+
+---
+
 # New Task → Agent Plan → Human Review design QA
 
 Date: 2026-07-18

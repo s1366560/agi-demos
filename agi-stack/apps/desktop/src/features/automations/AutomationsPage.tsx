@@ -1,22 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityLogIcon,
   ClockIcon,
+  Pencil1Icon,
   PlusIcon,
   ReloadIcon,
   RocketIcon,
+  TrashIcon,
 } from '@radix-ui/react-icons';
-import { Badge, Button, Heading, Text } from '@radix-ui/themes';
+import { AlertDialog, Badge, Button, Heading, Switch, Text } from '@radix-ui/themes';
 
 import { DesktopApiClient, DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
-import type { AutomationCapabilities, AutomationJob, AutomationRun } from '../../types';
+import type {
+  AutomationCapabilities,
+  AutomationCreateInput,
+  AutomationJob,
+  AutomationRun,
+} from '../../types';
+import { AutomationEditorDialog } from './AutomationEditorDialog';
 import {
   automationActionAvailability,
   automationCapabilityReasonCode,
   automationEnvironmentId,
   automationLastRunAt,
   automationLastRunStatus,
+  automationMutationKey,
   automationNextRunAt,
   automationPermissionProfile,
   automationScheduleValue,
@@ -29,10 +38,17 @@ import './AutomationsPage.css';
 type AutomationsPageProps = {
   api: Pick<
     DesktopApiClient,
-    'getAutomationCapabilities' | 'listAutomations' | 'listAutomationRuns'
+    | 'createAutomation'
+    | 'deleteAutomation'
+    | 'getAutomationCapabilities'
+    | 'listAutomations'
+    | 'listAutomationRuns'
+    | 'toggleAutomation'
+    | 'updateAutomation'
   >;
   projectId: string;
   projectName?: string | null;
+  onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
 };
 
@@ -40,6 +56,7 @@ export function AutomationsPage({
   api,
   projectId,
   projectName,
+  onOpenProjectSettings,
   onOpenConnection,
 }: AutomationsPageProps) {
   const { locale, t } = useI18n();
@@ -52,6 +69,11 @@ export function AutomationsPage({
   const [runsError, setRunsError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<AutomationCapabilities | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorJob, setEditorJob] = useState<AutomationJob | null>(null);
+  const [mutationBusy, setMutationBusy] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const mutationKeys = useRef(new Map<string, string>());
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null,
     [jobs, selectedJobId],
@@ -62,6 +84,7 @@ export function AutomationsPage({
       if (!projectId) {
         setJobs([]);
         setSelectedJobId('');
+        setCapabilities(null);
         setError(null);
         setUnavailable(false);
         return;
@@ -83,7 +106,9 @@ export function AutomationsPage({
         setJobs(response.items);
         setCapabilities(capabilityResponse);
         setSelectedJobId((current) =>
-          response.items.some((job) => job.id === current) ? current : (response.items[0]?.id ?? ''),
+          response.items.some((job) => job.id === current)
+            ? current
+            : (response.items[0]?.id ?? ''),
         );
       } catch (caught) {
         if (signal?.aborted) return;
@@ -93,7 +118,9 @@ export function AutomationsPage({
         setCapabilities(null);
         setSelectedJobId('');
         setUnavailable(capabilityUnavailable);
-        setError(capabilityUnavailable ? null : caught instanceof Error ? caught.message : String(caught));
+        setError(
+          capabilityUnavailable ? null : caught instanceof Error ? caught.message : String(caught),
+        );
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
@@ -132,11 +159,112 @@ export function AutomationsPage({
 
   const enabledCount = jobs.filter((job) => job.enabled).length;
   const createCapability = automationActionAvailability(capabilities, 'create', {
-    handler_available: false,
+    handler_available: true,
     revision_required: false,
+    durable_execution_required: false,
   });
   const createReasonCode = automationCapabilityReasonCode(createCapability.reason_code);
   const createReasonId = 'automation-create-disabled-reason';
+
+  const openCreate = () => {
+    setEditorJob(null);
+    setMutationError(null);
+    setEditorOpen(true);
+  };
+
+  const openEdit = (job: AutomationJob) => {
+    setEditorJob(job);
+    setMutationError(null);
+    setEditorOpen(true);
+  };
+
+  const submitEditor = async (input: Omit<AutomationCreateInput, 'idempotency_key'>) => {
+    setMutationBusy(true);
+    setMutationError(null);
+    try {
+      const idempotencyKey = automationMutationKey(
+        mutationKeys.current,
+        editorJob ? `edit:${editorJob.id}:${editorJob.revision}` : 'create',
+        input,
+      );
+      const saved = editorJob
+        ? await api.updateAutomation(
+            editorJob.id,
+            {
+              ...input,
+              idempotency_key: idempotencyKey,
+              expected_revision: editorJob.revision,
+            },
+            projectId,
+          )
+        : await api.createAutomation({ ...input, idempotency_key: idempotencyKey }, projectId);
+      setJobs((current) => {
+        const exists = current.some((job) => job.id === saved.id);
+        return exists
+          ? current.map((job) => (job.id === saved.id ? saved : job))
+          : [saved, ...current];
+      });
+      setSelectedJobId(saved.id);
+      setEditorOpen(false);
+    } catch (caught) {
+      setMutationError(caught instanceof Error ? caught.message : String(caught));
+      if (caught instanceof DesktopApiError && caught.status === 409) void loadJobs();
+    } finally {
+      setMutationBusy(false);
+    }
+  };
+
+  const toggleJob = async (job: AutomationJob) => {
+    setMutationBusy(true);
+    setMutationError(null);
+    try {
+      const saved = await api.toggleAutomation(
+        job.id,
+        {
+          idempotency_key: automationMutationKey(
+            mutationKeys.current,
+            `toggle:${job.id}:${job.revision}`,
+            { enabled: !job.enabled },
+          ),
+          expected_revision: job.revision,
+          enabled: !job.enabled,
+        },
+        projectId,
+      );
+      setJobs((current) => current.map((item) => (item.id === saved.id ? saved : item)));
+    } catch (caught) {
+      setMutationError(caught instanceof Error ? caught.message : String(caught));
+      if (caught instanceof DesktopApiError && caught.status === 409) void loadJobs();
+    } finally {
+      setMutationBusy(false);
+    }
+  };
+
+  const deleteJob = async (job: AutomationJob) => {
+    setMutationBusy(true);
+    setMutationError(null);
+    try {
+      await api.deleteAutomation(
+        job.id,
+        {
+          idempotency_key: automationMutationKey(
+            mutationKeys.current,
+            `delete:${job.id}:${job.revision}`,
+            {},
+          ),
+          expected_revision: job.revision,
+        },
+        projectId,
+      );
+      setJobs((current) => current.filter((item) => item.id !== job.id));
+      setSelectedJobId('');
+    } catch (caught) {
+      setMutationError(caught instanceof Error ? caught.message : String(caught));
+      if (caught instanceof DesktopApiError && caught.status === 409) void loadJobs();
+    } finally {
+      setMutationBusy(false);
+    }
+  };
 
   return (
     <section className="automations-page" aria-labelledby="automations-title">
@@ -153,10 +281,15 @@ export function AutomationsPage({
           </Text>
         </div>
         <div className="automations-header-actions">
-          <Button variant="surface" onClick={() => void loadJobs()} disabled={loading || !projectId}>
+          <Button
+            variant="surface"
+            onClick={() => void loadJobs()}
+            disabled={loading || !projectId}
+          >
             <ReloadIcon /> {loading ? t('automations.refreshing') : t('automations.refresh')}
           </Button>
           <Button
+            onClick={openCreate}
             disabled={!createCapability.allowed}
             aria-describedby={!createCapability.allowed ? createReasonId : undefined}
             title={
@@ -167,17 +300,29 @@ export function AutomationsPage({
           >
             <PlusIcon /> {t('automations.new')}
           </Button>
-          <span id={createReasonId} className="automation-visually-hidden">
-            {t(`automations.capabilityReason.${createReasonCode}`)}
-          </span>
+          {!createCapability.allowed ? (
+            <span id={createReasonId} className="automation-visually-hidden">
+              {t(`automations.capabilityReason.${createReasonCode}`)}
+            </span>
+          ) : null}
         </div>
       </header>
 
       <div className="automations-summary" aria-label={t('automations.summary')}>
-        <AutomationMetric label={t('automations.project')} value={projectName || projectId || '—'} />
+        <AutomationMetric
+          label={t('automations.project')}
+          value={projectName || projectId || '—'}
+        />
         <AutomationMetric label={t('automations.total')} value={String(jobs.length)} />
         <AutomationMetric label={t('automations.enabled')} value={String(enabledCount)} />
-        <AutomationMetric label={t('automations.contract')} value={t('automations.readOnly')} />
+        <AutomationMetric
+          label={t('automations.contract')}
+          value={
+            capabilities?.revision_guarded && capabilities.idempotency_guarded
+              ? t('automations.guardedWrites')
+              : t('automations.readOnly')
+          }
+        />
       </div>
 
       {!projectId ? (
@@ -185,7 +330,7 @@ export function AutomationsPage({
           icon={<ActivityLogIcon />}
           title={t('automations.projectRequired')}
           body={t('automations.projectRequiredBody')}
-          action={<Button onClick={onOpenConnection}>{t('automations.openSettings')}</Button>}
+          action={<Button onClick={onOpenProjectSettings}>{t('automations.openSettings')}</Button>}
         />
       ) : unavailable ? (
         <AutomationEmpty
@@ -213,6 +358,13 @@ export function AutomationsPage({
           icon={<ActivityLogIcon />}
           title={t('automations.empty')}
           body={t('automations.emptyBody')}
+          action={
+            createCapability.allowed ? (
+              <Button onClick={openCreate}>
+                <PlusIcon /> {t('automations.new')}
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <div className="automations-workbench">
@@ -233,11 +385,24 @@ export function AutomationsPage({
               runsLoading={runsLoading}
               locale={locale}
               loadError={runsError}
+              mutationError={mutationError}
               capabilities={capabilities}
+              busy={mutationBusy}
+              onEdit={() => openEdit(selectedJob)}
+              onToggle={() => void toggleJob(selectedJob)}
+              onDelete={() => void deleteJob(selectedJob)}
             />
           ) : null}
         </div>
       )}
+      <AutomationEditorDialog
+        open={editorOpen}
+        job={editorJob}
+        busy={mutationBusy}
+        error={mutationError}
+        onOpenChange={setEditorOpen}
+        onSubmit={submitEditor}
+      />
     </section>
   );
 }
@@ -282,14 +447,24 @@ function AutomationDetail({
   runsLoading,
   locale,
   loadError,
+  mutationError,
   capabilities,
+  busy,
+  onEdit,
+  onToggle,
+  onDelete,
 }: {
   job: AutomationJob;
   runs: AutomationRun[];
   runsLoading: boolean;
   locale: string;
   loadError: string | null;
+  mutationError: string | null;
   capabilities: AutomationCapabilities | null;
+  busy: boolean;
+  onEdit: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
 }) {
   const { t } = useI18n();
   const trigger = automationTriggerKind(job);
@@ -300,6 +475,22 @@ function AutomationDetail({
   const runCapability = automationActionAvailability(capabilities, 'run_now', {
     handler_available: false,
     revision_required: true,
+    durable_execution_required: true,
+  });
+  const editCapability = automationActionAvailability(capabilities, 'edit', {
+    handler_available: true,
+    revision_required: true,
+    durable_execution_required: false,
+  });
+  const toggleCapability = automationActionAvailability(capabilities, 'toggle', {
+    handler_available: true,
+    revision_required: true,
+    durable_execution_required: false,
+  });
+  const deleteCapability = automationActionAvailability(capabilities, 'delete', {
+    handler_available: true,
+    revision_required: true,
+    durable_execution_required: false,
   });
   const capabilityReason = t(
     `automations.capabilityReason.${automationCapabilityReasonCode(runCapability.reason_code)}`,
@@ -315,12 +506,50 @@ function AutomationDetail({
             {job.name}
           </Heading>
         </div>
-        <Button
-          disabled={!runCapability.allowed}
-          aria-describedby={!runCapability.allowed ? 'automation-mutation-capability' : undefined}
-        >
-          <RocketIcon /> {t('automations.runNow')}
-        </Button>
+        <div className="automation-detail-actions">
+          <label className="automation-toggle-control">
+            <Switch
+              checked={job.enabled}
+              disabled={busy || !toggleCapability.allowed}
+              onCheckedChange={onToggle}
+            />
+            <Text size="1">{job.enabled ? t('automations.active') : t('automations.paused')}</Text>
+          </label>
+          <Button variant="soft" onClick={onEdit} disabled={busy || !editCapability.allowed}>
+            <Pencil1Icon /> {t('automations.edit')}
+          </Button>
+          <AlertDialog.Root>
+            <AlertDialog.Trigger>
+              <Button color="red" variant="soft" disabled={busy || !deleteCapability.allowed}>
+                <TrashIcon /> {t('automations.delete')}
+              </Button>
+            </AlertDialog.Trigger>
+            <AlertDialog.Content maxWidth="420px">
+              <AlertDialog.Title>{t('automations.deleteTitle')}</AlertDialog.Title>
+              <AlertDialog.Description>
+                {t('automations.deleteDescription', { name: job.name })}
+              </AlertDialog.Description>
+              <div className="automation-confirm-actions">
+                <AlertDialog.Cancel>
+                  <Button variant="soft" color="gray">
+                    {t('automations.form.cancel')}
+                  </Button>
+                </AlertDialog.Cancel>
+                <AlertDialog.Action>
+                  <Button color="red" onClick={onDelete}>
+                    {t('automations.deleteConfirm')}
+                  </Button>
+                </AlertDialog.Action>
+              </div>
+            </AlertDialog.Content>
+          </AlertDialog.Root>
+          <Button
+            disabled={busy || !runCapability.allowed}
+            aria-describedby={!runCapability.allowed ? 'automation-mutation-capability' : undefined}
+          >
+            <RocketIcon /> {t('automations.runNow')}
+          </Button>
+        </div>
       </header>
 
       <dl className="automation-facts">
@@ -330,9 +559,7 @@ function AutomationDetail({
           label={t('automations.lastRun')}
           value={formatDate(automationLastRunAt(job), locale, t('automations.never'))}
           detail={
-            lastRunStatus
-              ? t(`automations.runStatus.${automationRunStatus(lastRunStatus)}`)
-              : null
+            lastRunStatus ? t(`automations.runStatus.${automationRunStatus(lastRunStatus)}`) : null
           }
         />
         <AutomationFact
@@ -351,15 +578,17 @@ function AutomationDetail({
         <AutomationFact label={t('automations.delivery')} value={job.delivery.kind} />
       </dl>
 
-      <div
-        id="automation-mutation-capability"
-        className="automation-capability-note"
-        role="note"
-      >
-        <strong>{t('automations.readOnlyTitle')}</strong>
+      <div id="automation-mutation-capability" className="automation-capability-note" role="note">
+        <strong>{t('automations.executionUnavailableTitle')}</strong>
         <span>{capabilityReason}</span>
-        <span>{t('automations.readOnlyBody')}</span>
+        <span>{t('automations.executionUnavailableBody')}</span>
       </div>
+
+      {mutationError ? (
+        <div className="automation-inline-error" role="alert">
+          {mutationError}
+        </div>
+      ) : null}
 
       <section className="automation-history" aria-labelledby="automation-history-title">
         <header>

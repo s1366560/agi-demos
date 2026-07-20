@@ -1168,7 +1168,7 @@ export type AutomationTrigger =
 
 export type AutomationActionCapability = {
   allowed: boolean;
-  reason_code: string;
+  reason_code?: string | null;
 };
 
 export type AutomationCapabilities = {
@@ -1214,6 +1214,39 @@ export type AutomationJob = {
 export type AutomationJobListResponse = {
   items: AutomationJob[];
   total: number;
+};
+
+export type AutomationCreateInput = {
+  idempotency_key: string;
+  name: string;
+  description?: string | null;
+  enabled?: boolean;
+  delete_after_run?: boolean;
+  schedule: AutomationConfig;
+  payload: AutomationConfig;
+  delivery?: AutomationConfig;
+  conversation_mode?: 'reuse' | 'fresh';
+  conversation_id?: string | null;
+  timezone?: string;
+  stagger_seconds?: number;
+  timeout_seconds?: number;
+  max_retries?: number;
+};
+
+export type AutomationUpdateInput = Partial<Omit<AutomationCreateInput, 'idempotency_key'>> & {
+  idempotency_key: string;
+  expected_revision: number;
+};
+
+export type AutomationToggleInput = {
+  idempotency_key: string;
+  expected_revision: number;
+  enabled: boolean;
+};
+
+export type AutomationDeleteInput = {
+  idempotency_key: string;
+  expected_revision: number;
 };
 
 export type AutomationRun = {

@@ -33,6 +33,25 @@ function readOnlyCapabilities(reasonCode: string): AutomationCapabilities {
   };
 }
 
+function guardedCapabilities(): AutomationCapabilities {
+  return {
+    schema_version: 1,
+    read: true,
+    revision_guarded: true,
+    idempotency_guarded: true,
+    durable_execution: false,
+    supported_read_trigger_kinds: ['manual', 'schedule', 'event'],
+    create: { allowed: true },
+    edit: { allowed: true },
+    toggle: { allowed: true },
+    run_now: {
+      allowed: false,
+      reason_code: 'durable_automation_execution_unavailable',
+    },
+    delete: { allowed: true },
+  };
+}
+
 const jobs: AutomationJob[] = [
   {
     id: 'automation-nightly-review',
@@ -156,12 +175,20 @@ function AutomationsQa() {
             detail: 'Service unavailable',
           });
         }
-        return readOnlyCapabilities(
-          state === 'permission'
-            ? 'project_write_required'
-            : 'durable_automation_runtime_unavailable',
-        );
+        return state === 'permission'
+          ? readOnlyCapabilities('project_write_required')
+          : guardedCapabilities();
       },
+      async createAutomation(input: { name: string }) {
+        return { ...jobs[0]!, id: 'automation-created', name: input.name, revision: 1 };
+      },
+      async updateAutomation(_automationId: string, input: { name?: string }) {
+        return { ...jobs[0]!, name: input.name ?? jobs[0]!.name, revision: 8 };
+      },
+      async toggleAutomation(_automationId: string, input: { enabled: boolean }) {
+        return { ...jobs[0]!, enabled: input.enabled, revision: 8 };
+      },
+      async deleteAutomation() {},
       async listAutomationRuns(automationId: string) {
         return { items: runs.filter((run) => run.job_id === automationId), total: runs.length };
       },
@@ -190,6 +217,7 @@ function AutomationsQa() {
           api={api}
           projectId="local-project"
           projectName="Desktop Client"
+          onOpenProjectSettings={() => {}}
           onOpenConnection={() => {}}
         />
       </div>

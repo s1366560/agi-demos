@@ -192,7 +192,7 @@ pub(super) async fn create(
         "delete_after_run": request.delete_after_run,
         "revision": 1,
         "schedule_revision": 1,
-        "trigger": trigger_projection(&request.schedule.kind),
+        "trigger": trigger_projection(&request.schedule),
         "schedule": request.schedule,
         "payload": request.payload,
         "delivery": request.delivery,
@@ -465,7 +465,7 @@ fn apply_update(
         }
     }
     if let Some(schedule) = request.schedule.as_ref() {
-        set_field(job, "trigger", trigger_projection(&schedule.kind))?;
+        set_field(job, "trigger", trigger_projection(schedule))?;
     }
     if let Some(value) = request.conversation_mode.as_deref() {
         set_field(job, "conversation_mode", Value::from(value))?;
@@ -524,8 +524,8 @@ fn lower_hex(bytes: &[u8]) -> String {
     encoded
 }
 
-fn trigger_projection(schedule_kind: &str) -> Value {
-    json!({ "kind": "schedule", "schedule_kind": schedule_kind })
+fn trigger_projection(schedule: &AutomationConfig) -> Value {
+    json!({ "kind": "schedule", "schedule": schedule })
 }
 
 fn store_error(error_value: AutomationStoreError) -> (StatusCode, Json<Value>) {
