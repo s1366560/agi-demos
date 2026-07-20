@@ -4242,17 +4242,34 @@ async fn probe_saved_llm_provider(
     let base_url = binding_snapshot.base_url.clone();
     let auth_method = binding_snapshot.auth_method.clone();
     let binding_digest = binding_snapshot.binding_digest.clone();
+    let key = ProviderRuntimeKey {
+        tenant_id: tenant_id.clone(),
+        provider_id: provider_id.to_string(),
+    };
     let credential = if auth_method == "api_key" {
-        let broker = state.provider_credentials.clone();
-        let tenant_id = tenant_id.clone();
-        let provider_id = provider_id.to_string();
-        let binding_digest = binding_digest.clone();
-        tokio::task::spawn_blocking(move || {
-            broker.load(&tenant_id, &provider_id, revision, &binding_digest)
-        })
-        .await
-        .map_err(|_| provider_credential_store_error(ProviderCredentialStoreError::Unavailable))?
-        .map_err(provider_credential_store_error)?
+        let runtime_credential = {
+            let runtime = state
+                .provider_runtime
+                .lock()
+                .map_err(|error| local_store_error(error.to_string()))?;
+            runtime.credentials.get(&key).cloned()
+        };
+        if runtime_credential.is_some() {
+            runtime_credential
+        } else {
+            let broker = state.provider_credentials.clone();
+            let tenant_id = tenant_id.clone();
+            let provider_id = provider_id.to_string();
+            let binding_digest = binding_digest.clone();
+            tokio::task::spawn_blocking(move || {
+                broker.load(&tenant_id, &provider_id, revision, &binding_digest)
+            })
+            .await
+            .map_err(|_| {
+                provider_credential_store_error(ProviderCredentialStoreError::Unavailable)
+            })?
+            .map_err(provider_credential_store_error)?
+        }
     } else if auth_method == "environment" {
         resolved_environment_credential(&provider)
     } else {
@@ -4314,10 +4331,6 @@ async fn probe_saved_llm_provider(
         return Err(provider_probe_revision_conflict(revision, current_revision));
     }
     let last_check = now_iso();
-    let key = ProviderRuntimeKey {
-        tenant_id,
-        provider_id: provider_id.to_string(),
-    };
     runtime.probes.insert(
         key,
         ProviderProbeSnapshot {
@@ -8381,6 +8394,22 @@ mod tests {
         }
     }
 
+    struct WriteOnlyProviderCredentialStore;
+
+    impl ProviderCredentialStore for WriteOnlyProviderCredentialStore {
+        fn save(&self, _account: &str, _value: &str) -> Result<(), ProviderCredentialStoreError> {
+            Ok(())
+        }
+
+        fn load(&self, _account: &str) -> Result<Option<String>, ProviderCredentialStoreError> {
+            Ok(None)
+        }
+
+        fn clear(&self, _account: &str) -> Result<(), ProviderCredentialStoreError> {
+            Ok(())
+        }
+    }
+
     struct ScopedEnvironmentVariable {
         name: &'static str,
         previous: Option<std::ffi::OsString>,
@@ -10335,6 +10364,77 @@ mod tests {
             .expect("provider runtime")
             .credentials
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn saved_api_key_probe_uses_the_live_runtime_credential_when_vault_read_is_empty() {
+        let credential = "write-only-provider-session";
+        let root = test_root();
+        let tool_host = LocalToolHost::new(&root).expect("tool host");
+        let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+        let session_store = DesktopSessionStore::in_memory().expect("session store");
+        let provider_credentials = ProviderCredentialBroker::new(
+            Arc::new(WriteOnlyProviderCredentialStore),
+            session_store.installation_id(),
+        )
+        .expect("write-only credential broker");
+        let state = Arc::new(
+            LocalRuntimeState::new_with_provider_credentials(
+                root,
+                tool_host,
+                checkpoints,
+                credential.to_string(),
+                session_store,
+                provider_credentials,
+            )
+            .expect("local runtime state"),
+        );
+        state
+            .session_store
+            .seed_test_session(credential)
+            .expect("authenticated test session");
+        let app = local_router(state);
+
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/",
+                credential,
+                json!({
+                    "name": "Custom provider",
+                    "provider_type": "openai_compatible",
+                    "base_url": "https://127.0.0.1:9/v1",
+                    "auth_method": "api_key",
+                    "api_key": "runtime-provider-key",
+                    "llm_model": "custom-model",
+                    "allowed_models": ["custom-model"],
+                    "is_active": true
+                }),
+            ))
+            .await
+            .expect("create provider response");
+        assert_eq!(created.status(), axum::http::StatusCode::OK);
+        let created = response_json(created).await;
+        assert_eq!(created["credential_configured"], true);
+        let provider_id = created["id"].as_str().expect("provider id");
+        let revision = created["revision"].as_u64().expect("provider revision");
+
+        let health = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/llm-providers/{provider_id}/health-check"),
+                credential,
+                json!({ "expected_revision": revision }),
+            ))
+            .await
+            .expect("provider health response");
+        assert_eq!(health.status(), axum::http::StatusCode::OK);
+        let health = response_json(health).await;
+        assert_eq!(health["probed"], true);
+        assert_ne!(health["status"], "needs_credentials");
+        assert_ne!(health["error_code"], "credential_unavailable");
+        assert_eq!(health["provider"]["credential_configured"], true);
     }
 
     #[tokio::test]
