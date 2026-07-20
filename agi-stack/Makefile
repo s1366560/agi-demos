@@ -49,6 +49,14 @@ NDK_TC := $(NDK)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
 .DEFAULT_GOAL := help
 .PHONY: help test ci strangler-gate all ensure-wasm-target wasm-core server wasm-web desktop desktop-check desktop-deps desktop-frontend desktop-icons run-desktop desktop-bundle desktop-bundle-smoke android ios bench scorecard clean fmt-check
 
+HOST_OS := $(shell uname -s)
+ifeq ($(HOST_OS),Darwin)
+MACOS_DESKTOP_DEV_RUNNER := $(abspath scripts/run-macos-dev-signed.sh)
+DESKTOP_DEV_ENV := \
+	CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER="$(MACOS_DESKTOP_DEV_RUNNER)" \
+	CARGO_TARGET_X86_64_APPLE_DARWIN_RUNNER="$(MACOS_DESKTOP_DEV_RUNNER)"
+endif
+
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -107,7 +115,7 @@ desktop-icons: ## 桌面:生成 macOS bundle 所需 .icns 图标
 	./scripts/build-desktop-icons.sh "$(DESKTOP_ICON_PNG)" "$(DESKTOP_ICON_ICNS)"
 
 run-desktop: ## 启动桌面 App(Tauri dev 会拉起 Vite 并创建原生窗口)
-	cd $(DESKTOP_APP_DIR) && $(TAURI_CLI) dev
+	cd $(DESKTOP_APP_DIR) && $(DESKTOP_DEV_ENV) $(TAURI_CLI) dev
 
 desktop-bundle: desktop-frontend desktop-icons ## 桌面:完整 Tauri bundle(可安装客户端;CI macOS job 上传产物)
 	cd $(DESKTOP_APP_DIR) && $(TAURI_CLI) build $(TAURI_BUILD_ARGS)

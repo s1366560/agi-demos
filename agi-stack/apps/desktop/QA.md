@@ -6,6 +6,9 @@
 
 - `make run-desktop` launches the Tauri dev shell, starts Vite on `127.0.0.1:5173`,
   and renders the React app to `New session`.
+- On macOS, `make run-desktop` provisions a private local development signing identity and signs
+  each rebuilt dev binary with that stable identity. Existing Keychain records can require one
+  final **Always Allow** confirmation after upgrading from an ad-hoc build; later rebuilds reuse it.
 - Browser QA on `http://127.0.0.1:5173` verifies the signed-out desktop shell,
   sign-in dialog, successful local login against `http://127.0.0.1:8000`,
   workspace chat entry, and sending a workspace task prompt.
