@@ -44,6 +44,7 @@ const LOCAL_RUNTIME_ROUTABLE_HEALTH_STATUSES = new Set([
   'healthy',
   'connected',
   'ready',
+  'not_checked',
 ]);
 
 const providerTypeLabels: Readonly<Record<string, string>> = {

@@ -347,6 +347,10 @@ fn frontend_dom_probe_script() -> &'static str {
           hasTauriGlobal: Boolean(window.__TAURI__ || window.__TAURI_INTERNALS__),
           loginScreen: elementProbe('.desktop-login-screen'),
           appShell: elementProbe('.app-shell'),
+          composerModelButton: elementProbe('.composer-model-button'),
+          modelOptions: Array.from(
+            document.querySelectorAll('.composer-model-popover button'),
+          ).map((button) => button.textContent?.replace(/\s+/g, ' ').trim() ?? ''),
           settingsWindow: elementProbe('.settings-window-dialog'),
           ...extra,
         });
@@ -360,6 +364,29 @@ fn frontend_dom_probe_script() -> &'static str {
 
         setTimeout(async () => {
           let summary = summarize('probe');
+          const selectGlmModel = () => {
+            const modelButton = document.querySelector('.composer-model-button');
+            if (!modelButton) {
+              report(summarize('probe-model-button-missing'));
+              return;
+            }
+            modelButton.click();
+            setTimeout(() => {
+              report(summarize('probe-model-menu-open'));
+              const option = Array.from(
+                document.querySelectorAll('.composer-model-popover button'),
+              ).find((button) => button.textContent?.includes('glm-5.2'));
+              if (!option) return;
+              option.click();
+              setTimeout(() => report(summarize('probe-model-selected')), 2500);
+            }, 500);
+          };
+          const firstSessionButton = document.querySelector('.workspace-tree-session-row');
+          if (firstSessionButton && !window.__AGISTACK_GLM_SMOKE__) {
+            window.__AGISTACK_GLM_SMOKE__ = true;
+            firstSessionButton.click();
+            setTimeout(selectGlmModel, 2500);
+          }
           if (
             !summary.hasLoginScreen &&
             !summary.hasAppShell &&

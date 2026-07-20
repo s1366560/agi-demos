@@ -426,6 +426,10 @@ test('local routing candidates fail closed to runtime-supported ready providers'
     'gpt-main',
     'gpt-fast',
   ]);
+  assert.deepEqual(localRuntimeRoutingModelIds({ ...provider, health_status: 'not_checked' }), [
+    'gpt-main',
+    'gpt-fast',
+  ]);
   assert.deepEqual(
     localRuntimeRoutingModelIds({
       ...provider,
