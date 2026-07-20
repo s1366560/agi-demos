@@ -23,7 +23,6 @@ import type {
   DeviceCodeView,
   DeviceTokenView,
   DesktopRuntimeConfig,
-  DesktopServiceResponse,
   ForkRecoveryOutcome,
   HitlResponseOutcome,
   HitlResponseSubmission,
@@ -1142,32 +1141,12 @@ export class DesktopApiClient {
     );
   }
 
-  async ensureSandbox(signal?: AbortSignal): Promise<ProjectSandbox> {
-    const projectId = requireValue(this.config.projectId, 'project id');
-    return this.request<ProjectSandbox>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/sandbox`,
-      {
-        method: 'POST',
-        body: { auto_create: true },
-        signal,
-      },
-    );
-  }
-
   async seedProxyAuthCookie(): Promise<void> {
     const projectId = requireValue(this.config.projectId, 'project id');
     await this.request<unknown>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/sandbox/proxy-auth-cookie`,
       { method: 'POST' },
     );
-  }
-
-  async startDesktop(resolution = '1440x900'): Promise<DesktopServiceResponse> {
-    const projectId = requireValue(this.config.projectId, 'project id');
-    const path = `/api/v1/projects/${encodeURIComponent(
-      projectId,
-    )}/sandbox/desktop?resolution=${encodeURIComponent(resolution)}`;
-    return this.request<DesktopServiceResponse>(path, { method: 'POST' });
   }
 
   async startTerminal(
@@ -1237,14 +1216,6 @@ export class DesktopApiClient {
       myWork: myWorkResult.items,
       myWorkError: myWorkResult.error,
     };
-  }
-
-  desktopProxyUrl(): string {
-    const projectId = requireValue(this.config.projectId, 'project id');
-    return absoluteUrl(
-      this.config.apiBaseUrl,
-      `/api/v1/projects/${encodeURIComponent(projectId)}/sandbox/desktop/proxy/`,
-    );
   }
 
   terminalProxyUrl(sessionId?: string | null, boundProjectId?: string | null): string {

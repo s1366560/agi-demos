@@ -47,11 +47,6 @@ import {
   isWorkspaceContextUnavailableError,
 } from './api/client';
 import {
-  ingestLocalMemory,
-  searchLocalMemory,
-  semanticSearchLocalMemory,
-} from './api/localMemory';
-import {
   clearNativeTrustedSession,
   hasNativeTrustedSessionBroker,
   loadNativeTrustedSession,
@@ -188,7 +183,6 @@ import {
 } from './features/settings/settingsEntryRouting';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
-import { StatusPanel } from './features/status/StatusPanel';
 import {
   NewTaskFlow,
   type NewTaskAgentTurnInput,
@@ -238,19 +232,16 @@ import type {
   DesktopRun,
   DesktopRunInput,
   DesktopRuntimeConfig,
-  DesktopServiceResponse,
   DesktopToolInvocation,
   HitlResponseSubmission,
   LoginOutcome,
   LocalRuntimeStatus,
-  LocalMemoryResult,
   PlanSnapshot,
   ProjectSummary,
   ProjectWorkItem,
   RuntimeNodeLoadState,
   RuntimeDataset,
   RunInputDelivery,
-  StatusTab,
   TerminalServiceResponse,
   WorkbenchSection,
   WorkspaceAgentBinding,
@@ -313,14 +304,6 @@ type CommandPaletteItem = {
   onSelect: () => void;
 };
 
-type WorkflowTarget =
-  | 'changes'
-  | 'pull'
-  | 'plan'
-  | 'board'
-  | 'background'
-  | 'artifacts'
-  | 'runtime';
 type RunControlState = 'planning' | 'running' | 'paused' | 'stopped';
 type RunDotTone = RunControlState | 'completed' | 'failed' | 'idle';
 const runControlLabels: Record<RunControlState, string> = {
@@ -1557,15 +1540,8 @@ export function App() {
   const [reviewTab, setReviewTab] = useState<ReviewTab>('overview');
   const [reviewPanelOpen, setReviewPanelOpen] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState('');
-  const [statusTab, setStatusTab] = useState<StatusTab>('overview');
   const [sandboxBusy, setSandboxBusy] = useState(false);
-  const [desktop, setDesktop] = useState<DesktopServiceResponse | null>(null);
   const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
-  const [terminalInput, setTerminalInput] = useState('');
-  const [memoryContent, setMemoryContent] = useState('Local-first desktop workspace smoke record');
-  const [memoryQuery, setMemoryQuery] = useState('desktop workspace');
-  const [memoryBusy, setMemoryBusy] = useState(false);
-  const [memoryResult, setMemoryResult] = useState<LocalMemoryResult | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
   const agentConversationSessionRef = useRef(agentConversationSession);
@@ -1697,14 +1673,6 @@ export function App() {
     auth.context?.revision ?? null,
     scopedConversation?.id ?? null,
   );
-  const desktopFrameUrl = useMemo(() => {
-    if (!desktop?.success) return null;
-    try {
-      return api.desktopProxyUrl();
-    } catch {
-      return null;
-    }
-  }, [api, desktop?.success]);
   const modalOpen = loginModalOpen || commandPaletteOpen || newTaskOpen || settingsWindowOpen;
   const localRuntimeMode = config.mode === 'local' && runsInTauri;
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
@@ -2624,15 +2592,6 @@ export function App() {
         : newTaskAgentTurnTransport(config.mode, socket.connected) === 'live_socket_required'
           ? t('task.liveConnectionRequired')
           : null;
-  const sandboxDisabledReason = !identityAuthenticated
-    ? t('sandbox.disabled.signIn')
-    : !showRuntimeConfig
-      ? t('sandbox.disabled.projectRequired')
-    : !config.apiKey.trim()
-      ? t('sandbox.disabled.authRequired')
-      : !config.projectId.trim()
-        ? t('sandbox.disabled.projectRequired')
-        : null;
   const chatDisabledReason = !identityAuthenticated
     ? 'Sign in or enter an API key before sending messages.'
     : !showRuntimeConfig
@@ -2685,10 +2644,7 @@ export function App() {
     setSelectedTaskId('');
     setReviewTab('overview');
     setReviewPanelOpen(true);
-    setDesktop(null);
     setTerminal(null);
-    setTerminalInput('');
-    setMemoryResult(null);
     setAgentConversationSession(null);
     setSessionProjectionState(emptySessionProjectionState);
     setSessionDisplayProjection(null);
@@ -3962,7 +3918,6 @@ export function App() {
     setSectionForwardStack([]);
     activeSectionRef.current = 'workspace';
     setActiveSection('workspace');
-    setStatusTab('overview');
     setError(persistenceWarning);
   };
 
@@ -4111,7 +4066,6 @@ export function App() {
     setSelectedTaskId('');
     resetConversationTimeline();
     setAgentTaskSignals([]);
-    setStatusTab('overview');
     setReviewTab('plan');
     setSectionBackStack([]);
     setSectionForwardStack([]);
@@ -4405,24 +4359,6 @@ export function App() {
     [],
   );
 
-  const ensureSandbox = async () => {
-    await runSandboxAction(async () => {
-      const sandbox = await api.ensureSandbox();
-      setDataset((current) => ({ ...current, sandbox }));
-    });
-  };
-
-  const startDesktop = async () => {
-    await runSandboxAction(async () => {
-      await api.seedProxyAuthCookie();
-      const response = await api.startDesktop();
-      setDesktop(response);
-      const sandbox = await api.getSandbox().catch(() => dataset.sandbox);
-      setDataset((current) => ({ ...current, sandbox }));
-      setStatusTab('sandbox');
-    });
-  };
-
   const startTerminal = async () => {
     await runSandboxAction(async () => {
       const sourceRun = currentArtifactRunRef.current;
@@ -4441,9 +4377,7 @@ export function App() {
         throw new Error(t('session.terminalAuthorityMismatch'));
       }
       terminalProxy.clear();
-      setTerminalInput('');
       setTerminal(response);
-      setStatusTab('sandbox');
     });
   };
 
@@ -4459,26 +4393,6 @@ export function App() {
     }
   };
 
-  const sendTerminalInput = () => {
-    const input = terminalInput.trimEnd();
-    if (!input) return;
-    if (terminalProxy.sendInput(`${input}\n`)) setTerminalInput('');
-  };
-
-  const runMemoryAction = async (action: () => Promise<LocalMemoryResult>) => {
-    setMemoryBusy(true);
-    setError(null);
-    try {
-      setMemoryResult(await action());
-    } catch (caught) {
-      setMemoryResult({ label: 'Error', usedFallback: false, data: formatError(caught) });
-    } finally {
-      setMemoryBusy(false);
-    }
-  };
-
-  const memoryProjectId = config.projectId.trim() || 'desktop-local';
-  const memoryAuthorId = auth.user?.user_id ?? 'desktop-user';
   const paneStageClassName =
     activeSection === 'board'
       ? 'pane-stage single-stage my-work-stage'
@@ -4675,9 +4589,6 @@ export function App() {
   useEffect(() => {
     void loadRunChanges();
   }, [loadRunChanges]);
-  useEffect(() => {
-    setTerminalInput('');
-  }, [currentTerminalRunScopeKey]);
   useEffect(() => {
     let active = true;
     if (!localRuntimeMode || !currentArtifactRun) {
@@ -5199,21 +5110,16 @@ export function App() {
       return;
     }
 
-    selectWorkflowTarget('board');
+    switchSection('board');
   };
 
   const applySectionSideEffects = (section: WorkbenchSection) => {
     activeSectionRef.current = section;
     setActiveSection(section);
-    if (section === 'sandbox' || section === 'terminal') setStatusTab('sandbox');
-    if (section === 'memory') setStatusTab('memory');
-    if (section === 'status') setStatusTab('overview');
-    if (section === 'terminal') setReviewTab('terminal');
     if (section === 'board') {
       setReviewTab('changes');
       setReviewPanelOpen(false);
     }
-    if (section === 'status') setReviewTab('plan');
   };
 
   useEffect(() => {
@@ -5432,42 +5338,6 @@ export function App() {
 
   const canGoBack = sectionBackStack.length > 0;
   const canGoForward = sectionForwardStack.length > 0;
-
-  const selectWorkflowTarget = (target: WorkflowTarget) => {
-    setReviewPanelOpen(true);
-    if (target === 'changes') {
-      setReviewTab('changes');
-      switchSection('workspace');
-      return;
-    }
-    if (target === 'pull') {
-      setReviewTab('pull');
-      switchSection('workspace');
-      return;
-    }
-    if (target === 'board') {
-      setReviewTab('changes');
-      switchSection('board');
-      return;
-    }
-    if (target === 'plan') {
-      setReviewTab('plan');
-      switchSection('workspace');
-      return;
-    }
-    if (target === 'background') {
-      setReviewTab('background');
-      switchSection('workspace');
-      return;
-    }
-    if (target === 'artifacts') {
-      setReviewTab('artifacts');
-      switchSection('workspace');
-      return;
-    }
-    setReviewTab('terminal');
-    switchSection('terminal');
-  };
 
   const selectChatWorkflowTarget = useCallback((target: ChatWorkflowTarget) => {
     setReviewPanelOpen(true);
@@ -5737,54 +5607,6 @@ export function App() {
     />
   );
 
-  const renderStatusPanel = () => (
-    <StatusPanel
-      selectedTask={selectedTask}
-      plan={activeDataset.plan}
-      events={socket.events}
-      wsConnected={socket.connected}
-      tab={statusTab}
-      sandbox={activeDataset.sandbox}
-      desktop={desktop}
-      desktopFrameUrl={desktopFrameUrl}
-      terminal={terminal}
-      terminalBinding={terminalBinding}
-      terminalError={terminalProxy.error}
-      terminalLines={terminalProxy.lines}
-      terminalInput={terminalInput}
-      sandboxBusy={sandboxBusy}
-      sandboxDisabledReason={sandboxDisabledReason}
-      memoryProjectId={memoryProjectId}
-      memoryContent={memoryContent}
-      memoryQuery={memoryQuery}
-      tauriAvailable={runsInTauri}
-      memoryBusy={memoryBusy}
-      memoryResult={memoryResult}
-      onTabChange={setStatusTab}
-      onTerminalInputChange={setTerminalInput}
-      onEnsureSandbox={() => void ensureSandbox()}
-      onStartDesktop={() => void startDesktop()}
-      onStartTerminal={() => void startTerminal()}
-      onSendTerminalInput={sendTerminalInput}
-      onClearTerminal={terminalProxy.clear}
-      onMemoryContentChange={setMemoryContent}
-      onMemoryQueryChange={setMemoryQuery}
-      onMemoryIngest={() =>
-        void runMemoryAction(() =>
-          ingestLocalMemory(memoryProjectId, memoryAuthorId, memoryContent),
-        )
-      }
-      onMemorySearch={() =>
-        void runMemoryAction(() => searchLocalMemory(memoryProjectId, memoryQuery, 10))
-      }
-      onMemorySemanticSearch={() =>
-        void runMemoryAction(() =>
-          semanticSearchLocalMemory(memoryProjectId, memoryQuery, 10),
-        )
-      }
-    />
-  );
-
   const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
     <WorkspaceReviewPanel
       activeTab={reviewTab}
@@ -5852,14 +5674,6 @@ export function App() {
       activeSection === 'search'
     ) {
       return renderAuxiliaryView(activeSection);
-    }
-    if (
-      activeSection === 'status' ||
-      activeSection === 'sandbox' ||
-      activeSection === 'memory' ||
-      activeSection === 'terminal'
-    ) {
-      return renderStatusPanel();
     }
     return renderWorkspaceOverview();
   };

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
@@ -583,6 +583,27 @@ test('desktop styles contain no retired signed-out or mobile menu chrome', () =>
     globalStyles,
     /\.(?:signed-out(?:-[\w-]+)?|mobile-section-[\w-]+|session-group-[\w-]+|welcome-(?:shell|timeline)|usage-warning(?:-[\w-]+)?|workflow-(?:strip|chip)|session-scope-[\w-]+|composer-(?:reference-menu|draft-input|toolbar))\b/,
   );
+});
+
+test('the prototype shell excludes the retired standalone runtime inspector', () => {
+  assert.doesNotMatch(appSource, /StatusPanel|renderStatusPanel|statusTab|setStatusTab/);
+  assert.doesNotMatch(
+    appSource,
+    /activeSection === '(?:status|sandbox|memory|terminal)'|switchSection\('terminal'\)/,
+  );
+  assert.equal(
+    existsSync(new URL('../src/features/status/StatusPanel.tsx', import.meta.url)),
+    false,
+  );
+  assert.equal(
+    existsSync(new URL('../src/features/sandbox/SandboxPanel.tsx', import.meta.url)),
+    false,
+  );
+  assert.equal(
+    existsSync(new URL('../src/features/memory/MemoryPanel.tsx', import.meta.url)),
+    false,
+  );
+  assert.equal(existsSync(new URL('../qa/status-terminal.html', import.meta.url)), false);
 });
 
 test('profile menu keeps account and workspace switching as distinct settings entries', () => {

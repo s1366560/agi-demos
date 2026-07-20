@@ -2,8 +2,6 @@ export type RuntimeMode = 'local' | 'cloud';
 
 export type ConnectionState = 'idle' | 'loading' | 'ready' | 'error';
 
-export type StatusTab = 'overview' | 'plan' | 'sandbox' | 'memory' | 'events';
-
 export type AuthStatus = 'signed_out' | 'signing_in' | 'signed_in' | 'manual';
 
 export type CredentialKind = 'cloud_session' | 'manual_api_key' | 'local_session';
@@ -15,10 +13,6 @@ export type WorkbenchSection =
   | 'search'
   | 'chat'
   | 'board'
-  | 'status'
-  | 'sandbox'
-  | 'memory'
-  | 'terminal'
   | 'settings';
 
 export type DesktopRuntimeConfig = {
@@ -1137,17 +1131,6 @@ export type ProjectSandbox = {
   error_message?: string | null;
 };
 
-export type DesktopServiceResponse = {
-  success: boolean;
-  url?: string | null;
-  display?: string;
-  resolution?: string;
-  port?: number;
-  audio_enabled?: boolean;
-  dynamic_resize?: boolean;
-  encoding?: string;
-};
-
 export type TerminalServiceResponse = {
   success: boolean;
   url?: string | null;
@@ -1260,21 +1243,6 @@ export type AgentWsEvent = {
   sandbox_id?: string;
   payload?: unknown;
   [key: string]: unknown;
-};
-
-export type LocalMemoryRecord = {
-  id?: string;
-  project_id?: string;
-  content?: string;
-  score?: number;
-  created_at?: string;
-  [key: string]: unknown;
-};
-
-export type LocalMemoryResult = {
-  label: string;
-  data: unknown;
-  usedFallback: boolean;
 };
 
 export type RuntimeNodeState = {
