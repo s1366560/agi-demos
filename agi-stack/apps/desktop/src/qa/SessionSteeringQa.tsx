@@ -113,6 +113,12 @@ const queuedInput: DesktopRunInput = {
   updated_at: '2026-07-13T10:18:00Z',
 };
 
+const qaModelOptions = [
+  { value: 'gpt-5.5', modelId: 'gpt-5.5', providerLabel: 'OpenAI production' },
+  { value: 'gpt-5.5-mini', modelId: 'gpt-5.5-mini', providerLabel: 'OpenAI production' },
+  { value: 'glm-5.2', modelId: 'glm-5.2', providerLabel: 'OpenAI-compatible' },
+];
+
 const messages: WorkspaceMessage[] = [
   {
     id: 'message-1',
@@ -210,6 +216,8 @@ function SessionSteeringQa() {
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
+  const [model, setModel] = useState('gpt-5.5');
+  const [switchingModel, setSwitchingModel] = useState(false);
   const [historyAttempt, setHistoryAttempt] = useState(0);
   const [timeline, setTimeline] = useState<ConversationTimelineState>(() => {
     const items = historyMode === 'anchor' ? anchorTimelineItems : timelineState.items;
@@ -310,7 +318,10 @@ function SessionSteeringQa() {
               sending={false}
               disabledReason={null}
               activeWorkflowTarget="changes"
-              modelLabel="GPT-5.5"
+              modelLabel={model}
+              modelOptions={qaModelOptions}
+              selectedModelValue={model}
+              modelSwitching={switchingModel}
               runtimeTargetLabel="Local Rust Core"
               runtimeTargetOptions={['Local Rust Core']}
               runInputDelivery={delivery}
@@ -340,6 +351,12 @@ function SessionSteeringQa() {
               onLoadEarlier={loadEarlierHistory}
               onRespondToHitl={async () => undefined}
               onWorkflowSelect={() => undefined}
+              onModelChange={async (value) => {
+                setSwitchingModel(true);
+                await new Promise((resolve) => window.setTimeout(resolve, 180));
+                setModel(value);
+                setSwitchingModel(false);
+              }}
               onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />

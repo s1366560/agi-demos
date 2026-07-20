@@ -39,6 +39,7 @@ import {
   visibleQueuedRunInputs,
 } from '../session/sessionRunInputModel';
 import { ComposerControls } from './ComposerControls';
+import type { ComposerModelOption } from './ComposerControls';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import { isImportantTimelineItem } from './chatTimelinePresentation';
 import { SessionEmptyState, WorkspaceTranscriptMessage } from './ChatTranscript';
@@ -73,6 +74,10 @@ type ChatPanelProps = {
   disabledReason: string | null;
   activeWorkflowTarget: ChatWorkflowTarget;
   modelLabel?: string;
+  modelOptions?: readonly ComposerModelOption[];
+  selectedModelValue?: string | null;
+  modelSwitching?: boolean;
+  modelError?: string | null;
   runtimeTargetLabel?: string;
   runtimeTargetOptions?: string[];
   runInputDelivery: RunInputDelivery | null;
@@ -95,6 +100,7 @@ type ChatPanelProps = {
   onAuthorityAction?: () => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
   onRuntimeTargetChange?: (value: string) => void;
+  onModelChange?: (value: string) => Promise<void>;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
 };
 
@@ -148,6 +154,10 @@ export const ChatPanel = memo(function ChatPanel({
   disabledReason,
   activeWorkflowTarget,
   modelLabel,
+  modelOptions,
+  selectedModelValue,
+  modelSwitching,
+  modelError,
   runtimeTargetLabel,
   runtimeTargetOptions,
   runInputDelivery,
@@ -170,6 +180,7 @@ export const ChatPanel = memo(function ChatPanel({
   onAuthorityAction,
   onWorkflowSelect,
   onRuntimeTargetChange,
+  onModelChange,
   onOpenCommands,
 }: ChatPanelProps) {
   const { t } = useI18n();
@@ -630,6 +641,10 @@ export const ChatPanel = memo(function ChatPanel({
         runInputAuthorityRunId={runInputAuthorityRunId}
         references={references}
         modelLabel={modelLabel}
+        modelOptions={modelOptions}
+        selectedModelValue={selectedModelValue}
+        modelSwitching={modelSwitching}
+        modelError={modelError}
         runtimeTargetLabel={runtimeTargetLabel}
         runtimeTargetOptions={runtimeTargetOptions}
         authorityNotice={authorityNotice}
@@ -639,6 +654,7 @@ export const ChatPanel = memo(function ChatPanel({
         onRemoveReference={onRemoveReference}
         onWorkflowSelect={onWorkflowSelect}
         onRuntimeTargetChange={onRuntimeTargetChange}
+        onModelChange={onModelChange}
         onOpenCommands={onOpenCommands}
         onSend={handleComposerSend}
       />
@@ -662,6 +678,10 @@ type ChatComposerProps = {
   runInputAuthorityRunId: string | null;
   references: CodeRangeReference[];
   modelLabel?: string;
+  modelOptions?: readonly ComposerModelOption[];
+  selectedModelValue?: string | null;
+  modelSwitching?: boolean;
+  modelError?: string | null;
   runtimeTargetLabel?: string;
   runtimeTargetOptions?: string[];
   authorityNotice?: ChatAuthorityNotice;
@@ -671,6 +691,7 @@ type ChatComposerProps = {
   onRemoveReference: (reference: CodeRangeReference) => void;
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
   onRuntimeTargetChange?: (value: string) => void;
+  onModelChange?: (value: string) => Promise<void>;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
   onSend: (content: string, onWorkspaceMessageSaved?: () => void) => void;
 };
@@ -691,6 +712,10 @@ function ChatComposer({
   runInputAuthorityRunId,
   references,
   modelLabel,
+  modelOptions,
+  selectedModelValue,
+  modelSwitching,
+  modelError,
   runtimeTargetLabel,
   runtimeTargetOptions,
   authorityNotice,
@@ -700,6 +725,7 @@ function ChatComposer({
   onRemoveReference,
   onWorkflowSelect,
   onRuntimeTargetChange,
+  onModelChange,
   onOpenCommands,
   onSend,
 }: ChatComposerProps) {
@@ -893,6 +919,16 @@ function ChatComposer({
               <MixerHorizontalIcon aria-hidden="true" />
               {t('session.context')}
             </button>
+            {modelLabel && modelOptions?.length && onModelChange ? (
+              <ComposerControls
+                modelLabel={modelLabel}
+                modelOptions={modelOptions}
+                modelValue={selectedModelValue}
+                modelPending={modelSwitching}
+                modelError={modelError}
+                onModelChange={onModelChange}
+              />
+            ) : null}
           </div>
         ) : null}
         {composerPresentation.showCommands ? (
@@ -930,8 +966,13 @@ function ChatComposer({
           <ComposerControls
             disabledHint={disabledReason}
             modelLabel={modelLabel}
+            modelOptions={modelOptions}
+            modelValue={selectedModelValue}
+            modelPending={modelSwitching}
+            modelError={modelError}
             runtimeTargetLabel={runtimeTargetLabel}
             runtimeTargetOptions={runtimeTargetOptions}
+            onModelChange={onModelChange}
             onRuntimeTargetChange={onRuntimeTargetChange}
           />
         ) : null}

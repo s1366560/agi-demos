@@ -1,19 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
-import { PlusIcon } from '@radix-ui/react-icons';
+import { CheckIcon, CubeIcon, MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons';
+
+import { useI18n } from '../../i18n';
 
 type ComposerMenu = 'files' | 'mode' | 'model' | 'effort' | 'runtime';
+
+export type ComposerModelOption = {
+  value: string;
+  modelId: string;
+  providerLabel: string;
+};
 
 type ComposerControlsProps = {
   disabledHint?: string | null;
   effortLabel?: string;
   modeLabel?: string;
   modelLabel?: string;
+  modelOptions?: readonly ComposerModelOption[];
+  modelValue?: string | null;
+  modelPending?: boolean;
+  modelError?: string | null;
   runtimeTargetLabel?: string;
   runtimeTargetOptions?: string[];
   onAddFiles?: () => void;
   onModeChange?: (value: string) => void;
-  onModelChange?: (value: string) => void;
+  onModelChange?: (value: string) => Promise<void>;
   onEffortChange?: (value: string) => void;
   onRuntimeTargetChange?: (value: string) => void;
 };
@@ -22,6 +34,10 @@ export function ComposerControls({
   effortLabel = 'Medium',
   modeLabel = 'Autopilot',
   modelLabel = 'Local model',
+  modelOptions = [],
+  modelValue = null,
+  modelPending = false,
+  modelError = null,
   runtimeTargetLabel = 'Local Rust Core',
   runtimeTargetOptions = ['Local Rust Core', 'Staging Runtime'],
   onAddFiles,
@@ -32,7 +48,6 @@ export function ComposerControls({
 }: ComposerControlsProps) {
   const [openMenu, setOpenMenu] = useState<ComposerMenu | null>(null);
   const [mode, setMode] = useState(modeLabel);
-  const [model, setModel] = useState(modelLabel);
   const [effort, setEffort] = useState(effortLabel);
   const [runtimeTarget, setRuntimeTarget] = useState(runtimeTargetLabel);
   const trayRef = useRef<HTMLDivElement>(null);
@@ -40,10 +55,6 @@ export function ComposerControls({
   useEffect(() => {
     setMode(modeLabel);
   }, [modeLabel]);
-
-  useEffect(() => {
-    setModel(modelLabel);
-  }, [modelLabel]);
 
   useEffect(() => {
     setEffort(effortLabel);
@@ -121,23 +132,21 @@ export function ComposerControls({
           }}
         />
       ) : null}
-      {onModelChange ? (
-        <ComposerModelCombobox
-          disabled={false}
-          compactLabel={compactComposerLabel(model)}
+      {onModelChange && modelOptions.length ? (
+        <ComposerModelSwitch
+          disabled={modelPending}
+          compactLabel={compactComposerLabel(modelLabel)}
           open={openMenu === 'model'}
-          controlLabel={`Select model, ${model}`}
-          options={Array.from(new Set([modelLabel, 'Workspace model', 'Cloud model']))}
-          selected={model}
+          displayLabel={modelLabel}
+          error={modelError}
+          options={modelOptions}
+          pending={modelPending}
+          selected={modelValue}
           onToggle={() => toggleMenu('model')}
-          onInput={(value) => {
-            setModel(value);
-            onModelChange(value);
-          }}
           onSelect={(value) => {
-            setModel(value);
-            onModelChange(value);
-            setOpenMenu(null);
+            void onModelChange(value)
+              .then(() => setOpenMenu(null))
+              .catch(() => undefined);
           }}
         />
       ) : null}
@@ -181,30 +190,48 @@ export function ComposerControls({
   );
 }
 
-function ComposerModelCombobox({
+function ComposerModelSwitch({
   disabled,
   compactLabel,
   open,
-  controlLabel,
+  displayLabel,
+  error,
   options,
+  pending,
   selected,
   onToggle,
-  onInput,
   onSelect,
 }: {
   disabled: boolean;
   compactLabel: string;
   open: boolean;
-  controlLabel: string;
-  options: string[];
-  selected: string;
+  displayLabel: string;
+  error: string | null;
+  options: readonly ComposerModelOption[];
+  pending: boolean;
+  selected: string | null;
   onToggle: () => void;
-  onInput: (value: string) => void;
   onSelect: (value: string) => void;
 }) {
-  const listboxId = 'composer-model-listbox';
+  const { t } = useI18n();
+  const listboxId = useId();
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions = useMemo(
+    () =>
+      normalizedQuery
+        ? options.filter((option) =>
+            `${option.modelId} ${option.providerLabel}`.toLowerCase().includes(normalizedQuery),
+          )
+        : options,
+    [normalizedQuery, options],
+  );
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
       event.preventDefault();
       if (!open) onToggle();
@@ -217,40 +244,67 @@ function ComposerModelCombobox({
 
   return (
     <div className="composer-control">
-      <input
-        className="composer-mode-button composer-model-combobox"
+      <button
+        className="composer-mode-button composer-model-button"
         data-compact-label={compactLabel}
-        type="text"
-        role="combobox"
-        aria-label={controlLabel}
-        aria-autocomplete="list"
+        type="button"
+        aria-label={t('chat.selectModel', { model: displayLabel })}
         aria-controls={listboxId}
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
+        aria-busy={pending}
         disabled={disabled}
-        title={disabled ? 'Model selection is managed by the active runtime.' : undefined}
-        value={selected}
-        onChange={(event) => onInput(event.target.value)}
+        title={displayLabel}
         onClick={() => {
           if (!disabled) onToggle();
         }}
         onKeyDown={handleKeyDown}
-      />
+      >
+        <CubeIcon aria-hidden="true" />
+        <span>{displayLabel}</span>
+      </button>
       {open ? (
-        <ComposerPopover id={listboxId} role="listbox" title="Select model">
-          {options.map((option) => (
-            <button
-              className={selected === option ? 'selected' : ''}
-              type="button"
-              role="option"
-              aria-selected={selected === option}
-              key={option}
-              onClick={() => onSelect(option)}
-            >
-              {option}
-            </button>
-          ))}
-        </ComposerPopover>
+        <div
+          className="composer-popover composer-model-popover"
+          id={listboxId}
+          role="dialog"
+          aria-label={t('chat.modelSwitcherTitle')}
+        >
+          <strong>{t('chat.modelSwitcherTitle')}</strong>
+          <label className="composer-model-search">
+            <MagnifyingGlassIcon aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              placeholder={t('chat.searchModels')}
+              aria-label={t('chat.searchModels')}
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <div className="composer-model-options" role="listbox">
+            {visibleOptions.map((option) => (
+              <button
+                className={selected === option.value ? 'selected' : ''}
+                type="button"
+                role="option"
+                aria-selected={selected === option.value}
+                disabled={pending}
+                key={option.value}
+                onClick={() => onSelect(option.value)}
+              >
+                <span>
+                  <b>{option.modelId}</b>
+                  <small>{option.providerLabel}</small>
+                </span>
+                {selected === option.value ? <CheckIcon aria-hidden="true" /> : null}
+              </button>
+            ))}
+            {!visibleOptions.length ? <p>{t('chat.noModelsFound')}</p> : null}
+          </div>
+          {pending ? <p>{t('chat.switchingModel')}</p> : null}
+          {error ? <p className="composer-model-error">{error}</p> : null}
+        </div>
       ) : null}
     </div>
   );

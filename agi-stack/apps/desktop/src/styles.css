@@ -6689,6 +6689,100 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   vertical-align: middle;
 }
 
+.composer-model-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-model-button > svg {
+  flex: 0 0 auto;
+}
+
+.composer-model-button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-model-popover {
+  width: min(320px, calc(100vw - 32px));
+  max-width: 320px;
+  overflow: visible;
+}
+
+.composer-model-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+  background: #0b1118;
+  color: var(--desktop-faint);
+}
+
+.composer-model-search:focus-within {
+  border-color: #2c7085;
+  color: var(--desktop-cyan);
+}
+
+.composer-model-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--desktop-text);
+  font: 500 11px/1 inherit;
+}
+
+.composer-model-search input::placeholder {
+  color: var(--desktop-faint);
+}
+
+.composer-model-options {
+  display: grid;
+  gap: 3px;
+  max-height: min(240px, calc(100vh - 160px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.composer-model-options button {
+  width: 100%;
+  min-height: 44px;
+}
+
+.composer-model-options button > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.composer-model-options b,
+.composer-model-options small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-model-options b {
+  color: inherit;
+  font-size: 12px;
+}
+
+.composer-model-options small {
+  color: var(--desktop-faint);
+  font-size: 10px;
+}
+
+.composer-model-error {
+  color: #e8a1ad !important;
+}
+
 .composer-workflows button {
   display: inline-flex;
   align-items: center;

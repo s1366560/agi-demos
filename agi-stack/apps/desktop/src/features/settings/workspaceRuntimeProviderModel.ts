@@ -1,9 +1,64 @@
 import type {
   DesktopRuntimeConfig,
   LlmProviderRoutingPolicy,
+  LlmProviderRoutingPolicyMutationInput,
   ManagedLlmProvider,
   WorkspaceRuntimeProvider,
 } from '../../types';
+import { localRuntimeRoutingModelIds } from './providerManagementModel';
+
+export type WorkspaceRuntimeModelOption = {
+  value: string;
+  providerId: string;
+  providerLabel: string;
+  modelId: string;
+  selected: boolean;
+};
+
+export function workspaceRuntimeModelSelectionValue(providerId: string, modelId: string): string {
+  return JSON.stringify([providerId, modelId]);
+}
+
+export function workspaceRuntimeModelOptions(
+  policy: LlmProviderRoutingPolicy,
+  providers: readonly ManagedLlmProvider[],
+): WorkspaceRuntimeModelOption[] {
+  const selected = policy.roles.default;
+  return providers.flatMap((provider) =>
+    localRuntimeRoutingModelIds(provider).map((modelId) => ({
+      value: workspaceRuntimeModelSelectionValue(provider.id, modelId),
+      providerId: provider.id,
+      providerLabel: provider.name.trim() || provider.provider_type,
+      modelId,
+      selected:
+        selected?.provider_id === provider.id && selected.model_id === modelId,
+    })),
+  );
+}
+
+export function workspaceRuntimeRoutingMutation(
+  config: DesktopRuntimeConfig,
+  policy: LlmProviderRoutingPolicy,
+  option: WorkspaceRuntimeModelOption,
+): LlmProviderRoutingPolicyMutationInput | null {
+  if (
+    policy.tenant_id !== config.tenantId.trim() ||
+    policy.project_id !== config.projectId.trim() ||
+    policy.workspace_id !== config.workspaceId.trim()
+  ) {
+    return null;
+  }
+  return {
+    projectId: policy.project_id,
+    workspaceId: policy.workspace_id,
+    expectedRevision: policy.revision,
+    roles: {
+      ...policy.roles,
+      default: { provider_id: option.providerId, model_id: option.modelId },
+    },
+    fallbacks: [...policy.fallbacks],
+  };
+}
 
 export function workspaceRuntimeProviderFromAuthority(
   config: DesktopRuntimeConfig,

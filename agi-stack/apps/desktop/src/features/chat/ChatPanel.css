@@ -558,12 +558,13 @@
 }
 
 .session-composer-context-actions {
+  position: relative;
   display: flex;
   min-width: 0;
   gap: 2px;
 }
 
-.session-composer-context-actions button {
+.session-composer-context-actions > button {
   display: inline-flex;
   align-items: center;
   height: 26px;
@@ -577,8 +578,40 @@
   cursor: pointer;
 }
 
-.session-composer-context-actions button:hover {
+.session-composer-context-actions > button:hover {
   background: rgba(148, 163, 184, 0.1);
+  color: var(--desktop-text);
+}
+
+.session-composer-context-actions .composer-control-tray {
+  gap: 2px;
+}
+
+.session-composer-context-actions .composer-control {
+  position: static !important;
+}
+
+.session-composer-context-actions .composer-model-popover {
+  right: auto !important;
+  left: 0 !important;
+}
+
+.session-composer-context-actions .composer-model-button {
+  max-width: 156px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+
+.session-composer-context-actions .composer-model-popover button {
+  min-height: 44px;
+  color: var(--desktop-muted);
+  font-size: 12px;
+}
+
+.session-composer-context-actions .composer-model-popover button:hover,
+.session-composer-context-actions .composer-model-popover button.selected {
   color: var(--desktop-text);
 }
 
@@ -669,7 +702,8 @@
     padding-left: 8px;
   }
 
-  .session-composer-context-actions button {
+  .session-composer-context-actions > button,
+  .session-composer-context-actions .composer-model-button {
     width: 28px;
     padding: 0;
     justify-content: center;
@@ -677,8 +711,15 @@
     color: transparent;
   }
 
-  .session-composer-context-actions button svg {
+  .session-composer-context-actions > button svg,
+  .session-composer-context-actions .composer-model-button svg {
     flex: 0 0 auto;
     color: var(--desktop-muted);
+  }
+
+  .session-composer-context-actions .composer-model-button::before,
+  .session-composer-context-actions .composer-model-button::after,
+  .session-composer-context-actions .composer-model-button > span {
+    display: none;
   }
 }

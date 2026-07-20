@@ -1,14 +1,42 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
-import type { DesktopRuntimeConfig, WorkspaceRuntimeProvider } from '../../types';
-import { workspaceRuntimeProviderFromAuthority } from './workspaceRuntimeProviderModel';
+import { DesktopApiClient, DesktopApiError } from '../../api/client';
+import { useI18n } from '../../i18n';
+import type {
+  DesktopRuntimeConfig,
+  LlmProviderRoutingPolicy,
+  ManagedLlmProvider,
+  WorkspaceRuntimeProvider,
+} from '../../types';
+import {
+  workspaceRuntimeModelOptions,
+  workspaceRuntimeProviderFromAuthority,
+  workspaceRuntimeRoutingMutation,
+} from './workspaceRuntimeProviderModel';
+import type { WorkspaceRuntimeModelOption } from './workspaceRuntimeProviderModel';
+
+type WorkspaceRuntimeProviderSnapshot = {
+  scopeKey: string;
+  policy: LlmProviderRoutingPolicy | null;
+  providers: ManagedLlmProvider[];
+  provider: WorkspaceRuntimeProvider | null;
+};
+
+export type WorkspaceRuntimeProviderSelection = {
+  provider: WorkspaceRuntimeProvider | null;
+  modelOptions: WorkspaceRuntimeModelOption[];
+  selectedModelValue: string | null;
+  switchingModel: boolean;
+  modelError: string | null;
+  selectModel: (value: string) => Promise<void>;
+};
 
 export function useWorkspaceRuntimeProvider(
   config: DesktopRuntimeConfig,
   enabled: boolean,
   refreshRevision: number,
-): WorkspaceRuntimeProvider | null {
+): WorkspaceRuntimeProviderSelection {
+  const { t } = useI18n();
   const client = useMemo(() => new DesktopApiClient(config), [config]);
   const scopeKey = [
     config.mode,
@@ -19,10 +47,36 @@ export function useWorkspaceRuntimeProvider(
     config.projectId,
     config.workspaceId,
   ].join('\u0000');
-  const [snapshot, setSnapshot] = useState<{
-    scopeKey: string;
-    provider: WorkspaceRuntimeProvider | null;
-  }>({ scopeKey: '', provider: null });
+  const [snapshot, setSnapshot] = useState<WorkspaceRuntimeProviderSnapshot>({
+    scopeKey: '',
+    policy: null,
+    providers: [],
+    provider: null,
+  });
+  const snapshotRef = useRef(snapshot);
+  const scopeKeyRef = useRef(scopeKey);
+  const selectionRequestRef = useRef(0);
+  const [selectionState, setSelectionState] = useState({
+    scopeKey: '',
+    switching: false,
+    error: null as string | null,
+  });
+  snapshotRef.current = snapshot;
+  scopeKeyRef.current = scopeKey;
+
+  const commitAuthority = useCallback(
+    (policy: LlmProviderRoutingPolicy, providers: ManagedLlmProvider[]) => {
+      const nextSnapshot = {
+        scopeKey,
+        policy,
+        providers,
+        provider: workspaceRuntimeProviderFromAuthority(config, policy, providers),
+      };
+      snapshotRef.current = nextSnapshot;
+      setSnapshot(nextSnapshot);
+    },
+    [config, scopeKey],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -33,7 +87,11 @@ export function useWorkspaceRuntimeProvider(
       !config.projectId.trim() ||
       !config.workspaceId.trim()
     ) {
-      setSnapshot({ scopeKey, provider: null });
+      const emptySnapshot = { scopeKey, policy: null, providers: [], provider: null };
+      snapshotRef.current = emptySnapshot;
+      setSnapshot(emptySnapshot);
+      selectionRequestRef.current += 1;
+      setSelectionState({ scopeKey, switching: false, error: null });
       return () => controller.abort();
     }
 
@@ -47,20 +105,97 @@ export function useWorkspaceRuntimeProvider(
     ])
       .then(([policy, providers]) => {
         if (!controller.signal.aborted) {
-          setSnapshot({
-            scopeKey,
-            provider: workspaceRuntimeProviderFromAuthority(config, policy, providers),
-          });
+          commitAuthority(policy, providers);
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setSnapshot({ scopeKey, provider: null });
+        if (!controller.signal.aborted) {
+          const emptySnapshot = { scopeKey, policy: null, providers: [], provider: null };
+          snapshotRef.current = emptySnapshot;
+          setSnapshot(emptySnapshot);
+        }
       });
 
     return () => controller.abort();
-  }, [client, config, enabled, refreshRevision, scopeKey]);
+  }, [client, commitAuthority, config, enabled, refreshRevision, scopeKey]);
 
-  return enabled && config.mode === 'local' && snapshot.scopeKey === scopeKey
-    ? snapshot.provider
-    : null;
+  const activeSnapshot =
+    enabled && config.mode === 'local' && snapshot.scopeKey === scopeKey ? snapshot : null;
+  const modelOptions = useMemo(
+    () =>
+      activeSnapshot?.policy
+        ? workspaceRuntimeModelOptions(activeSnapshot.policy, activeSnapshot.providers)
+        : [],
+    [activeSnapshot],
+  );
+  const selectedModelValue = modelOptions.find((option) => option.selected)?.value ?? null;
+
+  const selectModel = useCallback(
+    async (value: string): Promise<void> => {
+      const requestId = selectionRequestRef.current + 1;
+      selectionRequestRef.current = requestId;
+      const current = snapshotRef.current;
+      const currentPolicy = current.scopeKey === scopeKey ? current.policy : null;
+      const currentOption = currentPolicy
+        ? workspaceRuntimeModelOptions(currentPolicy, current.providers).find(
+            (option) => option.value === value,
+          )
+        : null;
+      if (!enabled || config.mode !== 'local' || !currentPolicy || !currentOption) {
+        throw new Error(t('chat.selectedModelUnavailable'));
+      }
+      if (currentOption.selected) return;
+
+      setSelectionState({ scopeKey, switching: true, error: null });
+      try {
+        let providers = current.providers;
+        let mutation = workspaceRuntimeRoutingMutation(config, currentPolicy, currentOption);
+        if (!mutation) throw new Error(t('chat.modelRoutingContextChanged'));
+
+        let updated: LlmProviderRoutingPolicy;
+        try {
+          updated = await client.updateLlmProviderRoutingPolicy(mutation);
+        } catch (caught) {
+          if (!(caught instanceof DesktopApiError) || caught.status !== 409) throw caught;
+          const [latestPolicy, latestProviders] = await Promise.all([
+            client.getLlmProviderRoutingPolicy(config.projectId, config.workspaceId),
+            client.listLlmProviders(),
+          ]);
+          const latestOption = workspaceRuntimeModelOptions(latestPolicy, latestProviders).find(
+            (option) => option.value === value,
+          );
+          if (!latestOption) {
+            throw new Error(t('chat.selectedModelUnavailable'));
+          }
+          mutation = workspaceRuntimeRoutingMutation(config, latestPolicy, latestOption);
+          if (!mutation) throw new Error(t('chat.modelRoutingContextChanged'));
+          providers = latestProviders;
+          updated = await client.updateLlmProviderRoutingPolicy(mutation);
+        }
+
+        if (selectionRequestRef.current !== requestId || scopeKeyRef.current !== scopeKey) return;
+        commitAuthority(updated, providers);
+        setSelectionState({ scopeKey, switching: false, error: null });
+      } catch (caught) {
+        if (selectionRequestRef.current === requestId && scopeKeyRef.current === scopeKey) {
+          setSelectionState({
+            scopeKey,
+            switching: false,
+            error: caught instanceof Error ? caught.message : String(caught),
+          });
+        }
+        throw caught;
+      }
+    },
+    [client, commitAuthority, config, enabled, scopeKey, t],
+  );
+
+  return {
+    provider: activeSnapshot?.provider ?? null,
+    modelOptions,
+    selectedModelValue,
+    switchingModel: selectionState.scopeKey === scopeKey && selectionState.switching,
+    modelError: selectionState.scopeKey === scopeKey ? selectionState.error : null,
+    selectModel,
+  };
 }

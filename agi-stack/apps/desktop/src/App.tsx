@@ -1681,7 +1681,14 @@ export function App() {
     localRuntimeStatus,
     runsInTauri,
   );
-  const runtimeProvider = useWorkspaceRuntimeProvider(
+  const {
+    provider: runtimeProvider,
+    modelOptions: runtimeModelOptions,
+    selectedModelValue: selectedRuntimeModelValue,
+    switchingModel: switchingRuntimeModel,
+    modelError: runtimeModelError,
+    selectModel: selectRuntimeModel,
+  } = useWorkspaceRuntimeProvider(
     config,
     identityAuthenticated && localRuntimeMode && localRuntimeAuthorityReady,
     runtimeProjectionRefreshRevision,
@@ -5475,6 +5482,12 @@ export function App() {
       disabledReason={sessionChatDisabledReason}
       activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
       modelLabel={config.mode === 'local' ? localRuntimeModelLabel : undefined}
+      modelOptions={config.mode === 'local' ? runtimeModelOptions : undefined}
+      selectedModelValue={
+        config.mode === 'local' ? selectedRuntimeModelValue : undefined
+      }
+      modelSwitching={config.mode === 'local' ? switchingRuntimeModel : undefined}
+      modelError={config.mode === 'local' ? runtimeModelError : undefined}
       runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
       runtimeTargetOptions={runtimeTargetComposerOptions}
       runInputDelivery={effectiveRunInputDeliveryValue}
@@ -5498,6 +5511,7 @@ export function App() {
         sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
       }
       onWorkflowSelect={selectChatWorkflowTarget}
+      onModelChange={config.mode === 'local' ? selectRuntimeModel : undefined}
       onRuntimeTargetChange={handleChatRuntimeTargetChange}
       onOpenCommands={openCommandPalette}
     />

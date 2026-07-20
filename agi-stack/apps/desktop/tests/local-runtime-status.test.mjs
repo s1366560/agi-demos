@@ -9,7 +9,12 @@ const {
   LOCAL_DEV_SERVER_PRESETS,
   mergeLocalRuntimeStatus,
 } = require('/tmp/agistack-desktop-test-dist/src/types.js');
-const { workspaceRuntimeProviderFromAuthority } = require(
+const {
+  workspaceRuntimeModelOptions,
+  workspaceRuntimeModelSelectionValue,
+  workspaceRuntimeProviderFromAuthority,
+  workspaceRuntimeRoutingMutation,
+} = require(
   '/tmp/agistack-desktop-test-dist/src/features/settings/workspaceRuntimeProviderModel.js'
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
@@ -127,6 +132,116 @@ test('workspace runtime projection follows only the selected workspace default r
     null,
   );
   assert.equal(workspaceRuntimeProviderFromAuthority(config, policy, providers.slice(1)), null);
+});
+
+test('workspace model selector exposes only routable enabled models and marks the default route', () => {
+  const policy = {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    workspace_id: 'workspace-a',
+    revision: 3,
+    roles: {
+      default: { provider_id: 'provider-a', model_id: 'gpt-primary' },
+      fast: null,
+      coding: null,
+      vision: null,
+    },
+    fallbacks: [],
+    updated_at: '2026-07-19T00:00:00Z',
+  };
+  const providers = [
+    {
+      id: 'provider-a',
+      name: 'OpenAI production',
+      provider_type: 'openai_compatible',
+      operation_type: 'llm',
+      auth_method: 'api_key',
+      credential_configured: true,
+      is_active: true,
+      is_enabled: true,
+      base_url: 'https://api.example.test/v1',
+      llm_model: 'gpt-primary',
+      allowed_models: ['gpt-primary', 'gpt-fast', 'gpt-fast'],
+      health_status: 'healthy',
+    },
+    {
+      id: 'provider-b',
+      name: 'OpenAI staging',
+      provider_type: 'openai_compatible',
+      operation_type: 'llm',
+      auth_method: 'api_key',
+      credential_configured: false,
+      is_active: true,
+      base_url: 'https://staging.example.test/v1',
+      llm_model: 'staging-only',
+      allowed_models: ['staging-only'],
+      health_status: 'healthy',
+    },
+  ];
+
+  assert.deepEqual(workspaceRuntimeModelOptions(policy, providers), [
+    {
+      value: workspaceRuntimeModelSelectionValue('provider-a', 'gpt-primary'),
+      providerId: 'provider-a',
+      providerLabel: 'OpenAI production',
+      modelId: 'gpt-primary',
+      selected: true,
+    },
+    {
+      value: workspaceRuntimeModelSelectionValue('provider-a', 'gpt-fast'),
+      providerId: 'provider-a',
+      providerLabel: 'OpenAI production',
+      modelId: 'gpt-fast',
+      selected: false,
+    },
+  ]);
+});
+
+test('workspace model switch replaces only the default route and keeps policy concurrency', () => {
+  const config = {
+    ...DEFAULT_CONFIG,
+    tenantId: 'tenant-a',
+    projectId: 'project-a',
+    workspaceId: 'workspace-a',
+  };
+  const policy = {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    workspace_id: 'workspace-a',
+    revision: 7,
+    roles: {
+      default: { provider_id: 'provider-a', model_id: 'gpt-primary' },
+      fast: { provider_id: 'provider-a', model_id: 'gpt-fast' },
+      coding: null,
+      vision: null,
+    },
+    fallbacks: [{ provider_id: 'provider-b', model_id: 'fallback-model' }],
+    updated_at: '2026-07-19T00:00:00Z',
+  };
+  const option = {
+    value: workspaceRuntimeModelSelectionValue('provider-b', 'next-model'),
+    providerId: 'provider-b',
+    providerLabel: 'Provider B',
+    modelId: 'next-model',
+    selected: false,
+  };
+
+  assert.deepEqual(workspaceRuntimeRoutingMutation(config, policy, option), {
+    projectId: 'project-a',
+    workspaceId: 'workspace-a',
+    expectedRevision: 7,
+    roles: {
+      default: { provider_id: 'provider-b', model_id: 'next-model' },
+      fast: { provider_id: 'provider-a', model_id: 'gpt-fast' },
+      coding: null,
+      vision: null,
+    },
+    fallbacks: [{ provider_id: 'provider-b', model_id: 'fallback-model' }],
+  });
+  assert.equal(
+    workspaceRuntimeRoutingMutation({ ...config, workspaceId: 'workspace-b' }, policy, option),
+    null,
+  );
 });
 
 test('Desktop runtime configuration and Tauri configure payload contain no LLM authority', () => {
