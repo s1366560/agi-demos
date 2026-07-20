@@ -390,22 +390,48 @@ async fn resolve_and_authorize_endpoint(
     if addresses.is_empty() {
         return Err(ProbeFailure::DnsFailed);
     }
+    if !resolved_transport_allowed(endpoint, provider_type, auth_method, &addresses) {
+        return Err(ProbeFailure::EndpointBlocked);
+    }
+    Ok(addresses[0])
+}
+
+fn resolved_transport_allowed(
+    endpoint: &Url,
+    provider_type: &str,
+    auth_method: &str,
+    addresses: &[SocketAddr],
+) -> bool {
+    if addresses.is_empty() {
+        return false;
+    }
     let all_loopback = addresses.iter().all(|address| address.ip().is_loopback());
-    let all_public = addresses
-        .iter()
-        .all(|address| is_allowed_public_ip(address.ip()));
+    let domain_target = matches!(endpoint.host(), Some(Host::Domain(_)));
+    let all_authorized_remote = addresses.iter().all(|address| {
+        is_allowed_public_ip(address.ip()) || (domain_target && is_proxy_fake_ip(address.ip()))
+    });
     let transport_allowed = if all_loopback {
         endpoint.scheme() == "https"
             || (endpoint.scheme() == "http"
                 && provider_type == "openai_compatible"
                 && auth_method == "none")
     } else {
-        endpoint.scheme() == "https" && all_public
+        endpoint.scheme() == "https" && all_authorized_remote
     };
-    if !transport_allowed || (auth_method == "api_key" && endpoint.scheme() != "https") {
-        return Err(ProbeFailure::EndpointBlocked);
+    transport_allowed && (auth_method != "api_key" || endpoint.scheme() == "https")
+}
+
+fn is_proxy_fake_ip(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => {
+            let octets = address.octets();
+            // Clash-compatible fake-IP DNS maps public hostnames into RFC 2544's benchmarking
+            // range. The caller permits this range only for domain-based HTTPS endpoints, so a
+            // user-supplied reserved IP literal or cleartext endpoint remains blocked.
+            octets[0] == 198 && matches!(octets[1], 18 | 19)
+        }
+        IpAddr::V6(_) => false,
     }
-    Ok(addresses[0])
 }
 
 fn is_allowed_public_ip(address: IpAddr) -> bool {
@@ -514,6 +540,44 @@ mod tests {
             models_endpoint(&request).expect("model endpoint").as_str(),
             "https://api.anthropic.com/v1/models"
         );
+    }
+
+    #[test]
+    fn https_domains_accept_proxy_fake_ips_without_allowing_reserved_ip_endpoints() {
+        let fake_ip = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(198, 18, 0, 91)), 443);
+        let domain = Url::parse("https://provider.example/v1/models").expect("domain URL");
+        assert!(resolved_transport_allowed(
+            &domain,
+            "openai_compatible",
+            "api_key",
+            &[fake_ip],
+        ));
+
+        let direct_ip = Url::parse("https://198.18.0.91/v1/models").expect("direct IP URL");
+        assert!(!resolved_transport_allowed(
+            &direct_ip,
+            "openai_compatible",
+            "api_key",
+            &[fake_ip],
+        ));
+
+        let insecure_domain = Url::parse("http://provider.example/v1/models").expect("HTTP URL");
+        assert!(!resolved_transport_allowed(
+            &insecure_domain,
+            "openai_compatible",
+            "api_key",
+            &[SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 80)],
+        ));
+
+        assert!(!resolved_transport_allowed(
+            &domain,
+            "openai_compatible",
+            "api_key",
+            &[SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254)),
+                443,
+            )],
+        ));
     }
 
     #[test]
