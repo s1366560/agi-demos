@@ -16,6 +16,8 @@ import {
   X,
 } from 'lucide-react';
 
+import { AppModal } from '@/components/common';
+
 import { schemaAPI } from '../../../services/api';
 import { confirmAction } from '../../../utils/confirmAction';
 
@@ -259,7 +261,7 @@ export default function EdgeMapList() {
                     onChange={(e) => {
                       setFilterSource(e.target.value);
                     }}
-                    className="bg-blue-50 dark:bg-primary/20 text-blue-600 dark:text-primary text-xs px-2 py-0.5 rounded font-medium border-none outline-none cursor-pointer"
+                    className="bg-blue-50 dark:bg-primary/20 text-blue-600 dark:text-primary text-xs px-2 py-0.5 rounded font-medium border-none outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
                   >
                     <option value="All">{t('project.schema.mappings.all', 'All')}</option>
                     {allEntityNames.map((name) => (
@@ -289,7 +291,7 @@ export default function EdgeMapList() {
                     onChange={(e) => {
                       setFilterTarget(e.target.value);
                     }}
-                    className="bg-blue-50 dark:bg-primary/20 text-blue-600 dark:text-primary text-xs px-2 py-0.5 rounded font-medium border-none outline-none cursor-pointer"
+                    className="bg-blue-50 dark:bg-primary/20 text-blue-600 dark:text-primary text-xs px-2 py-0.5 rounded font-medium border-none outline-none focus-visible:ring-1 focus-visible:ring-primary cursor-pointer"
                   >
                     <option value="All">{t('project.schema.mappings.all', 'All')}</option>
                     {allEntityNames.map((name) => (
@@ -474,89 +476,68 @@ export default function EdgeMapList() {
       </div>
 
       {/* Add Mapping Modal */}
-      {isAddModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50"
-          onClick={() => {
-            setIsAddModalOpen(false);
-          }}
-        >
-          <div
-            className="mx-4 w-full max-w-md rounded-lg border border-slate-200 bg-slate-50 p-6 shadow-lg dark:border-border-dark dark:bg-surface-dark"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                {t('project.schema.mappings.modal.title')}
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                }}
-                aria-label={t('project.schema.mappings.close_modal')}
-                className="rounded p-1 text-slate-400 dark:text-text-muted hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-border-dark dark:hover:text-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between bg-slate-100 dark:bg-background-dark p-3 rounded-lg border border-slate-200 dark:border-border-dark">
-                <span className="font-bold text-slate-900 dark:text-slate-100">
-                  {newMapData.source}
-                </span>
-                <ArrowRight className="text-slate-400 dark:text-text-muted w-4 h-4" />
-                <span className="font-bold text-slate-900 dark:text-slate-100">
-                  {newMapData.target}
-                </span>
-              </div>
+      <AppModal
+        open={isAddModalOpen}
+        onClose={() => {
+          setIsAddModalOpen(false);
+        }}
+        title={t('project.schema.mappings.modal.title')}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddModalOpen(false);
+              }}
+              className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
+            >
+              {t('project.schema.mappings.modal.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleCreate();
+              }}
+              className="px-4 py-2 text-sm font-bold text-slate-50 bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-sm"
+            >
+              {t('project.schema.mappings.modal.add')}
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between bg-slate-100 dark:bg-background-dark p-3 rounded-lg border border-slate-200 dark:border-border-dark">
+            <span className="font-bold text-slate-900 dark:text-slate-100">
+              {newMapData.source}
+            </span>
+            <ArrowRight className="text-slate-400 dark:text-text-muted w-4 h-4" />
+            <span className="font-bold text-slate-900 dark:text-slate-100">
+              {newMapData.target}
+            </span>
+          </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-text-muted uppercase mb-2">
-                  {t('project.schema.mappings.modal.select_edge')}
-                </label>
-                <select
-                  aria-label={t('project.schema.mappings.modal.select_edge')}
-                  className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-slate-100 px-3 py-2 outline-none focus:border-blue-600 dark:focus:border-primary"
-                  value={newMapData.edge}
-                  onChange={(e) => {
-                    setNewMapData({ ...newMapData, edge: e.target.value });
-                  }}
-                >
-                  {edgeTypes.map((edge) => (
-                    <option key={edge.id} value={edge.name}>
-                      {edge.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddModalOpen(false);
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
-                >
-                  {t('project.schema.mappings.modal.cancel')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleCreate();
-                  }}
-                  className="px-4 py-2 text-sm font-bold text-slate-50 bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-sm"
-                >
-                  {t('project.schema.mappings.modal.add')}
-                </button>
-              </div>
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-text-muted uppercase mb-2">
+              {t('project.schema.mappings.modal.select_edge')}
+            </label>
+            <select
+              aria-label={t('project.schema.mappings.modal.select_edge')}
+              className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-slate-100 px-3 py-2 outline-none focus:border-blue-600 dark:focus:border-primary"
+              value={newMapData.edge}
+              onChange={(e) => {
+                setNewMapData({ ...newMapData, edge: e.target.value });
+              }}
+            >
+              {edgeTypes.map((edge) => (
+                <option key={edge.id} value={edge.name}>
+                  {edge.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      )}
+      </AppModal>
     </div>
   );
 }

@@ -67,6 +67,8 @@ interface ConversationsState {
   ) => Promise<Conversation>;
   getConversation: (conversationId: string, projectId: string) => Promise<Conversation | null>;
   deleteConversation: (conversationId: string, projectId: string) => Promise<void>;
+  removeConversationLocal: (conversationId: string) => Conversation | null;
+  restoreConversationLocal: (conversation: Conversation) => void;
   renameConversation: (conversationId: string, projectId: string, title: string) => Promise<void>;
   setCurrentConversation: (conversation: Conversation | null) => void;
   generateConversationTitle: () => Promise<void>;
@@ -454,6 +456,31 @@ export const useConversationsStore = create<ConversationsState>()(
           });
           throw error;
         }
+      },
+
+      /**
+       * Optimistically remove a conversation from the local list WITHOUT hitting the API.
+       * Returns the removed conversation (or null if not found) so callers can restore it on undo.
+       */
+      removeConversationLocal: (conversationId: string) => {
+        const removed = get().conversations.find((c) => c.id === conversationId) ?? null;
+        set((state) => ({
+          conversations: state.conversations.filter((c) => c.id !== conversationId),
+          currentConversation:
+            state.currentConversation?.id === conversationId ? null : state.currentConversation,
+        }));
+        return removed;
+      },
+
+      /**
+       * Restore a previously removed conversation back into the local list (no API call).
+       * Used by the undo flow. Keeps the list sorted by insertion order.
+       */
+      restoreConversationLocal: (conversation: Conversation) => {
+        set((state) => {
+          if (state.conversations.some((c) => c.id === conversation.id)) return state;
+          return { conversations: [conversation, ...state.conversations] };
+        });
       },
 
       renameConversation: async (conversationId: string, projectId: string, title: string) => {

@@ -249,7 +249,7 @@ describe('AuditLogs', () => {
     mockListRuntimeHooks.mockClear();
     mockGetRuntimeHookSummary.mockClear();
 
-    fireEvent.change(screen.getByPlaceholderText('Filter by hook name...'), {
+    fireEvent.change(screen.getByPlaceholderText('Filter by hook name…'), {
       target: { value: 'before_response' },
     });
 
@@ -277,7 +277,7 @@ describe('AuditLogs', () => {
 
     mockList.mockClear();
 
-    fireEvent.change(screen.getByPlaceholderText('Filter by actor...'), {
+    fireEvent.change(screen.getByPlaceholderText('Filter by actor…'), {
       target: { value: 'system' },
     });
 
@@ -299,7 +299,7 @@ describe('AuditLogs', () => {
       );
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Filter by actor...'), {
+    fireEvent.change(screen.getByPlaceholderText('Filter by actor…'), {
       target: { value: 'system' },
     });
 
@@ -339,7 +339,7 @@ describe('AuditLogs', () => {
       expect(mockListRuntimeHooks).toHaveBeenCalled();
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Filter by hook name...'), {
+    fireEvent.change(screen.getByPlaceholderText('Filter by hook name…'), {
       target: { value: 'before_response' },
     });
 

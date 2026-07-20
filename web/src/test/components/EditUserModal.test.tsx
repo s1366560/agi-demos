@@ -174,7 +174,7 @@ describe('EditUserModal - Component Tests', () => {
         />
       );
 
-      const closeButton = screen.getByRole('button', { name: 'Close' });
+      const closeButton = screen.getByRole('button', { name: 'Close dialog' });
       fireEvent.click(closeButton);
 
       expect(mockOnClose).toHaveBeenCalledTimes(1);

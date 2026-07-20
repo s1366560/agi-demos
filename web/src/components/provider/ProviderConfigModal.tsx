@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 import { Select, Slider, InputNumber } from 'antd';
 import {
-  X,
   Check,
   ChevronDown,
   ChevronUp,
@@ -18,6 +17,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+
+import { AppModal } from '@/components/common';
 
 import { PROVIDERS } from '../../constants/providers';
 import { providerAPI } from '../../services/api';
@@ -964,115 +965,127 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setTestResult(null);
   };
 
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  const providerTitle = isEditing
+    ? t('components.provider.config.editTitle', { defaultValue: 'Edit Provider' })
+    : t('components.provider.config.addTitle', { defaultValue: 'Add New Provider' });
+  const providerSubtitle = t('components.provider.config.subtitle', {
+    defaultValue: 'Configure your LLM provider settings',
+  });
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-slate-950/60 transition-opacity" onClick={onClose} />
-
-      {/* Modal */}
-      <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-800">
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/40">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-                {isEditing
-                  ? t('components.provider.config.editTitle', {
-                      defaultValue: 'Edit Provider',
-                    })
-                  : t('components.provider.config.addTitle', {
-                      defaultValue: 'Add New Provider',
-                    })}
-              </h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t('components.provider.config.subtitle', {
-                  defaultValue: 'Configure your LLM provider settings',
-                })}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t('components.provider.config.close', {
-                defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
-              })}
-              title={t('components.provider.config.close', {
-                defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
-              })}
-              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              <X size={20} />
-            </button>
+    <AppModal
+      open={isOpen}
+      onClose={onClose}
+      title={providerTitle}
+      description={providerSubtitle}
+      size="xl"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={
+              currentStep === 'provider'
+                ? onClose
+                : () => {
+                    setCurrentStep(
+                      steps[steps.findIndex((s) => s.key === currentStep) - 1]?.key ?? 'provider'
+                    );
+                  }
+            }
+            className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+          >
+            {currentStep === 'provider'
+              ? t('common.cancel', { defaultValue: 'Cancel' })
+              : t('common.back', { defaultValue: 'Back' })}
+          </button>
+          <div className="flex items-center gap-3">
+            {currentStep === 'review' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSubmit();
+                }}
+                disabled={isSubmitting}
+                className="px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
+                    Saving...
+                  </span>
+                ) : (
+                  'Save Provider'
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentStep(
+                    steps[steps.findIndex((s) => s.key === currentStep) + 1]?.key ?? 'review'
+                  );
+                }}
+                disabled={!canProceed()}
+                className="px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            )}
           </div>
+        </>
+      }
+    >
+      {/* Progress Steps */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between">
+          {steps.map((step, index) => {
+            const isCompleted = steps.findIndex((s) => s.key === currentStep) > index;
+            const isCurrent = step.key === currentStep;
 
-          {/* Progress Steps */}
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
-            <div className="flex items-center justify-between">
-              {steps.map((step, index) => {
-                const isCompleted = steps.findIndex((s) => s.key === currentStep) > index;
-                const isCurrent = step.key === currentStep;
+            return (
+              <React.Fragment key={step.key}>
+                <div className="flex items-center">
+                  <div
+                    className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+                      isCompleted
+                        ? 'bg-primary border-primary text-white'
+                        : isCurrent
+                          ? 'border-primary text-primary bg-white dark:bg-slate-800'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    {isCompleted ? <Check size={16} /> : <step.icon size={16} />}
+                  </div>
+                  <div className="ml-3 hidden sm:block">
+                    <p
+                      className={`text-sm font-medium ${
+                        isCurrent ? 'text-primary' : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      {step.label}
+                    </p>
+                    <p className="text-xs text-slate-400">{step.description}</p>
+                  </div>
+                </div>
+                {index < steps.length - 1 && (
+                  <div
+                    className={`flex-1 h-0.5 mx-4 ${
+                      isCompleted ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-600'
+                    }`}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
 
-                return (
-                  <React.Fragment key={step.key}>
-                    <div className="flex items-center">
-                      <div
-                        className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
-                          isCompleted
-                            ? 'bg-primary border-primary text-white'
-                            : isCurrent
-                              ? 'border-primary text-primary bg-white dark:bg-slate-800'
-                              : 'border-slate-200 dark:border-slate-700 text-slate-400'
-                        }`}
-                      >
-                        {isCompleted ? <Check size={16} /> : <step.icon size={16} />}
-                      </div>
-                      <div className="ml-3 hidden sm:block">
-                        <p
-                          className={`text-sm font-medium ${
-                            isCurrent ? 'text-primary' : 'text-slate-500 dark:text-slate-400'
-                          }`}
-                        >
-                          {step.label}
-                        </p>
-                        <p className="text-xs text-slate-400">{step.description}</p>
-                      </div>
-                    </div>
-                    {index < steps.length - 1 && (
-                      <div
-                        className={`flex-1 h-0.5 mx-4 ${
-                          isCompleted ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-600'
-                        }`}
-                      />
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="p-6 max-h-[60vh] overflow-y-auto">
-            {/* Step 1: Provider Selection */}
-            {currentStep === 'provider' && (
-              <div className="space-y-4">
-                <div className="text-center mb-6">
+      {/* Content */}
+      <div className="max-h-[55vh] overflow-y-auto -mx-2 px-2">
+        {/* Step 1: Provider Selection */}
+        {currentStep === 'provider' && (
+          <div className="space-y-4">
+            <div className="text-center mb-6">
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
                     {t('components.provider.config.chooseProviderTitle', {
                       defaultValue: 'Choose Your LLM Provider',
@@ -2489,65 +2502,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 {error}
               </div>
             )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={
-                currentStep === 'provider'
-                  ? onClose
-                  : () => {
-                      setCurrentStep(
-                        steps[steps.findIndex((s) => s.key === currentStep) - 1]?.key ?? 'provider'
-                      );
-                    }
-              }
-              className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-            >
-              {currentStep === 'provider'
-                ? t('common.cancel', { defaultValue: 'Cancel' })
-                : t('common.back', { defaultValue: 'Back' })}
-            </button>
-
-            <div className="flex items-center gap-3">
-              {currentStep === 'review' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleSubmit();
-                  }}
-                  disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
-                      Saving...
-                    </span>
-                  ) : (
-                    'Save Provider'
-                  )}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentStep(
-                      steps[steps.findIndex((s) => s.key === currentStep) + 1]?.key ?? 'review'
-                    );
-                  }}
-                  disabled={!canProceed()}
-                  className="px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
-    </div>
+    </AppModal>
   );
 };

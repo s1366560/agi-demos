@@ -30,8 +30,8 @@ import {
   normalizeStringList,
 } from './agentDefinitionPolicyForm';
 
-import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
 import type { TenantExternalACPAgent } from '../../types/acp';
+import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
 import type {
   AgentDefinition,
   AgentDefinitionDelegateCapabilityTier,

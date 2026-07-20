@@ -43,7 +43,16 @@ export const SandboxImage: NonNullable<Components['img']> = ({ src, alt, ...prop
 
   const finalSrc = directSrc ?? (resolved?.key === initialSrc ? resolved.url : null);
   if (!finalSrc) return null;
-  return <img src={finalSrc} alt={typeof alt === 'string' ? alt : ''} {...props} />;
+  return (
+    <img
+      src={finalSrc}
+      alt={typeof alt === 'string' ? alt : ''}
+      loading="lazy"
+      decoding="async"
+      className="max-w-full h-auto rounded-lg"
+      {...props}
+    />
+  );
 };
 
 export const MarkdownTable: NonNullable<Components['table']> = ({ children, ...props }) => (

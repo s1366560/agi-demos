@@ -13,7 +13,6 @@ import {
   Plus,
   Save,
   Trash2,
-  X,
   XCircle,
 } from 'lucide-react';
 
@@ -22,6 +21,8 @@ import { useTenantStore } from '@/stores/tenant';
 import { graphStoreAPI, retrievalStoreAPI } from '@/services/api';
 
 import { confirmAction } from '@/utils/confirmAction';
+
+import { AppModal } from '@/components/common';
 
 import type {
   BackendStore,
@@ -663,94 +664,83 @@ export const BackendStores: React.FC = () => {
         </section>
       </div>
 
-      {editStore && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-2xl dark:bg-surface-dark">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {t('tenant.backendStores.editTitle', { defaultValue: 'Edit store' })}
-                </h2>
-                <p className="text-sm text-slate-500">{editStore.engine_type}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditStore(null);
-                }}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="flex flex-col gap-4 overflow-auto p-6">
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                {t('common.forms.name')}
-                <input
-                  value={editForm.name}
-                  onChange={(event) => {
-                    setEditForm({ ...editForm, name: event.target.value });
-                  }}
-                  className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                {t('tenant.backendStores.connectionConfig', {
-                  defaultValue: 'Connection config',
-                })}
-                <textarea
-                  rows={9}
-                  value={editForm.connection_config_text}
-                  onChange={(event) => {
-                    setEditForm({
-                      ...editForm,
-                      connection_config_text: event.target.value,
-                    });
-                  }}
-                  className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                {t('tenant.backendStores.indexConfig', { defaultValue: 'Index config' })}
-                <textarea
-                  rows={6}
-                  value={editForm.index_config_text}
-                  onChange={(event) => {
-                    setEditForm({ ...editForm, index_config_text: event.target.value });
-                  }}
-                  className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
-              </label>
-            </div>
-            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditStore(null);
-                }}
-                className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleSaveEdit();
-                }}
-                disabled={isSaving || !editForm.name.trim()}
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSaving ? (
-                  <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Save size={15} />
-                )}
-                {t('common.save')}
-              </button>
-            </div>
-          </div>
+      <AppModal
+        open={!!editStore}
+        onClose={() => {
+          setEditStore(null);
+        }}
+        title={t('tenant.backendStores.editTitle', { defaultValue: 'Edit store' })}
+        description={editStore?.engine_type}
+        size="lg"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setEditStore(null);
+              }}
+              className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleSaveEdit();
+              }}
+              disabled={isSaving || !editForm.name.trim()}
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSaving ? (
+                <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Save size={15} />
+              )}
+              {t('common.save')}
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            {t('common.forms.name')}
+            <input
+              value={editForm.name}
+              onChange={(event) => {
+                setEditForm({ ...editForm, name: event.target.value });
+              }}
+              className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            {t('tenant.backendStores.connectionConfig', {
+              defaultValue: 'Connection config',
+            })}
+            <textarea
+              rows={9}
+              value={editForm.connection_config_text}
+              onChange={(event) => {
+                setEditForm({
+                  ...editForm,
+                  connection_config_text: event.target.value,
+                });
+              }}
+              className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            {t('tenant.backendStores.indexConfig', { defaultValue: 'Index config' })}
+            <textarea
+              rows={6}
+              value={editForm.index_config_text}
+              onChange={(event) => {
+                setEditForm({ ...editForm, index_config_text: event.target.value });
+              }}
+              className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
+          </label>
         </div>
-      )}
+      </AppModal>
     </div>
   );
 };

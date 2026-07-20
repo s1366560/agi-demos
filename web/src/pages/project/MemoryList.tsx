@@ -38,6 +38,8 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { formatDateOnly } from '@/utils/date';
 
+import { AppModal } from '@/components/common';
+
 import { memoryAPI } from '../../services/api';
 
 import type { Memory } from '../../types/memory';
@@ -1177,7 +1179,7 @@ const PaginationInternal: React.FC<{ className?: string | undefined }> = ({ clas
         </label>
         <button
           type="button"
-          onClick={() => actions.setPage(Math.max(1, safePage - 1))}
+          onClick={() => { actions.setPage(Math.max(1, safePage - 1)); }}
           disabled={safePage <= 1}
           className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
           aria-label={texts.previousPage}
@@ -1190,7 +1192,7 @@ const PaginationInternal: React.FC<{ className?: string | undefined }> = ({ clas
         </span>
         <button
           type="button"
-          onClick={() => actions.setPage(Math.min(totalPages, safePage + 1))}
+          onClick={() => { actions.setPage(Math.min(totalPages, safePage + 1)); }}
           disabled={safePage >= totalPages}
           className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
           aria-label={texts.nextPage}
@@ -1221,22 +1223,16 @@ interface DeleteModalProps {
 const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
   ({ isOpen, onClose, onConfirm, memoryTitle, isDeleting = false, className = '' }) => {
     const texts = useMemoryListTexts();
-    if (!isOpen) return null;
 
     return (
-      <div
-        className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 ${className}`}
-      >
-        <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-surface-dark">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-            {texts.deleteTitle}
-          </h3>
-          <p className="text-slate-600 dark:text-slate-300 mb-6">
-            {texts.deleteMessage}
-            <br />
-            <span className="font-medium text-slate-900 dark:text-white">"{memoryTitle}"</span>
-          </p>
-          <div className="flex justify-end gap-3">
+      <AppModal
+        open={isOpen}
+        onClose={onClose}
+        title={texts.deleteTitle}
+        size="sm"
+        className={className}
+        footer={
+          <>
             <button
               type="button"
               onClick={onClose}
@@ -1253,9 +1249,15 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
             >
               {isDeleting ? texts.loading : texts.deleteConfirm}
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      >
+        <p className="text-slate-600 dark:text-slate-300">
+          {texts.deleteMessage}
+          <br />
+          <span className="font-medium text-slate-900 dark:text-white">"{memoryTitle}"</span>
+        </p>
+      </AppModal>
     );
   }
 );

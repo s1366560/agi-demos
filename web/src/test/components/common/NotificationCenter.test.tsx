@@ -41,7 +41,7 @@ describe('NotificationCenter', () => {
       screen.getByRole('dialog', { name: /notifications\.title|Notifications/ })
     ).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(
       screen.queryByRole('dialog', { name: /notifications\.title|Notifications/ })

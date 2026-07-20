@@ -4,8 +4,8 @@
  * Displays the current roster for a multi-agent conversation with
  * coordinator / focused badges. Delete action removes a participant.
  *
- * Design: compact sidebar panel (monochrome, 1px borders), matching the
- * Vercel-inspired design tokens in .impeccable.md.
+ * Design: compact sidebar panel (mission-control dark surface, 1px borders),
+ * using tokens from web/src/theme/tokens.ts.
  */
 
 import { memo, useMemo, useState } from 'react';

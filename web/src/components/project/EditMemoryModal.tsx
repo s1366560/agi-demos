@@ -1,8 +1,10 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { X, Loader2, Save } from 'lucide-react';
+import { Loader2, Save, X } from 'lucide-react';
+
+import { AppModal } from '@/components/common';
 
 import { memoryAPI } from '../../services/api';
 
@@ -24,7 +26,6 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
   projectId,
 }) => {
   const { t } = useTranslation();
-  const titleId = useId();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -40,19 +41,6 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       setTags(memory.tags);
     }
   }, [memory]);
-
-  useEffect(() => {
-    if (!isOpen || isSaving) return undefined;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, isSaving, onClose]);
 
   const handleAddTag = () => {
     if (newTag && !tags.includes(newTag)) {
@@ -116,33 +104,43 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
   if (!isOpen || !memory) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div
-        className="mx-4 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-          <div className="flex items-center space-x-2">
-            <Save className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-            <h2 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-white">
-              {t('memory.edit.title')}
-            </h2>
-          </div>
+    <AppModal
+      open={isOpen}
+      onClose={onClose}
+      title={t('memory.edit.title')}
+      ariaLabel={t('memory.detail.closeAria')}
+      size="xl"
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
             disabled={isSaving}
-            aria-label={t('memory.detail.closeAria')}
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            {t('memory.edit.cancel')}
           </button>
-        </div>
+          <button
+            type="button"
+            onClick={() => {
+              void handleSubmit();
+            }}
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            disabled={isSaving}
+          >
+            {isSaving && (
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+            )}
+            {isSaving ? t('memory.edit.saving') : t('memory.edit.save')}
+          </button>
+        </>
+      }
+    >
+      <div className="flex items-center space-x-2 mb-4">
+        <Save className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+      </div>
 
-        {/* Form */}
+      {/* Form */}
         <form
           onSubmit={(e) => {
             void handleSubmit(e);
@@ -269,32 +267,6 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             </p>
           </div>
         </form>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
-            disabled={isSaving}
-          >
-            {t('memory.edit.cancel')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void handleSubmit();
-            }}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={isSaving}
-          >
-            {isSaving && (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-            )}
-            {isSaving ? t('memory.edit.saving') : t('memory.edit.save')}
-          </button>
-        </div>
-      </div>
-    </div>
+    </AppModal>
   );
 };

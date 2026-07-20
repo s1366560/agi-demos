@@ -42,6 +42,7 @@ const updateDocumentClass = (theme: Theme) => {
   if (theme === 'high-contrast') {
     root.classList.add('dark', 'high-contrast');
     useThemeStore.setState({ computedTheme: 'dark' });
+    setThemeColorMeta('dark');
     return;
   }
 
@@ -57,6 +58,24 @@ const updateDocumentClass = (theme: Theme) => {
     root.classList.remove('dark');
     useThemeStore.setState({ computedTheme: 'light' });
   }
+  setThemeColorMeta(isDark ? 'dark' : 'light');
+};
+
+/** Keep the `<meta name="theme-color">` (browser chrome / mobile address bar)
+ * in sync with the active theme. index.html ships a `prefers-color-scheme`-
+ * scoped pair for correct pre-JS rendering; an explicit user choice needs a
+ * media-less override tag, which always matches and therefore wins. */
+const setThemeColorMeta = (mode: 'light' | 'dark') => {
+  const value = mode === 'dark' ? '#080c12' : '#ffffff';
+  let plain = Array.from(
+    document.head.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
+  ).find((m) => !m.hasAttribute('media'));
+  if (!plain) {
+    plain = document.createElement('meta');
+    plain.setAttribute('name', 'theme-color');
+    document.head.appendChild(plain);
+  }
+  plain.setAttribute('content', value);
 };
 
 // Listen for system changes if theme is 'system'

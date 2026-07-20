@@ -168,11 +168,17 @@ vi.mock('../../stores/tenant', () => ({
 }));
 
 vi.mock('@/stores/agent/conversationsStore', () => ({
-  useConversationsStore: {
-    getState: () => ({
-      reset: mockConversationReset,
-    }),
-  },
+  useConversationsStore: Object.assign(
+    (selector?: (state: { conversations: unknown[]; reset: typeof mockConversationReset }) => unknown) =>
+      selector
+        ? selector({ conversations: [], reset: mockConversationReset })
+        : { conversations: [], reset: mockConversationReset },
+    {
+      getState: () => ({
+        reset: mockConversationReset,
+      }),
+    },
+  ),
 }));
 
 vi.mock('@/stores/agent/executionStore', () => ({

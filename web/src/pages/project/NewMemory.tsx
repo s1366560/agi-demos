@@ -546,7 +546,7 @@ export const NewMemory: React.FC = () => {
                       setNewTag(e.target.value);
                     }}
                     onKeyDown={handleAddTag}
-                    className="bg-transparent text-sm outline-none placeholder:text-slate-500 text-slate-900 dark:text-white min-w-25"
+                    className="bg-transparent text-sm outline-none focus-visible:ring-1 focus-visible:ring-primary placeholder:text-slate-500 text-slate-900 dark:text-white min-w-25"
                     placeholder={t('project.memories.new.form.add_tag')}
                   />
                 </div>

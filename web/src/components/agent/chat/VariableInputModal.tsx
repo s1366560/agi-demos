@@ -9,6 +9,8 @@ import { useState, memo, useMemo, useCallback, useEffect, useId, useRef } from '
 
 import { useTranslation } from 'react-i18next';
 
+import { AppModal } from '@/components/common';
+
 interface TemplateVariable {
   name: string;
   description: string;
@@ -31,7 +33,6 @@ export const VariableInputModal = memo<VariableInputModalProps>(
   ({ template, visible, onClose, onSubmit }) => {
     const { t } = useTranslation();
     const titleId = useId();
-    const descriptionId = useId();
 
     const detectedVars = useMemo(() => {
       const matches = template.content.match(/\{\{(\w+)\}\}/g) || [];
@@ -92,19 +93,6 @@ export const VariableInputModal = memo<VariableInputModalProps>(
       onClose();
     }, [onClose, resetValues]);
 
-    useEffect(() => {
-      if (!visible || detectedVars.length === 0) return undefined;
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-          handleClose();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    }, [visible, detectedVars.length, handleClose]);
-
     const handleSubmit = useCallback(() => {
       let result = template.content;
       for (const [key, val] of Object.entries(values)) {
@@ -122,69 +110,14 @@ export const VariableInputModal = memo<VariableInputModalProps>(
     }
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50">
-        <div
-          className="max-h-[80vh] w-[28rem] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-          aria-describedby={descriptionId}
-        >
-          <h3
-            id={titleId}
-            className="text-lg font-semibold mb-1 text-slate-800 dark:text-slate-100"
-          >
-            {template.title}
-          </h3>
-          <p id={descriptionId} className="text-xs text-slate-500 mb-4">
-            {t('agent.templates.fillVariables', 'Fill in the template variables')}
-          </p>
-          <div className="space-y-3 mb-4">
-            {detectedVars.map((v, index) => {
-              const inputId = `${titleId}-${v.name}`;
-              const descriptionInputId = v.description ? `${inputId}-description` : undefined;
-              return (
-                <div key={v.name}>
-                  <label
-                    htmlFor={inputId}
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
-                  >
-                    {v.name}
-                    {v.required && (
-                      <span className="text-red-500 ml-0.5" aria-hidden="true">
-                        *
-                      </span>
-                    )}
-                  </label>
-                  {v.description && (
-                    <p id={descriptionInputId} className="text-xs text-slate-400 mb-1">
-                      {v.description}
-                    </p>
-                  )}
-                  <input
-                    id={inputId}
-                    value={values[v.name] || ''}
-                    onChange={(e) => {
-                      setValueState((prev) => {
-                        const baseValues =
-                          prev.templateKey === templateKey ? prev.values : initialValues;
-                        return {
-                          templateKey,
-                          values: { ...baseValues, [v.name]: e.target.value },
-                        };
-                      });
-                    }}
-                    placeholder={v.default_value || v.name}
-                    className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
-                    aria-describedby={descriptionInputId}
-                    aria-required={v.required}
-                    autoFocus={index === 0}
-                  />
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-end gap-2">
+      <AppModal
+        open={visible}
+        onClose={handleClose}
+        title={template.title}
+        description={t('agent.templates.fillVariables', 'Fill in the template variables')}
+        size="md"
+        footer={
+          <>
             <button
               type="button"
               onClick={handleClose}
@@ -199,9 +132,55 @@ export const VariableInputModal = memo<VariableInputModalProps>(
             >
               {t('agent.templates.useTemplate', 'Use Template')}
             </button>
-          </div>
+          </>
+        }
+      >
+        <div className="space-y-3 mb-4">
+          {detectedVars.map((v, index) => {
+            const inputId = `${titleId}-${v.name}`;
+            const descriptionInputId = v.description ? `${inputId}-description` : undefined;
+            return (
+              <div key={v.name}>
+                <label
+                  htmlFor={inputId}
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+                >
+                  {v.name}
+                  {v.required && (
+                    <span className="text-red-500 ml-0.5" aria-hidden="true">
+                      *
+                    </span>
+                  )}
+                </label>
+                {v.description && (
+                  <p id={descriptionInputId} className="text-xs text-slate-400 mb-1">
+                    {v.description}
+                  </p>
+                )}
+                <input
+                  id={inputId}
+                  value={values[v.name] || ''}
+                  onChange={(e) => {
+                    setValueState((prev) => {
+                      const baseValues =
+                        prev.templateKey === templateKey ? prev.values : initialValues;
+                      return {
+                        templateKey,
+                        values: { ...baseValues, [v.name]: e.target.value },
+                      };
+                    });
+                  }}
+                  placeholder={v.default_value || v.name}
+                  className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
+                  aria-describedby={descriptionInputId}
+                  aria-required={v.required}
+                  autoFocus={index === 0}
+                />
+              </div>
+            );
+          })}
         </div>
-      </div>
+      </AppModal>
     );
   }
 );

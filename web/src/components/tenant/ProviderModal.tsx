@@ -4,10 +4,8 @@ import { useTranslation } from 'react-i18next';
 
 import {
   AlertCircle,
-  Bot,
   Loader2,
   Save,
-  X,
   CheckCircle,
   Square,
   StopCircle,
@@ -29,6 +27,8 @@ import {
 } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
+
+import { AppModal } from '@/components/common';
 
 import { providerAPI } from '../../services/api';
 import {
@@ -526,90 +526,100 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
 
   if (!isOpen) return null;
 
+  const titleKey = isEditing
+    ? 'components.provider.modal.editTitle'
+    : 'components.provider.modal.addTitle';
+  const descKey = isEditing
+    ? 'components.provider.modal.editDescription'
+    : 'components.provider.modal.addDescription';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg text-primary">
-              <Bot size={16} />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                {t(
-                  isEditing
-                    ? 'components.provider.modal.editTitle'
-                    : 'components.provider.modal.addTitle'
-                )}
-              </h2>
-              <p className="text-sm text-slate-500">
-                {t(
-                  isEditing
-                    ? 'components.provider.modal.editDescription'
-                    : 'components.provider.modal.addDescription'
-                )}
-              </p>
-            </div>
-          </div>
+    <AppModal
+      open={isOpen}
+      onClose={onClose}
+      title={t(titleKey)}
+      description={t(descKey)}
+      size="lg"
+      isDirty={isSubmitting}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            aria-label={t('components.provider.modal.close', {
-              defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
-            })}
-            title={t('components.provider.modal.close', {
-              defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
-            })}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            disabled={isSubmitting}
+            className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
           >
-            <X size={16} />
+            {t('common.cancel')}
           </button>
-        </div>
+          <button
+            type="submit"
+            form="provider-form"
+            disabled={isSubmitting || !credentialReady}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 size={16} className="animate-spin motion-reduce:animate-none ]" />
+                {t('components.provider.modal.saving')}
+              </>
+            ) : (
+              <>
+                <Save size={16} className="]" />
+                {t(
+                  isEditing
+                    ? 'components.provider.modal.updateProvider'
+                    : 'components.provider.modal.createProvider'
+                )}
+              </>
+            )}
+          </button>
+        </>
+      }
+    >
+      {/* Tabs */}
+      <div className="px-6 border-b border-slate-200 dark:border-slate-700">
+        <nav className="flex gap-6">
+          {[
+            { id: 'basic', labelKey: 'components.provider.modal.tabs.basic', icon: 'info' },
+            {
+              id: 'models',
+              labelKey: 'components.provider.modal.tabs.models',
+              icon: 'psychology',
+            },
+            {
+              id: 'advanced',
+              labelKey: 'components.provider.modal.tabs.advanced',
+              icon: 'settings',
+            },
+          ].map((tab) => (
+            <button
+              type="button"
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id as typeof activeTab);
+              }}
+              className={`flex items-center gap-2 py-3 text-sm font-medium border-b transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
+                activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              {renderDynamicIcon(tab.icon, 18, '')}
+              {t(tab.labelKey)}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-        {/* Tabs */}
-        <div className="px-6 border-b border-slate-200 dark:border-slate-700">
-          <nav className="flex gap-6">
-            {[
-              { id: 'basic', labelKey: 'components.provider.modal.tabs.basic', icon: 'info' },
-              {
-                id: 'models',
-                labelKey: 'components.provider.modal.tabs.models',
-                icon: 'psychology',
-              },
-              {
-                id: 'advanced',
-                labelKey: 'components.provider.modal.tabs.advanced',
-                icon: 'settings',
-              },
-            ].map((tab) => (
-              <button
-                type="button"
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id as typeof activeTab);
-                }}
-                className={`flex items-center gap-2 py-3 text-sm font-medium border-b transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
-                  activeTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                }`}
-              >
-                {renderDynamicIcon(tab.icon, 18, '')}
-                {t(tab.labelKey)}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Content */}
-        <form
-          onSubmit={(e) => {
-            void handleSubmit(e);
-          }}
-          className="flex-1 overflow-y-auto"
-        >
-          <div className="p-6 space-y-6">
+      {/* Content */}
+      <form
+        id="provider-form"
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+        className="flex-1 overflow-y-auto"
+      >
+        <div className="p-6 space-y-6">
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
                 <AlertCircle size={16} className="text-red-600" />
@@ -1016,41 +1026,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
               </div>
             )}
           </div>
-
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !credentialReady}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 size={16} className="animate-spin motion-reduce:animate-none ]" />
-                  {t('components.provider.modal.saving')}
-                </>
-              ) : (
-                <>
-                  <Save size={16} className="]" />
-                  {t(
-                    isEditing
-                      ? 'components.provider.modal.updateProvider'
-                      : 'components.provider.modal.createProvider'
-                  )}
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </AppModal>
   );
 };

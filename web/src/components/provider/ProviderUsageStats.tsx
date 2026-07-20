@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Activity, AlertCircle, BarChart3, DollarSign, Gauge, Loader2, X } from 'lucide-react';
+import { Activity, AlertCircle, BarChart3, DollarSign, Gauge, Loader2 } from 'lucide-react';
+
+import { AppModal } from '@/components/common';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, ProviderUsageStats as ProviderUsageStatsType } from '../../types/memory';
@@ -17,19 +19,6 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
   const [stats, setStats] = useState<ProviderUsageStatsType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -51,55 +40,37 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
   }, [provider.id, t]);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-
-      {/* Modal */}
-      <div className="flex min-h-full items-center justify-center p-4">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="provider-usage-stats-title"
-          className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden"
+    <AppModal
+      open
+      onClose={onClose}
+      title={t('components.provider.usage.title')}
+      description={provider.name}
+      size="xl"
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-panel-2)]"
         >
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <div>
-              <h2
-                id="provider-usage-stats-title"
-                className="text-xl font-semibold text-slate-900 dark:text-white"
-              >
-                {t('components.provider.usage.title')}
-              </h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{provider.name}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t('common.close')}
-              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-            >
-              <X size={16} />
-            </button>
+          {t('common.close')}
+        </button>
+      }
+    >
+      <div className="space-y-6" aria-live="polite">
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <Loader2
+              size={16}
+              className="animate-spin motion-reduce:animate-none text-primary text-4xl"
+            />
           </div>
-
-          {/* Content */}
-          <div className="p-6 space-y-6" aria-live="polite">
-            {loading ? (
-              <div className="flex justify-center items-center py-12">
-                <Loader2
-                  size={16}
-                  className="animate-spin motion-reduce:animate-none text-primary text-4xl"
-                />
-              </div>
-            ) : error ? (
-              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-2">
-                <AlertCircle size={16} />
-                {error}
-              </div>
-            ) : stats ? (
-              <>
+        ) : error ? (
+          <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-2">
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        ) : stats ? (
+          <>
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="rounded-lg border border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/10 p-4">
@@ -202,20 +173,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                 {t('components.provider.usage.empty')}
               </div>
             )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              {t('common.close')}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+    </AppModal>
   );
 };

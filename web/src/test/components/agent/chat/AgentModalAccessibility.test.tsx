@@ -48,7 +48,7 @@ describe('agent custom modal accessibility', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(screen.getByLabelText(/name/)).toHaveAttribute('aria-required', 'true');
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -70,7 +70,7 @@ describe('agent custom modal accessibility', () => {
     expect(screen.getByLabelText('Template name')).toHaveFocus();
     expect(screen.getByLabelText('Category')).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -90,7 +90,7 @@ describe('agent custom modal accessibility', () => {
     expect(dialog).toHaveAccessibleDescription(/attempt to revert/i);
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onCancel).toHaveBeenCalled();
   });
 
@@ -112,7 +112,7 @@ describe('agent custom modal accessibility', () => {
     );
     expect(screen.getByRole('textbox', { name: 'Search conversations...' })).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
 

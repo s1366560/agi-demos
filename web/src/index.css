@@ -33,47 +33,62 @@ html:not(.app-ready) * {
 
 @theme {
   /* ========================================================================
-     * COLOR PALETTE
-     * Primary: Deep Blue #1e3fae - Trust, Intelligence, Enterprise
+     * COLOR PALETTE  (source of truth: web/src/theme/tokens.ts)
+     * Primary: Cyan — #38d6ff (dark) / #0e7490 (light, AA on white).
+     * Brand shim: `blue-*` utilities are remapped to the cyan scale so the
+     * legacy ~2000 `blue-*` call sites render the brand color without edits.
+     * Dark-mode overrides live in the `.dark` block below.
      * ======================================================================== */
 
-  /* Primary Colors */
-  --color-primary: #1e3fae;
-  --color-primary-dark: #152d7e;
-  --color-primary-light: #3b5fc9;
-  --color-primary-glow: #4b6fd9;
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #1e3fae;
-  --color-primary-700: #152d7e;
-  --color-primary-800: #1e1b4b;
-  --color-primary-900: #0f0d2e;
+  /* Primary Colors — light defaults (deeper cyan, AA on white) */
+  --color-primary: #0e7490;
+  --color-primary-dark: #155e75;
+  --color-primary-light: #0891b2;
+  --color-primary-glow: #22d3ee;
+  --color-primary-50: #ecfeff;
+  --color-primary-100: #cffafe;
+  --color-primary-200: #a5f3fc;
+  --color-primary-300: #67e8f9;
+  --color-primary-400: #22d3ee;
+  --color-primary-500: #0891b2;
+  --color-primary-600: #0e7490;
+  --color-primary-700: #155e75;
+  --color-primary-800: #164e63;
+  --color-primary-900: #083344;
 
-  /* Background Colors */
-  --color-background-light: #f8f9fb;
-  --color-background-dark: #141416;
+  /* `blue-*` brand shim (light) — mirrors the primary scale */
+  --color-blue-50: #ecfeff;
+  --color-blue-100: #cffafe;
+  --color-blue-200: #a5f3fc;
+  --color-blue-300: #67e8f9;
+  --color-blue-400: #22d3ee;
+  --color-blue-500: #0891b2;
+  --color-blue-600: #0e7490;
+  --color-blue-700: #155e75;
+  --color-blue-800: #164e63;
+  --color-blue-900: #083344;
 
-  /* Surface Colors */
+  /* Background Colors — dark follows PRODUCT.md mission-control #080c12 */
+  --color-background-light: #f6f8fa;
+  --color-background-dark: #080c12;
+
+  /* Surface Colors — dark panels: #0d121a / #111720 / #151c27 */
   --color-surface-light: #ffffff;
-  --color-surface-dark: #1c1c1f;
-  --color-surface-dark-alt: #242428;
-  --color-surface-elevated: #2a2a2f;
+  --color-surface-dark: #0d121a;
+  --color-surface-dark-alt: #111720;
+  --color-surface-elevated: #151c27;
 
-  /* Border Colors */
+  /* Border Colors — dark #242d3a (spec --border) */
   --color-border-light: #e2e8f0;
-  --color-border-dark: #2c2c31;
+  --color-border-dark: #242d3a;
   --color-border-subtle: #f1f5f9;
 
-  /* Text Colors */
-  --color-text-primary: #1a2332;
-  --color-text-secondary: #5a6577;
-  --color-text-muted: #7d8599;
-  --color-text-muted-light: #6b7280;
-  --color-text-inverse: #e8eaed;
+  /* Text Colors — dark text #e7edf6, muted #8996a9 (spec) */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-muted-light: #64748b;
+  --color-text-inverse: #e7edf6;
 
   /* Surface Variants */
   --color-surface-alt: #f1f5f9;
@@ -83,35 +98,35 @@ html:not(.app-ready) * {
   --color-border-separator: #cbd5e1;
   --color-border-separator-dark: #3f3f46;
 
-  /* Status Colors */
-  --color-success: #10b981;
+  /* Status Colors — spec-faithful (green #35d399 / amber #f0b35a / red #ff6978) */
+  --color-success: #35d399;
   --color-success-light: #d1fae5;
   --color-success-dark: #059669;
   --color-success-bg: #ecfdf5;
-  --color-success-bg-dark: rgba(16, 185, 129, 0.2);
+  --color-success-bg-dark: rgba(53, 211, 153, 0.18);
   --color-success-border: #a7f3d0;
-  --color-success-border-dark: rgba(16, 185, 129, 0.3);
-  --color-warning: #f59e0b;
+  --color-success-border-dark: rgba(53, 211, 153, 0.3);
+  --color-warning: #f0b35a;
   --color-warning-light: #fef3c7;
   --color-warning-dark: #d97706;
   --color-warning-bg: #fffbeb;
-  --color-warning-bg-dark: rgba(245, 158, 11, 0.2);
+  --color-warning-bg-dark: rgba(240, 179, 90, 0.18);
   --color-warning-border: #fde68a;
-  --color-warning-border-dark: rgba(245, 158, 11, 0.3);
-  --color-error: #ef4444;
+  --color-warning-border-dark: rgba(240, 179, 90, 0.3);
+  --color-error: #ff6978;
   --color-error-light: #fee2e2;
   --color-error-dark: #dc2626;
   --color-error-bg: #fef2f2;
-  --color-error-bg-dark: rgba(239, 68, 68, 0.2);
+  --color-error-bg-dark: rgba(255, 105, 120, 0.18);
   --color-error-border: #fecaca;
-  --color-error-border-dark: rgba(239, 68, 68, 0.3);
-  --color-info: #3b82f6;
-  --color-info-light: #dbeafe;
-  --color-info-dark: #2563eb;
-  --color-info-bg: #eff6ff;
-  --color-info-bg-dark: rgba(59, 130, 246, 0.2);
-  --color-info-border: #bfdbfe;
-  --color-info-border-dark: rgba(59, 130, 246, 0.3);
+  --color-error-border-dark: rgba(255, 105, 120, 0.3);
+  --color-info: #38d6ff;
+  --color-info-light: #cffafe;
+  --color-info-dark: #0e7490;
+  --color-info-bg: #ecfeff;
+  --color-info-bg-dark: rgba(56, 214, 255, 0.15);
+  --color-info-border: #a5f3fc;
+  --color-info-border-dark: rgba(56, 214, 255, 0.3);
   --color-caution: #f97316;
   --color-caution-light: #ffedd5;
   --color-caution-dark: #ea580c;
@@ -124,13 +139,13 @@ html:not(.app-ready) * {
   --color-status-text-muted: #475569;
   --color-status-text-muted-dark: #94a3b8;
   --color-status-text-success: #059669;
-  --color-status-text-success-dark: #34d399;
+  --color-status-text-success-dark: #35d399;
   --color-status-text-warning: #d97706;
-  --color-status-text-warning-dark: #fbbf24;
+  --color-status-text-warning-dark: #f0b35a;
   --color-status-text-error: #dc2626;
-  --color-status-text-error-dark: #f87171;
-  --color-status-text-info: #2563eb;
-  --color-status-text-info-dark: #60a5fa;
+  --color-status-text-error-dark: #ff6978;
+  --color-status-text-info: #0e7490;
+  --color-status-text-info-dark: #38d6ff;
   --color-status-text-caution: #ea580c;
   --color-status-text-caution-dark: #fb923c;
 
@@ -142,14 +157,14 @@ html:not(.app-ready) * {
   --color-purple-bg-dark: rgba(139, 92, 246, 0.15);
   --color-purple-border: rgba(139, 92, 246, 0.2);
 
-  /* Accent Tile Colors - for dashboard cards */
-  --color-tile-blue: #3b82f6;
-  --color-tile-purple: #8b5cf6;
-  --color-tile-emerald: #10b981;
-  --color-tile-amber: #f59e0b;
-  --color-tile-indigo: #6366f1;
-  --color-tile-rose: #f43f5e;
-  --color-tile-cyan: #06b6d4;
+  /* Accent Tile Colors - for dashboard cards (cohesive cyan/teal family) */
+  --color-tile-blue: #38d6ff;
+  --color-tile-purple: #a78bfa;
+  --color-tile-emerald: #35d399;
+  --color-tile-amber: #f0b35a;
+  --color-tile-indigo: #22d3ee;
+  --color-tile-rose: #ff6978;
+  --color-tile-cyan: #0891b2;
   --color-tile-pink: #ec4899;
 
   /* ========================================================================
@@ -206,7 +221,7 @@ html:not(.app-ready) * {
   --radius-default: 0.25rem; /* 4px - Default controls */
   --radius-md: 0.375rem; /* 6px - Cards and grouped surfaces */
   --radius-lg: 0.5rem; /* 8px - Modal shells and larger surfaces */
-  --radius-xl: 0.75rem; /* 12px - Rare oversized panels */
+  --radius-xl: 0.5rem; /* 8px - Panels and modal shells (spec: max 8px) */
   --radius-2xl: 1rem; /* 16px - Marketing-only shells */
   --radius-full: 9999px; /* Pills, badges */
 
@@ -223,8 +238,8 @@ html:not(.app-ready) * {
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 
   /* Colored shadows for buttons and cards */
-  --shadow-primary: 0 4px 14px -3px rgba(30, 63, 174, 0.25);
-  --shadow-primary-lg: 0 10px 25px -5px rgba(30, 63, 174, 0.3);
+  --shadow-primary: 0 4px 14px -3px rgba(56, 214, 255, 0.28);
+  --shadow-primary-lg: 0 10px 25px -5px rgba(56, 214, 255, 0.32);
 
   /* ========================================================================
      * ANIMATIONS
@@ -268,10 +283,10 @@ html:not(.app-ready) * {
   @keyframes pulse-ring {
     0%,
     100% {
-      box-shadow: 0 0 0 0 rgba(30, 63, 174, 0.4);
+      box-shadow: 0 0 0 0 rgba(56, 214, 255, 0.4);
     }
     50% {
-      box-shadow: 0 0 0 8px rgba(30, 63, 174, 0);
+      box-shadow: 0 0 0 8px rgba(56, 214, 255, 0);
     }
   }
 
@@ -361,10 +376,10 @@ html:not(.app-ready) * {
   @keyframes glow-pulse {
     0%,
     100% {
-      box-shadow: 0 0 20px rgba(30, 63, 174, 0.2);
+      box-shadow: 0 0 20px rgba(56, 214, 255, 0.2);
     }
     50% {
-      box-shadow: 0 0 40px rgba(30, 63, 174, 0.4);
+      box-shadow: 0 0 40px rgba(56, 214, 255, 0.4);
     }
   }
 
@@ -406,13 +421,22 @@ html:not(.app-ready) * {
 }
 
 html {
+  /* Tells the browser to render native form controls, scrollbars, and
+     UA UI in the matching scheme. Updated per-theme via `.dark` below. */
+  color-scheme: light;
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 body {
+  /* Removes the legacy 300ms mobile tap-delay for click targets. */
+  touch-action: manipulation;
   background-color: var(--color-background-light);
   color: var(--color-text-primary);
 }
@@ -420,6 +444,14 @@ body {
 .dark body {
   background-color: var(--color-background-dark);
   color: var(--color-text-inverse);
+}
+
+/* Keep scroll chained inside overlay surfaces so a fling at the bottom of a
+ * modal/drawer never scrolls the page behind it. */
+.ant-modal-body,
+.ant-drawer-body,
+.app-modal__body {
+  overscroll-behavior: contain;
 }
 
 #root {
@@ -455,7 +487,7 @@ body {
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a40;
+  background: #334154;
 }
 
 /* Thin scrollbar variant */
@@ -659,10 +691,10 @@ body {
   --form-placeholder: #999999;
   --form-addon-bg: #fafafa;
   --form-focus-ring: 0 0 0 1px rgba(0, 0, 0, 0.32), 0 0 0 4px rgba(0, 0, 0, 0.12);
-  --form-error-border: #dc2626;
-  --form-error-focus-ring: 0 0 0 1px rgba(220, 38, 38, 0.28), 0 0 0 4px rgba(220, 38, 38, 0.12);
-  --form-warning-border: #d97706;
-  --form-warning-focus-ring: 0 0 0 1px rgba(217, 119, 6, 0.28), 0 0 0 4px rgba(217, 119, 6, 0.12);
+  --form-error-border: #ff6978;
+  --form-error-focus-ring: 0 0 0 1px rgba(255, 105, 120, 0.4), 0 0 0 4px rgba(255, 105, 120, 0.14);
+  --form-warning-border: #f0b35a;
+  --form-warning-focus-ring: 0 0 0 1px rgba(240, 179, 90, 0.4), 0 0 0 4px rgba(240, 179, 90, 0.14);
   --button-primary-bg: #171717;
   --button-primary-bg-hover: #2a2a2a;
   --button-primary-bg-active: #111111;
@@ -678,37 +710,126 @@ body {
   --form-control-selected-bg-hover: var(--button-primary-bg-hover);
   --form-control-selected-border: var(--button-primary-border);
   --form-control-selected-indicator: #ffffff;
+
+  /* Semantic surface aliases — theme-aware, used by AppModal + future primitives. */
+  --color-panel: var(--color-surface-light);
+  --color-panel-2: #f6f8fa;
+  --color-panel-3: #eef1f5;
+  --color-border: var(--color-border-light);
+  --color-text: var(--color-text-primary);
+  --color-muted: var(--color-text-secondary);
+  --color-overlay-backdrop: rgba(15, 23, 42, 0.55);
 }
 
 .dark {
-  --form-bg: #1c1c1f;
-  --form-bg-hover: #242428;
-  --form-border: #2c2c31;
-  --form-border-hover: #3a3a40;
-  --form-border-strong: #737373;
-  --form-text: #fafafa;
-  --form-placeholder: #737373;
-  --form-addon-bg: #181818;
-  --form-focus-ring: 0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12);
-  --form-error-border: #f87171;
-  --form-error-focus-ring: 0 0 0 1px rgba(248, 113, 113, 0.32), 0 0 0 4px rgba(248, 113, 113, 0.14);
-  --form-warning-border: #fbbf24;
-  --form-warning-focus-ring: 0 0 0 1px rgba(251, 191, 36, 0.32), 0 0 0 4px rgba(251, 191, 36, 0.14);
-  --button-primary-bg: #fafafa;
-  --button-primary-bg-hover: #f0f0f0;
-  --button-primary-bg-active: #e6e6e6;
-  --button-primary-border: #fafafa;
-  --button-primary-text: #111111;
-  --button-secondary-bg: #1c1c1f;
-  --button-secondary-bg-hover: #242428;
-  --button-secondary-bg-active: #2a2a2f;
-  --button-secondary-border: #2c2c31;
-  --button-secondary-text: #fafafa;
+  /* Form + button tokens — mission-control neutrals (blue-black family). */
+  --form-bg: #151c27; /* panel-3 (elevated input surface) */
+  --form-bg-hover: #1f2937; /* neutral 600 */
+  --form-border: #242d3a; /* panel border */
+  --form-border-hover: #334154; /* border-strong */
+  --form-border-strong: #8996a9; /* muted */
+  --form-text: #e7edf6;
+  --form-placeholder: #5d6979; /* muted-2 */
+  --form-addon-bg: #111720; /* panel-2 */
+  --form-focus-ring: 0 0 0 1px rgba(56, 214, 255, 0.5), 0 0 0 4px rgba(56, 214, 255, 0.18);
+  --form-error-border: #ff6978;
+  --form-error-focus-ring: 0 0 0 1px rgba(255, 105, 120, 0.5), 0 0 0 4px rgba(255, 105, 120, 0.18);
+  --form-warning-border: #f0b35a;
+  --form-warning-focus-ring: 0 0 0 1px rgba(240, 179, 90, 0.5), 0 0 0 4px rgba(240, 179, 90, 0.18);
+  /* Primary CTA: luminous inverted (spec-compliant monochrome accent). */
+  --button-primary-bg: #e7edf6;
+  --button-primary-bg-hover: #d6dde6;
+  --button-primary-bg-active: #b8c3d2;
+  --button-primary-border: #e7edf6;
+  --button-primary-text: #0d121a;
+  /* Secondary: recessed panel surface. */
+  --button-secondary-bg: #151c27;
+  --button-secondary-bg-hover: #1f2937;
+  --button-secondary-bg-active: #242d3a;
+  --button-secondary-border: #242d3a;
+  --button-secondary-text: #e7edf6;
   --button-focus-ring: var(--form-focus-ring);
   --form-control-selected-bg: var(--button-primary-bg);
   --form-control-selected-bg-hover: var(--button-primary-bg-hover);
   --form-control-selected-border: var(--button-primary-border);
-  --form-control-selected-indicator: #111111;
+  --form-control-selected-indicator: #0d121a;
+
+  /* Semantic surface aliases — theme-aware, used by AppModal + future primitives. */
+  --color-panel: var(--color-surface-dark);
+  --color-panel-2: var(--color-surface-dark-alt);
+  --color-panel-3: var(--color-surface-elevated);
+  --color-border: var(--color-border-dark);
+  --color-text: #e7edf6;
+  --color-muted: #8996a9;
+  --color-overlay-backdrop: rgba(8, 12, 18, 0.8);
+}
+
+/* ============================================================================
+ * DARK-MODE PALETTE SHIM
+ * Remaps the Tailwind default `blue-*` / `slate-*` / `gray-*` scales (and the
+ * primary token) to the mission-control palette so the legacy call sites
+ * (~2000 blue-*, ~300 slate/gray files) render the reskin without edits.
+ * Source of truth: web/src/theme/tokens.ts. Light-mode values stay in @theme.
+ * ============================================================================ */
+.dark {
+  /* Brand — luminous cyan centered on #38d6ff */
+  --color-primary: #38d6ff;
+  --color-primary-dark: #2398bd;
+  --color-primary-light: #2bb8e0;
+  --color-primary-glow: #66e6ff;
+  --color-primary-50: #0a1f28;
+  --color-primary-100: #112b36;
+  --color-primary-200: #1a3f52;
+  --color-primary-300: #2a6680;
+  --color-primary-400: #38d6ff;
+  --color-primary-500: #38d6ff;
+  --color-primary-600: #2bb8e0;
+  --color-primary-700: #2398bd;
+  --color-primary-800: #1b7a98;
+  --color-primary-900: #145f7a;
+
+  /* `blue-*` → luminous cyan scale */
+  --color-blue-50: #0a1f28;
+  --color-blue-100: #112b36;
+  --color-blue-200: #1a3f52;
+  --color-blue-300: #2a6680;
+  --color-blue-400: #38d6ff;
+  --color-blue-500: #38d6ff;
+  --color-blue-600: #2bb8e0;
+  --color-blue-700: #2398bd;
+  --color-blue-800: #1b7a98;
+  --color-blue-900: #145f7a;
+
+  /* `slate-*` → mission-control neutral panels (#080c12 family) */
+  --color-slate-50: #e7edf6;
+  --color-slate-100: #d6dde6;
+  --color-slate-200: #b8c3d2;
+  --color-slate-300: #8996a9;
+  --color-slate-400: #5d6979;
+  --color-slate-500: #334154;
+  --color-slate-600: #1f2937;
+  --color-slate-700: #151c27;
+  --color-slate-800: #111720;
+  --color-slate-900: #0d121a;
+  --color-slate-950: #080c12;
+
+  /* `gray-*` → same neutral family */
+  --color-gray-50: #e7edf6;
+  --color-gray-100: #d6dde6;
+  --color-gray-200: #b8c3d2;
+  --color-gray-300: #8996a9;
+  --color-gray-400: #5d6979;
+  --color-gray-500: #334154;
+  --color-gray-600: #1f2937;
+  --color-gray-700: #151c27;
+  --color-gray-800: #111720;
+  --color-gray-900: #0d121a;
+  --color-gray-950: #080c12;
+
+  /* Semantic text — spec muted values */
+  --color-text-secondary: #8996a9;
+  --color-text-muted: #8996a9;
+  --color-text-muted-light: #5d6979;
 }
 
 /* ============================================================================
@@ -805,7 +926,7 @@ body {
 
 /* Override Ant Design menu */
 .ant-menu-item-selected {
-  background-color: rgba(30, 63, 174, 0.1) !important;
+  background-color: rgba(56, 214, 255, 0.12) !important;
 }
 
 /* Override Ant Design card */
@@ -1550,7 +1671,7 @@ textarea.ant-input,
 }
 
 .dark .chat-search-highlight {
-  outline-color: #60a5fa;
+  outline-color: #38d6ff;
 }
 
 /* Performance optimization for long lists
@@ -1855,8 +1976,8 @@ img[loading='lazy'] {
 :is(.dark .memstack-prose) kbd {
   color: var(--color-text-inverse);
   background-color: var(--color-border-dark);
-  border-color: #3a3a40;
-  box-shadow: 0 1px 0 #3a3a40;
+  border-color: #334154;
+  box-shadow: 0 1px 0 #334154;
 }
 
 /* --- Details/summary --- */
@@ -2144,26 +2265,26 @@ img[loading='lazy'] {
 }
 
 .dark .a2ui-surface-theme {
-  --a2ui-surface-bg: #111111;
-  --a2ui-surface-muted: #181818;
-  --a2ui-surface-border: #2a2a2a;
+  --a2ui-surface-bg: #0d121a;
+  --a2ui-surface-muted: #111720;
+  --a2ui-surface-border: #242d3a;
   --a2ui-surface-border-strong: rgba(255, 255, 255, 0.1);
-  --a2ui-text-primary: #fafafa;
-  --a2ui-text-secondary: #a3a3a3;
-  --a2ui-text-muted: #737373;
-  --a2ui-accent: #fafafa;
+  --a2ui-text-primary: #e7edf6;
+  --a2ui-text-secondary: #8996a9;
+  --a2ui-text-muted: #5d6979;
+  --a2ui-accent: #38d6ff;
   --a2ui-focus-ring: var(--form-focus-ring);
-  --a2ui-progress-track: #262626;
-  --a2ui-progress-fill: #fafafa;
-  --a2ui-progress-text: #d4d4d4;
+  --a2ui-progress-track: #151c27;
+  --a2ui-progress-fill: #e7edf6;
+  --a2ui-progress-text: #b8c3d2;
   --a2ui-progress-track-success: #163322;
   --a2ui-progress-fill-success: #86efac;
   --a2ui-progress-text-success: #bbf7d0;
   --a2ui-progress-track-warning: #3a2c12;
-  --a2ui-progress-fill-warning: #fbbf24;
+  --a2ui-progress-fill-warning: #f0b35a;
   --a2ui-progress-text-warning: #fde68a;
   --a2ui-progress-track-error: #3b1717;
-  --a2ui-progress-fill-error: #fca5a5;
+  --a2ui-progress-fill-error: #ff6978;
   --a2ui-progress-text-error: #fecaca;
 }
 

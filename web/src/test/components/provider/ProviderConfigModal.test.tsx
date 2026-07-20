@@ -133,7 +133,7 @@ describe('ProviderConfigModal', () => {
       expect(providerAPI.listModels).toHaveBeenCalledWith('openai');
     });
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -149,7 +149,7 @@ describe('ProviderConfigModal', () => {
     );
 
     const apiKeyInput = await waitFor(() => {
-      const input = container.querySelector('input[type="password"]');
+      const input = document.querySelector('input[type="password"]');
       expect(input).toBeTruthy();
       return input as HTMLInputElement;
     });
@@ -189,7 +189,7 @@ describe('ProviderConfigModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     const apiKeyInput = await waitFor(() => {
-      const input = container.querySelector('input[type="password"]');
+      const input = document.querySelector('input[type="password"]');
       expect(input).toBeTruthy();
       return input as HTMLInputElement;
     });
@@ -288,7 +288,7 @@ describe('ProviderConfigModal', () => {
 
     await screen.findByText(/No credential was auto-filled/i);
     expect(screen.getByLabelText('Authentication')).toHaveValue('api_key');
-    expect(container.querySelector('input[type="password"]')).toHaveValue('');
+    expect(document.querySelector('input[type="password"]')).toHaveValue('');
     expect(screen.queryByDisplayValue('must-not-enter-the-form')).not.toBeInTheDocument();
   });
 
@@ -313,7 +313,7 @@ describe('ProviderConfigModal', () => {
     );
 
     const apiKeyInput = await waitFor(() => {
-      const input = container.querySelector('input[type="password"]');
+      const input = document.querySelector('input[type="password"]');
       expect(input).toBeTruthy();
       return input as HTMLInputElement;
     });
@@ -348,7 +348,7 @@ describe('ProviderConfigModal', () => {
       )
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Authentication')).toBeDisabled();
-    expect(container.querySelector('input[type="password"]')).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="password"]')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 
@@ -410,7 +410,7 @@ describe('ProviderConfigModal', () => {
         'This provider cannot be configured until secure credential storage is available.'
       )
     ).toBeInTheDocument();
-    expect(container.querySelector('input[type="password"]')).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="password"]')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 
@@ -420,7 +420,7 @@ describe('ProviderConfigModal', () => {
     );
 
     const apiKeyInput = await waitFor(() => {
-      const input = container.querySelector('input[type="password"]');
+      const input = document.querySelector('input[type="password"]');
       expect(input).toBeTruthy();
       return input as HTMLInputElement;
     });

@@ -16,7 +16,7 @@ describe('DeleteConfirmationModal', () => {
       />
     );
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -34,7 +34,7 @@ describe('DeleteConfirmationModal', () => {
       />
     );
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).not.toHaveBeenCalled();
   });

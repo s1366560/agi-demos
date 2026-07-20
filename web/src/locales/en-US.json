@@ -8,7 +8,7 @@
     "edit": "Edit",
     "create": "Create",
     "search": "Search",
-    "loading": "Loading...",
+    "loading": "Loading…",
     "success": "Success",
     "error": "Error",
     "required": "Required",
@@ -204,7 +204,7 @@
     "email": "Email",
     "password": "Password",
     "submit": "Sign In",
-    "loading": "Signing in...",
+    "loading": "Signing in…",
     "hero": {
       "title": "Build Your Enterprise AI Memory Hub",
       "subtitle": "Connect every knowledge point, build a growable enterprise knowledge graph. Let AI truly understand your business.",
@@ -249,11 +249,11 @@
       "userAria": "Use user demo credentials"
     },
     "oauth": {
-      "processing": "Completing sign in...",
-      "authenticating": "Authenticating...",
-      "authenticatingWith": "Authenticating with {{provider}}...",
+      "processing": "Completing sign in…",
+      "authenticating": "Authenticating…",
+      "authenticatingWith": "Authenticating with {{provider}}…",
       "success": "Sign in successful!",
-      "redirecting": "Redirecting you now...",
+      "redirecting": "Redirecting you now…",
       "failed": "Sign in failed",
       "tryAgain": "Try again",
       "errors": {
@@ -342,10 +342,10 @@
       "close": "Close node details"
     },
     "cytoscapeViewport": {
-      "loadingVisualization": "Loading graph visualization...",
+      "loadingVisualization": "Loading graph visualization…",
       "initializeFailed": "Failed to initialize graph visualization",
       "loadDataFailed": "Failed to load graph data",
-      "loadingGraph": "Loading graph..."
+      "loadingGraph": "Loading graph…"
     }
   },
   "search": {
@@ -397,7 +397,7 @@
     "editReply": "Edit reply",
     "replies": "Replies",
     "noReplies": "No replies yet",
-    "writeReply": "Write a reply...",
+    "writeReply": "Write a reply…",
     "sendReply": "Send",
     "noPosts": "No posts yet",
     "noPostsDescription": "Create the first post to start the discussion.",
@@ -422,7 +422,7 @@
     "tasksSubtitle": "Turn shared context into execution. Create tasks from the board and move them as work progresses.",
     "taskInputLabel": "Task title",
     "taskStatusLabel": "Task status",
-    "taskPlaceholder": "Create a task for the board...",
+    "taskPlaceholder": "Create a task for the board…",
     "creatingTask": "Creating…",
     "addTask": "Add task",
     "creatingPost": "Creating…",
@@ -1018,7 +1018,7 @@
       "desc_placeholder": "Optional description",
       "cancel": "Cancel",
       "create": "Create",
-      "creating": "Creating...",
+      "creating": "Creating…",
       "error": "Failed to create tenant"
     },
     "settings": {
@@ -1026,7 +1026,7 @@
       "subtitle": "Manage your workspace preferences and billing details.",
       "success": "Organization settings updated successfully.",
       "error": "Failed to update settings. Please try again.",
-      "saving": "Saving...",
+      "saving": "Saving…",
       "general": {
         "title": "General Information",
         "name": "Organization Name",
@@ -1058,13 +1058,13 @@
       "title": "Member Management",
       "subtitle": "Manage user access, assign roles, and control permissions for this tenant.",
       "inviteMember": "Invite Member",
-      "searchPlaceholder": "Search by name, email, or role...",
+      "searchPlaceholder": "Search by name, email, or role…",
       "filterByRole": "Filter by role",
       "allRoles": "All Roles",
       "noMembers": "No members found",
       "showingResults": "Showing {{start}} to {{end}} of {{total}} results",
       "load_error": "Failed to load users",
-      "loading": "Loading members...",
+      "loading": "Loading members…",
       "remove_confirm": "Are you sure you want to remove this user?",
       "remove_success": "Member removed",
       "remove_error": "Failed to remove user, please try again later",
@@ -1117,14 +1117,14 @@
         "email_placeholder": "Enter user email address",
         "role": "Role",
         "message": "Message (Optional)",
-        "message_placeholder": "Add invitation message...",
+        "message_placeholder": "Add invitation message…",
         "cancel": "Cancel",
         "submit": "Send Invitation"
       },
       "owner_role_immutable": "Owner role cannot be changed",
       "joined_at_label": "Joined At",
       "last_login_label": "Last Login",
-      "saving": "Saving..."
+      "saving": "Saving…"
     },
     "agentDefinitions": {
       "title": "Agent Definitions",
@@ -1212,7 +1212,7 @@
         "triggerConfig": "Trigger & Routing",
         "permissions": "Permissions & Resources",
         "sandboxIsolation": "Sandbox & Isolation",
-        "loadingResources": "Loading resources...",
+        "loadingResources": "Loading resources…",
         "name": "Name",
         "nameRequired": "Name is required",
         "namePattern": "Lowercase letters, digits, underscores. Must start with letter.",
@@ -1222,13 +1222,13 @@
         "displayNamePlaceholder": "e.g., Customer Support Agent",
         "systemPrompt": "System Prompt",
         "systemPromptRequired": "System prompt is required",
-        "systemPromptPlaceholder": "Define the agent's role, capabilities, and behavior...",
+        "systemPromptPlaceholder": "Define the agent's role, capabilities, and behavior…",
         "scope": "Scope",
         "personaFiles": "Persona files",
         "model": "Model",
         "maxRetries": "Max Retries",
         "triggerKeywords": "Trigger Keywords",
-        "addKeyword": "Add keyword...",
+        "addKeyword": "Add keyword…",
         "noKeywords": "No keywords added",
         "discoverable": "Discoverable",
         "agentToAgent": "Agent-to-Agent",
@@ -1326,13 +1326,13 @@
       "actions": "Actions",
       "openProject": "Open project {{name}}",
       "openProjectActions": "Open actions for {{name}}",
-      "loading": "Loading tenant information..."
+      "loading": "Loading tenant information…"
     },
     "providers": {
       "title": "LLM Providers",
       "subtitle": "Configure and manage AI model providers for your workspace.",
       "addProvider": "Add Provider",
-      "searchPlaceholder": "Search by name or model...",
+      "searchPlaceholder": "Search by name or model…",
       "allTypes": "All Types",
       "typeFilterLabel": "Filter providers by type",
       "statusFilterLabel": "Filter providers by status",
@@ -1379,7 +1379,7 @@
       "registry": "Skill Registry",
       "createWithChat": "Create in chat",
       "createWithChatPrompt": "Help me create a new skill. Ask for the goal, trigger scenarios, allowed tools, inputs and outputs, and bundled files before generating a spec-compliant skill package.",
-      "searchPlaceholder": "Search skills...",
+      "searchPlaceholder": "Search skills…",
       "statusFilterLabel": "Filter skills by status",
       "scopeFilterLabel": "Filter skills by scope",
       "projectsLoadFailed": "Failed to load projects",
@@ -1456,7 +1456,7 @@
       "import": {
         "button": "Import",
         "title": "Import Agent Skill",
-        "placeholder": "Paste SKILL.md content with YAML frontmatter...",
+        "placeholder": "Paste SKILL.md content with YAML frontmatter…",
         "zipPlaceholder": "Choose a .zip skill package",
         "zipButton": "Browse",
         "scopeLabel": "Import scope",
@@ -1642,7 +1642,7 @@
         "description": "Description",
         "descriptionRequired": "Please enter skill description",
         "descriptionMax": "Description must be 1024 characters or fewer",
-        "descriptionPlaceholder": "Describe what this skill does...",
+        "descriptionPlaceholder": "Describe what this skill does…",
         "scope": "Scope",
         "scopeRequired": "Please select a scope",
         "scopeTenant": "Tenant",
@@ -1654,14 +1654,14 @@
         "allowedToolsRaw": "allowed-tools",
         "allowedToolsRawPlaceholder": "Bash(git:*) Bash(jq:*) Read",
         "body": "Markdown instructions",
-        "bodyPlaceholder": "Write the instructions agents should follow when this skill activates...",
+        "bodyPlaceholder": "Write the instructions agents should follow when this skill activates…",
         "advanced": "Optional frontmatter",
         "advancedHint": "License, compatibility, spec version, and metadata.",
         "preview": "Generated package",
         "previewEmpty": "Enter a name and description to preview SKILL.md.",
         "previewInvalid": "Fix invalid metadata to preview SKILL.md.",
         "fullContent": "SKILL.md content",
-        "fullContentPlaceholder": "Paste or edit the complete SKILL.md content...",
+        "fullContentPlaceholder": "Paste or edit the complete SKILL.md content…",
         "fullContentHint": "If omitted, the backend can generate a minimal SKILL.md from the fields above.",
         "metadataJson": "Metadata JSON",
         "metadataInvalid": "Metadata must be a JSON object",
@@ -1672,7 +1672,7 @@
         "compatibilityMax": "Compatibility must be 500 characters or fewer",
         "compatibilityPlaceholder": "Required product, system packages, network access, or runtime notes",
         "requireTools": "At least one tool is required",
-        "addTool": "Enter tool name...",
+        "addTool": "Enter tool name…",
         "noTools": "No tools yet, please add at least one",
         "toolsHint": "Optional. Leave blank to omit allowed-tools from frontmatter; the runtime stores this as unrestricted internally."
       },
@@ -1854,7 +1854,7 @@
       "title": "MCP Servers",
       "subtitle": "Manage Model Context Protocol server integrations",
       "createNew": "Add Server",
-      "searchPlaceholder": "Search servers...",
+      "searchPlaceholder": "Search servers…",
       "allStatus": "All Status",
       "enabledOnly": "Enabled Only",
       "disabledOnly": "Disabled Only",
@@ -1896,7 +1896,7 @@
       },
       "placeholders": {
         "name": "e.g. My MCP Server",
-        "description": "Describe what this server does..."
+        "description": "Describe what this server does…"
       },
       "tooltips": {
         "command": "Command to execute, e.g. python, npx",
@@ -1966,7 +1966,7 @@
         "invocations": "Total Runs"
       },
       "filter": {
-        "searchPlaceholder": "Search subagents...",
+        "searchPlaceholder": "Search subagents…",
         "all": "All",
         "enabled": "Enabled",
         "disabled": "Disabled"
@@ -2029,17 +2029,17 @@
         "displayNamePlaceholder": "e.g., Code Reviewer",
         "systemPrompt": "System Prompt",
         "systemPromptRequired": "System prompt is required",
-        "systemPromptPlaceholder": "Enter the system prompt for this SubAgent...",
+        "systemPromptPlaceholder": "Enter the system prompt for this SubAgent…",
         "model": "Model",
         "color": "Color",
         "triggerDescription": "Trigger Description",
         "triggerDescriptionRequired": "Trigger description is required",
-        "triggerDescriptionPlaceholder": "Describe when this SubAgent should be activated...",
+        "triggerDescriptionPlaceholder": "Describe when this SubAgent should be activated…",
         "triggerKeywords": "Trigger Keywords",
-        "addKeyword": "Add keyword...",
+        "addKeyword": "Add keyword…",
         "noKeywords": "No keywords added",
         "triggerExamples": "Trigger Examples",
-        "addExample": "Add example message...",
+        "addExample": "Add example message…",
         "noExamples": "No examples added",
         "allowedTools": "Allowed Tools",
         "allowedToolsTooltip": "Comma-separated tool names, or * for all tools",
@@ -2081,7 +2081,7 @@
         "identityIntro": "Configure the identity this SubAgent uses when spawning child agents. Leave empty to use defaults.",
         "identityDescription": "Identity Description",
         "identityDescriptionField": "Identity Description",
-        "identityDescriptionPlaceholder": "Describe this SubAgent's role and personality when spawning child agents...",
+        "identityDescriptionPlaceholder": "Describe this SubAgent's role and personality when spawning child agents…",
         "metadata": "Metadata",
         "metadataKey": "Key",
         "metadataValue": "Value",
@@ -2089,7 +2089,7 @@
         "removeExample": "Remove example {{example}}",
         "removeMetadata": "Remove metadata row {{index}}",
         "testKeywords": "Test Keyword Match",
-        "testQueryPlaceholder": "Enter query to test match...",
+        "testQueryPlaceholder": "Enter query to test match…",
         "keywordMatchFound": "Matches keyword: \"{{keyword}}\"",
         "noExactKeywordMatch": "No exact keyword match found. The LLM may still route based on description.",
         "resourceFetchError": "Failed to load available tools and skills"
@@ -2148,7 +2148,7 @@
         "show": "Show Decision Trace",
         "candidatesCount": "{{count}} candidates"
       },
-      "search": "Search bindings...",
+      "search": "Search bindings…",
       "empty": "No agent bindings yet",
       "noResults": "No bindings match your search",
       "columns": {
@@ -2354,7 +2354,7 @@
       "contact_sales": "Contact Sales",
       "current_plan_button": "Current Plan",
       "upgrade_to": "Upgrade to {{plan}}",
-      "upgrading": "Upgrading...",
+      "upgrading": "Upgrading…",
       "upgrade_success": "Plan upgraded successfully",
       "upgrade_error": "Failed to upgrade plan. Please try again.",
       "sales_unavailable": "Sales contact is not configured in this build.",
@@ -2656,7 +2656,7 @@
       "title": "Instance Management",
       "subtitle": "Manage your AI agent instances",
       "createNew": "Create Instance",
-      "searchPlaceholder": "Search instances...",
+      "searchPlaceholder": "Search instances…",
       "restartSuccess": "Instance restarted successfully",
       "deleteSuccess": "Instance deleted successfully",
       "scaleSuccess": "Instance scaled successfully",
@@ -2830,8 +2830,8 @@
         "description": "Manage who has access to this instance",
         "addMember": "Add Member",
         "searchUser": "Search Users",
-        "searchUserPlaceholder": "Search by email or name...",
-        "searchPlaceholder": "Filter members...",
+        "searchUserPlaceholder": "Search by email or name…",
+        "searchPlaceholder": "Filter members…",
         "colUser": "User",
         "colRole": "Role",
         "colJoined": "Joined",
@@ -2850,7 +2850,7 @@
         "description": "Configure your instance settings",
         "generalSettings": "General Settings",
         "descriptionLabel": "Description",
-        "descriptionPlaceholder": "Enter a description for this instance...",
+        "descriptionPlaceholder": "Enter a description for this instance…",
         "updateSuccess": "Instance updated successfully",
         "dangerZone": "Danger Zone",
         "dangerZoneDescription": "Irreversible and destructive actions",
@@ -2887,7 +2887,7 @@
         "totalFolders": "Folders",
         "totalFiles": "Files",
         "totalSize": "Total Size",
-        "searchPlaceholder": "Search files...",
+        "searchPlaceholder": "Search files…",
         "noFiles": "No files yet",
         "noSearchResults": "No files match your search",
         "colType": "Type",
@@ -2920,7 +2920,7 @@
         "connected": "Connected",
         "disconnected": "Disconnected",
         "error": "Error",
-        "searchPlaceholder": "Search channels...",
+        "searchPlaceholder": "Search channels…",
         "noChannels": "No channels configured",
         "colName": "Name",
         "colType": "Type",
@@ -2968,7 +2968,7 @@
         "colVersion": "Version",
         "description": "Install and manage capability genes for this instance.",
         "availableGenesError": "Failed to load available genes",
-        "availableSearchPlaceholder": "Search available genes...",
+        "availableSearchPlaceholder": "Search available genes…",
         "fetchError": "Failed to load genes",
         "installError": "Failed to install gene",
         "installGene": "Install gene",
@@ -2977,7 +2977,7 @@
         "noDescription": "No description provided",
         "noGenes": "No genes found",
         "paginationTotal": "{{from}}-{{to}} of {{total}} genes",
-        "searchPlaceholder": "Search genes...",
+        "searchPlaceholder": "Search genes…",
         "selectGeneDescription": "Choose a gene to install on this instance.",
         "status": {
           "failed": "Failed",
@@ -3044,8 +3044,8 @@
         "allEvents": "All Events",
         "runtimeHooks": "Runtime Hooks"
       },
-      "filterActorPlaceholder": "Filter by actor...",
-      "filterActionPlaceholder": "Filter by action...",
+      "filterActorPlaceholder": "Filter by actor…",
+      "filterActionPlaceholder": "Filter by action…",
       "filterResourceType": "Resource Type",
       "filterFromDate": "From date",
       "filterToDate": "To date",
@@ -3094,7 +3094,7 @@
         "resourceLabel": "Resource",
         "resourceTypeLabel": "Runtime Hook",
         "filterAction": "Action",
-        "filterHookName": "Filter by hook name...",
+        "filterHookName": "Filter by hook name…",
         "filterExecutorKind": "Executor",
         "filterHookFamily": "Hook Family",
         "filterIsolationMode": "Isolation Mode",
@@ -3166,7 +3166,7 @@
       },
       "healthDrawer": {
         "title": "Cluster Health",
-        "loading": "Checking cluster health...",
+        "loading": "Checking cluster health…",
         "status": "Status",
         "nodeCount": "Node Count",
         "cpuUsage": "CPU Usage",
@@ -3253,9 +3253,9 @@
         "createDraftError": "Failed to create gene draft",
         "createGenomeDraftError": "Failed to create genome draft"
       },
-      "searchPlaceholder": "Search genes...",
-      "searchGenomesPlaceholder": "Search genomes...",
-      "loading": "Loading genes...",
+      "searchPlaceholder": "Search genes…",
+      "searchGenomesPlaceholder": "Search genomes…",
+      "loading": "Loading genes…",
       "ratings": "ratings",
       "genesCount": "genes",
       "fetchError": "Failed to fetch gene details",
@@ -3307,7 +3307,7 @@
       "rating": "Rating",
       "ratingRequired": "Rating is required",
       "comment": "Comment",
-      "commentPlaceholder": "Leave a comment...",
+      "commentPlaceholder": "Leave a comment…",
       "filters": {
         "categoryLabel": "Filter genes by category",
         "visibilityLabel": "Filter genes by visibility",
@@ -3335,7 +3335,7 @@
       "title": "Instance Templates",
       "subtitle": "Create and manage instance templates",
       "createTemplate": "Create Template",
-      "searchPlaceholder": "Search templates...",
+      "searchPlaceholder": "Search templates…",
       "filterAll": "All",
       "filterPublished": "Published",
       "filterDraft": "Draft",
@@ -3359,7 +3359,7 @@
       "descriptionPlaceholder": "Enter template description",
       "tags": "Tags",
       "tagsTooltip": "Press enter to add tags",
-      "tagsPlaceholder": "Add tags...",
+      "tagsPlaceholder": "Add tags…",
       "baseConfig": "Base Config (JSON)",
       "baseConfigPlaceholder": "{\"key\": \"value\"}",
       "viewTemplate": "View {{name}}",
@@ -3481,7 +3481,7 @@
         "email": "Email Address",
         "emailPlaceholder": "Enter member email",
         "role": "Role",
-        "searchPlaceholder": "Search members...",
+        "searchPlaceholder": "Search members…",
         "filterByRole": "Filter by role",
         "allRoles": "All Roles",
         "colUser": "User",
@@ -3529,7 +3529,7 @@
         "exportCsv": "Export CSV",
         "exportJson": "Export JSON",
         "exportSuccess": "Export completed",
-        "filterUser": "Filter by user...",
+        "filterUser": "Filter by user…",
         "filterAction": "Filter by action",
         "filterResourceType": "Resource type",
         "filterFromDate": "From date",
@@ -3665,13 +3665,13 @@
         "previousPage": "Previous page",
         "nextPage": "Next page"
       },
-      "pluginsLoading": "Loading plugins...",
-      "channelsLoading": "Loading channels...",
+      "pluginsLoading": "Loading plugins…",
+      "channelsLoading": "Loading channels…",
       "pluginsList": {
         "installedPlugins": "Installed Plugins",
         "available": "Available",
         "noPluginsAvailable": "No plugins available",
-        "searchPlaceholder": "Search plugins...",
+        "searchPlaceholder": "Search plugins…",
         "installRequirement": "Install from PyPI",
         "installPlaceholder": "e.g., memstack-plugin-template==0.1.0",
         "install": "Install",
@@ -3770,7 +3770,7 @@
         "editTitle": "Edit Channel Configuration",
         "save": "Save",
         "cancel": "Cancel",
-        "saving": "Saving...",
+        "saving": "Saving…",
         "createSuccess": "Configuration created",
         "updateSuccess": "Configuration updated",
         "saveSuccess": "Channel configuration saved successfully",
@@ -3780,7 +3780,7 @@
         "pleaseEnterName": "Please enter a name",
         "leaveUnchanged": "Leave blank to keep unchanged ({{sentinel}})",
         "namePlaceholder": "e.g., Feishu Bot for Support",
-        "loadingSchema": "Loading schema...",
+        "loadingSchema": "Loading schema…",
         "connectionMode": "Connection Mode",
         "connectionModeWebsocket": "WebSocket (Recommended)",
         "connectionModeWebhook": "Webhook",
@@ -3824,7 +3824,7 @@
       "title": "Workspaces",
       "subtitle": "Collaborative multi-agent spaces scoped to this project",
       "createButton": "Create Workspace",
-      "searchPlaceholder": "Search workspaces...",
+      "searchPlaceholder": "Search workspaces…",
       "empty": "No workspaces found",
       "emptyDescription": "Create a workspace to organize your agents and objectives",
       "emptyFiltered": "No workspaces match your search",
@@ -3888,7 +3888,7 @@
       "subtitle": "Manage workflow patterns for your workspace",
       "description": "Audit, optimize, and manage learned execution behaviors from successful agent runs.",
       "createButton": "Create Pattern",
-      "searchPlaceholder": "Search patterns...",
+      "searchPlaceholder": "Search patterns…",
       "sortLabel": "Sort workflow patterns",
       "sortByUsage": "Sort by usage",
       "sortBySuccessRate": "Sort by success rate",
@@ -3896,7 +3896,7 @@
       "deleteButton": "Delete",
       "editButton": "Edit",
       "empty": "No patterns found",
-      "loading": "Loading patterns...",
+      "loading": "Loading patterns…",
       "loadErrorTitle": "Failed to load patterns",
       "loadError": "Failed to load patterns",
       "deleteTitle": "Delete pattern",
@@ -3913,7 +3913,7 @@
       "manageTenant": "Manage {{tenant}}"
     },
     "projectManager": {
-      "searchPlaceholder": "Search projects...",
+      "searchPlaceholder": "Search projects…",
       "deleteConfirm": "Delete this project? This action cannot be undone.",
       "filterAll": "All",
       "settingsTooltip": "Project settings",
@@ -3935,9 +3935,9 @@
       "title": "Project Management",
       "subtitle": "Manage memory resources, permissions, and environments for this tenant workspace.",
       "create": "Create New Project",
-      "searchPlaceholder": "Search by project name, ID, or owner...",
+      "searchPlaceholder": "Search by project name, ID, or owner…",
       "filter": "Filter:",
-      "loading": "Loading projects...",
+      "loading": "Loading projects…",
       "storage": "Storage",
       "viewGrid": "Grid view",
       "viewList": "List view",
@@ -3971,7 +3971,7 @@
       "subtitle": "Configure a new workspace for your memories and knowledge graph.",
       "basicInfo": "Basic Information",
       "namePlaceholder": "e.g. Finance Knowledge Base",
-      "descriptionPlaceholder": "Briefly describe the purpose of this project...",
+      "descriptionPlaceholder": "Briefly describe the purpose of this project…",
       "memoryRules": "Memory Rules",
       "graphConfig": "Graph Configuration",
       "maxEpisodes": "Max Episodes",
@@ -3999,7 +3999,7 @@
       "planPremium": "Premium",
       "planEnterprise": "Enterprise",
       "cancel": "Cancel",
-      "creating": "Creating...",
+      "creating": "Creating…",
       "submit": "Create",
       "action": "Create tenant"
     },
@@ -4017,7 +4017,7 @@
       "planPremium": "Premium",
       "planEnterprise": "Enterprise",
       "cancel": "Cancel",
-      "creating": "Creating...",
+      "creating": "Creating…",
       "submit": "Create"
     },
     "create_page": {
@@ -4025,7 +4025,7 @@
       "name": "Organization name",
       "name_placeholder": "e.g. Acme Corp",
       "description": "Description",
-      "description_placeholder": "Briefly describe your organization...",
+      "description_placeholder": "Briefly describe your organization…",
       "org_details": "Organization details",
       "plan": "Plan",
       "plan_options": {
@@ -4049,7 +4049,7 @@
       "charts": {
         "current": "Current",
         "dist_desc": "Task distribution by current status.",
-        "loading": "Loading chart...",
+        "loading": "Loading chart…",
         "pending_tasks": "Pending tasks",
         "queue_depth": "Queue depth",
         "queue_desc": "Queued task volume over time.",
@@ -4118,7 +4118,7 @@
       "namePlaceholder": "e.g. Finance Knowledge Base",
       "status": "Status",
       "description": "Description",
-      "descriptionPlaceholder": "Briefly describe the purpose of this project...",
+      "descriptionPlaceholder": "Briefly describe the purpose of this project…",
       "status_options": {
         "active": "Active",
         "paused": "Paused",
@@ -4156,7 +4156,7 @@
       "basicDescription": "Description",
       "basicPublic": "Make project public",
       "basicSave": "Save",
-      "basicSaving": "Saving...",
+      "basicSaving": "Saving…",
       "memoryTitle": "Memory Rules",
       "memoryMaxEpisodes": "Max Episodes",
       "memoryRetention": "Retention Days",
@@ -4199,7 +4199,7 @@
       "sandboxSave": "Save",
       "sandboxSectionTitle": "Sandbox",
       "sandboxDescription": "Sandboxes provide isolated execution environments for tools and code. They are automatically created on first use and destroyed after idle timeout.",
-      "sandboxLoading": "Loading sandbox status...",
+      "sandboxLoading": "Loading sandbox status…",
       "sandboxEmpty": "No sandbox provisioned. A sandbox will be created automatically when tools are first used.",
       "sandboxStatusLabel": "Status",
       "sandboxIdLabel": "ID",
@@ -4211,7 +4211,7 @@
       "nameLabel": "Project Name *",
       "namePlaceholder": "Enter project name",
       "descriptionLabel": "Description",
-      "descriptionPlaceholder": "Add project description...",
+      "descriptionPlaceholder": "Add project description…",
       "publicLabel": "Public Project",
       "publicHint": "Public projects can be accessed by anyone with the link",
       "agentModeLabel": "Agent Conversation Mode",
@@ -4233,10 +4233,10 @@
       "createdAtPrefix": "Created",
       "deleteConfirmMessage": "Are you sure you want to delete this project? This action cannot be undone. All related memories and data will be deleted.",
       "cancel": "Cancel",
-      "deleting": "Deleting...",
+      "deleting": "Deleting…",
       "confirmDelete": "Confirm Delete",
       "deleteProject": "Delete Project",
-      "saving": "Saving...",
+      "saving": "Saving…",
       "saveChanges": "Save Changes"
     },
     "search": {
@@ -4283,7 +4283,7 @@
           "title": "Focal Node",
           "desc": "A specific node UUID to use as the center for node-distance reranking. Results closer to this node will rank higher."
         },
-        "focalPlaceholder": "e.g. node-1234-uuid...",
+        "focalPlaceholder": "e.g. node-1234-uuid…",
         "cross_encoder": "Cross-Encoder Client",
         "max_depth": "Max Depth",
         "decrease_max_depth": "Decrease max depth",
@@ -4316,16 +4316,16 @@
           "community": "Community UUID"
         },
         "placeholder": {
-          "default": "Search memories by keyword, concept, or ask a question...",
-          "graph": "Enter start entity UUID...",
-          "community": "Enter community UUID..."
+          "default": "Search memories by keyword, concept, or ask a question…",
+          "graph": "Enter start entity UUID…",
+          "community": "Enter community UUID…"
         },
-        "listening": "Listening...",
+        "listening": "Listening…",
         "voice_search": "Voice Search"
       },
       "actions": {
         "retrieve": "Retrieve",
-        "searching": "Searching...",
+        "searching": "Searching…",
         "history": "History",
         "searchHistory": "Search History",
         "noHistory": "No search history",
@@ -4374,8 +4374,8 @@
         "select_prompt": "Select a node"
       },
       "cytoscapeViewport": {
-        "loadingVisualization": "Loading graph visualization...",
-        "loadingGraph": "Loading graph...",
+        "loadingVisualization": "Loading graph visualization…",
+        "loadingGraph": "Loading graph…",
         "initializeFailed": "Failed to initialize graph visualization",
         "loadDataFailed": "Failed to load graph data"
       },
@@ -4417,7 +4417,7 @@
         "title": "Communities",
         "subtitle": "Automatically detected groups of related entities in the knowledge graph",
         "rebuild": "Rebuild Communities",
-        "rebuilding": "Rebuilding...",
+        "rebuilding": "Rebuilding…",
         "refresh": "Refresh",
         "confirm_rebuild": "This will rebuild all communities from scratch. This operation may take several minutes. The task will run in the background and you can track its progress here. Continue?",
         "task": {
@@ -4428,10 +4428,10 @@
           "connections_count": "Connections",
           "error": "Error",
           "id": "Task ID",
-          "processing": "Processing...",
+          "processing": "Processing…",
           "completed_message": "Community rebuild completed",
           "failed_message": "Community rebuild failed",
-          "status_running": "Rebuilding Communities...",
+          "status_running": "Rebuilding Communities…",
           "status_completed": "Rebuild Completed Successfully",
           "status_failed": "Rebuild Failed",
           "status_scheduled": "Rebuild Scheduled"
@@ -4441,7 +4441,7 @@
           "page": "Page {{current}} of {{total}}"
         },
         "empty": {
-          "loading": "Loading communities...",
+          "loading": "Loading communities…",
           "title": "No communities found",
           "desc": "Add more episodes to enable community detection, or rebuild communities"
         },
@@ -4461,7 +4461,7 @@
           "close": "Close community details",
           "unnamed": "Unnamed Community",
           "member_list": "Community Members ({{count}})",
-          "more_members": "...and {{count}} more",
+          "more_members": "…and {{count}} more",
           "no_members": "No members loaded",
           "select_prompt": "Select a community to view details",
           "click_prompt": "Click on any community card to see its members"
@@ -4486,7 +4486,7 @@
         "title": "Project Entities",
         "subtitle": "Explore and manage entities in the knowledge graph",
         "refresh": "Refresh Entities",
-        "loading": "Loading entities...",
+        "loading": "Loading entities…",
         "error": "Failed to load entities",
         "empty": "No entities found",
         "empty_filter": "No entities match your filters",
@@ -4500,7 +4500,7 @@
           "type": "Entity Type",
           "type_options": "Entity type options",
           "all_types": "All Types",
-          "search_placeholder": "Search entities...",
+          "search_placeholder": "Search entities…",
           "sort_by": "Sort by",
           "sort_latest": "Latest Created",
           "sort_name": "Name",
@@ -4542,27 +4542,27 @@
           "title": "Incremental Refresh",
           "desc": "Reprocess recent episodes and update graph without full rebuild",
           "button": "Refresh",
-          "loading": "Refreshing..."
+          "loading": "Refreshing…"
         },
         "dedup": {
           "title": "Deduplicate Entities",
           "desc": "Find and merge duplicate entities based on name similarity",
           "check": "Check",
           "merge": "Merge",
-          "processing": "Processing..."
+          "processing": "Processing…"
         },
         "clean": {
           "title": "Clean Stale Edges",
           "desc": "Remove relationships that haven't been updated in 30 days",
           "check": "Check",
           "clean": "Clean",
-          "cleaning": "Cleaning..."
+          "cleaning": "Cleaning…"
         },
         "rebuild": {
           "title": "Rebuild Communities",
           "desc": "Redetect communities using Louvain algorithm. Needed after major graph updates.",
           "button": "Rebuild",
-          "rebuilding": "Rebuilding..."
+          "rebuilding": "Rebuilding…"
         },
         "export": {
           "title": "Export Data",
@@ -4576,7 +4576,7 @@
           "missing_vectors": "{{count}} nodes missing vectors",
           "status_ok": "Status normal",
           "button": "Rebuild Vectors",
-          "rebuilding": "Rebuilding..."
+          "rebuilding": "Rebuilding…"
         }
       },
       "messages": {
@@ -4649,9 +4649,9 @@
           "urgent": "Urgent - Cannot Use"
         },
         "message": "Description",
-        "message_placeholder": "Describe your issue in detail...",
+        "message_placeholder": "Describe your issue in detail…",
         "submit": "Submit Ticket",
-        "submitting": "Submitting..."
+        "submitting": "Submitting…"
       },
       "tickets": {
         "close_confirm": "Are you sure you want to close this ticket?",
@@ -4701,8 +4701,8 @@
       "size": "Size",
       "dataStatus": "Data Status",
       "processing": "Processing Status",
-      "search_placeholder": "Search memories...",
-      "searchPlaceholder": "Search memories...",
+      "search_placeholder": "Search memories…",
+      "searchPlaceholder": "Search memories…",
       "contentTypeLabel": "Memory type",
       "contentTypes": {
         "text": "Text",
@@ -4760,10 +4760,10 @@
         "save_draft": "Save as Draft",
         "save_memory": "Save Memory",
         "status": {
-          "processing": "Processing Memory...",
+          "processing": "Processing Memory…",
           "completed": "Memory Processing Completed!",
           "complete": "Complete",
-          "redirecting": "Redirecting to memories list..."
+          "redirecting": "Redirecting to memories list…"
         },
         "error": {
           "processing": "Processing Error",
@@ -4799,10 +4799,10 @@
           "title_placeholder": "e.g. Q3 Strategy Meeting Notes",
           "context": "Project Context",
           "tags": "Tags",
-          "add_tag": "+ Add tag..."
+          "add_tag": "+ Add tag…"
         },
         "ai": {
-          "optimizing": "Optimizing...",
+          "optimizing": "Optimizing…",
           "assist": "AI Assist"
         },
         "actions": {
@@ -4813,7 +4813,7 @@
           "dismiss_error": "Dismiss error"
         },
         "editor": {
-          "placeholder": "# Start typing your memory here...\n\n\nYou can use Markdown syntax to format your text.\n\n- Use lists to organize thoughts\n- **Bold** key concepts\n- Connect ideas with links",
+          "placeholder": "# Start typing your memory here…\n\n\nYou can use Markdown syntax to format your text.\n\n- Use lists to organize thoughts\n- **Bold** key concepts\n- Connect ideas with links",
           "markdown_supported": "Markdown Supported"
         },
         "footer": {
@@ -4828,7 +4828,7 @@
         "edit_memory": "Edit Memory",
         "type": "Type",
         "processing": "Processing Memory",
-        "extracting_knowledge": "Extracting knowledge...",
+        "extracting_knowledge": "Extracting knowledge…",
         "tabs": {
           "content": "Content",
           "metadata": "Metadata",
@@ -4852,7 +4852,7 @@
           "share": "Share",
           "export": "Export"
         },
-        "loading": "Loading memory details...",
+        "loading": "Loading memory details…",
         "not_found": "Memory not found",
         "invalid_params": "Invalid URL parameters",
         "delete_failed": "Failed to delete memory"
@@ -4876,7 +4876,7 @@
         "copy_success": "Schema JSON copied",
         "copy_failed": "Unable to copy schema JSON",
         "no_results": "No schema types match this search.",
-        "search_placeholder": "Filter schema types by name, attribute, or tag...",
+        "search_placeholder": "Filter schema types by name, attribute, or tag…",
         "entity_types": {
           "title": "Entity Types",
           "defined": "{{count}} Defined",
@@ -4902,7 +4902,7 @@
         "title": "Entity Type Management",
         "subtitle": "Define data models, attributes, and validation rules for the knowledge graph.",
         "create": "Create Entity Type",
-        "search_placeholder": "Search entity types...",
+        "search_placeholder": "Search entity types…",
         "filter_project": "Project: All",
         "table": {
           "entity_type": "Entity Type",
@@ -4936,7 +4936,7 @@
           "data_type_label": "Data Type",
           "required": "Required",
           "docstring_label": "Description (Docstring)",
-          "docstring_placeholder": "Describe the attribute...",
+          "docstring_placeholder": "Describe the attribute…",
           "last_saved": "Last saved: {{time}}",
           "never_saved": "Never",
           "discard": "Discard Changes",
@@ -4949,14 +4949,14 @@
         "title": "Entity Types",
         "subtitle": "Define the structure of entities in your knowledge graph",
         "createButton": "Create Entity Type",
-        "searchPlaceholder": "Search entity types...",
+        "searchPlaceholder": "Search entity types…",
         "filterProject": "Project scope",
         "listView": "List View",
         "gridView": "Grid View",
         "edit": "Edit",
         "delete": "Delete",
         "deleteConfirm": "Are you sure you want to delete this entity type?",
-        "loading": "Loading...",
+        "loading": "Loading…",
         "generalSettings": "General Settings",
         "attributesSchema": "Attributes & Schema",
         "relationships": "Relationships",
@@ -5022,7 +5022,7 @@
         "title": "Relationship Type Management",
         "subtitle": "Define custom edge schemas and configure the valid connection rules between entity types.",
         "system_active": "System Status: Active",
-        "search_placeholder": "Search edge types...",
+        "search_placeholder": "Search edge types…",
         "create": "Create Edge Type",
         "list": {
           "active": "Active",
@@ -5060,7 +5060,7 @@
         "title": "Edge Types",
         "subtitle": "Define the structure of relationships in your knowledge graph",
         "createButton": "Create Edge Type",
-        "searchPlaceholder": "Search edge types...",
+        "searchPlaceholder": "Search edge types…",
         "filter": "Filter",
         "downloadSchema": "Download Schema",
         "systemActive": "System Active",
@@ -5109,7 +5109,7 @@
         "modalSave": "Save",
         "deleteConfirm": "Are you sure you want to delete this edge type?",
         "saveError": "Failed to save edge type",
-        "loading": "Loading..."
+        "loading": "Loading…"
       },
       "mappings": {
         "title": "Edge Type Mapping",
@@ -5120,7 +5120,7 @@
         "add_mapping_button": "Add Mapping",
         "all": "All",
         "filter": "Filter",
-        "search_placeholder": "Search entity types...",
+        "search_placeholder": "Search entity types…",
         "reset_defaults": "Reset Defaults",
         "filter_source": {
           "title": "Source Entity",
@@ -5169,7 +5169,7 @@
           "title": "Communities",
           "subtitle": "Automatically detected groups of related entities in the knowledge graph",
           "rebuild": "Rebuild Communities",
-          "rebuilding": "Rebuilding...",
+          "rebuilding": "Rebuilding…",
           "refresh": "Refresh",
           "confirm_rebuild": "This will rebuild all communities from scratch. This operation may take several minutes. The task will run in the background and you can track its progress here. Continue?",
           "task": {
@@ -5185,7 +5185,7 @@
             "page": "Page {{current}} of {{total}}"
           },
           "empty": {
-            "loading": "Loading communities...",
+            "loading": "Loading communities…",
             "title": "No communities found",
             "desc": "Add more episodes to enable community detection, or rebuild communities"
           },
@@ -5215,7 +5215,7 @@
           "filter": {
             "type": "Type:",
             "all_types": "All Types",
-            "search_placeholder": "Search entities by name or summary...",
+            "search_placeholder": "Search entities by name or summary…",
             "sort_by": "Sort by:",
             "sort_latest": "Latest",
             "sort_name": "Name",
@@ -5226,7 +5226,7 @@
             "showing": "Showing {{count}} of {{total}} entities"
           },
           "empty": {
-            "loading": "Loading entities...",
+            "loading": "Loading entities…",
             "no_match": "No entities match your filters",
             "not_found": "No entities found"
           },
@@ -5250,7 +5250,7 @@
       "title": "Entity Types",
       "subtitle": "Define the structure of entities in your knowledge graph",
       "create": "Create Entity Type",
-      "searchPlaceholder": "Search entity types...",
+      "searchPlaceholder": "Search entity types…",
       "filterProject": "Filter Project",
       "listView": "List View",
       "gridView": "Grid View",
@@ -5289,7 +5289,7 @@
       "edit": "Edit",
       "delete": "Delete",
       "deleteConfirm": "Are you sure you want to delete this entity type?",
-      "loading": "Loading...",
+      "loading": "Loading…",
       "generalSettings": "General Settings",
       "attributesSchema": "Attributes & Schema",
       "relationships": "Relationships",
@@ -5307,7 +5307,7 @@
       "title": "Communities",
       "subtitle": "Automatically detected groups of related entities in the knowledge graph",
       "rebuild": "Rebuild Communities",
-      "rebuilding": "Rebuilding...",
+      "rebuilding": "Rebuilding…",
       "refresh": "Refresh",
       "confirmRebuild": "This will rebuild all communities from scratch. Continue?",
       "cancel": "Cancel",
@@ -5319,7 +5319,7 @@
       "taskError": "Error",
       "showing": "Showing {{count}} of {{total}} communities",
       "page": "Page {{current}} of {{total}}",
-      "loading": "Loading communities...",
+      "loading": "Loading communities…",
       "emptyTitle": "No communities found",
       "emptyDesc": "Add more episodes to enable community detection",
       "communityDetails": "Community Details",
@@ -5380,7 +5380,7 @@
       "formNameRequired": "Name is required",
       "formNamePlaceholder": "E.g., Daily Summary Report",
       "formDescription": "Description",
-      "formDescriptionPlaceholder": "Optional description...",
+      "formDescriptionPlaceholder": "Optional description…",
       "formEnabled": "Enabled",
       "formScheduleConfiguration": "Schedule Configuration",
       "formScheduleType": "Schedule Type",
@@ -5401,10 +5401,10 @@
       "formAgentTurn": "Agent Turn (Send Message)",
       "formEventContent": "Event Content",
       "formContentRequired": "Content is required",
-      "formContentPlaceholder": "Event payload content...",
+      "formContentPlaceholder": "Event payload content…",
       "formAgentMessage": "Agent Message",
       "formMessageRequired": "Message is required",
-      "formMessagePlaceholder": "Message to send to agent...",
+      "formMessagePlaceholder": "Message to send to agent…",
       "formAdvancedSettings": "Advanced Settings",
       "formConversationMode": "Conversation Mode",
       "formReuseConversation": "Reuse single conversation",
@@ -5476,7 +5476,7 @@
       "rateLimitTooltip": "Maximum requests per minute",
       "accessControl": "Access Control",
       "diagnostics": "Diagnostics",
-      "loadingSchema": "Loading schema...",
+      "loadingSchema": "Loading schema…",
       "columns": {
         "name": "Name",
         "type": "Type",
@@ -5604,7 +5604,7 @@
       "tipStep2": "Start the local sandbox service",
       "tipStep3": "Configure the tunnel connection in the client",
       "cancel": "Cancel",
-      "creating": "Creating...",
+      "creating": "Creating…",
       "submit": "Create Project"
     },
     "entities": {
@@ -5613,7 +5613,7 @@
   },
   "dashboard": {
     "project": {
-      "title_loading": "Loading...",
+      "title_loading": "Loading…",
       "back_button_title": "Back to Projects",
       "memories": {
         "title": "Memories Management"
@@ -5714,7 +5714,7 @@
       "createProject": "Create Project",
       "changeProject": "Switch Project",
       "currentProject": "Current Project",
-      "loading": "Initializing Agent workspace...",
+      "loading": "Initializing Agent workspace…",
       "projectsLoadFailed": "Failed to load projects",
       "mode": {
         "single": "Single",
@@ -5736,7 +5736,7 @@
         "updated": "Linked task updated",
         "updateFailed": "Failed to update linked task",
         "label": "Linked workspace task",
-        "placeholder": "Pick a workspace task...",
+        "placeholder": "Pick a workspace task…",
         "hint": "Goal, budget and termination are driven by the linked task.",
         "summaryLabel": "Linked task"
       }
@@ -5776,7 +5776,7 @@
       "title": "Agent Graph",
       "clear": "Clear",
       "noActiveRun": "No active graph run",
-      "noNodes": "Waiting for nodes to start...",
+      "noNodes": "Waiting for nodes to start…",
       "outputKeys": "Output keys: {{keys}}",
       "pattern": "Pattern"
     },
@@ -5805,7 +5805,7 @@
       "traceChain": {
         "emptyTitle": "No chain data",
         "emptyDescription": "Select a trace to view its execution chain.",
-        "loading": "Loading trace chain...",
+        "loading": "Loading trace chain…",
         "runDetails": "Run details",
         "untracedRuns": "Untraced runs",
         "traceLabel": "Trace: {{id}}",
@@ -5863,14 +5863,14 @@
     },
     "activityTimeline": {
       "title": "Activity Timeline",
-      "processing": "Processing...",
+      "processing": "Processing…",
       "activityCount": "{{count}} activities",
       "activityCount_one": "{{count}} activity",
       "activityCount_other": "{{count}} activities",
       "showEarlier": "Show {{count}} earlier activities",
       "showEarlier_one": "Show {{count}} earlier activity",
       "showEarlier_other": "Show {{count}} earlier activities",
-      "waiting": "Waiting for next activity...",
+      "waiting": "Waiting for next activity…",
       "thought": "Thought",
       "tool": "Tool",
       "executionTime": "Execution time",
@@ -5951,7 +5951,7 @@
       "messageCount_one": "{{count}} msg",
       "messageCount_other": "{{count}} msgs",
       "showLess": "Show less",
-      "showMore": "Show {{count}} more...",
+      "showMore": "Show {{count}} more…",
       "spawnable": "spawnable",
       "unknown": "Unknown"
     },
@@ -6023,7 +6023,7 @@
     "chatHistory": {
       "newConversationAria": "New conversation",
       "newChat": "New Chat",
-      "searchPlaceholder": "Search history...",
+      "searchPlaceholder": "Search history…",
       "searchAria": "Search conversation history",
       "recentSessions": "Recent Sessions",
       "older": "Older",
@@ -6108,7 +6108,7 @@
     },
     "streamingThought": {
       "reasoning": "Reasoning",
-      "thinking": "Thinking..."
+      "thinking": "Thinking…"
     },
     "simpleExecution": {
       "title": "Tool Executions",
@@ -6118,7 +6118,7 @@
       "completed": "{{count}} completed",
       "running": "{{count}} running",
       "failed": "{{count}} failed",
-      "processing": "Processing..."
+      "processing": "Processing…"
     },
     "results": {
       "multiSource": {
@@ -6182,7 +6182,7 @@
       "chat": "Chat",
       "streaming": "Streaming",
       "closeChat": "Close chat",
-      "placeholder": "Send a message...",
+      "placeholder": "Send a message…",
       "sendMessage": "Send message"
     },
     "executionStats": {
@@ -6216,7 +6216,7 @@
       "selectModel": "Select a model",
       "autoRouter": "Auto (Router)",
       "autoRouterDescription": "Let the platform pick the best model per turn",
-      "loadingModels": "Loading models...",
+      "loadingModels": "Loading models…",
       "noModels": "No models available",
       "updateFailed": "Failed to update model override",
       "resetFailed": "Failed to reset model override"
@@ -6237,8 +6237,8 @@
       "ariaLabel": "Agent thinking process",
       "workLevel": "Work-level Thinking",
       "taskLevel": "Task-level Thinking",
-      "thinking": "Thinking...",
-      "processing": "Processing...",
+      "thinking": "Thinking…",
+      "processing": "Processing…",
       "step": "Step {{step}}",
       "expandThought": "Expand thought",
       "collapseThought": "Collapse thought"
@@ -6258,14 +6258,14 @@
       "speaker": "Speaker",
       "camera": "Camera",
       "expandPanel": "Expand voice call panel",
-      "connecting": "Connecting...",
+      "connecting": "Connecting…",
       "error": "Error",
       "minimizePanel": "Minimize voice call panel"
     },
     "layout": {
       "resizePanels": "Resize panels",
       "searchCurrentConversation": "Search current conversation",
-      "searchCurrentConversationPlaceholder": "Search current conversation...",
+      "searchCurrentConversationPlaceholder": "Search current conversation…",
       "online": "Agent Online",
       "viewExecutionHistory": "View execution history",
       "viewWorkflowPatterns": "View workflow patterns"
@@ -6363,15 +6363,15 @@
         "cancel": "Cancel"
       },
       "messages": {
-        "terminating": "Terminating Agent instance...",
-        "stopping": "Stopping Agent...",
+        "terminating": "Terminating Agent instance…",
+        "stopping": "Stopping Agent…",
         "stopFailed": "Failed to stop Agent",
-        "restarting": "Restarting Agent instance...",
-        "restartingAgent": "Restarting Agent...",
+        "restarting": "Restarting Agent instance…",
+        "restartingAgent": "Restarting Agent…",
         "restartFailed": "Failed to restart Agent",
-        "pausing": "Pausing Agent instance...",
+        "pausing": "Pausing Agent instance…",
         "pauseFailed": "Failed to pause Agent",
-        "resuming": "Resuming Agent instance...",
+        "resuming": "Resuming Agent instance…",
         "resumeFailed": "Failed to resume Agent"
       },
       "error": {
@@ -6424,10 +6424,10 @@
         }
       },
       "input": {
-        "placeholder": "Type a message...",
+        "placeholder": "Type a message…",
         "send": "Send",
         "stop": "Stop",
-        "thinking": "Thinking...",
+        "thinking": "Thinking…",
         "planMode": "Plan Mode"
       },
       "header": {
@@ -6507,12 +6507,12 @@
     "thread": {
       "reply": "Reply",
       "replies": "{{count}} replies",
-      "replyPlaceholder": "Write a reply...",
+      "replyPlaceholder": "Write a reply…",
       "sendReply": "Send reply"
     },
     "thinking": {
       "title": "Thinking",
-      "analyzing": "Analyzing your request...",
+      "analyzing": "Analyzing your request…",
       "duration": "{{seconds}}s",
       "collapse": "Collapse thinking",
       "expand": "Expand thinking",
@@ -6560,7 +6560,7 @@
     },
     "statusBar": {
       "connection": {
-        "loading": "Loading...",
+        "loading": "Loading…",
         "websocketConnected": "WebSocket Connected",
         "ready": "Ready",
         "activeToolCalls": "Active tool calls: {{count}}",
@@ -6570,8 +6570,8 @@
     },
     "projectSelector": {
       "aria": "Select project for agent conversation",
-      "loading": "Loading...",
-      "loadingConversations": "Loading conversations...",
+      "loading": "Loading…",
+      "loadingConversations": "Loading conversations…",
       "noProjectsAvailable": "No projects available",
       "selectProject": "Select a project",
       "noProjectsFound": "No projects found",
@@ -6595,6 +6595,10 @@
       "delete": "Delete",
       "deleteTitle": "Delete Conversation",
       "deleteConfirm": "Are you sure? This action cannot be undone.",
+      "deleteDescription": "This conversation and its messages will be permanently removed.",
+      "deletedToast": "Conversation deleted",
+      "deleteFailed": "Failed to delete conversation",
+      "undo": "Undo",
       "untitled": "Untitled",
       "needsInput": "Needs input",
       "processing": "Processing",
@@ -6609,12 +6613,12 @@
       "projectSwitcher": "Project switcher",
       "searchProjects": "Search projects",
       "searchProjectsPlaceholder": "Search all authorized projects",
-      "searchingProjects": "Searching projects...",
+      "searchingProjects": "Searching projects…",
       "projectSearchResults": "Authorized project search results",
       "selectedProjectBadge": "Selected",
       "projectSearchCount": "Showing {{count}} of {{total}} projects",
       "loadMoreProjects": "Load more",
-      "loadingMoreProjects": "Loading...",
+      "loadingMoreProjects": "Loading…",
       "expandSidebar": "Expand sidebar",
       "collapseSidebar": "Collapse sidebar",
       "conversations": "conversations",
@@ -6636,11 +6640,11 @@
       "showSummary": "Show summary",
       "collapse": "Collapse summary",
       "regenerate": "Regenerate summary",
-      "generating": "Generating summary..."
+      "generating": "Generating summary…"
     },
     "messageBubble": {
       "reasoning": "Reasoning",
-      "thinking": "Thinking...",
+      "thinking": "Thinking…",
       "running": "Running",
       "success": "Success",
       "failed": "Failed",
@@ -6653,17 +6657,17 @@
       "fileGenerated": "File Generated",
       "imageLoadFailed": "Failed to load image",
       "download": "Download",
-      "refreshing": "Refreshing...",
+      "refreshing": "Refreshing…",
       "refreshLink": "Refresh",
-      "uploading": "Uploading...",
+      "uploading": "Uploading…",
       "uploadFailed": "Upload failed",
       "openInCanvas": "Canvas",
       "openSandboxFileInCanvas": "Open {{path}} in Canvas",
       "subAgentIcon": "SubAgent Icon"
     },
     "inputBar": {
-      "placeholder": "Ask me anything, or type '/' for commands...",
-      "planPlaceholder": "Describe what you want to plan in detail...",
+      "placeholder": "Ask me anything, or type '/' for commands…",
+      "planPlaceholder": "Describe what you want to plan in detail…",
       "planModeActive": "Plan Mode Active",
       "attachFiles": "Attach files (or drag & drop)",
       "attachNotSupported": "Current model does not support file attachments",
@@ -6682,7 +6686,7 @@
       "modeToggle": "Toggle input mode",
       "chatMode": "Chat",
       "commandMode": "Command",
-      "commandPlaceholder": "Enter a command...",
+      "commandPlaceholder": "Enter a command…",
       "removeSelectedSkill": "Remove /{{name}} skill",
       "removeSelectedSubAgent": "Remove @{{name}} subagent",
       "retryAttachmentUpload": "Retry upload for {{filename}}",
@@ -6695,14 +6699,14 @@
     "mentions": {
       "title": "Mention entities or memories",
       "noResults": "No results found",
-      "typeToSearch": "Type to search...",
+      "typeToSearch": "Type to search…",
       "coordinator": "Coordinator",
       "loadSubAgentsFailed": "Failed to load sub-agents",
       "searchFailed": "Failed to search mentions"
     },
     "slashCommand": {
       "title": "Skills",
-      "loading": "Loading skills...",
+      "loading": "Loading skills…",
       "matching": "Skills matching \"{{query}}\"",
       "noMatch": "No skills matching \"{{query}}\"",
       "noSkills": "No active skills available",
@@ -6737,7 +6741,7 @@
       "copy": "Copy",
       "download": "Download",
       "backToChat": "Back to chat",
-      "loadingContent": "Loading content...",
+      "loadingContent": "Loading content…",
       "selectionExplain": "Explain",
       "selectionSimplify": "Simplify",
       "selectionExpand": "Expand",
@@ -6775,7 +6779,7 @@
         "refresh": "Refresh files",
         "collapse": "Collapse file browser",
         "expand": "Expand file browser",
-        "loading": "Loading files...",
+        "loading": "Loading files…",
         "empty": "No files found",
         "noProject": "Select a project to browse files.",
         "loadFailed": "Failed to load files",
@@ -6807,13 +6811,13 @@
     "artifact": {
       "fileGenerated": "File generated",
       "download": "Download",
-      "uploading": "Uploading...",
+      "uploading": "Uploading…",
       "openInCanvas": "Open in Canvas"
     },
     "timeline": {
       "input": "Input",
       "output": "Output",
-      "running": "Running {{count}} tools...",
+      "running": "Running {{count}} tools…",
       "runningWithTools": "Execute {{count}} tools: {{tools}}",
       "completed": "{{completed}}/{{total}} steps completed",
       "completedWithTools": "Finish {{total}} tools: {{tools}}",
@@ -6912,8 +6916,8 @@
       "depth_limited": "Depth Limited: {{name}}",
       "parallel_tasks": "Parallel execution: {{count}} tasks",
       "chain_steps": "Chain: {{name}} ({{count}} steps)",
-      "executing": "Executing...",
-      "parallel_subtaskRunning": "Running...",
+      "executing": "Executing…",
+      "parallel_subtaskRunning": "Running…",
       "parallel_subtaskPending": "Pending",
       "parallel_subtaskDone": "Done",
       "parallel_subtaskFailed": "Failed",
@@ -6921,7 +6925,7 @@
       "live_preview": "Live",
       "action_stop": "Stop",
       "action_redirect": "Redirect",
-      "redirect_placeholder": "Enter new instructions...",
+      "redirect_placeholder": "Enter new instructions…",
       "send_redirect": "Send redirect",
       "cancel_redirect": "Cancel redirect",
       "parallel_badge": "Parallel",
@@ -6931,7 +6935,7 @@
       "viewDetails": "Show details",
       "hideDetails": "Hide details",
       "progress": {
-        "initializing": "Initializing...",
+        "initializing": "Initializing…",
         "routed": "Routed",
         "started": "Started",
         "executing": "Executing",
@@ -6962,7 +6966,7 @@
     },
     "templates": {
       "title": "Prompt Templates",
-      "search": "Search templates...",
+      "search": "Search templates…",
       "noResults": "No templates found",
       "closeLibrary": "Close template library",
       "all": "All",
@@ -7013,7 +7017,7 @@
       "seedError": "Failed to seed templates"
     },
     "search": {
-      "placeholder": "Search in conversation...",
+      "placeholder": "Search in conversation…",
       "noResults": "0 results",
       "previousResult": "Previous result",
       "nextResult": "Next result",
@@ -7062,7 +7066,7 @@
         "aria": "Pending HITL requests",
         "title": "HITL Center",
         "filterAria": "Filter by HITL type",
-        "loading": "Loading...",
+        "loading": "Loading…",
         "error": "Failed to load HITL requests",
         "empty": "No pending requests.",
         "accept": "Accept",
@@ -7093,8 +7097,8 @@
         "remember_choice": "Remember this choice"
       },
       "placeholder": {
-        "enter_answer": "Enter your answer...",
-        "enter_decision": "Enter your decision...",
+        "enter_answer": "Enter your answer…",
+        "enter_decision": "Enter your decision…",
         "env_vars_fallback": "Environment variables"
       },
       "none": {
@@ -7198,7 +7202,7 @@
         "processes": "Processes",
         "uptime": "Uptime"
       },
-      "loading": "Loading...",
+      "loading": "Loading…",
       "duration": {
         "seconds": "s",
         "minutes": "m",
@@ -7213,7 +7217,7 @@
       "statusRunning": "Running",
       "statusWaiting": "Waiting",
       "toolsLabel": "{{count}} tools",
-      "runningEllipsis": "Running...",
+      "runningEllipsis": "Running…",
       "expandAll": "Expand all",
       "collapseAll": "Collapse all"
     },
@@ -7234,7 +7238,7 @@
     "participants": {
       "aria": "Conversation participants",
       "title": "Participants",
-      "loading": "Loading roster...",
+      "loading": "Loading roster…",
       "error": "Failed to load roster",
       "empty": "No agents in this conversation.",
       "sourceWorkspace": "workspace",
@@ -7250,7 +7254,7 @@
       "isolatedSuggestsFocused": "Isolated mode works best with one focused agent. Click ◎ on a participant to set it.",
       "noneAvailable": "No more agents available. Add agents to the linked workspace to see them here.",
       "addLabel": "Add agent",
-      "addPlaceholder": "Select an agent..."
+      "addPlaceholder": "Select an agent…"
     }
   },
   "user_profile": {
@@ -7318,7 +7322,7 @@
     "buttons": {
       "cancel": "Cancel",
       "save": "Save Changes",
-      "saving": "Saving..."
+      "saving": "Saving…"
     },
     "toast": {
       "success_title": "Successfully saved!",
@@ -7328,9 +7332,9 @@
   "comparison": {
     "title": "Compare Conversations",
     "selectConversation": "Select conversation to compare",
-    "search": "Search conversations...",
+    "search": "Search conversations…",
     "noResults": "No conversations found",
-    "loading": "Loading...",
+    "loading": "Loading…",
     "noMessages": "No messages",
     "exitCompare": "Exit comparison",
     "compare": "Compare"
@@ -7386,7 +7390,7 @@
       "goHome": "Go to Home",
       "goToWorkspace": "Go to Workspace"
     },
-    "accepting": "Accepting invitation..."
+    "accepting": "Accepting invitation…"
   },
   "workspaceSettings": {
     "title": "Workspace Settings",
@@ -7575,8 +7579,8 @@
     "title": "Workspace",
     "missingContext": "Missing workspace context.",
     "openInAgentWorkspace": "Open in Agent Workspace",
-    "loadingSurface": "Loading workspace surface...",
-    "loading3DView": "Loading 3D View...",
+    "loadingSurface": "Loading workspace surface…",
+    "loading3DView": "Loading 3D View…",
     "errorLoadingWorkspace": "Failed to load workspace. Please try again.",
     "tabs": {
       "overview": "Overview",
@@ -7612,7 +7616,7 @@
     },
     "taskBoard": {
       "title": "Task Board",
-      "taskTitlePlaceholder": "Task title...",
+      "taskTitlePlaceholder": "Task title…",
       "taskTitle": "Task title",
       "priority": "Priority",
       "effort": "Effort",
@@ -7648,7 +7652,7 @@
     "chat": {
       "noMessages": "No messages yet. Start the conversation!",
       "messageInputAria": "Chat message input",
-      "messagePlaceholder": "Type a message... (Use @ to mention)",
+      "messagePlaceholder": "Type a message… (Use @ to mention)",
       "mentionBroadcast": "broadcast",
       "mentionHuman": "human",
       "mentionAgent": "agent"
@@ -7769,7 +7773,7 @@
       "titleRequired": "Please enter a title",
       "titlePlaceholder": "E.g., Increase Q3 Revenue",
       "descriptionLabel": "Description",
-      "descriptionPlaceholder": "Add some details about this objective...",
+      "descriptionPlaceholder": "Add some details about this objective…",
       "typeLabel": "Type",
       "typeRequired": "Please select a type",
       "typeObjective": "Objective",
@@ -7793,7 +7797,7 @@
       "createSuccess": "Gene created",
       "updateSuccess": "Gene updated",
       "importFromMarketplace": "Import from Marketplace",
-      "marketplaceSearchPlaceholder": "Search marketplace genes...",
+      "marketplaceSearchPlaceholder": "Search marketplace genes…",
       "noMarketplaceResults": "No marketplace genes found",
       "errors": {
         "nameRequired": "Name is required"
@@ -7890,7 +7894,7 @@
     "confirmPassword": "Confirm New Password",
     "confirmPasswordPlaceholder": "Re-enter your new password",
     "submit": "Change Password",
-    "loading": "Changing password...",
+    "loading": "Changing password…",
     "success": "Password changed successfully.",
     "failed": "Failed to change password.",
     "passwordMismatch": "Passwords do not match.",
@@ -8049,7 +8053,7 @@
         "title": "Discard Message(s)",
         "confirmMessage": "You are about to discard {{count}} message(s). This action cannot be undone.",
         "reasonLabel": "Please provide a reason for discarding:",
-        "reasonPlaceholder": "e.g., Duplicate event, Stale data, Manual fix applied..."
+        "reasonPlaceholder": "e.g., Duplicate event, Stale data, Manual fix applied…"
       }
     }
   },
@@ -8069,7 +8073,7 @@
     "editReview": "Edit Review",
     "deleteReview": "Delete Review",
     "deleteReviewConfirm": "Are you sure you want to delete this review?",
-    "reviewPlaceholder": "Share your thoughts about this gene...",
+    "reviewPlaceholder": "Share your thoughts about this gene…",
     "reviewSubmitSuccess": "Review submitted successfully",
     "reviewSubmitError": "Failed to submit review",
     "reviewDeleteSuccess": "Review deleted successfully",
@@ -8229,11 +8233,11 @@
     },
     "tools": {
       "allServers": "All servers",
-      "loading": "Loading tools...",
+      "loading": "Loading tools…",
       "totalTools": "Total tools",
       "serversWithTools": "Servers with tools",
       "showCount": "Showing {{shown}} / {{total}}",
-      "searchPlaceholder": "Search tool name or description...",
+      "searchPlaceholder": "Search tool name or description…",
       "filterByServer": "Filter by server",
       "emptyNoTools": "No tools yet",
       "emptyNoMatch": "No matching tools",
@@ -8242,11 +8246,11 @@
     },
     "prompts": {
       "allServers": "All servers",
-      "loading": "Loading prompts...",
+      "loading": "Loading prompts…",
       "totalPrompts": "Total prompts",
       "serversWithPrompts": "Servers with prompts",
       "showCount": "Showing {{shown}} / {{total}}",
-      "searchPlaceholder": "Search prompt name or description...",
+      "searchPlaceholder": "Search prompt name or description…",
       "filterByServer": "Filter by server",
       "emptyNoPrompts": "No prompts yet",
       "emptyNoMatch": "No matching prompts",
@@ -8264,7 +8268,7 @@
       "logLevel": "Log level",
       "setLevel": "Set level",
       "refresh": "Refresh",
-      "loading": "Loading logs...",
+      "loading": "Loading logs…",
       "emptySelected": "No log messages captured yet",
       "emptyNoServer": "Select a server to view logs",
       "fetchFailed": "Failed to load server logs",
@@ -8289,12 +8293,12 @@
       "deleteFailed": "Failed to delete MCP app",
       "refreshSuccess": "App refreshed",
       "retryFailed": "Retry failed",
-      "loading": "Loading MCP apps...",
+      "loading": "Loading MCP apps…",
       "totalApps": "Total apps",
       "statusReady": "Ready",
       "statusLoading": "Loading",
       "statusError": "Error",
-      "searchPlaceholder": "Search apps...",
+      "searchPlaceholder": "Search apps…",
       "refresh": "Refresh",
       "empty": "No MCP apps",
       "emptyHint": "Apps will appear here once MCP servers are discovered."
@@ -8325,7 +8329,7 @@
       }
     },
     "servers": {
-      "searchPlaceholder": "Search server name or description...",
+      "searchPlaceholder": "Search server name or description…",
       "statusAll": "All status",
       "statusEnabled": "Enabled",
       "statusDisabled": "Disabled",
@@ -8357,7 +8361,7 @@
       "reconcileSuccess": "Runtime reconciled: {{restored}} restored, {{running}} already running, {{failed}} failed",
       "reconcileFailed": "Failed to reconcile MCP runtime",
       "errorBanner": "{{count}} servers have sync errors. Please check server card details.",
-      "loadingServers": "Loading servers...",
+      "loadingServers": "Loading servers…",
       "emptyTitle": "No MCP Servers",
       "emptyHint": "Create your first MCP server to enable powerful tools and capabilities",
       "emptyCreateButton": "Create Server",
@@ -8371,7 +8375,7 @@
       "titleLabel": "Title",
       "titlePlaceholder": "Enter memory title",
       "contentLabel": "Content",
-      "contentPlaceholder": "Enter memory content...",
+      "contentPlaceholder": "Enter memory content…",
       "tagsLabel": "Tags",
       "removeTagAria": "Remove tag {{tag}}",
       "addTagPlaceholder": "Add new tag",
@@ -8379,7 +8383,7 @@
       "addTag": "Add",
       "optimisticLockWarning": "This memory uses optimistic locking. If another user modified it concurrently, please reload and try again.",
       "cancel": "Cancel",
-      "saving": "Saving...",
+      "saving": "Saving…",
       "save": "Save changes"
     },
     "detail": {
@@ -8416,7 +8420,7 @@
       "createdPrefix": "Created:",
       "updatedPrefix": "Updated:",
       "contentHeading": "Memory Content",
-      "contentPlaceholder": "Enter memory content...",
+      "contentPlaceholder": "Enter memory content…",
       "entitiesHeading": "Entities",
       "relationshipsHeading": "Relationships",
       "confidencePrefix": "Confidence:",
@@ -8430,13 +8434,13 @@
       "title": "Memory Management",
       "countSuffix": "({{count}} items)",
       "newButton": "New Memory",
-      "searchPlaceholder": "Search memories...",
+      "searchPlaceholder": "Search memories…",
       "typeAll": "All Types",
       "typeText": "Text",
       "typeDocument": "Document",
       "typeImage": "Image",
       "typeVideo": "Video",
-      "userFilterPlaceholder": "Filter by user...",
+      "userFilterPlaceholder": "Filter by user…",
       "search": "Search",
       "reset": "Reset",
       "emptyHeading": "No Memories",
@@ -8471,7 +8475,7 @@
       "extractionHint": "Click the buttons below to automatically extract entities and relationships from the text. Make sure you have entered content in Basic Info.",
       "extractEntities": "Extract Entities",
       "extractRelationships": "Extract Relationships",
-      "extracting": "Extracting...",
+      "extracting": "Extracting…",
       "extractedEntitiesHeading": "Extracted Entities",
       "extractedRelationshipsHeading": "Extracted Relationships",
       "metadataLabel": "Metadata Settings",
@@ -8481,7 +8485,7 @@
       "tagsPlaceholder": "Enter tags separated by commas",
       "tagsHelp": "Use commas to separate multiple tags",
       "cancel": "Cancel",
-      "creating": "Creating...",
+      "creating": "Creating…",
       "submit": "Create Memory"
     }
   },
@@ -8528,8 +8532,8 @@
     "recommended": "Recommended",
     "customAnswer": "Custom input",
     "customDecision": "Custom decision",
-    "answerPlaceholder": "Enter your answer...",
-    "decisionPlaceholder": "Enter your decision...",
+    "answerPlaceholder": "Enter your answer…",
+    "decisionPlaceholder": "Enter your decision…",
     "noPresetOptions": "No preset options available, please enter manually",
     "emptyOptionsMessage": "No options available",
     "emptyOptionsDescription": "There are no options to select from",
@@ -8559,7 +8563,7 @@
   "components": {
     "taskList": {
       "title": "Tasks",
-      "searchPlaceholder": "Search Task ID or Name...",
+      "searchPlaceholder": "Search Task ID or Name…",
       "refresh": "Refresh tasks",
       "empty": "No tasks found",
       "confirmStop": "Are you sure you want to stop this task?",
@@ -8605,7 +8609,7 @@
     },
     "mcpApp": {
       "renderer": {
-        "loading": "Loading MCP App...",
+        "loading": "Loading MCP App…",
         "loadFailed": "Failed to load MCP App",
         "noUiResource": "This MCP tool does not provide a UI resource. Showing tool result below.",
         "exitFullscreen": "Exit fullscreen",
@@ -8615,7 +8619,7 @@
       "launcher": {
         "title": "MCP Apps",
         "refreshApps": "Refresh apps",
-        "searchPlaceholder": "Search apps...",
+        "searchPlaceholder": "Search apps…",
         "noSearchResults": "No apps match your search",
         "empty": "No MCP apps available",
         "loadFailed": "Failed to load MCP apps",
@@ -8636,7 +8640,7 @@
     },
     "deleteConfirmation": {
       "cancel": "Cancel",
-      "deleting": "Deleting...",
+      "deleting": "Deleting…",
       "delete": "Delete"
     },
     "stateDisplay": {
@@ -8780,7 +8784,7 @@
           "noAuthentication": "This provider does not require a credential."
         },
         "providerInformation": "Provider Information",
-        "saving": "Saving...",
+        "saving": "Saving…",
         "updateProvider": "Update Provider",
         "createProvider": "Create Provider",
         "auth": {
@@ -8821,18 +8825,18 @@
           }
         },
         "usePresetModel": "Use preset model",
-        "customModelNameOption": "Custom model name...",
+        "customModelNameOption": "Custom model name…",
         "customModelPlaceholder": "Enter custom model name",
-        "loadingModels": "Loading models...",
+        "loadingModels": "Loading models…",
         "selectModel": "Select a model",
-        "fetchingModels": "Fetching available models...",
+        "fetchingModels": "Fetching available models…",
         "primaryLlmModel": "Primary LLM Model",
         "smallFastModelOptional": "Small/Fast Model (Optional)",
         "embeddingModel": "Embedding Model",
         "embeddingModelOptional": "Embedding Model (Optional)",
         "rerankerModel": "Reranker Model",
         "rerankerModelOptional": "Reranker Model (Optional)",
-        "selectOrEnterCustomModel": "Select or enter custom model...",
+        "selectOrEnterCustomModel": "Select or enter custom model…",
         "active": "Active",
         "setAsDefault": "Set as Default",
         "userIdOptional": "User ID (Optional)",
@@ -8920,7 +8924,7 @@
       },
       "modelCatalog": {
         "providerIconAria": "provider",
-        "searchPlaceholder": "Search models by name, provider, or capability...",
+        "searchPlaceholder": "Search models by name, provider, or capability…",
         "filtersLabel": "Filters:",
         "columns": {
           "model": "Model",
@@ -8966,7 +8970,7 @@
       },
       "selector": {
         "title": "Select Provider",
-        "searchPlaceholder": "Search providers...",
+        "searchPlaceholder": "Search providers…",
         "searchAria": "Search providers",
         "empty": "No providers found."
       },
@@ -8999,8 +9003,8 @@
       "loadVideoFailed": "Failed to load video",
       "loadAudioFailed": "Failed to load audio",
       "loadPdfFailed": "Failed to load PDF",
-      "preparing": "Preparing...",
-      "uploading": "Uploading...",
+      "preparing": "Preparing…",
+      "uploading": "Uploading…",
       "loadFailed": "Failed to load artifact",
       "deletedTitle": "Artifact deleted",
       "deletedDescription": "This artifact has been removed.",
@@ -9123,7 +9127,7 @@
       "exportingPdf": "Exporting PDF",
       "exportAsPdf": "Export as PDF",
       "exportToPdf": "Export to PDF",
-      "exporting": "Exporting...",
+      "exporting": "Exporting…",
       "pdf": "PDF",
       "linkCopied": "Link copied",
       "shareAria": "Share conversation link",
@@ -9151,7 +9155,7 @@
       "openInNewTab": "Open in new tab",
       "screenshotAlt": "Screenshot",
       "screenshotCaptured": "Screenshot captured",
-      "executing": "Executing..."
+      "executing": "Executing…"
     },
     "toolExecutionLive": {
       "status": {
@@ -9180,7 +9184,7 @@
         "partialResults": "{{count}} partial results",
         "awaitingResponse": "Awaiting response"
       },
-      "scanningTitle": "Scanning knowledge graph...",
+      "scanningTitle": "Scanning knowledge graph…",
       "scanningDescription": "Searching for relevant entities and relationships",
       "searchCompleted": "Search completed",
       "resultsFound": "{{count}} results found",
@@ -9209,7 +9213,7 @@
       "actions": "Actions",
       "copied": "Copied!",
       "copyToClipboard": "Copy to Clipboard",
-      "exporting": "Exporting...",
+      "exporting": "Exporting…",
       "exportAsPdf": "Export as PDF",
       "shareWithTeam": "Share with Team",
       "generated": "Generated {{time}}",
@@ -9237,7 +9241,7 @@
       },
       "patternDefinition": "Pattern Definition",
       "adminNotes": "Admin Notes",
-      "adminNotesPlaceholder": "Add notes about this pattern...",
+      "adminNotesPlaceholder": "Add notes about this pattern…",
       "deletePattern": "Delete Pattern"
     },
     "jitContext": {
@@ -9275,7 +9279,7 @@
       },
       "errorPrefix": "Error: {{error}}",
       "unknownRole": "Unknown message role",
-      "renderFailed": "Failed to render message {{messageId}}...",
+      "renderFailed": "Failed to render message {{messageId}}…",
       "messageAria": "{{role}} message"
     },
     "messageErrorBoundary": {
@@ -9340,11 +9344,11 @@
         "count": "{{count}} {{status}}"
       },
       "buildingArguments": "Building Arguments",
-      "preparingToolCall": "Preparing tool call...",
+      "preparingToolCall": "Preparing tool call…",
       "input": "Input",
       "executionMode": "Execution Mode",
       "liveResults": "Live Results",
-      "executing": "Executing..."
+      "executing": "Executing…"
     },
     "timelineNode": {
       "status": {
@@ -9363,13 +9367,13 @@
       "toolExecutions": "Tool Executions"
     },
     "timelineItems": {
-      "loadingMarkdown": "Loading..."
+      "loadingMarkdown": "Loading…"
     },
     "messageArea": {
-      "loadingConversation": "Loading conversation...",
+      "loadingConversation": "Loading conversation…",
       "emptyTitle": "No messages yet",
       "emptySubtitle": "Start a conversation to see messages here",
-      "loading": "Loading...",
+      "loading": "Loading…",
       "copyFailed": "Failed to copy to clipboard",
       "scrollToBottom": "Scroll to bottom"
     },
@@ -9404,7 +9408,7 @@
       "autoResolution": "Auto (fit panel)",
       "status": {
         "disconnected": "Disconnected",
-        "connecting": "Connecting...",
+        "connecting": "Connecting…",
         "connected": "Connected",
         "error": "Error"
       },
@@ -9413,7 +9417,7 @@
       "reconnect": "Reconnect",
       "fullscreen": "Fullscreen",
       "exitFullscreen": "Exit fullscreen",
-      "connectingToDesktop": "Connecting to desktop...",
+      "connectingToDesktop": "Connecting to desktop…",
       "failedToConnect": "Failed to connect to desktop"
     },
     "sandboxSection": {
@@ -9424,7 +9428,7 @@
       "startTerminal": "Start Terminal",
       "startDesktop": "Start Desktop",
       "connected": "Connected",
-      "connecting": "Connecting...",
+      "connecting": "Connecting…",
       "reconnect": "Reconnect",
       "desktopRunning": "Desktop Running",
       "fullscreen": "Fullscreen",
@@ -9443,16 +9447,16 @@
     "sandboxTerminal": {
       "connected": "Terminal ({{sessionId}})",
       "unknown": "unknown",
-      "connecting": "Connecting...",
+      "connecting": "Connecting…",
       "error": "Error",
       "disconnected": "Disconnected",
       "reconnect": "Reconnect",
       "exitFullscreen": "Exit Fullscreen",
       "fullscreen": "Fullscreen",
-      "connectingToTerminal": "Connecting to terminal...",
+      "connectingToTerminal": "Connecting to terminal…",
       "connectionError": "Connection Error",
       "retry": "Retry",
-      "loadingTerminal": "Loading terminal..."
+      "loadingTerminal": "Loading terminal…"
     },
     "remoteDesktop": {
       "notRunning": "Desktop is not running",
@@ -9461,7 +9465,7 @@
     "sandboxControl": {
       "remoteDesktop": "Remote Desktop",
       "webTerminal": "Web Terminal",
-      "starting": "Starting...",
+      "starting": "Starting…",
       "running": "Running",
       "stopped": "Stopped",
       "resolution": "Resolution:",
@@ -9487,5 +9491,28 @@
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "systemMode": "System Mode"
+  },
+  "commandPalette": {
+    "title": "Command palette",
+    "trigger": "Command palette (⌘K)",
+    "placeholder": "Search commands, pages, conversations…",
+    "resultsLabel": "Command results",
+    "noResults": "No results found",
+    "groups": {
+      "actions": "Actions",
+      "navigation": "Navigation",
+      "recentConversations": "Recent conversations"
+    },
+    "actions": {
+      "newConversation": "New conversation",
+      "switchToLight": "Switch to light theme",
+      "switchToDark": "Switch to dark theme",
+      "switchToEnglish": "Switch to English",
+      "switchToChinese": "切换到中文"
+    },
+    "hints": {
+      "navigate": "navigate",
+      "select": "select"
+    }
   }
 }

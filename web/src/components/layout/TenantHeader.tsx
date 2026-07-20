@@ -29,6 +29,7 @@ import {
   Monitor,
   Languages,
   Activity,
+  Command,
 } from 'lucide-react';
 
 import { useAuthActions, useUser } from '@/stores/auth';
@@ -57,6 +58,7 @@ interface TenantHeaderProps {
   onSidebarToggle: () => void;
   onMobileMenuOpen: () => void;
   projectId?: string | undefined;
+  onCommandPaletteOpen?: (() => void) | undefined;
 }
 
 function getThemePresentation(
@@ -88,6 +90,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   onSidebarToggle,
   onMobileMenuOpen,
   projectId,
+  onCommandPaletteOpen,
 }) => {
   const { t } = useTranslation();
   const location = useLocation();
@@ -193,6 +196,18 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-none">
+            {onCommandPaletteOpen ? (
+              <button
+                type="button"
+                onClick={onCommandPaletteOpen}
+                className="hidden md:flex items-center gap-2 h-9 px-2.5 rounded-lg border border-slate-200 dark:border-border-dark text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                aria-label={t('commandPalette.trigger', 'Command palette (⌘K)')}
+                title={t('commandPalette.trigger', 'Command palette (⌘K)')}
+              >
+                <Command size={16} />
+                <kbd className="text-[10px] font-medium tracking-wide opacity-70">⌘K</kbd>
+              </button>
+            ) : null}
             <SearchButton searchPath={searchPath} />
             <BackgroundTasksButton />
             <NotificationDropdown />
@@ -502,7 +517,7 @@ function HeaderUserMenu({
       >
         <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-xs font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            <img src={avatarUrl} alt={displayName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             initials
           )}

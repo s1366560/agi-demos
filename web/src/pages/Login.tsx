@@ -145,7 +145,12 @@ export const Login: React.FC = () => {
               <div className="relative">
                 <input
                   id="email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
@@ -177,7 +182,9 @@ export const Login: React.FC = () => {
               <div className="relative">
                 <input
                   id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
@@ -211,7 +218,7 @@ export const Login: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isLoading || authLoading}
               data-testid="login-submit-button"
             >
@@ -245,7 +252,8 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
-          {/* Demo Credentials Hint */}
+          {/* Demo Credentials Hint — dev-only so production never exposes seed accounts. */}
+          {import.meta.env.DEV && (
           <div className="mt-10 p-5 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
             <div className="flex items-center space-x-2 mb-3">
               <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -282,6 +290,7 @@ export const Login: React.FC = () => {
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

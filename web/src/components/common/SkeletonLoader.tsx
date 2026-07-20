@@ -2,6 +2,8 @@ import React from 'react';
 
 import { Skeleton, Card, Row, Col } from 'antd';
 
+import { useThemeColor } from '@/hooks/useThemeColor';
+
 export interface SkeletonLoaderProps {
   type?: 'list' | 'card' | 'table' | 'form' | 'chat' | undefined;
   count?: number | undefined;
@@ -21,6 +23,11 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
   count = 3,
   rows = 5,
 }) => {
+  // Theme-aware colors (resolved from design tokens)
+  const borderColor = useThemeColor('--color-border');
+  const primaryColor = useThemeColor('--color-primary');
+  const panel2Color = useThemeColor('--color-panel-2');
+
   switch (type) {
     case 'list':
       return (
@@ -31,7 +38,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
               style={{
                 marginBottom: i < count - 1 ? '16px' : 0,
                 padding: '16px',
-                border: '1px solid #f0f0f0',
+                border: `1px solid ${borderColor}`,
                 borderRadius: '8px',
               }}
             >
@@ -70,7 +77,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
                 gap: '16px',
                 marginBottom: '12px',
                 padding: '12px',
-                borderBottom: '1px solid #f0f0f0',
+                borderBottom: `1px solid ${borderColor}`,
               }}
             >
               <Skeleton.Input active style={{ width: '5%' }} size="small" />
@@ -107,7 +114,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
               style={{
                 maxWidth: '70%',
                 padding: '12px 16px',
-                background: '#193db3',
+                background: primaryColor,
                 borderRadius: '12px',
               }}
             >
@@ -124,7 +131,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
               style={{
                 maxWidth: '70%',
                 padding: '12px 16px',
-                background: '#f5f5f5',
+                background: panel2Color,
                 borderRadius: '12px',
               }}
             >
@@ -139,7 +146,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
               style={{
                 maxWidth: '70%',
                 padding: '12px 16px',
-                background: '#193db3',
+                background: primaryColor,
                 borderRadius: '12px',
               }}
             >
@@ -168,7 +175,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
                     width: '8px',
                     height: '8px',
                     borderRadius: '50%',
-                    background: '#d9d9d9',
+                    background: panel2Color,
                     animation: 'pulse 1.4s ease-in-out infinite',
                     animationDelay: `${String(i * 0.2)}s`,
                   }}

@@ -631,6 +631,60 @@ describe('ConversationsStore', () => {
     });
   });
 
+  describe('removeConversationLocal', () => {
+    it('should remove from list without calling the API', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
+      const conv2 = createMockConversation('conv-2', 'proj-1', 'Conversation 2');
+
+      useConversationsStore.setState({
+        conversations: [conv1, conv2],
+        currentConversation: conv1,
+      });
+
+      const removed = useConversationsStore.getState().removeConversationLocal('conv-1');
+
+      expect(removed).toEqual(conv1);
+      expect(useConversationsStore.getState().conversations).toHaveLength(1);
+      expect(useConversationsStore.getState().conversations[0].id).toBe('conv-2');
+      expect(useConversationsStore.getState().currentConversation).toBe(null);
+      expect(deleteConversationMock).not.toHaveBeenCalled();
+    });
+
+    it('should return null when conversation not found', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
+      useConversationsStore.setState({ conversations: [conv1] });
+
+      const removed = useConversationsStore.getState().removeConversationLocal('nonexistent');
+
+      expect(removed).toBe(null);
+      expect(useConversationsStore.getState().conversations).toHaveLength(1);
+    });
+  });
+
+  describe('restoreConversationLocal', () => {
+    it('should re-add a conversation to the front of the list', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
+      const conv2 = createMockConversation('conv-2', 'proj-1', 'Conversation 2');
+
+      useConversationsStore.setState({ conversations: [conv2] });
+      useConversationsStore.getState().restoreConversationLocal(conv1);
+
+      const { conversations } = useConversationsStore.getState();
+      expect(conversations).toHaveLength(2);
+      expect(conversations[0].id).toBe('conv-1');
+      expect(conversations[1].id).toBe('conv-2');
+    });
+
+    it('should not duplicate an already-present conversation', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
+
+      useConversationsStore.setState({ conversations: [conv1] });
+      useConversationsStore.getState().restoreConversationLocal(conv1);
+
+      expect(useConversationsStore.getState().conversations).toHaveLength(1);
+    });
+  });
+
   describe('setCurrentConversation', () => {
     it('should set current conversation', () => {
       const conversation = createMockConversation('conv-1', 'proj-1', 'Test');

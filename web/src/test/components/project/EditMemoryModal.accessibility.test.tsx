@@ -44,7 +44,7 @@ describe('EditMemoryModal accessibility', () => {
     );
     expect(screen.getByLabelText(/Title/)).toHaveFocus();
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
 });

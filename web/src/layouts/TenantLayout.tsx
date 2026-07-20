@@ -38,6 +38,8 @@ import { useTenantStore } from '@/stores/tenant';
 import { agentService } from '@/services/agentService';
 import { unifiedEventService } from '@/services/unifiedEventService';
 
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+
 import { getTenantContentSections } from '@/config/navigation';
 import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
@@ -45,6 +47,7 @@ import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 import { BackgroundSubAgentPanel } from '@/components/agent/BackgroundSubAgentPanel';
 // eslint-disable-next-line no-restricted-imports
 import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
+import { CommandPalette, useCommandPaletteOpen } from '@/components/common/CommandPalette';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 import TenantHeader from '@/components/layout/TenantHeader';
@@ -127,6 +130,9 @@ export const TenantLayout: React.FC = memo(() => {
   const getTenant = useTenantStore((state) => state.getTenant);
   const listTenants = useTenantStore((state) => state.listTenants);
 
+  // Cmd+K command palette
+  const [commandPaletteOpen, setCommandPaletteOpen] = useCommandPaletteOpen();
+
   const currentProject = useProjectStore((state) => state.currentProject);
   const clearProjects = useProjectStore((state) => state.clearProjects);
 
@@ -135,7 +141,11 @@ export const TenantLayout: React.FC = memo(() => {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [tenantEntryStatus, setTenantEntryStatus] = useState<TenantEntryStatus>('idle');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Persist sidebar collapse across reloads (per-tenant not needed — global pref).
+  const { value: sidebarCollapsed, setValue: setSidebarCollapsed } = useLocalStorage<boolean>(
+    'memstack:sidebarCollapsed',
+    false
+  );
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const projectSyncRequestRef = useRef(0);
   const tenantProjectScopeRef = useRef<string | null | undefined>(undefined);
@@ -484,6 +494,9 @@ export const TenantLayout: React.FC = memo(() => {
               setMobileSidebarOpen(true);
             }}
             projectId={projectId}
+            onCommandPaletteOpen={() => {
+              setCommandPaletteOpen(true);
+            }}
           />
 
           {/* Page Content */}
@@ -510,6 +523,16 @@ export const TenantLayout: React.FC = memo(() => {
         onSuccess={() => {
           void handleCreateTenant();
         }}
+      />
+
+      {/* Cmd+K Command Palette */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => {
+          setCommandPaletteOpen(false);
+        }}
+        tenantId={tenantId}
+        projectId={effectiveProjectId}
       />
 
       {/* Background SubAgent Panel */}

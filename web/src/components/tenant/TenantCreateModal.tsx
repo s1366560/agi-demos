@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { message } from 'antd';
-import { X, Building2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
+
+import { AppModal } from '@/components/common';
 
 import { useTenantStore } from '../../stores/tenant';
 
@@ -46,145 +48,129 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
     setFormData({ name: '', description: '', plan: 'free' });
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div className="mx-4 w-full max-w-md rounded-lg bg-white shadow-lg dark:bg-slate-900">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-          <div className="flex items-center space-x-2">
-            <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {t('tenant.createModal.title')}
-            </h2>
-          </div>
+    <AppModal
+      open={isOpen}
+      onClose={handleClose}
+      title={t('tenant.createModal.title')}
+      size="md"
+      isDirty={isLoading}
+      closeOnBackdrop={!isLoading}
+      footer={
+        <>
           <button
             type="button"
             onClick={handleClose}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            aria-label={t('tenant.createModal.closeAria', {
-              defaultValue: 'Close create workspace dialog',
-            })}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+            disabled={isLoading}
           >
-            <X className="h-5 w-5" />
+            {t('tenant.createModal.cancel')}
           </button>
+          <button
+            type="submit"
+            form="tenant-create-form"
+            className="flex-1 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading || !formData.name.trim()}
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>{t('tenant.createModal.creating')}</span>
+              </div>
+            ) : (
+              t('tenant.createModal.submit')
+            )}
+          </button>
+        </>
+      }
+    >
+      <form
+        id="tenant-create-form"
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+        className="space-y-4"
+      >
+        {error && (
+          <div
+            className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md"
+            role="alert"
+            aria-live="assertive"
+          >
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+            <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
+          </div>
+        )}
+
+        <div>
+          <label
+            htmlFor="tenant-create-name"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+          >
+            {t('tenant.createModal.nameLabel')} *
+          </label>
+          <input
+            type="text"
+            id="tenant-create-name"
+            value={formData.name}
+            onChange={(e) => {
+              setFormData({ ...formData, name: e.target.value });
+            }}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+            placeholder={t('tenant.createModal.namePlaceholder')}
+            required
+            disabled={isLoading}
+            aria-required="true"
+          />
         </div>
 
-        <form
-          onSubmit={(event) => {
-            void handleSubmit(event);
-          }}
-          className="p-6 space-y-4"
-        >
-          {error && (
-            <div
-              className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md"
-              role="alert"
-              aria-live="assertive"
-            >
-              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
-              <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
-            </div>
-          )}
+        <div>
+          <label
+            htmlFor="tenant-create-description"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+          >
+            {t('tenant.createModal.descriptionLabel')}
+          </label>
+          <textarea
+            id="tenant-create-description"
+            value={formData.description}
+            onChange={(e) => {
+              setFormData({ ...formData, description: e.target.value });
+            }}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+            placeholder={t('tenant.createModal.descriptionPlaceholder')}
+            rows={3}
+            disabled={isLoading}
+            aria-describedby="tenant-create-description-help"
+          />
+          <span id="tenant-create-description-help" className="text-xs text-gray-500 dark:text-slate-400">
+            {t('tenant.createModal.descriptionHint')}
+          </span>
+        </div>
 
-          <div>
-            <label
-              htmlFor="tenant-create-name"
-              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
-            >
-              {t('tenant.createModal.nameLabel')} *
-            </label>
-            <input
-              type="text"
-              id="tenant-create-name"
-              value={formData.name}
-              onChange={(e) => {
-                setFormData({ ...formData, name: e.target.value });
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-              placeholder={t('tenant.createModal.namePlaceholder')}
-              required
-              disabled={isLoading}
-              aria-required="true"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="tenant-create-description"
-              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
-            >
-              {t('tenant.createModal.descriptionLabel')}
-            </label>
-            <textarea
-              id="tenant-create-description"
-              value={formData.description}
-              onChange={(e) => {
-                setFormData({ ...formData, description: e.target.value });
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-              placeholder={t('tenant.createModal.descriptionPlaceholder')}
-              rows={3}
-              disabled={isLoading}
-              aria-describedby="tenant-create-description-help"
-            />
-            <span
-              id="tenant-create-description-help"
-              className="text-xs text-gray-500 dark:text-slate-400"
-            >
-              {t('tenant.createModal.descriptionHint')}
-            </span>
-          </div>
-
-          <div>
-            <label
-              htmlFor="tenant-create-plan"
-              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
-            >
-              {t('tenant.createModal.planLabel')}
-            </label>
-            <select
-              id="tenant-create-plan"
-              value={formData.plan}
-              onChange={(e) => {
-                setFormData({ ...formData, plan: e.target.value });
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-              disabled={isLoading}
-            >
-              <option value="free">{t('tenant.createModal.planFree')}</option>
-              <option value="basic">{t('tenant.createModal.planBasic')}</option>
-              <option value="premium">{t('tenant.createModal.planPremium')}</option>
-              <option value="enterprise">{t('tenant.createModal.planEnterprise')}</option>
-            </select>
-          </div>
-
-          <div className="flex space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-              disabled={isLoading}
-            >
-              {t('tenant.createModal.cancel')}
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isLoading || !formData.name.trim()}
-            >
-              {isLoading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>{t('tenant.createModal.creating')}</span>
-                </div>
-              ) : (
-                t('tenant.createModal.submit')
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div>
+          <label
+            htmlFor="tenant-create-plan"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+          >
+            {t('tenant.createModal.planLabel')}
+          </label>
+          <select
+            id="tenant-create-plan"
+            value={formData.plan}
+            onChange={(e) => {
+              setFormData({ ...formData, plan: e.target.value });
+            }}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+            disabled={isLoading}
+          >
+            <option value="free">{t('tenant.createModal.planFree')}</option>
+            <option value="basic">{t('tenant.createModal.planBasic')}</option>
+            <option value="premium">{t('tenant.createModal.planPremium')}</option>
+            <option value="enterprise">{t('tenant.createModal.planEnterprise')}</option>
+          </select>
+        </div>
+      </form>
+    </AppModal>
   );
 };

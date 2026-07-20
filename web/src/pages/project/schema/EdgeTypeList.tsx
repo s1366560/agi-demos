@@ -26,13 +26,14 @@ import {
   Pencil,
   Share2,
   Trash2,
-  X,
   FileEdit,
   ChevronDown,
   History,
 } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
+
+import { AppModal } from '@/components/common';
 
 import { schemaAPI } from '../../../services/api';
 import { confirmAction } from '../../../utils/confirmAction';
@@ -988,63 +989,64 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
       [attributes, setAttributes]
     );
 
-    useEffect(() => {
-      if (!isOpen) return undefined;
-
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-          onClose();
-        }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    }, [isOpen, onClose]);
-
     if (!isOpen) return null;
 
     return (
-      <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end" role="dialog">
-        <div className="absolute inset-0 bg-slate-950/60 transition-opacity" onClick={onClose} />
-        <div
-          className="relative flex h-full w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-lg animate-in slide-in-from-right duration-300 dark:border-border-dark dark:bg-background-dark"
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
-                <Share2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-none">
-                  {editingEdge
-                    ? edgeText(t, 'modalTitleEdit', TEXTS.modal.titleEdit, {
-                        name: editingEdge.name,
-                      })
-                    : edgeText(t, 'modalTitleNew', TEXTS.modal.titleNew)}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-text-muted mt-1 font-mono">
-                  {editingEdge?.id || 'New ID'}
-                </p>
-              </div>
+      <AppModal
+        open={isOpen}
+        onClose={onClose}
+        position="side"
+        size="xl"
+        ariaLabel={edgeText(t, 'modal.close', 'Close relationship type editor')}
+        title={
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
+              <Share2 className="w-6 h-6" />
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label={edgeText(t, 'modal.close', 'Close relationship type editor')}
-                title={edgeText(t, 'modal.close', 'Close relationship type editor')}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-text-muted hover:bg-slate-200 dark:hover:bg-border-dark hover:text-slate-900 dark:hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-none">
+                {editingEdge
+                  ? edgeText(t, 'modalTitleEdit', TEXTS.modal.titleEdit, {
+                      name: editingEdge.name,
+                    })
+                  : edgeText(t, 'modalTitleNew', TEXTS.modal.titleNew)}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-text-muted mt-1 font-mono">
+                {editingEdge?.id || 'New ID'}
+              </p>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
+        }
+        footer={
+          <>
+            <div className="mr-auto text-xs text-slate-500 dark:text-text-muted flex items-center gap-1">
+              <History className="w-4 h-4" />
+              <span>
+                {edgeText(t, 'modalLastSaved', TEXTS.modal.lastSaved, {
+                  time: editingEdge?.updated_at
+                    ? formatDateTime(editingEdge.updated_at)
+                    : edgeText(t, 'modalNeverSaved', TEXTS.modal.neverSaved),
+                })}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
+            >
+              {edgeText(t, 'modalDiscard', TEXTS.modal.discard)}
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity]"
+            >
+              {edgeText(t, 'modalSave', TEXTS.modal.save)}
+            </button>
+          </>
+        }
+      >
+        <div className="flex-1 overflow-y-auto">
             <div
               role="tablist"
               className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2"
@@ -1213,36 +1215,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
               </div>
             </div>
           </div>
-          <div className="border-t border-slate-200 dark:border-border-dark p-4 bg-slate-50 dark:bg-surface-dark flex justify-between items-center gap-3">
-            <div className="text-xs text-slate-500 dark:text-text-muted flex items-center gap-1">
-              <History className="w-4 h-4" />
-              <span>
-                {edgeText(t, 'modalLastSaved', TEXTS.modal.lastSaved, {
-                  time: editingEdge?.updated_at
-                    ? formatDateTime(editingEdge.updated_at)
-                    : edgeText(t, 'modalNeverSaved', TEXTS.modal.neverSaved),
-                })}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
-              >
-                {edgeText(t, 'modalDiscard', TEXTS.modal.discard)}
-              </button>
-              <button
-                type="button"
-                onClick={onSave}
-                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity]"
-              >
-                {edgeText(t, 'modalSave', TEXTS.modal.save)}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      </AppModal>
     );
   }
 );

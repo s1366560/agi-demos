@@ -6,6 +6,13 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MemStack - AI Memory Cloud Platform</title>
+
+    <!-- Browser chrome / mobile address bar tint. Values mirror tokens.ts
+         (light panel #ffffff, dark bg #080c12). The ThemeStore also updates
+         this dynamically when the user picks a non-system theme. -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#080c12" media="(prefers-color-scheme: dark)" />
+
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
@@ -13,6 +20,22 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Noto+Sans+SC:wght@300;400;500;700&amp;display=swap"
         rel="stylesheet" />
 
+    <noscript>
+        <style>
+            html:not(.app-ready) body { visibility: visible !important; opacity: 1 !important; }
+        </style>
+    </noscript>
+
+    <script>
+        // FOUC safety net: AppInitializer flips `app-ready` once i18n loads,
+        // but if that ever hangs or errors this guarantees content still shows.
+        (function () {
+            function show() { document.documentElement.classList.add('app-ready'); }
+            window.addEventListener('DOMContentLoaded', function () {
+                window.setTimeout(show, 4000);
+            });
+        })();
+    </script>
 </head>
 
 <body>

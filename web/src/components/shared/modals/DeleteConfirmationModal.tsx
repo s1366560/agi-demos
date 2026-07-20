@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
+
+import { AppModal } from '@/components/common';
 
 interface DeleteConfirmationModalProps {
   isOpen: boolean;
@@ -23,41 +25,18 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
 }) => {
   const { t } = useTranslation();
 
-  useEffect(() => {
-    if (!isOpen || isDeleting) return undefined;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isDeleting, isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-confirmation-title"
-        className="mx-4 w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg animate-in fade-in zoom-in duration-200 dark:border-slate-800 dark:bg-surface-dark"
-      >
-        <div className="p-6">
-          <div className="flex items-center gap-3 text-red-600 dark:text-red-400 mb-4">
-            <AlertTriangle size={30} />
-            <h3 id="delete-confirmation-title" className="text-xl font-bold">
-              {title}
-            </h3>
-          </div>
-          <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{message}</p>
-        </div>
-        <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+    <AppModal
+      open={isOpen}
+      onClose={onClose}
+      title={title}
+      ariaLabel={title}
+      size="sm"
+      isDirty={isDeleting}
+      closeOnBackdrop={!isDeleting}
+      closeOnEscape={!isDeleting}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
@@ -84,8 +63,13 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
               </>
             )}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div className="flex items-center gap-3 text-red-600 dark:text-red-400 mb-4">
+        <AlertTriangle size={30} />
       </div>
-    </div>
+      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{message}</p>
+    </AppModal>
   );
 };

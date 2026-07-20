@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { message } from 'antd';
-import { X, Folder, AlertCircle, Settings, Brain, Users, Cloud, Monitor } from 'lucide-react';
+import { AlertCircle, Settings, Brain, Users, Cloud, Monitor } from 'lucide-react';
+
+import { AppModal } from '@/components/common';
 
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
@@ -146,26 +148,42 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div className="mx-4 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-          <div className="flex items-center space-x-2">
-            <Folder className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {t('project.create.title')}
-            </h2>
-          </div>
+    <AppModal
+      open={isOpen}
+      onClose={handleClose}
+      title={t('project.create.title')}
+      size="xl"
+      isDirty={isLoading}
+      closeOnBackdrop={!isLoading}
+      footer={
+        <>
           <button
             type="button"
             onClick={handleClose}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            aria-label={t('project.create.closeAria')}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+            disabled={isLoading}
           >
-            <X className="h-5 w-5" />
+            {t('project.create.cancel')}
           </button>
-        </div>
-
-        <div className="border-b border-gray-200 dark:border-slate-800">
+          <button
+            type="submit"
+            form="project-form"
+            className="flex-1 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading || !formData.name.trim()}
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>{t('project.create.creating')}</span>
+              </div>
+            ) : (
+              t('project.create.submit')
+            )}
+          </button>
+        </>
+      }
+    >
+      <div className="border-b border-gray-200 dark:border-slate-800">
           <nav className="flex space-x-8 px-6">
             <button
               type="button"
@@ -775,33 +793,6 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             )}
           </div>
         </form>
-
-        <div className="flex space-x-3 p-6 border-t border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-            disabled={isLoading}
-          >
-            {t('project.create.cancel')}
-          </button>
-          <button
-            type="submit"
-            form="project-form"
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isLoading || !formData.name.trim()}
-          >
-            {isLoading ? (
-              <div className="flex items-center justify-center space-x-2">
-                <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
-                <span>{t('project.create.creating')}</span>
-              </div>
-            ) : (
-              t('project.create.submit')
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+    </AppModal>
   );
 };

@@ -30,7 +30,7 @@ export interface ConversationRosterSectionProps {
 }
 
 const modeBadge =
-  'inline-flex h-[18px] items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-[#ebebeb] px-2 text-[11px] font-medium text-[#171717]';
+  'inline-flex h-[18px] items-center rounded-full border border-border bg-panel-2 px-2 text-[11px] font-medium text-text';
 
 export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
   ({ projectId, workspaceId, className }) => {
@@ -87,24 +87,24 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
             onClick={() => {
               void refresh();
             }}
-            className="rounded px-2 py-0.5 text-xs text-[#666] hover:bg-[#fafafa] hover:text-[#0070f3]"
+            className="rounded px-2 py-0.5 text-xs text-muted hover:bg-panel-2 hover:text-primary"
           >
             {t('common.refresh', { defaultValue: 'Refresh' })}
           </button>
         </header>
 
         {loading && (
-          <p className="text-xs text-[#999]">
+          <p className="text-xs text-muted">
             {t('blackboard.rosters.loading', { defaultValue: 'Loading conversations…' })}
           </p>
         )}
         {error && (
-          <p className="text-xs text-[#ee0000]">
+          <p className="text-xs text-error">
             {t('blackboard.rosters.error', { defaultValue: 'Failed to load conversations.' })}
           </p>
         )}
         {!loading && !error && sorted.length === 0 && (
-          <p className="text-xs text-[#999]">
+          <p className="text-xs text-muted">
             {t('blackboard.rosters.empty', {
               defaultValue:
                 'No conversations linked to this workspace yet. Start a chat from Agent Workspace with this workspace attached.',
@@ -130,10 +130,10 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
                   className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span aria-hidden="true" className="text-xs text-[#999]">
+                    <span aria-hidden="true" className="text-xs text-muted">
                       {isOpen ? '▾' : '▸'}
                     </span>
-                    <span className="truncate text-sm font-medium text-[#171717]">
+                    <span className="truncate text-sm font-medium text-text">
                       {c.title || c.id}
                     </span>
                   </span>
@@ -144,15 +144,15 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
                   </span>
                 </button>
                 {isOpen && (
-                  <div className="space-y-4 border-t border-[rgba(0,0,0,0.08)] px-3 py-3">
+                  <div className="space-y-4 border-t border-border px-3 py-3">
                     <section data-testid={`roster-mode-${c.id}`}>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#666]">
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
                         {t('blackboard.rosters.section.mode', { defaultValue: 'Mode' })}
                       </div>
                       <ConversationModePanel conversationId={c.id} projectId={projectId} />
                     </section>
                     <section data-testid={`roster-participants-${c.id}`}>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#666]">
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
                         {t('blackboard.rosters.section.participants', {
                           defaultValue: 'Participants',
                         })}
@@ -160,7 +160,7 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
                       <ConversationParticipantsPanel conversationId={c.id} />
                     </section>
                     <section data-testid={`roster-hitl-${c.id}`}>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#666]">
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
                         {t('blackboard.rosters.section.hitl', { defaultValue: 'HITL Center' })}
                       </div>
                       <HITLCenterPanel conversationId={c.id} />

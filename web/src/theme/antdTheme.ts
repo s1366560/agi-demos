@@ -1,65 +1,71 @@
 /**
  * Ant Design Theme Configuration
  *
- * Matches design prototype from design-prototype/
- * Color scheme: Primary Blue #1e3fae with sophisticated neutrals
+ * Single source of truth: `web/src/theme/tokens.ts` (PRODUCT.md mission-control).
+ * - Dark (primary): #080c12 surfaces, cyan #38d6ff accent.
+ * - Light (derived): white surfaces, deeper cyan #0e7490 for WCAG AA on white.
  *
- * Design Reference:
- * - Primary: #1e3fae (Deep Blue)
- * - Background Light: #f8f9fb
- * - Background Dark: #141416
- * - Surface Light: #ffffff
- * - Surface Dark: #1c1c1f
- * - Border Dark: #2c2c31
- * - Text Muted: #7d8599
+ * NOTE: `index.css` `@theme` / `.dark` hold LITERAL copies of these values for
+ * Tailwind utility resolution; `tokenSync.test.ts` asserts they stay in sync.
  */
+
+import { tokens } from './tokens';
 
 import type { ThemeConfig } from 'antd';
 
-// Design System Colors
+// Design System Colors (values from tokens.ts; kept flat for hostStyles consumers)
 export const colors = {
-  // Primary
-  primary: '#1e3fae',
-  primaryDark: '#152d7e',
-  primaryLight: '#3b5fc9',
-  primaryGlow: '#4b6fd9',
+  // Primary — light-appropriate cyan (AA on white); dark uses #38d6ff below
+  primary: tokens.light.cyan,
+  primaryDark: '#155e75',
+  primaryLight: '#0891b2',
+  primaryGlow: '#22d3ee',
+  primaryCyanDark: tokens.dark.cyan, // luminous accent for dark theme
 
   // Background
-  bgLight: '#f8f9fb',
-  bgDark: '#141416',
+  bgLight: tokens.light.bg,
+  bgDark: tokens.dark.bg,
 
   // Surface
-  surfaceLight: '#ffffff',
-  surfaceDark: '#1c1c1f',
-  surfaceDarkAlt: '#242428',
+  surfaceLight: tokens.light.panel,
+  surfaceDark: tokens.dark.panel,
+  surfaceDarkAlt: tokens.dark.panel2,
+  surfaceElevated: tokens.dark.panel3,
 
   // Border
-  borderLight: '#e2e8f0',
-  borderDark: '#2c2c31',
+  borderLight: tokens.light.border,
+  borderStrongLight: tokens.light.borderStrong,
+  borderDark: tokens.dark.border,
+  borderStrongDark: tokens.dark.borderStrong,
 
   // Text
-  textPrimary: '#1a2332',
-  textSecondary: '#5a6577',
-  textMuted: '#7d8599',
-  textMutedLight: '#6b7280',
+  textPrimary: tokens.light.text,
+  textSecondary: tokens.light.textMuted,
+  textMuted: tokens.light.textMuted2,
+  textMutedLight: tokens.light.textMuted2,
+
+  // Dark-theme text (mission-control neutrals)
+  textPrimaryDark: tokens.dark.text,
+  textSecondaryDark: tokens.dark.textMuted,
+  textMutedDark2: tokens.dark.textMuted2,
 
   // Status
-  success: '#10b981',
+  success: tokens.status.success,
   successLight: '#d1fae5',
-  warning: '#f59e0b',
+  warning: tokens.status.warning,
   warningLight: '#fef3c7',
-  error: '#ef4444',
+  error: tokens.status.error,
   errorLight: '#fee2e2',
-  info: '#3b82f6',
-  infoLight: '#dbeafe',
+  info: tokens.status.info,
+  infoLight: '#cffafe',
 
-  // Accent colors for tiles/cards
-  tileBlue: '#3b82f6',
-  tilePurple: '#8b5cf6',
-  tileEmerald: '#10b981',
-  tileAmber: '#f59e0b',
-  tileIndigo: '#6366f1',
-  tileRose: '#f43f5e',
+  // Accent tile colors — cohesive cyan/teal family (was random rainbow)
+  tileBlue: '#38d6ff',
+  tilePurple: '#a78bfa',
+  tileEmerald: '#35d399',
+  tileAmber: '#f0b35a',
+  tileIndigo: '#22d3ee',
+  tileRose: '#ff6978',
 };
 
 // Light Theme Configuration
@@ -69,10 +75,10 @@ export const lightTheme: ThemeConfig = {
     colorPrimary: colors.primary,
     colorPrimaryHover: colors.primaryLight,
     colorPrimaryActive: colors.primaryDark,
-    colorPrimaryBg: '#eef2ff',
-    colorPrimaryBgHover: '#e0e7ff',
-    colorPrimaryBorder: '#c7d2fe',
-    colorPrimaryBorderHover: '#a5b4fc',
+    colorPrimaryBg: '#ecfeff',
+    colorPrimaryBgHover: '#cffafe',
+    colorPrimaryBorder: '#a5f3fc',
+    colorPrimaryBorderHover: '#67e8f9',
     colorPrimaryText: colors.primary,
     colorPrimaryTextHover: colors.primaryLight,
     colorPrimaryTextActive: colors.primaryDark,
@@ -82,7 +88,7 @@ export const lightTheme: ThemeConfig = {
     colorBgContainer: colors.surfaceLight,
     colorBgElevated: colors.surfaceLight,
     colorBgLayout: colors.bgLight,
-    colorBgSpotlight: 'rgba(30, 63, 174, 0.1)',
+    colorBgSpotlight: 'rgba(8, 145, 178, 0.1)',
     colorBgMask: 'rgba(0, 0, 0, 0.45)',
 
     // Border Colors
@@ -110,7 +116,7 @@ export const lightTheme: ThemeConfig = {
     colorErrorBorder: '#fecaca',
     colorInfo: colors.info,
     colorInfoBg: colors.infoLight,
-    colorInfoBorder: '#93c5fd',
+    colorInfoBorder: '#a5f3fc',
 
     // Typography
     fontFamily:
@@ -129,8 +135,8 @@ export const lightTheme: ThemeConfig = {
     lineHeightHeading5: 1.5714285714285714,
 
     // Border Radius
-    borderRadius: 4,
-    borderRadiusLG: 6,
+    borderRadius: 6,
+    borderRadiusLG: 8,
     borderRadiusSM: 2,
     borderRadiusXS: 2,
 
@@ -141,8 +147,8 @@ export const lightTheme: ThemeConfig = {
       '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
 
     // Control
-    controlHeight: 36,
-    controlHeightLG: 44,
+    controlHeight: 32,
+    controlHeightLG: 36,
     controlHeightSM: 28,
 
     // Motion
@@ -166,9 +172,9 @@ export const lightTheme: ThemeConfig = {
       itemColor: colors.textSecondary,
       itemHoverBg: '#f1f5f9',
       itemHoverColor: colors.textPrimary,
-      itemSelectedBg: 'rgba(30, 63, 174, 0.1)',
+      itemSelectedBg: 'rgba(8, 145, 178, 0.1)',
       itemSelectedColor: colors.primary,
-      itemActiveBg: 'rgba(30, 63, 174, 0.15)',
+      itemActiveBg: 'rgba(8, 145, 178, 0.15)',
     },
     Button: {
       primaryShadow: 'none',
@@ -274,51 +280,51 @@ export const lightTheme: ThemeConfig = {
 export const darkTheme: ThemeConfig = {
   token: {
     // Primary Colors
-    colorPrimary: colors.primaryLight,
+    colorPrimary: colors.primaryCyanDark,
     colorPrimaryHover: colors.primaryGlow,
-    colorPrimaryActive: colors.primary,
-    colorPrimaryBg: 'rgba(59, 95, 201, 0.15)',
-    colorPrimaryBgHover: 'rgba(59, 95, 201, 0.25)',
-    colorPrimaryBorder: 'rgba(59, 95, 201, 0.4)',
-    colorPrimaryBorderHover: 'rgba(59, 95, 201, 0.6)',
-    colorPrimaryText: colors.primaryLight,
+    colorPrimaryActive: colors.primaryCyanDark,
+    colorPrimaryBg: 'rgba(56, 214, 255, 0.15)',
+    colorPrimaryBgHover: 'rgba(56, 214, 255, 0.25)',
+    colorPrimaryBorder: 'rgba(56, 214, 255, 0.4)',
+    colorPrimaryBorderHover: 'rgba(56, 214, 255, 0.6)',
+    colorPrimaryText: colors.primaryCyanDark,
     colorPrimaryTextHover: colors.primaryGlow,
-    colorPrimaryTextActive: colors.primary,
+    colorPrimaryTextActive: colors.primaryCyanDark,
 
     // Background Colors
     colorBgBase: colors.bgDark,
     colorBgContainer: colors.surfaceDark,
     colorBgElevated: colors.surfaceDarkAlt,
     colorBgLayout: colors.bgDark,
-    colorBgSpotlight: 'rgba(59, 95, 201, 0.15)',
+    colorBgSpotlight: 'rgba(56, 214, 255, 0.15)',
     colorBgMask: 'rgba(0, 0, 0, 0.65)',
 
     // Border Colors
     colorBorder: colors.borderDark,
-    colorBorderSecondary: '#222226',
+    colorBorderSecondary: '#1a2230',
 
     // Text Colors
-    colorText: '#e8eaed',
-    colorTextSecondary: '#b0b8c4',
+    colorText: colors.textPrimaryDark,
+    colorTextSecondary: colors.textSecondaryDark,
     colorTextTertiary: colors.textMuted,
-    colorTextQuaternary: '#5a6270',
+    colorTextQuaternary: colors.textMutedDark2,
     colorTextDescription: colors.textMuted,
-    colorTextDisabled: '#4a4f5a',
-    colorTextPlaceholder: '#5a6270',
+    colorTextDisabled: '#3a4452',
+    colorTextPlaceholder: colors.textMutedDark2,
 
     // Status Colors
-    colorSuccess: '#34d399',
-    colorSuccessBg: 'rgba(16, 185, 129, 0.15)',
-    colorSuccessBorder: 'rgba(16, 185, 129, 0.4)',
-    colorWarning: '#fbbf24',
-    colorWarningBg: 'rgba(245, 158, 11, 0.15)',
-    colorWarningBorder: 'rgba(245, 158, 11, 0.4)',
-    colorError: '#f87171',
-    colorErrorBg: 'rgba(239, 68, 68, 0.15)',
-    colorErrorBorder: 'rgba(239, 68, 68, 0.4)',
-    colorInfo: '#60a5fa',
-    colorInfoBg: 'rgba(59, 130, 246, 0.15)',
-    colorInfoBorder: 'rgba(59, 130, 246, 0.4)',
+    colorSuccess: colors.success,
+    colorSuccessBg: 'rgba(53, 211, 153, 0.15)',
+    colorSuccessBorder: 'rgba(53, 211, 153, 0.4)',
+    colorWarning: colors.warning,
+    colorWarningBg: 'rgba(240, 179, 90, 0.15)',
+    colorWarningBorder: 'rgba(240, 179, 90, 0.4)',
+    colorError: colors.error,
+    colorErrorBg: 'rgba(255, 105, 120, 0.15)',
+    colorErrorBorder: 'rgba(255, 105, 120, 0.4)',
+    colorInfo: colors.info,
+    colorInfoBg: 'rgba(56, 214, 255, 0.15)',
+    colorInfoBorder: 'rgba(56, 214, 255, 0.4)',
 
     // Typography
     fontFamily:
@@ -331,8 +337,8 @@ export const darkTheme: ThemeConfig = {
     fontSizeHeading5: 14,
 
     // Border Radius
-    borderRadius: 4,
-    borderRadiusLG: 6,
+    borderRadius: 6,
+    borderRadiusLG: 8,
     borderRadiusSM: 2,
     borderRadiusXS: 2,
 
@@ -343,8 +349,8 @@ export const darkTheme: ThemeConfig = {
       '0 6px 16px 0 rgba(0, 0, 0, 0.32), 0 3px 6px -4px rgba(0, 0, 0, 0.48), 0 9px 28px 8px rgba(0, 0, 0, 0.2)',
 
     // Control
-    controlHeight: 36,
-    controlHeightLG: 44,
+    controlHeight: 32,
+    controlHeightLG: 36,
     controlHeightSM: 28,
 
     // Motion
@@ -353,7 +359,7 @@ export const darkTheme: ThemeConfig = {
   components: {
     Layout: {
       headerBg: colors.surfaceDark,
-      headerColor: '#e8eaed',
+      headerColor: colors.textPrimaryDark,
       siderBg: colors.surfaceDark,
       bodyBg: colors.bgDark,
       triggerBg: colors.surfaceDarkAlt,
@@ -362,16 +368,16 @@ export const darkTheme: ThemeConfig = {
       itemBg: 'transparent',
       itemColor: colors.textMuted,
       itemHoverBg: colors.borderDark,
-      itemHoverColor: '#e8eaed',
-      itemSelectedBg: 'rgba(59, 95, 201, 0.15)',
-      itemSelectedColor: colors.primaryLight,
-      itemActiveBg: 'rgba(59, 95, 201, 0.2)',
+      itemHoverColor: colors.textPrimaryDark,
+      itemSelectedBg: 'rgba(56, 214, 255, 0.15)',
+      itemSelectedColor: colors.primaryCyanDark,
+      itemActiveBg: 'rgba(56, 214, 255, 0.2)',
       darkItemBg: 'transparent',
       darkItemColor: colors.textMuted,
       darkItemHoverBg: colors.borderDark,
-      darkItemHoverColor: '#e8eaed',
-      darkItemSelectedBg: 'rgba(59, 95, 201, 0.15)',
-      darkItemSelectedColor: colors.primaryLight,
+      darkItemHoverColor: colors.textPrimaryDark,
+      darkItemSelectedBg: 'rgba(56, 214, 255, 0.15)',
+      darkItemSelectedColor: colors.primaryCyanDark,
     },
     Button: {
       primaryShadow: 'none',
@@ -394,53 +400,53 @@ export const darkTheme: ThemeConfig = {
       colorBgContainer: colors.surfaceDark,
     },
     Input: {
-      colorBgContainer: '#1c1c1f',
-      colorBorder: '#2c2c31',
-      addonBg: '#181818',
-      hoverBg: '#242428',
-      activeBg: '#1c1c1f',
-      activeBorderColor: '#737373',
-      hoverBorderColor: '#3a3a40',
-      activeShadow: '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
+      colorBgContainer: colors.surfaceDarkAlt,
+      colorBorder: colors.borderDark,
+      addonBg: colors.surfaceDark,
+      hoverBg: colors.surfaceElevated,
+      activeBg: colors.surfaceDarkAlt,
+      activeBorderColor: colors.borderStrongDark,
+      hoverBorderColor: colors.borderDark,
+      activeShadow: '0 0 0 1px rgba(56, 214, 255, 0.45), 0 0 0 4px rgba(56, 214, 255, 0.16)',
     },
     Select: {
-      colorBgContainer: '#1c1c1f',
-      colorBorder: '#2c2c31',
-      selectorBg: '#1c1c1f',
-      optionSelectedBg: '#242428',
+      colorBgContainer: colors.surfaceDarkAlt,
+      colorBorder: colors.borderDark,
+      selectorBg: colors.surfaceDarkAlt,
+      optionSelectedBg: colors.surfaceElevated,
       optionSelectedColor: '#fafafa',
-      multipleItemBg: '#242428',
-      multipleItemBorderColor: '#2c2c31',
-      activeBorderColor: '#737373',
-      hoverBorderColor: '#3a3a40',
-      activeOutlineColor: 'rgba(255, 255, 255, 0.12)',
+      multipleItemBg: colors.surfaceElevated,
+      multipleItemBorderColor: colors.borderDark,
+      activeBorderColor: colors.borderStrongDark,
+      hoverBorderColor: colors.borderDark,
+      activeOutlineColor: 'rgba(56, 214, 255, 0.16)',
     },
     DatePicker: {
-      colorBgContainer: '#1c1c1f',
-      colorBorder: '#2c2c31',
-      activeBg: '#1c1c1f',
-      hoverBg: '#242428',
-      activeBorderColor: '#737373',
-      hoverBorderColor: '#3a3a40',
-      activeShadow: '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
+      colorBgContainer: colors.surfaceDarkAlt,
+      colorBorder: colors.borderDark,
+      activeBg: colors.surfaceDarkAlt,
+      hoverBg: colors.surfaceElevated,
+      activeBorderColor: colors.borderStrongDark,
+      hoverBorderColor: colors.borderDark,
+      activeShadow: '0 0 0 1px rgba(56, 214, 255, 0.45), 0 0 0 4px rgba(56, 214, 255, 0.16)',
     },
     InputNumber: {
-      colorBgContainer: '#1c1c1f',
-      colorBorder: '#2c2c31',
-      activeBg: '#1c1c1f',
-      hoverBg: '#242428',
-      activeBorderColor: '#737373',
-      hoverBorderColor: '#3a3a40',
-      activeShadow: '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
+      colorBgContainer: colors.surfaceDarkAlt,
+      colorBorder: colors.borderDark,
+      activeBg: colors.surfaceDarkAlt,
+      hoverBg: colors.surfaceElevated,
+      activeBorderColor: colors.borderStrongDark,
+      hoverBorderColor: colors.borderDark,
+      activeShadow: '0 0 0 1px rgba(56, 214, 255, 0.45), 0 0 0 4px rgba(56, 214, 255, 0.16)',
     },
     Modal: {
       headerBg: colors.surfaceDark,
       contentBg: colors.surfaceDark,
     },
     Tabs: {
-      inkBarColor: colors.primaryLight,
-      itemActiveColor: colors.primaryLight,
-      itemSelectedColor: colors.primaryLight,
+      inkBarColor: colors.primaryCyanDark,
+      itemActiveColor: colors.primaryCyanDark,
+      itemSelectedColor: colors.primaryCyanDark,
       itemHoverColor: colors.primaryGlow,
       itemColor: colors.textMuted,
     },
@@ -449,24 +455,24 @@ export const darkTheme: ThemeConfig = {
       defaultColor: colors.textMuted,
     },
     Badge: {
-      colorBgContainer: '#f87171',
+      colorBgContainer: colors.error,
     },
     Breadcrumb: {
       itemColor: colors.textMuted,
-      lastItemColor: '#e8eaed',
+      lastItemColor: colors.textPrimaryDark,
       linkColor: colors.textMuted,
       linkHoverColor: colors.primaryLight,
-      separatorColor: '#3a3a40',
+      separatorColor: colors.borderDark,
     },
     Statistic: {
       titleFontSize: 12,
       contentFontSize: 28,
     },
     Progress: {
-      defaultColor: colors.primaryLight,
+      defaultColor: colors.primaryCyanDark,
     },
     Spin: {
-      colorPrimary: colors.primaryLight,
+      colorPrimary: colors.primaryCyanDark,
     },
     Tooltip: {
       colorBgSpotlight: colors.surfaceDarkAlt,

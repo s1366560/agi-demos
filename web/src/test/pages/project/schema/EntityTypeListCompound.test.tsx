@@ -443,7 +443,7 @@ describe('EntityTypeList Compound Component', () => {
         />
       );
 
-      fireEvent.keyDown(window, { key: 'Escape' });
+      fireEvent.keyDown(document, { key: 'Escape' });
 
       expect(onClose).toHaveBeenCalledTimes(1);
     });

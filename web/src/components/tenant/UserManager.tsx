@@ -18,6 +18,8 @@ import {
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
 
+import { AppModal } from '@/components/common';
+
 import { projectService } from '../../services/projectService';
 import { tenantService } from '../../services/tenantService';
 import { useProjectStore } from '../../stores/project';
@@ -433,89 +435,75 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
       </div>
 
       {/* Invite User Modal */}
-      {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-          <div className="mx-4 w-full max-w-md rounded-lg bg-white shadow-lg dark:bg-slate-900">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-              <div className="flex items-center space-x-2">
-                <UserPlus className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {t('tenant.users.invite_modal.title')}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsInviteModalOpen(false);
-                }}
-                aria-label={t('common.close')}
-                className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-              >
-                <span className="text-xl">×</span>
-              </button>
-            </div>
-
-            <form className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  {t('tenant.users.invite_modal.email')} *
-                </label>
-                <input
-                  type="email"
-                  aria-label={t('tenant.users.invite_modal.email')}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                  placeholder={t('tenant.users.invite_modal.email_placeholder')}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  {t('tenant.users.invite_modal.role')} *
-                </label>
-                <select
-                  aria-label={t('tenant.users.invite_modal.role')}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-                >
-                  <option value="member">{t('tenant.users.roles.member')}</option>
-                  <option value="admin">{t('tenant.users.roles.admin')}</option>
-                  <option value="viewer">{t('tenant.users.roles.viewer')}</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  {t('tenant.users.invite_modal.message')}
-                </label>
-                <textarea
-                  aria-label={t('tenant.users.invite_modal.message')}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                  placeholder={t('tenant.users.invite_modal.message_placeholder')}
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsInviteModalOpen(false);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-                >
-                  {t('tenant.users.invite_modal.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-                >
-                  {t('tenant.users.invite_modal.submit')}
-                </button>
-              </div>
-            </form>
+      <AppModal
+        open={isInviteModalOpen}
+        onClose={() => {
+          setIsInviteModalOpen(false);
+        }}
+        title={t('tenant.users.invite_modal.title')}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setIsInviteModalOpen(false);
+              }}
+              className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+            >
+              {t('tenant.users.invite_modal.cancel')}
+            </button>
+            <button
+              type="submit"
+              form="user-invite-form"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+            >
+              {t('tenant.users.invite_modal.submit')}
+            </button>
+          </>
+        }
+      >
+        <form id="user-invite-form" className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+              {t('tenant.users.invite_modal.email')} *
+            </label>
+            <input
+              type="email"
+              aria-label={t('tenant.users.invite_modal.email')}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+              placeholder={t('tenant.users.invite_modal.email_placeholder')}
+              required
+            />
           </div>
-        </div>
-      )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+              {t('tenant.users.invite_modal.role')} *
+            </label>
+            <select
+              aria-label={t('tenant.users.invite_modal.role')}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+            >
+              <option value="member">{t('tenant.users.roles.member')}</option>
+              <option value="admin">{t('tenant.users.roles.admin')}</option>
+              <option value="viewer">{t('tenant.users.roles.viewer')}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+              {t('tenant.users.invite_modal.message')}
+            </label>
+            <textarea
+              aria-label={t('tenant.users.invite_modal.message')}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+              placeholder={t('tenant.users.invite_modal.message_placeholder')}
+              rows={3}
+            />
+          </div>
+        </form>
+      </AppModal>
 
       {/* Edit User Modal */}
       {selectedUser && (

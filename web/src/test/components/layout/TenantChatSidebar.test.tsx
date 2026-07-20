@@ -43,6 +43,8 @@ const conversationsState = {
   conversationsLoading: false,
   hasMoreConversations: false,
   reset: vi.fn(),
+  removeConversationLocal: vi.fn(() => null),
+  restoreConversationLocal: vi.fn(),
 };
 
 const projectState = {
@@ -147,6 +149,31 @@ vi.mock('@/components/agent/Resizer', () => ({
   Resizer: () => null,
 }));
 
+vi.mock('@/components/common/AppModal', () => ({
+  AppModal: ({
+    children,
+    open,
+    onClose,
+    title,
+    footer,
+  }: {
+    children?: ReactNode;
+    open?: boolean;
+    onClose?: () => void;
+    title?: string;
+    footer?: ReactNode;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={title}>
+        <button type="button" onClick={onClose} aria-label="Close dialog">
+          ×
+        </button>
+        {children}
+        {footer}
+      </div>
+    ) : null,
+}));
+
 vi.mock('@/components/ui/lazyAntd', () => ({
   LazyButton: ({
     children,
@@ -160,6 +187,7 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   ),
   LazyBadge: () => <span>processing</span>,
   LazyDropdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  useLazyMessage: () => null,
   LazySelect: ({
     value,
     onChange,

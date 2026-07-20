@@ -15,10 +15,14 @@ const antdModal = vi.hoisted(() => ({
   confirm: vi.fn((options?: { onOk?: () => void | Promise<void> }) => options?.onOk?.()),
 }));
 
-vi.mock('antd', () => ({
-  Modal: antdModal,
-  message: antdMessage,
-}));
+vi.mock('antd', async () => {
+  const actual = await vi.importActual<typeof import('antd')>('antd');
+  return {
+    ...actual,
+    Modal: antdModal,
+    message: antdMessage,
+  };
+});
 
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({

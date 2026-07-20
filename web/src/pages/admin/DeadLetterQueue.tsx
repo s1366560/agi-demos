@@ -48,6 +48,8 @@ import {
 import { dlqService } from '@/services/dlqService';
 import type { DLQMessage, DLQMessageStatus, DLQStats } from '@/services/dlqService';
 
+import { useThemeColor } from '@/hooks/useThemeColor';
+
 import { formatDateTime } from '@/utils/date';
 
 import type { ColumnsType } from 'antd/es/table';
@@ -116,6 +118,14 @@ const getDistributionPercent = (count: number, total: number): number => {
 
 const DeadLetterQueue: React.FC = () => {
   const { t } = useTranslation();
+
+  // Theme-aware status colors (resolved from design tokens)
+  const warningColor = useThemeColor('--color-warning');
+  const primaryColor = useThemeColor('--color-primary');
+  const successColor = useThemeColor('--color-success');
+  const mutedColor = useThemeColor('--color-muted');
+  const errorColor = useThemeColor('--color-error');
+  const codeBgColor = useThemeColor('--color-panel-2');
 
   // State
   const [stats, setStats] = useState<DLQStats | null>(null);
@@ -415,7 +425,7 @@ const DeadLetterQueue: React.FC = () => {
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
           <Title level={2} style={{ margin: 0 }}>
-            <AlertTriangle size={24} style={{ marginRight: 8, color: '#faad14' }} />
+            <AlertTriangle size={24} style={{ marginRight: 8, color: warningColor }} />
             {t('admin.deadLetterQueue.title')}
           </Title>
           <Text type="secondary">{t('admin.deadLetterQueue.description')}</Text>
@@ -468,7 +478,7 @@ const DeadLetterQueue: React.FC = () => {
             <Statistic
               title={t('admin.deadLetterQueue.stats.pending')}
               value={stats?.pending_count || 0}
-              styles={{ content: { color: '#faad14' } }}
+              styles={{ content: { color: warningColor } }}
               prefix={<Clock size={20} />}
             />
           </Card>
@@ -478,7 +488,7 @@ const DeadLetterQueue: React.FC = () => {
             <Statistic
               title={t('admin.deadLetterQueue.stats.retrying')}
               value={stats?.retrying_count || 0}
-              styles={{ content: { color: '#1890ff' } }}
+              styles={{ content: { color: primaryColor } }}
               prefix={<RefreshCcw size={20} />}
             />
           </Card>
@@ -488,7 +498,7 @@ const DeadLetterQueue: React.FC = () => {
             <Statistic
               title={t('admin.deadLetterQueue.stats.resolved')}
               value={stats?.resolved_count || 0}
-              styles={{ content: { color: '#52c41a' } }}
+              styles={{ content: { color: successColor } }}
               prefix={<CheckCircle2 size={20} />}
             />
           </Card>
@@ -498,7 +508,7 @@ const DeadLetterQueue: React.FC = () => {
             <Statistic
               title={t('admin.deadLetterQueue.stats.discarded')}
               value={stats?.discarded_count || 0}
-              styles={{ content: { color: '#8c8c8c' } }}
+              styles={{ content: { color: mutedColor } }}
               prefix={<Trash2 size={20} />}
             />
           </Card>
@@ -720,7 +730,7 @@ const DeadLetterQueue: React.FC = () => {
                 style={{
                   maxHeight: 200,
                   overflow: 'auto',
-                  backgroundColor: '#f5f5f5',
+                  backgroundColor: codeBgColor,
                   padding: 8,
                   borderRadius: 4,
                   fontSize: 12,
@@ -735,11 +745,11 @@ const DeadLetterQueue: React.FC = () => {
                   style={{
                     maxHeight: 200,
                     overflow: 'auto',
-                    backgroundColor: '#fff1f0',
+                    backgroundColor: codeBgColor,
                     padding: 8,
                     borderRadius: 4,
                     fontSize: 11,
-                    color: '#cf1322',
+                    color: errorColor,
                   }}
                 >
                   {selectedMessage.error_traceback}

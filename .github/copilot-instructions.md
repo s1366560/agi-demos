@@ -151,9 +151,11 @@ web/src/
 The canonical product/design spec lives in [`PRODUCT.md`](../PRODUCT.md) (Users, Brand Personality, Aesthetic Direction, Design Principles, Component Patterns, color/spacing/shadow tokens, accessibility). Refer to it directly to avoid drift; the summary below is only a quick orientation.
 
 - **Audience**: Enterprise developers orchestrating multi-layer agent systems (Tool -> Skill -> SubAgent -> Agent)
-- **Aesthetic**: Vercel-inspired, monochrome (black/white/gray) with a sparing `#0070f3` blue accent, Geist typography
-- **Principle**: Clarity and zero visual noise first; pill-shape (radius 100px, height 48px) reserved for explicit CTAs; 4px default control radius / 36px default control height elsewhere
-- **Accessibility**: WCAG 2.1 AA; focus ring `0 0 0 1px gray + 0 0 0 4px rgba(0,0,0,0.16)`; respect `prefers-reduced-motion`
+- **Aesthetic**: Dark mission-control (primary) with a preserved light mode. Dark surfaces `#080c12` / `#0d121a` / `#111720` / `#151c27`, border `#242d3a`, text `#e7edf6`, muted `#8996a9`. Cyan `#38D6FF` accent (light mode uses `#0E7490` for WCAG AA contrast). Inter typography.
+- **Tokens**: All colors, radii, control heights, and shadows live in [`web/src/theme/tokens.ts`](../web/src/theme/tokens.ts) — the single source of truth. `index.css` `@theme` and `theme/antdTheme.ts` derive from it; a Vitest sync test (`web/src/test/theme/tokenSync.test.ts`) guards against drift. Dark values are shimmed via a `.dark {}` palette block that redefines the Tailwind `blue-*` ramp to the cyan ramp — new code should use the `primary`/`panel`/`text`/`muted`/`border` tokens rather than `blue-*` utilities.
+- **Principle**: Clarity and zero visual noise first. Radius 6px (controls) / 8px (cards, panels); `rounded-full` reserved for status dots, mode pills, and filter chips. Control heights 28 (sm) / 32 (default) / 36 (lg). Status colors: success `#35D399`, warning `#F0B35A`, error `#FF6978`.
+- **No hardcoded hex in TSX**: The `memstack/no-hardcoded-hex` ESLint rule (see `web/eslint-rules/no-hardcoded-hex.mjs`) blocks hex literals in components; use tokens or `useThemeColor`/`resolveThemeColor`. Domain-specific fixed colors (xterm, Cytoscape graph, 3D hex mesh, A2UI) are allowListed.
+- **Accessibility**: WCAG 2.1 AA; `color-scheme` set on `html`/`html.dark`, `<meta name="theme-color">` synced per theme; visible focus rings via `focus-visible`; `touch-action: manipulation`; modals/drawers use `overscroll-behavior: contain`. Respect `prefers-reduced-motion`.
 
 ---
 

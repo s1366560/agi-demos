@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 import { message } from 'antd';
 import {
-  X,
   Brain,
   User,
   Calendar,
@@ -19,6 +18,9 @@ import {
 } from 'lucide-react';
 
 import { formatDateTimeFull } from '@/utils/date';
+
+import { AppModal } from '@/components/common';
+
 
 import { memoryService } from '../../services/memoryService';
 
@@ -87,21 +89,6 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   }, [memoryProp]);
 
   const memory = memoryProp && displayMemory?.id === memoryProp.id ? displayMemory : memoryProp;
-
-  useEffect(() => {
-    if (!isOpen || !memory) return undefined;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, memory, onClose]);
 
   if (!isOpen || !memory) return null;
 
@@ -200,98 +187,82 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   const hasMetadata = Object.keys(memory.metadata).length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="memory-detail-title"
-        className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900"
-      >
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-          <div className="flex items-center space-x-2">
-            <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2
-              id="memory-detail-title"
-              className="text-lg font-semibold text-gray-900 dark:text-white"
-            >
-              {isEditing ? t('memory.detail.editTitle') : t('memory.detail.title')}
-            </h2>
-          </div>
-          <div className="flex items-center space-x-2">
-            {isEditing ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleSave();
-                  }}
-                  disabled={isLoading}
-                  className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
-                  aria-label={t('memory.detail.saveAria')}
-                  title={t('memory.detail.saveTitle')}
-                >
-                  {isLoading ? (
-                    <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-green-600"></div>
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={isLoading}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
-                  aria-label={t('memory.detail.cancelAria')}
-                  title={t('memory.detail.cancelTitle')}
-                >
-                  <XCircle className="h-4 w-4" />
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleEdit}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label={t('memory.detail.editAria')}
-                  title={t('memory.detail.editTitleTooltip')}
-                >
-                  <Edit3 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleShare();
-                  }}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-green-600 dark:hover:text-green-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label={t('memory.detail.shareAria')}
-                  title={t('memory.detail.shareTitle')}
-                >
-                  <Share2 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label={t('memory.detail.downloadAria')}
-                  title={t('memory.detail.downloadTitle')}
-                >
-                  <Download className="h-4 w-4" />
-                </button>
-              </>
-            )}
+    <AppModal
+      open={isOpen}
+      onClose={onClose}
+      title={isEditing ? t('memory.detail.editTitle') : t('memory.detail.title')}
+      ariaLabel={t('memory.detail.closeAria')}
+      size="xl"
+      headerActions={
+        isEditing ? (
+          <>
             <button
               type="button"
-              onClick={onClose}
-              aria-label={t('memory.detail.closeAria')}
-              className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              onClick={() => {
+                void handleSave();
+              }}
+              disabled={isLoading}
+              className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
+              aria-label={t('memory.detail.saveAria')}
+              title={t('memory.detail.saveTitle')}
             >
-              <X className="h-5 w-5" />
+              {isLoading ? (
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
             </button>
-          </div>
-        </div>
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={isLoading}
+              className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
+              aria-label={t('memory.detail.cancelAria')}
+              title={t('memory.detail.cancelTitle')}
+            >
+              <XCircle className="h-4 w-4" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleEdit}
+              className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label={t('memory.detail.editAria')}
+              title={t('memory.detail.editTitleTooltip')}
+            >
+              <Edit3 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleShare();
+              }}
+              className="p-2 text-gray-400 dark:text-slate-500 hover:text-green-600 dark:hover:text-green-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label={t('memory.detail.shareAria')}
+              title={t('memory.detail.shareTitle')}
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="p-2 text-gray-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label={t('memory.detail.downloadAria')}
+              title={t('memory.detail.downloadTitle')}
+            >
+              <Download className="h-4 w-4" />
+            </button>
+          </>
+        )
+      }
+    >
+      <div className="flex items-center space-x-2 mb-4">
+        <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+      </div>
 
-        <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
           <div className="p-6">
             <div className="mb-6">
               <div className="flex items-center space-x-3 mb-3">
@@ -493,8 +464,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
               </div>
             </div>
           </div>
-        </div>
       </div>
-    </div>
+    </AppModal>
   );
 };

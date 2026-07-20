@@ -33,7 +33,7 @@ describe('provider modal keyboard behavior', () => {
       <ProviderSelectorModal isOpen onClose={onClose} onSelect={vi.fn()} providers={[provider]} />
     );
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -50,7 +50,7 @@ describe('provider modal keyboard behavior', () => {
       />
     );
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

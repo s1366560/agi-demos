@@ -62,7 +62,7 @@ describe('MemoryDetailModal', () => {
     const onClose = vi.fn();
     render(<MemoryDetailModal isOpen={true} onClose={onClose} memory={mockMemory} />);
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

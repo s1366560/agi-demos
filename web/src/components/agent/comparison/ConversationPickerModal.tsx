@@ -4,11 +4,13 @@
  * Shows a searchable list of conversations (excluding the current one)
  * so the user can pick which conversation to compare with.
  */
-import { memo, useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
+import { memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Search, MessageSquare, X } from 'lucide-react';
+import { Search, MessageSquare } from 'lucide-react';
+
+import { AppModal } from '@/components/common';
 
 import type { Conversation } from '@/types/agent';
 
@@ -43,7 +45,6 @@ export const ConversationPickerModal = memo(
     onClose,
   }: ConversationPickerModalProps) => {
     const { t } = useTranslation();
-    const titleId = useId();
     const [search, setSearch] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -72,110 +73,81 @@ export const ConversationPickerModal = memo(
       [onSelect, onClose]
     );
 
-    // Close on Escape
-    useEffect(() => {
-      if (!visible) return;
-      const handleKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onClose();
-      };
-      window.addEventListener('keydown', handleKey);
-      return () => {
-        window.removeEventListener('keydown', handleKey);
-      };
-    }, [visible, onClose]);
-
     if (!visible) return null;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50">
-        <div
-          className="mx-4 w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
-            <h3 id={titleId} className="text-sm font-medium text-slate-700 dark:text-slate-200">
-              {t('comparison.selectConversation', 'Select conversation to compare')}
-            </h3>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t('common.close', 'Close')}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Search */}
-          <div className="px-4 py-2 border-b border-slate-200/60 dark:border-slate-700/50">
-            <div className="relative">
-              <Search
-                size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-                aria-hidden="true"
-              />
-              <input
-                ref={inputRef}
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                }}
-                placeholder={t('comparison.search', 'Search conversations...')}
-                className="w-full rounded-md border border-slate-200 bg-slate-100 py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary/50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
-                aria-label={t('comparison.search', 'Search conversations...')}
-              />
-            </div>
-          </div>
-
-          {/* List */}
-          <div className="max-h-80 overflow-y-auto">
-            {filteredConversations.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-sm text-slate-400">
-                {t('comparison.noResults', 'No conversations found')}
-              </div>
-            ) : (
-              filteredConversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  type="button"
-                  onClick={() => {
-                    handleSelect(conv.id);
-                  }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-100 dark:border-slate-700/30 last:border-b-0"
-                >
-                  <div className="flex items-start gap-2.5">
-                    <MessageSquare
-                      size={14}
-                      className="mt-0.5 flex-shrink-0 text-slate-400"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
-                        {conv.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
-                        <span>
-                          {conv.message_count} {conv.message_count === 1 ? 'message' : 'messages'}
-                        </span>
-                        {conv.updated_at && (
-                          <>
-                            <span className="text-slate-300 dark:text-slate-600">|</span>
-                            <span>{formatDate(conv.updated_at)}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))
-            )}
+      <AppModal
+        open={visible}
+        onClose={onClose}
+        title={t('comparison.selectConversation', 'Select conversation to compare')}
+        size="md"
+      >
+        {/* Search */}
+        <div className="px-1 py-2 border-b border-slate-200/60 dark:border-slate-700/50">
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+              aria-hidden="true"
+            />
+            <input
+              ref={inputRef}
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+              }}
+              placeholder={t('comparison.search', 'Search conversations...')}
+              className="w-full rounded-md border border-slate-200 bg-slate-100 py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary/50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
+              aria-label={t('comparison.search', 'Search conversations...')}
+            />
           </div>
         </div>
-      </div>
+
+        {/* List */}
+        <div className="max-h-80 overflow-y-auto">
+          {filteredConversations.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-sm text-slate-400">
+              {t('comparison.noResults', 'No conversations found')}
+            </div>
+          ) : (
+            filteredConversations.map((conv) => (
+              <button
+                key={conv.id}
+                type="button"
+                onClick={() => {
+                  handleSelect(conv.id);
+                }}
+                className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-100 dark:border-slate-700/30 last:border-b-0"
+              >
+                <div className="flex items-start gap-2.5">
+                  <MessageSquare
+                    size={14}
+                    className="mt-0.5 flex-shrink-0 text-slate-400"
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                      {conv.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                      <span>
+                        {conv.message_count} {conv.message_count === 1 ? 'message' : 'messages'}
+                      </span>
+                      {conv.updated_at && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <span>{formatDate(conv.updated_at)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </AppModal>
     );
   }
 );

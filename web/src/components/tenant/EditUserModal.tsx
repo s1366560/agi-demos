@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { X } from 'lucide-react';
-
 import { formatDateOnly } from '@/utils/date';
+
+import { AppModal } from '@/components/common';
+
 
 interface User {
   id: string;
@@ -53,8 +54,6 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   const availableRoles =
     context === 'tenant'
       ? [
@@ -71,86 +70,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div className="mx-4 w-full max-w-md rounded-lg bg-white shadow-lg dark:bg-slate-900">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {t('tenant.users.actions.edit')}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('common.close')}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
-          {/* User Info */}
-          <div className="flex items-center space-x-4 pb-4 border-b border-gray-200 dark:border-slate-800">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 dark:bg-slate-100">
-              <span className="text-lg font-medium text-slate-50 dark:text-slate-900">
-                {user.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div>
-              <h3 className="font-medium text-gray-900 dark:text-white">{user.name}</h3>
-              <p className="text-sm text-gray-500 dark:text-slate-400">{user.email}</p>
-            </div>
-          </div>
-
-          {/* Role Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-              {t('tenant.users.invite_modal.role')}
-            </label>
-            <select
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value);
-              }}
-              disabled={user.role === 'owner' || isSaving}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {availableRoles.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-            {user.role === 'owner' && (
-              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-                {t('tenant.users.owner_role_immutable')}
-              </p>
-            )}
-          </div>
-
-          {/* User Info */}
-          <div className="pt-4 border-t border-gray-200 dark:border-slate-800">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-gray-500 dark:text-slate-500">
-                  {t('tenant.users.joined_at_label')}
-                </p>
-                <p className="text-gray-900 dark:text-white font-medium">
-                  {formatDateOnly(user.created_at)}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500 dark:text-slate-500">
-                  {t('tenant.users.last_login_label')}
-                </p>
-                <p className="text-gray-900 dark:text-white font-medium">
-                  {user.last_login ? formatDateOnly(user.last_login) : t('common.time.never')}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex space-x-3 p-6 border-t border-gray-200 dark:border-slate-800">
+    <AppModal
+      open={isOpen}
+      onClose={onClose}
+      title={t('tenant.users.actions.edit')}
+      size="md"
+      isDirty={isSaving}
+      closeOnBackdrop={!isSaving}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
@@ -165,12 +93,75 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               void handleSave();
             }}
             disabled={isSaving || user.role === 'owner'}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? t('tenant.users.saving') : t('common.save')}
           </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {/* User Info */}
+        <div className="flex items-center space-x-4 pb-4 border-b border-gray-200 dark:border-slate-800">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 dark:bg-slate-100">
+            <span className="text-lg font-medium text-slate-50 dark:text-slate-900">
+              {user.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <h3 className="font-medium text-gray-900 dark:text-white">{user.name}</h3>
+            <p className="text-sm text-gray-500 dark:text-slate-400">{user.email}</p>
+          </div>
+        </div>
+
+        {/* Role Selection */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+            {t('tenant.users.invite_modal.role')}
+          </label>
+          <select
+            value={role}
+            onChange={(e) => {
+              setRole(e.target.value);
+            }}
+            disabled={user.role === 'owner' || isSaving}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {availableRoles.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          {user.role === 'owner' && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+              {t('tenant.users.owner_role_immutable')}
+            </p>
+          )}
+        </div>
+
+        {/* User Info */}
+        <div className="pt-4 border-t border-gray-200 dark:border-slate-800">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-gray-500 dark:text-slate-500">
+                {t('tenant.users.joined_at_label')}
+              </p>
+              <p className="text-gray-900 dark:text-white font-medium">
+                {formatDateOnly(user.created_at)}
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-500 dark:text-slate-500">
+                {t('tenant.users.last_login_label')}
+              </p>
+              <p className="text-gray-900 dark:text-white font-medium">
+                {user.last_login ? formatDateOnly(user.last_login) : t('common.time.never')}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </AppModal>
   );
 };

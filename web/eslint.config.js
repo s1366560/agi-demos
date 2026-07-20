@@ -5,6 +5,11 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
+import noHardcodedHex from './eslint-rules/no-hardcoded-hex.mjs';
+
+const localRules = {
+  'memstack/no-hardcoded-hex': 'warn',
+};
 
 export default tseslint.config(
   { ignores: ['dist', 'src/test/**', '**/.legacy.*', 'e2e/**', 'test-debug.tsx', 'vitest.config.ts', 'playwright.config.ts'] },
@@ -24,6 +29,7 @@ export default tseslint.config(
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
       import: importPlugin,
+      memstack: { rules: { 'no-hardcoded-hex': noHardcodedHex } },
     },
     settings: {
       'import/resolver': {
@@ -120,6 +126,9 @@ export default tseslint.config(
           ],
         },
       ],
+
+      // Local governance rules
+      ...localRules,
     },
   },
   // Prettier must be last to override other formatting rules

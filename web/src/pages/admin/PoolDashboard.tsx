@@ -41,6 +41,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { useThemeColor } from '@/hooks/useThemeColor';
+
 import { formatDateTime } from '@/utils/date';
 
 import { usePoolStore } from '../../stores/pool';
@@ -165,6 +167,12 @@ const PoolDashboard: React.FC = () => {
   }, [autoRefresh, refreshInterval, fetchStatus, fetchInstances, fetchMetrics]);
 
   const { t } = useTranslation();
+
+  // Theme-aware status/tier colors (resolved from design tokens)
+  const successColor = useThemeColor('--color-success');
+  const primaryColor = useThemeColor('--color-primary');
+  const errorColor = useThemeColor('--color-error');
+  const warningDarkColor = useThemeColor('--color-warning-dark');
 
   const handleRefresh = useCallback(() => {
     void fetchStatus();
@@ -396,7 +404,7 @@ const PoolDashboard: React.FC = () => {
             <Statistic
               title={t('admin.poolDashboard.status.ready')}
               value={status?.ready_instances ?? 0}
-              styles={{ content: { color: '#52c41a' } }}
+              styles={{ content: { color: successColor } }}
               prefix={<CheckCircle2 size={20} />}
             />
           </Card>
@@ -406,7 +414,7 @@ const PoolDashboard: React.FC = () => {
             <Statistic
               title={t('admin.poolDashboard.status.executing')}
               value={status?.executing_instances ?? 0}
-              styles={{ content: { color: '#1890ff' } }}
+              styles={{ content: { color: primaryColor } }}
               prefix={<Zap size={20} />}
             />
           </Card>
@@ -418,7 +426,7 @@ const PoolDashboard: React.FC = () => {
               value={status?.unhealthy_instances ?? 0}
               styles={{
                 content: {
-                  color: (status?.unhealthy_instances ?? 0) > 0 ? '#f5222d' : undefined,
+                  color: (status?.unhealthy_instances ?? 0) > 0 ? errorColor : undefined,
                 },
               }}
               prefix={<AlertCircle size={20} />}
@@ -436,7 +444,7 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <Zap size={16} style={{ color: '#f5222d' }} />
+                      <Zap size={16} style={{ color: errorColor }} />
                       {t('admin.poolDashboard.tiers.hot')}
                     </Space>
                   }
@@ -447,7 +455,7 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <Cloud size={16} style={{ color: '#fa8c16' }} />
+                      <Cloud size={16} style={{ color: warningDarkColor }} />
                       {t('admin.poolDashboard.tiers.warm')}
                     </Space>
                   }
@@ -458,7 +466,7 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <History size={16} style={{ color: '#1890ff' }} />
+                      <History size={16} style={{ color: primaryColor }} />
                       {t('admin.poolDashboard.tiers.cold')}
                     </Space>
                   }

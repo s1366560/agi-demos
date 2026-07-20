@@ -74,7 +74,7 @@ export const UserMenu = React.memo(function UserMenu({
       >
         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-xs font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900 sm:h-8 sm:w-8 sm:text-sm">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            <img src={avatarUrl} alt={displayName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             initials
           )}

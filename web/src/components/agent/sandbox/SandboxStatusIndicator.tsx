@@ -788,7 +788,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
             ${config.bgColor} ${config.color}
             transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             cursor-pointer hover:opacity-80
-            border-none outline-none
+            border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent
             ${className || ''}
           `}
           onClick={handleClick}

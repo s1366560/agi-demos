@@ -14,7 +14,7 @@ import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate, NavLink } from 'react-router-dom';
+import { useLocation, useNavigate, NavLink, Link } from 'react-router-dom';
 
 import {
   Plus,
@@ -49,12 +49,13 @@ import {
   persistLastProjectId,
 } from '@/utils/projectSelectionPersistence';
 
+import { AppModal } from '@/components/common/AppModal';
 import {
   getContextualTopNavItems,
   groupTenantTopNavItems,
   isContextualTopNavItemActive,
 } from '@/components/layout/tenantNavigation';
-import { LazyButton, LazyInput } from '@/components/ui/lazyAntd';
+import { LazyButton, LazyInput, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { Resizer } from '../agent/Resizer';
 
@@ -69,10 +70,11 @@ interface ConversationWithProject extends Conversation {
 }
 
 interface ConversationItemProps {
-  activeItemRef?: React.Ref<HTMLDivElement> | undefined;
+  activeItemRef?: React.Ref<HTMLAnchorElement> | undefined;
   conversation: ConversationWithProject;
   grouped?: boolean | undefined;
   isActive: boolean;
+  href: string;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onRename?: ((e: React.MouseEvent) => void) | undefined;
@@ -362,7 +364,7 @@ function conversationActivityDate(conversation: Conversation): string {
 
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
 const ConversationItem: React.FC<ConversationItemProps> = memo(
-  ({ activeItemRef, conversation, grouped = false, isActive, onSelect, onDelete, onRename }) => {
+  ({ activeItemRef, conversation, grouped = false, isActive, href, onSelect, onDelete, onRename }) => {
     const { t } = useTranslation();
     const timeAgo = React.useMemo(() => {
       try {
@@ -383,20 +385,14 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
         : [display.roleLabel, display.contextLabel].filter((part): part is string => Boolean(part));
 
     return (
-      <div
+      <Link
         ref={activeItemRef}
-        role="button"
-        tabIndex={0}
+        to={href}
         onClick={onSelect}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onSelect();
-          }
-        }}
+        aria-current={isActive ? 'page' : undefined}
         className={`
         group relative p-3 rounded-xl mb-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
-        transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 border
+        transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 border no-underline
         ${
           isActive
             ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
@@ -470,7 +466,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
             </button>
           </div>
         </div>
-      </div>
+      </Link>
     );
   }
 );
@@ -545,7 +541,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const widthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const sidebarRef = useRef<HTMLElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const activeConversationItemRef = useRef<HTMLDivElement | null>(null);
+  const activeConversationItemRef = useRef<HTMLAnchorElement | null>(null);
 
   // Internal state for uncontrolled mode
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -618,12 +614,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     conversationsLoading,
     hasMoreConversations,
     reset: resetConversations,
+    removeConversationLocal,
+    restoreConversationLocal,
   } = useConversationsStore(
     useShallow((state) => ({
       conversations: state.conversations,
       conversationsLoading: state.conversationsLoading,
       hasMoreConversations: state.hasMoreConversations,
       reset: state.reset,
+      removeConversationLocal: state.removeConversationLocal,
+      restoreConversationLocal: state.restoreConversationLocal,
     }))
   );
 
@@ -1207,47 +1207,104 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
   }, [selectedProjectId, createNewConversation, navigate, tenantId]);
 
-  const handleDeleteConversation = useCallback(
-    (id: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!selectedProjectId) return;
-      const confirmed = window.confirm(
-        `${t('agent.sidebar.deleteTitle', 'Delete Conversation')}\n\n${t(
-          'agent.sidebar.deleteConfirm',
-          'Are you sure? This action cannot be undone.'
-        )}`
-      );
-      if (!confirmed) {
-        return;
-      }
+  // Delete confirmation + optimistic-undo state
+  const [deleteTarget, setDeleteTarget] = useState<ConversationWithProject | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const pendingDeleteUndoRef = useRef<{ cancelled: boolean } | null>(null);
+  const messageApi = useLazyMessage();
 
+  const handleDeleteConversation = useCallback(
+    (conv: ConversationWithProject, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setDeleteTarget(conv);
+    },
+    []
+  );
+
+  const confirmDeleteConversation = useCallback(async () => {
+    const target = deleteTarget;
+    if (!target || !selectedProjectId) return;
+
+    // Snapshot + close modal immediately
+    const snapshot = target;
+    const conversationId = target.id;
+    setDeleteTarget(null);
+    setIsDeleting(true);
+
+    // Optimistically remove from the list (no API call yet)
+    removeConversationLocal(conversationId);
+
+    // Navigate away if we deleted the active conversation
+    if (activeConversationId === conversationId) {
+      void navigate(
+        buildAgentWorkspacePath({
+          tenantId,
+          projectId: selectedProjectId,
+          workspaceId: workspaceIdFromQuery,
+        })
+      );
+    }
+
+    // Show undo toast; commit the real delete after a short delay
+    const UNDO_WINDOW_MS = 5000;
+    const undoToken = { cancelled: false };
+    pendingDeleteUndoRef.current = undoToken;
+
+    const undo = () => {
+      undoToken.cancelled = true;
+      restoreConversationLocal(snapshot);
+    };
+
+    messageApi?.open({
+      type: 'success',
+      content: (
+        <span className="ms-2 inline-flex items-center gap-3">
+          <span>{t('agent.sidebar.deletedToast', 'Conversation deleted')}</span>
+          <LazyButton
+            size="small"
+            type="link"
+            onClick={undo}
+            style={{ padding: 0, height: 'auto' }}
+          >
+            {t('agent.sidebar.undo', 'Undo')}
+          </LazyButton>
+        </span>
+      ),
+      duration: UNDO_WINDOW_MS / 1000,
+    });
+
+    window.setTimeout(() => {
+      if (undoToken.cancelled) return;
       void (async () => {
         try {
-          await deleteConversation(id, selectedProjectId);
-          if (activeConversationId === id) {
-            void navigate(
-              buildAgentWorkspacePath({
-                tenantId,
-                projectId: selectedProjectId,
-                workspaceId: workspaceIdFromQuery,
-              })
-            );
-          }
+          await deleteConversation(conversationId, selectedProjectId);
         } catch (error) {
           console.error('Failed to delete conversation:', error);
+          restoreConversationLocal(snapshot);
+          messageApi?.error(t('agent.sidebar.deleteFailed', 'Failed to delete conversation'));
+        } finally {
+          pendingDeleteUndoRef.current = null;
+          setIsDeleting(false);
         }
       })();
-    },
-    [
-      selectedProjectId,
-      activeConversationId,
-      deleteConversation,
-      navigate,
-      tenantId,
-      t,
-      workspaceIdFromQuery,
-    ]
-  );
+    }, UNDO_WINDOW_MS);
+  }, [
+    deleteTarget,
+    selectedProjectId,
+    removeConversationLocal,
+    restoreConversationLocal,
+    activeConversationId,
+    navigate,
+    tenantId,
+    workspaceIdFromQuery,
+    messageApi,
+    deleteConversation,
+    t,
+  ]);
+
+  const cancelDeleteConversation = useCallback(() => {
+    setDeleteTarget(null);
+  }, []);
 
   // Rename conversation state and handlers
   const [renamingConversation, setRenamingConversation] = useState<ConversationWithProject | null>(
@@ -1734,11 +1791,17 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                           key={conv.id}
                           conversation={conv}
                           isActive={conv.id === selectedConversationId}
+                          href={buildAgentWorkspacePath({
+                            tenantId,
+                            conversationId: conv.id,
+                            projectId: conv.projectId,
+                            workspaceId: workspaceIdFromQuery,
+                          })}
                           onSelect={() => {
                             handleSelectConversation(conv.id, conv.projectId);
                           }}
                           onDelete={(e) => {
-                            handleDeleteConversation(conv.id, e);
+                            handleDeleteConversation(conv, e);
                           }}
                           onRename={(e) => {
                             handleRenameClick(conv, e);
@@ -1770,11 +1833,17 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                                 conversation={conv}
                                 grouped
                                 isActive={conv.id === selectedConversationId}
+                                href={buildAgentWorkspacePath({
+                                  tenantId,
+                                  conversationId: conv.id,
+                                  projectId: conv.projectId,
+                                  workspaceId: workspaceIdFromQuery,
+                                })}
                                 onSelect={() => {
                                   handleSelectConversation(conv.id, conv.projectId);
                                 }}
                                 onDelete={(e) => {
-                                  handleDeleteConversation(conv.id, e);
+                                  handleDeleteConversation(conv, e);
                                 }}
                                 onRename={(e) => {
                                   handleRenameClick(conv, e);
@@ -1868,6 +1937,39 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           </div>
         </div>
       ) : null}
+      <AppModal
+        open={deleteTarget !== null}
+        onClose={cancelDeleteConversation}
+        title={t('agent.sidebar.deleteTitle', 'Delete Conversation')}
+        description={t('agent.sidebar.deleteDescription', 'This conversation and its messages will be permanently removed.')}
+        size="sm"
+        closeOnEscape={!isDeleting}
+        closeOnBackdrop={!isDeleting}
+        footer={
+          <div className="flex justify-end gap-2">
+            <LazyButton size="small" onClick={cancelDeleteConversation} disabled={isDeleting}>
+              {t('common.cancel', 'Cancel')}
+            </LazyButton>
+            <LazyButton
+              size="small"
+              type="primary"
+              danger
+              loading={isDeleting}
+              onClick={() => {
+                void confirmDeleteConversation();
+              }}
+            >
+              {t('agent.sidebar.delete', 'Delete')}
+            </LazyButton>
+          </div>
+        }
+      >
+        {deleteTarget ? (
+          <p className="text-sm text-muted break-words">
+            {deleteTarget.title || t('agent.sidebar.untitled', 'Untitled')}
+          </p>
+        ) : null}
+      </AppModal>
     </aside>
   );
 };
