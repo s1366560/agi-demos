@@ -58,6 +58,7 @@ mod auth_context;
 mod authority_store;
 mod authorized_tool_host;
 mod automation;
+mod automation_store;
 mod changes;
 #[cfg(test)]
 mod managed_resource_tests;
@@ -2374,7 +2375,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route(
             "/api/v1/projects/:project_id/cron-jobs",
-            get(automation::list),
+            get(automation::list).post(automation::create),
         )
         .route(
             "/api/v1/projects/:project_id/cron-jobs/capabilities",
@@ -2382,7 +2383,13 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route(
             "/api/v1/projects/:project_id/cron-jobs/:automation_id",
-            get(automation::get),
+            get(automation::get)
+                .patch(automation::update)
+                .delete(automation::delete),
+        )
+        .route(
+            "/api/v1/projects/:project_id/cron-jobs/:automation_id/toggle",
+            post(automation::toggle),
         )
         .route(
             "/api/v1/projects/:project_id/cron-jobs/:automation_id/runs",
@@ -11591,7 +11598,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 16);
+        assert_eq!(version, 17);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -11671,13 +11678,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 17;")
+                .execute_batch("PRAGMA user_version = 18;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 16"));
+        assert!(error.contains("newer than supported schema version 17"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -12413,7 +12420,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 16);
+        assert_eq!(schema_version, 17);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -14629,9 +14636,54 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_automation_read_contract_is_project_scoped_and_fail_closed() {
+    async fn local_automation_mutations_are_persistent_revision_guarded_and_project_scoped() {
         let state = test_state("automation-read-secret");
         let app = local_router(state);
+
+        let create_payload = json!({
+            "idempotency_key": "create-daily-brief",
+            "name": "Daily brief",
+            "description": "Summarize the active workspace",
+            "enabled": true,
+            "delete_after_run": false,
+            "schedule": { "kind": "cron", "config": { "expression": "0 9 * * 1-5" } },
+            "payload": { "kind": "agent_turn", "config": { "message": "Prepare the brief" } },
+            "delivery": { "kind": "announce", "config": {} },
+            "conversation_mode": "fresh",
+            "timezone": "Asia/Shanghai",
+            "stagger_seconds": 0,
+            "timeout_seconds": 300,
+            "max_retries": 2
+        });
+        let created = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-read-secret",
+                create_payload.clone(),
+            ))
+            .await
+            .expect("create automation response");
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created = response_json(created).await;
+        let automation_id = created["id"].as_str().expect("automation id").to_string();
+        assert_eq!(created["revision"], 1);
+        assert_eq!(created["schedule_revision"], 1);
+        assert_eq!(created["project_id"], "local-project");
+
+        let replay = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/projects/local-project/cron-jobs",
+                "automation-read-secret",
+                create_payload,
+            ))
+            .await
+            .expect("replay create automation response");
+        assert_eq!(replay.status(), StatusCode::OK);
+        assert_eq!(response_json(replay).await["id"], automation_id);
 
         let jobs = app
             .clone()
@@ -14646,7 +14698,7 @@ mod tests {
         assert_eq!(jobs.status(), StatusCode::OK);
         assert_eq!(
             response_json(jobs).await,
-            json!({ "items": [], "total": 0 })
+            json!({ "items": [created.clone()], "total": 1 })
         );
 
         let capabilities = app
@@ -14665,32 +14717,75 @@ mod tests {
             json!({
                 "schema_version": 1,
                 "read": true,
-                "revision_guarded": false,
-                "idempotency_guarded": false,
+                "revision_guarded": true,
+                "idempotency_guarded": true,
                 "durable_execution": false,
                 "supported_read_trigger_kinds": ["manual", "schedule", "event"],
-                "create": {
-                    "allowed": false,
-                    "reason_code": "durable_automation_runtime_unavailable",
-                },
-                "edit": {
-                    "allowed": false,
-                    "reason_code": "durable_automation_runtime_unavailable",
-                },
-                "toggle": {
-                    "allowed": false,
-                    "reason_code": "durable_automation_runtime_unavailable",
-                },
+                "create": { "allowed": true },
+                "edit": { "allowed": true },
+                "toggle": { "allowed": true },
                 "run_now": {
                     "allowed": false,
-                    "reason_code": "durable_automation_runtime_unavailable",
+                    "reason_code": "durable_automation_execution_unavailable",
                 },
-                "delete": {
-                    "allowed": false,
-                    "reason_code": "durable_automation_runtime_unavailable",
-                },
+                "delete": { "allowed": true },
             })
         );
+
+        let updated = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}"),
+                "automation-read-secret",
+                json!({
+                    "idempotency_key": "rename-daily-brief",
+                    "expected_revision": 1,
+                    "name": "Weekday brief"
+                }),
+            ))
+            .await
+            .expect("update automation response");
+        assert_eq!(updated.status(), StatusCode::OK);
+        let updated = response_json(updated).await;
+        assert_eq!(updated["name"], "Weekday brief");
+        assert_eq!(updated["revision"], 2);
+        assert_eq!(updated["schedule_revision"], 1);
+
+        let stale_update = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}"),
+                "automation-read-secret",
+                json!({
+                    "idempotency_key": "stale-rename",
+                    "expected_revision": 1,
+                    "name": "Stale name"
+                }),
+            ))
+            .await
+            .expect("stale automation response");
+        assert_eq!(stale_update.status(), StatusCode::CONFLICT);
+
+        let disabled = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}/toggle"),
+                "automation-read-secret",
+                json!({
+                    "idempotency_key": "disable-daily-brief",
+                    "expected_revision": 2,
+                    "enabled": false
+                }),
+            ))
+            .await
+            .expect("toggle automation response");
+        assert_eq!(disabled.status(), StatusCode::OK);
+        let disabled = response_json(disabled).await;
+        assert_eq!(disabled["enabled"], false);
+        assert_eq!(disabled["revision"], 3);
 
         let missing_job = app
             .clone()
@@ -14715,6 +14810,21 @@ mod tests {
             .await
             .expect("missing automation runs response");
         assert_eq!(missing_runs.status(), StatusCode::NOT_FOUND);
+
+        let deleted = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "DELETE",
+                &format!("/api/v1/projects/local-project/cron-jobs/{automation_id}"),
+                "automation-read-secret",
+                json!({
+                    "idempotency_key": "delete-daily-brief",
+                    "expected_revision": 3
+                }),
+            ))
+            .await
+            .expect("delete automation response");
+        assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
 
         let invalid_page = app
             .clone()

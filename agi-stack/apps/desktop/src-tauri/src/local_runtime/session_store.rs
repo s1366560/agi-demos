@@ -29,7 +29,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 16;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 17;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 const LEGACY_TASK_SESSION_RECEIPT_TABLE: &str = "desktop_new_task_sessions_v15";
@@ -555,6 +555,7 @@ impl DesktopSessionStore {
             }
         };
         super::auth_context::initialize_auth_context_schema(&connection)?;
+        super::automation_store::initialize_schema(&connection)?;
         super::resource_registry::initialize_resource_registry(&connection)?;
         connection
             .pragma_update(None, "user_version", DESKTOP_SESSION_SCHEMA_VERSION)
