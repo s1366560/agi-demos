@@ -20,11 +20,14 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+aes-gcm = { version = "0.10", features = ["zeroize"] }
 tauri = { version = "2", features = [] }
 axum = { version = "0.7", features = ["ws"] }
 async-trait = "0.1"
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 futures-util = "0.3"
+getrandom = "0.2"
 portable-pty = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -35,6 +38,7 @@ tokio = { version = "1", features = ["macros", "net", "process", "rt-multi-threa
 tower-http = { version = "0.6", features = ["cors"] }
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+zeroize = "1"
 
 # The same portable core + embedded device adapters used on every other platform.
 agistack-core = { path = "../../../crates/core" }
@@ -42,21 +46,6 @@ agistack-adapters-device = { path = "../../../crates/adapters-device" }
 agistack-adapters-http-llm = { path = "../../../crates/adapters-http-llm" }
 agistack-adapters-local-tools = { path = "../../../crates/adapters-local-tools" }
 agistack-adapters-mem = { path = "../../../crates/adapters-mem" }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-keyring = { version = "=3.6.3", default-features = false, features = ["apple-native"] }
-# keyring's `security-framework = "3"` range currently resolves to releases
-# above this crate's Rust 1.81 MSRV. Keep the newest compatible native backend.
-security-framework = { version = "=3.5.1", default-features = false }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-keyring = { version = "=3.6.3", default-features = false, features = [
-  "crypto-rust",
-  "linux-native-sync-persistent",
-] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

@@ -37,6 +37,23 @@ make reset         # Full wipe (docker + cache)
 make fresh         # reset + init + dev
 ```
 
+### Desktop client development (mandatory)
+
+- Agents **MUST** launch the native desktop client from the repository root with
+  `make -C agi-stack run-desktop`.
+- **NEVER** use `cargo run` from `agi-stack/apps/desktop/src-tauri` to launch the client. It bypasses
+  the canonical Tauri development runner and can produce a client with different native runtime,
+  configuration, and signing behavior from the supported development path.
+- Do not treat `pnpm run dev` in `agi-stack/apps/desktop` as a native-client launch. It starts only
+  the Vite frontend and cannot validate Tauri, native runtime, signing, or application-vault
+  persistence behavior.
+- Do not invoke raw `tauri dev` / `pnpm dlx @tauri-apps/cli ... dev` during normal development.
+  The macOS Tauri configuration has a defensive stable-signing runner, but the Make target remains
+  the canonical entry point and must be used by coding agents, IDE tasks, and manual QA.
+- Desktop trusted sessions and local Provider API keys use the application-managed encrypted vault;
+  agents must not add `keyring`, macOS Keychain, Windows Credential Manager, or Linux Secret Service
+  dependencies back into the desktop credential path.
+
 **Default credentials** (auto-created):
 
 | User | Email | Password |

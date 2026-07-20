@@ -12,6 +12,7 @@ test('the Tauri command surface contains only Mission Control shell capabilities
   assert.match(tauriSource, /local_runtime_configure/);
   assert.match(tauriSource, /open_device_authorization_url/);
   assert.match(tauriSource, /trusted_session_(?:save|load|clear)/);
+  assert.match(tauriSource, /local_trusted_session_(?:save|load|clear)/);
 
   assert.doesNotMatch(tauriSource, /pub struct DesktopCore/);
   assert.doesNotMatch(tauriSource, /async fn (?:ingest|search|semantic_search)\b/);

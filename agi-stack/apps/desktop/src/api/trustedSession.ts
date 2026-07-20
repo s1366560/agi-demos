@@ -89,3 +89,35 @@ export async function clearNativeTrustedSession(): Promise<void> {
   const invoke = requireDesktopInvoke();
   await invoke('trusted_session_clear');
 }
+
+function requireLocalTrustedSession(session: NativeTrustedSession): NativeTrustedSession {
+  if (
+    session.runtime_mode !== 'local' ||
+    session.credential_kind !== 'local_session_reference'
+  ) {
+    throw new Error('The local trusted desktop session record is invalid.');
+  }
+  return session;
+}
+
+export async function loadLocalTrustedSession(): Promise<NativeTrustedSession | null> {
+  const invoke = requireDesktopInvoke();
+  const value = await invoke('local_trusted_session_load');
+  if (value === null || value === undefined) return null;
+  const session = decodeNativeTrustedSession(value);
+  if (!session) {
+    await clearLocalTrustedSession();
+    throw new Error('The local trusted desktop session record is invalid.');
+  }
+  return requireLocalTrustedSession(session);
+}
+
+export async function saveLocalTrustedSession(session: NativeTrustedSession): Promise<void> {
+  const invoke = requireDesktopInvoke();
+  await invoke('local_trusted_session_save', { input: requireLocalTrustedSession(session) });
+}
+
+export async function clearLocalTrustedSession(): Promise<void> {
+  const invoke = requireDesktopInvoke();
+  await invoke('local_trusted_session_clear');
+}

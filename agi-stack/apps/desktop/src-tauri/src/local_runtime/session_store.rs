@@ -32,6 +32,7 @@ use super::{
 
 const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 18;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
+const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 const LEGACY_TASK_SESSION_RECEIPT_TABLE: &str = "desktop_new_task_sessions_v15";
 const TASK_SESSION_RECEIPT_TABLE_SQL: &str = "CREATE TABLE desktop_new_task_sessions (
@@ -572,6 +573,41 @@ impl DesktopSessionStore {
 
     pub(super) fn installation_id(&self) -> &str {
         &self.installation_id
+    }
+
+    pub(super) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
+        if value.trim().is_empty() {
+            return Err("local trusted session record is invalid".to_string());
+        }
+        self.connection()?
+            .execute(
+                "INSERT INTO desktop_runtime_metadata(key, value_text) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value_text = excluded.value_text",
+                params![LOCAL_TRUSTED_SESSION_METADATA_KEY, value],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub(super) fn load_local_trusted_session(&self) -> Result<Option<String>, String> {
+        self.connection()?
+            .query_row(
+                "SELECT value_text FROM desktop_runtime_metadata WHERE key = ?1",
+                params![LOCAL_TRUSTED_SESSION_METADATA_KEY],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn clear_local_trusted_session(&self) -> Result<(), String> {
+        self.connection()?
+            .execute(
+                "DELETE FROM desktop_runtime_metadata WHERE key = ?1",
+                params![LOCAL_TRUSTED_SESSION_METADATA_KEY],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
     }
 
     pub(super) fn ensure_workspace(&self, workspace: &Value) -> Result<(), String> {
@@ -4574,6 +4610,52 @@ fn timeline_has_cursor_collision(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_trusted_session_reference_survives_reopen_and_can_be_cleared() {
+        let path = std::env::temp_dir().join(format!(
+            "agistack-local-trusted-session-{}.db",
+            Uuid::new_v4()
+        ));
+        let record = r#"{"version":1,"credential":"local-session-reference"}"#;
+
+        {
+            let store = DesktopSessionStore::open(&path).expect("open local session store");
+            store
+                .save_local_trusted_session(record)
+                .expect("save local trusted session reference");
+            assert_eq!(
+                store
+                    .load_local_trusted_session()
+                    .expect("load local trusted session reference"),
+                Some(record.to_string())
+            );
+        }
+
+        {
+            let store = DesktopSessionStore::open(&path).expect("reopen local session store");
+            assert_eq!(
+                store
+                    .load_local_trusted_session()
+                    .expect("load reopened local trusted session reference"),
+                Some(record.to_string())
+            );
+            store
+                .clear_local_trusted_session()
+                .expect("clear local trusted session reference");
+            store
+                .clear_local_trusted_session()
+                .expect("clear missing local trusted session reference");
+            assert_eq!(
+                store
+                    .load_local_trusted_session()
+                    .expect("load cleared local trusted session reference"),
+                None
+            );
+        }
+
+        let _ = std::fs::remove_file(path);
+    }
 
     fn task_session_snapshot(
         user_id: &str,

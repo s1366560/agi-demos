@@ -373,7 +373,7 @@ test('runtime preset selection requires both matching origin and transport mode'
   );
 });
 
-test('runtime identity changes clear bearer, launch, and native trusted authority', () => {
+test('runtime identity changes clear the trusted authority owned by the previous mode', () => {
   const start = appSource.indexOf('const handleConfigChange');
   const end = appSource.indexOf('const useApiKeyManually', start);
   const source = start >= 0 && end > start ? appSource.slice(start, end) : '';
@@ -381,7 +381,10 @@ test('runtime identity changes clear bearer, launch, and native trusted authorit
   assert.match(source, /runtimeTransportIdentityChanged\(/);
   assert.match(source, /transportIdentityChanged[\s\S]*apiKey: ''[\s\S]*localApiToken: ''/);
   assert.match(source, /setAuth\(emptyAuthState\)/);
-  assert.match(source, /clearNativeTrustedSession\(\)/);
+  assert.match(source, /previousConfig\.mode === 'local'/);
+  assert.match(source, /clearLocalTrustedSession/);
+  assert.match(source, /clearNativeTrustedSession/);
+  assert.match(source, /void clearTrustedSession\(\)/);
 });
 
 test('cloud task-list sessions reopen the exact conversation through guarded legacy review', () => {

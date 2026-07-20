@@ -7,8 +7,13 @@
 - `make run-desktop` launches the Tauri dev shell, starts Vite on `127.0.0.1:5173`,
   and renders the React app to `New session`.
 - On macOS, `make run-desktop` provisions a private local development signing identity and signs
-  each rebuilt dev binary with that stable identity. Existing Keychain records can require one
-  final **Always Allow** confirmation after upgrading from an ad-hoc build; later rebuilds reuse it.
+  each rebuilt dev binary with that stable identity. Desktop credentials no longer access Keychain;
+  cloud sessions and Provider API keys persist through the application-managed encrypted vault.
+- The macOS Tauri configuration applies the same signing runner to direct `tauri dev` launches, so
+  IDE and coding-agent development commands cannot accidentally fall back to ad-hoc signatures.
+- The encrypted vault stores only AES-256-GCM ciphertext in SQLite and keeps its random installation
+  key in a separate user-private file. Upgrading from a Keychain-backed build requires signing in and
+  entering Provider API keys once; legacy Keychain entries are left untouched.
 - Browser QA on `http://127.0.0.1:5173` verifies the signed-out desktop shell,
   sign-in dialog, successful local login against `http://127.0.0.1:8000`,
   workspace chat entry, and sending a workspace task prompt.

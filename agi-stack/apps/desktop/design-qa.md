@@ -894,10 +894,10 @@ The source capture is softer and records an earlier popup width. Production foll
 - Local catalogs identify built-in suggestions as `static-fallback`; an empty catalog without a source remains unavailable. No local `/models` network request is implied.
 - Fast, coding, vision, fallback, and cloud routing mutations remain read-only because the current service contract does not expose those writes.
 - A newly connected Provider is created active only after explicit validation and the final Add action; the UI does not claim unsupported per-role routing writes.
-- API keys are accepted only in write requests and stored in the operating-system credential vault.
+- API keys are accepted only in write requests and stored in the application-managed encrypted vault.
   Versioned records bind each secret to tenant, Provider, revision, type, endpoint, and auth method;
   stale or corrupt records fail closed. Provider responses expose only
-  `credential_configured` plus a non-locating `system_vault` source enum, and the frontend
+  `credential_configured` plus a non-locating `application_vault` source enum, and the frontend
   allow-lists response fields before retaining them.
 - Environment-secret references are implemented for the local and target Rust runtimes. Only the
   allow-listed variable name is persisted or returned; the value is resolved at runtime and remains
@@ -967,9 +967,11 @@ comparison remains current. Final contract audit: P0 0, P1 0, P2 0.
 
 ### Iteration 5 — passed: secure credential persistence
 
-The prior process-memory-only credential behavior was replaced with the existing cross-platform
-system-vault adapter (macOS Keychain, Windows Credential Manager, Linux persistent secret service).
-Each desktop database now owns a persisted installation UUID. Vault accounts are one-way digests of
+The prior operating-system credential adapter was replaced with an application-managed vault that
+stores AES-256-GCM ciphertext in SQLite and a random installation key in a separate user-private file.
+This removes Keychain, Windows Credential Manager, and Linux Secret Service access. It protects a
+copied database, but not against a process already able to read both files as the same OS user.
+Each desktop database owns a persisted installation UUID. Vault record keys are one-way digests of
 installation, tenant, Provider, revision, and binding identity, and each versioned record repeats those
 fields for validation. The next revision is pre-written to its own account before the SQLite CAS; a
 conflict removes only that candidate, while a process crash leaves the database's prior revision and

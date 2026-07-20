@@ -47,9 +47,12 @@ import {
   isWorkspaceContextUnavailableError,
 } from './api/client';
 import {
+  clearLocalTrustedSession,
   clearNativeTrustedSession,
   hasNativeTrustedSessionBroker,
+  loadLocalTrustedSession,
   loadNativeTrustedSession,
+  saveLocalTrustedSession,
   saveNativeTrustedSession,
   type NativeTrustedSession,
 } from './api/trustedSession';
@@ -3783,9 +3786,9 @@ export function App() {
     try {
       if (hasNativeTrustedSessionBroker()) {
         try {
-          await clearNativeTrustedSession();
+          await clearLocalTrustedSession();
         } catch {
-          // An uncleared record may belong to another identity. Fail closed before account switch.
+          // An uncleared local reference may belong to another local session. Fail closed.
           throw new Error(t('login.credentialStoreUnavailable'));
         }
         if (authAttemptRevisionRef.current !== authAttemptRevision) return;
@@ -3804,7 +3807,7 @@ export function App() {
           expires_at: outcome.session?.expires_at ?? null,
         };
         try {
-          await saveNativeTrustedSession(trustedSession);
+          await saveLocalTrustedSession(trustedSession);
         } catch {
           persistenceWarning = t('login.persistenceUnavailable');
         }
@@ -3818,7 +3821,7 @@ export function App() {
       if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       if (hasNativeTrustedSessionBroker()) {
         try {
-          await clearNativeTrustedSession();
+          await clearLocalTrustedSession();
         } catch {
           // Preserve the original authentication failure without exposing credential-store detail.
         }
@@ -3854,7 +3857,11 @@ export function App() {
       localResumeAttemptRef.current = '';
       setAuth(emptyAuthState);
       if (hasNativeTrustedSessionBroker()) {
-        void clearNativeTrustedSession().catch(() => {
+        const clearTrustedSession =
+          previousConfig.mode === 'local'
+            ? clearLocalTrustedSession
+            : clearNativeTrustedSession;
+        void clearTrustedSession().catch(() => {
           if (authAttemptRevisionRef.current === authAttemptRevision) {
             setError(t('login.persistenceUnavailable'));
           }
@@ -3895,7 +3902,7 @@ export function App() {
             .catch(() => false)
         : Promise.resolve(false),
       hasCredentialBroker
-        ? clearNativeTrustedSession()
+        ? (config.mode === 'local' ? clearLocalTrustedSession() : clearNativeTrustedSession())
             .then(() => true)
             .catch(() => false)
         : Promise.resolve(true),
@@ -5143,7 +5150,10 @@ export function App() {
 
     void (async () => {
       try {
-        const trustedSession = await loadNativeTrustedSession();
+        const trustedSession =
+          config.mode === 'local'
+            ? await loadLocalTrustedSession()
+            : await loadNativeTrustedSession();
         if (!trustedSession) return;
         if (
           localResumeAttemptRef.current !== attemptKey ||
@@ -5203,13 +5213,13 @@ export function App() {
           return;
         }
         if (!outcome?.session?.session_id) {
-          await clearNativeTrustedSession();
+          await clearLocalTrustedSession();
           if (authAttemptRevisionRef.current !== authAttemptRevision) return;
           setAuth(emptyAuthState);
           setConnection('idle');
           return;
         }
-        await saveNativeTrustedSession({
+        await saveLocalTrustedSession({
           version: 1,
           api_base_url: config.apiBaseUrl,
           runtime_mode: 'local',
@@ -5229,7 +5239,11 @@ export function App() {
           return;
         }
         try {
-          await clearNativeTrustedSession();
+          if (config.mode === 'local') {
+            await clearLocalTrustedSession();
+          } else {
+            await clearNativeTrustedSession();
+          }
         } catch {
           // The original restore failure remains the user-facing error.
         }

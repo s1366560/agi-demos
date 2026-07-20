@@ -8,15 +8,18 @@ use std::{
     process::{Command, Stdio},
 };
 
+mod application_vault;
 mod local_runtime;
 mod trusted_session;
 
+use application_vault::ApplicationCredentialVault;
 use local_runtime::{LocalRuntimeConfig, LocalRuntimeService, LocalRuntimeStatus};
 use tauri::{
     webview::PageLoadEvent, Manager, RunEvent, State, TitleBarStyle, Url, WebviewUrl,
     WebviewWindowBuilder,
 };
 use trusted_session::{
+    local_trusted_session_clear, local_trusted_session_load, local_trusted_session_save,
     trusted_session_clear, trusted_session_load, trusted_session_save, TrustedSessionBroker,
 };
 use url::{Host, Position};
@@ -459,13 +462,16 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|error| setup_error(error.to_string()))?;
             std::fs::create_dir_all(&app_data_dir)?;
+            let credential_vault = ApplicationCredentialVault::open(&app_data_dir)
+                .map_err(|error| setup_error(error.to_string()))?;
             let local_runtime = tauri::async_runtime::block_on(LocalRuntimeService::start(
                 app_data_dir,
                 default_local_workspace_root(),
+                credential_vault.clone(),
             ))
             .map_err(setup_error)?;
             app.manage(local_runtime);
-            app.manage(TrustedSessionBroker::native());
+            app.manage(TrustedSessionBroker::native(credential_vault));
             ensure_main_window(app.handle())?;
             Ok(())
         })
@@ -476,7 +482,10 @@ pub fn run() {
             open_device_authorization_url,
             trusted_session_save,
             trusted_session_load,
-            trusted_session_clear
+            trusted_session_clear,
+            local_trusted_session_save,
+            local_trusted_session_load,
+            local_trusted_session_clear
         ])
         .build(tauri::generate_context!())
         .expect("error while building the agistack desktop application")

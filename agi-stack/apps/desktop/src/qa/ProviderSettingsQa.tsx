@@ -71,7 +71,7 @@ const initialProviders: ManagedLlmProvider[] = [
     allowed_models: ['gpt-5.1', 'gpt-5.1-mini', 'gpt-4.1'],
     secondary_models: ['gpt-5.1-mini'],
     health_status: 'healthy',
-    credential_source: 'system_vault',
+    credential_source: 'application_vault',
     credential_configured: true,
     api_key_masked: '••••••••••7K2J',
     health_last_check: NOW,
@@ -489,7 +489,7 @@ function safeProviderFromBody(
         ? 'none'
         : authMethod === 'environment'
           ? 'environment'
-          : 'system_vault',
+          : 'application_vault',
     environment_variable: authMethod === 'environment' ? environmentVariable : null,
     api_key_masked:
       authMethod === 'api_key'

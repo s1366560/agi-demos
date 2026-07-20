@@ -51,6 +51,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use url::{Host, Url};
 use uuid::Uuid;
 
+use crate::application_vault::ApplicationCredentialVault;
+
 #[cfg(test)]
 use agistack_core::model::Entity;
 
@@ -120,7 +122,11 @@ pub struct LocalRuntimeService {
 }
 
 impl LocalRuntimeService {
-    pub async fn start(app_data_dir: PathBuf, workspace_root: PathBuf) -> Result<Self, String> {
+    pub async fn start(
+        app_data_dir: PathBuf,
+        workspace_root: PathBuf,
+        credential_vault: ApplicationCredentialVault,
+    ) -> Result<Self, String> {
         std::fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
         std::fs::create_dir_all(&workspace_root).map_err(|error| error.to_string())?;
         let checkpoint_path = app_data_dir.join("agistack-local-agent-checkpoints.db");
@@ -133,7 +139,7 @@ impl LocalRuntimeService {
         let api_token = generate_capability_token();
         let session_store = DesktopSessionStore::open(&session_store_path)?;
         let provider_credentials =
-            ProviderCredentialBroker::native(session_store.installation_id())
+            ProviderCredentialBroker::native(credential_vault, session_store.installation_id())
                 .map_err(|error| error.to_string())?;
         let state = Arc::new(LocalRuntimeState::new_with_provider_credentials(
             workspace_root,
@@ -161,6 +167,18 @@ impl LocalRuntimeService {
             state,
             api_base_url,
         })
+    }
+
+    pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
+        self.state.session_store.save_local_trusted_session(value)
+    }
+
+    pub(crate) fn load_local_trusted_session(&self) -> Result<Option<String>, String> {
+        self.state.session_store.load_local_trusted_session()
+    }
+
+    pub(crate) fn clear_local_trusted_session(&self) -> Result<(), String> {
+        self.state.session_store.clear_local_trusted_session()
     }
 
     pub fn status(&self) -> LocalRuntimeStatus {
@@ -3727,7 +3745,7 @@ fn mutate_llm_provider(
             "base_url": null,
             "auth_method": "api_key",
             "environment_variable": null,
-            "credential_source": "system_vault",
+            "credential_source": "application_vault",
             "credential_configured": false,
             "llm_model": null,
             "allowed_models": [],
@@ -3845,7 +3863,7 @@ fn mutate_llm_provider(
         json!(match auth_method.as_str() {
             "none" => "none",
             "environment" => "environment",
-            _ => "system_vault",
+            _ => "application_vault",
         }),
     );
     object.insert("credential_configured".to_string(), json!(false));
@@ -4042,7 +4060,7 @@ fn provider_credential_store_error(
         status,
         Json(json!({
             "code": "provider_credential_store_unavailable",
-            "detail": "the provider credential could not be saved securely; unlock the operating system credential store and retry",
+            "detail": "the provider credential could not be saved in the encrypted application vault; check desktop app-data access and retry",
         })),
     )
 }
@@ -5143,7 +5161,7 @@ fn provider_with_runtime_state(
     let credential_source = match auth_method {
         "none" => "none",
         "environment" => "environment",
-        _ => "system_vault",
+        _ => "application_vault",
     };
     if let Some(object) = provider.as_object_mut() {
         object.insert("credential_source".to_string(), json!(credential_source));
@@ -11660,7 +11678,7 @@ mod tests {
         assert_eq!(providers[0]["runtime_selected"], true);
         assert_eq!(providers[0]["credential_configured"], true);
         assert_eq!(providers[0]["health_status"], "configuration_valid");
-        assert_eq!(providers[0]["credential_source"], "system_vault");
+        assert_eq!(providers[0]["credential_source"], "application_vault");
         assert!(!providers.to_string().contains("ephemeral-restart-key"));
         assert!(!providers
             .to_string()

@@ -38,11 +38,11 @@ test('login validation remains localized in English and Simplified Chinese', () 
   assert.match(i18nSource, /'login\.restoreFailed': '无法恢复已保存的登录状态，请重新登录。'/);
   assert.match(
     i18nSource,
-    /'login\.signOutPersistenceWarning':[\s\S]*'Signed out, but the revoked credential could not be removed from the operating system store\.'/,
+    /'login\.signOutPersistenceWarning':[\s\S]*'Signed out, but the revoked credential could not be removed from the encrypted application vault\.'/,
   );
   assert.match(
     i18nSource,
-    /'login\.credentialStoreUnavailable':[\s\S]*'Unlock the operating system credential store before switching accounts\.'/,
+    /'login\.credentialStoreUnavailable':[\s\S]*'The encrypted application credential vault is unavailable\. Check desktop app-data access before switching accounts\.'/,
   );
   assert.match(i18nSource, /'login\.localWorkspace': 'Continue with local workspace'/);
   assert.match(i18nSource, /'login\.localWorkspace': '继续使用本地工作区'/);

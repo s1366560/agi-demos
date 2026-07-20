@@ -53,6 +53,7 @@ copyFileSync(
 const testFiles = [
   'a2ui-action.test.mjs',
   'api-client.test.mjs',
+  'application-vault.test.mjs',
   'automation-model.test.mjs',
   'auxiliary-view.test.mjs',
   'auth-context-model.test.mjs',
@@ -63,6 +64,7 @@ const testFiles = [
   'desktop-a11y-i18n.test.mjs',
   'login-screen-fidelity.test.mjs',
   'login-screen-model.test.mjs',
+  'macos-dev-signing.test.mjs',
   'runtime-config-model.test.mjs',
   'trusted-session-broker.test.mjs',
   'local-runtime-status.test.mjs',

@@ -550,7 +550,7 @@ async fn routing_policy_validates_default_models_and_fallback_constraints() {
                 "is_active": true,
                 "base_url": "https://api.example.test/v1",
                 "auth_method": "api_key",
-                "credential_source": "system_vault",
+                "credential_source": "application_vault",
                 "credential_configured": true,
                 "llm_model": "credential-model",
                 "allowed_models": ["credential-model"],

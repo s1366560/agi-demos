@@ -1,4 +1,4 @@
-//! Operating-system credential storage for local LLM providers.
+//! Application-encrypted credential storage for local LLM providers.
 
 use std::{
     fmt,
@@ -8,9 +8,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::application_vault::{ApplicationCredentialVault, ApplicationVaultError};
+
 const PROVIDER_CREDENTIAL_RECORD_VERSION: u16 = 2;
-const KEYRING_SERVICE: &str = "ai.memstack.desktop";
-const KEYRING_ACCOUNT_PREFIX: &str = "llm-provider-credential.v2";
+const APPLICATION_VAULT_KEY_PREFIX: &str = "llm-provider-credential.v2";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ProviderCredentialStoreError {
@@ -30,9 +31,7 @@ impl fmt::Display for ProviderCredentialStoreError {
                 formatter.write_str("provider credential record version is unsupported")
             }
             Self::CorruptRecord => formatter.write_str("provider credential record is corrupt"),
-            Self::Unavailable => {
-                formatter.write_str("operating system credential storage is unavailable")
-            }
+            Self::Unavailable => formatter.write_str("application credential vault is unavailable"),
         }
     }
 }
@@ -92,8 +91,11 @@ impl ProviderCredentialBroker {
         })
     }
 
-    pub(super) fn native(installation_id: &str) -> Result<Self, ProviderCredentialStoreError> {
-        Self::new(Arc::new(NativeProviderCredentialStore), installation_id)
+    pub(super) fn native(
+        vault: ApplicationCredentialVault,
+        installation_id: &str,
+    ) -> Result<Self, ProviderCredentialStoreError> {
+        Self::new(Arc::new(vault), installation_id)
     }
 
     #[cfg(test)]
@@ -283,38 +285,33 @@ fn provider_credential_account(
     digest.update(provider_revision.to_be_bytes());
     digest.update(b"\0");
     digest.update(binding_digest.as_bytes());
-    Ok(format!("{KEYRING_ACCOUNT_PREFIX}.{:x}", digest.finalize()))
+    Ok(format!(
+        "{APPLICATION_VAULT_KEY_PREFIX}.{:x}",
+        digest.finalize()
+    ))
 }
 
-struct NativeProviderCredentialStore;
-
-impl NativeProviderCredentialStore {
-    fn entry(account: &str) -> Result<keyring::Entry, ProviderCredentialStoreError> {
-        keyring::Entry::new(KEYRING_SERVICE, account)
-            .map_err(|_| ProviderCredentialStoreError::Unavailable)
+fn map_application_vault_error(error: ApplicationVaultError) -> ProviderCredentialStoreError {
+    match error {
+        ApplicationVaultError::InvalidKey => ProviderCredentialStoreError::InvalidKey,
+        ApplicationVaultError::InvalidRecord => ProviderCredentialStoreError::InvalidRecord,
+        ApplicationVaultError::CorruptRecord => ProviderCredentialStoreError::CorruptRecord,
+        ApplicationVaultError::Unavailable => ProviderCredentialStoreError::Unavailable,
     }
 }
 
-impl ProviderCredentialStore for NativeProviderCredentialStore {
+impl ProviderCredentialStore for ApplicationCredentialVault {
     fn save(&self, account: &str, credential: &str) -> Result<(), ProviderCredentialStoreError> {
-        Self::entry(account)?
-            .set_password(credential)
-            .map_err(|_| ProviderCredentialStoreError::Unavailable)
+        self.put(account, credential)
+            .map_err(map_application_vault_error)
     }
 
     fn load(&self, account: &str) -> Result<Option<String>, ProviderCredentialStoreError> {
-        match Self::entry(account)?.get_password() {
-            Ok(credential) => Ok(Some(credential)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(ProviderCredentialStoreError::Unavailable),
-        }
+        self.get(account).map_err(map_application_vault_error)
     }
 
     fn clear(&self, account: &str) -> Result<(), ProviderCredentialStoreError> {
-        match Self::entry(account)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(ProviderCredentialStoreError::Unavailable),
-        }
+        ApplicationCredentialVault::clear(self, account).map_err(map_application_vault_error)
     }
 }
 
@@ -394,7 +391,7 @@ mod tests {
             &binding_digest,
         )
         .expect("credential account");
-        assert!(account.starts_with(KEYRING_ACCOUNT_PREFIX));
+        assert!(account.starts_with(APPLICATION_VAULT_KEY_PREFIX));
         assert!(!account.contains(INSTALLATION_A));
         assert!(!account.contains("tenant-a"));
         assert!(!account.contains("provider-a"));
@@ -489,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn installation_namespaces_isolate_shared_operating_system_storage() {
+    fn installation_namespaces_isolate_shared_application_vault_storage() {
         let store = Arc::new(InMemoryProviderCredentialStore::default());
         let installation_a = ProviderCredentialBroker::new(store.clone(), INSTALLATION_A)
             .expect("first installation broker");

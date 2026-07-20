@@ -1,4 +1,4 @@
-//! Native trusted-session credential storage.
+//! Application-encrypted trusted-session credential storage.
 
 use std::{
     fmt,
@@ -8,9 +8,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::{application_vault::ApplicationCredentialVault, local_runtime::LocalRuntimeService};
+
 const TRUSTED_SESSION_RECORD_VERSION: u16 = 1;
-const KEYRING_SERVICE: &str = "ai.memstack.desktop";
-const KEYRING_ACCOUNT: &str = "trusted-session.v1";
+const TRUSTED_SESSION_VAULT_KEY: &str = "trusted-session.v1";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -100,8 +101,8 @@ impl TrustedSessionBroker {
         }
     }
 
-    pub(crate) fn native() -> Self {
-        Self::new(Arc::new(NativeTrustedSessionStore))
+    pub(crate) fn native(vault: ApplicationCredentialVault) -> Self {
+        Self::new(Arc::new(vault))
     }
 
     pub(crate) fn save(
@@ -183,39 +184,25 @@ fn map_store_error(_error: TrustedSessionStoreError) -> TrustedSessionBrokerErro
     TrustedSessionBrokerError::StorageUnavailable
 }
 
-struct NativeTrustedSessionStore;
-
-impl NativeTrustedSessionStore {
-    fn entry() -> Result<keyring::Entry, TrustedSessionStoreError> {
-        keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-            .map_err(|_| TrustedSessionStoreError::Unavailable)
-    }
-}
-
-impl TrustedSessionStore for NativeTrustedSessionStore {
+impl TrustedSessionStore for ApplicationCredentialVault {
     fn save_raw(&self, value: &str) -> Result<(), TrustedSessionStoreError> {
-        Self::entry()?
-            .set_password(value)
+        self.put(TRUSTED_SESSION_VAULT_KEY, value)
             .map_err(|_| TrustedSessionStoreError::Unavailable)
     }
 
     fn load_raw(&self) -> Result<Option<String>, TrustedSessionStoreError> {
-        match Self::entry()?.get_password() {
-            Ok(value) => Ok(Some(value)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(TrustedSessionStoreError::Unavailable),
-        }
+        self.get(TRUSTED_SESSION_VAULT_KEY)
+            .map_err(|_| TrustedSessionStoreError::Unavailable)
     }
 
     fn clear_raw(&self) -> Result<(), TrustedSessionStoreError> {
-        match Self::entry()?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(TrustedSessionStoreError::Unavailable),
-        }
+        self.clear(TRUSTED_SESSION_VAULT_KEY)
+            .map_err(|_| TrustedSessionStoreError::Unavailable)
     }
 }
 
 const BLOCKING_TASK_ERROR: &str = "trusted session credential task failed";
+const LOCAL_BLOCKING_TASK_ERROR: &str = "local trusted session task failed";
 
 #[tauri::command]
 pub(crate) async fn trusted_session_save(
@@ -249,6 +236,74 @@ pub(crate) async fn trusted_session_clear(
         .await
         .map_err(|_| BLOCKING_TASK_ERROR.to_string())?
         .map_err(|error| error.to_string())
+}
+
+fn serialize_local_record(
+    record: &TrustedSessionRecord,
+) -> Result<String, TrustedSessionBrokerError> {
+    validate_record(record)?;
+    if !matches!(
+        (record.runtime_mode, record.credential_kind),
+        (
+            TrustedSessionRuntimeMode::Local,
+            TrustedSessionCredentialKind::LocalSessionReference
+        )
+    ) {
+        return Err(TrustedSessionBrokerError::InvalidRecord);
+    }
+    serde_json::to_string(record).map_err(|_| TrustedSessionBrokerError::InvalidRecord)
+}
+
+fn deserialize_local_record(
+    serialized: &str,
+) -> Result<TrustedSessionRecord, TrustedSessionBrokerError> {
+    let record = serde_json::from_str::<TrustedSessionRecord>(serialized)
+        .map_err(|_| TrustedSessionBrokerError::CorruptRecord)?;
+    serialize_local_record(&record)?;
+    Ok(record)
+}
+
+#[tauri::command]
+pub(crate) async fn local_trusted_session_save(
+    runtime: State<'_, LocalRuntimeService>,
+    input: TrustedSessionRecord,
+) -> Result<(), String> {
+    let serialized = serialize_local_record(&input).map_err(|error| error.to_string())?;
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.save_local_trusted_session(&serialized))
+        .await
+        .map_err(|_| LOCAL_BLOCKING_TASK_ERROR.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn local_trusted_session_load(
+    runtime: State<'_, LocalRuntimeService>,
+) -> Result<Option<TrustedSessionRecord>, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(serialized) = runtime.load_local_trusted_session()? else {
+            return Ok(None);
+        };
+        match deserialize_local_record(&serialized) {
+            Ok(record) => Ok(Some(record)),
+            Err(error) => {
+                runtime.clear_local_trusted_session()?;
+                Err(error.to_string())
+            }
+        }
+    })
+    .await
+    .map_err(|_| LOCAL_BLOCKING_TASK_ERROR.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn local_trusted_session_clear(
+    runtime: State<'_, LocalRuntimeService>,
+) -> Result<(), String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.clear_local_trusted_session())
+        .await
+        .map_err(|_| LOCAL_BLOCKING_TASK_ERROR.to_string())?
 }
 
 #[cfg(test)]
@@ -365,5 +420,13 @@ mod tests {
         }"#;
 
         assert!(serde_json::from_str::<TrustedSessionRecord>(serialized).is_err());
+    }
+
+    #[test]
+    fn local_record_storage_rejects_cloud_bearers() {
+        assert_eq!(
+            serialize_local_record(&cloud_record()),
+            Err(TrustedSessionBrokerError::InvalidRecord)
+        );
     }
 }

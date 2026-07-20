@@ -1419,7 +1419,7 @@ test('provider responses normalize compatibility fields explicitly', async () =>
           auth_method: 'api_key',
           credential_configured: true,
           api_key_masked: 'sk-server-value-must-not-be-retained',
-          credential_source: 'system_vault',
+          credential_source: 'application_vault',
           health_status: 'configuration_valid',
           revision: 4,
         },
@@ -1522,7 +1522,7 @@ test('provider responses normalize compatibility fields explicitly', async () =>
     assert.equal(JSON.stringify(providers).includes('response-secret-must-be-dropped'), false);
     const persisted = providers[2];
     assert.equal(persisted.api_key_masked, '••••••••••••');
-    assert.equal(persisted.credential_source, 'system_vault');
+    assert.equal(persisted.credential_source, 'application_vault');
     assert.equal(providerDraftFromProvider(persisted).apiKey, '');
     const unknown = providers[3];
     assert.equal(unknown.credential_configured, undefined);

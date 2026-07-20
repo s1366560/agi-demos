@@ -62,9 +62,9 @@ const enUS: Record<string, string> = {
   'login.passwordChangeRequired':
     'Your organization requires a password change before this desktop can continue.',
   'login.persistenceUnavailable':
-    'Signed in for this session, but the operating system credential store is unavailable.',
+    'Signed in for this session, but the encrypted application credential vault is unavailable.',
   'login.credentialStoreUnavailable':
-    'Unlock the operating system credential store before switching accounts.',
+    'The encrypted application credential vault is unavailable. Check desktop app-data access before switching accounts.',
   'login.authenticatedTenantUnavailable':
     'The authenticated workspace tenant is not available to this user.',
   'login.authoritativeProjectUnavailable':
@@ -82,7 +82,7 @@ const enUS: Record<string, string> = {
   'login.signOutPersistenceFailed':
     'Sign out could not revoke the active session. Try again before closing the app.',
   'login.signOutPersistenceWarning':
-    'Signed out, but the revoked credential could not be removed from the operating system store.',
+    'Signed out, but the revoked credential could not be removed from the encrypted application vault.',
   'login.hidePassword': 'Hide password',
   'login.showPassword': 'Show password',
   'login.keepSignedIn': 'Keep me signed in on this device',
@@ -1995,8 +1995,8 @@ const zhCN: Record<string, string> = {
   'login.passwordPlaceholder': '输入密码',
   'login.invalidCredentials': '请输入有效的工作邮箱，密码至少 6 个字符。',
   'login.passwordChangeRequired': '组织要求先修改密码，完成后才能继续使用桌面客户端。',
-  'login.persistenceUnavailable': '已登录当前会话，但操作系统凭据存储暂不可用。',
-  'login.credentialStoreUnavailable': '切换账号前，请先解锁操作系统凭据存储。',
+  'login.persistenceUnavailable': '已登录当前会话，但应用加密凭据库暂不可用。',
+  'login.credentialStoreUnavailable': '应用加密凭据库不可用，请检查桌面应用数据访问权限后再切换账号。',
   'login.authenticatedTenantUnavailable': '登录返回的工作空间租户对当前用户不可用。',
   'login.authoritativeProjectUnavailable': '权威工作空间中的项目已不可用。',
   'login.authenticatedContextMismatch': '登录返回的工作空间上下文与所选项目不匹配。',
@@ -2007,7 +2007,7 @@ const zhCN: Record<string, string> = {
   'login.manualApiKeyRequiresValidation': '必须先由服务端验证手动 API 密钥，才能打开工作空间。',
   'login.restoreFailed': '无法恢复已保存的登录状态，请重新登录。',
   'login.signOutPersistenceFailed': '无法撤销当前会话，请重试后再关闭应用。',
-  'login.signOutPersistenceWarning': '已退出登录，但无法从操作系统凭据存储中移除已撤销的凭据。',
+  'login.signOutPersistenceWarning': '已退出登录，但无法从应用加密凭据库中移除已撤销的凭据。',
   'login.hidePassword': '隐藏密码',
   'login.showPassword': '显示密码',
   'login.keepSignedIn': '在此设备上保持登录',
