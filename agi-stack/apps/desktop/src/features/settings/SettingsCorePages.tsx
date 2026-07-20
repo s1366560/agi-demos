@@ -487,13 +487,26 @@ export function GeneralSettingsPage({
   );
 }
 
-export function PreferenceUnavailablePage({
+export function PreferenceSummaryPage({
   section,
 }: {
   section: 'appearance' | 'notifications';
 }) {
   const { t } = useI18n();
   const Icon = section === 'appearance' ? FontStyleIcon : BellIcon;
+  const rows =
+    section === 'appearance'
+      ? [
+          ['settings.theme', 'settings.themeValue'],
+          ['settings.density', 'settings.densityValue'],
+          ['settings.motion', 'settings.motionValue'],
+        ]
+      : [
+          ['settings.reviewAlerts', 'settings.reviewAlertsValue'],
+          ['settings.delivery', 'settings.deliveryValue'],
+          ['settings.quietHours', 'settings.quietHoursValue'],
+        ];
+
   return (
     <SettingsPage
       eyebrow={t('settings.preferences')}
@@ -501,15 +514,19 @@ export function PreferenceUnavailablePage({
       description={t(`settings.${section}Subtitle`)}
       className="settings-preference-page"
     >
-      <section className="settings-panel settings-preference-unavailable">
-        <Icon />
-        <span>
-          <strong>{t('settings.preferenceUnavailable')}</strong>
-          <small>{t(`settings.${section}UnavailableDescription`)}</small>
-        </span>
-        <Badge color="gray" variant="soft">
-          {t('settings.readOnly')}
-        </Badge>
+      <section className="settings-panel settings-preference-summary">
+        <header>
+          <Icon />
+          <span>
+            <strong>{t(`settings.${section}Summary`)}</strong>
+            <small>{t(`settings.${section}SummaryDescription`)}</small>
+          </span>
+        </header>
+        <div className="settings-rows">
+          {rows.map(([label, value]) => (
+            <SettingsRow key={label} label={t(label)} value={t(value)} />
+          ))}
+        </div>
       </section>
     </SettingsPage>
   );

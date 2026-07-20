@@ -44,7 +44,7 @@ import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
   GeneralSettingsPage,
-  PreferenceUnavailablePage,
+  PreferenceSummaryPage,
   SettingsPage,
   WorkspaceSettingsPage,
   type SettingsResourceCounts,
@@ -491,7 +491,7 @@ export function SettingsWindow({
               ) : null}
 
               {section === 'appearance' || section === 'notifications' ? (
-                <PreferenceUnavailablePage section={section} />
+                <PreferenceSummaryPage section={section} />
               ) : null}
 
               {section === 'connection' ? (

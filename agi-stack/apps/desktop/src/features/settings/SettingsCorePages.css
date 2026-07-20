@@ -593,33 +593,34 @@ button.active > .settings-choice-icon {
   font-weight: 650;
 }
 
-.settings-preference-unavailable {
+.settings-preference-summary > header {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  min-height: 92px;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--desktop-border-soft);
 }
 
-.settings-preference-unavailable > svg {
-  color: #718196;
+.settings-preference-summary > header > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--desktop-cyan);
 }
 
-.settings-preference-unavailable > span {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.settings-preference-summary > header > span {
+  display: grid;
+  gap: 3px;
 }
 
-.settings-preference-unavailable > span strong {
+.settings-preference-summary > header strong {
   font-size: 10px;
 }
 
-.settings-preference-unavailable > span small {
+.settings-preference-summary > header small {
   color: #68778a;
   font-size: 8px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 @media (max-width: 1180px) {

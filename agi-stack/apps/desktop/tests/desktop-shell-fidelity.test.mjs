@@ -459,6 +459,15 @@ test('sidebar notifications open the governed notifications settings section', (
   );
 });
 
+test('appearance and notification settings render the prototype preference summaries', () => {
+  assert.match(settingsCoreSource, /export function PreferenceSummaryPage/);
+  assert.match(settingsCoreSource, /settings\.theme/);
+  assert.match(settingsCoreSource, /settings\.reviewAlerts/);
+  assert.match(settingsCoreStyles, /\.settings-preference-summary/);
+  assert.doesNotMatch(settingsCoreSource, /PreferenceUnavailablePage/);
+  assert.doesNotMatch(settingsCoreSource, /settings\.preferenceUnavailable/);
+});
+
 test('command palette cannot bypass the workspace and conversation hierarchy', () => {
   const commandItems =
     appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
