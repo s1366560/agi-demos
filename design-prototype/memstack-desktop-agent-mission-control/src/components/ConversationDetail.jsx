@@ -25,6 +25,7 @@ import {
 import { useI18n } from '../i18n';
 
 import { ApprovalCard } from './ApprovalCard';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { ConversationCanvas } from './ConversationCanvas';
 import { PlanCard } from './PlanCard';
 import './ConversationDetail.css';
@@ -255,7 +256,7 @@ export function ConversationDetail({ mode, task, project, workspace, onApprovePl
           <footer className="session-composer">
             {contextRefs.length ? <div className="session-context-chips">{contextRefs.map((ref) => <button type="button" key={ref} onClick={() => setContextRefs((current) => current.filter((item) => item !== ref))}><Link2Icon />{ref}<span>×</span></button>)}</div> : null}
             <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') sendMessage(); }} placeholder={t('Steer this session…')} aria-label={t('Message conversation')} />
-            <div><span><button type="button"><Link2Icon />{t('Attach')}</button><button type="button"><MixerHorizontalIcon />{t('Context')}</button></span><div className="session-delivery-mode" aria-label={t('Message delivery')}><button className={deliveryMode === 'steer' ? 'active' : ''} type="button" onClick={() => setDeliveryMode('steer')}>{t('Steer now')}</button><button className={deliveryMode === 'queue' ? 'active' : ''} type="button" onClick={() => setDeliveryMode('queue')}>{t('Queue next')}</button></div><button className="send-button" type="button" disabled={!draft.trim() || sending} onClick={sendMessage} aria-label={t('Send message')}><ArrowRightIcon /></button></div>
+            <div><span><ComposerPlusMenu compact sessions={workspace.sessions.filter((session) => session.taskId !== task.id)} onAdd={(item) => addReference(item.label)} /><button type="button"><MixerHorizontalIcon />{t('Context')}</button></span><div className="session-delivery-mode" aria-label={t('Message delivery')}><button className={deliveryMode === 'steer' ? 'active' : ''} type="button" onClick={() => setDeliveryMode('steer')}>{t('Steer now')}</button><button className={deliveryMode === 'queue' ? 'active' : ''} type="button" onClick={() => setDeliveryMode('queue')}>{t('Queue next')}</button></div><button className="send-button" type="button" disabled={!draft.trim() || sending} onClick={sendMessage} aria-label={t('Send message')}><ArrowRightIcon /></button></div>
           </footer>
         </section>
 

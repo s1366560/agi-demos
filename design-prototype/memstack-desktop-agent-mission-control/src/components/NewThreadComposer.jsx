@@ -6,6 +6,7 @@ import {
   CodeIcon,
   CubeIcon,
   FileTextIcon,
+  ImageIcon,
   Link2Icon,
   LockClosedIcon,
   MixerHorizontalIcon,
@@ -13,8 +14,21 @@ import {
 
 import { useI18n } from '../i18n';
 
-const MODELS = ['GPT-5.5', 'Claude Opus 4.8', 'Gemini 3.1 Pro'];
-const EFFORTS = ['Low', 'Medium', 'High'];
+import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { PickerMenu } from './PickerMenu';
+
+const MODEL_OPTIONS = [
+  { value: 'GPT-5.5', description: 'Primary reasoning model for planning, execution, and review.', meta: '128k', badge: 'Default' },
+  { value: 'GPT-5.5 mini', description: 'Fast model for lightweight tasks and quick drafts.', meta: '128k', badge: 'Fast' },
+  { value: 'GPT-5.5 Codex', description: 'Code-specialized model for implementation and refactoring.', meta: '192k', badge: 'Coding' },
+  { value: 'Claude Sonnet 4.5', description: 'Balanced long-context model for synthesis and code review.', meta: '200k' },
+  { value: 'Gemini 2.5 Pro', description: 'Multimodal model for large source sets and visual analysis.', meta: '1m' },
+];
+const EFFORT_OPTIONS = [
+  { value: 'Low', description: 'Fastest responses for simple, well-scoped tasks.' },
+  { value: 'Medium', description: 'Balanced speed and reasoning depth.' },
+  { value: 'High', description: 'Deeper reasoning for complex, multi-step work.' },
+];
 const PERMISSIONS = ['Ask for approval', 'Automatic', 'Full access'];
 
 const SUGGESTIONS = {
@@ -34,19 +48,24 @@ function cycle(list, current) {
   return list[(list.indexOf(current) + 1) % list.length];
 }
 
-export function NewThreadComposer({ workspace, recentThreads, onCreate, onOpenThread }) {
+export function NewThreadComposer({ workspace, recentThreads, onCreate, onOpenThread, onManageModels }) {
   const { t } = useI18n();
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState('work');
-  const [model, setModel] = useState(MODELS[0]);
+  const [model, setModel] = useState(MODEL_OPTIONS[0].value);
   const [effort, setEffort] = useState('Medium');
   const [permission, setPermission] = useState(PERMISSIONS[0]);
+  const [additions, setAdditions] = useState([]);
 
   const canSend = prompt.trim().length > 0;
 
+  function addItem(item) {
+    setAdditions((current) => (current.some((entry) => entry.label === item.label) ? current : [...current, item]));
+  }
+
   function send() {
     if (!canSend) return;
-    onCreate({ prompt: prompt.trim(), mode, model, effort, permission });
+    onCreate({ prompt: prompt.trim(), mode, model, effort, permission, additions: additions.map((item) => item.label) });
   }
 
   return (
@@ -60,6 +79,17 @@ export function NewThreadComposer({ workspace, recentThreads, onCreate, onOpenTh
         </header>
 
         <section className="new-thread-composer">
+          {additions.length ? (
+            <div className="new-thread-chips" aria-label={t('Added context')}>
+              {additions.map((item) => (
+                <button type="button" key={item.label} onClick={() => setAdditions((current) => current.filter((entry) => entry !== item))} aria-label={`${t('Remove')} ${item.label}`}>
+                  {item.kind === 'attachment' ? <ImageIcon /> : <Link2Icon />}
+                  {item.label}
+                  <span aria-hidden="true">×</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
@@ -68,15 +98,21 @@ export function NewThreadComposer({ workspace, recentThreads, onCreate, onOpenTh
             aria-label={t('New thread prompt')}
           />
           <div className="new-thread-composer-toolbar">
+            <ComposerPlusMenu sessions={recentThreads} onAdd={addItem} />
             <div className="composer-pickers">
               <div className="mode-picker" role="group" aria-label={t('Mode')}>
                 <button className={mode === 'work' ? 'active' : ''} type="button" onClick={() => setMode('work')}><MixerHorizontalIcon /> {t('Work')}</button>
                 <button className={mode === 'code' ? 'active' : ''} type="button" onClick={() => setMode('code')}><CodeIcon /> {t('Code')}</button>
               </div>
-              <button className="picker-chip" type="button" onClick={() => setModel(cycle(MODELS, model))}>{t('Model')} <b>{model}</b><ChevronDownIcon /></button>
-              <button className="picker-chip" type="button" onClick={() => setEffort(cycle(EFFORTS, effort))}>{t('Effort')} <b>{t(effort)}</b><ChevronDownIcon /></button>
+              <PickerMenu
+                label={t('Model')}
+                value={model}
+                options={MODEL_OPTIONS}
+                onChange={setModel}
+                footer={onManageModels ? { label: 'Manage models in Settings', icon: <CubeIcon />, onClick: onManageModels } : undefined}
+              />
+              <PickerMenu label={t('Effort')} value={effort} options={EFFORT_OPTIONS} onChange={setEffort} />
               <button className="picker-chip" type="button" onClick={() => setPermission(cycle(PERMISSIONS, permission))}><LockClosedIcon /> {t(permission)}<ChevronDownIcon /></button>
-              <button className="picker-chip" type="button"><Link2Icon /> {t('Attach')}</button>
             </div>
             <button className="send-button" type="button" disabled={!canSend} onClick={send} aria-label={t('Start thread')}><ArrowRightIcon /></button>
           </div>

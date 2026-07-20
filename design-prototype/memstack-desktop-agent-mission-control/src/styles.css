@@ -1067,7 +1067,7 @@ button.primary, .action-buttons button.primary { border-color: #2692ad; backgrou
 .new-thread-composer textarea { width: 100%; min-height: 108px; padding: 15px 16px 8px; border: 0; outline: none; background: transparent; color: var(--text); font-size: 12.5px; line-height: 1.55; resize: vertical; }
 .new-thread-composer textarea::placeholder { color: #556375; }
 .new-thread-composer-toolbar { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-top: 1px solid #1b2430; }
-.composer-pickers { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; overflow-x: auto; }
+.composer-pickers { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .mode-picker { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .mode-picker button { display: flex; align-items: center; gap: 5px; height: 27px; padding: 0 10px; border: 0; background: transparent; color: var(--muted); font-size: 8.5px; font-weight: 650; }
 .mode-picker button.active { background: #143642; color: var(--cyan); }
@@ -1172,3 +1172,49 @@ button.primary, .action-buttons button.primary { border-color: #2692ad; backgrou
 .session-timeline-event.resolution svg { width: 13px; height: 13px; }
 .session-timeline-event.resolution.allowed svg { color: var(--green); }
 .session-timeline-event.resolution.denied svg { color: var(--red); }
+
+/* Composer "+" menu (Codex-style add context & tools) */
+.plus-menu-anchor { position: relative; flex: 0 0 auto; }
+.plus-menu-backdrop { position: fixed; inset: 0; z-index: 70; }
+.plus-menu { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 71; width: 252px; max-height: 340px; overflow-y: auto; padding: 5px; border: 1px solid #2c3948; border-radius: 10px; background: #0d131b; box-shadow: 0 18px 48px rgb(0 0 0 / .55); }
+.plus-menu-header { padding: 7px 9px 5px; color: #556375; font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.plus-menu button.plus-menu-category { display: flex; align-items: center; gap: 8px; width: 100%; height: auto; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: #c3cedb; font-size: 10.5px; font-weight: 550; text-align: left; }
+.plus-menu button.plus-menu-category:hover, .plus-menu button.plus-menu-category.expanded { background: #141c26; color: #e2e9f2; }
+.plus-menu button.plus-menu-category svg { width: 12px; height: 12px; flex: 0 0 auto; color: #7fbfce; }
+.plus-menu button.plus-menu-category svg.chevron { width: 10px; height: 10px; margin-left: auto; color: #556375; transition: transform .15s ease; }
+.plus-menu button.plus-menu-category.expanded svg.chevron { transform: rotate(90deg); }
+.plus-menu-items { display: grid; gap: 1px; margin: 2px 2px 5px 15px; padding-left: 8px; border-left: 1px solid #1b2430; }
+.plus-menu button.plus-menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; height: auto; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.plus-menu button.plus-menu-item:hover:not(:disabled) { background: #141c26; }
+.plus-menu button.plus-menu-item:disabled { opacity: .45; cursor: not-allowed; }
+.plus-menu button.plus-menu-item b { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; overflow: hidden; color: #d6dee8; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.plus-menu button.plus-menu-item b svg { width: 11px; height: 11px; color: #7fbfce; }
+.plus-menu button.plus-menu-item small { color: #6b7a8c; font-size: 8.5px; }
+.plus-menu-empty { padding: 6px 8px; color: #556375; font-size: 9px; }
+
+/* Chips above the new-thread composer textarea */
+.new-thread-chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 2px; }
+.new-thread-chips button { display: inline-flex; align-items: center; gap: 5px; height: 23px; max-width: 240px; padding: 0 7px; overflow: hidden; border: 1px solid #315062; border-radius: 6px; background: #10232c; color: #7fbfce; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+.new-thread-chips button svg { width: 10px; height: 10px; flex: 0 0 auto; }
+.new-thread-chips button span { color: #607083; font-size: 11px; }
+.new-thread-chips button:hover { border-color: #2e8ba5; color: #a8dbe8; }
+
+/* Codex-style picker dropdown (model / effort) */
+.picker-menu-anchor { position: relative; flex: 0 0 auto; }
+.picker-menu-backdrop { position: fixed; inset: 0; z-index: 70; }
+.picker-menu { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 71; width: 264px; max-height: 340px; overflow-y: auto; padding: 5px; border: 1px solid #2c3948; border-radius: 10px; background: #0d131b; box-shadow: 0 18px 48px rgb(0 0 0 / .55); }
+.picker-menu-header { padding: 7px 9px 5px; color: #556375; font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.picker-menu-items { display: grid; gap: 1px; }
+.picker-menu .picker-menu-items button { display: flex; align-items: center; gap: 7px; width: 100%; height: auto; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; color: #c3cedb; font-size: 10.5px; font-weight: 550; text-align: left; }
+.picker-menu .picker-menu-items button:hover { background: #141c26; color: #e2e9f2; }
+.picker-menu .picker-menu-items button.selected { background: #10232c; color: #a8dbe8; }
+.picker-menu-check { display: inline-flex; align-items: center; justify-content: center; width: 13px; flex: 0 0 auto; color: #35d0ba; }
+.picker-menu-check svg { width: 12px; height: 12px; }
+.picker-menu-item-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.picker-menu-item-text b { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; }
+.picker-menu-item-text small { color: #667585; font-size: 8.5px; font-weight: 450; line-height: 1.35; }
+.picker-menu-badge { padding: 1px 5px; border: 1px solid #315062; border-radius: 99px; background: #10232c; color: #7fbfce; font-size: 7.5px; font-style: normal; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.picker-menu-meta { flex: 0 0 auto; color: #556375; font-size: 8.5px; font-variant-numeric: tabular-nums; }
+.picker-menu .picker-menu-footer { display: flex; align-items: center; gap: 7px; width: 100%; height: auto; margin-top: 3px; padding: 7px 9px; border: 0; border-top: 1px solid #1b2430; border-radius: 0 0 6px 6px; background: transparent; color: #7fbfce; font-size: 9.5px; font-weight: 550; text-align: left; }
+.picker-menu .picker-menu-footer:hover { background: #141c26; color: #a8dbe8; }
+.picker-menu .picker-menu-footer svg { width: 11px; height: 11px; }

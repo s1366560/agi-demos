@@ -262,6 +262,7 @@ export function App() {
           recentThreads={workspace.sessions.map(resolveThread)}
           onCreate={createThread}
           onOpenThread={(threadSession) => openThread(threadSession, workspace.id)}
+          onManageModels={() => openSettings('models')}
         />
       )}
 
