@@ -1,6 +1,6 @@
 [package]
 name = "agistack-desktop"
-description = "Tauri desktop shell linking the portable core + device (SQLite) adapters."
+description = "Tauri shell for the MemStack Mission Control desktop client."
 edition = "2021"
 version = "0.1.0"
 license = "MIT"
@@ -59,7 +59,4 @@ keyring = { version = "=3.6.3", default-features = false, features = [
 ] }
 
 [dev-dependencies]
-# Single-threaded executor for the headless command round-trip test (no tokio,
-# mirroring the core's runtime-agnostic contract).
-futures = "0.3"
 tower = { version = "0.5", features = ["util"] }
