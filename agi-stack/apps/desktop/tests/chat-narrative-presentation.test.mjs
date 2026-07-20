@@ -93,6 +93,6 @@ test('narrative content is bounded without discarding authoritative markdown', (
   assert.match(chatSource, /const REMARK_PLUGINS = \[remarkGfm\]/);
   assert.match(
     chatSource,
-    /<ReactMarkdown remarkPlugins=\{REMARK_PLUGINS\}>\{content\}<\/ReactMarkdown>/,
+    /<ReactMarkdown remarkPlugins=\{REMARK_PLUGINS\} components=\{MARKDOWN_COMPONENTS\}>/,
   );
 });

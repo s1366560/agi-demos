@@ -18,6 +18,7 @@
     "src/features/automations/automationModel.ts",
     "src/features/chat/a2uiAction.ts",
     "src/features/chat/chatComposerModel.ts",
+    "src/features/chat/chatTimelineModel.ts",
     "src/hooks/useAgentSocket.ts",
     "src/hooks/useTerminalProxy.ts",
     "src/features/session/sessionProjectionModel.ts",

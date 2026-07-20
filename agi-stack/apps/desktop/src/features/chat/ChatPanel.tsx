@@ -503,11 +503,6 @@ export const ChatPanel = memo(function ChatPanel({
         <div className="message-stack">
           {timelineState ? (
             <>
-              {timelineState.items.length ? (
-                <div className="session-chat-day" aria-label={t('session.today')}>
-                  <span>{t('session.today')}</span>
-                </div>
-              ) : null}
               {activitySummary ? (
                 <section className="session-current-activity" aria-label={t('session.currentActivity')}>
                   <div className="session-current-activity-primary">
@@ -559,6 +554,7 @@ export const ChatPanel = memo(function ChatPanel({
                 onRetry={onRefresh}
                 onRespondToHitl={onRespondToHitl}
                 respondableHitlRequestIds={respondableHitlRequestIds}
+                activityPresence={activityPresence}
               />
             </>
           ) : messages.length === 0 ? (

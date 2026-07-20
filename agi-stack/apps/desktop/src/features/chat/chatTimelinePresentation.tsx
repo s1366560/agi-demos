@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
   ArchiveIcon,
+  ChatBubbleIcon,
   CodeIcon,
   DotsHorizontalIcon,
 } from '@radix-ui/react-icons';
@@ -154,7 +155,8 @@ export function timelineIcon(kind: TimelineKind, item: AgentTimelineItem): React
   if (item.isError || item.error) return <DotsHorizontalIcon />;
   if (kind === 'tool') return <CodeIcon />;
   if (kind === 'artifact') return <ArchiveIcon />;
-  if (item.type === 'thought' || item.type === 'work_plan') return <ActivityLogIcon />;
+  if (item.type === 'thought') return <ChatBubbleIcon />;
+  if (item.type === 'work_plan') return <ActivityLogIcon />;
   return <DotsHorizontalIcon />;
 }
 

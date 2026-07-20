@@ -55,21 +55,27 @@
   box-sizing: border-box;
 }
 
-.session-chat-day {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 16px;
-  color: var(--desktop-faint);
+.session-chat-narrative .timeline-day-divider {
+  margin: 18px 0 0;
   font-size: 9px;
 }
 
-.session-chat-day::before,
-.session-chat-day::after {
-  height: 1px;
-  flex: 1;
-  background: var(--desktop-border-soft);
-  content: '';
+.session-chat-narrative .agent-timeline > .timeline-day-divider:first-child {
+  margin-top: 0;
+}
+
+.session-chat-narrative .timeline-working-indicator {
+  margin: 16px 0 0 45px;
+}
+
+.session-chat-narrative .agent-timeline > .message.timeline-row.thought {
+  border-style: dashed;
+  border-color: #26303c;
+  background: transparent;
+}
+
+.session-chat-narrative .timeline-loading {
+  padding: 24px 0;
 }
 
 .session-chat-narrative .session-current-activity {
@@ -207,6 +213,11 @@
 .session-thread-avatar svg {
   width: 16px;
   height: 16px;
+}
+
+.session-thread-message.is-streaming .session-thread-avatar {
+  border-color: rgba(56, 214, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(56, 214, 255, 0.12);
 }
 
 .session-message-body {

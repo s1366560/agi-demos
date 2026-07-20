@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Button, Text } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
+  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CodeIcon,
+  ExclamationTriangleIcon,
   ReloadIcon,
+  UpdateIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -16,12 +19,22 @@ import type {
   HitlResponseSubmission,
 } from '../../types';
 import { buildSessionNarrative } from '../session/sessionNarrativeModel';
-import type { SessionNarrativeNode } from '../session/sessionNarrativeModel';
+import type { SessionActivityPresence, SessionNarrativeNode } from '../session/sessionNarrativeModel';
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
 import {
+  detectPayloadLanguage,
+  formatToolCallDuration,
+  pairToolCallItems,
+  shouldShowAgentWorkingIndicator,
+  timelineDayKey,
+  timelineDayLabel,
+  toolCallPairDurationMs,
+  toolCallPairStatus,
+} from './chatTimelineModel';
+import type { ToolCallPair } from './chatTimelineModel';
+import {
   formatTimelineTime,
-  formatTimelineValue,
   isImportantTimelineItem,
   timelineDetailLineCount,
   timelineFileMetadata,
@@ -38,6 +51,7 @@ import {
   ToolFileMetadataView,
 } from './chatTimelinePresentation';
 import type { TimelineKind } from './chatTimelinePresentation';
+import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import {
   MarkdownContent,
@@ -78,6 +92,7 @@ export function AgentTimeline({
   onRetry,
   onRespondToHitl,
   respondableHitlRequestIds,
+  activityPresence,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
@@ -88,6 +103,7 @@ export function AgentTimeline({
   onRetry: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
+  activityPresence: SessionActivityPresence;
 }) {
   const { t } = useI18n();
   const respondableHitlRequestIdSet = useMemo(
@@ -112,6 +128,11 @@ export function AgentTimeline({
     [narrative, state.items.length, earlierRenderAllowance],
   );
   const [expandedGroupItems, setExpandedGroupItems] = useState<Record<string, boolean>>({});
+  const showWorkingIndicator = shouldShowAgentWorkingIndicator({
+    items: state.items,
+    presence: activityPresence,
+    awaitingHitl: respondableHitlRequestIdSet.size > 0,
+  });
   const setGroupOpen = (items: AgentTimelineItem[], open: boolean) => {
     setExpandedGroupItems((current) => {
       const next = { ...current };
@@ -132,12 +153,15 @@ export function AgentTimeline({
         role="status"
         aria-label={t('session.loadingHistory')}
       >
-        <Text size="2" color="gray">
-          {t('session.loadingHistory')}
-        </Text>
+        <span className="timeline-skeleton-bar is-wide" aria-hidden="true" />
+        <span className="timeline-skeleton-bar" aria-hidden="true" />
+        <span className="timeline-skeleton-bar is-short" aria-hidden="true" />
+        <span className="sr-only">{t('session.loadingHistory')}</span>
       </div>
     );
   }
+
+  let lastRenderedDayKey = '';
 
   return (
     <div className="agent-timeline" aria-label={t('session.conversationTimeline')}>
@@ -195,111 +219,275 @@ export function AgentTimeline({
       ) : (
         narrative.map((node, index) => {
           if (index < renderWindow.startIndex) return null;
+          const nodeTimeUs =
+            node.kind === 'item' ? node.item.eventTimeUs : node.items[0]?.eventTimeUs;
+          const dayKey = timelineDayKey(nodeTimeUs);
+          const dayDivider =
+            dayKey && dayKey !== lastRenderedDayKey && nodeTimeUs ? (
+              <TimelineDayDivider key={`day-${dayKey}`} timeUs={nodeTimeUs} />
+            ) : null;
+          if (dayKey) lastRenderedDayKey = dayKey;
           if (node.kind === 'activity_group') {
             const groupId = timelineGroupIdentity(narrative, index);
             const open = node.items.some((item) => expandedGroupItems[item.id]);
             return (
-              <details
-                className="timeline-debug-group"
-                data-timeline-anchor-id={groupId}
-                data-timeline-anchor-members={node.membersJson}
-                key={groupId}
-                open={open}
-                onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
-              >
-                <summary>
-                  <span className="timeline-debug-group-icon" aria-hidden="true">
-                    <ActivityLogIcon />
-                  </span>
-                  <span>
-                    <strong>{t('session.runActivity')}</strong>
-                    <small>{t('session.runActivityCount', { count: node.items.length })}</small>
-                  </span>
-                  <em>{t('session.inspect')}</em>
-                  <ChevronRightIcon className="timeline-debug-group-chevron" aria-hidden="true" />
-                </summary>
-                <div className="timeline-debug-group-items">
-                  {node.items.map((item) => (
-                    <TimelineItemView
-                      item={item}
-                      expanded={expandedItems[item.id] ?? false}
-                      onToggle={() => onToggleItem(item)}
-                      onRespondToHitl={onRespondToHitl}
-                      canRespondToHitl={false}
-                      key={item.id}
-                    />
-                  ))}
-                </div>
-              </details>
+              <Fragment key={groupId}>
+                {dayDivider}
+                <details
+                  className="timeline-debug-group"
+                  data-timeline-anchor-id={groupId}
+                  data-timeline-anchor-members={node.membersJson}
+                  open={open}
+                  onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
+                >
+                  <summary>
+                    <span className="timeline-debug-group-icon" aria-hidden="true">
+                      <ActivityLogIcon />
+                    </span>
+                    <span>
+                      <strong>{t('session.runActivity')}</strong>
+                      <small>{t('session.runActivityCount', { count: node.items.length })}</small>
+                    </span>
+                    <em>{t('session.inspect')}</em>
+                    <ChevronRightIcon className="timeline-debug-group-chevron" aria-hidden="true" />
+                  </summary>
+                  <div className="timeline-debug-group-items">
+                    {node.items.map((item) => (
+                      <TimelineItemView
+                        item={item}
+                        expanded={expandedItems[item.id] ?? false}
+                        onToggle={() => onToggleItem(item)}
+                        onRespondToHitl={onRespondToHitl}
+                        canRespondToHitl={false}
+                        key={item.id}
+                      />
+                    ))}
+                  </div>
+                </details>
+              </Fragment>
             );
           }
           if (node.kind === 'tool_group') {
             const groupId = timelineGroupIdentity(narrative, index);
             const open = node.items.some((item) => expandedGroupItems[item.id]);
             return (
-              <details
-                className={`timeline-tool-group status-${node.status}`}
-                data-timeline-anchor-id={groupId}
-                data-timeline-anchor-members={node.membersJson}
-                key={groupId}
-                open={open}
-                onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
-              >
-                <summary>
-                  <span className="timeline-tool-group-icon" aria-hidden>
-                    <CodeIcon />
-                  </span>
-                  <span>
-                    <strong>{t('session.toolActivity')}</strong>
-                    <small>{t('session.toolActivityCount', { count: node.toolCount })}</small>
-                  </span>
-                  <em>{t(`session.toolStatus.${node.status}`)}</em>
-                  <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden />
-                </summary>
-                <div className="timeline-tool-group-items">
-                  {node.items.map((item) => {
-                    const requestId = timelineHitlRequestId(item);
-                    return (
-                      <TimelineItemView
-                        item={item}
-                        expanded={expandedItems[item.id] ?? false}
-                        onToggle={() => onToggleItem(item)}
-                        onRespondToHitl={onRespondToHitl}
-                        canRespondToHitl={Boolean(
-                          requestId && respondableHitlRequestIdSet.has(requestId),
-                        )}
-                        a2uiActionView={a2uiActionViews.get(item.id)}
-                        approvalRequest={state.approvalRequests.find(
-                          (request) => request.id === requestId,
-                        )}
-                        key={item.id}
+              <Fragment key={groupId}>
+                {dayDivider}
+                <details
+                  className={`timeline-tool-group status-${node.status}`}
+                  data-timeline-anchor-id={groupId}
+                  data-timeline-anchor-members={node.membersJson}
+                  open={open}
+                  onToggle={(event) => setGroupOpen(node.items, event.currentTarget.open)}
+                >
+                  <summary>
+                    <span className="timeline-tool-group-icon" aria-hidden>
+                      <CodeIcon />
+                    </span>
+                    <span>
+                      <strong>{t('session.toolActivity')}</strong>
+                      <small>{t('session.toolActivityCount', { count: node.toolCount })}</small>
+                    </span>
+                    <em>{t(`session.toolStatus.${node.status}`)}</em>
+                    <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden />
+                  </summary>
+                  <div className="timeline-tool-group-items">
+                    {pairToolCallItems(node.items).map((pair) => (
+                      <ToolCallPairView
+                        pair={pair}
+                        expanded={expandedItems[pair.call.id] ?? false}
+                        onToggle={() => onToggleItem(pair.call)}
+                        key={pair.call.id}
                       />
-                    );
-                  })}
-                </div>
-              </details>
+                    ))}
+                  </div>
+                </details>
+              </Fragment>
             );
           }
           const item = node.item;
           const requestId = timelineHitlRequestId(item);
           return (
-            <TimelineItemView
-              item={item}
-              expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
-              onToggle={() => onToggleItem(item)}
-              onRespondToHitl={onRespondToHitl}
-              canRespondToHitl={Boolean(
-                requestId && respondableHitlRequestIdSet.has(requestId),
-              )}
-              a2uiActionView={a2uiActionViews.get(item.id)}
-              approvalRequest={state.approvalRequests.find(
-                (request) => request.id === requestId,
-              )}
-              key={node.id}
-            />
+            <Fragment key={node.id}>
+              {dayDivider}
+              <TimelineItemView
+                item={item}
+                expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
+                onToggle={() => onToggleItem(item)}
+                onRespondToHitl={onRespondToHitl}
+                canRespondToHitl={Boolean(
+                  requestId && respondableHitlRequestIdSet.has(requestId),
+                )}
+                a2uiActionView={a2uiActionViews.get(item.id)}
+                approvalRequest={state.approvalRequests.find(
+                  (request) => request.id === requestId,
+                )}
+              />
+            </Fragment>
           );
         })
       )}
+      {showWorkingIndicator ? (
+        <div className="timeline-working-indicator" role="status" aria-live="polite">
+          <span className="timeline-working-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="timeline-working-label">{t('session.agentWorking')}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TimelineDayDivider({ timeUs }: { timeUs: number }) {
+  const { t } = useI18n();
+  const label = timelineDayLabel(timeUs);
+  return (
+    <div className="timeline-day-divider" aria-hidden="true">
+      <span>
+        {label.kind === 'today'
+          ? t('session.today')
+          : label.kind === 'yesterday'
+            ? t('session.yesterday')
+            : label.date}
+      </span>
+    </div>
+  );
+}
+
+function ToolCallPairView({
+  pair,
+  expanded,
+  onToggle,
+}: {
+  pair: ToolCallPair;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useI18n();
+  const status = toolCallPairStatus(pair);
+  const primary = pair.result ?? pair.call;
+  const title =
+    timelineToolDisplay(pair.call)?.title || pair.call.toolName || t('chat.toolCall');
+  const rawSummary = timelineSummary(primary, 'tool', t);
+  const summary = stripRedundantToolPrefix(rawSummary, title, pair.call.toolName);
+  const durationMs = toolCallPairDurationMs(pair);
+  const hasDetails = timelineHasDetails(pair.call, 'tool') || Boolean(pair.result);
+  const memberIds = pair.result ? [pair.call.id, pair.result.id] : [pair.call.id];
+  return (
+    <article
+      className={`message timeline-row timeline-item tool tool-call status-${status} ${
+        expanded ? 'is-expanded' : ''
+      }`}
+      data-timeline-anchor-id={pair.call.id}
+      data-timeline-anchor-members={JSON.stringify(memberIds)}
+    >
+      {hasDetails ? (
+        <button
+          type="button"
+          className="timeline-row-toggle"
+          aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: title })}
+          aria-expanded={expanded}
+          onClick={onToggle}
+        >
+          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+        </button>
+      ) : (
+        <span className="timeline-row-spacer" aria-hidden="true" />
+      )}
+      <div className="timeline-row-main">
+        <div className="timeline-row-line">
+          <span className={`timeline-row-icon tool-call-icon is-${status}`} aria-hidden="true">
+            {status === 'running' ? (
+              <UpdateIcon />
+            ) : status === 'failed' ? (
+              <ExclamationTriangleIcon />
+            ) : (
+              <CheckIcon />
+            )}
+          </span>
+          <span className="timeline-row-title">{title}</span>
+          <span className="timeline-row-summary">{summary}</span>
+        </div>
+        {expanded && hasDetails ? <ToolCallPairBody pair={pair} /> : null}
+      </div>
+      <div className="timeline-row-meta">
+        {status === 'running' ? (
+          <span className="timeline-status waiting">{t('chat.status.running')}</span>
+        ) : null}
+        {status === 'failed' ? (
+          <span className="timeline-status error">{t('chat.status.error')}</span>
+        ) : null}
+        {durationMs !== null ? (
+          <span className="timeline-pair-duration">{formatToolCallDuration(durationMs)}</span>
+        ) : null}
+        <span>{formatTimelineTime(primary)}</span>
+      </div>
+    </article>
+  );
+}
+
+function stripRedundantToolPrefix(
+  summary: string,
+  title: string,
+  toolName: string | undefined,
+): string {
+  for (const prefix of [title, toolName ?? '']) {
+    if (prefix && summary.startsWith(`${prefix} `)) {
+      return summary.slice(prefix.length + 1);
+    }
+  }
+  return summary;
+}
+
+function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {  const { t } = useI18n();
+  const display = timelineToolDisplay(pair.call) ?? timelineToolDisplay(pair.result ?? pair.call);
+  const fileMetadata =
+    timelineFileMetadata(pair.result ?? pair.call) ?? timelineFileMetadata(pair.call);
+  const input = pair.call.toolInput;
+  const output = pair.result?.toolOutput ?? pair.result?.payload;
+  return (
+    <div className="timeline-details">
+      {display?.summary ? (
+        <Text as="p" size="2" className="timeline-detail-summary">
+          {display.summary}
+        </Text>
+      ) : null}
+      {fileMetadata ? <ToolFileMetadataView metadata={fileMetadata} /> : null}
+      {display?.details !== undefined ? (
+        <TimelinePayloadBlock label={t('chat.displayDetails')} value={display.details} />
+      ) : null}
+      {input !== undefined ? (
+        <TimelinePayloadBlock label={t('chat.input')} value={input} />
+      ) : null}
+      {output !== undefined ? (
+        <TimelinePayloadBlock label={t('chat.output')} value={output} />
+      ) : null}
+      {pair.call.payload !== undefined ? (
+        <TimelinePayloadBlock label={t('chat.payload')} value={pair.call.payload} />
+      ) : null}
+      {pair.result?.error ? (
+        <Text size="1" color="red">
+          {pair.result.error}
+        </Text>
+      ) : null}
+    </div>
+  );
+}
+
+function TimelinePayloadBlock({ label, value }: { label: string; value: unknown }) {
+  const payload = detectPayloadLanguage(value);
+  return (
+    <div className="timeline-detail-block">
+      <span>{label}</span>
+      <CodeBlockFrame
+        code={payload.code}
+        language={payload.language}
+        collapsibleAfterLines={24}
+        wrap
+      />
     </div>
   );
 }
@@ -335,6 +523,7 @@ function TimelineItemView({
         badge={kind === 'agent' ? t('session.workspaceAgent') : null}
         className="timeline-item"
         timelineItemId={item.id}
+        streaming={Boolean(item.metadata?.streaming)}
       >
         <TimelineItemBody
           item={item}
@@ -350,9 +539,12 @@ function TimelineItemView({
 
   const hasDetails = timelineHasDetails(item, kind);
   const status = timelineStatus(item);
+  const isThought = item.type === 'thought';
   return (
     <article
-      className={`message timeline-row timeline-item ${kind} ${expanded ? 'is-expanded' : ''} ${
+      className={`message timeline-row timeline-item ${kind}${isThought ? ' thought' : ''} ${
+        expanded ? 'is-expanded' : ''
+      } ${
         approvalRequest ? 'has-approval-evidence' : ''
       }`}
       data-timeline-anchor-id={item.id}
@@ -446,28 +638,16 @@ function TimelineItemBody({
         ) : null}
         {fileMetadata ? <ToolFileMetadataView metadata={fileMetadata} /> : null}
         {display?.details !== undefined ? (
-          <div className="timeline-detail-block">
-            <span>{t('chat.displayDetails')}</span>
-            <pre>{formatTimelineValue(display.details)}</pre>
-          </div>
+          <TimelinePayloadBlock label={t('chat.displayDetails')} value={display.details} />
         ) : null}
         {item.toolInput !== undefined ? (
-          <div className="timeline-detail-block">
-            <span>{t('chat.input')}</span>
-            <pre>{formatTimelineValue(item.toolInput)}</pre>
-          </div>
+          <TimelinePayloadBlock label={t('chat.input')} value={item.toolInput} />
         ) : null}
         {item.toolOutput !== undefined ? (
-          <div className="timeline-detail-block">
-            <span>{t('chat.output')}</span>
-            <pre>{formatTimelineValue(item.toolOutput)}</pre>
-          </div>
+          <TimelinePayloadBlock label={t('chat.output')} value={item.toolOutput} />
         ) : null}
         {item.payload !== undefined ? (
-          <div className="timeline-detail-block">
-            <span>{t('chat.payload')}</span>
-            <pre>{formatTimelineValue(item.payload)}</pre>
-          </div>
+          <TimelinePayloadBlock label={t('chat.payload')} value={item.payload} />
         ) : null}
       </div>
     );
@@ -485,10 +665,7 @@ function TimelineItemBody({
           </Text>
         ) : null}
         {item.payload !== undefined ? (
-          <div className="timeline-detail-block">
-            <span>{t('chat.payload')}</span>
-            <pre>{formatTimelineValue(item.payload)}</pre>
-          </div>
+          <TimelinePayloadBlock label={t('chat.payload')} value={item.payload} />
         ) : null}
       </div>
     );
@@ -516,15 +693,15 @@ function TimelineItemBody({
             {item.content}
           </Text>
         ) : null}
-        <div className="timeline-detail-block">
-          <span>{t('chat.payload')}</span>
-          <pre>{formatTimelineValue(item.payload)}</pre>
-        </div>
+        <TimelinePayloadBlock label={t('chat.payload')} value={item.payload} />
       </div>
     );
   }
 
   const content = item.content || timelinePayloadPreview(item);
+  if (item.type === 'thought') {
+    return <MarkdownContent content={content} className="transcript-content thought-content" />;
+  }
   if (kind === 'user' || kind === 'agent') {
     return <MarkdownContent content={content} className="transcript-content" />;
   }
@@ -555,6 +732,13 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
   };
 
   narrative.forEach((node) => {
+    // Reasoning traces stay first-class, collapsible rows instead of being
+    // folded into the debug activity group.
+    if (node.kind === 'item' && node.item.type === 'thought') {
+      flushActivityItems();
+      grouped.push(node);
+      return;
+    }
     if (node.kind === 'item' && isCollapsibleRuntimeItem(node.item)) {
       activityItems.push(node.item);
       return;

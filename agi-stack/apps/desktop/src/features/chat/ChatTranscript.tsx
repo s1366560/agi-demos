@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react';
+import { isValidElement, memo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
@@ -8,10 +8,12 @@ import {
   PersonIcon,
 } from '@radix-ui/react-icons';
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { useI18n } from '../../i18n';
 import type { WorkspaceMessage } from '../../types';
+import { CodeBlockFrame } from './HighlightedCode';
 
 export function SessionEmptyState() {
   const { t } = useI18n();
@@ -64,6 +66,7 @@ export function NarrativeMessageFrame({
   badge,
   className,
   timelineItemId,
+  streaming = false,
   children,
 }: {
   kind: 'user' | 'agent' | 'runtime';
@@ -73,11 +76,14 @@ export function NarrativeMessageFrame({
   badge: string | null;
   className: string;
   timelineItemId?: string;
+  streaming?: boolean;
   children: ReactNode;
 }) {
   return (
     <article
-      className={`message transcript-message session-thread-message ${className} ${kind}`}
+      className={`message transcript-message session-thread-message ${className} ${kind}${
+        streaming ? ' is-streaming' : ''
+      }`}
       data-timeline-anchor-id={timelineItemId}
     >
       <span className="session-thread-avatar" aria-hidden="true">
@@ -99,12 +105,19 @@ export function NarrativeMessageFrame({
           <MessageActionMenu content={content} />
         </header>
         {children}
+        {streaming ? <span className="streaming-caret" aria-hidden="true" /> : null}
       </div>
     </article>
   );
 }
 
 const REMARK_PLUGINS = [remarkGfm];
+
+const MARKDOWN_COMPONENTS: Components = {
+  // Fenced code blocks render as framed, syntax-highlighted blocks with a
+  // copy affordance; inline `code` keeps the default renderer and styling.
+  pre: MarkdownPreBlock,
+};
 
 export const MarkdownContent = memo(function MarkdownContent({
   content,
@@ -115,10 +128,33 @@ export const MarkdownContent = memo(function MarkdownContent({
 }) {
   return (
     <div className={`markdown-content ${className}`}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
+        {content}
+      </ReactMarkdown>
     </div>
   );
 });
+
+function MarkdownPreBlock({ children }: { children?: ReactNode }) {
+  const codeElement = isValidElement(children) ? children : null;
+  const codeProps = (codeElement?.props ?? {}) as {
+    className?: unknown;
+    children?: ReactNode;
+  };
+  const className = typeof codeProps.className === 'string' ? codeProps.className : '';
+  const language = /language-([\w-]+)/.exec(className)?.[1] ?? 'text';
+  return <CodeBlockFrame code={reactNodeToText(codeProps.children)} language={language} />;
+}
+
+function reactNodeToText(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(reactNodeToText).join('');
+  if (isValidElement(node)) {
+    return reactNodeToText((node.props as { children?: ReactNode }).children);
+  }
+  return '';
+}
 
 function MessageActionMenu({ content }: { content: string }) {
   const { t } = useI18n();
