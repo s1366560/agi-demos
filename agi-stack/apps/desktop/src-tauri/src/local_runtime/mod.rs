@@ -64,6 +64,7 @@ mod changes;
 mod managed_resource_tests;
 mod provider_credentials;
 mod provider_probe;
+mod provider_usage_store;
 mod resource_registry;
 #[cfg(test)]
 mod routing_policy_tests;
@@ -101,6 +102,7 @@ use provider_credentials::{
     provider_credential_binding_digest, ProviderCredentialBroker, ProviderCredentialStoreError,
 };
 use provider_probe::{ProviderProbeOutcome, ProviderProbeRequest, ProviderProbeService};
+use provider_usage_store::ProviderUsageRecord;
 use resource_registry::{ManagedResourceKind, ResourceRegistryError};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
@@ -2122,13 +2124,25 @@ impl LocalRuntimeState {
         let candidates = targets
             .into_iter()
             .filter_map(|target| {
+                let provider_id = target.provider_id;
+                let model_name = target.model_id;
                 let key = ProviderRuntimeKey {
                     tenant_id: tenant_id.to_string(),
-                    provider_id: target.provider_id,
+                    provider_id: provider_id.clone(),
                 };
                 let mut binding = runtime.bindings.get(&key)?.clone();
-                binding.model = target.model_id;
-                llm_from_runtime_binding(binding, runtime.credentials.get(&key).cloned())
+                binding.model = model_name.clone();
+                llm_from_runtime_binding(binding, runtime.credentials.get(&key).cloned()).map(
+                    |inner| {
+                        Arc::new(MeteredLlm {
+                            inner,
+                            session_store: self.session_store.clone(),
+                            provider_id,
+                            tenant_id: tenant_id.to_string(),
+                            model_name,
+                        }) as Arc<dyn LlmPort>
+                    },
+                )
             })
             .collect::<Vec<_>>();
         drop(runtime);
@@ -4464,11 +4478,15 @@ async fn get_llm_provider_usage(
         )
         .map_err(local_store_error)?
         .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
+    let statistics = state
+        .session_store
+        .llm_provider_usage_statistics(&provider_id, tenant_id)
+        .map_err(local_store_error)?;
     Ok(Json(json!({
         "provider_id": provider_id,
         "tenant_id": tenant_id,
-        "availability": "unavailable",
-        "statistics": [],
+        "availability": "available",
+        "statistics": statistics,
     })))
 }
 
@@ -8103,6 +8121,73 @@ struct FailoverLlm {
     candidate_timeout: std::time::Duration,
 }
 
+struct MeteredLlm {
+    inner: Arc<dyn LlmPort>,
+    session_store: DesktopSessionStore,
+    provider_id: String,
+    tenant_id: String,
+    model_name: String,
+}
+
+impl MeteredLlm {
+    fn record_success(&self, started_at: std::time::Instant) {
+        let response_time_ms = i64::try_from(started_at.elapsed().as_millis()).unwrap_or(i64::MAX);
+        let created_at = now_iso();
+        let _ = self
+            .session_store
+            .record_llm_provider_usage(ProviderUsageRecord {
+                provider_id: &self.provider_id,
+                tenant_id: &self.tenant_id,
+                operation_type: "llm",
+                model_name: &self.model_name,
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                cost_usd: None,
+                response_time_ms,
+                created_at: &created_at,
+            });
+    }
+}
+
+#[async_trait]
+impl LlmPort for MeteredLlm {
+    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
+        let started_at = std::time::Instant::now();
+        let result = self.inner.extract_memory(episode).await;
+        if result.is_ok() {
+            self.record_success(started_at);
+        }
+        result
+    }
+
+    async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
+        let started_at = std::time::Instant::now();
+        let result = self.inner.extract_relationships(memory).await;
+        if result.is_ok() {
+            self.record_success(started_at);
+        }
+        result
+    }
+
+    async fn decide(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        available_tools: &[String],
+    ) -> CoreResult<AgentAction> {
+        let started_at = std::time::Instant::now();
+        let result = self
+            .inner
+            .decide(goal, round, transcript, available_tools)
+            .await;
+        if result.is_ok() {
+            self.record_success(started_at);
+        }
+        result
+    }
+}
+
 impl FailoverLlm {
     const CANDIDATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 
@@ -10118,7 +10203,7 @@ mod tests {
             json!({
                 "provider_id": "local-runtime",
                 "tenant_id": "local",
-                "availability": "unavailable",
+                "availability": "available",
                 "statistics": []
             })
         );
@@ -11698,7 +11783,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 17);
+        assert_eq!(version, 18);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -11708,6 +11793,15 @@ mod tests {
             )
             .expect("provider selection table count");
         assert_eq!(selection_table, 1);
+        let usage_table: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'desktop_llm_usage'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("provider usage table count");
+        assert_eq!(usage_table, 1);
         let credential_alias_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -11778,13 +11872,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 18;")
+                .execute_batch("PRAGMA user_version = 19;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 17"));
+        assert!(error.contains("newer than supported schema version 18"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -12520,7 +12614,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 17);
+        assert_eq!(schema_version, 18);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }

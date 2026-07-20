@@ -73,6 +73,7 @@ async fn configured_api_key_provider_executes_the_selected_coding_model() {
     assert_eq!(created["health_status"], "configuration_valid");
 
     let saved = app
+        .clone()
         .oneshot(authenticated_json_request(
             "PUT",
             LOCAL_ROUTING_POLICY_URI,
@@ -116,6 +117,33 @@ async fn configured_api_key_provider_executes_the_selected_coding_model() {
     assert!(requests[0].contains("POST /v1/chat/completions"));
     assert!(requests[0].contains("authorization: Bearer test-glm-provider-key"));
     assert!(requests[0].contains(r#""model":"glm-5.2""#));
+    drop(requests);
+
+    let usage = app
+        .oneshot(authenticated_json_request(
+            "GET",
+            &format!("/api/v1/llm-providers/{provider_id}/usage"),
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("provider usage response");
+    assert_eq!(usage.status(), StatusCode::OK);
+    let usage = response_json(usage).await;
+    assert_eq!(usage["provider_id"], provider_id);
+    assert_eq!(usage["tenant_id"], "local");
+    assert_eq!(usage["availability"], "available");
+    assert_eq!(usage["statistics"].as_array().map(Vec::len), Some(1));
+    let statistic = &usage["statistics"][0];
+    assert_eq!(statistic["operation_type"], "llm");
+    assert_eq!(statistic["total_requests"], 1);
+    assert_eq!(statistic["total_prompt_tokens"], 0);
+    assert_eq!(statistic["total_completion_tokens"], 0);
+    assert_eq!(statistic["total_tokens"], 0);
+    assert_eq!(statistic["total_cost_usd"], Value::Null);
+    assert!(statistic["avg_response_time_ms"].is_number());
+    assert!(statistic["first_request_at"].is_string());
+    assert!(statistic["last_request_at"].is_string());
 }
 
 #[tokio::test]
