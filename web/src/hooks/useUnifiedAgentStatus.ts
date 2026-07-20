@@ -302,7 +302,7 @@ export function useUnifiedAgentStatus({
       lifecycle: deriveLifecycleState(lifecycleState),
       agentState,
       planMode: derivePlanModeInfo(),
-      resources: deriveResources(lifecycleState, activeToolCalls, timeline.length),
+      resources: deriveResources(lifecycleState, activeToolCalls, timelineCount),
       toolStats: deriveToolStats(lifecycleState),
       skillStats: deriveSkillStats(lifecycleState),
       connection: deriveConnectionStatus(isLifecycleConnected, activeSandboxId),
@@ -311,7 +311,7 @@ export function useUnifiedAgentStatus({
       lifecycleState,
       agentState,
       activeToolCalls,
-      timeline.length,
+      timelineCount,
       isLifecycleConnected,
       activeSandboxId,
     ]

@@ -28,7 +28,7 @@ vi.mock('../../stores/agent/streamingStore', () => ({
 }));
 
 vi.mock('../../stores/agent/timelineStore', () => ({
-  useTimeline: vi.fn(),
+  useTimelineCount: vi.fn(),
 }));
 
 vi.mock('../../stores/sandbox', () => ({
@@ -41,7 +41,7 @@ vi.mock('../../hooks/useAgentLifecycleState', () => ({
 
 import { useAgentState, useActiveToolCalls } from '../../stores/agent/executionStore';
 import { useIsStreaming } from '../../stores/agent/streamingStore';
-import { useTimeline } from '../../stores/agent/timelineStore';
+import { useTimelineCount } from '../../stores/agent/timelineStore';
 import { useSandboxStore } from '../../stores/sandbox';
 
 import type { LifecycleStateData } from '../../types/agent';
@@ -67,7 +67,7 @@ describe('useUnifiedAgentStatus - TDD RED Phase', () => {
     vi.mocked(useAgentState).mockReturnValue('idle');
     vi.mocked(useActiveToolCalls).mockReturnValue(new Map());
     vi.mocked(useIsStreaming).mockReturnValue(false);
-    vi.mocked(useTimeline).mockReturnValue([]);
+    vi.mocked(useTimelineCount).mockReturnValue(0);
     vi.mocked(useSandboxStore).mockImplementation((selector) => {
       const state = { activeSandboxId: null };
       return selector(state as any);
@@ -280,6 +280,16 @@ describe('useUnifiedAgentStatus - TDD RED Phase', () => {
       );
 
       expect(result.current.status.resources.activeCalls).toBe(2);
+    });
+
+    it('should use the timeline count for the message total', () => {
+      vi.mocked(useTimelineCount).mockReturnValue(7);
+
+      const { result } = renderHook(() =>
+        useUnifiedAgentStatus({ projectId: mockProjectId, tenantId: mockTenantId, enabled: false })
+      );
+
+      expect(result.current.status.resources.messages).toBe(7);
     });
 
     it('should default to zero when no lifecycle state available', () => {
