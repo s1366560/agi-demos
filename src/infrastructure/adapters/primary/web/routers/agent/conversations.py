@@ -877,6 +877,7 @@ async def delete_conversation(
             project_id=project_id,
             user_id=current_user.id,
         )
+        await db.commit()
 
     except HTTPException:
         raise

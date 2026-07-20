@@ -308,8 +308,8 @@ export type TaskSessionWorkspaceCreateInput = {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  use_case?: 'general' | 'programming' | 'conversation' | 'research' | 'operations';
-  collaboration_mode?:
+  use_case: 'general' | 'programming' | 'conversation' | 'research' | 'operations';
+  collaboration_mode:
     | 'single_agent'
     | 'multi_agent_shared'
     | 'multi_agent_isolated'

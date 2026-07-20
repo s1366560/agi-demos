@@ -12,16 +12,39 @@ pub(super) async fn delete_project_dependents(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     project_id: &str,
 ) -> CoreResult<()> {
+    let project_ids = vec![project_id.to_string()];
+    lock_rows_by_any(tx, "projects", "id", "id", &project_ids).await?;
+    lock_rows_by_any(tx, "user_projects", "id", "project_id", &project_ids).await?;
+
+    let mut workspace_ids =
+        select_ids_by_eq(tx, "workspaces", "id", "project_id", project_id).await?;
+    workspace_ids.sort_unstable();
+    workspace_ids.dedup();
+    lock_rows_by_any(tx, "workspaces", "id", "id", &workspace_ids).await?;
+    lock_rows_by_any(
+        tx,
+        "workspace_members",
+        "id",
+        "workspace_id",
+        &workspace_ids,
+    )
+    .await?;
+
     let conversation_ids =
         select_ids_by_eq(tx, "conversations", "id", "project_id", project_id).await?;
     let message_ids =
         select_ids_by_any(tx, "messages", "id", "conversation_id", &conversation_ids).await?;
-    let workspace_ids = select_ids_by_eq(tx, "workspaces", "id", "project_id", project_id).await?;
 
     if table_exists(tx, "messages").await? {
         update_null_by_any(tx, "messages", "reply_to_id", &message_ids).await?;
-        delete_rows_referencing(tx, "messages", "id", &message_ids, vec!["messages".into()])
-            .await?;
+        delete_rows_referencing(
+            tx,
+            "messages",
+            "id",
+            &message_ids,
+            vec!["messages".into(), "task_session_creation_receipts".into()],
+        )
+        .await?;
         delete_by_any(tx, "messages", "conversation_id", &conversation_ids).await?;
     }
 
@@ -39,7 +62,11 @@ pub(super) async fn delete_project_dependents(
             "conversations",
             "id",
             &conversation_ids,
-            vec!["conversations".into(), "messages".into()],
+            vec![
+                "conversations".into(),
+                "messages".into(),
+                "task_session_creation_receipts".into(),
+            ],
         )
         .await?;
         delete_by_eq(tx, "conversations", "project_id", project_id).await?;
@@ -301,6 +328,46 @@ async fn select_ids_by_any(
         .map(|row| row.try_get("id"))
         .collect::<Result<Vec<String>, sqlx::Error>>()
         .map_err(|e| CoreError::Storage(e.to_string()))
+}
+
+async fn lock_rows_by_any(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    table: &str,
+    id_column: &str,
+    filter_column: &str,
+    filter_values: &[String],
+) -> CoreResult<()> {
+    if filter_values.is_empty()
+        || !table_exists(tx, table).await?
+        || !table_has_column(tx, table, filter_column).await?
+    {
+        return Ok(());
+    }
+    let has_id_column = table_has_column(tx, table, id_column).await?;
+    let row_identity = if has_id_column {
+        format!("{}::text", quote_ident(id_column))
+    } else {
+        "ctid::text".to_string()
+    };
+    let order_by = if has_id_column {
+        row_identity.clone()
+    } else {
+        format!("{}::text, ctid", quote_ident(filter_column))
+    };
+    let sql = format!(
+        "SELECT {row_identity} FROM {} \
+         WHERE {} IS NOT NULL AND {}::text = ANY($1::text[]) \
+         ORDER BY {order_by} FOR UPDATE",
+        quote_ident(table),
+        quote_ident(filter_column),
+        quote_ident(filter_column)
+    );
+    sqlx::query(&sql)
+        .bind(filter_values.to_vec())
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+    Ok(())
 }
 
 async fn update_null_by_any(

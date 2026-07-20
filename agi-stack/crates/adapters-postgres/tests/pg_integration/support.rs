@@ -5,32 +5,34 @@ pub(super) use agistack_adapters_postgres::{
     BlackboardPostRecord, BlackboardReplyRecord, ChannelWebhookEventInsertRecord,
     ChannelWebhookSecretRecord, ChannelWebhookSessionCreateRecord, ConversationCreateRecord,
     ConversationListQuery, ConversationModePatch, ConversationMutationAccess,
-    ConversationReplayAccess, CreateTenantWebhook, CronJobListQuery, DataStatsAccess,
-    DataStatsScopeError, DeployAccess, DeployListQuery, GeneListQuery, GenomeListQuery,
-    InstanceListQuery, InstanceMemberListQuery, InvitationRecord, LlmProviderCreateRecord,
-    LlmProviderUpdateRecord, NewDecisionRecordRecord, NewHitlRequestRecord, NewShareRecord,
-    NewTrustPolicyRecord, PgAdminAccessRepository, PgAgentConversationRepository,
-    PgAgentExecutionEventRepository, PgApiKeyStore, PgArtifactRepository, PgAttachmentRepository,
-    PgAuditLogRepository, PgBillingRepository, PgChannelRepository, PgCheckpointStore,
-    PgCronRepository, PgDataStatsRepository, PgDeployRepository, PgEventLogRepository,
-    PgGeneRepository, PgHitlRequestRepository, PgInstanceRepository, PgInvitationRepository,
-    PgLlmProviderRepository, PgMemoryRepository, PgNotificationRepository, PgProjectReadRepository,
-    PgProjectSandboxRepository, PgProjectStore, PgSchemaRepository, PgShareRepository,
-    PgSkillEvolutionRepository, PgSkillRepository, PgSubagentTemplateRepository,
-    PgSupportRepository, PgTenantRepository, PgTenantSkillConfigRepository,
-    PgTenantWebhookRepository, PgTrustRepository, PgUserStore, PgVectorIndex,
-    PgWorkspaceContextRepository, PgWorkspaceRepository, ProjectCreateRecord,
+    ConversationReplayAccess, CreateTaskSessionRecord, CreateTenantWebhook, CronJobListQuery,
+    DataStatsAccess, DataStatsScopeError, DeployAccess, DeployListQuery, GeneListQuery,
+    GenomeListQuery, InstanceListQuery, InstanceMemberListQuery, InvitationRecord,
+    LlmProviderCreateRecord, LlmProviderUpdateRecord, NewDecisionRecordRecord,
+    NewHitlRequestRecord, NewShareRecord, NewTrustPolicyRecord, PgAdminAccessRepository,
+    PgAgentConversationRepository, PgAgentExecutionEventRepository, PgApiKeyStore,
+    PgArtifactRepository, PgAttachmentRepository, PgAuditLogRepository, PgBillingRepository,
+    PgChannelRepository, PgCheckpointStore, PgCronRepository, PgDataStatsRepository,
+    PgDeployRepository, PgEventLogRepository, PgGeneRepository, PgHitlRequestRepository,
+    PgInstanceRepository, PgInvitationRepository, PgLlmProviderRepository, PgMemoryRepository,
+    PgNotificationRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
+    PgSchemaRepository, PgShareRepository, PgSkillEvolutionRepository, PgSkillRepository,
+    PgSubagentTemplateRepository, PgSupportRepository, PgTenantRepository,
+    PgTenantSkillConfigRepository, PgTenantWebhookRepository, PgTrustRepository, PgUserStore,
+    PgVectorIndex, PgWorkspaceContextRepository, PgWorkspaceRepository, ProjectCreateRecord,
     ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup, ProjectSandboxRecord,
     ProjectStatsLookup, ProjectUpdatePatch, RuntimeHookAuditQuery,
     SkillEvolutionJobAuditEventInsertRecord, SkillEvolutionJobInsertRecord, SkillProjectAccess,
-    SkillRecord, SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus, TenantAdminStatus,
-    TenantEventLogListQuery, TenantLookup, TenantSkillConfigRecord, TenantUpdatePatch,
-    TopologyEdgeRecord, TopologyNodeRecord, TrustDecisionResolution, UsageStatisticsQuery,
-    WorkspaceAccess, WorkspaceContextRepositoryError, WorkspaceContextSwitchRequest,
-    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
-    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
-    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
-    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    SkillRecord, SkillUpdateRecord, SkillVersionRecord, TaskSessionCapabilityMode,
+    TaskSessionConversationRecord, TaskSessionRepositoryError, TaskSessionWorkspaceRecord,
+    TenantAccessStatus, TenantAdminStatus, TenantEventLogListQuery, TenantLookup,
+    TenantSkillConfigRecord, TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord,
+    TrustDecisionResolution, UsageStatisticsQuery, WorkspaceAccess,
+    WorkspaceContextRepositoryError, WorkspaceContextSwitchRequest, WorkspacePipelineRunRecord,
+    WorkspacePipelineStageRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
+    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceTaskSessionAttemptRecord,
 };
 pub(super) use agistack_core::agent::types::{SessionState, SessionStatus};
 pub(super) use agistack_core::model::{Entity, Memory};
@@ -78,8 +80,17 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
 
     for ddl in [
         "CREATE TABLE IF NOT EXISTS users (id text PRIMARY KEY, email text)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password text",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser boolean DEFAULT false",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile json DEFAULT '{}'::json NOT NULL",
         "CREATE TABLE IF NOT EXISTS tenants (id text PRIMARY KEY, name text)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug text",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_id text",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free'",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_projects integer DEFAULT 10",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_users integer DEFAULT 5",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_storage bigint DEFAULT 1073741824",
         "CREATE TABLE IF NOT EXISTS user_tenants (\
             id text PRIMARY KEY, user_id text NOT NULL, tenant_id text NOT NULL, \
             role text DEFAULT 'member', permissions json DEFAULT '{}'::json, \
@@ -87,6 +98,11 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
         "CREATE TABLE IF NOT EXISTS projects (\
             id text PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, \
             owner_id text NOT NULL, is_public boolean DEFAULT false)",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS memory_rules json DEFAULT '{}'::json",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS graph_config json DEFAULT '{}'::json",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS sandbox_type text DEFAULT 'cloud'",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS sandbox_config json DEFAULT '{}'::json",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS agent_conversation_mode text DEFAULT 'single_agent'",
         "CREATE TABLE IF NOT EXISTS conversations (\
             id text PRIMARY KEY, user_id text NOT NULL, tenant_id text NOT NULL, \
             project_id text NOT NULL, workspace_id text, meta json DEFAULT '{}'::json)",
@@ -393,9 +409,11 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             metadata_json json DEFAULT '{}'::json NOT NULL, \
             local_config json DEFAULT '{}'::json NOT NULL)",
         "CREATE TABLE IF NOT EXISTS user_projects (\
-            user_id text NOT NULL, project_id text NOT NULL, role text DEFAULT 'member', \
-            PRIMARY KEY (user_id, project_id))",
+            id text PRIMARY KEY, user_id text NOT NULL, project_id text NOT NULL, \
+            role text DEFAULT 'member', permissions json DEFAULT '{}'::json)",
+        "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS id text",
         "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS role text DEFAULT 'member'",
+        "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS permissions json DEFAULT '{}'::json",
         "CREATE TABLE IF NOT EXISTS api_keys (\
             id text PRIMARY KEY, key_hash text, name text, user_id text, \
             created_at timestamptz DEFAULT now(), expires_at timestamptz, \
@@ -522,6 +540,13 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             id text PRIMARY KEY, workspace_id text NOT NULL, user_id text NOT NULL, \
             role varchar(20) DEFAULT 'viewer' NOT NULL, invited_by text, \
             created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS workspace_messages (\
+            id text PRIMARY KEY, workspace_id text NOT NULL REFERENCES workspaces(id) \
+                ON DELETE CASCADE, \
+            sender_id text NOT NULL, sender_type varchar(10) NOT NULL, content text NOT NULL, \
+            mentions_json json DEFAULT '[]'::json NOT NULL, parent_message_id text, \
+            metadata_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL)",
         "CREATE TABLE IF NOT EXISTS agent_definitions (\
             id text PRIMARY KEY, tenant_id text NOT NULL, project_id text, name varchar(100) NOT NULL, \
             display_name varchar(200) NOT NULL, system_prompt text NOT NULL, \
@@ -720,6 +745,110 @@ pub(super) async fn ensure_python_shaped_tables(pool: &PgPool) {
             max_attempts integer DEFAULT 10 NOT NULL, last_error text, next_attempt_at timestamptz, \
             dispatched_at timestamptz, created_at timestamptz DEFAULT now() NOT NULL, \
             updated_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS task_session_creation_receipts (\
+            id text PRIMARY KEY, \
+            actor_user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE, \
+            tenant_id text NOT NULL REFERENCES tenants(id) ON DELETE CASCADE, \
+            project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE, \
+            idempotency_key varchar(255) NOT NULL, payload_hash varchar(64) NOT NULL, \
+            workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, \
+            conversation_id text REFERENCES conversations(id) ON DELETE SET NULL, \
+            initial_message_id text REFERENCES workspace_messages(id) ON DELETE SET NULL, \
+            response_json json NOT NULL, created_at timestamptz DEFAULT now() NOT NULL, \
+            CONSTRAINT uq_task_session_receipts_scope_key UNIQUE \
+                (actor_user_id, tenant_id, project_id, idempotency_key), \
+            CONSTRAINT uq_task_session_receipts_conversation UNIQUE (conversation_id), \
+            CONSTRAINT uq_task_session_receipts_initial_message UNIQUE (initial_message_id))",
+        "CREATE INDEX IF NOT EXISTS ix_task_session_receipts_scope_created \
+            ON task_session_creation_receipts (tenant_id, project_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_task_session_receipts_actor_user_id \
+            ON task_session_creation_receipts (actor_user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_task_session_receipts_project_id \
+            ON task_session_creation_receipts (project_id)",
+        "CREATE INDEX IF NOT EXISTS ix_task_session_receipts_workspace_id \
+            ON task_session_creation_receipts (workspace_id)",
+        "DO $$ \
+         BEGIN \
+             IF EXISTS ( \
+                 SELECT 1 FROM information_schema.columns \
+                 WHERE table_schema = ANY(current_schemas(false)) \
+                   AND table_name = 'task_session_creation_receipts' \
+                   AND column_name = 'conversation_id' AND is_nullable = 'NO' \
+             ) THEN \
+                 ALTER TABLE task_session_creation_receipts \
+                     ALTER COLUMN conversation_id DROP NOT NULL; \
+             END IF; \
+             IF EXISTS ( \
+                 SELECT 1 FROM information_schema.columns \
+                 WHERE table_schema = ANY(current_schemas(false)) \
+                   AND table_name = 'task_session_creation_receipts' \
+                   AND column_name = 'initial_message_id' AND is_nullable = 'NO' \
+             ) THEN \
+                 ALTER TABLE task_session_creation_receipts \
+                     ALTER COLUMN initial_message_id DROP NOT NULL; \
+             END IF; \
+             IF EXISTS ( \
+                 SELECT 1 FROM pg_constraint \
+                 WHERE conrelid = 'task_session_creation_receipts'::regclass \
+                   AND conname = 'task_session_creation_receipts_conversation_id_fkey' \
+                   AND confdeltype <> 'n' \
+             ) THEN \
+                 ALTER TABLE task_session_creation_receipts DROP CONSTRAINT \
+                     task_session_creation_receipts_conversation_id_fkey; \
+             END IF; \
+             IF NOT EXISTS ( \
+                 SELECT 1 FROM pg_constraint \
+                 WHERE conrelid = 'task_session_creation_receipts'::regclass \
+                   AND conname = 'task_session_creation_receipts_conversation_id_fkey' \
+             ) THEN \
+                 ALTER TABLE task_session_creation_receipts ADD CONSTRAINT \
+                     task_session_creation_receipts_conversation_id_fkey \
+                     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL; \
+             END IF; \
+             IF EXISTS ( \
+                 SELECT 1 FROM pg_constraint \
+                 WHERE conrelid = 'task_session_creation_receipts'::regclass \
+                   AND conname = 'task_session_creation_receipts_initial_message_id_fkey' \
+                   AND confdeltype <> 'n' \
+             ) THEN \
+                 ALTER TABLE task_session_creation_receipts DROP CONSTRAINT \
+                     task_session_creation_receipts_initial_message_id_fkey; \
+             END IF; \
+             IF NOT EXISTS ( \
+                 SELECT 1 FROM pg_constraint \
+                 WHERE conrelid = 'task_session_creation_receipts'::regclass \
+                   AND conname = 'task_session_creation_receipts_initial_message_id_fkey' \
+             ) THEN \
+                 ALTER TABLE task_session_creation_receipts ADD CONSTRAINT \
+                     task_session_creation_receipts_initial_message_id_fkey \
+                     FOREIGN KEY (initial_message_id) REFERENCES workspace_messages(id) \
+                         ON DELETE SET NULL; \
+             END IF; \
+         END \
+         $$",
+        "CREATE OR REPLACE FUNCTION tombstone_task_session_creation_receipt() \
+         RETURNS trigger LANGUAGE plpgsql AS $$ \
+         BEGIN \
+             IF TG_TABLE_NAME = 'conversations' THEN \
+                 UPDATE task_session_creation_receipts \
+                 SET conversation_id = NULL, initial_message_id = NULL, \
+                     response_json = json_build_object('tombstone', true) \
+                 WHERE conversation_id = OLD.id; \
+             ELSIF TG_TABLE_NAME = 'workspace_messages' THEN \
+                 UPDATE task_session_creation_receipts \
+                 SET conversation_id = NULL, initial_message_id = NULL, \
+                     response_json = json_build_object('tombstone', true) \
+                 WHERE initial_message_id = OLD.id; \
+             END IF; \
+             RETURN OLD; \
+         END; \
+         $$",
+        "CREATE OR REPLACE TRIGGER trg_task_session_receipt_conversation_delete \
+         BEFORE DELETE ON conversations FOR EACH ROW \
+         EXECUTE FUNCTION tombstone_task_session_creation_receipt()",
+        "CREATE OR REPLACE TRIGGER trg_task_session_receipt_message_delete \
+         BEFORE DELETE ON workspace_messages FOR EACH ROW \
+         EXECUTE FUNCTION tombstone_task_session_creation_receipt()",
     ] {
         sqlx::query(ddl)
             .execute(pool)

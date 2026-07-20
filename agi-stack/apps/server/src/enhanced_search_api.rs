@@ -243,20 +243,14 @@ async fn search_scope_entities(
     // Query projects concurrently, but keep the sequential contract: `buffered`
     // yields per-project results in scope order, so hits concatenate in scope
     // order and the first error in scope order aborts the merge.
-    let per_project: Vec<_> = stream::iter(
-        scope
-            .project_ids
-            .iter()
-            .cloned()
-            .map(|project_id| {
-                let graph = app.graph.clone();
-                async move {
-                    graph
-                        .search_entities(&project_id, query, per_project_limit)
-                        .await
-                }
-            }),
-    )
+    let per_project: Vec<_> = stream::iter(scope.project_ids.iter().cloned().map(|project_id| {
+        let graph = app.graph.clone();
+        async move {
+            graph
+                .search_entities(&project_id, query, per_project_limit)
+                .await
+        }
+    }))
     .buffered(SCOPE_FANOUT_CONCURRENCY)
     .collect()
     .await;

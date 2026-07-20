@@ -22,6 +22,7 @@ mod plan_outbox;
 mod records;
 mod rows;
 mod task_attempts;
+mod task_session;
 mod topology;
 
 use rows::*;

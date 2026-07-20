@@ -55,8 +55,6 @@ export function newTaskDefinitionSignature(
     title: definition.title.trim(),
     objective: definition.objective.trim(),
     kind: definition.kind,
-    workspaceRoot: definition.workspaceRoot?.trim() ?? '',
-    contextSources: [...(definition.contextSources ?? [])].sort(),
     workspaceSelection: workspaceSelection.trim(),
   });
 }

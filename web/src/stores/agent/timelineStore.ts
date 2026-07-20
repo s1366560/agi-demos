@@ -317,6 +317,7 @@ export const useLatestCounter = () => useTimelineStore((state) => state.latestCo
 // Bridge selectors — read from timelineStore's own agent-level fields.
 
 export const useTimeline = () => useTimelineStore((s) => s.agentTimeline);
+export const useTimelineCount = () => useTimelineStore((s) => s.agentTimeline.length);
 export const useMessages = () => useTimelineStore((s) => s.agentMessages);
 export const useIsLoadingHistory = () => useTimelineStore((s) => s.agentIsLoadingHistory);
 export const useIsLoadingEarlier = () => useTimelineStore((s) => s.agentIsLoadingEarlier);

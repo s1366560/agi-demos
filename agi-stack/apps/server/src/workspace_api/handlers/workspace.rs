@@ -1,5 +1,39 @@
 use super::super::*;
 
+pub(in crate::workspace_api) async fn create_task_session(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id)): Path<(String, String)>,
+    Json(body): Json<CreateTaskSessionPayload>,
+) -> Result<(StatusCode, Json<CreateTaskSessionView>), WorkspaceApiError> {
+    let view = app
+        .workspaces
+        .create_task_session(&identity.user_id, &tenant_id, &project_id, body)
+        .await?;
+    let registration = TaskSessionConversationRegistration::try_from(&view.conversation)
+        .map_err(|_| WorkspaceApiError::internal("Task session response was invalid"))?;
+    app.agent_conversations
+        .register_task_session_conversation(registration)
+        .await
+        .map_err(|_| WorkspaceApiError::internal("Task session registration failed"))?;
+    let status = if view.replayed {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    Ok((status, Json(view)))
+}
+
+pub(in crate::workspace_api) async fn get_task_session_capabilities(
+) -> Json<TaskSessionCapabilitiesView> {
+    Json(TaskSessionCapabilitiesView {
+        schema_version: 1,
+        atomic_creation: true,
+        initial_conversation_mode: "workspace",
+        initial_plan_mode: "plan",
+    })
+}
+
 pub(in crate::workspace_api) async fn create_workspace(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,

@@ -46,6 +46,7 @@ use agistack_adapters_postgres::{
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::ObjectStore;
 
+use crate::agent_conversations_api::TaskSessionConversationRegistration;
 use crate::auth::Identity;
 use crate::AppState;
 
@@ -92,11 +93,10 @@ use types::{
     MessageListView, MessageMentionQuery, MessageView, MkdirPayload, MyWorkAuthorityKind,
     MyWorkCapabilityMode, MyWorkGroup, MyWorkRequiredAction, MyWorkStatus, ProjectMyWorkResponse,
     ProjectWorkItem, RenameOrMoveFilePayload, SendMessagePayload, TaskListQuery,
-    TaskSessionCapabilityMode, TaskSessionConversationPayload, TaskSessionInitialMessagePayload,
-    TaskSessionWorkspacePayload, TaskTransitionAction, TopologyEdgeCreatePayload,
-    TopologyEdgeUpdatePayload, TopologyEdgeView, TopologyNodeCreatePayload,
-    TopologyNodeUpdatePayload, TopologyNodeView, WorkspaceAgentListQuery, WorkspaceAgentView,
-    WorkspaceApiError, WorkspaceCollaborationMode, WorkspaceCreatePayload,
+    TaskSessionCapabilitiesView, TaskSessionCapabilityMode, TaskSessionWorkspacePayload,
+    TaskTransitionAction, TopologyEdgeCreatePayload, TopologyEdgeUpdatePayload, TopologyEdgeView,
+    TopologyNodeCreatePayload, TopologyNodeUpdatePayload, TopologyNodeView,
+    WorkspaceAgentListQuery, WorkspaceAgentView, WorkspaceApiError, WorkspaceCreatePayload,
     WorkspaceDeliverySummaryView, WorkspaceListQuery, WorkspaceMemberView,
     WorkspacePlanActionCapabilityView, WorkspacePlanActionRequest, WorkspacePlanActionResultView,
     WorkspacePlanBlackboardEntryView, WorkspacePlanEventView, WorkspacePlanEvidenceBundleView,
@@ -105,8 +105,7 @@ use types::{
     WorkspacePlanPhaseContractView, WorkspacePlanPipelineRunRequest,
     WorkspacePlanRunAssessmentView, WorkspacePlanSnapshotQuery, WorkspacePlanSnapshotView,
     WorkspacePlanView, WorkspaceReplyUpdateInput, WorkspaceTaskCreatePayload,
-    WorkspaceTaskUpdatePayload, WorkspaceTaskView, WorkspaceUpdatePayload, WorkspaceUseCase,
-    WorkspaceView,
+    WorkspaceTaskUpdatePayload, WorkspaceTaskView, WorkspaceUpdatePayload, WorkspaceView,
 };
 
 #[cfg(test)]

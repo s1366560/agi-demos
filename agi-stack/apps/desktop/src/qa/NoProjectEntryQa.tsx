@@ -276,6 +276,7 @@ function NoProjectEntryQa() {
         <NewTaskFlow
           open={newTaskOpen}
           config={config}
+          actorId={auth.user?.user_id}
           workspaceAuthority={workspaceAuthority}
           preferredWorkspaceId=""
           preferredKind={mode === 'code' ? 'programming' : 'general'}

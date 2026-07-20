@@ -5,7 +5,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 pub(crate) struct WorkspaceReplyUpdateInput<'a> {
     pub(crate) user_id: &'a str,
@@ -21,6 +21,7 @@ pub(crate) struct WorkspaceReplyUpdateInput<'a> {
 pub(crate) struct WorkspaceApiError {
     pub(in crate::workspace_api) status: StatusCode,
     pub(in crate::workspace_api) detail: String,
+    code: Option<&'static str>,
 }
 
 impl WorkspaceApiError {
@@ -28,6 +29,7 @@ impl WorkspaceApiError {
         Self {
             status,
             detail: detail.into(),
+            code: None,
         }
     }
 
@@ -71,6 +73,17 @@ impl WorkspaceApiError {
         Self::new(StatusCode::CONFLICT, detail)
     }
 
+    pub(in crate::workspace_api) fn coded_conflict(
+        code: &'static str,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            detail: detail.into(),
+            code: Some(code),
+        }
+    }
+
     pub(in crate::workspace_api) fn internal(detail: impl std::fmt::Display) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, detail.to_string())
     }
@@ -78,7 +91,11 @@ impl WorkspaceApiError {
 
 impl IntoResponse for WorkspaceApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(json!({ "detail": self.detail }))).into_response()
+        let body = match self.code {
+            Some(code) => json!({ "code": code, "detail": self.detail }),
+            None => json!({ "detail": self.detail }),
+        };
+        (self.status, Json(body)).into_response()
     }
 }
 
@@ -186,6 +203,112 @@ pub(crate) struct WorkspaceCreatePayload {
     pub(in crate::workspace_api) autonomy_profile: Option<Value>,
     #[serde(default)]
     pub(in crate::workspace_api) sandbox_code_root: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CreateTaskSessionPayload {
+    pub(in crate::workspace_api) idempotency_key: String,
+    pub(in crate::workspace_api) workspace: TaskSessionWorkspacePayload,
+    pub(in crate::workspace_api) conversation: TaskSessionConversationPayload,
+    pub(in crate::workspace_api) initial_message: TaskSessionInitialMessagePayload,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub(crate) enum TaskSessionWorkspacePayload {
+    Create {
+        name: String,
+        #[serde(default)]
+        description: Option<String>,
+        #[serde(default)]
+        metadata: Option<Map<String, Value>>,
+        use_case: WorkspaceUseCase,
+        collaboration_mode: WorkspaceCollaborationMode,
+        #[serde(default)]
+        sandbox_code_root: Option<String>,
+    },
+    Existing {
+        workspace_id: String,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TaskSessionConversationPayload {
+    pub(in crate::workspace_api) title: String,
+    pub(in crate::workspace_api) capability_mode: TaskSessionCapabilityMode,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TaskSessionInitialMessagePayload {
+    pub(in crate::workspace_api) content: String,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorkspaceUseCase {
+    General,
+    Programming,
+    Conversation,
+    Research,
+    Operations,
+}
+
+impl WorkspaceUseCase {
+    pub(in crate::workspace_api) const fn as_str(self) -> &'static str {
+        match self {
+            Self::General => "general",
+            Self::Programming => "programming",
+            Self::Conversation => "conversation",
+            Self::Research => "research",
+            Self::Operations => "operations",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorkspaceCollaborationMode {
+    SingleAgent,
+    MultiAgentShared,
+    MultiAgentIsolated,
+    Autonomous,
+}
+
+impl WorkspaceCollaborationMode {
+    pub(in crate::workspace_api) const fn as_str(self) -> &'static str {
+        match self {
+            Self::SingleAgent => "single_agent",
+            Self::MultiAgentShared => "multi_agent_shared",
+            Self::MultiAgentIsolated => "multi_agent_isolated",
+            Self::Autonomous => "autonomous",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TaskSessionCapabilityMode {
+    Work,
+    Code,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub(crate) struct CreateTaskSessionView {
+    pub(in crate::workspace_api) replayed: bool,
+    pub(in crate::workspace_api) workspace: Value,
+    pub(in crate::workspace_api) conversation: Value,
+    pub(in crate::workspace_api) initial_message: Value,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct TaskSessionCapabilitiesView {
+    pub(in crate::workspace_api) schema_version: u8,
+    pub(in crate::workspace_api) atomic_creation: bool,
+    pub(in crate::workspace_api) initial_conversation_mode: &'static str,
+    pub(in crate::workspace_api) initial_plan_mode: &'static str,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

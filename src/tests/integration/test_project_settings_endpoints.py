@@ -14,10 +14,13 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     Message,
     Project,
+    TaskSessionCreationReceiptModel,
     Tenant,
     ToolExecutionRecord,
     User,
     UserProject,
+    WorkspaceMemberModel,
+    WorkspaceModel,
 )
 
 
@@ -221,6 +224,69 @@ class TestDeleteProjectEndpoint:
         # Verify user-project relationship also deleted
         result = await db.execute(select(UserProject).where(UserProject.project_id == project_id))
         assert result.scalar_one_or_none() is None
+
+    async def test_delete_project_removes_workspace_and_task_session_receipt(
+        self,
+        authenticated_async_client: AsyncClient,
+        db: AsyncSession,
+        test_tenant_db: "Tenant",
+        test_user: User,
+    ):
+        """A committed task-session receipt cannot survive its project root."""
+        from uuid import uuid4
+
+        project = Project(
+            id=str(uuid4()),
+            tenant_id=test_tenant_db.id,
+            name="Project with Task Session",
+            owner_id=test_user.id,
+            memory_rules={},
+            graph_config={},
+        )
+        user_project = UserProject(
+            id=str(uuid4()),
+            user_id=test_user.id,
+            project_id=project.id,
+            role="owner",
+            permissions={"admin": True},
+        )
+        workspace = WorkspaceModel(
+            id=str(uuid4()),
+            tenant_id=test_tenant_db.id,
+            project_id=project.id,
+            name="Task workspace",
+            created_by=test_user.id,
+        )
+        workspace_member = WorkspaceMemberModel(
+            id=str(uuid4()),
+            workspace_id=workspace.id,
+            user_id=test_user.id,
+            role="owner",
+        )
+        receipt = TaskSessionCreationReceiptModel(
+            id=str(uuid4()),
+            actor_user_id=test_user.id,
+            tenant_id=test_tenant_db.id,
+            project_id=project.id,
+            idempotency_key="delete-project-task-session",
+            payload_hash="a" * 64,
+            workspace_id=workspace.id,
+            response_json={"tombstone": True},
+        )
+        db.add_all([project, user_project, workspace, workspace_member, receipt])
+        await db.commit()
+
+        response = await authenticated_async_client.delete(f"/api/v1/projects/{project.id}")
+
+        assert response.status_code == 204
+        for model, item_id in [
+            (Project, project.id),
+            (WorkspaceModel, workspace.id),
+            (WorkspaceMemberModel, workspace_member.id),
+            (TaskSessionCreationReceiptModel, receipt.id),
+        ]:
+            result = await db.execute(select(model).where(model.id == item_id))
+            assert result.scalar_one_or_none() is None
 
     async def test_delete_project_not_found(self, authenticated_async_client: AsyncClient):
         """Test deleting a non-existent project."""

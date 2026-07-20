@@ -10,50 +10,70 @@ const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const generatePlanSource =
   taskFlowSource.match(
-    /const generatePlan = async \(\) => \{[\s\S]*?\n  \};\n\n  const requestRevision/,
+    /const generatePlan = async \(workspaceSelectionOverride\?: string\) => \{[\s\S]*?\n  \};\n\n  const createAsNewTask/,
   )?.[0] ?? '';
+const createAsNewTaskSource =
+  taskFlowSource.match(
+    /const createAsNewTask = async \(\) => \{[\s\S]*?\n  \};\n\n  const requestRevision/,
+  )?.[0] ?? '';
+const generatePlanCatchStart = generatePlanSource.lastIndexOf('    } catch (error) {');
+const generatePlanCatchEnd = generatePlanSource.indexOf(
+  '\n    } finally {',
+  generatePlanCatchStart,
+);
+const generatePlanCatchSource =
+  generatePlanCatchStart >= 0 && generatePlanCatchEnd > generatePlanCatchStart
+    ? generatePlanSource.slice(generatePlanCatchStart, generatePlanCatchEnd)
+    : '';
 const runTurnStart = appSource.indexOf('const runNewTaskAgentTurn');
 const runTurnEnd = appSource.indexOf('const ensureAgentConversation', runTurnStart);
 const runTurnSource =
   runTurnStart >= 0 && runTurnEnd > runTurnStart
     ? appSource.slice(runTurnStart, runTurnEnd)
     : '';
-const localCreationStart = generatePlanSource.indexOf("if (config.mode === 'local') {");
-const localCreationEnd = generatePlanSource.indexOf('\n        } else {', localCreationStart);
-const localCreationSource =
-  localCreationStart >= 0 && localCreationEnd > localCreationStart
-    ? generatePlanSource.slice(localCreationStart, localCreationEnd)
-    : '';
-const cloudCreationStart = localCreationEnd;
-const cloudCreationEnd = generatePlanSource.indexOf(
-  '\n        }\n        planningConversationIdRef.current',
-  cloudCreationStart,
+const cloudCapabilityStart = generatePlanSource.indexOf("if (config.mode === 'cloud') {");
+const cloudCapabilityEnd = generatePlanSource.indexOf(
+  '\n        const creationFingerprint',
+  cloudCapabilityStart,
 );
-const cloudCreationSource =
-  cloudCreationStart >= 0 && cloudCreationEnd > cloudCreationStart
-    ? generatePlanSource.slice(cloudCreationStart, cloudCreationEnd)
+const cloudCapabilitySource =
+  cloudCapabilityStart >= 0 && cloudCapabilityEnd > cloudCapabilityStart
+    ? generatePlanSource.slice(cloudCapabilityStart, cloudCapabilityEnd)
     : '';
-const cloudPreparationStart = generatePlanSource.indexOf("if (config.mode === 'cloud') {");
-const cloudPreparationEnd = generatePlanSource.indexOf(
-  '\n      }\n      expectedPlanSignatureRef.current',
-  cloudPreparationStart,
+const atomicCreationStart = cloudCapabilityEnd;
+const atomicCreationEnd = generatePlanSource.indexOf(
+  '\n        planningConversationIdRef.current',
+  atomicCreationStart,
 );
-const cloudPreparationSource =
-  cloudPreparationStart >= 0 && cloudPreparationEnd > cloudPreparationStart
-    ? generatePlanSource.slice(cloudPreparationStart, cloudPreparationEnd)
+const atomicCreationSource =
+  atomicCreationStart >= 0 && atomicCreationEnd > atomicCreationStart
+    ? generatePlanSource.slice(atomicCreationStart, atomicCreationEnd)
+    : '';
+const postCreationStart = atomicCreationEnd;
+const postCreationEnd = generatePlanSource.indexOf(
+  '\n      expectedPlanSignatureRef.current',
+  postCreationStart,
+);
+const postCreationSource =
+  postCreationStart >= 0 && postCreationEnd > postCreationStart
+    ? generatePlanSource.slice(postCreationStart, postCreationEnd)
     : '';
 const closeFlowSource =
   taskFlowSource.match(/const closeFlow = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+const actorChangeEffectSource =
+  taskFlowSource.match(
+    /useEffect\(\(\) => \{\n    const previousActorId[\s\S]*?\n  \}, \[normalizedActorId, open\]\);/,
+  )?.[0] ?? '';
 
 test('local new-task creation uses one atomic task-session mutation', () => {
-  assert.notEqual(localCreationSource, '');
-  assert.equal((localCreationSource.match(/createTaskSession\(/g) ?? []).length, 1);
-  assert.doesNotMatch(localCreationSource, /supportsAgentPlanWorkflow\(/);
-  assert.doesNotMatch(localCreationSource, /createWorkspaceForProject\(/);
-  assert.doesNotMatch(localCreationSource, /createAgentConversation\(/);
-  assert.doesNotMatch(localCreationSource, /updateAgentConversationMode\(/);
-  assert.doesNotMatch(localCreationSource, /switchPlanMode\(/);
-  assert.doesNotMatch(localCreationSource, /sendMessage\(/);
+  assert.notEqual(atomicCreationSource, '');
+  assert.equal((atomicCreationSource.match(/createTaskSession\(/g) ?? []).length, 1);
+  assert.doesNotMatch(atomicCreationSource, /supportsAgentPlanWorkflow\(/);
+  assert.doesNotMatch(atomicCreationSource, /createWorkspaceForProject\(/);
+  assert.doesNotMatch(atomicCreationSource, /createAgentConversation\(/);
+  assert.doesNotMatch(atomicCreationSource, /updateAgentConversationMode\(/);
+  assert.doesNotMatch(atomicCreationSource, /switchPlanMode\(/);
+  assert.doesNotMatch(atomicCreationSource, /sendMessage\(/);
 
   const atomicIndex = generatePlanSource.indexOf('createTaskSession(');
   const persistedIndex = generatePlanSource.indexOf('onSessionPersisted(readySession);');
@@ -62,18 +82,20 @@ test('local new-task creation uses one atomic task-session mutation', () => {
   assert.ok(persistedIndex < agentTurnIndex);
 });
 
-test('cloud new-task creation retains the split compatibility path', () => {
-  const probeIndex = cloudCreationSource.indexOf('await baseClient.supportsAgentPlanWorkflow()');
-  const workspaceCreateIndex = cloudCreationSource.indexOf('createWorkspaceForProject(');
-  const conversationCreateIndex = cloudCreationSource.indexOf('createAgentConversation(');
+test('cloud new-task creation uses the same atomic task-session mutation', () => {
+  const probeIndex = cloudCapabilitySource.indexOf('await baseClient.supportsAgentPlanWorkflow()');
+  const atomicCreateIndex = atomicCreationSource.indexOf('createTaskSession(');
 
   assert.notEqual(probeIndex, -1);
-  assert.ok(probeIndex < workspaceCreateIndex);
-  assert.ok(probeIndex < conversationCreateIndex);
-  assert.match(cloudCreationSource, /throw new Error\(t\('task\.planRuntimeUnsupported'\)\)/);
-  assert.match(cloudPreparationSource, /updateAgentConversationMode\(/);
-  assert.match(cloudPreparationSource, /switchPlanMode\(/);
-  assert.match(cloudPreparationSource, /sendMessage\(/);
+  assert.notEqual(atomicCreateIndex, -1);
+  assert.ok(cloudCapabilityStart < atomicCreationStart);
+  assert.match(cloudCapabilitySource, /throw new Error\(t\('task\.planRuntimeUnsupported'\)\)/);
+  assert.equal((atomicCreationSource.match(/createTaskSession\(/g) ?? []).length, 1);
+  assert.doesNotMatch(atomicCreationSource, /createWorkspaceForProject\(/);
+  assert.doesNotMatch(atomicCreationSource, /createAgentConversation\(/);
+  assert.doesNotMatch(postCreationSource, /updateAgentConversationMode\(/);
+  assert.doesNotMatch(postCreationSource, /switchPlanMode\(/);
+  assert.doesNotMatch(postCreationSource, /sendMessage\(/);
 });
 
 test('new task planning blocks duplicate submission and keeps one creation key for retry', () => {
@@ -83,6 +105,114 @@ test('new task planning blocks duplicate submission and keeps one creation key f
   assert.match(generatePlanSource, /finally \{[\s\S]*generatePlanPendingRef\.current = false/);
   assert.match(taskFlowSource, /taskSessionCreationAttempt\(/);
   assert.match(taskFlowSource, /taskSessionCreationAttemptRef\.current = creationAttempt/);
+  assert.match(taskFlowSource, /readTaskSessionCreationAttempt\(/);
+  assert.match(taskFlowSource, /writeTaskSessionCreationAttempt\(/);
+  assert.match(taskFlowSource, /clearTaskSessionCreationAttempt\(/);
+  const createIndex = generatePlanSource.indexOf('await baseClient.createTaskSession');
+  const persistIndex = generatePlanSource.indexOf('onSessionPersisted(readySession);');
+  const responseGuardSource = generatePlanSource.slice(createIndex, persistIndex);
+  assert.match(responseGuardSource, /flowEpochRef\.current !== operationEpoch/);
+  assert.match(responseGuardSource, /activeActorIdRef\.current !== operationActorId/);
+});
+
+test('only a structured task-session conflict offers an explicit key rotation', () => {
+  assert.match(taskFlowSource, /isTaskSessionIdempotencyConflictError/);
+  assert.match(
+    generatePlanSource,
+    /isTaskSessionIdempotencyConflictError\(error\)[\s\S]*rejectedCreationFingerprint = creationFingerprint/,
+  );
+  assert.match(
+    generatePlanSource,
+    /taskSessionConflict[\s\S]*task\.creationIdempotencyConflict[\s\S]*setTaskSessionConflictRecovery\(\{/,
+  );
+  assert.notEqual(createAsNewTaskSource, '');
+  assert.notEqual(generatePlanCatchSource, '');
+  assert.doesNotMatch(generatePlanCatchSource, /clearTaskSessionCreationAttempt\(/);
+  assert.doesNotMatch(
+    generatePlanCatchSource,
+    /taskSessionCreationAttemptRef\.current = null/,
+  );
+  const clearIndex = createAsNewTaskSource.indexOf('clearTaskSessionCreationAttempt(');
+  const resetRefIndex = createAsNewTaskSource.indexOf(
+    'taskSessionCreationAttemptRef.current = null;',
+  );
+  const retryIndex = createAsNewTaskSource.indexOf(
+    'await generatePlan(targetWorkspaceSelection);',
+  );
+  assert.ok(clearIndex > -1 && clearIndex < resetRefIndex);
+  assert.ok(resetRefIndex < retryIndex);
+  assert.match(
+    createAsNewTaskSource,
+    /!clearTaskSessionCreationAttempt\([\s\S]*task\.creationConflictResetUnavailable[\s\S]*return;/,
+  );
+  assert.match(
+    taskFlowSource,
+    /taskSessionConflictActionAvailable \? \([\s\S]*onClick=\{\(\) => void createAsNewTask\(\)\}[\s\S]*task\.createAsNewTask/,
+  );
+  assert.equal((i18nSource.match(/'task\.creationIdempotencyConflict'/g) ?? []).length, 2);
+  assert.equal((i18nSource.match(/'task\.createAsNewTask'/g) ?? []).length, 2);
+  assert.equal((i18nSource.match(/'task\.creationConflictResetUnavailable'/g) ?? []).length, 2);
+});
+
+test('create-workspace tombstones require an explicit authoritative existing-workspace choice', () => {
+  assert.match(
+    generatePlanSource,
+    /targetWorkspaceSelection === NEW_WORKSPACE_VALUE[\s\S]*new DesktopApiClient\(config\)\.listWorkspaces\(\)[\s\S]*resolveTaskSessionConflictWorkspace\([\s\S]*definition\.title/,
+  );
+  assert.match(
+    generatePlanSource,
+    /setTaskSessionConflictRecovery\(\{[\s\S]*workspaceSelection: targetWorkspaceSelection,[\s\S]*existingWorkspace: existingConflictWorkspace/,
+  );
+  assert.match(
+    taskFlowSource,
+    /taskSessionConflictActionAvailable =[\s\S]*workspaceSelection !== NEW_WORKSPACE_VALUE \|\|[\s\S]*taskSessionConflictWorkspace !== null/,
+  );
+  assert.match(
+    taskFlowSource,
+    /taskSessionConflictWorkspace[\s\S]*task\.continueInWorkspace[\s\S]*task\.createAsNewTask/,
+  );
+  assert.match(
+    createAsNewTaskSource,
+    /workspaceSelection === NEW_WORKSPACE_VALUE[\s\S]*existingWorkspace\?\.id[\s\S]*await generatePlan\(targetWorkspaceSelection\)/,
+  );
+  assert.match(
+    generatePlanSource,
+    /newTaskDefinitionSignature\([\s\S]*targetWorkspaceSelection[\s\S]*taskSessionCreationFingerprint\([\s\S]*targetWorkspaceSelection[\s\S]*buildLocalTaskSessionRequest\([\s\S]*targetWorkspaceSelection/,
+  );
+  assert.equal(
+    (i18nSource.match(/'task\.creationWorkspaceConflictResolved'/g) ?? []).length,
+    2,
+  );
+  assert.equal(
+    (i18nSource.match(/'task\.creationWorkspaceConflictUnresolved'/g) ?? []).length,
+    2,
+  );
+  assert.equal((i18nSource.match(/'task\.continueInWorkspace'/g) ?? []).length, 2);
+});
+
+test('actor changes invalidate in-flight work and close the actor-bound modal', () => {
+  assert.match(appSource, /actorId=\{auth\.user\?\.user_id\}/);
+  assert.doesNotMatch(appSource, /actorId=\{[^}]*apiKey/);
+  assert.match(taskFlowSource, /activeActorIdRef\.current = normalizedActorId/);
+  assert.notEqual(actorChangeEffectSource, '');
+  assert.match(
+    actorChangeEffectSource,
+    /const previousActorId = modalActorIdRef\.current;[\s\S]*previousActorId === normalizedActorId[\s\S]*flowEpochRef\.current \+= 1[\s\S]*setSession\(null\)[\s\S]*onCloseRef\.current\(\)/,
+  );
+  assert.doesNotMatch(actorChangeEffectSource, /clearTaskSessionCreationAttempt/);
+  assert.match(generatePlanSource, /const operationActorId = normalizedActorId/);
+  assert.match(
+    generatePlanSource,
+    /session\.conversation\.user_id === operationActorId/,
+  );
+  assert.ok(
+    (generatePlanSource.match(/activeActorIdRef\.current !== operationActorId/g) ?? [])
+      .length >= 3,
+  );
+  assert.match(
+    generatePlanSource,
+    /activeActorIdRef\.current === operationActorId[\s\S]*generatePlanPendingRef\.current = false/,
+  );
 });
 
 test('closing a submitted task keeps planning alive in the background', () => {
@@ -109,7 +239,7 @@ test('closing a submitted task keeps planning alive in the background', () => {
 test('a fresh planning attempt clears local and shell errors', () => {
   const localClearIndex = generatePlanSource.indexOf('setFlowError(null);');
   const shellClearIndex = generatePlanSource.indexOf('onError(null);');
-  const firstCreationIndex = generatePlanSource.indexOf("if (config.mode === 'local') {");
+  const firstCreationIndex = generatePlanSource.indexOf('const creationFingerprint');
 
   assert.notEqual(localClearIndex, -1);
   assert.notEqual(shellClearIndex, -1);
@@ -141,13 +271,13 @@ test('unsupported Plan runtime guidance is localized and actionable', () => {
 
 test('Plan capability network failures expose connection recovery before any write', () => {
   const capabilityProbe =
-    cloudCreationSource.match(
+    cloudCapabilitySource.match(
       /try \{[\s\S]*?supportsAgentPlanWorkflow\(\)[\s\S]*?\} catch \(error\) \{[\s\S]*?setRuntimeRecoveryAvailable\(true\);[\s\S]*?throw error;[\s\S]*?\}/,
     )?.[0] ?? '';
-  const workspaceCreateIndex = cloudCreationSource.indexOf('createWorkspaceForProject(');
+  const taskSessionCreateIndex = generatePlanSource.indexOf('createTaskSession(');
 
   assert.notEqual(capabilityProbe, '');
-  assert.ok(cloudCreationSource.indexOf(capabilityProbe) < workspaceCreateIndex);
+  assert.ok(generatePlanSource.indexOf(capabilityProbe) < taskSessionCreateIndex);
 });
 
 test('App passes structured workspace authority and stale selection cannot silently create', () => {

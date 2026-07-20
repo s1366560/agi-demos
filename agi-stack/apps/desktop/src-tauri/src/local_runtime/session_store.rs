@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -29,9 +29,29 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 15;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 16;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
+const LEGACY_TASK_SESSION_RECEIPT_TABLE: &str = "desktop_new_task_sessions_v15";
+const TASK_SESSION_RECEIPT_TABLE_SQL: &str = "CREATE TABLE desktop_new_task_sessions (
+       user_id TEXT NOT NULL,
+       tenant_id TEXT NOT NULL,
+       project_id TEXT NOT NULL,
+       idempotency_key TEXT NOT NULL,
+       payload_hash TEXT NOT NULL,
+       workspace_id TEXT NOT NULL,
+       conversation_id TEXT NOT NULL UNIQUE,
+       initial_message_id TEXT NOT NULL UNIQUE,
+       response_json TEXT NOT NULL,
+       created_at TEXT NOT NULL,
+       PRIMARY KEY(user_id, tenant_id, project_id, idempotency_key),
+       FOREIGN KEY(workspace_id) REFERENCES desktop_workspaces(id),
+       FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id),
+       FOREIGN KEY(initial_message_id) REFERENCES desktop_workspace_messages(id)
+     );";
+const TASK_SESSION_RECEIPT_INDEX_SQL: &str =
+    "CREATE INDEX IF NOT EXISTS idx_desktop_new_task_sessions_scope
+       ON desktop_new_task_sessions(user_id, tenant_id, project_id, created_at);";
 
 pub(super) struct PreparedToolInvocation {
     pub(super) invocation: ToolInvocation,
@@ -257,7 +277,7 @@ impl DesktopSessionStore {
         Self::from_connection(connection)
     }
 
-    fn from_connection(connection: Connection) -> Result<Self, String> {
+    fn from_connection(mut connection: Connection) -> Result<Self, String> {
         let stored_schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|error| error.to_string())?;
@@ -358,20 +378,6 @@ impl DesktopSessionStore {
                    PRIMARY KEY(conversation_id, message_id),
                    FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id)
                      ON DELETE CASCADE
-                 );
-                 CREATE TABLE IF NOT EXISTS desktop_new_task_sessions (
-                   idempotency_key TEXT PRIMARY KEY,
-                   payload_hash TEXT NOT NULL,
-                   tenant_id TEXT NOT NULL,
-                   project_id TEXT NOT NULL,
-                   workspace_id TEXT NOT NULL,
-                   conversation_id TEXT NOT NULL UNIQUE,
-                   initial_message_id TEXT NOT NULL UNIQUE,
-                   response_json TEXT NOT NULL,
-                   created_at TEXT NOT NULL,
-                   FOREIGN KEY(workspace_id) REFERENCES desktop_workspaces(id),
-                   FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id),
-                   FOREIGN KEY(initial_message_id) REFERENCES desktop_workspace_messages(id)
                  );
                  CREATE TABLE IF NOT EXISTS desktop_run_inputs (
                    id TEXT PRIMARY KEY,
@@ -492,8 +498,6 @@ impl DesktopSessionStore {
                    ON desktop_run_events(run_id, revision);
                  CREATE INDEX IF NOT EXISTS idx_desktop_client_turns_conversation
                    ON desktop_client_turns(conversation_id, created_at);
-                 CREATE INDEX IF NOT EXISTS idx_desktop_new_task_sessions_scope
-                   ON desktop_new_task_sessions(tenant_id, project_id, created_at);
                  CREATE INDEX IF NOT EXISTS idx_desktop_run_inputs_run
                    ON desktop_run_inputs(run_id, sequence);
                  CREATE INDEX IF NOT EXISTS idx_desktop_run_inputs_pending
@@ -524,6 +528,7 @@ impl DesktopSessionStore {
                 "desktop session store requires exclusive SQLite ownership, got {locking_mode}"
             ));
         }
+        migrate_task_session_receipt_scope(&mut connection)?;
         let installation_id = match connection
             .query_row(
                 "SELECT value_text FROM desktop_runtime_metadata WHERE key = ?1",
@@ -990,44 +995,22 @@ impl DesktopSessionStore {
             &project_id,
         )?;
 
-        if let Some(receipt) = query_task_session_receipt(&transaction, &idempotency_key)? {
-            if receipt.payload_hash != payload_hash
-                || receipt.tenant_id != tenant_id
-                || receipt.project_id != project_id
-            {
+        if let Some(receipt) = query_task_session_receipt(
+            &transaction,
+            &user_id,
+            &tenant_id,
+            &project_id,
+            &idempotency_key,
+        )? {
+            if receipt.payload_hash != payload_hash {
                 return Err(DesktopTaskSessionError::IdempotencyConflict);
             }
+            validate_task_session_receipt(&receipt, &user_id, &tenant_id, &project_id)?;
             let TaskSessionResponseSnapshot {
                 workspace,
                 conversation,
                 initial_message,
             } = receipt.response;
-            validate_workspace_scope_value(&workspace, &tenant_id, &project_id)?;
-            if required_string(&workspace, "id").map_err(DesktopTaskSessionError::Storage)?
-                != receipt.workspace_id
-                || required_string(&conversation, "id").map_err(DesktopTaskSessionError::Storage)?
-                    != receipt.conversation_id
-                || required_string(&conversation, "tenant_id")
-                    .map_err(DesktopTaskSessionError::Storage)?
-                    != tenant_id
-                || required_string(&conversation, "project_id")
-                    .map_err(DesktopTaskSessionError::Storage)?
-                    != project_id
-                || required_string(&conversation, "workspace_id")
-                    .map_err(DesktopTaskSessionError::Storage)?
-                    != receipt.workspace_id
-                || required_string(&conversation, "current_mode")
-                    .map_err(DesktopTaskSessionError::Storage)?
-                    != "plan"
-                || required_string(&initial_message, "id")
-                    .map_err(DesktopTaskSessionError::Storage)?
-                    != receipt.initial_message_id
-                || required_string(&initial_message, "workspace_id")
-                    .map_err(DesktopTaskSessionError::Storage)?
-                    != receipt.workspace_id
-            {
-                return Err(DesktopTaskSessionError::ScopeMismatch);
-            }
             transaction
                 .commit()
                 .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
@@ -1087,14 +1070,15 @@ impl DesktopSessionStore {
         transaction
             .execute(
                 "INSERT INTO desktop_new_task_sessions(
-                   idempotency_key, payload_hash, tenant_id, project_id, workspace_id,
+                   user_id, tenant_id, project_id, idempotency_key, payload_hash, workspace_id,
                    conversation_id, initial_message_id, response_json, created_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
-                    idempotency_key,
-                    payload_hash,
+                    user_id,
                     tenant_id,
                     project_id,
+                    idempotency_key,
+                    payload_hash,
                     workspace_id,
                     conversation.id,
                     initial_message_id,
@@ -3911,6 +3895,7 @@ fn query_artifact_delivery_by_idempotency(
 }
 
 struct TaskSessionReceipt {
+    user_id: String,
     payload_hash: String,
     tenant_id: String,
     project_id: String,
@@ -3925,6 +3910,242 @@ struct TaskSessionResponseSnapshot {
     workspace: Value,
     conversation: Value,
     initial_message: Value,
+}
+
+struct LegacyTaskSessionReceipt {
+    idempotency_key: String,
+    payload_hash: String,
+    tenant_id: String,
+    project_id: String,
+    workspace_id: String,
+    conversation_id: String,
+    initial_message_id: String,
+    response_json: String,
+    created_at: String,
+}
+
+struct SqliteColumnInfo {
+    name: String,
+    not_null: bool,
+    primary_key_position: i64,
+}
+
+fn migrate_task_session_receipt_scope(connection: &mut Connection) -> Result<(), String> {
+    let columns = task_session_receipt_columns(connection)?;
+    if columns.is_empty() {
+        connection
+            .execute_batch(TASK_SESSION_RECEIPT_TABLE_SQL)
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute_batch(TASK_SESSION_RECEIPT_INDEX_SQL)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    if columns.iter().any(|column| column.name == "user_id") {
+        validate_scoped_task_session_receipt_schema(&columns)?;
+        connection
+            .execute_batch(TASK_SESSION_RECEIPT_INDEX_SQL)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    validate_legacy_task_session_receipt_schema(&columns)?;
+    if sqlite_table_exists(connection, LEGACY_TASK_SESSION_RECEIPT_TABLE)? {
+        return Err("legacy task session receipt migration table already exists".to_string());
+    }
+
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute_batch(
+            "DROP INDEX IF EXISTS idx_desktop_new_task_sessions_scope;
+             ALTER TABLE desktop_new_task_sessions
+               RENAME TO desktop_new_task_sessions_v15;",
+        )
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute_batch(TASK_SESSION_RECEIPT_TABLE_SQL)
+        .map_err(|error| error.to_string())?;
+
+    let legacy_receipts = {
+        let mut statement = transaction
+            .prepare(
+                "SELECT idempotency_key, payload_hash, tenant_id, project_id, workspace_id,
+                        conversation_id, initial_message_id, response_json, created_at
+                 FROM desktop_new_task_sessions_v15 ORDER BY rowid ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(LegacyTaskSessionReceipt {
+                    idempotency_key: row.get(0)?,
+                    payload_hash: row.get(1)?,
+                    tenant_id: row.get(2)?,
+                    project_id: row.get(3)?,
+                    workspace_id: row.get(4)?,
+                    conversation_id: row.get(5)?,
+                    initial_message_id: row.get(6)?,
+                    response_json: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?
+    };
+
+    for legacy in legacy_receipts {
+        let response: TaskSessionResponseSnapshot = serde_json::from_str(&legacy.response_json)
+            .map_err(|_| "legacy task session receipt response is invalid".to_string())?;
+        let user_id = task_session_snapshot_user(&response)
+            .map_err(|_| "legacy task session receipt identity is invalid".to_string())?
+            .to_string();
+        let receipt = TaskSessionReceipt {
+            user_id: user_id.clone(),
+            payload_hash: legacy.payload_hash.clone(),
+            tenant_id: legacy.tenant_id.clone(),
+            project_id: legacy.project_id.clone(),
+            workspace_id: legacy.workspace_id.clone(),
+            conversation_id: legacy.conversation_id.clone(),
+            initial_message_id: legacy.initial_message_id.clone(),
+            response,
+        };
+        validate_task_session_receipt(&receipt, &user_id, &legacy.tenant_id, &legacy.project_id)
+            .map_err(|_| "legacy task session receipt scope is invalid".to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_new_task_sessions(
+                   user_id, tenant_id, project_id, idempotency_key, payload_hash, workspace_id,
+                   conversation_id, initial_message_id, response_json, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    user_id,
+                    legacy.tenant_id,
+                    legacy.project_id,
+                    legacy.idempotency_key,
+                    legacy.payload_hash,
+                    legacy.workspace_id,
+                    legacy.conversation_id,
+                    legacy.initial_message_id,
+                    legacy.response_json,
+                    legacy.created_at,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    transaction
+        .execute_batch(
+            "DROP TABLE desktop_new_task_sessions_v15;
+             CREATE INDEX idx_desktop_new_task_sessions_scope
+               ON desktop_new_task_sessions(user_id, tenant_id, project_id, created_at);",
+        )
+        .map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())
+}
+
+fn task_session_receipt_columns(connection: &Connection) -> Result<Vec<SqliteColumnInfo>, String> {
+    let mut statement = connection
+        .prepare("PRAGMA table_info('desktop_new_task_sessions')")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(SqliteColumnInfo {
+                name: row.get(1)?,
+                not_null: row.get::<_, i64>(3)? == 1,
+                primary_key_position: row.get(5)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+fn validate_legacy_task_session_receipt_schema(columns: &[SqliteColumnInfo]) -> Result<(), String> {
+    const EXPECTED_COLUMNS: [&str; 9] = [
+        "idempotency_key",
+        "payload_hash",
+        "tenant_id",
+        "project_id",
+        "workspace_id",
+        "conversation_id",
+        "initial_message_id",
+        "response_json",
+        "created_at",
+    ];
+    validate_task_session_receipt_columns(columns, &EXPECTED_COLUMNS)?;
+    let idempotency_key = columns
+        .iter()
+        .find(|column| column.name == "idempotency_key")
+        .ok_or_else(|| "legacy task session receipt key is missing".to_string())?;
+    if idempotency_key.primary_key_position != 1
+        || columns
+            .iter()
+            .any(|column| column.name != "idempotency_key" && !column.not_null)
+    {
+        return Err("legacy task session receipt primary key is invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_scoped_task_session_receipt_schema(columns: &[SqliteColumnInfo]) -> Result<(), String> {
+    const EXPECTED_COLUMNS: [&str; 10] = [
+        "user_id",
+        "tenant_id",
+        "project_id",
+        "idempotency_key",
+        "payload_hash",
+        "workspace_id",
+        "conversation_id",
+        "initial_message_id",
+        "response_json",
+        "created_at",
+    ];
+    validate_task_session_receipt_columns(columns, &EXPECTED_COLUMNS)?;
+    if columns.iter().any(|column| !column.not_null) {
+        return Err("task session receipt table schema is unsupported".to_string());
+    }
+    for (name, position) in [
+        ("user_id", 1),
+        ("tenant_id", 2),
+        ("project_id", 3),
+        ("idempotency_key", 4),
+    ] {
+        let column = columns
+            .iter()
+            .find(|column| column.name == name)
+            .ok_or_else(|| format!("task session receipt column {name} is missing"))?;
+        if column.primary_key_position != position {
+            return Err(format!(
+                "task session receipt primary key position for {name} is invalid"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_task_session_receipt_columns(
+    columns: &[SqliteColumnInfo],
+    expected: &[&str],
+) -> Result<(), String> {
+    let actual_names: HashSet<&str> = columns.iter().map(|column| column.name.as_str()).collect();
+    let expected_names: HashSet<&str> = expected.iter().copied().collect();
+    if actual_names != expected_names {
+        return Err("task session receipt table schema is unsupported".to_string());
+    }
+    Ok(())
+}
+
+fn sqlite_table_exists(connection: &Connection, table_name: &str) -> Result<bool, String> {
+    connection
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
+             )",
+            [table_name],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
 }
 
 fn validate_task_session_context(
@@ -3966,14 +4187,19 @@ fn validate_task_session_context(
 
 fn query_task_session_receipt(
     connection: &Connection,
+    user_id: &str,
+    tenant_id: &str,
+    project_id: &str,
     idempotency_key: &str,
 ) -> Result<Option<TaskSessionReceipt>, DesktopTaskSessionError> {
     let row = connection
         .query_row(
-            "SELECT payload_hash, tenant_id, project_id, workspace_id, conversation_id,
+            "SELECT user_id, payload_hash, tenant_id, project_id, workspace_id, conversation_id,
                     initial_message_id, response_json
-             FROM desktop_new_task_sessions WHERE idempotency_key = ?1",
-            [idempotency_key],
+             FROM desktop_new_task_sessions
+             WHERE user_id = ?1 AND tenant_id = ?2 AND project_id = ?3
+               AND idempotency_key = ?4",
+            params![user_id, tenant_id, project_id, idempotency_key],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -3983,12 +4209,14 @@ fn query_task_session_receipt(
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
                     row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
                 ))
             },
         )
         .optional()
         .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
     let Some((
+        user_id,
         payload_hash,
         tenant_id,
         project_id,
@@ -4003,6 +4231,7 @@ fn query_task_session_receipt(
     let response = serde_json::from_str(&response_json)
         .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
     Ok(Some(TaskSessionReceipt {
+        user_id,
         payload_hash,
         tenant_id,
         project_id,
@@ -4011,6 +4240,62 @@ fn query_task_session_receipt(
         initial_message_id,
         response,
     }))
+}
+
+fn validate_task_session_receipt(
+    receipt: &TaskSessionReceipt,
+    user_id: &str,
+    tenant_id: &str,
+    project_id: &str,
+) -> Result<(), DesktopTaskSessionError> {
+    if receipt.user_id != user_id
+        || receipt.tenant_id != tenant_id
+        || receipt.project_id != project_id
+    {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    }
+    validate_workspace_scope_value(&receipt.response.workspace, tenant_id, project_id)?;
+    let snapshot_user_id = task_session_snapshot_user(&receipt.response)?;
+    let conversation = &receipt.response.conversation;
+    let initial_message = &receipt.response.initial_message;
+    if snapshot_user_id != user_id
+        || required_string(&receipt.response.workspace, "id")
+            .map_err(DesktopTaskSessionError::Storage)?
+            != receipt.workspace_id
+        || required_string(conversation, "id").map_err(DesktopTaskSessionError::Storage)?
+            != receipt.conversation_id
+        || required_string(conversation, "tenant_id").map_err(DesktopTaskSessionError::Storage)?
+            != tenant_id
+        || required_string(conversation, "project_id").map_err(DesktopTaskSessionError::Storage)?
+            != project_id
+        || required_string(conversation, "workspace_id")
+            .map_err(DesktopTaskSessionError::Storage)?
+            != receipt.workspace_id
+        || required_string(conversation, "current_mode")
+            .map_err(DesktopTaskSessionError::Storage)?
+            != "plan"
+        || required_string(initial_message, "id").map_err(DesktopTaskSessionError::Storage)?
+            != receipt.initial_message_id
+        || required_string(initial_message, "workspace_id")
+            .map_err(DesktopTaskSessionError::Storage)?
+            != receipt.workspace_id
+    {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    }
+    Ok(())
+}
+
+fn task_session_snapshot_user(
+    response: &TaskSessionResponseSnapshot,
+) -> Result<String, DesktopTaskSessionError> {
+    let conversation_user = required_string(&response.conversation, "user_id")
+        .map_err(DesktopTaskSessionError::Storage)?;
+    let message_sender = required_string(&response.initial_message, "sender_id")
+        .map_err(DesktopTaskSessionError::Storage)?;
+    if conversation_user != message_sender {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    }
+    Ok(conversation_user)
 }
 
 fn validate_workspace_scope_value(
@@ -4269,6 +4554,330 @@ fn timeline_has_cursor_collision(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn task_session_snapshot(
+        user_id: &str,
+        sender_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        suffix: &str,
+    ) -> TaskSessionResponseSnapshot {
+        let workspace_id = format!("workspace-{suffix}");
+        TaskSessionResponseSnapshot {
+            workspace: json!({
+                "id": workspace_id,
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "name": format!("Workspace {suffix}"),
+            }),
+            conversation: json!({
+                "id": format!("conversation-{suffix}"),
+                "user_id": user_id,
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+                "title": format!("Conversation {suffix}"),
+                "current_mode": "plan",
+            }),
+            initial_message: json!({
+                "id": format!("message-{suffix}"),
+                "sender_id": sender_id,
+                "workspace_id": workspace_id,
+                "content": format!("Objective {suffix}"),
+            }),
+        }
+    }
+
+    fn legacy_task_session_connection(sender_id: &str) -> Connection {
+        let connection = Connection::open_in_memory().expect("legacy task session database");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 PRAGMA user_version = 15;
+                 CREATE TABLE desktop_workspaces (
+                   id TEXT PRIMARY KEY,
+                   project_id TEXT NOT NULL,
+                   value_json TEXT NOT NULL
+                 );
+                 CREATE TABLE desktop_workspace_messages (
+                   id TEXT PRIMARY KEY,
+                   workspace_id TEXT NOT NULL,
+                   position INTEGER NOT NULL,
+                   value_json TEXT NOT NULL,
+                   UNIQUE(workspace_id, position)
+                 );
+                 CREATE TABLE desktop_conversations (
+                   id TEXT PRIMARY KEY,
+                   project_id TEXT NOT NULL,
+                   workspace_id TEXT,
+                   updated_at TEXT NOT NULL,
+                   value_json TEXT NOT NULL
+                 );
+                 CREATE TABLE desktop_new_task_sessions (
+                   idempotency_key TEXT PRIMARY KEY,
+                   payload_hash TEXT NOT NULL,
+                   tenant_id TEXT NOT NULL,
+                   project_id TEXT NOT NULL,
+                   workspace_id TEXT NOT NULL,
+                   conversation_id TEXT NOT NULL UNIQUE,
+                   initial_message_id TEXT NOT NULL UNIQUE,
+                   response_json TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   FOREIGN KEY(workspace_id) REFERENCES desktop_workspaces(id),
+                   FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id),
+                   FOREIGN KEY(initial_message_id) REFERENCES desktop_workspace_messages(id)
+                 );
+                 CREATE INDEX idx_desktop_new_task_sessions_scope
+                   ON desktop_new_task_sessions(tenant_id, project_id, created_at);",
+            )
+            .expect("legacy task session schema");
+        let response = task_session_snapshot(
+            "local-user",
+            sender_id,
+            "northstar",
+            "desktop-client",
+            "legacy",
+        );
+        let workspace_json = serde_json::to_string(&response.workspace).expect("workspace json");
+        let conversation_json =
+            serde_json::to_string(&response.conversation).expect("conversation json");
+        let message_json =
+            serde_json::to_string(&response.initial_message).expect("initial message json");
+        let response_json = serde_json::to_string(&response).expect("task session response json");
+        connection
+            .execute(
+                "INSERT INTO desktop_workspaces(id, project_id, value_json)
+                 VALUES ('workspace-legacy', 'desktop-client', ?1)",
+                [workspace_json],
+            )
+            .expect("legacy workspace");
+        connection
+            .execute(
+                "INSERT INTO desktop_conversations(
+                   id, project_id, workspace_id, updated_at, value_json
+                 ) VALUES (
+                   'conversation-legacy', 'desktop-client', 'workspace-legacy',
+                   '2026-07-19T00:00:00Z', ?1
+                 )",
+                [conversation_json],
+            )
+            .expect("legacy conversation");
+        connection
+            .execute(
+                "INSERT INTO desktop_workspace_messages(id, workspace_id, position, value_json)
+                 VALUES ('message-legacy', 'workspace-legacy', 1, ?1)",
+                [message_json],
+            )
+            .expect("legacy initial message");
+        connection
+            .execute(
+                "INSERT INTO desktop_new_task_sessions(
+                   idempotency_key, payload_hash, tenant_id, project_id, workspace_id,
+                   conversation_id, initial_message_id, response_json, created_at
+                 ) VALUES (
+                   'shared-key', 'legacy-payload', 'northstar', 'desktop-client',
+                   'workspace-legacy', 'conversation-legacy', 'message-legacy', ?1,
+                   '2026-07-19T00:00:00Z'
+                 )",
+                [response_json],
+            )
+            .expect("legacy task session receipt");
+        connection
+    }
+
+    fn insert_scoped_task_session_receipt(
+        connection: &Connection,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        suffix: &str,
+    ) {
+        let response = task_session_snapshot(user_id, user_id, tenant_id, project_id, suffix);
+        let workspace_id = required_string(&response.workspace, "id").expect("workspace id");
+        let conversation_id =
+            required_string(&response.conversation, "id").expect("conversation id");
+        let message_id =
+            required_string(&response.initial_message, "id").expect("initial message id");
+        connection
+            .execute(
+                "INSERT INTO desktop_workspaces(id, project_id, value_json) VALUES (?1, ?2, ?3)",
+                params![
+                    workspace_id,
+                    project_id,
+                    serde_json::to_string(&response.workspace).expect("workspace json")
+                ],
+            )
+            .expect("scoped workspace");
+        connection
+            .execute(
+                "INSERT INTO desktop_conversations(
+                   id, project_id, workspace_id, updated_at, value_json
+                 ) VALUES (?1, ?2, ?3, '2026-07-19T00:00:00Z', ?4)",
+                params![
+                    conversation_id,
+                    project_id,
+                    workspace_id,
+                    serde_json::to_string(&response.conversation).expect("conversation json")
+                ],
+            )
+            .expect("scoped conversation");
+        connection
+            .execute(
+                "INSERT INTO desktop_workspace_messages(id, workspace_id, position, value_json)
+                 VALUES (?1, ?2, 1, ?3)",
+                params![
+                    message_id,
+                    workspace_id,
+                    serde_json::to_string(&response.initial_message).expect("initial message json")
+                ],
+            )
+            .expect("scoped initial message");
+        connection
+            .execute(
+                "INSERT INTO desktop_new_task_sessions(
+                   user_id, tenant_id, project_id, idempotency_key, payload_hash, workspace_id,
+                   conversation_id, initial_message_id, response_json, created_at
+                 ) VALUES (?1, ?2, ?3, 'shared-key', ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    user_id,
+                    tenant_id,
+                    project_id,
+                    format!("payload-{suffix}"),
+                    workspace_id,
+                    conversation_id,
+                    message_id,
+                    serde_json::to_string(&response).expect("response json"),
+                    format!("2026-07-19T00:00:0{suffix}Z"),
+                ],
+            )
+            .expect("scoped task session receipt");
+    }
+
+    #[test]
+    fn task_session_receipt_primary_key_and_lookup_are_fully_scoped() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let connection = store.connection().expect("session store connection");
+        let scopes = [
+            ("user-a", "tenant-a", "project-a", "1"),
+            ("user-b", "tenant-a", "project-a", "2"),
+            ("user-a", "tenant-b", "project-a", "3"),
+            ("user-a", "tenant-a", "project-b", "4"),
+        ];
+        for (user_id, tenant_id, project_id, suffix) in scopes {
+            insert_scoped_task_session_receipt(&connection, user_id, tenant_id, project_id, suffix);
+        }
+
+        let columns = task_session_receipt_columns(&connection).expect("task session columns");
+        let primary_key: Vec<_> = columns
+            .iter()
+            .filter(|column| column.primary_key_position > 0)
+            .map(|column| (column.name.as_str(), column.primary_key_position))
+            .collect();
+        assert_eq!(
+            primary_key,
+            vec![
+                ("user_id", 1),
+                ("tenant_id", 2),
+                ("project_id", 3),
+                ("idempotency_key", 4),
+            ]
+        );
+        for (user_id, tenant_id, project_id, suffix) in scopes {
+            let receipt = query_task_session_receipt(
+                &connection,
+                user_id,
+                tenant_id,
+                project_id,
+                "shared-key",
+            )
+            .expect("scoped receipt query")
+            .expect("scoped receipt");
+            assert_eq!(receipt.payload_hash, format!("payload-{suffix}"));
+            validate_task_session_receipt(&receipt, user_id, tenant_id, project_id)
+                .expect("valid scoped receipt");
+        }
+    }
+
+    #[test]
+    fn v15_task_session_receipt_migrates_and_replays_for_snapshot_user() {
+        let connection = legacy_task_session_connection("local-user");
+        let store = DesktopSessionStore::from_connection(connection).expect("migrate v15 store");
+
+        let outcome = store
+            .create_task_session(CreateTaskSessionInput {
+                user_id: "local-user".to_string(),
+                expected_context_revision: 0,
+                tenant_id: "northstar".to_string(),
+                project_id: "desktop-client".to_string(),
+                idempotency_key: "shared-key".to_string(),
+                payload_hash: "legacy-payload".to_string(),
+                workspace: TaskSessionWorkspaceInput::Existing("workspace-legacy".to_string()),
+                conversation: LocalConversation {
+                    id: "unused-conversation".to_string(),
+                    project_id: "desktop-client".to_string(),
+                    tenant_id: "northstar".to_string(),
+                    title: "Unused replay input".to_string(),
+                    workspace_id: Some("workspace-legacy".to_string()),
+                    capability_mode: ConversationCapabilityMode::Code,
+                    current_mode: ConversationRunMode::Plan,
+                    created_at: "2026-07-19T00:00:00Z".to_string(),
+                    updated_at: "2026-07-19T00:00:00Z".to_string(),
+                },
+                initial_message: json!({
+                    "id": "unused-message",
+                    "sender_id": "local-user",
+                    "workspace_id": "workspace-legacy",
+                }),
+                now: "2026-07-19T00:00:00Z".to_string(),
+            })
+            .expect("replay migrated task session receipt");
+        assert!(outcome.replayed);
+        assert_eq!(outcome.workspace["id"], "workspace-legacy");
+        assert_eq!(outcome.conversation["id"], "conversation-legacy");
+        assert_eq!(outcome.initial_message["id"], "message-legacy");
+
+        let connection = store.connection().expect("migrated connection");
+        let migrated_user: String = connection
+            .query_row(
+                "SELECT user_id FROM desktop_new_task_sessions
+                 WHERE tenant_id = 'northstar' AND project_id = 'desktop-client'
+                   AND idempotency_key = 'shared-key'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("migrated receipt user");
+        assert_eq!(migrated_user, "local-user");
+        assert!(
+            !sqlite_table_exists(&connection, LEGACY_TASK_SESSION_RECEIPT_TABLE)
+                .expect("legacy migration table state")
+        );
+    }
+
+    #[test]
+    fn corrupt_v15_task_session_receipt_rolls_back_migration() {
+        let mut connection = legacy_task_session_connection("different-user");
+        let error = migrate_task_session_receipt_scope(&mut connection)
+            .expect_err("identity mismatch must fail migration");
+        assert!(error.contains("identity is invalid"));
+        assert!(
+            sqlite_table_exists(&connection, "desktop_new_task_sessions")
+                .expect("original table state")
+        );
+        assert!(
+            !sqlite_table_exists(&connection, LEGACY_TASK_SESSION_RECEIPT_TABLE)
+                .expect("migration scratch table state")
+        );
+        let receipt_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM desktop_new_task_sessions WHERE idempotency_key = 'shared-key'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("legacy receipt count after rollback");
+        assert_eq!(receipt_count, 1);
+        let columns = task_session_receipt_columns(&connection).expect("rolled back columns");
+        assert!(!columns.iter().any(|column| column.name == "user_id"));
+    }
 
     fn timeline_item(id: &str, time_us: i64, counter: i64) -> Value {
         json!({

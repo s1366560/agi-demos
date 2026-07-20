@@ -79,6 +79,8 @@ mod subagent_templates;
 mod support;
 #[path = "pg_integration/support_tickets.rs"]
 mod support_tickets;
+#[path = "pg_integration/task_sessions.rs"]
+mod task_sessions;
 #[path = "pg_integration/tenant_trust.rs"]
 mod tenant_trust;
 #[path = "pg_integration/tenant_webhooks.rs"]

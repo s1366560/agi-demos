@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde_json::Value;
 use sqlx::types::chrono::{DateTime, Utc};
 
@@ -373,3 +375,93 @@ pub enum WorkspaceAccess {
     Read,
     Write,
 }
+
+/// Conversation capability selected when an atomic task session is created.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskSessionCapabilityMode {
+    Work,
+    Code,
+}
+
+impl TaskSessionCapabilityMode {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Work => "work",
+            Self::Code => "code",
+        }
+    }
+}
+
+/// Workspace branch for an atomic task-session write.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskSessionWorkspaceRecord {
+    Create {
+        workspace: Box<WorkspaceRecord>,
+        owner_member_id: String,
+    },
+    Existing {
+        workspace_id: String,
+    },
+}
+
+/// Minimal caller-owned conversation fields for an atomic task-session write.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskSessionConversationRecord {
+    pub id: String,
+    pub title: String,
+    pub capability_mode: TaskSessionCapabilityMode,
+}
+
+/// Complete deterministic input to one atomic task-session write.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateTaskSessionRecord {
+    pub receipt_id: String,
+    pub actor_user_id: String,
+    pub tenant_id: String,
+    pub project_id: String,
+    pub idempotency_key: String,
+    pub payload_hash: String,
+    pub workspace: TaskSessionWorkspaceRecord,
+    pub conversation: TaskSessionConversationRecord,
+    pub initial_message_id: String,
+    pub initial_message_content: String,
+    pub blackboard_outbox_id: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Response snapshot returned from the transaction or its durable receipt.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskSessionCreationOutcome {
+    pub replayed: bool,
+    pub workspace: Value,
+    pub conversation: Value,
+    pub initial_message: Value,
+}
+
+/// Stable failures consumed by the server boundary when mapping HTTP errors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskSessionRepositoryError {
+    InvalidInput,
+    ProjectAccessDenied,
+    WorkspaceNotFound,
+    WorkspaceAccessDenied,
+    WorkspaceNameConflict,
+    IdempotencyConflict,
+    Storage(String),
+}
+
+impl fmt::Display for TaskSessionRepositoryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidInput => "task session input is invalid",
+            Self::ProjectAccessDenied => "task session project write access is required",
+            Self::WorkspaceNotFound => "task session workspace was not found",
+            Self::WorkspaceAccessDenied => "task session workspace write access is required",
+            Self::WorkspaceNameConflict => "task session workspace name already exists",
+            Self::IdempotencyConflict => "task session idempotency key conflicts",
+            Self::Storage(_) => "task session storage failed",
+        })
+    }
+}
+
+impl std::error::Error for TaskSessionRepositoryError {}

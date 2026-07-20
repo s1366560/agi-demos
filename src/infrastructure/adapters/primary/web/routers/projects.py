@@ -46,6 +46,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
     UserTenant,
+    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repository import (
@@ -61,6 +62,7 @@ from src.infrastructure.retrieval.registry import ENV_RETRIEVAL_STORE_ID_PREFIX
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 logger = logging.getLogger(__name__)
 DEFAULT_PROJECT_NAMES = ("Default project", "默认项目")
+TASK_SESSION_RECEIPT_TABLE = "task_session_creation_receipts"
 
 
 class AddProjectMemberRequest(BaseModel):
@@ -278,7 +280,7 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
             target_table_name="messages",
             target_column_name="id",
             target_ids=message_ids,
-            skip_tables={"messages"},
+            skip_tables={"messages", TASK_SESSION_RECEIPT_TABLE},
             existing_tables=existing_tables,
         )
         _result = await db.execute(
@@ -301,7 +303,7 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
             target_table_name="conversations",
             target_column_name="id",
             target_ids=conversation_ids,
-            skip_tables={"conversations", "messages"},
+            skip_tables={"conversations", "messages", TASK_SESSION_RECEIPT_TABLE},
             existing_tables=existing_tables,
         )
         _result = await db.execute(
@@ -329,6 +331,56 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
         skip_tables={"projects", "conversations", "messages", "workspaces"},
         existing_tables=existing_tables,
     )
+
+
+async def _lock_project_delete_scopes(
+    db: AsyncSession,
+    project_ids: Sequence[str],
+) -> list[str]:
+    """Lock project-owned rows in the shared Rust/Python deletion order."""
+    ordered_project_ids = sorted(set(project_ids))
+    if not ordered_project_ids:
+        return []
+
+    project_result = await db.execute(
+        select(Project.id)
+        .where(Project.id.in_(ordered_project_ids))
+        .order_by(Project.id)
+        .with_for_update()
+    )
+    locked_project_ids = sorted(set(project_result.scalars().all()))
+    if not locked_project_ids:
+        return []
+
+    user_project_result = await db.execute(
+        select(UserProject.id)
+        .where(UserProject.project_id.in_(locked_project_ids))
+        .order_by(UserProject.id)
+        .with_for_update()
+    )
+    user_project_result.scalars().all()
+
+    workspace_result = await db.execute(
+        select(WorkspaceModel.id)
+        .where(WorkspaceModel.project_id.in_(locked_project_ids))
+        .order_by(WorkspaceModel.id)
+        .with_for_update()
+    )
+    workspace_ids = sorted(set(workspace_result.scalars().all()))
+    if workspace_ids:
+        workspace_member_result = await db.execute(
+            select(WorkspaceMemberModel.id)
+            .where(WorkspaceMemberModel.workspace_id.in_(workspace_ids))
+            .order_by(WorkspaceMemberModel.workspace_id, WorkspaceMemberModel.id)
+            .with_for_update()
+        )
+        workspace_member_result.scalars().all()
+    return locked_project_ids
+
+
+async def _lock_project_delete_scope(db: AsyncSession, project_id: str) -> bool:
+    """Lock one project deletion scope."""
+    return project_id in await _lock_project_delete_scopes(db, [project_id])
 
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -735,12 +787,7 @@ async def delete_project(
             status_code=status.HTTP_403_FORBIDDEN, detail=_("Only project owner can delete project")
         )
 
-    # Get project
-    result = await db.execute(
-        refresh_select_statement(select(Project).where(Project.id == project_id))
-    )
-    project = result.scalar_one_or_none()
-    if not project:
+    if not await _lock_project_delete_scope(db, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
     await _delete_project_dependents(db, project_id)

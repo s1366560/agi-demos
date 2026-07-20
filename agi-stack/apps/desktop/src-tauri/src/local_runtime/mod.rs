@@ -11574,7 +11574,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 15);
+        assert_eq!(version, 16);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -11611,6 +11611,25 @@ mod tests {
             )
             .expect("task session response column count");
         assert_eq!(task_session_response_column, 1);
+        let task_session_primary_key: Vec<(String, i64)> = connection
+            .prepare(
+                "SELECT name, pk FROM pragma_table_info('desktop_new_task_sessions')
+                 WHERE pk > 0 ORDER BY pk ASC",
+            )
+            .expect("prepare task session primary key inspection")
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .expect("query task session primary key")
+            .collect::<Result<_, _>>()
+            .expect("collect task session primary key");
+        assert_eq!(
+            task_session_primary_key,
+            vec![
+                ("user_id".to_string(), 1),
+                ("tenant_id".to_string(), 2),
+                ("project_id".to_string(), 3),
+                ("idempotency_key".to_string(), 4),
+            ]
+        );
         let stored_installation_id: String = connection
             .query_row(
                 "SELECT value_text FROM desktop_runtime_metadata WHERE key = 'installation_id'",
@@ -11635,13 +11654,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 16;")
+                .execute_batch("PRAGMA user_version = 17;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 15"));
+        assert!(error.contains("newer than supported schema version 16"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -12377,7 +12396,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 15);
+        assert_eq!(schema_version, 16);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }
@@ -12974,10 +12993,11 @@ mod tests {
             ))
             .await
             .expect("first task session response");
-        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(first.status(), StatusCode::CREATED);
         let first = response_json(first).await;
         assert_eq!(first["replayed"], false);
         assert_eq!(first["workspace"]["name"], "Atomic task session");
+        assert_eq!(first["workspace"]["is_archived"], false);
         assert_eq!(
             first["workspace"]["description"],
             "An atomic desktop task session"
@@ -13014,6 +13034,10 @@ mod tests {
         assert_eq!(
             first["initial_message"]["content"],
             "Build the approved desktop task flow"
+        );
+        assert_eq!(
+            first["initial_message"]["metadata"]["conversation_id"],
+            first["conversation"]["id"]
         );
         let original_conversation = first["conversation"].clone();
 
@@ -13099,7 +13123,7 @@ mod tests {
             ))
             .await
             .expect("first conflict fixture response");
-        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(first.status(), StatusCode::CREATED);
 
         let conflict = app
             .oneshot(authenticated_json_request(
@@ -13112,8 +13136,11 @@ mod tests {
             .expect("task session conflict response");
         assert_eq!(conflict.status(), StatusCode::CONFLICT);
         assert_eq!(
-            response_json(conflict).await["code"],
-            "TASK_SESSION_IDEMPOTENCY_CONFLICT"
+            response_json(conflict).await,
+            json!({
+                "code": "TASK_SESSION_IDEMPOTENCY_CONFLICT",
+                "detail": "Task session idempotency key is already bound to a different request",
+            })
         );
         assert_eq!(
             state
@@ -13161,7 +13188,7 @@ mod tests {
                 ))
                 .await
                 .expect("create restart task session");
-            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.status(), StatusCode::CREATED);
             let response = response_json(response).await;
             (
                 response["workspace"]["id"]
@@ -13220,6 +13247,13 @@ mod tests {
                 .await
                 .expect("conflict reopened task session");
             assert_eq!(conflict.status(), StatusCode::CONFLICT);
+            assert_eq!(
+                response_json(conflict).await,
+                json!({
+                    "code": "TASK_SESSION_IDEMPOTENCY_CONFLICT",
+                    "detail": "Task session idempotency key is already bound to a different request",
+                })
+            );
         }
 
         std::fs::remove_dir_all(root).expect("remove task session restart root");
@@ -13291,7 +13325,7 @@ mod tests {
             ))
             .await
             .expect("existing workspace task session response");
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
         let payload = response_json(response).await;
         assert_eq!(payload["workspace"]["id"], "local-workspace");
         assert_eq!(payload["conversation"]["workspace_id"], "local-workspace");

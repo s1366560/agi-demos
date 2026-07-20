@@ -17,7 +17,7 @@ import { useMemo } from 'react';
 
 import { useAgentState, useActiveToolCalls } from '../stores/agent/executionStore';
 import { useIsStreaming } from '../stores/agent/streamingStore';
-import { useTimeline } from '../stores/agent/timelineStore';
+import { useTimelineCount } from '../stores/agent/timelineStore';
 import { useSandboxStore } from '../stores/sandbox';
 
 import { useAgentLifecycleState } from './useAgentLifecycleState';
@@ -278,7 +278,10 @@ export function useUnifiedAgentStatus({
   const agentState = useAgentState();
   const isStreamingAgent = useIsStreaming();
   const activeToolCalls = useActiveToolCalls();
-  const timeline = useTimeline();
+  // Subscribe to the primitive count, not the whole timeline array: the array
+  // is replaced on every ~100ms stream flush and would re-render consumers
+  // (e.g. the status bar) at flush frequency for a length read.
+  const timelineCount = useTimelineCount();
 
   const activeSandboxId = useSandboxStore((s) => s.activeSandboxId);
 

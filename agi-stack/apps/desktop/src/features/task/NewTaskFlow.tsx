@@ -7,7 +7,10 @@ import {
   MagicWandIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from '../../api/client';
+import {
+  DesktopApiClient,
+  isTaskSessionIdempotencyConflictError,
+} from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   AgentConversation,
@@ -58,11 +61,17 @@ import {
   type ReviewPlanStep,
 } from './newTaskPlanModel';
 import {
+  browserTaskSessionCreationStorage,
   buildLocalTaskSessionRequest,
   canUseNewTaskWorkspaceSelection,
+  clearTaskSessionCreationAttempt,
   NEW_WORKSPACE_VALUE,
   newTaskWorkspaceLabel,
+  readTaskSessionCreationAttempt,
+  resolveTaskSessionConflictWorkspace,
   taskSessionCreationAttempt,
+  taskSessionCreationFingerprint,
+  writeTaskSessionCreationAttempt,
   type TaskSessionCreationAttempt,
 } from './newTaskSessionModel';
 import {
@@ -75,6 +84,12 @@ import './NewTaskFlow.css';
 import './NewTaskPlanReview.css';
 
 type NewTaskFlowPhase = 'define' | 'planning' | 'review' | 'launching';
+
+type TaskSessionConflictRecovery = {
+  fingerprint: string;
+  workspaceSelection: string;
+  existingWorkspace: WorkspaceSummary | null;
+};
 
 export type NewTaskSession = {
   workspace: WorkspaceSummary;
@@ -99,6 +114,7 @@ export type NewTaskResumeDraft = {
 type NewTaskFlowProps = {
   open: boolean;
   config: DesktopRuntimeConfig;
+  actorId: string | null | undefined;
   workspaceAuthority?: WorkspaceAuthorityCollection<WorkspaceSummary>;
   workspaces?: WorkspaceSummary[];
   resumeDraft?: NewTaskResumeDraft | null;
@@ -122,6 +138,7 @@ const DEFAULT_CONTEXT_SOURCES: NewTaskContextSource[] = [
 export function NewTaskFlow({
   open,
   config,
+  actorId,
   workspaceAuthority,
   workspaces,
   resumeDraft = null,
@@ -136,6 +153,7 @@ export function NewTaskFlow({
   onError,
 }: NewTaskFlowProps) {
   const { t } = useI18n();
+  const normalizedActorId = actorId?.trim() ?? '';
   const [phase, setPhase] = useState<NewTaskFlowPhase>('define');
   const [title, setTitle] = useState('');
   const [objective, setObjective] = useState('');
@@ -163,6 +181,8 @@ export function NewTaskFlow({
   const [revisionFeedback, setRevisionFeedback] = useState('');
   const [revisionComposerOpen, setRevisionComposerOpen] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const [taskSessionConflictRecovery, setTaskSessionConflictRecovery] =
+    useState<TaskSessionConflictRecovery | null>(null);
   const [runtimeRecoveryAvailable, setRuntimeRecoveryAvailable] = useState(false);
   const [deliveryOutcomeUnknown, setDeliveryOutcomeUnknown] = useState(false);
   const [session, setSession] = useState<NewTaskSession | null>(null);
@@ -181,6 +201,8 @@ export function NewTaskFlow({
   const preserveSubmittedWorkRef = useRef(false);
   const generatePlanPendingRef = useRef(false);
   const taskSessionCreationAttemptRef = useRef<TaskSessionCreationAttempt | null>(null);
+  const activeActorIdRef = useRef(normalizedActorId);
+  const modalActorIdRef = useRef(normalizedActorId);
   const wasOpenRef = useRef(false);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -191,6 +213,7 @@ export function NewTaskFlow({
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
   phaseRef.current = phase;
   onCloseRef.current = onClose;
+  activeActorIdRef.current = normalizedActorId;
 
   const resolvedWorkspaceAuthority = workspaceAuthority ?? {
     status: workspaces ? ('ready' as const) : ('unavailable' as const),
@@ -239,6 +262,40 @@ export function NewTaskFlow({
     Boolean(config.projectId.trim()) &&
     canUseNewTaskWorkspaceSelection(resolvedWorkspaceAuthority, workspaceSelection) &&
     !effectiveDisabledReason;
+  const currentTaskSessionFingerprint = useMemo(
+    () =>
+      taskSessionCreationFingerprint(
+        config,
+        normalizedActorId,
+        { title, objective, kind, workspaceRoot, contextSources },
+        workspaceSelection,
+      ),
+    [
+      config.apiBaseUrl,
+      config.mode,
+      config.projectId,
+      config.tenantId,
+      contextSources,
+      kind,
+      normalizedActorId,
+      objective,
+      title,
+      workspaceRoot,
+      workspaceSelection,
+    ],
+  );
+  const taskSessionConflictIsCurrent =
+    taskSessionConflictRecovery?.fingerprint === currentTaskSessionFingerprint;
+  const taskSessionConflictWorkspace =
+    taskSessionConflictIsCurrent &&
+    taskSessionConflictRecovery?.workspaceSelection === NEW_WORKSPACE_VALUE
+      ? taskSessionConflictRecovery.existingWorkspace
+      : null;
+  const taskSessionConflictActionAvailable =
+    taskSessionConflictIsCurrent &&
+    taskSessionConflictRecovery !== null &&
+    (taskSessionConflictRecovery.workspaceSelection !== NEW_WORKSPACE_VALUE ||
+      taskSessionConflictWorkspace !== null);
   const workspaceLabel = newTaskWorkspaceLabel(
     session?.workspace ?? null,
     selectedWorkspace,
@@ -288,6 +345,7 @@ export function NewTaskFlow({
     setRevisionFeedback('');
     setRevisionComposerOpen(false);
     setFlowError(null);
+    setTaskSessionConflictRecovery(null);
     setRuntimeRecoveryAvailable(false);
     setDeliveryOutcomeUnknown(false);
     setSession(resumeDraft?.session ?? null);
@@ -338,6 +396,32 @@ export function NewTaskFlow({
     preferredWorkspaceId,
     resumeDraft,
   ]);
+
+  useEffect(() => {
+    const previousActorId = modalActorIdRef.current;
+    modalActorIdRef.current = normalizedActorId;
+    if (previousActorId === normalizedActorId) return;
+
+    flowEpochRef.current += 1;
+    preserveSubmittedWorkRef.current = false;
+    generatePlanPendingRef.current = false;
+    taskSessionCreationAttemptRef.current = null;
+    planningAttemptRef.current = null;
+    planningConversationIdRef.current = '';
+    sessionDefinitionSignatureRef.current = '';
+    sessionWorkspaceSelectionRef.current = '';
+    approvalAttemptRef.current = null;
+    legacyBuildRecoveryRef.current = false;
+    setSession(null);
+    setPlanTasks([]);
+    setReviewSteps([]);
+    setPlanVersion(null);
+    setPlanApproval(null);
+    setTaskSessionConflictRecovery(null);
+    setFlowError(null);
+    setPhase('define');
+    if (open) onCloseRef.current();
+  }, [normalizedActorId, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -540,10 +624,14 @@ export function NewTaskFlow({
     return attempt.messageId;
   };
 
-  const generatePlan = async () => {
+  const generatePlan = async (workspaceSelectionOverride?: string) => {
     if (!canGenerate || generatePlanPendingRef.current) return;
     generatePlanPendingRef.current = true;
     const operationEpoch = flowEpochRef.current;
+    const operationActorId = normalizedActorId;
+    const targetWorkspaceSelection =
+      workspaceSelectionOverride ?? workspaceSelection;
+    let rejectedCreationFingerprint: string | null = null;
     setPhase('planning');
     setFlowError(null);
     setRuntimeRecoveryAvailable(false);
@@ -561,91 +649,106 @@ export function NewTaskFlow({
       contextSources,
     };
     const planningPrompt = buildPlanningPrompt(definition);
-    const definitionSignature = newTaskDefinitionSignature(definition, workspaceSelection);
+    const planningIntentChanged = lastPlanningPromptRef.current !== planningPrompt;
+    const definitionSignature = newTaskDefinitionSignature(
+      definition,
+      targetWorkspaceSelection,
+    );
     lastPlanningPromptRef.current = planningPrompt;
     try {
       const sessionMatchesDefinition = Boolean(
         session &&
+          session.conversation.user_id === operationActorId &&
           sessionDefinitionSignatureRef.current === definitionSignature &&
-          sessionWorkspaceSelectionRef.current === workspaceSelection,
+          sessionWorkspaceSelectionRef.current === targetWorkspaceSelection,
       );
       planningConversationIdRef.current = sessionMatchesDefinition
         ? (session?.conversation.id ?? '')
         : '';
-      if (sessionMatchesDefinition && planTasks.length > 0) {
+      if (sessionMatchesDefinition && planTasks.length > 0 && !planningIntentChanged) {
         setPhase('review');
         return;
       }
       let readySession = sessionMatchesDefinition ? session : null;
       if (!readySession) {
         const baseClient = new DesktopApiClient(config);
-        if (config.mode === 'local') {
-          const creationFingerprint = [
-            config.tenantId,
-            config.projectId,
-            definitionSignature,
-          ].join(':');
-          const creationAttempt = taskSessionCreationAttempt(
-            taskSessionCreationAttemptRef.current,
-            creationFingerprint,
-            () => `desktop-task-session-${crypto.randomUUID()}`,
-          );
-          taskSessionCreationAttemptRef.current = creationAttempt;
-          const result = await baseClient.createTaskSession(
-            buildLocalTaskSessionRequest(
-              definition,
-              workspaceSelection,
-              creationAttempt.idempotencyKey,
-            ),
-          );
-          readySession = {
-            workspace: result.workspace,
-            conversation: result.conversation,
-            config: { ...config, workspaceId: result.workspace.id },
-          };
-        } else {
+        if (config.mode === 'cloud') {
           try {
             if (!(await baseClient.supportsAgentPlanWorkflow())) {
               throw new Error(t('task.planRuntimeUnsupported'));
             }
+            if (
+              flowEpochRef.current !== operationEpoch ||
+              activeActorIdRef.current !== operationActorId
+            ) {
+              return;
+            }
           } catch (error) {
-            setRuntimeRecoveryAvailable(true);
+            if (
+              flowEpochRef.current === operationEpoch &&
+              activeActorIdRef.current === operationActorId
+            ) {
+              setRuntimeRecoveryAvailable(true);
+            }
             throw error;
           }
-          const reusableCreatedWorkspace =
-            workspaceSelection === NEW_WORKSPACE_VALUE &&
-            sessionWorkspaceSelectionRef.current === NEW_WORKSPACE_VALUE
-              ? session?.workspace
-              : null;
-          let workspace = selectedWorkspace;
-          if (workspaceSelection === NEW_WORKSPACE_VALUE) {
-            workspace =
-              reusableCreatedWorkspace ??
-              (await baseClient.createWorkspaceForProject(
-                config.projectId,
-                title.trim(),
-                objective.trim(),
-                config.tenantId,
-                {
-                  useCase: kind,
-                  collaborationMode: 'multi_agent_shared',
-                  sandboxCodeRoot: kind === 'programming' ? workspaceRoot.trim() : undefined,
-                },
-              ));
-          }
-          if (!workspace) throw new Error(t('task.workspaceSelectionStale'));
-          const scopedConfig = { ...config, workspaceId: workspace.id };
-          const client = new DesktopApiClient(scopedConfig);
-          const created = await client.createAgentConversation(
-            title.trim(),
-            config.projectId,
-            kind === 'programming' ? 'code' : 'work',
-          );
-          readySession = { workspace, conversation: created, config: scopedConfig };
         }
+        const creationFingerprint = taskSessionCreationFingerprint(
+          config,
+          operationActorId,
+          definition,
+          targetWorkspaceSelection,
+        );
+        const creationStorage = browserTaskSessionCreationStorage();
+        const storedCreationAttempt = readTaskSessionCreationAttempt(
+          creationStorage,
+          creationFingerprint,
+        );
+        const creationAttempt = taskSessionCreationAttempt(
+          taskSessionCreationAttemptRef.current?.fingerprint === creationFingerprint
+            ? taskSessionCreationAttemptRef.current
+            : storedCreationAttempt,
+          creationFingerprint,
+          () => `desktop-task-session-${crypto.randomUUID()}`,
+        );
+        if (
+          !creationFingerprint ||
+          !writeTaskSessionCreationAttempt(creationStorage, creationAttempt)
+        ) {
+          throw new Error(t('task.creationRecoveryUnavailable'));
+        }
+        taskSessionCreationAttemptRef.current = creationAttempt;
+        let result;
+        try {
+          result = await baseClient.createTaskSession(
+            buildLocalTaskSessionRequest(
+              definition,
+              targetWorkspaceSelection,
+              creationAttempt.idempotencyKey,
+            ),
+          );
+        } catch (error) {
+          if (isTaskSessionIdempotencyConflictError(error)) {
+            rejectedCreationFingerprint = creationFingerprint;
+          }
+          throw error;
+        }
+        if (
+          flowEpochRef.current !== operationEpoch ||
+          activeActorIdRef.current !== operationActorId
+        ) {
+          return;
+        }
+        readySession = {
+          workspace: result.workspace,
+          conversation: result.conversation,
+          config: { ...config, workspaceId: result.workspace.id },
+        };
         planningConversationIdRef.current = readySession.conversation.id;
         onSessionPersisted(readySession);
-        if (flowEpochRef.current !== operationEpoch) return;
+        clearTaskSessionCreationAttempt(creationStorage, creationFingerprint);
+        taskSessionCreationAttemptRef.current = null;
+        setTaskSessionConflictRecovery(null);
         setSession(readySession);
         setWorkspaceSelection(readySession.workspace.id);
         sessionDefinitionSignatureRef.current = newTaskDefinitionSignature(
@@ -661,29 +764,18 @@ export function NewTaskFlow({
         setPlanVersion(null);
         setPlanApproval(null);
       }
-      const client = new DesktopApiClient(readySession.config);
-      if (config.mode === 'cloud') {
-        if (readySession.conversation.workspace_id !== readySession.workspace.id) {
-          const conversation = await client.updateAgentConversationMode(
-            readySession.conversation.id,
-            { workspace_id: readySession.workspace.id },
-            readySession.config.projectId,
-          );
-          readySession = { ...readySession, conversation };
-          onSessionPersisted(readySession);
-          if (flowEpochRef.current !== operationEpoch) return;
-          setSession(readySession);
-        }
-        await client.switchPlanMode(readySession.conversation.id, 'plan');
-        await client.sendMessage(objective.trim());
-      }
       expectedPlanSignatureRef.current = displayedPlanSignatureRef.current;
       const outcome = await runAgentTurn(
         readySession,
         planningPrompt,
         planningMessageId(readySession, planningPrompt, 'desktop-plan'),
       );
-      if (flowEpochRef.current !== operationEpoch) return;
+      if (
+        flowEpochRef.current !== operationEpoch ||
+        activeActorIdRef.current !== operationActorId
+      ) {
+        return;
+      }
       setDeliveryOutcomeUnknown(outcome === 'unknown_outcome');
       if (
         canActivateNewTaskSession(
@@ -695,15 +787,115 @@ export function NewTaskFlow({
         onSessionReady(readySession);
       }
     } catch (error) {
-      if (flowEpochRef.current !== operationEpoch) return;
-      const message = error instanceof Error ? error.message : String(error);
-      if (config.mode === 'local') setRuntimeRecoveryAvailable(true);
+      if (
+        flowEpochRef.current !== operationEpoch ||
+        activeActorIdRef.current !== operationActorId
+      ) {
+        return;
+      }
+      const conflictFingerprint = rejectedCreationFingerprint;
+      const taskSessionConflict = conflictFingerprint !== null;
+      let existingConflictWorkspace: WorkspaceSummary | null = null;
+      if (
+        taskSessionConflict &&
+        targetWorkspaceSelection === NEW_WORKSPACE_VALUE
+      ) {
+        try {
+          const workspaces = await new DesktopApiClient(config).listWorkspaces();
+          if (
+            flowEpochRef.current !== operationEpoch ||
+            activeActorIdRef.current !== operationActorId
+          ) {
+            return;
+          }
+          existingConflictWorkspace = resolveTaskSessionConflictWorkspace(
+            workspaces,
+            definition.title,
+          );
+        } catch {
+          if (
+            flowEpochRef.current !== operationEpoch ||
+            activeActorIdRef.current !== operationActorId
+          ) {
+            return;
+          }
+        }
+      }
+      const message = taskSessionConflict
+        ? targetWorkspaceSelection === NEW_WORKSPACE_VALUE
+          ? existingConflictWorkspace
+            ? t('task.creationWorkspaceConflictResolved', {
+                workspace: existingConflictWorkspace.name ?? definition.title.trim(),
+              })
+            : t('task.creationWorkspaceConflictUnresolved')
+          : t('task.creationIdempotencyConflict')
+        : error instanceof Error
+          ? error.message
+          : String(error);
+      if (conflictFingerprint) {
+        setTaskSessionConflictRecovery({
+          fingerprint: conflictFingerprint,
+          workspaceSelection: targetWorkspaceSelection,
+          existingWorkspace: existingConflictWorkspace,
+        });
+        setRuntimeRecoveryAvailable(false);
+      } else if (config.mode === 'local') {
+        setRuntimeRecoveryAvailable(true);
+      }
       setFlowError(message);
       setPhase('define');
       onError(message);
     } finally {
-      generatePlanPendingRef.current = false;
+      if (
+        flowEpochRef.current === operationEpoch &&
+        activeActorIdRef.current === operationActorId
+      ) {
+        generatePlanPendingRef.current = false;
+      }
     }
+  };
+
+  const createAsNewTask = async () => {
+    const conflictRecovery = taskSessionConflictRecovery;
+    const conflictFingerprint = conflictRecovery?.fingerprint ?? '';
+    const targetWorkspaceSelection =
+      conflictRecovery?.workspaceSelection === NEW_WORKSPACE_VALUE
+        ? (conflictRecovery.existingWorkspace?.id ?? '')
+        : (conflictRecovery?.workspaceSelection ?? '');
+    const retryActorId = normalizedActorId;
+    if (
+      !canGenerate ||
+      !conflictRecovery ||
+      !targetWorkspaceSelection ||
+      conflictFingerprint !== currentTaskSessionFingerprint ||
+      !retryActorId ||
+      activeActorIdRef.current !== retryActorId ||
+      generatePlanPendingRef.current
+    ) {
+      return;
+    }
+    const currentAttempt = taskSessionCreationAttemptRef.current;
+    if (currentAttempt && currentAttempt.fingerprint !== conflictFingerprint) {
+      const message = t('task.creationConflictResetUnavailable');
+      setFlowError(message);
+      onError(message);
+      return;
+    }
+    if (
+      !clearTaskSessionCreationAttempt(
+        browserTaskSessionCreationStorage(),
+        conflictFingerprint,
+      )
+    ) {
+      const message = t('task.creationConflictResetUnavailable');
+      setFlowError(message);
+      onError(message);
+      return;
+    }
+    if (activeActorIdRef.current !== retryActorId) return;
+    taskSessionCreationAttemptRef.current = null;
+    setTaskSessionConflictRecovery(null);
+    await generatePlan(targetWorkspaceSelection);
   };
 
   const requestRevision = async (agentPrompt?: string, workspaceMessage?: string) => {
@@ -1085,14 +1277,30 @@ export function NewTaskFlow({
                       {t('task.openRuntimeSettings')}
                     </button>
                   ) : null}
-                  <button
-                    className="primary"
-                    type="button"
-                    disabled={!canGenerate}
-                    onClick={() => void generatePlan()}
-                  >
-                    {t('task.generatePlan')} <ArrowRightIcon />
-                  </button>
+                  {taskSessionConflictActionAvailable ? (
+                    <button
+                      className="primary"
+                      type="button"
+                      disabled={!canGenerate}
+                      onClick={() => void createAsNewTask()}
+                    >
+                      {taskSessionConflictWorkspace
+                        ? t('task.continueInWorkspace', {
+                            workspace: taskSessionConflictWorkspace.name ?? title.trim(),
+                          })
+                        : t('task.createAsNewTask')}{' '}
+                      <ArrowRightIcon />
+                    </button>
+                  ) : taskSessionConflictIsCurrent ? null : (
+                    <button
+                      className="primary"
+                      type="button"
+                      disabled={!canGenerate}
+                      onClick={() => void generatePlan()}
+                    >
+                      {t('task.generatePlan')} <ArrowRightIcon />
+                    </button>
+                  )}
                 </div>
               </>
             ) : phase === 'planning' ? (

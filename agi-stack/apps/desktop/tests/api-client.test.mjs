@@ -12,6 +12,7 @@ const {
   desktopLaunchCapability,
   DesktopApiClient,
   DesktopApiError,
+  isTaskSessionIdempotencyConflictError,
   isWorkspaceContextUnavailableError,
 } = clientModule;
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
@@ -85,6 +86,40 @@ test('workspace context unavailable detection requires the structured server cod
     false,
   );
   assert.equal(isWorkspaceContextUnavailableError(new Error('workspace_context_unavailable')), false);
+});
+
+test('task-session idempotency conflict requires the exact structured 409 contract', () => {
+  assert.equal(
+    isTaskSessionIdempotencyConflictError(
+      new DesktopApiError('conflict', 409, {
+        code: 'TASK_SESSION_IDEMPOTENCY_CONFLICT',
+        detail: 'Task session is tombstoned',
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    isTaskSessionIdempotencyConflictError(
+      new DesktopApiError('nested code', 409, {
+        detail: { code: 'TASK_SESSION_IDEMPOTENCY_CONFLICT' },
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    isTaskSessionIdempotencyConflictError(
+      new DesktopApiError('wrong status', 400, {
+        code: 'TASK_SESSION_IDEMPOTENCY_CONFLICT',
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    isTaskSessionIdempotencyConflictError(
+      new Error('TASK_SESSION_IDEMPOTENCY_CONFLICT'),
+    ),
+    false,
+  );
 });
 
 test('identity catalogs exhaust every authoritative page before resolving context', async () => {
@@ -1307,17 +1342,27 @@ test('plan workflow preflight proves route support without creating server artif
   const calls = [];
   const originalFetch = globalThis.fetch;
   const responses = [
-    new Response(JSON.stringify({ detail: 'missing field `conversation_id`' }), {
-      status: 422,
+    new Response(JSON.stringify({
+      schema_version: 1,
+      atomic_creation: true,
+      initial_conversation_mode: 'workspace',
+      initial_plan_mode: 'plan',
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }),
+    new Response(JSON.stringify({
+      schema_version: 1,
+      atomic_creation: false,
+      initial_conversation_mode: 'workspace',
+      initial_plan_mode: 'plan',
+    }), {
+      status: 200,
       headers: { 'content-type': 'application/json' },
     }),
     new Response('Not Found', {
       status: 404,
       headers: { 'content-type': 'text/plain' },
-    }),
-    new Response(JSON.stringify({ detail: 'Method Not Allowed' }), {
-      status: 405,
-      headers: { 'content-type': 'application/json' },
     }),
   ];
   globalThis.fetch = async (input, init) => {
@@ -1330,6 +1375,8 @@ test('plan workflow preflight proves route support without creating server artif
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'authenticated-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
     });
 
     assert.equal(await client.supportsAgentPlanWorkflow(), true);
@@ -1339,19 +1386,19 @@ test('plan workflow preflight proves route support without creating server artif
       calls.map((call) => [String(call.input), call.init?.method ?? 'GET', call.init?.body]),
       [
         [
-          'http://127.0.0.1:8088/api/v1/agent/plan/mode',
-          'POST',
-          '{}',
+          'http://127.0.0.1:8088/api/v1/tenants/tenant-1/projects/project-1/task-sessions/capabilities',
+          'GET',
+          undefined,
         ],
         [
-          'http://127.0.0.1:8088/api/v1/agent/plan/mode',
-          'POST',
-          '{}',
+          'http://127.0.0.1:8088/api/v1/tenants/tenant-1/projects/project-1/task-sessions/capabilities',
+          'GET',
+          undefined,
         ],
         [
-          'http://127.0.0.1:8088/api/v1/agent/plan/mode',
-          'POST',
-          '{}',
+          'http://127.0.0.1:8088/api/v1/tenants/tenant-1/projects/project-1/task-sessions/capabilities',
+          'GET',
+          undefined,
         ],
       ],
     );
@@ -2140,17 +2187,37 @@ test('createTaskSession posts one strictly scoped atomic task-session contract',
     return new Response(
       JSON.stringify({
         replayed: false,
-        workspace: { id: 'workspace-1', name: 'Atomic task' },
-        conversation: {
-          id: 'conversation-1',
+        workspace: workspaceRecord(1, {
+          tenant_id: 'tenant/1',
           project_id: 'project/1',
-          workspace_id: 'workspace-1',
+          name: 'Atomic task',
+        }),
+        conversation: conversationRecord(1, {
+          tenant_id: 'tenant/1',
+          project_id: 'project/1',
+          title: 'Atomic task',
+          conversation_mode: 'workspace',
           current_mode: 'plan',
-        },
+          workspace_id: 'workspace-1',
+          workspace_name: 'Atomic task',
+          agent_config: {
+            selected_agent_id: 'builtin:all-access',
+            capability_mode: 'code',
+          },
+        }),
         initial_message: {
           id: 'message-1',
           workspace_id: 'workspace-1',
+          sender_id: 'user-1',
+          sender_type: 'human',
           content: 'Create the reviewable plan',
+          mentions: [],
+          parent_message_id: null,
+          metadata: {
+            source: 'task_session',
+            conversation_id: 'conversation-1',
+          },
+          created_at: '2026-07-19T00:00:00Z',
         },
       }),
       { status: 200, headers: { 'content-type': 'application/json' } },
@@ -2191,6 +2258,86 @@ test('createTaskSession posts one strictly scoped atomic task-session contract',
       'http://127.0.0.1:8088/api/v1/tenants/tenant%2F1/projects/project%2F1/task-sessions',
     );
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), request);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('createTaskSession rejects malformed, cross-scope, unbound, or non-Plan success payloads', async () => {
+  const request = {
+    idempotency_key: 'desktop-task-session-1',
+    workspace: { kind: 'existing', workspace_id: 'workspace-1' },
+    conversation: { title: 'Atomic task', capability_mode: 'code' },
+    initial_message: { content: 'Create the reviewable plan' },
+  };
+  const validPayload = {
+    replayed: false,
+    workspace: workspaceRecord(1, { name: 'Atomic task' }),
+    conversation: conversationRecord(1, {
+      title: 'Atomic task',
+      conversation_mode: 'workspace',
+      current_mode: 'plan',
+      workspace_id: 'workspace-1',
+      workspace_name: 'Atomic task',
+      agent_config: {
+        selected_agent_id: 'builtin:all-access',
+        capability_mode: 'code',
+      },
+    }),
+    initial_message: {
+      id: 'message-1',
+      workspace_id: 'workspace-1',
+      sender_id: 'user-1',
+      sender_type: 'human',
+      content: 'Create the reviewable plan',
+      mentions: [],
+      parent_message_id: null,
+      metadata: {
+        source: 'task_session',
+        conversation_id: 'conversation-1',
+      },
+      created_at: '2026-07-19T00:00:00Z',
+    },
+  };
+  const invalidPayloads = [
+    { ...validPayload, unexpected: true },
+    {
+      ...validPayload,
+      workspace: { ...validPayload.workspace, tenant_id: 'tenant-other' },
+    },
+    {
+      ...validPayload,
+      conversation: { ...validPayload.conversation, workspace_id: 'workspace-other' },
+    },
+    {
+      ...validPayload,
+      conversation: { ...validPayload.conversation, current_mode: 'build' },
+    },
+    {
+      ...validPayload,
+      initial_message: { ...validPayload.initial_message, metadata: {} },
+    },
+  ];
+  const originalFetch = globalThis.fetch;
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      localApiToken: 'local-session-token',
+    });
+    for (const payload of invalidPayloads) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(
+        client.createTaskSession(request),
+        (error) => error instanceof DesktopApiError && error.status === 502,
+      );
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }

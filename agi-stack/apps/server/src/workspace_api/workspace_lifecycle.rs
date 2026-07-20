@@ -382,6 +382,9 @@ impl DevWorkspaceService {
         state
             .files
             .retain(|_, file| file.workspace_id != workspace_id);
+        state
+            .task_session_receipts
+            .retain(|_, receipt| receipt.workspace_id != workspace_id);
         Ok(())
     }
 }

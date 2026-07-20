@@ -8,6 +8,14 @@ pub(crate) type SharedWorkspaces = Arc<dyn WorkspaceService>;
 
 #[async_trait]
 pub(crate) trait WorkspaceService: Send + Sync {
+    async fn create_task_session(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        body: CreateTaskSessionPayload,
+    ) -> Result<CreateTaskSessionView, WorkspaceApiError>;
+
     async fn create_workspace(
         &self,
         user_id: &str,

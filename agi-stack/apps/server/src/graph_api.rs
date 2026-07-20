@@ -11,8 +11,8 @@
 //! migrated with parity goldens.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use axum::{
     extract::{Path, Query, State},

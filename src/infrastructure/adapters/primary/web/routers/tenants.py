@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import ColumnElement
@@ -18,6 +18,10 @@ from src.application.schemas.tenant import (
     TenantUpdate,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.projects import (
+    _delete_project_dependents,
+    _lock_project_delete_scopes,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -39,6 +43,32 @@ TENANT_ANALYTICS_PROJECT_STORAGE_LIMIT = 10
 def _order_tenant_list_query(query: Select[Any]) -> Select[Any]:
     """Return current-user tenants in default membership order."""
     return query.order_by(UserTenant.created_at.asc(), UserTenant.id.asc(), Tenant.id.asc())
+
+
+async def _lock_tenant_delete_scope(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    owner_user_id: str,
+) -> tuple[Tenant | None, list[str]]:
+    """Lock a tenant and all project-owned task-session roots before deletion."""
+    tenant_result = await db.execute(
+        select(Tenant)
+        .where(and_(Tenant.id == tenant_id, Tenant.owner_id == owner_user_id))
+        .with_for_update()
+    )
+    tenant = tenant_result.scalar_one_or_none()
+    if tenant is None:
+        return None, []
+
+    project_result = await db.execute(
+        refresh_select_statement(
+            select(Project.id).where(Project.tenant_id == tenant_id).order_by(Project.id)
+        )
+    )
+    project_ids = sorted(set(project_result.scalars().all()))
+    locked_project_ids = await _lock_project_delete_scopes(db, project_ids)
+    return tenant, locked_project_ids
 
 
 def _coerce_history_day(value: object) -> date:
@@ -301,17 +331,19 @@ async def delete_tenant(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete tenant."""
-    # Check if user is owner
-    result = await db.execute(
-        refresh_select_statement(
-            select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id))
-        )
+    tenant, project_ids = await _lock_tenant_delete_scope(
+        db,
+        tenant_id=tenant_id,
+        owner_user_id=current_user.id,
     )
-    tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=_("Only tenant owner can delete tenant")
         )
+
+    for project_id in project_ids:
+        await _delete_project_dependents(db, project_id)
+        _result = await db.execute(delete(Project).where(Project.id == project_id))
 
     await db.delete(tenant)
     await db.commit()

@@ -6027,6 +6027,7 @@ export function App() {
         <NewTaskFlow
           open={newTaskOpen}
           config={config}
+          actorId={auth.user?.user_id}
           workspaceAuthority={newTaskWorkspaceAuthority}
           resumeDraft={newTaskResumeDraft}
           preferredWorkspaceId={newTaskPreferredWorkspaceId}

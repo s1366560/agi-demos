@@ -362,6 +362,7 @@ function NewTaskFlowQa() {
       <NewTaskFlow
         open={open}
         config={config}
+        actorId={conversation.user_id}
         workspaceAuthority={{ status: 'ready', items: [], error: null }}
         preferredKind="general"
         onClose={() => {

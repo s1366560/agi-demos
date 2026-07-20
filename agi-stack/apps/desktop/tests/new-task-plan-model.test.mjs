@@ -227,7 +227,7 @@ test('delayed planning and priority presentation use structural protocol values'
   assert.equal(planPriorityTranslationKey('unexpected'), 'task.priorityUnknown');
 });
 
-test('task definition signatures distinguish edited briefs and workspace scope', () => {
+test('task-session signatures distinguish persisted briefs while ignoring planning-only context', () => {
   const definition = {
     title: 'Repair session UX',
     objective: 'Make plan recovery durable',
@@ -241,6 +241,17 @@ test('task definition signatures distinguish edited briefs and workspace scope',
     signature,
     newTaskDefinitionSignature(
       { ...definition, contextSources: ['project_memory', 'project_files'] },
+      'workspace-1',
+    ),
+  );
+  assert.equal(
+    signature,
+    newTaskDefinitionSignature(
+      {
+        ...definition,
+        workspaceRoot: '/workspace/another-root',
+        contextSources: ['web_research'],
+      },
       'workspace-1',
     ),
   );

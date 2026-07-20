@@ -79,8 +79,9 @@ use runtime_auth::*;
 use service_helpers::*;
 pub(crate) use service_state::PgProjectSandboxConfigSource;
 use service_state::{
-    InMemorySandboxRegistry, PgSandboxRegistry, ProjectSandboxConfig, ProjectSandboxConfigSource,
-    SandboxRecord, SandboxRegistry, SandboxToolConnector, WsMcpToolConnector,
+    CachingToolConnector, InMemorySandboxRegistry, PgSandboxRegistry, ProjectSandboxConfig,
+    ProjectSandboxConfigSource, SandboxRecord, SandboxRegistry, SandboxToolConnector,
+    WsMcpToolConnector,
 };
 
 use ws_urls::{

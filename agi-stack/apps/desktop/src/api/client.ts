@@ -126,6 +126,15 @@ export function isWorkspaceContextUnavailableError(error: unknown): boolean {
   return isRecord(detail) && detail.code === 'workspace_context_unavailable';
 }
 
+export function isTaskSessionIdempotencyConflictError(error: unknown): boolean {
+  return (
+    error instanceof DesktopApiError &&
+    error.status === 409 &&
+    isRecord(error.payload) &&
+    error.payload.code === 'TASK_SESSION_IDEMPOTENCY_CONFLICT'
+  );
+}
+
 export class DesktopApiClient {
   private readonly config: DesktopRuntimeConfig;
 
@@ -425,7 +434,7 @@ export class DesktopApiClient {
   async createTaskSession(input: CreateTaskSessionRequest): Promise<CreateTaskSessionResponse> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const projectId = requireValue(this.config.projectId, 'project id');
-    return this.request<CreateTaskSessionResponse>(
+    const payload = await this.request<unknown>(
       `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
         projectId,
       )}/task-sessions`,
@@ -434,6 +443,7 @@ export class DesktopApiClient {
         body: input,
       },
     );
+    return requireCreateTaskSessionResponse(payload, tenantId, projectId, input);
   }
 
   async createWorkspaceForProject(
@@ -653,17 +663,20 @@ export class DesktopApiClient {
   }
 
   async supportsAgentPlanWorkflow(signal?: AbortSignal): Promise<boolean> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const projectId = requireValue(this.config.projectId, 'project id');
     try {
-      // Schema validation proves the mutation route exists without creating a conversation or plan.
-      await this.request<unknown>('/api/v1/agent/plan/mode', {
-        method: 'POST',
-        body: {},
+      const payload = await this.request<unknown>(
+        `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+          projectId,
+        )}/task-sessions/capabilities`,
+        {
         signal,
-      });
-      return true;
+        },
+      );
+      return isAtomicTaskSessionCapability(payload);
     } catch (error) {
       if (!(error instanceof DesktopApiError)) throw error;
-      if (error.status === 422) return true;
       if (error.status === 404 || error.status === 405 || error.status === 501) return false;
       throw error;
     }
@@ -1561,6 +1574,110 @@ function normalizeWorkspaceSummary(
     ...(value.updated_at === undefined ? {} : { updated_at: value.updated_at }),
     ...(value.metadata === undefined ? {} : { metadata: value.metadata }),
   };
+}
+
+const TASK_SESSION_RESPONSE_KEYS = new Set([
+  'replayed',
+  'workspace',
+  'conversation',
+  'initial_message',
+]);
+const TASK_SESSION_CAPABILITY_KEYS = new Set([
+  'schema_version',
+  'atomic_creation',
+  'initial_conversation_mode',
+  'initial_plan_mode',
+]);
+
+function requireCreateTaskSessionResponse(
+  payload: unknown,
+  tenantId: string,
+  projectId: string,
+  input: CreateTaskSessionRequest,
+): CreateTaskSessionResponse {
+  if (
+    !isRecord(payload) ||
+    !hasExactKeys(payload, TASK_SESSION_RESPONSE_KEYS) ||
+    typeof payload.replayed !== 'boolean'
+  ) {
+    throw invalidTaskSessionResponse(payload);
+  }
+  const workspace = normalizeWorkspaceSummary(payload.workspace, tenantId, projectId);
+  if (
+    !workspace ||
+    workspace.is_archived !== false ||
+    (input.workspace.kind === 'existing' && workspace.id !== input.workspace.workspace_id)
+  ) {
+    throw invalidTaskSessionResponse(payload);
+  }
+  const conversation = normalizeAgentConversation(
+    payload.conversation,
+    tenantId,
+    projectId,
+    workspace.id,
+  );
+  if (
+    !conversation ||
+    conversation.title !== input.conversation.title ||
+    conversation.status !== 'active' ||
+    conversation.conversation_mode !== 'workspace' ||
+    conversation.current_mode !== 'plan' ||
+    conversation.workspace_id !== workspace.id ||
+    !isRecord(conversation.agent_config) ||
+    conversation.agent_config.selected_agent_id !== 'builtin:all-access' ||
+    conversation.agent_config.capability_mode !== input.conversation.capability_mode
+  ) {
+    throw invalidTaskSessionResponse(payload);
+  }
+  const initialMessage = payload.initial_message;
+  if (
+    !isRecord(initialMessage) ||
+    !isNonEmptyString(initialMessage.id) ||
+    initialMessage.workspace_id !== workspace.id ||
+    !isNonEmptyString(initialMessage.sender_id) ||
+    initialMessage.sender_type !== 'human' ||
+    initialMessage.content !== input.initial_message.content ||
+    !Array.isArray(initialMessage.mentions) ||
+    !initialMessage.mentions.every((mention) => typeof mention === 'string') ||
+    initialMessage.parent_message_id !== null ||
+    !isRecord(initialMessage.metadata) ||
+    initialMessage.metadata.source !== 'task_session' ||
+    initialMessage.metadata.conversation_id !== conversation.id ||
+    !isNonEmptyString(initialMessage.created_at)
+  ) {
+    throw invalidTaskSessionResponse(payload);
+  }
+  return {
+    replayed: payload.replayed,
+    workspace,
+    conversation,
+    initial_message: {
+      id: initialMessage.id,
+      workspace_id: initialMessage.workspace_id,
+      sender_id: initialMessage.sender_id,
+      sender_type: initialMessage.sender_type,
+      content: initialMessage.content,
+      mentions: initialMessage.mentions,
+      parent_message_id: initialMessage.parent_message_id,
+      metadata: initialMessage.metadata,
+      created_at: initialMessage.created_at,
+    },
+  };
+}
+
+function isAtomicTaskSessionCapability(payload: unknown): boolean {
+  return (
+    isRecord(payload) &&
+    hasExactKeys(payload, TASK_SESSION_CAPABILITY_KEYS) &&
+    payload.schema_version === 1 &&
+    payload.atomic_creation === true &&
+    payload.initial_conversation_mode === 'workspace' &&
+    payload.initial_plan_mode === 'plan'
+  );
+}
+
+function invalidTaskSessionResponse(payload: unknown): DesktopApiError {
+  return new DesktopApiError('Invalid task session response', 502, payload);
 }
 
 function requireConversationCatalogPage(

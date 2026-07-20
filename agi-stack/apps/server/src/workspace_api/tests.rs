@@ -39,6 +39,7 @@ mod autonomy;
 mod chat_mentions;
 mod goldens;
 mod my_work;
+mod task_session;
 mod workspace_lifecycle;
 
 #[test]

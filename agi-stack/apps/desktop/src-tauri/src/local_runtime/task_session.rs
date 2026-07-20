@@ -11,9 +11,12 @@ use super::{
     local_store_error, now_iso,
     session_store::{CreateTaskSessionInput, DesktopTaskSessionError, TaskSessionWorkspaceInput},
     tool_authority::canonical_json_digest,
-    ConversationCapabilityMode, ConversationRunMode, LocalConversation, LocalJsonResult,
-    LocalRuntimeState,
+    ConversationCapabilityMode, ConversationRunMode, LocalConversation, LocalRuntimeState,
 };
+
+const TASK_SESSION_IDEMPOTENCY_CONFLICT_CODE: &str = "TASK_SESSION_IDEMPOTENCY_CONFLICT";
+const TASK_SESSION_IDEMPOTENCY_CONFLICT_DETAIL: &str =
+    "Task session idempotency key is already bound to a different request";
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -73,6 +76,7 @@ pub(super) fn workspace_value(
         "name": attributes.name,
         "description": attributes.description,
         "status": "open",
+        "is_archived": false,
         "created_at": now,
         "updated_at": now,
         "metadata": metadata,
@@ -141,7 +145,7 @@ pub(super) async fn create_task_session(
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path((tenant_id, project_id)): Path<(String, String)>,
     Json(body): Json<CreateTaskSessionBody>,
-) -> LocalJsonResult {
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
     if tenant_id != authenticated.workspace.tenant_id
         || project_id != authenticated.workspace.project_id
     {
@@ -198,8 +202,9 @@ pub(super) async fn create_task_session(
             )
         }
     };
+    let conversation_id = format!("local-conversation-{}", Uuid::new_v4());
     let conversation = LocalConversation {
-        id: format!("local-conversation-{}", Uuid::new_v4()),
+        id: conversation_id.clone(),
         project_id: project_id.clone(),
         tenant_id: tenant_id.clone(),
         title,
@@ -218,7 +223,11 @@ pub(super) async fn create_task_session(
         "content": initial_content,
         "mentions": [],
         "created_at": now,
-        "metadata": { "runtime": "local", "source": "task_session" },
+        "metadata": {
+            "runtime": "local",
+            "source": "task_session",
+            "conversation_id": conversation_id,
+        },
     });
     let outcome = state
         .session_store
@@ -235,12 +244,20 @@ pub(super) async fn create_task_session(
             now,
         })
         .map_err(task_session_error)?;
-    Ok(Json(json!({
-        "replayed": outcome.replayed,
-        "workspace": outcome.workspace,
-        "conversation": outcome.conversation,
-        "initial_message": outcome.initial_message,
-    })))
+    let status = if outcome.replayed {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    Ok((
+        status,
+        Json(json!({
+            "replayed": outcome.replayed,
+            "workspace": outcome.workspace,
+            "conversation": outcome.conversation,
+            "initial_message": outcome.initial_message,
+        })),
+    ))
 }
 
 fn required_text(
@@ -265,8 +282,8 @@ fn task_session_error(error: DesktopTaskSessionError) -> (StatusCode, Json<Value
         DesktopTaskSessionError::IdempotencyConflict => (
             StatusCode::CONFLICT,
             Json(json!({
-                "code": "TASK_SESSION_IDEMPOTENCY_CONFLICT",
-                "detail": error.to_string(),
+                "code": TASK_SESSION_IDEMPOTENCY_CONFLICT_CODE,
+                "detail": TASK_SESSION_IDEMPOTENCY_CONFLICT_DETAIL,
             })),
         ),
         DesktopTaskSessionError::WorkspaceNotFound => (

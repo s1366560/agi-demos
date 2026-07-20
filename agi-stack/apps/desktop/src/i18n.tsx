@@ -1864,6 +1864,18 @@ const enUS: Record<string, string> = {
     'The legacy backend did not acknowledge execution and could not restore Plan mode.',
   'task.approvalRecoveryUnavailable':
     'Approval recovery could not be saved, so Build mode was not entered. Check desktop storage access and try again.',
+  'task.creationRecoveryUnavailable':
+    'Task creation recovery could not be saved, so nothing was created. Check desktop storage access and try again.',
+  'task.creationIdempotencyConflict':
+    'This creation key belongs to an earlier task whose saved session is no longer available. Retry keeps the key to prevent duplicates. Choose “Create as new task” only to create a separate task.',
+  'task.createAsNewTask': 'Create as new task',
+  'task.creationWorkspaceConflictResolved':
+    'A workspace named “{workspace}” still exists from the earlier task. Continue there to create a new task session, or change the title to create a separate workspace.',
+  'task.creationWorkspaceConflictUnresolved':
+    'The earlier task could not be matched to one live workspace with this exact name. Change the title to create a separate workspace, or refresh and select an existing workspace.',
+  'task.continueInWorkspace': 'Continue in {workspace}',
+  'task.creationConflictResetUnavailable':
+    'The earlier creation key could not be cleared safely, so nothing new was created. Check desktop storage access and try again.',
   'task.legacyApprovalReconcileRequired':
     'The pending approval no longer matches this exact task list. Return to the session and refresh its authority before retrying.',
   'task.planEditsSubmitted': '{count} reviewed plan edits were submitted.',
@@ -3545,6 +3557,18 @@ const zhCN: Record<string, string> = {
   'task.legacyRollbackFailed': '旧版后端未确认执行，且无法恢复为计划模式。',
   'task.approvalRecoveryUnavailable':
     '无法保存批准恢复状态，因此尚未进入执行模式。请检查桌面存储权限后重试。',
+  'task.creationRecoveryUnavailable':
+    '无法保存任务创建恢复状态，因此尚未创建任何内容。请检查桌面存储权限后重试。',
+  'task.creationIdempotencyConflict':
+    '这个创建键属于较早的任务，但对应的已保存会话已不可用。重试会保留该键以防重复创建；只有在确实需要独立任务时，才选择“作为新任务创建”。',
+  'task.createAsNewTask': '作为新任务创建',
+  'task.creationWorkspaceConflictResolved':
+    '较早任务创建的“{workspace}”工作空间仍然存在。你可以继续在该工作空间中创建新的任务会话，或修改标题以创建独立工作空间。',
+  'task.creationWorkspaceConflictUnresolved':
+    '无法按当前精确名称匹配到唯一且仍在使用的工作空间。请修改标题以创建独立工作空间，或刷新后选择现有工作空间。',
+  'task.continueInWorkspace': '继续在 {workspace}',
+  'task.creationConflictResetUnavailable':
+    '无法安全清除较早的创建键，因此没有创建新内容。请检查桌面存储权限后重试。',
   'task.legacyApprovalReconcileRequired':
     '待确认批准已不再匹配当前完整任务列表。请返回会话并刷新权威状态后再重试。',
   'task.planEditsSubmitted': '已提交 {count} 项经审查的计划修改。',

@@ -2,6 +2,17 @@ use super::*;
 
 #[async_trait]
 impl WorkspaceService for DevWorkspaceService {
+    async fn create_task_session(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        body: CreateTaskSessionPayload,
+    ) -> Result<CreateTaskSessionView, WorkspaceApiError> {
+        self.dev_create_task_session(user_id, tenant_id, project_id, body)
+            .await
+    }
+
     async fn create_workspace(
         &self,
         user_id: &str,

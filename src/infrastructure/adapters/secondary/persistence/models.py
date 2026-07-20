@@ -1158,6 +1158,88 @@ class AgentClientTurnModel(Base):
     )
 
 
+class TaskSessionCreationReceiptModel(Base):
+    """Durable response receipt for one atomic task-session creation."""
+
+    __tablename__ = "task_session_creation_receipts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    actor_user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    conversation_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    initial_message_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("workspace_messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    response_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_user_id",
+            "tenant_id",
+            "project_id",
+            "idempotency_key",
+            name="uq_task_session_receipts_scope_key",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            name="uq_task_session_receipts_conversation",
+        ),
+        UniqueConstraint(
+            "initial_message_id",
+            name="uq_task_session_receipts_initial_message",
+        ),
+        Index(
+            "ix_task_session_receipts_actor_user_id",
+            "actor_user_id",
+        ),
+        Index(
+            "ix_task_session_receipts_project_id",
+            "project_id",
+        ),
+        Index(
+            "ix_task_session_receipts_workspace_id",
+            "workspace_id",
+        ),
+        Index(
+            "ix_task_session_receipts_scope_created",
+            "tenant_id",
+            "project_id",
+            "created_at",
+        ),
+    )
+
+
 class Message(Base):
     """A single message in a conversation."""
 

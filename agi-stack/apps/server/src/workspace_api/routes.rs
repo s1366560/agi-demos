@@ -13,6 +13,14 @@ pub(crate) fn router() -> Router<AppState> {
             get(list_project_my_work),
         )
         .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/task-sessions",
+            post(create_task_session),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/task-sessions/capabilities",
+            get(get_task_session_capabilities),
+        )
+        .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces",
             post(create_workspace).get(list_workspaces),
         )

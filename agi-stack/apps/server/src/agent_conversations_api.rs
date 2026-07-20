@@ -130,6 +130,11 @@ pub(crate) trait AgentConversationApiService: Send + Sync {
         request: CreateConversationRequest,
     ) -> Result<AgentConversationResponse, AgentConversationsApiError>;
 
+    async fn register_task_session_conversation(
+        &self,
+        registration: TaskSessionConversationRegistration,
+    ) -> Result<(), AgentConversationsApiError>;
+
     async fn update_conversation_mode(
         &self,
         user_id: &str,
@@ -297,6 +302,15 @@ impl AgentConversationApiService for PgAgentConversationService {
             .map_err(AgentConversationsApiError::internal)?
             .ok_or_else(|| AgentConversationsApiError::not_found("Project not found"))?;
         Ok(record.into())
+    }
+
+    async fn register_task_session_conversation(
+        &self,
+        _registration: TaskSessionConversationRegistration,
+    ) -> Result<(), AgentConversationsApiError> {
+        // The atomic PostgreSQL task-session transaction already inserted the
+        // authoritative conversation row consumed by this service.
+        Ok(())
     }
 
     async fn update_conversation_mode(
@@ -665,6 +679,7 @@ impl AgentConversationApiService for DevAgentConversationService {
                 .filter(|title| !title.trim().is_empty())
                 .unwrap_or_else(|| "New conversation".to_string()),
             status: "active".to_string(),
+            current_mode: "build".to_string(),
             message_count: 0,
             created_at: now.clone(),
             updated_at: Some(now),
@@ -686,6 +701,54 @@ impl AgentConversationApiService for DevAgentConversationService {
             .map_err(|_| AgentConversationsApiError::internal("conversation lock poisoned"))?
             .insert(conversation.id.clone(), conversation.clone());
         Ok(conversation)
+    }
+
+    async fn register_task_session_conversation(
+        &self,
+        registration: TaskSessionConversationRegistration,
+    ) -> Result<(), AgentConversationsApiError> {
+        let conversation = AgentConversationResponse {
+            id: registration.id,
+            project_id: registration.project_id,
+            user_id: registration.user_id,
+            tenant_id: registration.tenant_id,
+            title: registration.title,
+            status: "active".to_string(),
+            current_mode: "plan".to_string(),
+            message_count: 0,
+            created_at: registration.created_at.clone(),
+            updated_at: Some(registration.created_at),
+            summary: None,
+            agent_config: Some(registration.agent_config),
+            metadata: Some(json!({ "source": "task_session" })),
+            parent_conversation_id: None,
+            branch_point_message_id: None,
+            conversation_mode: Some("workspace".to_string()),
+            workspace_id: Some(registration.workspace_id),
+            linked_workspace_task_id: None,
+            workspace_name: Some(registration.workspace_name),
+            participant_agents: Vec::new(),
+            coordinator_agent_id: None,
+            focused_agent_id: None,
+        };
+        let mut conversations = self
+            .conversations
+            .lock()
+            .map_err(|_| AgentConversationsApiError::internal("conversation lock poisoned"))?;
+        if let Some(existing) = conversations.get(&conversation.id) {
+            if existing.project_id == conversation.project_id
+                && existing.user_id == conversation.user_id
+                && existing.tenant_id == conversation.tenant_id
+                && existing.workspace_id == conversation.workspace_id
+            {
+                return Ok(());
+            }
+            return Err(AgentConversationsApiError::internal(
+                "task-session conversation identity conflict",
+            ));
+        }
+        conversations.insert(conversation.id.clone(), conversation);
+        Ok(())
     }
 
     async fn update_conversation_mode(
@@ -805,7 +868,7 @@ impl AgentConversationApiService for DevAgentConversationService {
             title: conversation.title,
             summary: conversation.summary,
             status: conversation.status,
-            current_mode: "build".to_string(),
+            current_mode: conversation.current_mode,
             conversation_mode: conversation.conversation_mode,
             agent_config: conversation.agent_config,
             message_count: conversation.message_count,
@@ -1068,6 +1131,8 @@ pub(crate) struct AgentConversationResponse {
     tenant_id: String,
     title: String,
     status: String,
+    #[serde(skip_serializing)]
+    current_mode: String,
     message_count: i32,
     created_at: String,
     updated_at: Option<String>,
@@ -1085,6 +1150,27 @@ pub(crate) struct AgentConversationResponse {
     focused_agent_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct TaskSessionConversationRegistration {
+    pub(crate) id: String,
+    pub(crate) project_id: String,
+    pub(crate) user_id: String,
+    pub(crate) tenant_id: String,
+    pub(crate) title: String,
+    pub(crate) agent_config: Value,
+    pub(crate) workspace_id: String,
+    pub(crate) workspace_name: String,
+    pub(crate) created_at: String,
+}
+
+impl TryFrom<&Value> for TaskSessionConversationRegistration {
+    type Error = serde_json::Error;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        serde_json::from_value(value.clone())
+    }
+}
+
 impl From<AgentConversationRecord> for AgentConversationResponse {
     fn from(record: AgentConversationRecord) -> Self {
         Self {
@@ -1094,6 +1180,7 @@ impl From<AgentConversationRecord> for AgentConversationResponse {
             tenant_id: record.tenant_id,
             title: record.title,
             status: record.status,
+            current_mode: "build".to_string(),
             message_count: record.message_count,
             created_at: format_optional_time(record.created_at).unwrap_or_default(),
             updated_at: format_optional_time(record.updated_at),
@@ -2277,6 +2364,58 @@ mod tests {
                 .expect("non-owner stop access resolves"),
             ConversationSocketAccess::Denied
         );
+    }
+
+    #[tokio::test]
+    async fn dev_task_session_registration_authorizes_the_bound_conversation() {
+        let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
+        let service = DevAgentConversationService::new(events);
+        service
+            .register_task_session_conversation(TaskSessionConversationRegistration {
+                id: "conversation-task-session".to_string(),
+                project_id: "project-a".to_string(),
+                user_id: "user-a".to_string(),
+                tenant_id: "tenant-a".to_string(),
+                title: "Atomic task".to_string(),
+                agent_config: json!({
+                    "selected_agent_id": "builtin:all-access",
+                    "capability_mode": "code",
+                }),
+                workspace_id: "workspace-a".to_string(),
+                workspace_name: "Atomic workspace".to_string(),
+                created_at: "2026-07-19T00:00:00Z".to_string(),
+            })
+            .await
+            .expect("task-session registration succeeds");
+
+        assert_eq!(
+            service
+                .authorize_message_send("user-a", "conversation-task-session", "project-a")
+                .await
+                .expect("task-session conversation access resolves"),
+            ConversationSocketAccess::Allowed
+        );
+        assert_eq!(
+            service
+                .authorize_message_send("user-b", "conversation-task-session", "project-a")
+                .await
+                .expect("other-user access resolves"),
+            ConversationSocketAccess::Denied
+        );
+        let projection = service
+            .get_session_projection(
+                "user-a",
+                "conversation-task-session",
+                ConversationSessionQuery {
+                    tenant_id: "tenant-a".to_string(),
+                    project_id: "project-a".to_string(),
+                    workspace_id: Some("workspace-a".to_string()),
+                },
+            )
+            .await
+            .expect("task-session projection succeeds");
+        let projection = serde_json::to_value(projection).expect("projection serializes");
+        assert_eq!(projection["conversation"]["current_mode"], "plan");
     }
 
     #[tokio::test]
