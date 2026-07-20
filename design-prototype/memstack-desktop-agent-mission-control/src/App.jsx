@@ -1,23 +1,16 @@
 import { useMemo, useState } from 'react';
-import {
-  DashboardIcon,
-  LightningBoltIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-} from '@radix-ui/react-icons';
+import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
 
-import { Dialog } from './components/Dialog';
 import { ConversationDetail } from './components/ConversationDetail';
+import { InboxView } from './components/InboxView';
 import { LoginScreen } from './components/LoginScreen';
-import { NewTaskFlow } from './components/NewTaskFlow';
+import { NewThreadComposer } from './components/NewThreadComposer';
 import { SettingsWorkspace } from './components/SettingsWorkspace';
 import { Sidebar } from './components/Sidebar';
-import { SourcesDialog, TaskDetail } from './components/TaskDetail';
-import { TaskQueue } from './components/TaskQueue';
 import { WorkspaceOverview } from './components/WorkspaceOverview';
 import { codeTasks, workTasks } from './data';
 import { useI18n } from './i18n';
-import { getProject, getProjectWorkspaces, getTenant, getWorkspace } from './workspaceContext';
+import { getProject, getProjectWorkspaces, getTenant } from './workspaceContext';
 
 const SESSION_KEY = 'memstack.prototype.session.v1';
 
@@ -30,23 +23,16 @@ function getInitialSession() {
   }
 }
 
-const auxiliaryCopy = {
-  Home: ['Good afternoon, Alex', 'Three tasks are running and two artifacts are ready for review.', DashboardIcon],
-  Automations: ['Automations', 'Schedule recurring agent tasks with explicit inputs, approval boundaries, and delivery targets.', LightningBoltIcon],
-  Search: ['Search workspace', 'Find tasks, conversations, sources, code changes, and artifacts across every project.', MagnifyingGlassIcon],
-};
-
-function AuxiliaryView({ name, onOpenWork }) {
+function SearchView() {
   const { t } = useI18n();
-  const [title, description, Icon] = auxiliaryCopy[name] ?? auxiliaryCopy.Home;
   return (
     <main className="auxiliary-view">
-      <header><span>MEMSTACK</span><h1>{name === 'Home' ? title : t(`nav.${name === 'Automations' ? 'automations' : 'search'}`)}</h1><p>{description}</p></header>
+      <header><span>MEMSTACK</span><h1>{t('nav.search')}</h1><p>{t('Find threads, sources, code changes, and artifacts across every project.')}</p></header>
       <section className="overview-grid">
-        <article className="overview-hero"><Icon /><h2>One workspace for every agent task</h2><p>Move from research to code without losing context, approvals, sources, or the final artifact.</p><button className="primary" type="button" onClick={onOpenWork}><PlusIcon /> {t('nav.myWork')}</button></article>
-        <article><span>RUNNING</span><b>3</b><p>Across Work and Code</p></article>
-        <article><span>NEEDS INPUT</span><b>2</b><p>One decision, one approval</p></article>
-        <article><span>READY</span><b>4</b><p>Artifacts waiting for review</p></article>
+        <article className="overview-hero"><MagnifyingGlassIcon /><h2>{t('Search the workspace')}</h2><p>{t('Search is scoped to the current project and respects workspace permissions.')}</p></article>
+        <article><span>{t('THREADS')}</span><b>12</b><p>{t('Across all workspaces')}</p></article>
+        <article><span>{t('SOURCES')}</span><b>28</b><p>{t('Verified project evidence')}</p></article>
+        <article><span>{t('ARTIFACTS')}</span><b>9</b><p>{t('Ready to reference')}</p></article>
       </section>
     </main>
   );
@@ -54,60 +40,134 @@ function AuxiliaryView({ name, onOpenWork }) {
 
 export function App() {
   const [session, setSession] = useState(getInitialSession);
-  const [activeNav, setActiveNav] = useState('Projects');
-  const [mode, setMode] = useState('work');
-  const [selected, setSelected] = useState({ work: 'strategy-brief', code: 'flaky-test' });
-  const [paused, setPaused] = useState(false);
-  const [dialog, setDialog] = useState(null);
+  const [view, setView] = useState('home');
+  const [activeThread, setActiveThread] = useState(null);
   const [toast, setToast] = useState('');
   const [workItems, setWorkItems] = useState(() => workTasks);
   const [codeItems, setCodeItems] = useState(() => codeTasks);
-  const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState('account');
   const [tenantId, setTenantId] = useState('northstar');
   const [projectId, setProjectId] = useState('desktop-client');
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('desktop-client-main');
-  const tasks = mode === 'work' ? workItems : codeItems;
-  const task = useMemo(() => tasks.find((item) => item.id === selected[mode]) ?? tasks[0], [mode, selected, tasks]);
+  const [workspaceList, setWorkspaceList] = useState(() => getProjectWorkspaces('northstar', 'desktop-client'));
+
   const tenant = getTenant(tenantId);
   const project = getProject(tenantId, projectId);
-  const workspaces = getProjectWorkspaces(tenantId, projectId);
-  const workspace = getWorkspace(tenantId, projectId, activeWorkspaceId);
+  const allTasks = useMemo(() => [...workItems, ...codeItems], [workItems, codeItems]);
+  const workspace = workspaceList.find((item) => item.id === activeWorkspaceId) ?? workspaceList[0];
+
+  const threadIndex = useMemo(() => {
+    const index = new Map();
+    workspaceList.forEach((item) => {
+      item.sessions.forEach((threadSession) => {
+        if (!index.has(threadSession.taskId)) {
+          index.set(threadSession.taskId, { workspaceId: item.id, workspaceName: item.name, session: threadSession });
+        }
+      });
+    });
+    return index;
+  }, [workspaceList]);
+
+  const taskById = (id) => allTasks.find((item) => item.id === id);
+
+  function resolveThread(threadSession) {
+    const task = taskById(threadSession.taskId);
+    const status = !task ? threadSession.status : task.status === 'planning' ? 'running' : task.status;
+    return { ...threadSession, status, meta: task?.meta ?? threadSession.meta };
+  }
+
+  const inboxItems = useMemo(() => allTasks.flatMap((task) => {
+    const location = threadIndex.get(task.id);
+    if (!location) return [];
+    const mode = workItems.some((item) => item.id === task.id) ? 'work' : 'code';
+    return [{ ...task, mode, workspaceId: location.workspaceId, workspaceName: location.workspaceName, sessionId: location.session.id }];
+  }), [allTasks, threadIndex, workItems]);
+
+  const inboxCount = inboxItems.filter((item) => item.status === 'input' || item.status === 'planning').length;
+
+  const activeThreadSession = activeThread
+    ? workspaceList.find((item) => item.id === activeThread.workspaceId)?.sessions.find((item) => item.id === activeThread.sessionId) ?? null
+    : null;
+  const activeTask = activeThreadSession ? taskById(activeThreadSession.taskId) : null;
+  const activeWorkspace = activeThread
+    ? workspaceList.find((item) => item.id === activeThread.workspaceId) ?? workspace
+    : workspace;
 
   function showToast(message) {
     setToast(message);
     window.setTimeout(() => setToast(''), 3200);
   }
 
-  function changeMode(nextMode) {
-    setMode(nextMode);
-    setActiveNav('My Work');
-    setPaused(false);
+  function updateTask(taskId, patch) {
+    setWorkItems((current) => current.map((item) => item.id === taskId ? { ...item, ...patch } : item));
+    setCodeItems((current) => current.map((item) => item.id === taskId ? { ...item, ...patch } : item));
   }
 
-  function createTask(draft) {
+  function openThread(threadSession, workspaceId = activeWorkspaceId) {
+    setActiveWorkspaceId(workspaceId);
+    setActiveThread({ workspaceId, sessionId: threadSession.id });
+    setView('thread');
+  }
+
+  function openInboxItem(item) {
+    const threadSession = threadIndex.get(item.id)?.session ?? { id: item.id, taskId: item.id, mode: item.mode, title: item.title, status: item.status, meta: item.meta };
+    openThread(threadSession, item.workspaceId);
+  }
+
+  function createThread(draft) {
+    const id = `thread-${Date.now()}`;
+    const title = draft.prompt.length > 56 ? `${draft.prompt.slice(0, 56)}…` : draft.prompt;
     const createdTask = {
-      id: `created-${Date.now()}`,
-      title: draft.title,
-      summary: draft.objective,
-      status: 'running',
-      meta: `${draft.plan.length} approved steps · starting`,
-      progress: 4,
-      phase: 'Starting approved plan',
-      plan: draft.plan,
-      context: draft.context,
+      id,
+      title,
+      summary: draft.prompt,
+      status: 'planning',
+      meta: 'Agent is planning',
+      progress: 0,
+      phase: 'Proposing a plan',
+      planPhase: 'generating',
+      model: draft.model,
+      effort: draft.effort,
+      permission: draft.permission,
+      prompt: draft.prompt,
     };
     if (draft.mode === 'work') {
       setWorkItems((current) => [createdTask, ...current]);
     } else {
       setCodeItems((current) => [createdTask, ...current]);
     }
-    setMode(draft.mode);
-    setSelected((current) => ({ ...current, [draft.mode]: createdTask.id }));
-    setActiveNav('My Work');
-    setNewTaskOpen(false);
+    const threadSession = { id, taskId: id, mode: draft.mode, title, status: 'running', meta: 'Agent is planning' };
+    setWorkspaceList((current) => current.map((item) => item.id === activeWorkspaceId ? { ...item, sessions: [threadSession, ...item.sessions] } : item));
+    setActiveThread({ workspaceId: activeWorkspaceId, sessionId: id });
+    setView('thread');
+    window.setTimeout(() => updateTask(id, { planPhase: 'ready', meta: 'Plan ready for review' }), 2200);
+  }
+
+  function approvePlan(taskId, approvedPlan) {
+    updateTask(taskId, {
+      status: 'running',
+      planPhase: 'approved',
+      plan: approvedPlan,
+      meta: `${approvedPlan.length} approved steps · starting`,
+      progress: 4,
+      phase: 'Starting approved plan',
+    });
     showToast('Plan approved. Agent task started.');
+  }
+
+  function resolveApproval(taskId, action, instruction) {
+    const labels = {
+      'allow-once': 'Allowed once',
+      'allow-always': 'Always allowed',
+      deny: 'Denied',
+    };
+    updateTask(taskId, {
+      status: 'running',
+      meta: `${labels[action]} · resuming`,
+      phase: 'Resuming after your decision',
+    });
+    showToast(instruction ? 'Decision and instruction sent. Thread resumed.' : 'Decision recorded. Thread resumed.');
   }
 
   function login(nextSession) {
@@ -132,22 +192,17 @@ export function App() {
   function changeContext(nextContext) {
     setTenantId(nextContext.tenantId);
     setProjectId(nextContext.projectId);
-    setActiveWorkspaceId(getProjectWorkspaces(nextContext.tenantId, nextContext.projectId)[0].id);
-    setActiveNav('Projects');
+    const nextWorkspaces = getProjectWorkspaces(nextContext.tenantId, nextContext.projectId);
+    setWorkspaceList(nextWorkspaces);
+    setActiveWorkspaceId(nextWorkspaces[0].id);
+    setActiveThread(null);
+    setView('home');
     setSettingsOpen(false);
   }
 
   function openWorkspace(workspaceId) {
     setActiveWorkspaceId(workspaceId);
-    setActiveNav('Projects');
-  }
-
-  function openSession(session, workspaceId = activeWorkspaceId) {
-    setActiveWorkspaceId(workspaceId);
-    setMode(session.mode);
-    setSelected((current) => ({ ...current, [session.mode]: session.taskId }));
-    setPaused(false);
-    setActiveNav('Conversation');
+    setView('workspace');
   }
 
   if (!session) {
@@ -157,76 +212,59 @@ export function App() {
   return (
     <div className="desktop-app">
       <Sidebar
-        activeNav={activeNav}
-        mode={mode}
-        taskCount={workItems.length + codeItems.length}
+        view={view}
+        activeWorkspaceId={workspace.id}
+        activeThreadId={activeThread?.sessionId ?? null}
+        inboxCount={inboxCount}
         tenant={tenant}
         project={project}
-        workspaces={workspaces}
-        activeWorkspaceId={workspace.id}
-        activeSessionId={selected[mode]}
+        workspaces={workspaceList}
         settingsOpen={settingsOpen}
-        onModeChange={changeMode}
-        onNavigate={setActiveNav}
+        resolveThread={resolveThread}
+        onNavigate={setView}
         onOpenWorkspace={openWorkspace}
-        onOpenSession={openSession}
-        onNewTask={() => { setActiveNav('My Work'); setNewTaskOpen(true); }}
+        onOpenThread={openThread}
+        onNewThread={() => setView('home')}
         onOpenSettings={openSettings}
         onSignOut={signOut}
       />
-      {activeNav === 'My Work' ? (
-        <main className="mission-control">
-          <TaskQueue
-            mode={mode}
-            tasks={tasks}
-            selectedId={task.id}
-            onSelect={(id) => setSelected((current) => ({ ...current, [mode]: id }))}
-            onInput={(inputTask) => setDialog({ type: 'input', task: inputTask })}
-          />
-          <TaskDetail
-            mode={mode}
-            task={task}
-            paused={paused}
-            onPause={() => setPaused((current) => !current)}
-            onInput={(inputTask) => setDialog({ type: 'input', task: inputTask })}
-            onSources={() => setDialog({ type: 'sources' })}
-            onToast={showToast}
-          />
-        </main>
-      ) : activeNav === 'Conversation' ? (
+      {view === 'thread' && activeThreadSession ? (
         <ConversationDetail
-          key={`${mode}-${task.id}`}
-          mode={mode}
-          task={task}
-          workspace={workspace}
-          onOpenTask={() => setActiveNav('My Work')}
-          onInput={(inputTask) => setDialog({ type: 'input', task: inputTask })}
+          key={`${activeThreadSession.mode}-${activeThreadSession.taskId}`}
+          mode={activeThreadSession.mode}
+          task={activeTask ?? { id: activeThreadSession.taskId, title: activeThreadSession.title, summary: '', status: activeThreadSession.status, meta: activeThreadSession.meta, progress: 0, phase: '' }}
+          project={project}
+          workspace={activeWorkspace}
+          onApprovePlan={(plan) => approvePlan(activeThreadSession.taskId, plan)}
+          onRevisePlan={() => {
+            updateTask(activeThreadSession.taskId, { planPhase: 'generating', meta: 'Agent is revising the plan' });
+            window.setTimeout(() => updateTask(activeThreadSession.taskId, { planPhase: 'ready', meta: 'Revised plan ready' }), 1800);
+          }}
+          onResolveApproval={(action, instruction) => resolveApproval(activeThreadSession.taskId, action, instruction)}
           onToast={showToast}
         />
-      ) : activeNav === 'Projects' ? (
+      ) : view === 'inbox' ? (
+        <InboxView items={inboxItems} onOpenThread={openInboxItem} />
+      ) : view === 'workspace' ? (
         <WorkspaceOverview
           tenant={tenant}
           project={project}
           workspace={workspace}
-          onNewTask={() => { setActiveNav('My Work'); setNewTaskOpen(true); }}
-          onOpenSession={(session) => openSession(session, workspace.id)}
+          onNewTask={() => setView('home')}
+          onOpenSession={(threadSession) => openThread(threadSession, workspace.id)}
           onConfigure={() => openSettings('workspace')}
         />
-      ) : <AuxiliaryView name={activeNav} onOpenWork={() => setActiveNav('My Work')} />}
-
-      {dialog?.type === 'input' && (
-        <Dialog title="Review agent request" onClose={() => setDialog(null)}>
-          <div className="request-body">
-            <span className="request-label">TASK</span>
-            <h3>{dialog.task.title}</h3>
-            <p>The agent recommends proceeding with the conservative option. This keeps the change reversible and inside the current project boundary.</p>
-            <label><span>Your instruction</span><textarea defaultValue="Proceed with the conservative option and document the trade-off." /></label>
-            <div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary" type="button" onClick={() => { setDialog(null); showToast('Instruction sent. Task resumed.'); }}>Send and resume</button></div>
-          </div>
-        </Dialog>
+      ) : view === 'search' ? (
+        <SearchView />
+      ) : (
+        <NewThreadComposer
+          workspace={workspace}
+          recentThreads={workspace.sessions.map(resolveThread)}
+          onCreate={createThread}
+          onOpenThread={(threadSession) => openThread(threadSession, workspace.id)}
+        />
       )}
-      {dialog?.type === 'sources' && <Dialog title="Source workspace" onClose={() => setDialog(null)}><SourcesDialog onClose={() => setDialog(null)} /></Dialog>}
-      {newTaskOpen ? <NewTaskFlow initialMode={mode} onClose={() => setNewTaskOpen(false)} onCreate={createTask} /> : null}
+
       {settingsOpen ? <SettingsWorkspace key={settingsSection} initialSection={settingsSection} onClose={() => setSettingsOpen(false)} onToast={showToast} onSignOut={signOut} session={session} currentTenantId={tenantId} currentProjectId={projectId} onContextChange={changeContext} /> : null}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>

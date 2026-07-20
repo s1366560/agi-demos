@@ -57,55 +57,60 @@
 .session-thread { min-height: 0; padding: 13px 15px 24px; overflow-y: auto; }
 .session-thread-day { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; color: #4e5c6e; font-size: 5.5px; }
 .session-thread-day::before, .session-thread-day::after { height: 1px; flex: 1; background: #202a35; content: ''; }
-.session-thread-message { display: grid; grid-template-columns: 27px minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 15px; }
-.session-thread-avatar { display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid #2b6475; border-radius: 6px; background: #102731; color: var(--cyan); }
-.session-thread-avatar img { width: 100%; height: 100%; border-radius: 5px; object-fit: cover; }
-.session-thread-avatar svg { width: 13px; height: 13px; }
-.session-thread-message > div:nth-child(2) { min-width: 0; }
-.session-thread-message.user > div:nth-child(2) { padding: 9px 10px; border: 1px solid #293542; border-radius: 7px; background: #101720; }
-.session-thread-message header { display: flex; align-items: center; min-height: 17px; gap: 6px; }
-.session-thread-message header b { color: #c9d1da; font-size: 8px; }
-.session-thread-message header em { padding: 2px 5px; border-radius: 7px; background: #14252d; color: #69b5c8; font-size: 5px; font-style: normal; }
-.session-thread-message header time { margin-left: auto; color: #465466; font-size: 5.5px; }
-.session-thread-message header button { display: grid; width: 18px; height: 18px; padding: 0; place-items: center; border: 0; background: transparent; color: #4d5b6d; }
-.session-thread-message p { margin: 5px 0 0; color: #98a5b3; font-size: 8px; line-height: 1.58; }
-.session-thread-message ul { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
-.session-thread-message li { padding: 3px 5px; border: 1px solid #283442; border-radius: 8px; color: #687789; font-size: 6px; }
+.session-thread-message { margin-top: 14px; }
+.session-thread-message.user { max-width: 88%; padding: 8px 11px; border: 1px solid #2a3542; border-radius: 10px; background: #161d27; }
+.session-thread-message.user p { color: #d5dce5; }
+.session-thread-message p { margin: 0; color: #a7b2bf; font-size: 8px; line-height: 1.6; }
+.session-thread-message p strong { color: #dde4ec; font-weight: 650; }
+.session-thread-message.assistant p + p { margin-top: 6px; }
+.session-thread-message ul { margin: 6px 0 0; padding: 0 0 0 2px; list-style: none; }
+.session-thread-message li { position: relative; padding-left: 11px; color: #8b98a7; font-size: 8px; line-height: 1.55; }
+.session-thread-message li + li { margin-top: 3px; }
+.session-thread-message li::before { position: absolute; left: 0; color: #4f5d6f; content: '•'; }
 .session-inline-action { display: flex; align-items: center; width: 100%; height: 30px; margin-top: 9px; gap: 6px; padding: 0 8px; border: 1px solid #28596a; border-radius: 5px; background: #10232c; color: #77c8da; font-size: 6.5px; text-align: left; }
 .session-inline-action svg:last-child { margin-left: auto; }
 
-.session-system-event, .session-progress-event { display: grid; grid-template-columns: 23px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin: 15px 0 0 35px; padding: 7px 8px; border: 1px solid #25313d; border-radius: 6px; background: #0d141c; }
-.session-system-event > svg, .session-progress-event > span { color: #6caec0; }
-.session-system-event > span, .session-progress-event > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.session-system-event b, .session-progress-event b { color: #96a3b1; font-size: 7px; }
-.session-system-event small, .session-progress-event small { overflow: hidden; color: #59687a; font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
-.session-system-event time, .session-progress-event em { color: #536174; font-size: 5.5px; font-style: normal; }
-.session-progress-event { border-color: #285768; background: #0e1d24; }
-.session-progress-event > span { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 5px; background: #112933; }
-.session-progress-event > span svg { width: 12px; height: 12px; }
-.session-progress-event em { color: var(--cyan); }
+.session-timeline-event { display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 2px 4px; }
+.session-timeline-event > svg { width: 11px; height: 11px; flex: 0 0 auto; color: #5d7c8a; }
+.session-timeline-event > span { display: flex; min-width: 0; flex: 1; align-items: baseline; gap: 6px; overflow: hidden; }
+.session-timeline-event b { color: #7e8b99; font-size: 6.6px; font-weight: 600; white-space: nowrap; }
+.session-timeline-event small { overflow: hidden; color: #4e5c6e; font-size: 5.8px; text-overflow: ellipsis; white-space: nowrap; }
+.session-timeline-event time { color: #465466; font-size: 5.5px; }
+.session-timeline-event.resolution.allowed > svg { color: var(--green); }
+.session-timeline-event.resolution.denied > svg { color: var(--red); }
 
-.session-tool-group { margin: 15px 0 0 35px; overflow: hidden; border: 1px solid #2a3643; border-radius: 7px; background: #0d141c; }
-.session-tool-group > button { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto 12px; align-items: center; width: 100%; min-height: 43px; gap: 7px; padding: 7px 8px; border: 0; background: transparent; text-align: left; }
-.session-tool-group > button > span { display: grid; width: 23px; height: 23px; place-items: center; border-radius: 5px; background: #122631; color: var(--cyan); }
-.session-tool-group > button > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.session-tool-group > button b { overflow: hidden; color: #9faab6; font-size: 7.2px; text-overflow: ellipsis; white-space: nowrap; }
-.session-tool-group > button small { color: #59687a; font-size: 6px; }
-.session-tool-group > button em { color: var(--green); font-size: 5.5px; font-style: normal; }
-.session-tool-group > button > svg { color: #536174; transition: transform .15s ease; }
-.session-tool-group > button > svg.expanded { transform: rotate(180deg); }
-.session-tool-rows { display: grid; padding: 0 8px 6px 39px; border-top: 1px solid #202a35; }
-.session-tool-rows > div { display: grid; grid-template-columns: 13px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 32px; border-bottom: 1px solid #202a35; }
-.session-tool-rows > div:last-child { border-bottom: 0; }
-.session-tool-rows > div > svg { color: var(--green); }
-.session-tool-rows span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.session-tool-rows b { color: #8f9ba9; font-size: 6.6px; }
-.session-tool-rows small, .session-tool-rows em { overflow: hidden; color: #566577; font-size: 5.8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.session-agent-typing { display: flex; align-items: center; gap: 3px; margin: 13px 0 0 35px; color: #59687a; font-size: 5.5px; }
+.session-worklog { margin-top: 14px; }
+.session-worklog > button { display: flex; align-items: center; width: 100%; min-height: 26px; gap: 6px; padding: 3px 4px; border: 0; border-radius: 5px; background: transparent; text-align: left; }
+.session-worklog > button:hover { background: #101720; }
+.session-worklog > button > svg:not(.chevron) { width: 12px; height: 12px; flex: 0 0 auto; color: #6caec0; }
+.session-worklog > button span { flex: 1; min-width: 0; overflow: hidden; color: #96a3b1; font-size: 7.2px; text-overflow: ellipsis; white-space: nowrap; }
+.session-worklog > button time { flex: 0 0 auto; color: #536174; font-size: 5.5px; }
+.session-worklog > button .chevron { width: 10px; height: 10px; flex: 0 0 auto; color: #536174; transition: transform .15s ease; }
+.session-worklog > button .chevron.expanded { transform: rotate(180deg); }
+.session-worklog-rows { display: grid; gap: 1px; margin-top: 2px; padding-left: 22px; }
+.session-worklog-row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; min-height: 24px; gap: 6px; }
+.session-worklog-row > svg { width: 11px; height: 11px; color: #5c6b7d; }
+.session-worklog-row.thinking > svg { color: #8b93c9; }
+.session-worklog-row.edit > svg { color: #7fa8c9; }
+.session-worklog-row.terminal > svg { color: #6c7f93; }
+.session-worklog-text { display: flex; min-width: 0; align-items: baseline; gap: 6px; overflow: hidden; }
+.session-worklog-text b { color: #8f9ba9; font-size: 6.6px; font-weight: 600; white-space: nowrap; }
+.session-worklog-text small { overflow: hidden; color: #566577; font-size: 5.8px; text-overflow: ellipsis; white-space: nowrap; }
+.session-worklog-row.thinking .session-worklog-text small { font-style: italic; }
+.session-worklog-row.terminal .session-worklog-text b { font-family: Menlo, monospace; font-weight: 500; }
+.session-worklog-row > em { color: #566577; font-size: 5.5px; font-style: normal; white-space: nowrap; }
+.session-diff-count { display: inline-flex; gap: 5px; }
+.session-diff-count b { color: var(--green); font-weight: 600; }
+.session-diff-count i { color: var(--red); font-style: normal; }
+.session-spinner { width: 10px; height: 10px; border: 1.5px solid #1e3d49; border-radius: 50%; border-top-color: var(--cyan); animation: session-spin .9s linear infinite; }
+@keyframes session-spin { to { transform: rotate(360deg); } }
+.session-worklog-row.active .session-worklog-text b { color: #a9d8e4; }
+.session-elapsed { color: var(--cyan); }
+.session-agent-typing { display: flex; align-items: center; gap: 3px; margin-top: 12px; color: #59687a; font-size: 5.5px; }
 .session-agent-typing span { width: 3px; height: 3px; border-radius: 50%; background: var(--cyan); opacity: .45; }
 .session-agent-typing span:nth-child(2) { opacity: .7; }
 .session-agent-typing span:nth-child(3) { margin-right: 3px; opacity: 1; }
-.session-message-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.session-message-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
 .session-message-refs span { display: inline-flex; align-items: center; gap: 3px; padding: 3px 5px; border: 1px solid #315062; border-radius: 5px; color: #78b9c9; font-size: 5.3px; }
 
 .session-composer { padding: 8px 10px 9px; border-top: 1px solid #202a35; background: #0b1017; }
@@ -305,54 +310,37 @@
 
 .session-thread { padding: 18px 20px 30px; }
 .session-thread-day { margin-bottom: 16px; font-size: 9px; }
-.session-live-summary { margin-bottom: 20px; overflow: hidden; border: 1px solid #285467; border-radius: 9px; background: linear-gradient(135deg, #10232c 0%, #0d171f 70%); }
-.session-live-summary > div { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 58px; padding: 10px 12px; }
-.session-live-summary > div > span { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 7px; background: #153642; color: var(--cyan); }
-.session-live-summary > div > span svg { width: 15px; height: 15px; }
-.session-live-summary p { display: flex; min-width: 0; flex-direction: column; gap: 4px; margin: 0; }
-.session-live-summary p small { color: #5f8391; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
-.session-live-summary p b { overflow: hidden; color: #c9d9e0; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.session-live-summary > div > em { color: var(--cyan); font-size: 10px; font-style: normal; }
-.session-live-summary dl { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px solid #23404c; }
-.session-live-summary dl > div { display: flex; align-items: center; justify-content: space-between; min-width: 0; min-height: 34px; gap: 8px; padding: 0 12px; }
-.session-live-summary dl > div + div { border-left: 1px solid #23404c; }
-.session-live-summary dt { color: #5d7180; font-size: 8px; }
-.session-live-summary dd { overflow: hidden; margin: 0; color: #90a3ae; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-
-.session-thread-message { grid-template-columns: 34px minmax(0, 1fr); gap: 11px; margin-top: 20px; }
-.session-thread-avatar { width: 33px; height: 33px; border-radius: 8px; }
-.session-thread-avatar img { border-radius: 7px; }
-.session-thread-avatar svg { width: 16px; height: 16px; }
-.session-thread-message.user > div:nth-child(2) { padding: 12px 13px; border-radius: 9px; }
-.session-thread-message header { min-height: 22px; gap: 8px; }
-.session-thread-message header b { font-size: 11px; }
-.session-thread-message header em { padding: 3px 7px; font-size: 8px; }
-.session-thread-message header time { font-size: 9px; }
-.session-thread-message header button { width: 24px; height: 24px; }
-.session-thread-message p { margin-top: 7px; font-size: 11px; line-height: 1.62; }
-.session-thread-message li { padding: 5px 8px; font-size: 9px; }
+.session-thread-message { margin-top: 22px; }
+.session-thread-message.user { max-width: 84%; padding: 12px 14px; border-radius: 12px; }
+.session-thread-message p { font-size: 12px; line-height: 1.66; }
+.session-thread-message.assistant p + p { margin-top: 8px; }
+.session-thread-message ul { margin-top: 8px; }
+.session-thread-message li { padding-left: 15px; font-size: 12px; line-height: 1.62; }
+.session-thread-message li + li { margin-top: 5px; }
 .session-inline-action { height: 38px; margin-top: 12px; padding: 0 11px; border-radius: 7px; font-size: 10px; }
 
-.session-system-event, .session-progress-event { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; margin: 20px 0 0 45px; padding: 10px 11px; border-radius: 8px; }
-.session-system-event b, .session-progress-event b { font-size: 10px; }
-.session-system-event small, .session-progress-event small { font-size: 9px; }
-.session-system-event time, .session-progress-event em { font-size: 9px; }
-.session-progress-event > span { width: 29px; height: 29px; }
-.session-progress-event > span svg { width: 14px; height: 14px; }
+.session-timeline-event { gap: 9px; margin-top: 14px; padding: 3px 6px; }
+.session-timeline-event > svg { width: 14px; height: 14px; }
+.session-timeline-event > span { gap: 8px; }
+.session-timeline-event b { font-size: 10px; }
+.session-timeline-event small { font-size: 9px; }
+.session-timeline-event time { font-size: 8.5px; }
 
-.session-tool-group { margin: 20px 0 0 45px; border-radius: 9px; }
-.session-tool-group > button { grid-template-columns: 32px minmax(0, 1fr) auto 15px; min-height: 58px; gap: 10px; padding: 10px 11px; }
-.session-tool-group > button > span { width: 31px; height: 31px; border-radius: 7px; }
-.session-tool-group > button b { font-size: 10px; }
-.session-tool-group > button small { font-size: 9px; }
-.session-tool-group > button em { font-size: 9px; }
-.session-tool-rows { padding: 0 11px 8px 53px; }
-.session-tool-rows > div { grid-template-columns: 16px minmax(0, 1fr) auto; min-height: 44px; gap: 8px; }
-.session-tool-rows b { font-size: 9.5px; }
-.session-tool-rows small, .session-tool-rows em { font-size: 8.5px; }
-.session-tool-rows > div.session-subagent-row { margin: 7px 0; padding: 0 8px; border: 1px solid #293d4b; border-radius: 6px; background: #101b24; }
-.session-tool-rows > div.session-subagent-row > svg { color: #80bdd0; }
-.session-agent-typing { margin: 18px 0 0 45px; font-size: 9px; }
+.session-worklog { margin-top: 20px; }
+.session-worklog > button { min-height: 34px; gap: 8px; padding: 4px 6px; border-radius: 7px; }
+.session-worklog > button > svg:not(.chevron) { width: 15px; height: 15px; }
+.session-worklog > button span { font-size: 11px; }
+.session-worklog > button time { font-size: 9px; }
+.session-worklog > button .chevron { width: 13px; height: 13px; }
+.session-worklog-rows { gap: 2px; padding-left: 27px; }
+.session-worklog-row { grid-template-columns: 18px minmax(0, 1fr) auto; min-height: 32px; gap: 8px; }
+.session-worklog-row > svg { width: 14px; height: 14px; }
+.session-worklog-text { gap: 8px; }
+.session-worklog-text b { font-size: 10.5px; }
+.session-worklog-text small { font-size: 9.5px; }
+.session-worklog-row > em { font-size: 9px; }
+.session-spinner { width: 13px; height: 13px; border-width: 2px; }
+.session-agent-typing { margin-top: 16px; font-size: 9px; }
 .session-agent-typing span { width: 5px; height: 5px; }
 .session-message-refs span { padding: 4px 7px; font-size: 8px; }
 
@@ -508,8 +496,6 @@
   .session-workspace.layout-thread .session-composer { padding-right: 18px; padding-left: 18px; }
   .session-context-rail { padding-right: 10px; padding-left: 10px; }
   .session-thread { padding-right: 15px; padding-left: 15px; }
-  .session-live-summary dl { grid-template-columns: 1fr; }
-  .session-live-summary dl > div + div { border-top: 1px solid #23404c; border-left: 0; }
   .session-canvas-content { padding: 13px; }
   .session-canvas-tabs button { padding-right: 8px; padding-left: 8px; }
 }

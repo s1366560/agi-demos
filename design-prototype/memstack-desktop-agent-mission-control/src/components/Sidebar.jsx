@@ -2,30 +2,42 @@ import { useEffect, useState } from 'react';
 import {
   ActivityLogIcon,
   BellIcon,
-  CheckCircledIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   CodeIcon,
   CubeIcon,
   DashboardIcon,
   GearIcon,
-  HomeIcon,
-  LightningBoltIcon,
   MagnifyingGlassIcon,
-  MixerHorizontalIcon,
   PlusIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../i18n';
 
 const primaryItems = [
-  ['Home', 'nav.home', HomeIcon],
-  ['My Work', 'nav.myWork', DashboardIcon],
-  ['Automations', 'nav.automations', LightningBoltIcon],
-  ['Search', 'nav.search', MagnifyingGlassIcon],
+  ['inbox', 'nav.myWork', DashboardIcon],
+  ['search', 'nav.search', MagnifyingGlassIcon],
 ];
 
-export function Sidebar({ activeNav, activeWorkspaceId, activeSessionId, mode, taskCount, tenant, project, workspaces, settingsOpen, onModeChange, onNavigate, onOpenWorkspace, onOpenSession, onNewTask, onOpenSettings, onSignOut }) {
+function ThreadRow({ thread, active, onOpen, t }) {
+  const ModeIcon = thread.mode === 'code' ? CodeIcon : ActivityLogIcon;
+  return (
+    <button
+      className={`thread-row ${active ? 'active' : ''}`}
+      type="button"
+      onClick={onOpen}
+    >
+      <i className={`thread-status ${thread.status}`} aria-hidden="true" />
+      <ModeIcon className="thread-mode-icon" />
+      <span>
+        <b>{thread.title}</b>
+        <small>{t(thread.meta)}</small>
+      </span>
+    </button>
+  );
+}
+
+export function Sidebar({ view, activeWorkspaceId, activeThreadId, inboxCount, tenant, project, workspaces, settingsOpen, resolveThread, onNavigate, onOpenWorkspace, onOpenThread, onNewThread, onOpenSettings, onSignOut }) {
   const { t } = useI18n();
   const [profileOpen, setProfileOpen] = useState(false);
   const workspaceIds = workspaces.map((workspace) => workspace.id).join('|');
@@ -40,69 +52,57 @@ export function Sidebar({ activeNav, activeWorkspaceId, activeSessionId, mode, t
   }
 
   return (
-    <aside className="sidebar" aria-label="Primary navigation">
-      <div className="brand-row">
+    <aside className="sidebar" aria-label={t('Primary navigation')}>
+      <button className="brand-row brand-button" type="button" onClick={() => onNavigate('home')}>
         <img src="/memstack-icon.png" alt="MemStack" className="brand-icon" />
         <div>
           <strong>MemStack</strong>
           <span>{t('app.workspace')}</span>
         </div>
-      </div>
+      </button>
 
-      <button className="new-task-button" type="button" onClick={onNewTask}>
+      <button className="new-task-button" type="button" onClick={onNewThread}>
         <PlusIcon />
-        {t('nav.newTask')}
+        {t('nav.newThread')}
       </button>
 
       <nav className="nav-list">
         {primaryItems.map(([id, labelKey, Icon]) => (
           <button
-            className={`nav-item ${activeNav === id ? 'active' : ''}`}
+            className={`nav-item ${view === id ? 'active' : ''}`}
             key={id}
             type="button"
             onClick={() => onNavigate(id)}
           >
             <Icon />
             <span>{t(labelKey)}</span>
-            {id === 'My Work' && <small>{taskCount}</small>}
+            {id === 'inbox' && inboxCount > 0 ? <small>{inboxCount}</small> : null}
           </button>
         ))}
       </nav>
 
-      <div className="nav-section-label sidebar-tenant-label"><span>{project.name}</span><small>{t('Workspaces')}</small></div>
-      <nav className="workspace-tree" aria-label={t('Workspace sessions')}>
+      <div className="nav-section-label sidebar-tenant-label"><span>{project.name}</span><small>{t('Threads')}</small></div>
+      <nav className="workspace-tree" aria-label={t('Workspace threads')}>
         {workspaces.map((workspace) => (
           <div className="workspace-tree-node" key={workspace.id}>
             <div className="workspace-tree-root">
               <button className={`workspace-tree-toggle ${expanded[workspace.id] ? 'expanded' : ''}`} type="button" aria-label={`${expanded[workspace.id] ? t('Collapse') : t('Expand')} ${workspace.name}`} onClick={() => toggleWorkspace(workspace.id)}><ChevronDownIcon /></button>
-              <button className={`workspace-tree-workspace ${activeNav === 'Projects' && activeWorkspaceId === workspace.id ? 'active' : ''}`} type="button" onClick={() => onOpenWorkspace(workspace.id)}><CubeIcon /><span><b>{workspace.name}</b><small>{workspace.sessions.length} {t('sessions')}</small></span>{workspace.status === 'attention' ? <i className="attention" /> : <i />}</button>
+              <button className={`workspace-tree-workspace ${view === 'workspace' && activeWorkspaceId === workspace.id ? 'active' : ''}`} type="button" onClick={() => onOpenWorkspace(workspace.id)}><CubeIcon /><span><b>{workspace.name}</b><small>{workspace.sessions.length} {t('threads')}</small></span><i className={workspace.status === 'attention' ? 'attention' : ''} /></button>
             </div>
-            {expanded[workspace.id] ? <div className="workspace-session-tree" role="group" aria-label={`${workspace.name} ${t('sessions')}`}>
-              {workspace.sessions.map((session) => {
-                const SessionIcon = session.mode === 'code' ? CodeIcon : ActivityLogIcon;
-                return <button className={(activeNav === 'Conversation' || activeNav === 'My Work') && activeSessionId === session.id ? 'active' : ''} type="button" key={session.id} onClick={() => onOpenSession(session, workspace.id)}><SessionIcon /><span><b>{session.title}</b><small>{t(session.meta)}</small></span>{session.status === 'ready' ? <CheckCircledIcon className="ready" /> : <i className={session.status} />}</button>;
-              })}
+            {expanded[workspace.id] ? <div className="workspace-session-tree" role="group" aria-label={`${workspace.name} ${t('threads')}`}>
+              {workspace.sessions.map((session) => (
+                <ThreadRow
+                  key={session.id}
+                  thread={resolveThread(session)}
+                  active={view === 'thread' && activeThreadId === session.id}
+                  onOpen={() => onOpenThread(session, workspace.id)}
+                  t={t}
+                />
+              ))}
             </div> : null}
           </div>
         ))}
       </nav>
-
-      <div className="mode-switcher" aria-label="Workspace mode">
-        <button
-          className={mode === 'work' ? 'active' : ''}
-          type="button"
-          onClick={() => onModeChange('work')}
-        >
-          <MixerHorizontalIcon /> {t('nav.work')}
-        </button>
-        <button
-          className={mode === 'code' ? 'active' : ''}
-          type="button"
-          onClick={() => onModeChange('code')}
-        >
-          <CodeIcon /> {t('nav.code')}
-        </button>
-      </div>
 
       <div className="sidebar-footer">
         <button className="nav-item" type="button">

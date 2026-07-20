@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityLogIcon,
   ArrowRightIcon,
+  CaretRightIcon,
   CheckCircledIcon,
   ChevronDownIcon,
   ClockIcon,
@@ -11,17 +12,21 @@ import {
   FileTextIcon,
   Link2Icon,
   LockClosedIcon,
+  MagnifyingGlassIcon,
   MixerHorizontalIcon,
-  PauseIcon,
+  Pencil1Icon,
   PersonIcon,
   ReaderIcon,
+  StarIcon,
   StopIcon,
   TargetIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../i18n';
 
+import { ApprovalCard } from './ApprovalCard';
 import { ConversationCanvas } from './ConversationCanvas';
+import { PlanCard } from './PlanCard';
 import './ConversationDetail.css';
 
 function StatusBadge({ status, t }) {
@@ -39,21 +44,48 @@ function StageStrip({ status, t }) {
   return <div className="session-stage-strip" aria-label={t('Session progress')}>{stages.map(([name, state], index) => <div className={state} key={name}>{state === 'complete' ? <CheckCircledIcon /> : state === 'active' ? <ActivityLogIcon /> : <ClockIcon />}<span><small>0{index + 1}</small><b>{t(name)}</b></span></div>)}</div>;
 }
 
-function ToolActivity({ mode, expanded, onToggle, t }) {
-  const tools = mode === 'code'
-    ? [['Search files', 'src/pipeline · shared_runner', '4 results'], ['Read code', 'runner.py · shared.py · test_pipeline.py', '3 files'], ['Run tests', 'pytest --count=50', '1 failure reproduced'], ['Apply patch', 'Fixture ownership scoped to job ID', '+138 −29']]
-    : [['Search memory', 'Activation and trust signals', '12 episodes'], ['Read sources', 'Interviews · metrics · market evidence', '28 sources'], ['Draft artifact', 'Leadership brief', '1 document'], ['Validate claims', 'Citation and coverage checks', '28 / 28']];
+function WorkLog({ mode, expanded, onToggle, t }) {
+  const rows = mode === 'code'
+    ? [
+      ['thinking', t('Thinking'), t('Race likely lives in the shared runner — scope the fixture to the job ID…'), ''],
+      ['search', t('Searched files'), t('src/pipeline · shared_runner'), t('4 results')],
+      ['read', t('Read code'), t('runner.py · shared.py · test_pipeline.py'), t('3 files')],
+      ['terminal', 'pytest --count=50', '', t('1 failure reproduced')],
+      ['edit', t('Edited'), 'runner.py', '+138 −29'],
+    ]
+    : [
+      ['thinking', t('Thinking'), t('Evidence points to activation friction — lead with guided activation…'), ''],
+      ['search', t('Searched memory'), t('Activation and trust signals'), t('12 episodes')],
+      ['read', t('Read sources'), t('Interviews · metrics · market evidence'), t('28 sources')],
+      ['edit', t('Drafted'), t('Leadership brief'), t('1 document')],
+      ['check', t('Validated claims'), t('Citation and coverage checks'), t('28 / 28')],
+    ];
+  const iconFor = (kind) => kind === 'thinking' ? <StarIcon /> : kind === 'search' ? <MagnifyingGlassIcon /> : kind === 'read' ? <FileTextIcon /> : kind === 'terminal' ? <CaretRightIcon /> : kind === 'edit' ? <Pencil1Icon /> : <CheckCircledIcon />;
   return (
-    <article className="session-tool-group">
-      <button type="button" onClick={onToggle} aria-expanded={expanded}><span><ActivityLogIcon /></span><div><b>{t(mode === 'code' ? 'Inspected, reproduced, and patched the race' : 'Synthesized the approved evidence')}</b><small>{tools.length} {t('tool calls')} · {mode === 'code' ? '42s' : '51s'}</small></div><em>{t('Completed')}</em><ChevronDownIcon className={expanded ? 'expanded' : ''} /></button>
-      {expanded ? <div className="session-tool-rows"><div className="session-subagent-row"><CodeIcon /><span><b>{t('Repository scout')}</b><small>{t('Mapped the runner lifecycle in an isolated context')}</small></span><em>{t('Subagent · 11s')}</em></div>{tools.map(([name, detail, result]) => <div key={name}><CheckCircledIcon /><span><b>{t(name)}</b><small>{t(detail)}</small></span><em>{t(result)}</em></div>)}</div> : null}
+    <article className="session-worklog">
+      <button type="button" onClick={onToggle} aria-expanded={expanded}>
+        <ActivityLogIcon />
+        <span>{t(mode === 'code' ? 'Inspected, reproduced, and patched the race' : 'Synthesized the approved evidence')}</span>
+        <time>{t('{count} tool calls', { count: rows.length - 1 })}</time>
+        <ChevronDownIcon className={`chevron ${expanded ? 'expanded' : ''}`} />
+      </button>
+      {expanded ? (
+        <div className="session-worklog-rows">
+          {rows.map(([kind, name, detail, result]) => (
+            <div className={`session-worklog-row ${kind}`} key={`${kind}-${name}`}>
+              {iconFor(kind)}
+              <span className="session-worklog-text"><b>{name}</b>{detail ? <small>{detail}</small> : null}</span>
+              {kind === 'edit' && result.includes('−') ? <em className="session-diff-count"><b>+{result.split(' ')[0].slice(1)}</b><i>−{result.split(' ')[1].slice(1)}</i></em> : result ? <em>{result}</em> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
 
-function ThreadMessage({ role, mode, time, children, t }) {
-  const isUser = role === 'user';
-  return <article className={`session-thread-message ${role}`}><div className="session-thread-avatar">{isUser ? <img src="/avatar-alex.png" alt="Alex Chen" /> : mode === 'code' ? <CodeIcon /> : <ReaderIcon />}</div><div><header><b>{isUser ? 'Alex Chen' : mode === 'code' ? 'Code Agent' : 'Research Agent'}</b>{!isUser ? <em>{t('Workspace agent')}</em> : null}<time>{time}</time><button type="button" aria-label={t('Message actions')}><DotsHorizontalIcon /></button></header>{children}</div></article>;
+function ThreadMessage({ role, children }) {
+  return <article className={`session-thread-message ${role}`}>{children}</article>;
 }
 
 function SessionContextRail({ mode, task, onOpenCanvas, onReview, t }) {
@@ -102,13 +134,14 @@ function SessionContextRail({ mode, task, onOpenCanvas, onReview, t }) {
   );
 }
 
-export function ConversationDetail({ mode, task, workspace, onOpenTask, onInput, onToast }) {
+export function ConversationDetail({ mode, task, project, workspace, onApprovePlan, onRevisePlan, onResolveApproval, onToast }) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState(task.status === 'input' ? 'plan' : mode === 'code' ? 'changes' : 'artifact');
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [draft, setDraft] = useState('');
   const [contextRefs, setContextRefs] = useState([]);
   const [sentMessages, setSentMessages] = useState([]);
+  const [resolutionEvents, setResolutionEvents] = useState([]);
   const [sending, setSending] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState('steer');
   const [canvasLayout, setCanvasLayout] = useState('thread');
@@ -155,34 +188,70 @@ export function ConversationDetail({ mode, task, workspace, onOpenTask, onInput,
     setCanvasLayout('split');
   }
 
+  function resolveApproval(action, instruction) {
+    const labels = {
+      'allow-once': t('Allowed once'),
+      'allow-always': t('Always allowed'),
+      deny: t('Denied'),
+    };
+    setResolutionEvents((current) => [...current, { id: Date.now(), action, label: labels[action], instruction }]);
+    onResolveApproval(action, instruction);
+  }
+
+  const approvalResolved = task.status !== 'input';
+  const planning = task.status === 'planning';
+
   return (
     <main className="session-detail">
       <header className="session-header">
-        <div className="session-heading"><span>{workspace.name} <ArrowRightIcon /> {t('Conversation')}</span><div><h1>{task.title}</h1><StatusBadge status={task.status} t={t} /></div></div>
+        <div className="session-heading"><span>{project.name} <ArrowRightIcon /> {workspace.name} <ArrowRightIcon /> {t('Conversation')}</span><div><h1>{task.title}</h1><StatusBadge status={planning ? 'running' : task.status} t={t} /></div></div>
         <StageStrip status={task.status} t={t} />
-        <div className="session-header-actions"><span><DesktopIcon />{mode === 'code' ? 'worktree/agent-fix' : t('Private workspace')}</span><span><ClockIcon />00:24:18</span><button type="button"><PauseIcon />{t('Pause')}</button><button className="primary" type="button" onClick={onOpenTask}><FileTextIcon />{t('Open task')}</button><button className="icon-button" type="button" aria-label={t('Conversation actions')}><DotsHorizontalIcon /></button></div>
+        <div className="session-header-actions"><span className="session-model-badge"><DesktopIcon />{task.model ?? 'GPT-5.5'}</span><span><LockClosedIcon />{mode === 'code' ? 'worktree/agent-fix' : t('Private workspace')}</span><button type="button" onClick={() => onToast(t('Share link copied'))}><PersonIcon />{t('Share')}</button><button type="button" onClick={() => onToast(t('Thread archived'))}><FileTextIcon />{t('Archive')}</button><button className="icon-button" type="button" aria-label={t('Conversation actions')}><DotsHorizontalIcon /></button></div>
       </header>
-
-      {task.status === 'input' && canvasLayout !== 'thread' ? <section className="session-hitl-banner"><StopIcon /><div><small>{t('HUMAN DECISION')}</small><b>{t(mode === 'code' ? 'Approve the fixture ownership boundary' : 'Choose the strategic priority')}</b><p>{t('The agent is paused before changing the approved scope.')}</p></div><button type="button" onClick={() => onInput(task)}>{t('Review request')}</button></section> : null}
 
       <div className={`session-workspace layout-${canvasLayout}`}>
         <section className="session-thread-pane">
           <header><div><span>{t('SESSION LOG')}</span><em>{t('Live')}</em></div><span><LockClosedIcon />{t('Private')}<PersonIcon />{mode === 'code' ? '2' : '3'}<button type="button" onClick={() => openCanvas(activeTab)}><ReaderIcon />{t('Open canvas')}</button></span></header>
           <div className="session-thread" ref={threadRef} aria-label={t('Conversation messages')}>
             <div className="session-thread-day"><span>{t('Today')}</span></div>
-            <section className="session-live-summary">
-              <div><span><ActivityLogIcon /></span><p><small>{t('CURRENT ACTIVITY')}</small><b>{t(mode === 'code' ? 'Verifying the isolated fix' : 'Validating the leadership brief')}</b></p><em>3 / 4</em></div>
-              <dl><div><dt>{t('Last checkpoint')}</dt><dd>{t(mode === 'code' ? 'Patch applied' : 'Draft complete')}</dd></div><div><dt>{t('Evidence')}</dt><dd>{mode === 'code' ? '18 tests · 50 race runs' : '28 linked claims'}</dd></div></dl>
-            </section>
-            <ThreadMessage role="user" mode={mode} time="10:14" t={t}><p>{mode === 'code' ? 'Please reproduce the flaky pipeline test, isolate the race without changing the public API, and leave verification evidence in this session.' : 'Use the approved sources to prepare a leadership-ready brief. Keep every recommendation linked to customer evidence.'}</p></ThreadMessage>
-            <ThreadMessage role="assistant" mode={mode} time="10:14" t={t}><p>{mode === 'code' ? 'I’ll inspect the shared runner, reproduce the race in an isolated worktree, then verify the smallest safe fix.' : 'I’ll synthesize the approved project evidence into a concise brief and keep each recommendation traceable.'}</p><ul>{(mode === 'code' ? ['Inspect fixture ownership', 'Reproduce concurrently', 'Patch and verify'] : ['Review evidence', 'Draft priorities', 'Validate citations']).map((item) => <li key={item}>{t(item)}</li>)}</ul></ThreadMessage>
-            <div className="session-system-event"><DesktopIcon /><span><b>{t(mode === 'code' ? 'Isolated worktree ready' : 'Approved project context attached')}</b><small>{mode === 'code' ? 'worktree/agent-fix · Local sandbox' : '12 memories · 28 sources'}</small></span><time>10:15</time></div>
-            <ToolActivity mode={mode} expanded={activityExpanded} onToggle={() => setActivityExpanded((value) => !value)} t={t} />
-            <ThreadMessage role="assistant" mode={mode} time="10:18" t={t}><p>{mode === 'code' ? 'I found the race: shared mutable state kept the previous job’s runner alive. I scoped the fixture to the job ID and added concurrent regression coverage.' : 'The evidence converges on one priority: guided activation and reviewable templates create more value than another standalone agent entry point.'}</p><button className="session-inline-action" type="button" onClick={() => openCanvas(mode === 'code' ? 'changes' : 'artifact')}>{mode === 'code' ? <CodeIcon /> : <FileTextIcon />}{t(mode === 'code' ? 'Review 4 changed files' : 'Review leadership brief')}<ArrowRightIcon /></button></ThreadMessage>
-            <div className="session-progress-event"><span><ActivityLogIcon /></span><div><b>{t(mode === 'code' ? 'Verification is running' : 'Artifact verification is running')}</b><small>{mode === 'code' ? '18 tests passed · 50 race runs passed · static checks' : t('28 claims linked · citation integrity · review checklist')}</small></div><em>3 / 4</em></div>
-            {sentMessages.map((message) => <ThreadMessage key={message.id} role={message.role} mode={mode} time={t('Now')} t={t}>{message.refs?.length ? <div className="session-message-refs">{message.refs.map((ref) => <span key={ref}><Link2Icon />{ref}</span>)}</div> : null}<p>{message.content}</p></ThreadMessage>)}
-            {sending ? <div className="session-agent-typing"><span /><span /><span />{t('Agent is responding')}</div> : null}
+            {planning ? (
+              <>
+                <ThreadMessage role="user"><p>{task.prompt ?? task.summary}</p></ThreadMessage>
+                <PlanCard
+                  mode={mode}
+                  title={task.title}
+                  generating={task.planPhase !== 'ready'}
+                  onApprove={onApprovePlan}
+                  onRevise={onRevisePlan}
+                />
+              </>
+            ) : (
+              <>
+                <ThreadMessage role="user"><p>{t(mode === 'code' ? 'Please reproduce the flaky pipeline test, isolate the race without changing the public API, and leave verification evidence in this session.' : 'Use the approved sources to prepare a leadership-ready brief. Keep every recommendation linked to customer evidence.')}</p></ThreadMessage>
+                <ThreadMessage role="assistant"><p>{t(mode === 'code' ? 'I’ll inspect the shared runner, reproduce the race in an isolated worktree, then verify the smallest safe fix.' : 'I’ll synthesize the approved project evidence into a concise brief and keep each recommendation traceable.')}</p><ul>{(mode === 'code' ? ['Inspect fixture ownership', 'Reproduce concurrently', 'Patch and verify'] : ['Review evidence', 'Draft priorities', 'Validate citations']).map((item) => <li key={item}>{t(item)}</li>)}</ul></ThreadMessage>
+                <div className="session-timeline-event"><DesktopIcon /><span><b>{t(mode === 'code' ? 'Isolated worktree ready' : 'Approved project context attached')}</b><small>{t(mode === 'code' ? 'worktree/agent-fix · Local sandbox' : '12 memories · 28 sources')}</small></span><time>10:15</time></div>
+                <WorkLog mode={mode} expanded={activityExpanded} onToggle={() => setActivityExpanded((value) => !value)} t={t} />
+                <ThreadMessage role="assistant"><p><strong>{t(mode === 'code' ? 'Root cause found.' : 'Recommendation ready.')}</strong> {t(mode === 'code' ? 'Shared mutable state kept the previous job’s runner alive. I scoped the fixture to the job ID and added concurrent regression coverage.' : 'The evidence converges on one priority: guided activation and reviewable templates create more value than another standalone agent entry point.')}</p><button className="session-inline-action" type="button" onClick={() => openCanvas(mode === 'code' ? 'changes' : 'artifact')}>{mode === 'code' ? <CodeIcon /> : <FileTextIcon />}{t(mode === 'code' ? 'Review 4 changed files' : 'Review leadership brief')}<ArrowRightIcon /></button></ThreadMessage>
+                <div className="session-worklog running">
+                  <div className="session-worklog-row active">
+                    <span className="session-spinner" aria-hidden="true" />
+                    <span className="session-worklog-text"><b>{t(mode === 'code' ? 'Running targeted verification' : 'Validating the brief')}</b><small>{mode === 'code' ? t('18 tests passed · 50 race runs passed · static checks') : t('28 claims linked · citation integrity · review checklist')}</small></span>
+                    <em className="session-elapsed">{t('Worked for {duration}', { duration: mode === 'code' ? '42s' : '51s' })}</em>
+                  </div>
+                </div>
+              </>
+            )}
+            {resolutionEvents.map((event) => (
+              <div className={`session-timeline-event resolution ${event.action === 'deny' ? 'denied' : 'allowed'}`} key={event.id}>
+                <CheckCircledIcon />
+                <span><b>{t('You decided: {label}', { label: event.label })}</b><small>{event.instruction ? event.instruction : t(mode === 'code' ? 'Scope: src/pipeline and src/tests only.' : 'Scope: this brief only.')}</small></span>
+                <time>{t('Now')}</time>
+              </div>
+            ))}
+            {sentMessages.map((message) => <ThreadMessage key={message.id} role={message.role}>{message.refs?.length ? <div className="session-message-refs">{message.refs.map((ref) => <span key={ref}><Link2Icon />{ref}</span>)}</div> : null}<p>{message.content}</p></ThreadMessage>)}
+            {sending ? <div className="session-agent-typing"><span /><span /><span />{t('Working…')}</div> : null}
           </div>
+          {!approvalResolved ? <ApprovalCard mode={mode} onResolve={resolveApproval} /> : null}
           <footer className="session-composer">
             {contextRefs.length ? <div className="session-context-chips">{contextRefs.map((ref) => <button type="button" key={ref} onClick={() => setContextRefs((current) => current.filter((item) => item !== ref))}><Link2Icon />{ref}<span>×</span></button>)}</div> : null}
             <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') sendMessage(); }} placeholder={t('Steer this session…')} aria-label={t('Message conversation')} />
@@ -191,9 +260,9 @@ export function ConversationDetail({ mode, task, workspace, onOpenTask, onInput,
         </section>
 
         {canvasLayout === 'thread' ? (
-          <SessionContextRail mode={mode} task={task} onOpenCanvas={openCanvas} onReview={() => onInput(task)} t={t} />
+          <SessionContextRail mode={mode} task={task} onOpenCanvas={openCanvas} onReview={() => setCanvasLayout('thread')} t={t} />
         ) : (
-          <ConversationCanvas mode={mode} task={task} activeTab={activeTab} onTabChange={setActiveTab} onReference={addReference} onOpenTask={onOpenTask} verificationState={verificationState} onRerun={rerunVerification} layout={canvasLayout} onLayoutChange={setCanvasLayout} />
+          <ConversationCanvas mode={mode} task={task} activeTab={activeTab} onTabChange={setActiveTab} onReference={addReference} onOpenTask={() => openCanvas('overview')} verificationState={verificationState} onRerun={rerunVerification} layout={canvasLayout} onLayoutChange={setCanvasLayout} />
         )}
       </div>
     </main>

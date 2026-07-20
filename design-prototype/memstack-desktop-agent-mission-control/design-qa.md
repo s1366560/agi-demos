@@ -175,4 +175,28 @@ New-task comparison result: the three new full-screen states inherit the selecte
 - Accessibility: passed for prototype scope. Canvas tabs, grouped activity, Diff lines, context chips, HITL, Composer, rerun control, and Task handoff are semantic native controls with accessible names; stage and status text supplement color. The visible focus ring remains intentional keyboard feedback.
 - Runtime verification: passed. A fresh reload followed by Conversation selection restored Thread, Canvas, and Changes with zero new warning/error console entries. `git diff --check` and the production Vite build succeed.
 
+### Pass 11 — Codex-aligned thread-centric shell
+
+- Direction: realign the shell with the Codex app interaction model — thread as the primary workspace, composer-first task creation, inline Plan and HITL approval cards, and an inbox-style My Work — while preserving MemStack's Work/Code dual modes and existing dark Mission Control tokens.
+- Implementation evidence: `qa/codex-01-home-composer-{1440,1100}.png`, `qa/codex-02-my-work-inbox-{1440,1100}.png`, `qa/codex-03-inline-approval-{1440,1100}.png`, `qa/codex-04-approval-resolved-{1440,1100}.png`, `qa/codex-05-plan-card-{1440,1100}.png`, and `qa/codex-06-thread-running-{1440,1100}.png` at 1440×1024 and 1100×800.
+- Implemented scope: sidebar rebuilt as a Workspace-grouped thread list with inline status (amber Needs input pulse, cyan Running pulse, green Ready check) and relative timestamps; primary navigation reduced to My Work and Search; Home merged into a composer-first New thread page with Mode / Model / Reasoning effort / Permission mode selectors; the overlay plan wizard replaced by an inline thread Plan card with editable/toggleable steps, live effort recompute, Approve plan, and Ask agent to revise; the HITL modal replaced by a sticky inline approval card (Allow once / Always allow / Deny with scope) whose resolution lands in the timeline as a system event; My Work rebuilt as a cross-mode inbox grouped by Needs input / Running / Ready to review, with cards jumping straight into the owning thread; thread header aligned to Codex breadcrumbs (Project → Workspace → Thread) with mode badge, branch/workspace context, model badge, Share, and Archive.
+- Interaction verification: passed. Sidebar thread selection opens the thread directly; inbox cards navigate to their owning thread (including a regression fix where cross-project fixture tasks without a thread location broke navigation); composer submission creates a thread and inserts a generating-then-ready Plan card; plan approval transitions the thread to Running; approval resolution appends a timeline system event and restores Running state.
+- Responsive verification: passed at 1440×1024 and 1100×800 with no horizontal overflow; sidebar, thread, and Work Canvas preserve the approved density.
+- Internationalization: passed. All new shell, composer, Plan card, approval card, and inbox strings are localized in English and Simplified Chinese; QA capture ran with locale `en` and all six views render fully in English.
+- Colors and tokens: passed. Existing near-black surfaces, cyan active, green complete, amber approval, and red danger semantics are reused; no gradients or new palettes introduced.
+- Accessibility: passed for prototype scope. Thread rows, inbox cards, plan step controls, and approval actions are semantic native controls with accessible names; status text supplements color.
+- Runtime verification: passed. Automated capture across both viewports completed with zero console errors; the production Vite build succeeds.
+
+final result: passed
+
+## Pass 12 — Codex-aligned message anatomy (2026-07-20)
+
+Scope: redesigned the thread message anatomy in `ConversationDetail.jsx` / `ConversationDetail.css` to match the Codex app conversation model: user messages are plain gray rounded bubbles with no avatar, name, header, or timestamp; agent replies are plain markdown-style text on the background with bold lead-ins and real bullet lists; tool executions are flat timeline rows (icon + past-tense verb + detail + right-aligned result/time) inside an expandable worklog group with a trailing chevron, a thinking row (sparkle, italic muted), edit rows with colored +N/−N diff counts, a terminal row with a mono prompt, and a running row with a spinner plus a cyan "Worked for {duration}" elapsed label; system and resolution events are slim muted inline rows.
+
+- Visual design: passed. No bubbles/avatars/headers on agent messages; diff counts use green/red semantics; the running row uses the cyan token; no new palettes or gradients; both compact and readable type scales updated.
+- Interactions: passed. Worklog group expands/collapses via a single header row with aria-expanded; approval resolution still appends a timeline event and dismisses the inline card.
+- Accessibility: passed for prototype scope. Native buttons, aria-expanded on the worklog toggle, decorative spinner marked aria-hidden.
+- i18n: passed. All new literals wrapped in t() with zh-CN translations; verified zh-CN thread rendering has no untranslated natural-language strings (file paths and commands intentionally stay as-is).
+- Runtime verification: passed. QA screenshots codex-03/04/06 re-captured at 1440x1024 and 1100x800 with zero console errors; production build succeeds.
+
 final result: passed
