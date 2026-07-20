@@ -5,6 +5,7 @@ import { useI18n } from '../../i18n';
 import type {
   DesktopRuntimeConfig,
   LlmProviderRoutingPolicy,
+  LlmRoutingRole,
   ManagedLlmProvider,
   WorkspaceRuntimeProvider,
 } from '../../types';
@@ -35,6 +36,7 @@ export function useWorkspaceRuntimeProvider(
   config: DesktopRuntimeConfig,
   enabled: boolean,
   refreshRevision: number,
+  role: LlmRoutingRole = 'default',
 ): WorkspaceRuntimeProviderSelection {
   const { t } = useI18n();
   const client = useMemo(() => new DesktopApiClient(config), [config]);
@@ -70,12 +72,12 @@ export function useWorkspaceRuntimeProvider(
         scopeKey,
         policy,
         providers,
-        provider: workspaceRuntimeProviderFromAuthority(config, policy, providers),
+        provider: workspaceRuntimeProviderFromAuthority(config, policy, providers, role),
       };
       snapshotRef.current = nextSnapshot;
       setSnapshot(nextSnapshot);
     },
-    [config, scopeKey],
+    [config, role, scopeKey],
   );
 
   useEffect(() => {
@@ -124,9 +126,9 @@ export function useWorkspaceRuntimeProvider(
   const modelOptions = useMemo(
     () =>
       activeSnapshot?.policy
-        ? workspaceRuntimeModelOptions(activeSnapshot.policy, activeSnapshot.providers)
+        ? workspaceRuntimeModelOptions(activeSnapshot.policy, activeSnapshot.providers, role)
         : [],
-    [activeSnapshot],
+    [activeSnapshot, role],
   );
   const selectedModelValue = modelOptions.find((option) => option.selected)?.value ?? null;
 
@@ -137,7 +139,7 @@ export function useWorkspaceRuntimeProvider(
       const current = snapshotRef.current;
       const currentPolicy = current.scopeKey === scopeKey ? current.policy : null;
       const currentOption = currentPolicy
-        ? workspaceRuntimeModelOptions(currentPolicy, current.providers).find(
+        ? workspaceRuntimeModelOptions(currentPolicy, current.providers, role).find(
             (option) => option.value === value,
           )
         : null;
@@ -149,7 +151,7 @@ export function useWorkspaceRuntimeProvider(
       setSelectionState({ scopeKey, switching: true, error: null });
       try {
         let providers = current.providers;
-        let mutation = workspaceRuntimeRoutingMutation(config, currentPolicy, currentOption);
+        let mutation = workspaceRuntimeRoutingMutation(config, currentPolicy, currentOption, role);
         if (!mutation) throw new Error(t('chat.modelRoutingContextChanged'));
 
         let updated: LlmProviderRoutingPolicy;
@@ -161,13 +163,15 @@ export function useWorkspaceRuntimeProvider(
             client.getLlmProviderRoutingPolicy(config.projectId, config.workspaceId),
             client.listLlmProviders(),
           ]);
-          const latestOption = workspaceRuntimeModelOptions(latestPolicy, latestProviders).find(
-            (option) => option.value === value,
-          );
+          const latestOption = workspaceRuntimeModelOptions(
+            latestPolicy,
+            latestProviders,
+            role,
+          ).find((option) => option.value === value);
           if (!latestOption) {
             throw new Error(t('chat.selectedModelUnavailable'));
           }
-          mutation = workspaceRuntimeRoutingMutation(config, latestPolicy, latestOption);
+          mutation = workspaceRuntimeRoutingMutation(config, latestPolicy, latestOption, role);
           if (!mutation) throw new Error(t('chat.modelRoutingContextChanged'));
           providers = latestProviders;
           updated = await client.updateLlmProviderRoutingPolicy(mutation);
@@ -187,7 +191,7 @@ export function useWorkspaceRuntimeProvider(
         throw caught;
       }
     },
-    [client, commitAuthority, config, enabled, scopeKey, t],
+    [client, commitAuthority, config, enabled, role, scopeKey, t],
   );
 
   return {

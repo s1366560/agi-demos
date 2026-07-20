@@ -135,6 +135,12 @@ test('workspace runtime projection follows only the selected workspace default r
 });
 
 test('workspace model selector exposes only routable enabled models and marks the default route', () => {
+  const config = {
+    ...DEFAULT_CONFIG,
+    tenantId: 'tenant-a',
+    projectId: 'project-a',
+    workspaceId: 'workspace-a',
+  };
   const policy = {
     tenant_id: 'tenant-a',
     project_id: 'project-a',
@@ -195,6 +201,24 @@ test('workspace model selector exposes only routable enabled models and marks th
       selected: false,
     },
   ]);
+
+  const codingPolicy = {
+    ...policy,
+    roles: {
+      ...policy.roles,
+      coding: { provider_id: 'provider-a', model_id: 'gpt-fast' },
+    },
+  };
+  assert.deepEqual(
+    workspaceRuntimeModelOptions(codingPolicy, providers, 'coding')
+      .filter((option) => option.selected)
+      .map((option) => option.modelId),
+    ['gpt-fast'],
+  );
+  assert.equal(
+    workspaceRuntimeProviderFromAuthority(config, codingPolicy, providers, 'coding')?.model,
+    'gpt-fast',
+  );
 });
 
 test('workspace model switch replaces only the default route and keeps policy concurrency', () => {
@@ -242,6 +266,44 @@ test('workspace model switch replaces only the default route and keeps policy co
     workspaceRuntimeRoutingMutation({ ...config, workspaceId: 'workspace-b' }, policy, option),
     null,
   );
+});
+
+test('code-session model switch writes the coding route and repairs an empty default route', () => {
+  const config = {
+    ...DEFAULT_CONFIG,
+    tenantId: 'tenant-a',
+    projectId: 'project-a',
+    workspaceId: 'workspace-a',
+  };
+  const policy = {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    workspace_id: 'workspace-a',
+    revision: 0,
+    roles: { default: null, fast: null, coding: null, vision: null },
+    fallbacks: [],
+    updated_at: '2026-07-20T00:00:00Z',
+  };
+  const option = {
+    value: workspaceRuntimeModelSelectionValue('glm-provider', 'glm-5.2'),
+    providerId: 'glm-provider',
+    providerLabel: 'OpenAI-compatible',
+    modelId: 'glm-5.2',
+    selected: false,
+  };
+
+  assert.deepEqual(workspaceRuntimeRoutingMutation(config, policy, option, 'coding'), {
+    projectId: 'project-a',
+    workspaceId: 'workspace-a',
+    expectedRevision: 0,
+    roles: {
+      default: { provider_id: 'glm-provider', model_id: 'glm-5.2' },
+      fast: null,
+      coding: { provider_id: 'glm-provider', model_id: 'glm-5.2' },
+      vision: null,
+    },
+    fallbacks: [],
+  });
 });
 
 test('Desktop runtime configuration and Tauri configure payload contain no LLM authority', () => {

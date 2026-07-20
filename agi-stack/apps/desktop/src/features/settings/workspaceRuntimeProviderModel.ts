@@ -2,6 +2,7 @@ import type {
   DesktopRuntimeConfig,
   LlmProviderRoutingPolicy,
   LlmProviderRoutingPolicyMutationInput,
+  LlmRoutingRole,
   ManagedLlmProvider,
   WorkspaceRuntimeProvider,
 } from '../../types';
@@ -22,8 +23,9 @@ export function workspaceRuntimeModelSelectionValue(providerId: string, modelId:
 export function workspaceRuntimeModelOptions(
   policy: LlmProviderRoutingPolicy,
   providers: readonly ManagedLlmProvider[],
+  role: LlmRoutingRole = 'default',
 ): WorkspaceRuntimeModelOption[] {
-  const selected = policy.roles.default;
+  const selected = policy.roles[role] ?? policy.roles.default;
   return providers.flatMap((provider) =>
     localRuntimeRoutingModelIds(provider).map((modelId) => ({
       value: workspaceRuntimeModelSelectionValue(provider.id, modelId),
@@ -40,6 +42,7 @@ export function workspaceRuntimeRoutingMutation(
   config: DesktopRuntimeConfig,
   policy: LlmProviderRoutingPolicy,
   option: WorkspaceRuntimeModelOption,
+  role: LlmRoutingRole = 'default',
 ): LlmProviderRoutingPolicyMutationInput | null {
   if (
     policy.tenant_id !== config.tenantId.trim() ||
@@ -48,13 +51,15 @@ export function workspaceRuntimeRoutingMutation(
   ) {
     return null;
   }
+  const target = { provider_id: option.providerId, model_id: option.modelId };
   return {
     projectId: policy.project_id,
     workspaceId: policy.workspace_id,
     expectedRevision: policy.revision,
     roles: {
       ...policy.roles,
-      default: { provider_id: option.providerId, model_id: option.modelId },
+      default: policy.roles.default ?? target,
+      [role]: target,
     },
     fallbacks: [...policy.fallbacks],
   };
@@ -64,6 +69,7 @@ export function workspaceRuntimeProviderFromAuthority(
   config: DesktopRuntimeConfig,
   policy: LlmProviderRoutingPolicy,
   providers: readonly ManagedLlmProvider[],
+  role: LlmRoutingRole = 'default',
 ): WorkspaceRuntimeProvider | null {
   const tenantId = config.tenantId.trim();
   const projectId = config.projectId.trim();
@@ -79,7 +85,7 @@ export function workspaceRuntimeProviderFromAuthority(
     return null;
   }
 
-  const target = policy.roles.default;
+  const target = policy.roles[role] ?? policy.roles.default;
   if (!target) return null;
   const provider = providers.find(
     (item) =>

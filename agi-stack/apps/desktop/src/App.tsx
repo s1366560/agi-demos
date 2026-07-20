@@ -237,6 +237,7 @@ import type {
   HitlResponseSubmission,
   LoginOutcome,
   LocalRuntimeStatus,
+  LlmRoutingRole,
   PlanSnapshot,
   ProjectSummary,
   ProjectWorkItem,
@@ -1681,6 +1682,8 @@ export function App() {
     localRuntimeStatus,
     runsInTauri,
   );
+  const runtimeModelRole: LlmRoutingRole =
+    scopedConversation?.agent_config?.capability_mode === 'code' ? 'coding' : 'default';
   const {
     provider: runtimeProvider,
     modelOptions: runtimeModelOptions,
@@ -1692,6 +1695,7 @@ export function App() {
     config,
     identityAuthenticated && localRuntimeMode && localRuntimeAuthorityReady,
     runtimeProjectionRefreshRevision,
+    runtimeModelRole,
   );
 
   const syncLocalRuntimeConfig = useCallback(
