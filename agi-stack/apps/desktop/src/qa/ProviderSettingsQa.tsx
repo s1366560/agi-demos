@@ -436,6 +436,72 @@ function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function agentFromBody(
+  body: Record<string, unknown>,
+  current?: ManagedAgentDefinition,
+): ManagedAgentDefinition {
+  const trigger = current?.trigger;
+  const currentTrigger =
+    trigger && typeof trigger === 'object' && !Array.isArray(trigger)
+      ? (trigger as Record<string, unknown>)
+      : {};
+  const name = stringValue(body.name, current?.name ?? 'new_agent');
+  return {
+    ...current,
+    id: current?.id ?? `agent-${name}`,
+    tenant_id: QA_TENANT_ID,
+    project_id:
+      typeof body.project_id === 'string' || body.project_id === null
+        ? body.project_id
+        : (current?.project_id ?? null),
+    name,
+    display_name: stringValue(body.display_name, current?.display_name ?? name),
+    system_prompt: stringValue(body.system_prompt, current?.system_prompt ?? ''),
+    trigger: {
+      description: stringValue(
+        body.trigger_description,
+        stringValue(currentTrigger.description, 'Default agent trigger'),
+      ),
+      keywords: stringArray(body.trigger_keywords, stringArray(currentTrigger.keywords)),
+      examples: stringArray(body.trigger_examples, stringArray(currentTrigger.examples)),
+    },
+    model: stringValue(body.model, stringValue(current?.model, 'inherit')),
+    temperature: numberValue(body.temperature, numberValue(current?.temperature, 0.7)),
+    max_tokens: numberValue(body.max_tokens, numberValue(current?.max_tokens, 4096)),
+    max_iterations: numberValue(body.max_iterations, numberValue(current?.max_iterations, 10)),
+    allowed_tools: stringArray(body.allowed_tools, current?.allowed_tools ?? []),
+    allowed_skills: stringArray(body.allowed_skills, current?.allowed_skills ?? []),
+    allowed_mcp_servers: stringArray(
+      body.allowed_mcp_servers,
+      current?.allowed_mcp_servers ?? [],
+    ),
+    fallback_models: stringArray(body.fallback_models, stringArray(current?.fallback_models)),
+    can_spawn: booleanValue(body.can_spawn, booleanValue(current?.can_spawn, false)),
+    max_spawn_depth: numberValue(
+      body.max_spawn_depth,
+      numberValue(current?.max_spawn_depth, 3),
+    ),
+    agent_to_agent_enabled: booleanValue(
+      body.agent_to_agent_enabled,
+      booleanValue(current?.agent_to_agent_enabled, false),
+    ),
+    agent_to_agent_allowlist: stringArray(
+      body.agent_to_agent_allowlist,
+      stringArray(current?.agent_to_agent_allowlist),
+    ),
+    discoverable: booleanValue(body.discoverable, booleanValue(current?.discoverable, true)),
+    max_retries: numberValue(body.max_retries, numberValue(current?.max_retries, 0)),
+    source: current?.source ?? 'database',
+    enabled: current?.enabled ?? true,
+    status: current?.status ?? 'active',
+    updated_at: NOW,
+  };
+}
+
 function isRouteTarget(value: unknown): value is LlmRouteTarget {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const target = value as Record<string, unknown>;
@@ -572,6 +638,11 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
   if (method === 'GET' && path === '/api/v1/agent/definitions') {
     return jsonResponse({ definitions: agents });
+  }
+  if (method === 'POST' && path === '/api/v1/agent/definitions') {
+    const created = agentFromBody(readJsonBody(body));
+    agents = [created, ...agents];
+    return jsonResponse(created, 201);
   }
   if (method === 'GET' && path === '/api/v1/subagents/') {
     return jsonResponse({ subagents, total: subagents.length });
@@ -732,6 +803,22 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         : agent,
     );
     return jsonResponse(agents.find((agent) => agent.id === agentId) ?? null);
+  }
+
+  const agentDefinitionMatch = path.match(/^\/api\/v1\/agent\/definitions\/([^/]+)$/);
+  if (agentDefinitionMatch) {
+    const agentId = decodeURIComponent(agentDefinitionMatch[1]);
+    const current = agents.find((agent) => agent.id === agentId);
+    if (!current) return jsonResponse({ detail: 'Definition not found.' }, 404);
+    if (method === 'PUT') {
+      const updated = agentFromBody(readJsonBody(body), current);
+      agents = agents.map((agent) => (agent.id === agentId ? updated : agent));
+      return jsonResponse(updated);
+    }
+    if (method === 'DELETE') {
+      agents = agents.filter((agent) => agent.id !== agentId);
+      return jsonResponse({ deleted: true, id: agentId });
+    }
   }
 
   const subagentStatusMatch = path.match(/^\/api\/v1\/subagents\/([^/]+)\/enable$/);

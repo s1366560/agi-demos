@@ -939,6 +939,30 @@ export type ManagedAgentDefinition = {
   [key: string]: unknown;
 };
 
+export type ManagedAgentDefinitionMutation = {
+  name: string;
+  display_name: string;
+  system_prompt: string;
+  project_id: string | null;
+  trigger_description: string;
+  trigger_examples: string[];
+  trigger_keywords: string[];
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  max_iterations: number;
+  allowed_tools: string[];
+  allowed_skills: string[];
+  allowed_mcp_servers: string[];
+  can_spawn: boolean;
+  max_spawn_depth: number;
+  agent_to_agent_enabled: boolean;
+  agent_to_agent_allowlist: string[] | null;
+  discoverable: boolean;
+  max_retries: number;
+  fallback_models: string[];
+};
+
 export type ManagedSubAgent = {
   id: string;
   tenant_id: string;

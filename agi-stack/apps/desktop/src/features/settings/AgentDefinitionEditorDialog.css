@@ -1,0 +1,257 @@
+.agent-definition-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(3 8 14 / 78%);
+  backdrop-filter: blur(8px);
+}
+
+.agent-definition-dialog {
+  display: flex;
+  width: min(880px, calc(100vw - 48px));
+  max-height: min(820px, calc(100vh - 48px));
+  flex-direction: column;
+  overflow: hidden;
+  color: #e8edf3;
+  background: #0d141d;
+  border: 1px solid #2d3c4d;
+  border-radius: 13px;
+  box-shadow: 0 28px 80px rgb(0 0 0 / 55%);
+}
+
+.agent-definition-dialog-heading {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 34px;
+  gap: 14px;
+  align-items: start;
+  padding: 20px 22px 18px;
+  border-bottom: 1px solid #253140;
+}
+
+.agent-definition-dialog-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: #e8ad5b;
+  background: #2a2014;
+  border: 1px solid #6d5334;
+  border-radius: 10px;
+}
+
+.agent-definition-dialog-heading span {
+  color: #6c8297;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.agent-definition-dialog-heading h2 {
+  margin: 3px 0 4px;
+  font-size: 21px;
+}
+
+.agent-definition-dialog-heading p {
+  margin: 0;
+  color: #8b9aac;
+  font-size: 12px;
+}
+
+.agent-definition-dialog-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: #9aabba;
+  background: #111b26;
+  border: 1px solid #2b3949;
+  border-radius: 7px;
+}
+
+.agent-definition-dialog-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 22px 0;
+  border-bottom: 1px solid #253140;
+}
+
+.agent-definition-dialog-tabs button {
+  padding: 9px 12px 10px;
+  color: #8293a5;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.agent-definition-dialog-tabs button.active {
+  color: #dce8f2;
+  border-bottom-color: #38d6ff;
+}
+
+.agent-definition-dialog-body {
+  min-height: 360px;
+  overflow: auto;
+  padding: 20px 22px 24px;
+}
+
+.agent-definition-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.agent-definition-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.agent-definition-field.wide {
+  grid-column: 1 / -1;
+}
+
+.agent-definition-field > span,
+.agent-definition-toggle-field > span {
+  color: #aebbc8;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.agent-definition-field input,
+.agent-definition-field select,
+.agent-definition-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 11px;
+  color: #e5edf4;
+  font: inherit;
+  font-size: 12px;
+  background: #0a1119;
+  border: 1px solid #2a3949;
+  border-radius: 7px;
+  outline: none;
+  resize: vertical;
+}
+
+.agent-definition-field input:focus,
+.agent-definition-field select:focus,
+.agent-definition-field textarea:focus {
+  border-color: #38bfe3;
+  box-shadow: 0 0 0 2px rgb(56 191 227 / 13%);
+}
+
+.agent-definition-field input:disabled,
+.agent-definition-field select:disabled,
+.agent-definition-field textarea:disabled {
+  opacity: 0.55;
+}
+
+.agent-definition-field small {
+  color: #ff8e86;
+  font-size: 10px;
+}
+
+.agent-definition-toggle-field {
+  display: flex;
+  min-height: 42px;
+  gap: 10px;
+  align-items: center;
+  padding: 0 12px;
+  background: #0a1119;
+  border: 1px solid #2a3949;
+  border-radius: 7px;
+}
+
+.agent-definition-toggle-field input {
+  accent-color: #38bfe3;
+}
+
+.agent-definition-dialog-error {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin: 0 22px 14px;
+  padding: 10px 12px;
+  color: #ffb0aa;
+  font-size: 11px;
+  background: rgb(127 35 35 / 20%);
+  border: 1px solid #663735;
+  border-radius: 7px;
+}
+
+.agent-definition-dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 22px;
+  border-top: 1px solid #253140;
+}
+
+.agent-definition-dialog-footer > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.agent-definition-dialog-footer button {
+  display: inline-flex;
+  min-height: 34px;
+  gap: 7px;
+  align-items: center;
+  padding: 0 13px;
+  color: #aebbc8;
+  background: #111b26;
+  border: 1px solid #2b3949;
+  border-radius: 7px;
+}
+
+.agent-definition-dialog-footer button.primary {
+  color: #061117;
+  background: #5ccae8;
+  border-color: #69d6f3;
+}
+
+.agent-definition-dialog-footer button.danger,
+.agent-definition-dialog-footer button.agent-definition-delete {
+  color: #ffaaa3;
+  background: #231516;
+  border-color: #603635;
+}
+
+.agent-definition-delete-confirmation {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #ffb0aa;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .agent-definition-dialog-backdrop {
+    padding: 10px;
+  }
+
+  .agent-definition-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .agent-definition-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-definition-field.wide {
+    grid-column: auto;
+  }
+
+  .agent-definition-dialog-footer,
+  .agent-definition-delete-confirmation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

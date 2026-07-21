@@ -4,7 +4,9 @@ import {
   LockClosedIcon,
   MagicWandIcon,
   MagnifyingGlassIcon,
+  Pencil2Icon,
   PersonIcon,
+  PlusIcon,
   ReloadIcon,
 } from '@radix-ui/react-icons';
 
@@ -66,12 +68,15 @@ export function ManagedResourceWorkspace({
   actionError,
   busy,
   canManage,
+  canCreate,
   mode,
   onQueryChange,
   onFilterChange,
   onSelect,
   onRetry,
   onAction,
+  onCreate,
+  onEdit,
 }: {
   section: ResourceSection;
   items: ManagedResource[];
@@ -83,12 +88,15 @@ export function ManagedResourceWorkspace({
   actionError: string | null;
   busy: boolean;
   canManage: boolean;
+  canCreate: boolean;
   mode: RuntimeMode;
   onQueryChange: (query: string) => void;
   onFilterChange: (filter: ManagedResourceListFilter) => void;
   onSelect: (id: string) => void;
   onRetry: () => void;
   onAction: (item: ManagedResource) => void;
+  onCreate: () => void;
+  onEdit: (item: ManagedResource) => void;
 }) {
   const { t } = useI18n();
   const meta = sectionMeta[section];
@@ -101,6 +109,11 @@ export function ManagedResourceWorkspace({
             <span>{t(meta.eyebrow)}</span>
             <h1>{t(meta.label)}</h1>
           </div>
+          {section === 'agents' && canCreate ? (
+            <button type="button" className="managed-resource-create" onClick={onCreate}>
+              <PlusIcon /> {t('settings.agentEditor.createAction')}
+            </button>
+          ) : null}
         </header>
         <label className="managed-resource-search">
           <MagnifyingGlassIcon />
@@ -170,6 +183,7 @@ export function ManagedResourceWorkspace({
             canManage={canManage}
             mode={mode}
             onAction={() => onAction(selected)}
+            onEdit={() => onEdit(selected)}
           />
         ) : (
           <div className="managed-resource-detail-empty">
@@ -225,6 +239,7 @@ function ResourceDetail({
   canManage,
   mode,
   onAction,
+  onEdit,
 }: {
   section: ResourceSection;
   item: ManagedResource;
@@ -233,6 +248,7 @@ function ResourceDetail({
   canManage: boolean;
   mode: RuntimeMode;
   onAction: () => void;
+  onEdit: () => void;
 }) {
   const { locale, t } = useI18n();
   const meta = sectionMeta[section];
@@ -240,6 +256,7 @@ function ResourceDetail({
   const facts = managedResourceFacts(section, item);
   const groups = managedResourceCapabilityGroups(section, item);
   const action = managedResourceAction(section, item, canManage, mode);
+  const editable = section === 'agents' && canManage && !resourceIsImmutable(section, item, mode);
   const notice = resourceIsImmutable(section, item, mode)
     ? t('settings.immutableResource')
     : !canManage
@@ -273,6 +290,16 @@ function ResourceDetail({
             >
               {busy ? <ReloadIcon className="managed-resource-spin" /> : <meta.Icon />}
               {t(action.nextActive ? 'settings.enable' : 'settings.disable')}
+            </button>
+          ) : null}
+          {editable ? (
+            <button
+              type="button"
+              className="managed-resource-secondary-action"
+              disabled={busy}
+              onClick={onEdit}
+            >
+              <Pencil2Icon /> {t('common.edit')}
             </button>
           ) : null}
         </div>

@@ -45,6 +45,7 @@ import type {
   LlmProviderUsageStatistic,
   LlmProviderValidationOutcome,
   ManagedAgentDefinition,
+  ManagedAgentDefinitionMutation,
   ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
@@ -1264,6 +1265,47 @@ export class DesktopApiClient {
         query ? `?${query}` : ''
       }`,
       { method: 'PATCH', body: { enabled } },
+    );
+  }
+
+  async createManagedAgentDefinition(
+    body: ManagedAgentDefinitionMutation,
+  ): Promise<ManagedAgentDefinition> {
+    const params = new URLSearchParams();
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    const query = params.toString();
+    return this.request<ManagedAgentDefinition>(
+      `/api/v1/agent/definitions${query ? `?${query}` : ''}`,
+      { method: 'POST', body },
+    );
+  }
+
+  async updateManagedAgentDefinition(
+    definitionId: string,
+    body: ManagedAgentDefinitionMutation,
+  ): Promise<ManagedAgentDefinition> {
+    const params = new URLSearchParams();
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    const query = params.toString();
+    return this.request<ManagedAgentDefinition>(
+      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${
+        query ? `?${query}` : ''
+      }`,
+      { method: 'PUT', body },
+    );
+  }
+
+  async deleteManagedAgentDefinition(
+    definitionId: string,
+  ): Promise<{ deleted: boolean; id: string }> {
+    const params = new URLSearchParams();
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    const query = params.toString();
+    return this.request<{ deleted: boolean; id: string }>(
+      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${
+        query ? `?${query}` : ''
+      }`,
+      { method: 'DELETE' },
     );
   }
 

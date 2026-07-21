@@ -22,11 +22,13 @@ import type {
   ConnectionState,
   DesktopRuntimeConfig,
   ManagedAgentDefinition,
+  ManagedAgentDefinitionMutation,
   ManagedPlugin,
   ManagedSkill,
   ManagedSubAgent,
 } from '../../types';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
+import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import {
   ManagedResourceWorkspace,
   type ManagedResource,
@@ -157,6 +159,12 @@ export function SettingsWindow({
   const [resourceFilter, setResourceFilter] = useState<ManagedResourceListFilter>('all');
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [agentEditor, setAgentEditor] = useState<{
+    definition: ManagedAgentDefinition | null;
+    key: string;
+  } | null>(null);
+  const [agentEditorBusy, setAgentEditorBusy] = useState(false);
+  const [agentEditorError, setAgentEditorError] = useState<string | null>(null);
   const resourceRequestId = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeSectionRef = useRef(section);
@@ -176,6 +184,10 @@ export function SettingsWindow({
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
   const isResourceSection = isResource(section);
   const canManageProviders = providerManagementAllowed(config.mode, auth.user?.roles ?? []);
+  const canManageAgentDefinitions = (auth.user?.roles ?? []).some((role) => {
+    const normalized = role.trim().toLowerCase();
+    return normalized === 'admin' || normalized === 'owner';
+  });
   const settingsDialogRef = useModalDialog({
     active: open,
     initialFocusRef: searchInputRef,
@@ -398,6 +410,57 @@ export function SettingsWindow({
     }
   };
 
+  const openAgentEditor = (definition: ManagedAgentDefinition | null) => {
+    setAgentEditorError(null);
+    setAgentEditor({ definition, key: `${definition?.id ?? 'new'}:${crypto.randomUUID()}` });
+  };
+
+  const saveAgentDefinition = async (input: ManagedAgentDefinitionMutation) => {
+    if (!agentEditor || !canManageAgentDefinitions) return;
+    const mutationContextKey = resourceContextKey;
+    const existingId = agentEditor.definition?.id ?? null;
+    setAgentEditorBusy(true);
+    setAgentEditorError(null);
+    try {
+      const client = new DesktopApiClient(config);
+      const saved = existingId
+        ? await client.updateManagedAgentDefinition(existingId, input)
+        : await client.createManagedAgentDefinition(input);
+      if (resourceContextKeyRef.current !== mutationContextKey) return;
+      setAgentEditor(null);
+      await loadResources('agents');
+      setSelectedResourceId(saved.id);
+    } catch (caught) {
+      if (resourceContextKeyRef.current === mutationContextKey) {
+        setAgentEditorError(caught instanceof Error ? caught.message : String(caught));
+      }
+    } finally {
+      if (resourceContextKeyRef.current === mutationContextKey) setAgentEditorBusy(false);
+    }
+  };
+
+  const deleteAgentDefinition = async () => {
+    const definitionId = agentEditor?.definition?.id;
+    if (!definitionId || !canManageAgentDefinitions) return;
+    const mutationContextKey = resourceContextKey;
+    setAgentEditorBusy(true);
+    setAgentEditorError(null);
+    try {
+      const client = new DesktopApiClient(config);
+      await client.deleteManagedAgentDefinition(definitionId);
+      if (resourceContextKeyRef.current !== mutationContextKey) return;
+      setAgentEditor(null);
+      setSelectedResourceId(null);
+      await loadResources('agents');
+    } catch (caught) {
+      if (resourceContextKeyRef.current === mutationContextKey) {
+        setAgentEditorError(caught instanceof Error ? caught.message : String(caught));
+      }
+    } finally {
+      if (resourceContextKeyRef.current === mutationContextKey) setAgentEditorBusy(false);
+    }
+  };
+
   const windowContent = (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="settings-window-backdrop" onMouseDown={onClose}>
@@ -547,6 +610,7 @@ export function SettingsWindow({
                   actionError={resourceActionError}
                   busy={actionBusyId !== null}
                   mode={config.mode}
+                  canCreate={canManageAgentDefinitions}
                   canManage={
                     selectedResource
                       ? managedResourceManagementAllowed(
@@ -565,11 +629,28 @@ export function SettingsWindow({
                   }}
                   onRetry={() => void loadResources(section)}
                   onAction={(item) => void toggleResource(item)}
+                  onCreate={() => openAgentEditor(null)}
+                  onEdit={(item) => openAgentEditor(item as ManagedAgentDefinition)}
                 />
               ) : null}
             </main>
           </div>
         </section>
+        {agentEditor ? (
+          <AgentDefinitionEditorDialog
+            key={agentEditor.key}
+            definition={agentEditor.definition}
+            projects={auth.projects.filter((project) => project.tenant_id === config.tenantId)}
+            initialProjectId={config.projectId || null}
+            busy={agentEditorBusy}
+            error={agentEditorError}
+            onClose={() => {
+              if (!agentEditorBusy) setAgentEditor(null);
+            }}
+            onSave={(input) => void saveAgentDefinition(input)}
+            onDelete={agentEditor.definition ? () => void deleteAgentDefinition() : null}
+          />
+        ) : null}
       </div>
     </Theme>
   );

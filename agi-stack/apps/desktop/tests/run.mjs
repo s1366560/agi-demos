@@ -99,6 +99,7 @@ const testFiles = [
   'settings-navigation-model.test.mjs',
   'settings-entry-routing.test.mjs',
   'settings-modal-behavior.test.mjs',
+  'agent-definition-form-model.test.mjs',
   'tauri-command-surface.test.mjs',
   'managed-resource-model.test.mjs',
   'provider-management.test.mjs',

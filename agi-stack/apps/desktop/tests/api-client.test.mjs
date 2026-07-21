@@ -2795,6 +2795,74 @@ test('managed agent APIs preserve project scope and the enabled mutation body', 
   }
 });
 
+test('managed Agent definition CRUD preserves tenant scope and request bodies', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    if (init?.method === 'DELETE') {
+      return new Response(JSON.stringify({ deleted: true, id: 'agent/1' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        id: 'agent/1',
+        name: 'release_reviewer',
+        display_name: 'Release reviewer',
+        system_prompt: 'Review releases.',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const mutation = {
+    name: 'release_reviewer',
+    display_name: 'Release reviewer',
+    system_prompt: 'Review releases.',
+    project_id: 'project/1',
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+    });
+
+    const created = await client.createManagedAgentDefinition(mutation);
+    const updated = await client.updateManagedAgentDefinition(created.id, mutation);
+    const deleted = await client.deleteManagedAgentDefinition(updated.id);
+
+    assert.equal(deleted.deleted, true);
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/agent/definitions?tenant_id=tenant+1',
+          'POST',
+          JSON.stringify(mutation),
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1?tenant_id=tenant+1',
+          'PUT',
+          JSON.stringify(mutation),
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/agent/definitions/agent%2F1?tenant_id=tenant+1',
+          'DELETE',
+          undefined,
+        ],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('managed subagent APIs preserve tenant scope and enabled mutation contracts', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
