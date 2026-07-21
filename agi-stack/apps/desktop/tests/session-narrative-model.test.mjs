@@ -10,6 +10,7 @@ const { buildSessionNarrative, sessionActivityPresence, sessionActivitySummary }
 test('consecutive tool calls are grouped without merging surrounding conversation turns', () => {
   const narrative = buildSessionNarrative([
     { id: 'user-1', type: 'user_message', role: 'user', content: 'Inspect the runner.' },
+    { id: 'thought-1', type: 'thought', content: 'The fixture may be shared.' },
     { id: 'act-1', type: 'act', toolName: 'read_file' },
     { id: 'observe-1', type: 'observe', toolName: 'read_file' },
     { id: 'act-2', type: 'act', toolName: 'run_tests' },
@@ -20,7 +21,10 @@ test('consecutive tool calls are grouped without merging surrounding conversatio
   assert.equal(narrative.length, 3);
   assert.equal(narrative[0].kind, 'item');
   assert.equal(narrative[1].kind, 'tool_group');
-  assert.equal(narrative[1].items.length, 4);
+  assert.deepEqual(
+    narrative[1].items.map((item) => item.type),
+    ['thought', 'act', 'observe', 'act', 'observe'],
+  );
   assert.equal(narrative[1].toolCount, 2);
   assert.equal(narrative[1].status, 'complete');
   assert.equal(narrative[2].kind, 'item');
@@ -37,6 +41,18 @@ test('tool groups expose running and failed states from structural events', () =
     { id: 'observe-1', type: 'observe', toolName: 'run_tests', isError: true },
   ]);
   assert.equal(failed[0].status, 'failed');
+});
+
+test('a standalone thought remains narrative text when no tool event follows it', () => {
+  const narrative = buildSessionNarrative([
+    { id: 'thought-1', type: 'thought', content: 'I am preparing the answer.' },
+    { id: 'agent-1', type: 'assistant_message', role: 'assistant', content: 'Ready.' },
+  ]);
+
+  assert.deepEqual(
+    narrative.map((node) => node.kind),
+    ['item', 'item'],
+  );
 });
 
 test('activity summary uses the latest event and leaves missing evidence unavailable', () => {

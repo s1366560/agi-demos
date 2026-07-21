@@ -75,6 +75,7 @@ mod session_projection;
 mod session_store;
 mod steering;
 mod task_session;
+mod timeline_presentation;
 mod tool_authority;
 mod worktree;
 
@@ -8293,7 +8294,7 @@ impl ReActObserver for LocalTimelineObserver {
     async fn on_tool_call(
         &self,
         _session_id: &str,
-        _round: u64,
+        round: u64,
         tool: &str,
         input_json: &str,
     ) -> CoreResult<()> {
@@ -8304,10 +8305,17 @@ impl ReActObserver for LocalTimelineObserver {
             None,
             None,
             None,
-            json!({ "tool_name": tool, "tool_input": redacted_input }),
+            json!({
+                "tool_name": tool,
+                "tool_input": redacted_input,
+                "round": round,
+                "display": timeline_presentation::display(tool),
+            }),
         );
         item["toolName"] = json!(tool);
         item["toolInput"] = json!(redacted_input);
+        item["round"] = json!(round);
+        item["display"] = timeline_presentation::display(tool);
         self.state.append_timeline(&self.conversation_id, item);
         Ok(())
     }
@@ -8315,7 +8323,7 @@ impl ReActObserver for LocalTimelineObserver {
     async fn on_tool_result(
         &self,
         _session_id: &str,
-        _round: u64,
+        round: u64,
         tool: &str,
         input_json: &str,
         output_json: &str,
@@ -8334,12 +8342,20 @@ impl ReActObserver for LocalTimelineObserver {
                 "tool_output": redacted_output,
                 "observation": redacted_output,
                 "is_error": false,
+                "round": round,
+                "display": timeline_presentation::display(tool),
             }),
         );
         item["toolName"] = json!(tool);
         item["toolInput"] = json!(redacted_input);
         item["toolOutput"] = json!(redacted_output);
         item["isError"] = json!(false);
+        item["round"] = json!(round);
+        item["display"] = timeline_presentation::display(tool);
+        if let Some(file_metadata) = timeline_presentation::file_metadata(&redacted_output) {
+            item["fileMetadata"] = file_metadata.clone();
+            item["payload"]["file_metadata"] = file_metadata;
+        }
         self.state.append_timeline(&self.conversation_id, item);
         if matches!(tool, "export_artifact" | "batch_export_artifacts") {
             let run_id = self

@@ -2,10 +2,8 @@ import { isValidElement, memo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
-  CodeIcon,
   CopyIcon,
   DotsHorizontalIcon,
-  PersonIcon,
 } from '@radix-ui/react-icons';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
@@ -86,22 +84,11 @@ export function NarrativeMessageFrame({
       }`}
       data-timeline-anchor-id={timelineItemId}
     >
-      <span className="session-thread-avatar" aria-hidden="true">
-        {kind === 'user' ? (
-          <PersonIcon />
-        ) : kind === 'agent' ? (
-          <CodeIcon />
-        ) : (
-          <ActivityLogIcon />
-        )}
-      </span>
       <div className="session-message-body">
         <header className="transcript-meta">
-          <span className="transcript-author">
-            <strong>{label}</strong>
-            {badge ? <em>{badge}</em> : null}
+          <span className="session-message-context sr-only">
+            {[label, badge, time].filter(Boolean).join(' · ')}
           </span>
-          <time>{time}</time>
           <MessageActionMenu content={content} />
         </header>
         {children}

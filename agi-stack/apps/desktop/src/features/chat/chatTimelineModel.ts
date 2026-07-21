@@ -15,7 +15,25 @@ export type ToolCallPair = {
   result: AgentTimelineItem | null;
 };
 
+export type ToolActivityRow =
+  | { kind: 'thought'; item: AgentTimelineItem }
+  | { kind: 'tool_call'; pair: ToolCallPair };
+
 export type ToolCallPairStatus = 'running' | 'complete' | 'failed';
+
+export type ToolCallPresentationKind =
+  | 'search'
+  | 'read'
+  | 'command'
+  | 'edit'
+  | 'check'
+  | 'tool';
+
+export type ToolCallDiffStat = {
+  filesChanged: number;
+  additions: number;
+  deletions: number;
+};
 
 export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
   const pairs: ToolCallPair[] = [];
@@ -41,6 +59,30 @@ export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
   return pairs;
 }
 
+export function toolActivityRows(items: AgentTimelineItem[]): ToolActivityRow[] {
+  const rows: ToolActivityRow[] = [];
+  let toolItems: AgentTimelineItem[] = [];
+  const flushTools = () => {
+    rows.push(
+      ...pairToolCallItems(toolItems).map(
+        (pair): ToolActivityRow => ({ kind: 'tool_call', pair }),
+      ),
+    );
+    toolItems = [];
+  };
+
+  for (const item of items) {
+    if (item.type === 'thought') {
+      flushTools();
+      rows.push({ kind: 'thought', item });
+    } else {
+      toolItems.push(item);
+    }
+  }
+  flushTools();
+  return rows;
+}
+
 export function toolCallPairStatus(pair: ToolCallPair): ToolCallPairStatus {
   if (pair.result) {
     return pair.result.isError || pair.result.error ? 'failed' : 'complete';
@@ -63,6 +105,63 @@ export function formatToolCallDuration(durationMs: number): string {
   const minutes = Math.floor(durationMs / 60_000);
   const seconds = Math.round((durationMs % 60_000) / 1000);
   return `${minutes}m ${seconds}s`;
+}
+
+export function toolCallPresentationKind(pair: ToolCallPair): ToolCallPresentationKind {
+  for (const item of [pair.result, pair.call]) {
+    const kind = item && isRecord(item.display) ? item.display.kind : null;
+    if (
+      kind === 'search' ||
+      kind === 'read' ||
+      kind === 'command' ||
+      kind === 'edit' ||
+      kind === 'check'
+    ) {
+      return kind;
+    }
+  }
+  return 'tool';
+}
+
+export function toolCallDiffStat(pair: ToolCallPair): ToolCallDiffStat | null {
+  for (const item of [pair.result, pair.call]) {
+    if (!item) continue;
+    const metadata = isRecord(item.fileMetadata)
+      ? item.fileMetadata
+      : isRecord(item.toolOutput) && isRecord(item.toolOutput.fileMetadata)
+        ? item.toolOutput.fileMetadata
+        : null;
+    const diffStat = metadata && isRecord(metadata.diffStat) ? metadata.diffStat : null;
+    if (!diffStat) continue;
+    const filesChanged = nonNegativeInteger(diffStat.filesChanged);
+    const additions = nonNegativeInteger(diffStat.additions);
+    const deletions = nonNegativeInteger(diffStat.deletions);
+    if (filesChanged === null && additions === null && deletions === null) continue;
+    return {
+      filesChanged: filesChanged ?? 0,
+      additions: additions ?? 0,
+      deletions: deletions ?? 0,
+    };
+  }
+  return null;
+}
+
+export function timelineWorkingStartedAtUs(items: AgentTimelineItem[]): number | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (
+      item.type === 'run_status' &&
+      isRecord(item.payload) &&
+      item.payload.status === 'running'
+    ) {
+      return item.eventTimeUs;
+    }
+  }
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.role === 'user' || item.type === 'user_message') return item.eventTimeUs;
+  }
+  return null;
 }
 
 export type TimelineDayLabel =
@@ -150,4 +249,12 @@ function startOfDay(timeMs: number): number {
   const date = new Date(timeMs);
   date.setHours(0, 0, 0, 0);
   return date.getTime();
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

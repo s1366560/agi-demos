@@ -1,13 +1,18 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Button, Text } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
+  CaretRightIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CodeIcon,
   ExclamationTriangleIcon,
+  FileTextIcon,
+  MagnifyingGlassIcon,
+  Pencil1Icon,
   ReloadIcon,
+  StarIcon,
   UpdateIcon,
 } from '@radix-ui/react-icons';
 
@@ -25,14 +30,17 @@ import type { A2UIActionView } from './a2uiAction';
 import {
   detectPayloadLanguage,
   formatToolCallDuration,
-  pairToolCallItems,
   shouldShowAgentWorkingIndicator,
+  timelineWorkingStartedAtUs,
   timelineDayKey,
   timelineDayLabel,
+  toolActivityRows,
+  toolCallDiffStat,
   toolCallPairDurationMs,
   toolCallPairStatus,
+  toolCallPresentationKind,
 } from './chatTimelineModel';
-import type { ToolCallPair } from './chatTimelineModel';
+import type { ToolCallPair, ToolCallPresentationKind } from './chatTimelineModel';
 import {
   formatTimelineTime,
   isImportantTimelineItem,
@@ -282,7 +290,7 @@ export function AgentTimeline({
                 >
                   <summary>
                     <span className="timeline-tool-group-icon" aria-hidden>
-                      <CodeIcon />
+                      <ActivityLogIcon />
                     </span>
                     <span>
                       <strong>{t('session.toolActivity')}</strong>
@@ -292,14 +300,25 @@ export function AgentTimeline({
                     <ChevronRightIcon className="timeline-tool-group-chevron" aria-hidden />
                   </summary>
                   <div className="timeline-tool-group-items">
-                    {pairToolCallItems(node.items).map((pair) => (
-                      <ToolCallPairView
-                        pair={pair}
-                        expanded={expandedItems[pair.call.id] ?? false}
-                        onToggle={() => onToggleItem(pair.call)}
-                        key={pair.call.id}
-                      />
-                    ))}
+                    {toolActivityRows(node.items).map((row) =>
+                      row.kind === 'thought' ? (
+                        <TimelineItemView
+                          item={row.item}
+                          expanded={expandedItems[row.item.id] ?? false}
+                          onToggle={() => onToggleItem(row.item)}
+                          onRespondToHitl={onRespondToHitl}
+                          canRespondToHitl={false}
+                          key={row.item.id}
+                        />
+                      ) : (
+                        <ToolCallPairView
+                          pair={row.pair}
+                          expanded={expandedItems[row.pair.call.id] ?? false}
+                          onToggle={() => onToggleItem(row.pair.call)}
+                          key={row.pair.call.id}
+                        />
+                      ),
+                    )}
                   </div>
                 </details>
               </Fragment>
@@ -328,14 +347,7 @@ export function AgentTimeline({
         })
       )}
       {showWorkingIndicator ? (
-        <div className="timeline-working-indicator" role="status" aria-live="polite">
-          <span className="timeline-working-dots" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span className="timeline-working-label">{t('session.agentWorking')}</span>
-        </div>
+        <TimelineWorkingRow items={state.items} />
       ) : null}
     </div>
   );
@@ -357,6 +369,33 @@ function TimelineDayDivider({ timeUs }: { timeUs: number }) {
   );
 }
 
+function TimelineWorkingRow({ items }: { items: AgentTimelineItem[] }) {
+  const { t } = useI18n();
+  const startedAtUs = timelineWorkingStartedAtUs(items);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!startedAtUs) return undefined;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [startedAtUs]);
+  const duration = startedAtUs
+    ? formatToolCallDuration(Math.max(0, nowMs - Math.floor(startedAtUs / 1_000)))
+    : '';
+  return (
+    <div
+      className="timeline-working-indicator timeline-worklog-row active"
+      role="status"
+      aria-live="polite"
+    >
+      <span className="timeline-working-spinner" aria-hidden="true" />
+      <span className="timeline-working-copy">
+        <strong>{t('session.agentWorking')}</strong>
+      </span>
+      {duration ? <em>{t('session.workedFor', { duration })}</em> : null}
+    </div>
+  );
+}
+
 function ToolCallPairView({
   pair,
   expanded,
@@ -368,9 +407,14 @@ function ToolCallPairView({
 }) {
   const { t } = useI18n();
   const status = toolCallPairStatus(pair);
+  const presentationKind = toolCallPresentationKind(pair);
+  const diffStat = toolCallDiffStat(pair);
   const primary = pair.result ?? pair.call;
   const title =
-    timelineToolDisplay(pair.call)?.title || pair.call.toolName || t('chat.toolCall');
+    timelineToolDisplay(pair.call)?.title ||
+    (presentationKind === 'tool'
+      ? pair.call.toolName || t('chat.toolCall')
+      : t(`session.toolKind.${presentationKind}`));
   const rawSummary = timelineSummary(primary, 'tool', t);
   const summary = stripRedundantToolPrefix(rawSummary, title, pair.call.toolName);
   const durationMs = toolCallPairDurationMs(pair);
@@ -378,7 +422,7 @@ function ToolCallPairView({
   const memberIds = pair.result ? [pair.call.id, pair.result.id] : [pair.call.id];
   return (
     <article
-      className={`message timeline-row timeline-item tool tool-call status-${status} ${
+      className={`timeline-worklog-row kind-${presentationKind} message timeline-row timeline-item tool tool-call status-${status} ${
         expanded ? 'is-expanded' : ''
       }`}
       data-timeline-anchor-id={pair.call.id}
@@ -400,13 +444,7 @@ function ToolCallPairView({
       <div className="timeline-row-main">
         <div className="timeline-row-line">
           <span className={`timeline-row-icon tool-call-icon is-${status}`} aria-hidden="true">
-            {status === 'running' ? (
-              <UpdateIcon />
-            ) : status === 'failed' ? (
-              <ExclamationTriangleIcon />
-            ) : (
-              <CheckIcon />
-            )}
+            <TimelineToolIcon kind={presentationKind} status={status} />
           </span>
           <span className="timeline-row-title">{title}</span>
           <span className="timeline-row-summary">{summary}</span>
@@ -414,6 +452,12 @@ function ToolCallPairView({
         {expanded && hasDetails ? <ToolCallPairBody pair={pair} /> : null}
       </div>
       <div className="timeline-row-meta">
+        {diffStat ? (
+          <span className="timeline-diff-count">
+            <b>+{diffStat.additions}</b>
+            <i>−{diffStat.deletions}</i>
+          </span>
+        ) : null}
         {status === 'running' ? (
           <span className="timeline-status waiting">{t('chat.status.running')}</span>
         ) : null}
@@ -429,6 +473,23 @@ function ToolCallPairView({
   );
 }
 
+function TimelineToolIcon({
+  kind,
+  status,
+}: {
+  kind: ToolCallPresentationKind;
+  status: 'running' | 'complete' | 'failed';
+}) {
+  if (status === 'running') return <UpdateIcon />;
+  if (status === 'failed') return <ExclamationTriangleIcon />;
+  if (kind === 'search') return <MagnifyingGlassIcon />;
+  if (kind === 'read') return <FileTextIcon />;
+  if (kind === 'command') return <CaretRightIcon />;
+  if (kind === 'edit') return <Pencil1Icon />;
+  if (kind === 'check') return <CheckIcon />;
+  return <CodeIcon />;
+}
+
 function stripRedundantToolPrefix(
   summary: string,
   title: string,
@@ -442,7 +503,8 @@ function stripRedundantToolPrefix(
   return summary;
 }
 
-function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {  const { t } = useI18n();
+function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
+  const { t } = useI18n();
   const display = timelineToolDisplay(pair.call) ?? timelineToolDisplay(pair.result ?? pair.call);
   const fileMetadata =
     timelineFileMetadata(pair.result ?? pair.call) ?? timelineFileMetadata(pair.call);
@@ -567,9 +629,11 @@ function TimelineItemView({
       <div className="timeline-row-main">
         <div className="timeline-row-line">
           <span className="timeline-row-icon" aria-hidden="true">
-            {timelineIcon(kind, item)}
+            {isThought ? <StarIcon /> : timelineIcon(kind, item)}
           </span>
-          <span className="timeline-row-title">{timelineTitle(item, t)}</span>
+          <span className="timeline-row-title">
+            {isThought ? t('session.thinking') : timelineTitle(item, t)}
+          </span>
           <span className="timeline-row-summary">{summary}</span>
         </div>
         {expanded && hasDetails ? (

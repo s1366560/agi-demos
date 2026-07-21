@@ -935,6 +935,7 @@ export type AgentTimelineItem = {
   type: string;
   eventTimeUs: number;
   eventCounter: number;
+  round?: number;
   timestamp?: number | null;
   message_id?: string | null;
   role?: string;
