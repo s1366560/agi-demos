@@ -32,7 +32,7 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
       title={title}
       ariaLabel={title}
       size="sm"
-      isDirty={isDeleting}
+      hideCloseButton={isDeleting}
       closeOnBackdrop={!isDeleting}
       closeOnEscape={!isDeleting}
       footer={
@@ -53,12 +53,16 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
           >
             {isDeleting ? (
               <>
-                <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
-                {t('components.deleteConfirmation.deleting', { defaultValue: 'Deleting...' })}
+                <Loader2
+                  size={18}
+                  aria-hidden="true"
+                  className="animate-spin motion-reduce:animate-none"
+                />
+                {t('components.deleteConfirmation.deleting', { defaultValue: 'Deleting…' })}
               </>
             ) : (
               <>
-                <Trash2 size={18} />
+                <Trash2 size={18} aria-hidden="true" />
                 {t('components.deleteConfirmation.delete', { defaultValue: 'Delete' })}
               </>
             )}
@@ -67,7 +71,7 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
       }
     >
       <div className="flex items-center gap-3 text-red-600 dark:text-red-400 mb-4">
-        <AlertTriangle size={30} />
+        <AlertTriangle size={30} aria-hidden="true" />
       </div>
       <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{message}</p>
     </AppModal>

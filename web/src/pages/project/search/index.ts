@@ -22,7 +22,6 @@ export type {
   EnhancedSearchResultsProps,
   EnhancedSearchGraphProps,
   EnhancedSearchErrorProps,
-  EnhancedSearchHistoryProps,
   EnhancedSearchCompound,
   EnhancedSearchContextValue,
   SearchParams,

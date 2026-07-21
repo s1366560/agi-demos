@@ -7,27 +7,27 @@ Last checked against code: 2026-05-18.
 
 ## Entry Points
 
-| File | Purpose |
-|---|---|
-| `main.tsx` | React root, `QueryClientProvider`, `BrowserRouter`, app bootstrap. |
-| `App.tsx` | Lazy-loaded route tree and auth/tenant guards. |
-| `App.css`, `index.css` | Global styles and Tailwind entry. |
+| File                   | Purpose                                                            |
+| ---------------------- | ------------------------------------------------------------------ |
+| `main.tsx`             | React root, `QueryClientProvider`, `BrowserRouter`, app bootstrap. |
+| `App.tsx`              | Lazy-loaded route tree and auth/tenant guards.                     |
+| `App.css`, `index.css` | Global styles and Tailwind entry.                                  |
 
 ## Directory Map
 
-| Directory | Purpose | Local guidance |
-|---|---|---|
-| `components/` | Product UI components. `agent/` is the largest subtree. | `components/agent/AGENTS.md` |
-| `pages/` | Route-level pages, mostly tenant and project views. | - |
-| `layouts/` | `TenantLayout`, deprecated `ProjectLayout`, `SchemaLayout`, `AgentLayout`. | - |
-| `services/` | REST, WebSocket, event, sandbox, MCP, and artifact clients. | `services/AGENTS.md` |
-| `stores/` | Zustand stores and agent submodules. | `stores/AGENTS.md` |
-| `hooks/` | Shared React hooks. | - |
-| `utils/` | Event adapters, projections, token/date/sanitize helpers. | - |
-| `theme/` | Ant Design/theme provider setup. | - |
-| `i18n`, `locales/` | i18next configuration and translation files. | - |
-| `types/` | Shared TypeScript types. | - |
-| `test/` | Vitest test helpers and test files. | - |
+| Directory          | Purpose                                                     | Local guidance               |
+| ------------------ | ----------------------------------------------------------- | ---------------------------- |
+| `components/`      | Product UI components. `agent/` is the largest subtree.     | `components/agent/AGENTS.md` |
+| `pages/`           | Route-level pages, mostly tenant and project views.         | -                            |
+| `layouts/`         | `TenantLayout`, deprecated `ProjectLayout`, `SchemaLayout`. | -                            |
+| `services/`        | REST, WebSocket, event, sandbox, MCP, and artifact clients. | `services/AGENTS.md`         |
+| `stores/`          | Zustand stores and agent submodules.                        | `stores/AGENTS.md`           |
+| `hooks/`           | Shared React hooks.                                         | -                            |
+| `utils/`           | Event adapters, projections, token/date/sanitize helpers.   | -                            |
+| `theme/`           | Ant Design/theme provider setup.                            | -                            |
+| `i18n`, `locales/` | i18next configuration and translation files.                | -                            |
+| `types/`           | Shared TypeScript types.                                    | -                            |
+| `test/`            | Vitest test helpers and test files.                         | -                            |
 
 ## Routing Facts
 

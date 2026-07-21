@@ -49,7 +49,24 @@ export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) 
     return <div className="text-xs text-red-500 dark:text-red-400 px-3 py-2">{error}</div>;
   }
 
-  if (!stats) return null;
+  if (!stats) {
+    return (
+      <div
+        className="flex items-center gap-4 px-4 py-3 bg-slate-50/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60"
+        aria-hidden="true"
+      >
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700 animate-pulse motion-reduce:animate-none" />
+            <div className="space-y-1">
+              <div className="h-3.5 w-8 rounded bg-slate-200 dark:bg-slate-700 animate-pulse motion-reduce:animate-none" />
+              <div className="h-2.5 w-12 rounded bg-slate-200 dark:bg-slate-700 animate-pulse motion-reduce:animate-none" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const items = [
     {
@@ -80,7 +97,7 @@ export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) 
         <div key={item.label} className="flex items-center gap-2">
           {item.icon}
           <div className="text-center">
-            <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 tabular-nums">
               {item.value.toLocaleString()}
             </div>
             <div className="text-2xs text-slate-500 dark:text-slate-400">{item.label}</div>

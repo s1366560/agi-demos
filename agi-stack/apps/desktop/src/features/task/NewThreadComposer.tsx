@@ -5,7 +5,6 @@ import {
   CodeIcon,
   CubeIcon,
   FileTextIcon,
-  LockClosedIcon,
   MixerHorizontalIcon,
 } from '@radix-ui/react-icons';
 
@@ -13,12 +12,19 @@ import { useI18n } from '../../i18n';
 import type {
   AgentCapabilityMode,
   AgentConversation,
+  ComposerContextItem,
   WorkspaceAgentPolicy,
   WorkspacePermissionMode,
   WorkspaceReasoningEffort,
   WorkspaceSummary,
 } from '../../types';
 import type { WorkspaceRuntimeModelOption } from '../settings/workspaceRuntimeProviderModel';
+import {
+  ComposerPlusMenu,
+  type ComposerCatalogClient,
+} from '../chat/ComposerPlusMenu';
+import { PickerMenu } from '../chat/PickerMenu';
+import '../chat/ComposerMenus.css';
 import './NewThreadComposer.css';
 
 export type NewThreadComposerInput = {
@@ -27,10 +33,12 @@ export type NewThreadComposerInput = {
   model: WorkspaceRuntimeModelOption;
   reasoningEffort: WorkspaceReasoningEffort;
   permissionMode: WorkspacePermissionMode;
+  contextItems: ComposerContextItem[];
 };
 
 type NewThreadComposerProps = {
   workspace: WorkspaceSummary | null;
+  api: ComposerCatalogClient;
   conversations: AgentConversation[];
   mode: AgentCapabilityMode;
   policy: WorkspaceAgentPolicy | null;
@@ -44,6 +52,7 @@ type NewThreadComposerProps = {
   onModeChange: (mode: AgentCapabilityMode) => void;
   onCreate: (input: NewThreadComposerInput) => void;
   onOpenThread: (conversation: AgentConversation) => void;
+  onManageModels: () => void;
 };
 
 const SUGGESTIONS: Record<AgentCapabilityMode, Array<{ title: string; prompt: string }>> = {
@@ -61,6 +70,7 @@ const SUGGESTIONS: Record<AgentCapabilityMode, Array<{ title: string; prompt: st
 
 export function NewThreadComposer({
   workspace,
+  api,
   conversations,
   mode,
   policy,
@@ -74,12 +84,14 @@ export function NewThreadComposer({
   onModeChange,
   onCreate,
   onOpenThread,
+  onManageModels,
 }: NewThreadComposerProps) {
   const { t } = useI18n();
   const [prompt, setPrompt] = useState('');
   const [modelValue, setModelValue] = useState('');
   const [reasoningEffort, setReasoningEffort] = useState<WorkspaceReasoningEffort>('medium');
   const [permissionMode, setPermissionMode] = useState<WorkspacePermissionMode>('ask');
+  const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
 
   useEffect(() => {
     setModelValue(modelOptions.find((option) => option.selected)?.value ?? modelOptions[0]?.value ?? '');
@@ -103,8 +115,60 @@ export function NewThreadComposer({
       model: selectedModel,
       reasoningEffort,
       permissionMode,
+      contextItems,
     });
   };
+
+  const addContextItem = (item: ComposerContextItem) => {
+    setContextItems((current) =>
+      current.some(
+        (candidate) => candidate.kind === item.kind && candidate.resource_id === item.resource_id,
+      )
+        ? current
+        : [...current, item],
+    );
+  };
+  const modelPickerOptions = modelOptions.map((option) => ({
+    value: option.value,
+    label: option.modelId,
+    description: option.description,
+    meta: option.contextWindow ?? t('task.contextWindowUnavailable'),
+    badges: option.roles.map((role) => t(`task.modelRole.${role}`)),
+  }));
+  const effortOptions = [
+    {
+      value: 'low',
+      label: t('task.effortLow'),
+      description: t('task.effortLowDescription'),
+    },
+    {
+      value: 'medium',
+      label: t('task.effortMedium'),
+      description: t('task.effortMediumDescription'),
+    },
+    {
+      value: 'high',
+      label: t('task.effortHigh'),
+      description: t('task.effortHighDescription'),
+    },
+  ];
+  const permissionOptions = [
+    {
+      value: 'ask',
+      label: t('task.permissionAsk'),
+      description: t('task.permissionAskDescription'),
+    },
+    {
+      value: 'automatic',
+      label: t('task.permissionAutomatic'),
+      description: t('task.permissionAutomaticDescription'),
+    },
+    {
+      value: 'full_access',
+      label: t('task.permissionModeFullAccess'),
+      description: t('task.permissionModeFullAccessDescription'),
+    },
+  ];
 
   return (
     <main className="new-thread-view" aria-busy={creating || loadingPolicy}>
@@ -119,6 +183,23 @@ export function NewThreadComposer({
         </header>
 
         <section className="new-thread-composer">
+          {contextItems.length ? (
+            <div className="composer-context-chips" aria-label={t('composer.addedContext')}>
+              {contextItems.map((item) => (
+                <button
+                  type="button"
+                  key={`${item.kind}:${item.resource_id}`}
+                  aria-label={t('composer.removeContext', { context: item.label })}
+                  onClick={() =>
+                    setContextItems((current) => current.filter((candidate) => candidate !== item))
+                  }
+                >
+                  {item.label}
+                  <span aria-hidden="true">×</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
@@ -130,6 +211,11 @@ export function NewThreadComposer({
             disabled={creating}
           />
           <div className="new-thread-composer-toolbar">
+            <ComposerPlusMenu
+              api={api}
+              conversations={conversations}
+              onAdd={addContextItem}
+            />
             <div className="composer-pickers">
               <div className="mode-picker" role="group" aria-label={t('task.mode')}>
                 <button
@@ -147,47 +233,33 @@ export function NewThreadComposer({
                   <CodeIcon /> {t('sidebar.codeMode')}
                 </button>
               </div>
-              <label className="picker-chip">
-                <span>{t('task.model')}</span>
-                <select
-                  value={modelValue}
-                  onChange={(event) => setModelValue(event.target.value)}
-                  disabled={!canManagePolicy || modelOptions.length === 0}
-                  aria-label={t('task.model')}
-                >
-                  {modelOptions.map((option) => (
-                    <option value={option.value} key={option.value}>
-                      {option.providerLabel} · {option.modelId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="picker-chip">
-                <span>{t('task.effort')}</span>
-                <select
-                  value={reasoningEffort}
-                  onChange={(event) => setReasoningEffort(event.target.value as WorkspaceReasoningEffort)}
-                  disabled={!canManagePolicy}
-                  aria-label={t('task.effort')}
-                >
-                  <option value="low">{t('task.effortLow')}</option>
-                  <option value="medium">{t('task.effortMedium')}</option>
-                  <option value="high">{t('task.effortHigh')}</option>
-                </select>
-              </label>
-              <label className="picker-chip">
-                <LockClosedIcon />
-                <select
-                  value={permissionMode}
-                  onChange={(event) => setPermissionMode(event.target.value as WorkspacePermissionMode)}
-                  disabled={!canManagePolicy}
-                  aria-label={t('task.permissionMode')}
-                >
-                  <option value="ask">{t('task.permissionAsk')}</option>
-                  <option value="automatic">{t('task.permissionAutomatic')}</option>
-                  <option value="full_access">{t('task.permissionModeFullAccess')}</option>
-                </select>
-              </label>
+              <PickerMenu
+                label={t('task.model')}
+                value={modelValue}
+                options={modelPickerOptions}
+                readOnly={!canManagePolicy}
+                onChange={setModelValue}
+                footer={{
+                  label: t('task.manageModels'),
+                  icon: <CubeIcon />,
+                  onClick: onManageModels,
+                }}
+              />
+              <PickerMenu
+                label={t('task.effort')}
+                value={reasoningEffort}
+                options={effortOptions}
+                readOnly={!canManagePolicy}
+                onChange={(value) => setReasoningEffort(value as WorkspaceReasoningEffort)}
+              />
+              <PickerMenu
+                label={t('task.permissionMode')}
+                value={permissionMode}
+                options={permissionOptions}
+                readOnly={!canManagePolicy}
+                hideLabel
+                onChange={(value) => setPermissionMode(value as WorkspacePermissionMode)}
+              />
             </div>
             <button
               className="send-button"

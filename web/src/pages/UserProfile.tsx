@@ -3,9 +3,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { Building2, Calendar, Camera, CheckCircle, KeyRound, MapPin, X } from 'lucide-react';
+import { AlertCircle, Building2, Calendar, Camera, CheckCircle, KeyRound, MapPin, X } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
+import { confirmAction } from '@/utils/confirmAction';
 
 import { authAPI } from '../services/api';
 import { useAuthStore } from '../stores/auth';
@@ -14,6 +15,7 @@ import type { User, UserProfile as UserProfileType, UserUpdate } from '../types/
 
 type UserProfileFormData = UserUpdate & { email: string };
 type ProfileSectionId = 'basic' | 'contact' | 'preferences' | 'security';
+type ProfileToast = { type: 'success' | 'error' };
 
 const DEFAULT_PROFILE: UserProfileType = {
   job_title: '',
@@ -44,12 +46,35 @@ const buildUserFormData = (user: User): UserProfileFormData => ({
   },
 });
 
+/** Fields counted toward the profile-completion indicator. */
+const COMPLETION_FIELDS: Array<(data: UserProfileFormData) => string | undefined> = [
+  (data) => data.name,
+  (data) => data.profile?.job_title,
+  (data) => data.profile?.department,
+  (data) => data.profile?.bio,
+  (data) => data.profile?.avatar_url,
+  (data) => data.profile?.phone,
+  (data) => data.profile?.location,
+  (data) => data.profile?.timezone,
+];
+
+const computeProfileCompletion = (data: UserProfileFormData): number => {
+  const filled = COMPLETION_FIELDS.filter((get) => Boolean(get(data)?.trim())).length;
+  return Math.round((filled / COMPLETION_FIELDS.length) * 100);
+};
+
+const getScrollBehavior = (): ScrollBehavior =>
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth';
+
 export const UserProfile: React.FC = () => {
   const { i18n, t } = useTranslation();
   const { user, setUser } = useAuthStore();
   const avatarUrlInputRef = useRef<HTMLInputElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [toast, setToast] = useState<ProfileToast | null>(null);
   const [activeSection, setActiveSection] = useState<ProfileSectionId>('basic');
   const [formData, setFormData] = useState<UserProfileFormData>({
     name: '',
@@ -63,17 +88,36 @@ export const UserProfile: React.FC = () => {
     }
   }, [user]);
 
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    },
+    []
+  );
+
+  const showToast = (next: ProfileToast) => {
+    setToast(next);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  };
+
   const handleSectionClick = (sectionId: ProfileSectionId) => {
     setActiveSection(sectionId);
     const section = document.getElementById(`profile-section-${sectionId}`);
     if (typeof section?.scrollIntoView === 'function') {
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      section.scrollIntoView({ behavior: getScrollBehavior(), block: 'start' });
     }
   };
 
   const focusAvatarUrlInput = () => {
     setActiveSection('basic');
-    avatarUrlInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    avatarUrlInputRef.current?.scrollIntoView({ behavior: getScrollBehavior(), block: 'center' });
     avatarUrlInputRef.current?.focus();
   };
 
@@ -114,22 +158,39 @@ export const UserProfile: React.FC = () => {
       if (updatedUser.preferred_language) {
         void i18n.changeLanguage(updatedUser.preferred_language);
       }
-      setShowSuccess(true);
-      setTimeout(() => {
-        setShowSuccess(false);
-      }, 3000);
+      showToast({ type: 'success' });
     } catch (error) {
       console.error('Failed to update profile:', error);
+      showToast({ type: 'error' });
     } finally {
       setIsLoading(false);
     }
   };
 
+  const isDirty = user
+    ? JSON.stringify(formData) !== JSON.stringify(buildUserFormData(user))
+    : false;
+
   const handleCancel = () => {
-    if (user) {
+    if (!user) return;
+    if (!isDirty) {
       setFormData(buildUserFormData(user));
+      return;
     }
+    void confirmAction({
+      title: t('user_profile.confirm.discard_title'),
+      content: t('user_profile.confirm.discard_content'),
+      okText: t('user_profile.confirm.discard_ok'),
+      cancelText: t('user_profile.buttons.cancel'),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed && user) {
+        setFormData(buildUserFormData(user));
+      }
+    });
   };
+
+  const profileCompletion = computeProfileCompletion(formData);
 
   if (!user) return <div className="p-8 text-center">{t('common.loading')}</div>;
 
@@ -173,7 +234,7 @@ export const UserProfile: React.FC = () => {
                   type="button"
                   aria-label={t('user_profile.avatar.change', 'Change avatar')}
                   title={t('user_profile.avatar.change', 'Change avatar')}
-                  className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-colors hover:bg-primary-dark"
+                  className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   onClick={focusAvatarUrlInput}
                 >
                   <Camera size={14} />
@@ -206,10 +267,22 @@ export const UserProfile: React.FC = () => {
                   <span className="text-slate-500 dark:text-slate-400">
                     {t('user_profile.profile_completion')}
                   </span>
-                  <span className="font-medium text-primary dark:text-blue-400">85%</span>
+                  <span className="font-medium text-primary dark:text-blue-400">
+                    {profileCompletion}%
+                  </span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-                  <div className="h-full w-[85%] rounded-full bg-primary"></div>
+                <div
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700"
+                  role="progressbar"
+                  aria-valuenow={profileCompletion}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={t('user_profile.profile_completion')}
+                >
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${String(profileCompletion)}%` }}
+                  ></div>
                 </div>
               </div>
             </div>
@@ -232,11 +305,10 @@ export const UserProfile: React.FC = () => {
                       key={section.id}
                       type="button"
                       aria-controls={`profile-section-${section.id}`}
-                      aria-current={isActive ? 'page' : undefined}
                       className={
                         isActive
-                          ? 'border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary dark:text-white'
-                          : 'border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white'
+                          ? 'border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
+                          : 'border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
                       }
                       onClick={() => {
                         handleSectionClick(section.id);
@@ -273,7 +345,8 @@ export const UserProfile: React.FC = () => {
                           disabled
                           id="email"
                           name="email"
-                          type="text"
+                          type="email"
+                          autoComplete="email"
                           value={formData.email}
                         />
                       </div>
@@ -291,6 +364,7 @@ export const UserProfile: React.FC = () => {
                           id="name"
                           name="name"
                           type="text"
+                          autoComplete="name"
                           value={formData.name}
                           onChange={handleChange}
                         />
@@ -407,6 +481,7 @@ export const UserProfile: React.FC = () => {
                           id="phone"
                           name="phone"
                           type="tel"
+                          autoComplete="tel"
                           value={formData.profile?.phone}
                           onChange={handleChange}
                         />
@@ -539,7 +614,7 @@ export const UserProfile: React.FC = () => {
                 {/* Action Buttons */}
                 <div className="flex items-center justify-end gap-x-4 border-t border-slate-200 pt-6 dark:border-slate-700">
                   <button
-                    className="rounded-md px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:ring-gray-600 dark:text-white dark:hover:bg-gray-800"
+                    className="rounded-md px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:ring-gray-600 dark:text-white dark:hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     type="button"
                     disabled={isLoading}
                     onClick={handleCancel}
@@ -561,29 +636,41 @@ export const UserProfile: React.FC = () => {
       </div>
 
       {/* Toast Notification */}
-      {showSuccess && (
+      {toast && (
         <div className="pointer-events-none fixed inset-0 flex items-end px-4 py-6 sm:items-start sm:p-6 z-50">
           <div className="flex w-full flex-col items-center space-y-4 sm:items-end">
-            <div className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-surface-dark dark:ring-white dark:ring-opacity-10 transform transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-out translate-y-0 opacity-100">
+            <div
+              role={toast.type === 'error' ? 'alert' : 'status'}
+              aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+              className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-surface-dark dark:ring-white dark:ring-opacity-10 transform transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-out translate-y-0 opacity-100 motion-reduce:transition-none"
+            >
               <div className="p-4">
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
-                    <CheckCircle size={16} className="text-green-400" />
+                    {toast.type === 'error' ? (
+                      <AlertCircle size={16} className="text-red-400" />
+                    ) : (
+                      <CheckCircle size={16} className="text-green-400" />
+                    )}
                   </div>
                   <div className="ml-3 w-0 flex-1 pt-0.5">
                     <p className="text-sm font-medium text-slate-900 dark:text-white">
-                      {t('user_profile.toast.success_title')}
+                      {toast.type === 'error'
+                        ? t('user_profile.toast.error_title')
+                        : t('user_profile.toast.success_title')}
                     </p>
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {t('user_profile.toast.success_desc')}
+                      {toast.type === 'error'
+                        ? t('user_profile.toast.error_desc')
+                        : t('user_profile.toast.success_desc')}
                     </p>
                   </div>
                   <div className="ml-4 flex flex-shrink-0">
                     <button
                       type="button"
-                      className="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:bg-surface-dark dark:hover:text-gray-300"
+                      className="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:bg-surface-dark dark:hover:text-gray-300"
                       onClick={() => {
-                        setShowSuccess(false);
+                        setToast(null);
                       }}
                     >
                       <span className="sr-only">{t('common.close', 'Close')}</span>

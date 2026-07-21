@@ -32,6 +32,7 @@ import {
 import { useDefinitions, useListDefinitions } from '../../stores/agentDefinitions';
 import { useUser } from '../../stores/auth';
 import { useCurrentTenant } from '../../stores/tenant';
+import { canManageTenantAgents } from '../../utils/permissions';
 
 import type {
   AgentBinding,
@@ -56,19 +57,6 @@ const optionalString = (value: string | undefined) => {
 };
 
 const formatProgressPercent = (percent: number | undefined) => `${(percent ?? 0).toFixed(0)}%`;
-
-function canManageTenantAgents(
-  user: ReturnType<typeof useUser>,
-  tenant: ReturnType<typeof useCurrentTenant>
-): boolean {
-  const roles = new Set((user?.roles ?? []).map((role) => role.toLowerCase()));
-  return (
-    roles.has('admin') ||
-    roles.has('owner') ||
-    roles.has('system_admin') ||
-    tenant?.owner_id === user?.id
-  );
-}
 
 export const AgentBindings: React.FC = () => {
   const { t } = useTranslation();
@@ -451,7 +439,7 @@ export const AgentBindings: React.FC = () => {
           <button
             type="button"
             onClick={handleTestModalOpen}
-            className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors sm:w-auto"
+            className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-auto"
           >
             <Route size={16} />
             {t('tenant.agentBindings.testRoutingButton', 'Test Routing')}
@@ -462,7 +450,7 @@ export const AgentBindings: React.FC = () => {
               onClick={() => {
                 setIsModalOpen(true);
               }}
-              className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:w-auto"
             >
               <Plus size={16} />
               {t('tenant.agentBindings.createNew', 'Create Binding')}
@@ -484,8 +472,9 @@ export const AgentBindings: React.FC = () => {
             onChange={(e) => {
               setSearch(e.target.value);
             }}
+            aria-label={t('tenant.agentBindings.search')}
             placeholder={t('tenant.agentBindings.search')}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary outline-none"
           />
         </div>
         <button
@@ -493,7 +482,7 @@ export const AgentBindings: React.FC = () => {
           onClick={handleRefresh}
           aria-label={t('tenant.agentBindings.refresh')}
           title={t('tenant.agentBindings.refresh')}
-          className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
         >
           <RefreshCw size={16} />
         </button>
@@ -502,6 +491,27 @@ export const AgentBindings: React.FC = () => {
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Spin size="large" />
+        </div>
+      ) : error ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400"
+        >
+          <p className="text-lg font-medium text-slate-700 dark:text-slate-300">
+            {t('tenant.agentBindings.loadFailed', 'Failed to load agent bindings')}
+          </p>
+          <p className="mt-1 max-w-md text-center text-sm">{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              clearError();
+              handleRefresh();
+            }}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <RefreshCw size={14} />
+            {t('common.retry', 'Retry')}
+          </button>
         </div>
       ) : filteredBindings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400">
@@ -517,7 +527,7 @@ export const AgentBindings: React.FC = () => {
               onClick={() => {
                 setIsModalOpen(true);
               }}
-              className="mt-4 text-primary hover:underline text-sm"
+              className="mt-4 text-primary hover:underline text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
             >
               {t('tenant.agentBindings.createFirst', 'Create your first binding')}
             </button>
@@ -529,7 +539,7 @@ export const AgentBindings: React.FC = () => {
           columns={columns}
           rowKey="id"
           size="small"
-          pagination={false}
+          pagination={{ pageSize: 50, hideOnSinglePage: true, showSizeChanger: false }}
           scroll={{ x: 'max-content' }}
           className="dark:[&_.ant-table]:bg-slate-800"
         />
@@ -671,7 +681,8 @@ export const AgentBindings: React.FC = () => {
             <div className="mt-6 border-t border-slate-200 dark:border-slate-700 pt-4">
               <button
                 type="button"
-                className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
+                className="text-sm font-medium text-primary hover:underline flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
+                aria-expanded={showTrace}
                 onClick={() => {
                   setShowTrace(!showTrace);
                 }}

@@ -60,17 +60,14 @@ export function useDateFormatter(_locale?: string): DateFormatterResult {
  * Moved outside component to avoid recreation on each render
  *
  * @param bytes - Size in bytes
- * @returns Formatted string (e.g., "5.0 GB", "150 MB", "800 KB")
+ * @returns Formatted string (e.g., "5 GB", "1.5 GB", "150 MB", "800 KB", "512 B")
  */
 export function formatStorage(bytes: number): string {
-  const gb = bytes / (1024 * 1024 * 1024);
-  if (gb >= 1) {
-    return `${gb.toFixed(1)} GB`;
-  }
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1) {
-    return `${mb.toFixed(1)} MB`;
-  }
-  const kb = bytes / 1024;
-  return `${kb.toFixed(1)} KB`;
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  const sizeLabel = sizes[unitIndex] ?? 'TB';
+  const value = Number.parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(1));
+  return `${String(value)} ${sizeLabel}`;
 }

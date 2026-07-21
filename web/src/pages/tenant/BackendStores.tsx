@@ -23,6 +23,7 @@ import { graphStoreAPI, retrievalStoreAPI } from '@/services/api';
 import { confirmAction } from '@/utils/confirmAction';
 
 import { AppModal } from '@/components/common';
+import { LazyEmpty } from '@/components/ui/lazyAntd';
 
 import type {
   BackendStore,
@@ -316,25 +317,44 @@ export const BackendStores: React.FC = () => {
 
   const handleSaveEdit = async () => {
     if (!tenantId || !editStore) return;
+
+    // Validate JSON up front so users see the friendly message, not a raw parse error
+    let indexConfig: Record<string, unknown>;
+    let connectionConfig: Record<string, unknown> | undefined;
+    try {
+      indexConfig = parseJsonObject(editForm.index_config_text);
+      const originalConnectionText = formatJson(editStore.connection_config);
+      if (editForm.connection_config_text.trim() !== originalConnectionText.trim()) {
+        connectionConfig = parseJsonObject(editForm.connection_config_text);
+      }
+    } catch {
+      setMessage({
+        kind: 'error',
+        text: t('tenant.backendStores.invalidJson', {
+          defaultValue: 'Configuration must be a JSON object.',
+        }),
+      });
+      return;
+    }
+
+    if (connectionConfig && containsRedactedPlaceholder(connectionConfig)) {
+      setMessage({
+        kind: 'error',
+        text: t('tenant.backendStores.replaceMaskedSecrets', {
+          defaultValue: 'Replace masked secret placeholders before saving connection config.',
+        }),
+      });
+      return;
+    }
+
     setIsSaving(true);
     setMessage(null);
     try {
       const payload: BackendStoreUpdate = {
         name: editForm.name.trim(),
-        index_config: parseJsonObject(editForm.index_config_text),
+        index_config: indexConfig,
       };
-      const originalConnectionText = formatJson(editStore.connection_config);
-      if (editForm.connection_config_text.trim() !== originalConnectionText.trim()) {
-        const connectionConfig = parseJsonObject(editForm.connection_config_text);
-        if (containsRedactedPlaceholder(connectionConfig)) {
-          setMessage({
-            kind: 'error',
-            text: t('tenant.backendStores.replaceMaskedSecrets', {
-              defaultValue: 'Replace masked secret placeholders before saving connection config.',
-            }),
-          });
-          return;
-        }
+      if (connectionConfig) {
         payload.connection_config = connectionConfig;
       }
       const updated = await planeApi.update(tenantId, editStore.id, payload);
@@ -391,7 +411,11 @@ export const BackendStores: React.FC = () => {
   };
 
   if (!tenantId) {
-    return <div className="p-8 text-center text-slate-500">{t('tenant.overview.loading')}</div>;
+    return (
+      <div className="flex items-center justify-center p-16">
+        <LazyEmpty description={t('common.noTenant')} />
+      </div>
+    );
   }
 
   return (
@@ -410,6 +434,7 @@ export const BackendStores: React.FC = () => {
         <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-surface-dark">
           <button
             type="button"
+            aria-pressed={activePlane === 'graph'}
             onClick={() => {
               setActivePlane('graph');
             }}
@@ -424,6 +449,7 @@ export const BackendStores: React.FC = () => {
           </button>
           <button
             type="button"
+            aria-pressed={activePlane === 'retrieval'}
             onClick={() => {
               setActivePlane('retrieval');
             }}
@@ -441,6 +467,7 @@ export const BackendStores: React.FC = () => {
 
       {message && (
         <div
+          role={message.kind === 'error' ? 'alert' : 'status'}
           className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
             message.kind === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300'
@@ -462,7 +489,13 @@ export const BackendStores: React.FC = () => {
               {t('tenant.backendStores.createTitle', { defaultValue: 'Create store' })}
             </h2>
           </div>
-          <div className="flex flex-col gap-4">
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCreate();
+            }}
+          >
             <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
               {t('common.forms.name')}
               <input
@@ -470,7 +503,7 @@ export const BackendStores: React.FC = () => {
                 onChange={(event) => {
                   setCreateForm({ ...createForm, name: event.target.value });
                 }}
-                className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               />
             </label>
             <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -480,7 +513,7 @@ export const BackendStores: React.FC = () => {
                 onChange={(event) => {
                   setCreateForm({ ...createForm, engine_type: event.target.value });
                 }}
-                className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               >
                 {currentTypes.map((typeInfo) => (
                   <option key={typeInfo.type} value={typeInfo.type}>
@@ -500,6 +533,7 @@ export const BackendStores: React.FC = () => {
               })}
               <textarea
                 rows={8}
+                spellCheck={false}
                 value={createForm.connection_config_text}
                 onChange={(event) => {
                   setCreateForm({
@@ -507,18 +541,19 @@ export const BackendStores: React.FC = () => {
                     connection_config_text: event.target.value,
                   });
                 }}
-                className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               />
             </label>
             <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
               {t('tenant.backendStores.indexConfig', { defaultValue: 'Index config' })}
               <textarea
                 rows={5}
+                spellCheck={false}
                 value={createForm.index_config_text}
                 onChange={(event) => {
                   setCreateForm({ ...createForm, index_config_text: event.target.value });
                 }}
-                className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               />
             </label>
             <div className="flex flex-wrap justify-end gap-3 pt-2">
@@ -540,10 +575,7 @@ export const BackendStores: React.FC = () => {
                 })}
               </button>
               <button
-                type="button"
-                onClick={() => {
-                  void handleCreate();
-                }}
+                type="submit"
                 disabled={isSaving || !createForm.name.trim()}
                 className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -555,7 +587,7 @@ export const BackendStores: React.FC = () => {
                 {t('common.create')}
               </button>
             </div>
-          </div>
+          </form>
         </section>
 
         <section className="flex min-w-0 flex-col gap-4">
@@ -672,6 +704,12 @@ export const BackendStores: React.FC = () => {
         title={t('tenant.backendStores.editTitle', { defaultValue: 'Edit store' })}
         description={editStore?.engine_type}
         size="lg"
+        isDirty={() =>
+          editStore !== null &&
+          (editForm.name !== editStore.name ||
+            editForm.connection_config_text !== formatJson(editStore.connection_config) ||
+            editForm.index_config_text !== formatJson(editStore.index_config))
+        }
         footer={
           <>
             <button
@@ -709,7 +747,7 @@ export const BackendStores: React.FC = () => {
               onChange={(event) => {
                 setEditForm({ ...editForm, name: event.target.value });
               }}
-              className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
           </label>
           <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -718,6 +756,7 @@ export const BackendStores: React.FC = () => {
             })}
             <textarea
               rows={9}
+              spellCheck={false}
               value={editForm.connection_config_text}
               onChange={(event) => {
                 setEditForm({
@@ -725,18 +764,19 @@ export const BackendStores: React.FC = () => {
                   connection_config_text: event.target.value,
                 });
               }}
-              className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
           </label>
           <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
             {t('tenant.backendStores.indexConfig', { defaultValue: 'Index config' })}
             <textarea
               rows={6}
+              spellCheck={false}
               value={editForm.index_config_text}
               onChange={(event) => {
                 setEditForm({ ...editForm, index_config_text: event.target.value });
               }}
-              className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              className="font-mono text-xs rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
           </label>
         </div>

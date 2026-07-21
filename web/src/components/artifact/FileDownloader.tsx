@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { Button, Space, Typography, Card } from 'antd';
 import { Download, File, FileArchive, FileText, FileSpreadsheet } from 'lucide-react';
 
+import { formatFileSize } from '@/utils/format';
+
 const { Text } = Typography;
 
 export interface FileDownloaderProps {
@@ -22,15 +24,6 @@ export interface FileDownloaderProps {
   sizeBytes?: number | undefined;
   /** Compact mode */
   compact?: boolean | undefined;
-}
-
-// Format file size
-function formatFileSize(bytes?: number): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 // Get icon based on mime type
@@ -83,7 +76,7 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
 }) => {
   const { t } = useTranslation();
   const icon = getFileIcon(mimeType, filename);
-  const size = formatFileSize(sizeBytes);
+  const size = sizeBytes ? formatFileSize(sizeBytes) : '';
 
   if (compact) {
     return (
@@ -94,8 +87,9 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
         target="_blank"
         rel="noopener noreferrer"
         size="small"
+        className="max-w-60"
       >
-        {filename}
+        <span className="inline-block max-w-full truncate align-middle">{filename}</span>
       </Button>
     );
   }

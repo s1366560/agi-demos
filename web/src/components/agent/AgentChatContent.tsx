@@ -1,14 +1,15 @@
 /**
  * AgentChatContent - Agent Chat content with multi-mode layout
  *
- * Supports four layout modes:
+ * Supports five layout modes:
  * - chat: Full chat view with optional right panel (Plan/Terminal/Desktop tabs)
  * - task: Split view — chat (left) + task panel (right, 50/50)
  * - code: Split view — chat (left) + terminal (right), resizable
  * - canvas: Split view — chat (left) + artifact canvas (right, 35/65)
+ * - collab: Split view — chat (left) + workspace group chat (right, 55/45)
  *
  * Features:
- * - Cmd+1/2/3/4 to switch modes
+ * - Cmd+1-5 to switch modes
  * - Draggable split ratio in task/code/canvas modes
  * - Flat right panel tabs (Plan | Terminal | Desktop)
  */
@@ -19,7 +20,7 @@ import { Suspense, lazy, useEffect, useCallback, useMemo, useRef, useState } fro
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { message } from 'antd';
+import { Dropdown, message } from 'antd';
 import {
   GripHorizontal,
   Download,
@@ -437,13 +438,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     const inputBarRef = useRef<HTMLTextAreaElement>(null);
 
-    // Auto-switch to task mode when tasks appear
-    useEffect(() => {
-      if (tasks.length > 0 && layoutMode === 'chat') {
-        // Don't auto-switch, just let the user know via the layout selector
-      }
-    }, [tasks.length, layoutMode]);
-
     useEffect(() => {
       return subscribeToAgentChatSearchRequests(() => {
         setChatSearchVisible(true);
@@ -471,13 +465,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           return;
         }
 
-        // Shift+Tab to toggle Plan Mode
+        // Shift+Tab to toggle Plan Mode — only when the chat input has focus,
+        // so standard backward focus navigation keeps working elsewhere.
         if (e.shiftKey && e.key === 'Tab') {
-          e.preventDefault();
-          // Use dynamic import to avoid stale closure
+          if (e.target !== inputBarRef.current) return;
           const store = useAgentV3Store.getState();
           const convId = store.activeConversationId;
           if (!convId) return;
+          e.preventDefault();
           const newMode = useExecutionStore.getState().agentIsPlanMode ? 'build' : 'plan';
           void import('@/services/planService').then(({ planService }) => {
             planService
@@ -490,7 +485,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
               })
               .catch((err: unknown) => {
                 void message.error(
-                  err instanceof Error ? err.message : 'Failed to switch plan mode'
+                  err instanceof Error ? err.message : t('agent.chat.errors.switchPlanModeFailed')
                 );
                 console.error('AgentChatContent: switchMode failed', err);
               });
@@ -513,7 +508,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       return () => {
         window.removeEventListener('keydown', handleKeyShortcut);
       };
-    }, [inputBarRef]);
+    }, [inputBarRef, t]);
 
     // Load conversations only when this surface owns the list. Tenant workspace
     // pages delegate list ownership to TenantChatSidebar so tenant switches do
@@ -908,7 +903,6 @@ ${content}`;
       );
     }, [timeline, activeConversationId]);
 
-    const [showExportMenu, setShowExportMenu] = useState(false);
     const [compareMode, setCompareMode] = useState(false);
     const [compareConversationId, setCompareConversationId] = useState<string | null>(null);
     const [showComparePicker, setShowComparePicker] = useState(false);
@@ -943,7 +937,7 @@ ${content}`;
             ? Math.round((taskProgress.current / taskProgress.total) * 100)
             : 0;
         slots.task = {
-          label: 'Task',
+          label: t('agent.statusBar.slots.task', 'Task'),
           value: `${String(taskProgress.current)}/${String(taskProgress.total)} · ${String(taskPercent)}%`,
           tone:
             taskProgress.status === 'failed'
@@ -951,12 +945,16 @@ ${content}`;
               : taskProgress.status === 'completed'
                 ? 'ok'
                 : 'running',
-          hint: taskProgress.label ?? 'Task progress',
+          hint: taskProgress.label ?? t('agent.statusBar.slots.taskProgress', 'Task progress'),
           progressPercent: taskPercent,
         };
       }
       if (isStreaming) {
-        slots.llm = { label: 'LLM', value: 'streaming', tone: 'running' };
+        slots.llm = {
+          label: 'LLM',
+          value: t('agent.statusBar.slots.streaming', 'streaming'),
+          tone: 'running',
+        };
       }
       if (sandboxConnectionStatus !== 'idle') {
         const tone: 'ok' | 'error' | 'running' =
@@ -977,19 +975,26 @@ ${content}`;
         slots.hitl = {
           label: 'HITL',
           value: doomLoopDetected
-            ? 'doom-loop'
-            : `${String(suggestionsCount)} suggestion${suggestionsCount === 1 ? '' : 's'}`,
+            ? t('agent.statusBar.slots.doomLoop', 'doom-loop')
+            : t('agent.statusBar.slots.suggestions', {
+                count: suggestionsCount,
+                defaultValue: '{{count}} suggestion(s)',
+              }),
           tone: doomLoopDetected ? 'error' : 'warning',
         };
       }
       if (conversationArtifacts.length > 0) {
         slots.friction = {
-          label: 'Evidence',
-          value: `${String(conversationArtifacts.length)} artifact${
-            conversationArtifacts.length === 1 ? '' : 's'
-          }`,
+          label: t('agent.statusBar.slots.evidence', 'Evidence'),
+          value: t('agent.statusBar.slots.artifacts', {
+            count: conversationArtifacts.length,
+            defaultValue: '{{count}} artifact(s)',
+          }),
           tone: 'idle',
-          hint: 'Open the Evidence drawer to inspect screenshots, diffs, test runs and logs',
+          hint: t(
+            'agent.statusBar.slots.evidenceHint',
+            'Open the Evidence drawer to inspect screenshots, diffs, test runs and logs'
+          ),
         };
       }
       return slots;
@@ -1001,6 +1006,7 @@ ${content}`;
       suggestionsCount,
       doomLoopDetected,
       conversationArtifacts.length,
+      t,
     ]);
 
     const statusBarWithLayout = (
@@ -1018,7 +1024,7 @@ ${content}`;
                 onClick={() => {
                   setEvidenceOpen(true);
                 }}
-                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 title={t('evidence.open', 'Evidence')}
                 aria-label={t('evidence.open', 'Evidence')}
                 data-testid="open-evidence-drawer"
@@ -1033,7 +1039,7 @@ ${content}`;
                   setCompareMode(true);
                   setShowComparePicker(true);
                 }}
-                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 title={t('comparison.compare', 'Compare')}
                 aria-label={t('comparison.compare', 'Compare')}
               >
@@ -1041,51 +1047,38 @@ ${content}`;
               </button>
             )}
             {timeline.length > 0 && (
-              <div className="relative">
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'markdown',
+                      label: t('agent.actions.exportMarkdown', 'Export as Markdown'),
+                    },
+                    {
+                      key: 'pdf',
+                      label: t('agent.actions.exportPdf', 'Export as PDF'),
+                    },
+                  ],
+                  onClick: ({ key }) => {
+                    if (key === 'markdown') {
+                      handleExportMarkdown();
+                    } else if (key === 'pdf') {
+                      handleExportPdf();
+                    }
+                  },
+                }}
+                trigger={['click']}
+              >
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowExportMenu((v) => !v);
-                  }}
-                  onBlur={() =>
-                    setTimeout(() => {
-                      setShowExportMenu(false);
-                    }, 150)
-                  }
-                  className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   title={t('agent.actions.export', 'Export')}
                   aria-label={t('agent.actions.export', 'Export')}
                 >
                   <Download size={14} />
                   <ChevronDown size={10} />
                 </button>
-                {showExportMenu && (
-                  <div className="absolute bottom-full right-0 mb-1 w-48 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg z-50 py-1">
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleExportMarkdown();
-                        setShowExportMenu(false);
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-                    >
-                      {t('agent.actions.exportMarkdown', 'Export as Markdown')}
-                    </button>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleExportPdf();
-                        setShowExportMenu(false);
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-                    >
-                      {t('agent.actions.exportPdf', 'Export as PDF')}
-                    </button>
-                  </div>
-                )}
-              </div>
+              </Dropdown>
             )}
             <AppLauncher variant="status" />
             <LayoutModeSelector hasWorkspace={!!effectiveWorkspaceId} />

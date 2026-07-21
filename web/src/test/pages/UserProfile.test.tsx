@@ -8,6 +8,8 @@ import { useAuthStore } from '../../stores/auth';
 
 import type { User } from '../../types/memory';
 
+const confirmActionMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../../services/api', () => ({
   authAPI: {
     updateProfile: vi.fn(),
@@ -16,6 +18,10 @@ vi.mock('../../services/api', () => ({
 
 vi.mock('../../stores/auth', () => ({
   useAuthStore: vi.fn(),
+}));
+
+vi.mock('../../utils/confirmAction', () => ({
+  confirmAction: confirmActionMock,
 }));
 
 const baseUser: User = {
@@ -43,6 +49,7 @@ describe('UserProfile', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    confirmActionMock.mockResolvedValue(false);
     (useAuthStore as any).mockReturnValue({
       user: baseUser,
       setUser,
@@ -62,13 +69,14 @@ describe('UserProfile', () => {
     const securityTab = screen.getByRole('button', { name: 'user_profile.tabs.security' });
     fireEvent.click(securityTab);
 
-    expect(securityTab).toHaveAttribute('aria-current', 'page');
+    expect(securityTab).toHaveAttribute('aria-controls', 'profile-section-security');
     expect(
       screen.getByRole('link', { name: 'user_profile.security.change_password' })
     ).toHaveAttribute('href', '/force-change-password');
   });
 
-  it('resets unsaved edits when cancel is clicked', () => {
+  it('resets unsaved edits after confirming the discard dialog', async () => {
+    confirmActionMock.mockResolvedValueOnce(true);
     renderProfile();
 
     fireEvent.change(screen.getByDisplayValue('Ada Lovelace'), {
@@ -78,10 +86,22 @@ describe('UserProfile', () => {
       target: { value: 'Principal Engineer' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'user_profile.buttons.cancel' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'user_profile.buttons.cancel' })[0]!);
 
-    expect(screen.getByDisplayValue('Ada Lovelace')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(confirmActionMock).toHaveBeenCalledOnce();
+      expect(screen.getByDisplayValue('Ada Lovelace')).toBeInTheDocument();
+    });
     expect(screen.getByDisplayValue('Analyst')).toBeInTheDocument();
+  });
+
+  it('resets a clean form immediately without asking for confirmation', () => {
+    renderProfile();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'user_profile.buttons.cancel' })[0]!);
+
+    expect(confirmActionMock).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue('Ada Lovelace')).toBeInTheDocument();
   });
 
   it('focuses the avatar URL field from the avatar action', () => {

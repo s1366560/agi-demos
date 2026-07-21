@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Skeleton, Card, Row, Col } from 'antd';
 
 import { useThemeColor } from '@/hooks/useThemeColor';
@@ -27,11 +29,15 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
   const borderColor = useThemeColor('--color-border');
   const primaryColor = useThemeColor('--color-primary');
   const panel2Color = useThemeColor('--color-panel-2');
+  const { t } = useTranslation();
+
+  // Announce the loading state to assistive technology.
+  const statusProps = { role: 'status', 'aria-label': t('common.loading') } as const;
 
   switch (type) {
     case 'list':
       return (
-        <div style={{ padding: '16px' }}>
+        <div style={{ padding: '16px' }} {...statusProps}>
           {Array.from({ length: count }).map((_, i) => (
             <div
               key={i}
@@ -52,7 +58,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
 
     case 'card':
       return (
-        <Row gutter={[16, 16]} style={{ padding: '16px' }}>
+        <Row gutter={[16, 16]} style={{ padding: '16px' }} {...statusProps}>
           {Array.from({ length: count }).map((_, i) => (
             <Col xs={24} sm={12} md={8} lg={6} key={i}>
               <Card>
@@ -68,7 +74,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
 
     case 'table':
       return (
-        <div style={{ padding: '16px' }}>
+        <div style={{ padding: '16px' }} {...statusProps}>
           {Array.from({ length: rows }).map((_, i) => (
             <div
               key={i}
@@ -93,7 +99,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
 
     case 'form':
       return (
-        <div style={{ padding: '24px', maxWidth: '600px' }}>
+        <div style={{ padding: '24px', maxWidth: '600px' }} {...statusProps}>
           <Skeleton.Input active style={{ width: '40%', marginBottom: '24px', height: 32 }} />
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{ marginBottom: '24px' }}>
@@ -107,7 +113,10 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
 
     case 'chat':
       return (
-        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div
+          style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+          {...statusProps}
+        >
           {/* User message */}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <div

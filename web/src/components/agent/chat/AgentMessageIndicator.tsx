@@ -40,11 +40,20 @@ export const AgentMessageIndicator: FC<AgentMessageIndicatorProps> = ({
       data-testid="agent-message-indicator"
     >
       <div className="flex items-center gap-1.5">
-        {isSent ? <MessageSquare size={14} /> : <Inbox size={14} />}
+        {isSent ? (
+          <MessageSquare size={14} aria-hidden="true" />
+        ) : (
+          <Inbox size={14} aria-hidden="true" />
+        )}
+        <span className="sr-only">
+          {isSent
+            ? t('agent.agentMessageIndicator.directionSent', { defaultValue: 'Sent' })
+            : t('agent.agentMessageIndicator.directionReceived', { defaultValue: 'Received' })}
+        </span>
         <span className="font-medium">{fromAgentName}</span>
         {isSent && toAgentName && (
           <>
-            <ArrowRight size={12} className="opacity-60" />
+            <ArrowRight size={12} className="opacity-60" aria-hidden="true" />
             <span className="font-medium">{toAgentName}</span>
           </>
         )}
@@ -68,7 +77,7 @@ export const AgentMessageIndicator: FC<AgentMessageIndicatorProps> = ({
         }
       >
         <div className="flex items-center gap-1 opacity-70 cursor-help text-xs max-w-50 truncate">
-          <Bot size={12} />
+          <Bot size={12} aria-hidden="true" />
           <span className="truncate">{messagePreview}</span>
         </div>
       </Tooltip>

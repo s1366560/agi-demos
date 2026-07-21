@@ -148,7 +148,7 @@ export const SearchConfig = memo<SearchConfigProps>(
 
         <aside
           className={`
-                fixed inset-y-0 right-0 z-50 w-80 bg-slate-50 dark:bg-slate-950 lg:relative lg:z-0 lg:h-full lg:w-[300px] lg:shrink-0 lg:transform-none lg:bg-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-300 ease-in-out
+                fixed inset-y-0 right-0 z-50 w-80 bg-slate-50 dark:bg-slate-950 lg:relative lg:z-0 lg:h-full lg:w-[300px] lg:shrink-0 lg:transform-none lg:bg-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
                 ${showMobileConfig ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
                 ${!isConfigOpen ? 'lg:w-0 lg:overflow-hidden lg:opacity-0 lg:p-0' : ''}
             `}
@@ -329,12 +329,20 @@ const RetrievalModeSelector = memo<{
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+      <span
+        id="retrieval-mode-label"
+        className="text-xs font-medium text-slate-500 dark:text-slate-400"
+      >
         {t('project.search.params.retrieval_mode')}
-      </label>
-      <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950/30">
+      </span>
+      <div
+        className="flex rounded-md border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950/30"
+        role="group"
+        aria-labelledby="retrieval-mode-label"
+      >
         <button
           type="button"
+          aria-pressed={value === 'hybrid'}
           onClick={() => {
             onChange('hybrid');
           }}
@@ -344,6 +352,7 @@ const RetrievalModeSelector = memo<{
         </button>
         <button
           type="button"
+          aria-pressed={value === 'nodeDistance'}
           onClick={() => {
             onChange('nodeDistance');
           }}
@@ -363,12 +372,15 @@ const StrategySelector = memo<{ value: string; onChange: (value: string) => void
 
     return (
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <label
+          htmlFor="strategy-select"
+          className="text-xs font-medium text-slate-500 dark:text-slate-400"
+        >
           {t('project.search.params.strategy')}
         </label>
         <div className="relative">
           <select
-            aria-label={t('project.search.params.strategy')}
+            id="strategy-select"
             value={value}
             onChange={(e) => {
               onChange(e.target.value);
@@ -409,17 +421,31 @@ const FocalNodeInput = memo<{
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <label
+          htmlFor="focal-node-input"
+          className="text-xs font-medium text-slate-500 dark:text-slate-400"
+        >
           {t('project.search.params.focal_node')}
         </label>
         <div className="relative">
-          <HelpCircle
-            className="h-4 w-4 cursor-help text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+          <button
+            type="button"
+            aria-label={t('project.search.params.focal_help', 'About focal node')}
+            aria-describedby={showTooltip ? 'focal-node-tooltip' : undefined}
             onMouseEnter={onShowTooltip}
             onMouseLeave={onHideTooltip}
-          />
+            onFocus={onShowTooltip}
+            onBlur={onHideTooltip}
+            className="block text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:hover:text-slate-200 dark:focus-visible:ring-slate-50/20"
+          >
+            <HelpCircle className="h-4 w-4" aria-hidden="true" />
+          </button>
           {showTooltip && (
-            <div className="absolute right-0 top-6 z-50 w-64 rounded-md bg-slate-950 p-2 text-xs text-white shadow-lg dark:bg-slate-700">
+            <div
+              role="tooltip"
+              id="focal-node-tooltip"
+              className="absolute right-0 top-6 z-50 w-64 rounded-md bg-slate-950 p-2 text-xs text-white shadow-lg dark:bg-slate-700"
+            >
               <p className="font-semibold mb-1">{t('project.search.params.focal_tooltip.title')}</p>
               <p>{t('project.search.params.focal_tooltip.desc')}</p>
             </div>
@@ -428,10 +454,11 @@ const FocalNodeInput = memo<{
       </div>
       <div className="relative group">
         <input
-          aria-label={t('project.search.params.focal_node')}
+          id="focal-node-input"
           className="w-full rounded-md border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs text-slate-700 transition-shadow placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-400 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200"
-          placeholder={t('project.search.params.focalPlaceholder', 'e.g. node-1234-uuid...')}
+          placeholder={t('project.search.params.focalPlaceholder', 'e.g. node-1234-uuid…')}
           type="text"
+          spellCheck={false}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
@@ -451,12 +478,15 @@ const CrossEncoderSelector = memo<{ value: string; onChange: (value: string) => 
 
     return (
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <label
+          htmlFor="cross-encoder-select"
+          className="text-xs font-medium text-slate-500 dark:text-slate-400"
+        >
           {t('project.search.params.cross_encoder')}
         </label>
         <div className="relative">
           <select
-            aria-label={t('project.search.params.cross_encoder')}
+            id="cross-encoder-select"
             value={value}
             onChange={(e) => {
               onChange(e.target.value);
@@ -491,10 +521,13 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
     return (
       <>
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+          <span
+            id="max-depth-label"
+            className="text-xs font-medium text-slate-500 dark:text-slate-400"
+          >
             {t('project.search.params.max_depth')}
-          </label>
-          <div className="flex items-center gap-2">
+          </span>
+          <div className="flex items-center gap-2" role="group" aria-labelledby="max-depth-label">
             <button
               type="button"
               onClick={() => {
@@ -524,14 +557,22 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+          <span
+            id="relationship-types-label"
+            className="text-xs font-medium text-slate-500 dark:text-slate-400"
+          >
             {t('project.search.params.relationship_types')}
-          </label>
-          <div className="flex flex-wrap gap-1.5">
+          </span>
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="group"
+            aria-labelledby="relationship-types-label"
+          >
             {['RELATES_TO', 'MENTIONS', 'PART_OF', 'CONTAINS', 'BELONGS_TO'].map((rel) => (
               <button
                 key={rel}
                 type="button"
+                aria-pressed={relationshipTypes.includes(rel)}
                 onClick={() => {
                   onToggleRelationshipType(rel);
                 }}
@@ -565,6 +606,15 @@ interface TemporalFiltersProps {
 const TemporalFilters = memo<TemporalFiltersProps>(
   ({ timeRange, customTimeRange, onTimeRangeChange, onCustomTimeRangeChange }) => {
     const { t } = useTranslation();
+
+    // Convert a stored ISO string to a valid `datetime-local` input value (local time, no seconds).
+    const toLocalInputValue = (iso: string | undefined): string => {
+      if (!iso) return '';
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '';
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
 
     return (
       <div className="flex flex-col gap-3">
@@ -635,12 +685,16 @@ const TemporalFilters = memo<TemporalFiltersProps>(
         {timeRange === 'custom' && (
           <div className="flex flex-col gap-3">
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+              <label
+                htmlFor="custom-range-since"
+                className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block"
+              >
                 {t('project.search.filters.from')}
               </label>
               <input
+                id="custom-range-since"
                 type="datetime-local"
-                value={customTimeRange.since || ''}
+                value={toLocalInputValue(customTimeRange.since)}
                 onChange={(e) => {
                   onCustomTimeRangeChange({
                     ...customTimeRange,
@@ -651,12 +705,16 @@ const TemporalFilters = memo<TemporalFiltersProps>(
               />
             </div>
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+              <label
+                htmlFor="custom-range-until"
+                className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block"
+              >
                 {t('project.search.filters.to')}
               </label>
               <input
+                id="custom-range-until"
                 type="datetime-local"
-                value={customTimeRange.until || ''}
+                value={toLocalInputValue(customTimeRange.until)}
                 onChange={(e) => {
                   onCustomTimeRangeChange({
                     ...customTimeRange,
@@ -710,6 +768,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
               <button
                 type="button"
                 key={type}
+                aria-pressed={selectedEntityTypes.includes(type)}
                 onClick={() => {
                   onToggleEntityType(type);
                 }}
@@ -736,6 +795,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
               <button
                 type="button"
                 key={tag}
+                aria-pressed={selectedTags.includes(tag)}
                 onClick={() => {
                   onToggleTag(tag);
                 }}

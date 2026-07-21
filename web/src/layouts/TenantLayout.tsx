@@ -461,7 +461,7 @@ export const TenantLayout: React.FC = memo(() => {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:p-4 focus:bg-white focus:text-primary dark:focus:bg-surface-dark dark:focus:text-primary-light"
       >
-        Skip to main content
+        {t('common.skipToContent', 'Skip to main content')}
       </a>
       <div className="flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark">
         {/* Sidebar - Agent Conversation History (Primary Navigation) */}

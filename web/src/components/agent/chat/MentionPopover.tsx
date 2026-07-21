@@ -162,7 +162,7 @@ export const MentionPopover = memo(
               {t('agent.mentions.title', 'Mention entities or memories')}
             </span>
           </div>
-          <div ref={listRef} className="overflow-y-auto max-h-48">
+          <div ref={listRef} className="overflow-y-auto max-h-48" role="listbox">
             {loading ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2
@@ -174,13 +174,15 @@ export const MentionPopover = memo(
               <div className="px-3 py-6 text-center text-xs text-slate-400">
                 {query
                   ? t('agent.mentions.noResults', 'No results found')
-                  : t('agent.mentions.typeToSearch', 'Type to search...')}
+                  : t('agent.mentions.typeToSearch', 'Type to search…')}
               </div>
             ) : (
               items.map((item, idx) => (
                 <button
                   key={item.id}
                   type="button"
+                  role="option"
+                  aria-selected={idx === selectedIndex}
                   onClick={() => {
                     onSelect(item);
                   }}

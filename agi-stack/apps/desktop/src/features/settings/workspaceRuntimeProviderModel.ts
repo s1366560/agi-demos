@@ -14,6 +14,9 @@ export type WorkspaceRuntimeModelOption = {
   providerLabel: string;
   modelId: string;
   selected: boolean;
+  roles: LlmRoutingRole[];
+  description: string;
+  contextWindow: string | null;
 };
 
 export function workspaceRuntimeModelSelectionValue(providerId: string, modelId: string): string {
@@ -27,14 +30,28 @@ export function workspaceRuntimeModelOptions(
 ): WorkspaceRuntimeModelOption[] {
   const selected = policy.roles[role] ?? policy.roles.default;
   return providers.flatMap((provider) =>
-    localRuntimeRoutingModelIds(provider).map((modelId) => ({
-      value: workspaceRuntimeModelSelectionValue(provider.id, modelId),
-      providerId: provider.id,
-      providerLabel: provider.name.trim() || provider.provider_type,
-      modelId,
-      selected:
-        selected?.provider_id === provider.id && selected.model_id === modelId,
-    })),
+    localRuntimeRoutingModelIds(provider).map((modelId) => {
+      const roles = (Object.entries(policy.roles) as Array<
+        [LlmRoutingRole, typeof selected]
+      >)
+        .filter(
+          ([, target]) =>
+            target?.provider_id === provider.id && target.model_id === modelId,
+        )
+        .map(([routingRole]) => routingRole);
+      const providerLabel = provider.name.trim() || provider.provider_type;
+      return {
+        value: workspaceRuntimeModelSelectionValue(provider.id, modelId),
+        providerId: provider.id,
+        providerLabel,
+        modelId,
+        selected:
+          selected?.provider_id === provider.id && selected.model_id === modelId,
+        roles,
+        description: `${providerLabel} · ${provider.provider_type}`,
+        contextWindow: null,
+      };
+    }),
   );
 }
 

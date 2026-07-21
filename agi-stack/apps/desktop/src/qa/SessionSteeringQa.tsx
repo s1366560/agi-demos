@@ -13,6 +13,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { ChatPanel } from '../features/chat/ChatPanel';
+import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
@@ -30,6 +31,12 @@ import './sessionSteeringQa.css';
 declare global {
   var __sessionSteeringQaRoot: Root | undefined;
 }
+
+const qaApi: ComposerCatalogClient = {
+  listManagedAgents: async () => [],
+  listManagedSkills: async () => [],
+  listManagedPlugins: async () => [],
+};
 
 const snapshot: ChangeSnapshot = {
   id: 'change-snapshot-72e3a5b9',
@@ -304,6 +311,8 @@ function SessionSteeringQa() {
           </header>
           <div className="session-steering-qa-content">
             <ChatPanel
+              api={qaApi}
+              conversations={[]}
               messages={messages}
               timelineState={timeline}
               agentTaskSignals={[]}

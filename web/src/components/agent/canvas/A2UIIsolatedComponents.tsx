@@ -433,11 +433,11 @@ A2UIButton.displayName = 'A2UIButton';
 
 function resolveTabTitle(
   tab: Record<string, unknown> | null,
-  index: number,
-  resolveString: (value: unknown) => string | null
+  resolveString: (value: unknown) => string | null,
+  fallbackTitle: string
 ): string {
   const title = resolveString(tab?.title);
-  return title && title.trim().length > 0 ? title : `Tab ${String(index + 1)}`;
+  return title && title.trim().length > 0 ? title : fallbackTitle;
 }
 
 const TabFallback = memo<{ title: string }>(({ title }) => <TabFallbackContent title={title} />);
@@ -460,6 +460,7 @@ TabFallback.displayName = 'TabFallback';
 TabFallbackContent.displayName = 'TabFallbackContent';
 
 export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
+  const { t } = useTranslation();
   const helpers = useA2UIComponent(node, surfaceId);
   const theme = helpers.theme as A2UIThemeShape;
   const props = node.properties ?? {};
@@ -475,7 +476,16 @@ export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
   const resolveTabString = (value: unknown): string | null => helpers.resolveString(value);
   const activeTab = tabItems[safeSelectedIndex] ?? null;
   const activeNode = resolveNode(activeTab?.child);
-  const activeTitle = resolveTabTitle(activeTab, safeSelectedIndex, resolveTabString);
+  const tabFallbackTitle = (index: number) =>
+    t('components.a2uiIsolated.tabFallbackTitle', {
+      defaultValue: 'Tab {{index}}',
+      index: index + 1,
+    });
+  const activeTitle = resolveTabTitle(
+    activeTab,
+    resolveTabString,
+    tabFallbackTitle(safeSelectedIndex)
+  );
 
   const focusTab = (nextIndex: number) => {
     requestAnimationFrame(() => {
@@ -510,13 +520,12 @@ export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
         style={stylesToObject(theme.additionalStyles?.Tabs)}
       >
         <div
-          id="buttons"
           role="tablist"
           aria-label={activeTitle}
           className={classMapToString(theme.components.Tabs.element)}
         >
           {tabItems.map((tab, index) => {
-            const title = resolveTabTitle(tab, index, resolveTabString);
+            const title = resolveTabTitle(tab, resolveTabString, tabFallbackTitle(index));
             const isSelected = index === safeSelectedIndex;
             const tabId = `${surfaceId}-tab-${String(index)}`;
             const panelId = `${surfaceId}-tabpanel-${String(index)}`;
@@ -631,8 +640,18 @@ export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
   if (!isOpen) {
     return (
       <div className="a2ui-modal" style={getHostStyle(node.weight)}>
-        <section onClick={openModal} style={{ cursor: 'pointer' }}>
-          <A2UIIsolatedNode
+        <section
+          role="button"
+          tabIndex={0}
+          onClick={openModal}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              openModal();
+            }
+          }}
+          style={{ cursor: 'pointer' }}
+        >          <A2UIIsolatedNode
             key={getNodeKey(entryPointChild, 'modal-trigger')}
             node={entryPointChild}
             surfaceId={surfaceId}

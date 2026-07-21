@@ -205,7 +205,7 @@ describe('AgentDefinitionDetail', () => {
     expect(screen.getByText('Session and delegation')).toBeInTheDocument();
     expect(screen.getByText('global')).toBeInTheDocument();
     expect(screen.getByText('read_write')).toBeInTheDocument();
-    expect(screen.getByText('12000')).toBeInTheDocument();
+    expect(screen.getByText('12,000')).toBeInTheDocument();
     expect(screen.getByText('binding-1')).toBeInTheDocument();
     expect(screen.getAllByText(/"owner": "platform"/).length).toBeGreaterThan(0);
     expect(screen.getByText(/"fallback_models"/)).toBeInTheDocument();

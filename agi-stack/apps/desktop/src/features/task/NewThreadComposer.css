@@ -95,10 +95,11 @@
 .composer-pickers {
   display: flex;
   flex: 1;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .mode-picker {
@@ -141,9 +142,18 @@
   padding: 0 8px;
   border: 1px solid #263140;
   border-radius: 7px;
+  background: transparent;
   color: #8290a2;
   font-size: 8.5px;
   white-space: nowrap;
+}
+
+.picker-chip > b {
+  max-width: 156px;
+  overflow: hidden;
+  color: #c3cedb;
+  font-weight: 650;
+  text-overflow: ellipsis;
 }
 
 .picker-chip select {
@@ -330,9 +340,5 @@
 @media (max-width: 1180px) {
   .new-thread-view {
     padding: 34px 20px;
-  }
-
-  .new-thread-suggestions {
-    grid-template-columns: 1fr;
   }
 }

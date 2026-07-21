@@ -6,6 +6,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { AlertCircle, ArrowRight, Brain, Building2, Loader2 } from 'lucide-react';
 
 import { useTenantStore } from '../../stores/tenant';
+import { confirmAction } from '../../utils/confirmAction';
+import { logger } from '../../utils/logger';
 
 export const NewTenant: React.FC = () => {
   const { t } = useTranslation();
@@ -18,6 +20,19 @@ export const NewTenant: React.FC = () => {
     plan: 'free',
   });
 
+  const isDirty = formData.name.trim() !== '' || formData.description.trim() !== '';
+
+  const handleNavAway = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isDirty) return;
+    e.preventDefault();
+    void confirmAction({
+      title: t('tenant.create_page.discardConfirm'),
+      danger: true,
+    }).then((confirmed) => {
+      if (confirmed) void navigate('/tenant');
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -27,8 +42,8 @@ export const NewTenant: React.FC = () => {
         plan: formData.plan,
       });
       void navigate('/tenant');
-    } catch (error) {
-      console.error('Failed to create tenant:', error);
+    } catch (err) {
+      logger.error('Failed to create tenant', err);
     }
   };
 
@@ -37,16 +52,17 @@ export const NewTenant: React.FC = () => {
       {/* Header */}
       <header className="w-full border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <Link to="/tenant" className="flex items-center gap-3">
+          <Link to="/tenant" onClick={handleNavAway} className="flex items-center gap-3">
             <div className="size-8 text-primary flex items-center justify-center bg-primary/10 rounded-lg">
               <Brain size={24} />
             </div>
-            <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+            <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
               MemStack<span className="text-primary">.ai</span>
-            </h2>
+            </span>
           </Link>
           <Link
             to="/tenant"
+            onClick={handleNavAway}
             className="text-sm font-medium text-slate-500 hover:text-primary transition-colors"
           >
             {t('tenant.create_page.header_cancel')}
@@ -70,8 +86,11 @@ export const NewTenant: React.FC = () => {
             </div>
 
             {error && (
-              <div className="mx-8 mb-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm border border-red-200 dark:border-red-800 flex items-center gap-2">
-                <AlertCircle size={16} />
+              <div
+                role="alert"
+                className="mx-8 mb-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm border border-red-200 dark:border-red-800 flex items-center gap-2"
+              >
+                <AlertCircle size={16} aria-hidden="true" />
                 {error}
               </div>
             )}
@@ -97,6 +116,9 @@ export const NewTenant: React.FC = () => {
                     </div>
                     <input
                       required
+                      name="name"
+                      autoComplete="organization"
+                      spellCheck={false}
                       value={formData.name}
                       onChange={(e) => {
                         setFormData({ ...formData, name: e.target.value });
@@ -122,7 +144,7 @@ export const NewTenant: React.FC = () => {
                     }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary p-3 text-sm placeholder:text-slate-400 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none resize-none"
                     placeholder={t('tenant.create_page.description_placeholder', {
-                      defaultValue: 'Briefly describe your organization...',
+                      defaultValue: 'Briefly describe your organization…',
                     })}
                   />
                 </label>

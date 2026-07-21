@@ -239,7 +239,7 @@ describe('ProviderList', () => {
 
     renderProviderList('/tenant/route-tenant/providers');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Routing & Assignments' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Routing & Assignments' }));
 
     expect(await screen.findByTestId('model-assignment')).toHaveAttribute(
       'data-tenant-id',

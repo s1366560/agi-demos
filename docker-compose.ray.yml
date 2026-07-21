@@ -40,6 +40,7 @@ services:
     restart: unless-stopped
     shm_size: 2g
     volumes:
+      - ./docker/ray-runtime.env:/app/.env:ro
       - ray-runtime:/tmp/ray
 
   ray-worker:
@@ -76,6 +77,8 @@ services:
     cpus: "1.5"
     restart: unless-stopped
     shm_size: 2g
+    volumes:
+      - ./docker/ray-runtime.env:/app/.env:ro
 
 volumes:
   ray-runtime:

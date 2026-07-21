@@ -23,6 +23,8 @@ import {
   List,
 } from 'lucide-react';
 
+import { formatDateOnly } from '@/utils/date';
+
 export interface SearchResult {
   content: string;
   score: number;
@@ -123,15 +125,17 @@ export const SearchResults = memo<SearchResultsProps>(
             ${isResultsCollapsed ? 'h-10 overflow-hidden' : 'flex-1'}
         `}
       >
-        <div
-          className="flex shrink-0 cursor-pointer select-none flex-col gap-2 rounded-md px-1 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between"
-          onClick={onResultsCollapseToggle}
-        >
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <div className="flex shrink-0 select-none flex-col gap-2 rounded-md px-1 py-1 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={onResultsCollapseToggle}
+            aria-expanded={!isResultsCollapsed}
+            className="flex min-w-0 flex-wrap items-center gap-3 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/10 dark:hover:bg-slate-900/70 dark:focus-visible:ring-slate-50/10"
+          >
             <div
-              className={`transition-transform duration-300 ${isResultsCollapsed ? '-rotate-90' : 'rotate-0'}`}
+              className={`transition-transform duration-300 motion-reduce:transition-none ${isResultsCollapsed ? '-rotate-90' : 'rotate-0'}`}
             >
-              <ChevronDown className="h-4 w-4 text-slate-400" />
+              <ChevronDown className="h-4 w-4 text-slate-400" aria-hidden="true" />
             </div>
             <h2 className="text-base font-semibold text-slate-950 dark:text-slate-50">
               {t('project.search.results.title')}
@@ -139,35 +143,36 @@ export const SearchResults = memo<SearchResultsProps>(
             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               {results.length} {t('project.search.results.items')}
             </span>
-          </div>
-          <div
-            className="flex items-center gap-3 self-end sm:self-auto"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <div className="flex items-center rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-950/30">
+          </button>
+          <div className="flex items-center gap-3 self-end sm:self-auto">
+            <div
+              className="flex items-center rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-950/30"
+              role="group"
+              aria-label={t('project.search.results.view_mode', 'Result view mode')}
+            >
               <button
                 type="button"
                 aria-label={t('project.search.actions.view_grid')}
+                aria-pressed={viewMode === 'grid'}
                 title={t('project.search.actions.view_grid')}
                 onClick={() => {
                   onViewModeChange('grid');
                 }}
                 className={`rounded p-1.5 shadow-sm transition-colors ${viewMode === 'grid' ? 'bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-900'}`}
               >
-                <Grid className="h-4 w-4" />
+                <Grid className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 type="button"
                 aria-label={t('project.search.actions.view_list')}
+                aria-pressed={viewMode === 'list'}
                 title={t('project.search.actions.view_list')}
                 onClick={() => {
                   onViewModeChange('list');
                 }}
                 className={`rounded p-1.5 shadow-sm transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-900'}`}
               >
-                <List className="h-4 w-4" />
+                <List className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -191,7 +196,7 @@ export const SearchResults = memo<SearchResultsProps>(
               );
               return (
                 <SearchResultCard
-                  key={index}
+                  key={result.metadata.uuid ?? index}
                   result={result}
                   viewMode={viewMode}
                   isSelected={isSelected}
@@ -240,9 +245,18 @@ const SearchResultCard = memo<SearchResultCardProps>(
 
     return (
       <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={isSelected}
         onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick();
+          }
+        }}
         className={`
-                group cursor-pointer rounded-md border bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.04)] transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-slate-50 dark:bg-surface-dark dark:hover:bg-slate-900/60
+                group cursor-pointer rounded-md border bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.04)] transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:bg-surface-dark dark:hover:bg-slate-900/60 dark:focus-visible:ring-slate-50/20
                 ${
                   isSelected
                     ? 'border-slate-950 ring-1 ring-slate-950 dark:border-slate-50 dark:ring-slate-50'
@@ -271,7 +285,7 @@ const SearchResultCard = memo<SearchResultCardProps>(
           </div>
           {viewMode === 'grid' && (
             <div className="flex flex-col items-end">
-              <span className={`text-sm font-bold ${getScoreColor(result.score)}`}>
+              <span className={`text-sm font-bold tabular-nums ${getScoreColor(result.score)}`}>
                 {Math.round(result.score * 100)}%
               </span>
               <span className="text-2xs text-slate-400">
@@ -296,7 +310,9 @@ const SearchResultCard = memo<SearchResultCardProps>(
                   />
                 )}
                 <div className="flex flex-col items-end">
-                  <span className={`text-sm font-bold ${getScoreColor(result.score)} leading-none`}>
+                  <span
+                    className={`text-sm font-bold tabular-nums ${getScoreColor(result.score)} leading-none`}
+                  >
                     {Math.round(result.score * 100)}%
                   </span>
                 </div>
@@ -329,7 +345,9 @@ const SearchResultCard = memo<SearchResultCardProps>(
                 ))}
             </div>
             <span className="text-2xs text-slate-400 font-medium">
-              {result.metadata.created_at || t('project.search.results.unknown_date')}
+              {result.metadata.created_at
+                ? formatDateOnly(result.metadata.created_at)
+                : t('project.search.results.unknown_date')}
             </span>
           </div>
         </div>
@@ -349,20 +367,25 @@ const NodeIdCopyButton = memo<NodeIdCopyButtonProps>(({ uuid, copiedId, onCopyId
   const { t } = useTranslation();
 
   return (
-    <div
-      className="group/id flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 font-mono text-2xs text-slate-500 transition-colors hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800"
+    <button
+      type="button"
+      className="group/id flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 font-mono text-2xs text-slate-500 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 dark:bg-slate-900 dark:hover:bg-slate-800 dark:focus-visible:ring-slate-50/20"
       onClick={(e) => {
         onCopyId(uuid, e);
       }}
+      aria-label={t('project.search.results.copy_id')}
       title={t('project.search.results.copy_id')}
     >
-      <span>{uuid.slice(0, 8)}...</span>
+      <span>{uuid.slice(0, 8)}…</span>
       {copiedId === uuid ? (
-        <Check className="w-3 h-3 text-emerald-500" />
+        <Check className="w-3 h-3 text-emerald-500" aria-hidden="true" />
       ) : (
-        <Copy className="h-3 w-3 opacity-0 transition-opacity hover:text-slate-950 group-hover/id:opacity-100 dark:hover:text-slate-50" />
+        <Copy
+          className="h-3 w-3 opacity-0 transition-opacity hover:text-slate-950 group-hover/id:opacity-100 group-focus-within/id:opacity-100 dark:hover:text-slate-50"
+          aria-hidden="true"
+        />
       )}
-    </div>
+    </button>
   );
 });
 NodeIdCopyButton.displayName = 'NodeIdCopyButton';
@@ -396,6 +419,8 @@ const LoadingResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => 
     className={`rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-surface-dark ${
       viewMode === 'grid' ? 'col-span-full' : ''
     }`}
+    role="status"
+    aria-busy="true"
   >
     <div className="space-y-3">
       <div className="h-4 w-40 animate-pulse rounded bg-slate-200 motion-reduce:animate-none dark:bg-slate-800" />

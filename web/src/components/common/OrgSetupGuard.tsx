@@ -11,13 +11,23 @@ export const OrgSetupGuard: React.FC<{ children: React.ReactNode }> = ({ childre
   const orgSetupComplete = useAuthStore((state) => state.orgSetupComplete);
   const currentTenant = useTenantStore((state) => state.currentTenant);
 
+  const redirectTarget =
+    !orgSetupComplete && currentTenant && !location.pathname.includes('/org-settings/')
+      ? `/tenant/${currentTenant.id}/org-settings/info`
+      : null;
+
   useEffect(() => {
     // Only redirect if setup is incomplete, we are inside a tenant route,
     // and not already on the org-settings page.
-    if (!orgSetupComplete && currentTenant && !location.pathname.includes('/org-settings/')) {
-      void navigate(`/tenant/${currentTenant.id}/org-settings/info`, { replace: true });
+    if (redirectTarget) {
+      void navigate(redirectTarget, { replace: true });
     }
-  }, [orgSetupComplete, currentTenant, location.pathname, navigate]);
+  }, [redirectTarget, navigate]);
+
+  // Render nothing while the redirect is pending to avoid flashing gated content.
+  if (redirectTarget) {
+    return null;
+  }
 
   return <>{children}</>;
 };

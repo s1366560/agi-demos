@@ -95,7 +95,7 @@ export const StreamingAssistantSection: React.FC<StreamingAssistantSectionProps>
 
         {/* Streaming content indicator - matches MessageBubble.Assistant style */}
         {streamingContent && !effectiveIsThinkingStreaming && (
-          <div className="flex items-start gap-3 mb-2 animate-fade-in-up" aria-live="assertive">
+          <div className="flex items-start gap-3 mb-2 animate-fade-in-up" aria-live="off">
             <div className={ASSISTANT_AVATAR_CLASSES}>
               <svg
                 className="w-4.5 h-4.5 text-primary"

@@ -19,6 +19,7 @@ import type {
   AutomationToggleInput,
   AutomationUpdateInput,
   ConversationMessagesResponse,
+  ComposerContextItem,
   ChangeSnapshot,
   CreateTaskSessionRequest,
   CreateTaskSessionResponse,
@@ -623,7 +624,11 @@ export class DesktopApiClient {
     return readArray<WorkspaceMessage>(payload, ['messages', 'items', 'data']);
   }
 
-  async sendMessage(content: string, parentMessageId?: string): Promise<WorkspaceMessage> {
+  async sendMessage(
+    content: string,
+    parentMessageId?: string,
+    contextItems: ComposerContextItem[] = [],
+  ): Promise<WorkspaceMessage> {
     const path = this.workspacePath('/messages');
     return this.request<WorkspaceMessage>(path, {
       method: 'POST',
@@ -632,6 +637,7 @@ export class DesktopApiClient {
         sender_type: 'human',
         parent_message_id: parentMessageId || undefined,
         mentions: [],
+        context_items: contextItems,
       },
     });
   }
@@ -907,6 +913,7 @@ export class DesktopApiClient {
           idempotency_key: input.idempotencyKey,
           delivery: input.delivery,
           references: input.references,
+          context_items: input.contextItems,
         },
       },
     );

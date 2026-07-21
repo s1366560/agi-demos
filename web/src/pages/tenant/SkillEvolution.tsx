@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FC, ReactNode } from 'react';
+import type { FC, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -17,20 +17,24 @@ import {
   RefreshCw,
   Scale,
   TimerReset,
-  XCircle,
 } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
 
 import { skillAPI } from '@/services/skillService';
 
+import { formatDateTime } from '@/utils/date';
+
+import { EvolutionJobRow } from '@/components/skill/EvolutionJobRow';
 import { LazyEmpty, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
+
 
 import type {
   SkillEvolutionConfigResponse,
   SkillEvolutionJobResponse,
   SkillEvolutionMonitorResponse,
   SkillEvolutionOverviewResponse,
+  SkillEvolutionRouteEntry,
   SkillEvolutionSessionResponse,
   SkillEvolutionStageResponse,
   SkillEvolutionSkillSummaryResponse,
@@ -55,7 +59,7 @@ function formatScore(value: number | null): string {
 }
 
 function formatDate(value: string | null | undefined): string {
-  return value ? new Date(value).toLocaleString() : '-';
+  return value ? formatDateTime(value) : '-';
 }
 
 function translateEnum(t: TFunction, prefix: string, value: string) {
@@ -147,9 +151,16 @@ function StatCard({
 }
 
 function ProgressMeter({ value }: { value: number }) {
-  const width = `${String(Math.max(0, Math.min(100, value)))}%`;
+  const clamped = Math.max(0, Math.min(100, value));
+  const width = `${String(clamped)}%`;
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[oklch(0.92_0.004_255)] dark:bg-[oklch(0.28_0.006_255)]">
+    <div
+      role="progressbar"
+      aria-valuenow={Math.round(clamped)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className="h-1.5 w-full overflow-hidden rounded-full bg-[oklch(0.92_0.004_255)] dark:bg-[oklch(0.28_0.006_255)]"
+    >
       <div className="h-full rounded-full bg-[oklch(0.53_0.16_255)]" style={{ width }} />
     </div>
   );
@@ -430,80 +441,23 @@ function RecentSessionRow({ session }: { session: SkillEvolutionSessionResponse 
   );
 }
 
-function RecentJobRow({
-  job,
-  isProcessing,
-  onApply,
-  onReject,
-}: {
-  job: SkillEvolutionJobResponse;
-  isProcessing: boolean;
-  onApply: (jobId: string) => void;
-  onReject: (jobId: string) => void;
-}) {
-  const { t } = useTranslation();
-  const tone =
-    job.status === 'applied' ? 'success' : job.status === 'pending_review' ? 'pending' : 'neutral';
-  const actionable = job.status === 'pending_review';
-
-  return (
-    <div className="border-b border-[oklch(0.9_0.006_255)] px-4 py-3 last:border-b-0 dark:border-[oklch(0.28_0.006_255)]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-sm font-semibold ${pageText}`}>{job.skill_name}</span>
-            <StatusPill>
-              {translateEnum(t, 'tenant.skillEvolution.jobActions', job.action)}
-            </StatusPill>
-            <StatusPill tone={tone}>
-              {translateEnum(t, 'tenant.skillEvolution.jobStatuses', job.status)}
-            </StatusPill>
-            <StatusPill>{getSkillScopeText(t, job.project_id)}</StatusPill>
-          </div>
-        </div>
-        {actionable ? (
-          <div className="flex shrink-0 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                onApply(job.id);
-              }}
-              disabled={isProcessing}
-              className={actionButton}
-            >
-              <CheckCircle2 size={14} />
-              {t('tenant.skillEvolution.jobs.apply')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onReject(job.id);
-              }}
-              disabled={isProcessing}
-              className={actionButton}
-            >
-              <XCircle size={14} />
-              {t('tenant.skillEvolution.jobs.reject')}
-            </button>
-          </div>
-        ) : null}
-      </div>
-      {job.rationale ? (
-        <div className={`mt-2 line-clamp-3 text-sm ${mutedText}`}>{job.rationale}</div>
-      ) : null}
-      {job.candidate_preview ? (
-        <pre className="mt-2 max-h-36 overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-3 text-xs leading-5 text-[oklch(0.28_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.84_0.006_255)]">
-          {job.candidate_preview}
-        </pre>
-      ) : null}
-      <div className={`mt-2 text-xs ${mutedText}`}>
-        {formatDate(job.created_at)} ·{' '}
-        {t('tenant.skillEvolution.units.sessions', {
-          count: job.session_ids.length,
-        })}
-      </div>
-    </div>
-  );
+function toRouteEntry(job: SkillEvolutionJobResponse): SkillEvolutionRouteEntry {
+  return {
+    kind: 'evolution_job',
+    id: job.id,
+    label: job.skill_name,
+    project_id: job.project_id,
+    status: job.status,
+    action: job.action,
+    version_number: null,
+    version_label: null,
+    skill_version_id: job.skill_version_id,
+    change_summary: null,
+    rationale: job.rationale,
+    candidate_preview: job.candidate_preview,
+    created_by: null,
+    created_at: job.created_at,
+  };
 }
 
 export const SkillEvolution: FC = () => {
@@ -559,19 +513,24 @@ export const SkillEvolution: FC = () => {
     void loadOverview();
   }, [loadOverview]);
 
+  const refreshSeconds = overview
+    ? Math.max((overview.monitor ?? buildFallbackMonitor(overview)).refresh_interval_seconds, 5)
+    : 0;
+
   useEffect(() => {
-    if (!autoRefresh || !overview) {
+    if (!autoRefresh || refreshSeconds === 0) {
       return undefined;
     }
-    const monitor = overview.monitor ?? buildFallbackMonitor(overview);
-    const refreshMs = Math.max(monitor.refresh_interval_seconds, 5) * 1000;
     const intervalId = window.setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
       void loadOverview();
-    }, refreshMs);
+    }, refreshSeconds * 1000);
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [autoRefresh, loadOverview, overview]);
+  }, [autoRefresh, loadOverview, refreshSeconds]);
 
   const handleManualRun = useCallback(async () => {
     if (!tenantId) {
@@ -685,6 +644,33 @@ export const SkillEvolution: FC = () => {
     return tenantId ? `/tenant/${tenantId}` : '/tenant';
   }, [location.pathname]);
 
+  const handleTabKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+      const lastIndex = panelTabs.length - 1;
+      let nextIndex: number | null = null;
+      if (event.key === 'ArrowRight') {
+        nextIndex = index === lastIndex ? 0 : index + 1;
+      } else if (event.key === 'ArrowLeft') {
+        nextIndex = index === 0 ? lastIndex : index - 1;
+      } else if (event.key === 'Home') {
+        nextIndex = 0;
+      } else if (event.key === 'End') {
+        nextIndex = lastIndex;
+      }
+      if (nextIndex === null) {
+        return;
+      }
+      event.preventDefault();
+      const nextTab = panelTabs[nextIndex];
+      if (!nextTab) {
+        return;
+      }
+      setActivePanel(nextTab.id);
+      document.getElementById(`skill-evolution-tab-${nextTab.id}`)?.focus();
+    },
+    [panelTabs]
+  );
+
   if (isLoading && !overview) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -759,6 +745,7 @@ export const SkillEvolution: FC = () => {
               onClick={() => {
                 setAutoRefresh((current) => !current);
               }}
+              aria-pressed={autoRefresh}
               className={actionButton}
             >
               {autoRefresh ? <PauseCircle size={15} /> : <PlayCircle size={15} />}
@@ -1135,7 +1122,7 @@ export const SkillEvolution: FC = () => {
               aria-label={t('tenant.skillEvolution.tabs.ariaLabel')}
               className="flex gap-1 overflow-x-auto"
             >
-              {panelTabs.map((tab) => {
+              {panelTabs.map((tab, index) => {
                 const isActive = activePanel === tab.id;
                 return (
                   <button
@@ -1145,8 +1132,12 @@ export const SkillEvolution: FC = () => {
                     role="tab"
                     aria-selected={isActive}
                     aria-controls={`skill-evolution-panel-${tab.id}`}
+                    tabIndex={isActive ? 0 : -1}
                     onClick={() => {
                       setActivePanel(tab.id);
+                    }}
+                    onKeyDown={(event) => {
+                      handleTabKeyDown(event, index);
                     }}
                     className={`inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${
                       isActive
@@ -1255,19 +1246,23 @@ export const SkillEvolution: FC = () => {
                   </button>
                 </div>
                 {overview.recent_jobs.length > 0 ? (
-                  overview.recent_jobs.map((job) => (
-                    <RecentJobRow
-                      key={job.id}
-                      job={job}
-                      isProcessing={processingJobId === job.id}
-                      onApply={(jobId) => {
-                        void handleApplyJob(jobId);
-                      }}
-                      onReject={(jobId) => {
-                        void handleRejectJob(jobId);
-                      }}
-                    />
-                  ))
+                  <div className="divide-y divide-[oklch(0.9_0.006_255)] px-4 dark:divide-[oklch(0.28_0.006_255)]">
+                    {overview.recent_jobs.map((job) => (
+                      <EvolutionJobRow
+                        key={job.id}
+                        entry={toRouteEntry(job)}
+                        scopeLabel={getSkillScopeText(t, job.project_id)}
+                        sessionCount={job.session_ids.length}
+                        isProcessing={processingJobId === job.id}
+                        onApply={(jobId) => {
+                          void handleApplyJob(jobId);
+                        }}
+                        onReject={(jobId) => {
+                          void handleRejectJob(jobId);
+                        }}
+                      />
+                    ))}
+                  </div>
                 ) : (
                   <div className="p-6">
                     <LazyEmpty description={t('tenant.skillEvolution.jobs.empty')} />

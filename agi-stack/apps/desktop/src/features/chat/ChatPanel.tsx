@@ -6,7 +6,6 @@ import {
   ChevronDownIcon,
   CodeIcon,
   Cross2Icon,
-  Link2Icon,
   MixerHorizontalIcon,
   ReloadIcon,
   RocketIcon,
@@ -26,6 +25,8 @@ import {
 import type { SessionTimelineWindow } from '../session/sessionTimelineScrollModel';
 import type {
   AgentTimelineItem,
+  AgentConversation,
+  ComposerContextItem,
   ConversationTimelineState,
   HitlResponseSubmission,
   CodeRangeReference,
@@ -39,6 +40,7 @@ import {
   visibleQueuedRunInputs,
 } from '../session/sessionRunInputModel';
 import { ComposerControls } from './ComposerControls';
+import { ComposerPlusMenu, type ComposerCatalogClient } from './ComposerPlusMenu';
 import type { ComposerModelOption } from './ComposerControls';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
 import { isImportantTimelineItem } from './chatTimelinePresentation';
@@ -48,6 +50,7 @@ import type { ChatWorkflowTarget } from './ChatWorkflowStrip';
 import { chatComposerPresentation } from './chatComposerModel';
 import type { ChatComposerVariant } from './chatComposerModel';
 import './ChatPanel.css';
+import './ComposerMenus.css';
 
 export type { ChatWorkflowTarget } from './ChatWorkflowStrip';
 
@@ -59,6 +62,9 @@ type ChatAuthorityNotice = {
 } | null;
 
 type ChatPanelProps = {
+  api: ComposerCatalogClient;
+  conversations: readonly AgentConversation[];
+  selectedConversationId?: string | null;
   messages: WorkspaceMessage[];
   timelineState: ConversationTimelineState | null;
   agentTaskSignals: AgentTaskSignal[];
@@ -91,7 +97,11 @@ type ChatPanelProps = {
   onRunInputDeliveryChange: (delivery: RunInputDelivery) => void;
   onPromoteRunInput: (input: DesktopRunInput) => void;
   onRemoveReference: (reference: CodeRangeReference) => void;
-  onSend: (content: string, onWorkspaceMessageSaved?: () => void) => void;
+  onSend: (
+    content: string,
+    contextItems: ComposerContextItem[],
+    onWorkspaceMessageSaved?: () => void,
+  ) => void;
   onRefresh: () => void;
   onLoadEarlier: () => void;
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
@@ -139,6 +149,9 @@ function timelineAnchorMemberIds(anchor: HTMLElement): string[] {
 }
 
 export const ChatPanel = memo(function ChatPanel({
+  api,
+  conversations,
+  selectedConversationId,
   messages,
   timelineState,
   agentTaskSignals,
@@ -462,10 +475,14 @@ export const ChatPanel = memo(function ChatPanel({
   }, [scrollToLatest]);
 
   const handleComposerSend = useCallback(
-    (content: string, onWorkspaceMessageSaved?: () => void) => {
+    (
+      content: string,
+      contextItems: ComposerContextItem[],
+      onWorkspaceMessageSaved?: () => void,
+    ) => {
       pinnedToLatestRef.current = true;
       setShowJumpToLatest(false);
-      onSend(content, onWorkspaceMessageSaved);
+      onSend(content, contextItems, onWorkspaceMessageSaved);
       window.requestAnimationFrame(scrollToLatest);
     },
     [onSend, scrollToLatest],
@@ -625,6 +642,9 @@ export const ChatPanel = memo(function ChatPanel({
         </Button>
       ) : null}
       <ChatComposer
+        api={api}
+        conversations={conversations}
+        selectedConversationId={selectedConversationId}
         key={composerResetKey}
         composerVariant={composerVariant}
         initialInput={initialInput}
@@ -663,6 +683,9 @@ export const ChatPanel = memo(function ChatPanel({
 });
 
 type ChatComposerProps = {
+  api: ComposerCatalogClient;
+  conversations: readonly AgentConversation[];
+  selectedConversationId?: string | null;
   composerVariant: ChatComposerVariant;
   initialInput?: string;
   sending: boolean;
@@ -693,10 +716,17 @@ type ChatComposerProps = {
   onRuntimeTargetChange?: (value: string) => void;
   onModelChange?: (value: string) => Promise<void>;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
-  onSend: (content: string, onWorkspaceMessageSaved?: () => void) => void;
+  onSend: (
+    content: string,
+    contextItems: ComposerContextItem[],
+    onWorkspaceMessageSaved?: () => void,
+  ) => void;
 };
 
 function ChatComposer({
+  api,
+  conversations,
+  selectedConversationId,
   composerVariant,
   initialInput = '',
   sending,
@@ -731,14 +761,27 @@ function ChatComposer({
 }: ChatComposerProps) {
   const { t } = useI18n();
   const [input, setInput] = useState(initialInput);
+  const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
   const disabled = Boolean(disabledReason);
   const canSend = !disabled && !sending && Boolean(input.trim());
   const composerPresentation = chatComposerPresentation(composerVariant);
   const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
   const handleSend = useCallback(() => {
     if (!canSend) return;
-    onSend(input, () => setInput(''));
-  }, [canSend, input, onSend]);
+    onSend(input, contextItems, () => {
+      setInput('');
+      setContextItems([]);
+    });
+  }, [canSend, contextItems, input, onSend]);
+  const addContextItem = useCallback((item: ComposerContextItem) => {
+    setContextItems((current) =>
+      current.some(
+        (candidate) => candidate.kind === item.kind && candidate.resource_id === item.resource_id,
+      )
+        ? current
+        : [...current, item],
+    );
+  }, []);
 
   return (
     <form
@@ -857,6 +900,23 @@ function ChatComposer({
         </div>
       ) : null}
       <div className="session-composer-editor">
+        {contextItems.length ? (
+          <div className="composer-context-chips" aria-label={t('composer.addedContext')}>
+            {contextItems.map((item) => (
+              <button
+                type="button"
+                key={`${item.kind}:${item.resource_id}`}
+                aria-label={t('composer.removeContext', { context: item.label })}
+                onClick={() =>
+                  setContextItems((current) => current.filter((candidate) => candidate !== item))
+                }
+              >
+                {item.label}
+                <Cross2Icon aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        ) : null}
         {references.length ? (
           <div className="composer-reference-chips" aria-label={t('session.attachedReferences')}>
             {references.map((reference) => (
@@ -905,13 +965,13 @@ function ChatComposer({
         >
         {composerVariant === 'session' ? (
           <div className="session-composer-context-actions">
-            <button
-              type="button"
-              onClick={(event) => onOpenCommands(event.currentTarget)}
-            >
-              <Link2Icon aria-hidden="true" />
-              {t('session.attach')}
-            </button>
+            <ComposerPlusMenu
+              api={api}
+              conversations={conversations}
+              excludedConversationId={selectedConversationId}
+              compact
+              onAdd={addContextItem}
+            />
             <button
               type="button"
               onClick={(event) => onOpenCommands(event.currentTarget)}

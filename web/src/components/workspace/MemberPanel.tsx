@@ -63,14 +63,20 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
             {t('workspaceDetail.members.membersLabel')} ({members.length})
           </h4>
           <ul className="space-y-1">
-            {members.map((member) => (
-              <li
-                key={member.id}
-                className="text-sm border dark:border-slate-700 rounded px-2 py-1"
-              >
-                {member.user_email ?? member.user_id} · {member.role}
+            {members.length === 0 ? (
+              <li className="text-sm text-slate-400 dark:text-slate-500">
+                {t('workspaceDetail.members.noMembers', { defaultValue: 'No members yet' })}
               </li>
-            ))}
+            ) : (
+              members.map((member) => (
+                <li
+                  key={member.id}
+                  className="truncate text-sm border dark:border-slate-700 rounded px-2 py-1"
+                >
+                  {member.user_email ?? member.user_id} · {member.role}
+                </li>
+              ))
+            )}
           </ul>
         </div>
         <div>
@@ -90,30 +96,37 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
             </Button>
           </div>
           <ul className="space-y-1">
-            {agents.map((agent) => (
-              <li
-                key={agent.id}
-                className="text-sm border dark:border-slate-700 rounded px-2 py-1 flex items-center justify-between group"
-              >
-                <span>{agent.display_name || agent.agent_id}</span>
-                <LazyPopconfirm
-                  title={t('workspaceDetail.members.removeAgentConfirm')}
-                  onConfirm={() => {
-                    void handleRemoveAgent(agent.id);
-                  }}
-                  okText={t('workspaceDetail.members.remove')}
-                  cancelText={t('workspaceDetail.members.cancel')}
-                >
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    icon={<Trash2 size={16} />}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  />
-                </LazyPopconfirm>
+            {agents.length === 0 ? (
+              <li className="text-sm text-slate-400 dark:text-slate-500">
+                {t('workspaceDetail.members.noAgents', { defaultValue: 'No agents yet' })}
               </li>
-            ))}
+            ) : (
+              agents.map((agent) => (
+                <li
+                  key={agent.id}
+                  className="text-sm border dark:border-slate-700 rounded px-2 py-1 flex items-center justify-between group"
+                >
+                  <span className="truncate">{agent.display_name || agent.agent_id}</span>
+                  <LazyPopconfirm
+                    title={t('workspaceDetail.members.removeAgentConfirm')}
+                    onConfirm={() => {
+                      void handleRemoveAgent(agent.id);
+                    }}
+                    okText={t('workspaceDetail.members.remove')}
+                    cancelText={t('workspaceDetail.members.cancel')}
+                  >
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      aria-label={t('workspaceDetail.members.remove')}
+                      icon={<Trash2 size={16} />}
+                      className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
+                    />
+                  </LazyPopconfirm>
+                </li>
+              ))
+            )}
           </ul>
         </div>
       </div>

@@ -5,11 +5,13 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { Button, Form, Input, message, Typography } from 'antd';
-import { Lock } from 'lucide-react';
+import { Lock, LogOut } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
 
 import { authAPI } from '@/services/api';
+
+import { getErrorMessage, isUnknownError } from '@/types/common';
 
 const { Title, Text } = Typography;
 
@@ -24,6 +26,7 @@ export const ForceChangePassword: React.FC = () => {
   const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm<ChangePasswordFormValues>();
 
@@ -38,11 +41,17 @@ export const ForceChangePassword: React.FC = () => {
       }
 
       void navigate('/tenant', { replace: true });
-    } catch (_error) {
-      void message.error(t('forceChangePassword.failed'));
+    } catch (error) {
+      const hasDetail = isUnknownError(error) && (error.response?.data?.detail || error.message);
+      void message.error(hasDetail ? getErrorMessage(error) : t('forceChangePassword.failed'));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSignOut = () => {
+    logout();
+    void navigate('/login', { replace: true });
   };
 
   return (
@@ -62,7 +71,6 @@ export const ForceChangePassword: React.FC = () => {
           form={form}
           layout="vertical"
           onFinish={(values) => void handleSubmit(values)}
-          autoComplete="off"
         >
           <Form.Item
             name="currentPassword"
@@ -76,6 +84,7 @@ export const ForceChangePassword: React.FC = () => {
           >
             <Input.Password
               placeholder={t('forceChangePassword.currentPasswordPlaceholder')}
+              autoComplete="current-password"
               size="large"
             />
           </Form.Item>
@@ -96,6 +105,7 @@ export const ForceChangePassword: React.FC = () => {
           >
             <Input.Password
               placeholder={t('forceChangePassword.newPasswordPlaceholder')}
+              autoComplete="new-password"
               size="large"
             />
           </Form.Item>
@@ -121,6 +131,7 @@ export const ForceChangePassword: React.FC = () => {
           >
             <Input.Password
               placeholder={t('forceChangePassword.confirmPasswordPlaceholder')}
+              autoComplete="new-password"
               size="large"
             />
           </Form.Item>
@@ -131,6 +142,17 @@ export const ForceChangePassword: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
+
+        <div className="mt-4 text-center">
+          <Button
+            type="link"
+            icon={<LogOut size={14} />}
+            onClick={handleSignOut}
+            disabled={loading}
+          >
+            {t('forceChangePassword.signOut')}
+          </Button>
+        </div>
       </div>
     </div>
   );

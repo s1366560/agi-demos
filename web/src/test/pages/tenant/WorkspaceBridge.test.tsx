@@ -43,10 +43,6 @@ vi.mock('../../../components/workspace/MemberPanel', () => ({
   MemberPanel: () => <div data-testid="member-panel" />,
 }));
 
-vi.mock('../../../components/workspace/TopologyBoard', () => ({
-  TopologyBoard: () => <div data-testid="topology-board" />,
-}));
-
 vi.mock('../../../hooks/useLocalStorage', () => ({
   useLocalStorage: <T,>(key: string, initialValue: T) => ({
     value: (localStorageMock.values.has(key)

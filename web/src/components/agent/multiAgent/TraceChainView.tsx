@@ -3,17 +3,9 @@ import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  GitBranch,
-  ArrowRight,
-  Clock,
-  Timer,
-  Hash,
-  AlertCircle,
-  CheckCircle2,
-  Loader2,
-  XCircle,
-} from 'lucide-react';
+import { GitBranch, ArrowRight, Clock, Timer, Hash, Loader2 } from 'lucide-react';
+
+import { formatDuration, formatTimestamp, StatusIcon } from './format';
 
 import type {
   DescendantTreeDTO,
@@ -22,46 +14,6 @@ import type {
   UntracedRunDetailsDTO,
 } from '../../../types/multiAgent';
 import type { TFunction } from 'i18next';
-
-function formatDuration(ms: number | null): string {
-  if (ms === null) return '-';
-  if (ms < 1000) return `${String(ms)}ms`;
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${String(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${String(minutes)}m ${String(remainingSeconds)}s`;
-}
-
-function formatTimestamp(iso: string | null): string {
-  if (!iso) return '-';
-  try {
-    const date = new Date(iso);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  } catch {
-    return iso;
-  }
-}
-
-function StatusIcon({ status }: { status: string }) {
-  switch (status) {
-    case 'completed':
-      return <CheckCircle2 size={16} className="text-green-600 dark:text-green-400" />;
-    case 'failed':
-      return <AlertCircle size={16} className="text-red-600 dark:text-red-400" />;
-    case 'running':
-      return (
-        <Loader2
-          size={16}
-          className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none"
-        />
-      );
-    case 'cancelled':
-      return <XCircle size={16} className="text-amber-600 dark:text-amber-400" />;
-    default:
-      return <Clock size={16} className="text-slate-400 dark:text-slate-500" />;
-  }
-}
 
 const STATUS_SURFACE: Record<string, string> = {
   pending: 'bg-slate-50 dark:bg-slate-800',
@@ -199,7 +151,7 @@ const LoadingState: FC = memo(() => {
     <div className="flex items-center justify-center p-8">
       <Loader2 size={24} className="text-blue-500 animate-spin motion-reduce:animate-none" />
       <span className="ml-2 text-sm text-slate-500">
-        {t('agent.multiAgent.traceChain.loading', { defaultValue: 'Loading trace chain...' })}
+        {t('agent.multiAgent.traceChain.loading', { defaultValue: 'Loading trace chain…' })}
       </span>
     </div>
   );

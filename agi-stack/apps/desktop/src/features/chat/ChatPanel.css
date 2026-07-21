@@ -682,6 +682,22 @@
   color: var(--desktop-text);
 }
 
+.composer-model-role {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #17303c;
+  color: #8cc8d6;
+  font-size: 8px;
+  font-style: normal;
+}
+
+.composer-model-context {
+  margin-left: auto;
+  color: #647487;
+  white-space: nowrap;
+}
+
 .session-chat-narrative .composer-delivery-switch {
   margin-left: auto;
   padding: 2px;

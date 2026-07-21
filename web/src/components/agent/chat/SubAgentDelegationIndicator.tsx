@@ -65,6 +65,19 @@ const getStatusIcon = (status: string) => {
   }
 };
 
+const getStatusLabel = (status: string, t: TFunction) => {
+  switch (status) {
+    case 'started':
+      return tFallback(t, 'agent.subAgentDelegation.statusStarted', 'Started');
+    case 'completed':
+      return tFallback(t, 'agent.subAgentDelegation.statusCompleted', 'Completed');
+    case 'failed':
+      return tFallback(t, 'agent.subAgentDelegation.statusFailed', 'Failed');
+    default:
+      return status;
+  }
+};
+
 export const SubAgentDelegationIndicator: FC<SubAgentDelegationIndicatorProps> = ({
   subagentName,
   subagentColor,
@@ -110,7 +123,8 @@ export const SubAgentDelegationIndicator: FC<SubAgentDelegationIndicatorProps> =
               </div>
             )}
             <div>
-              <strong>{tFallback(t, 'agent.subAgentDelegation.status', 'Status')}:</strong> {status}
+              <strong>{tFallback(t, 'agent.subAgentDelegation.status', 'Status')}:</strong>{' '}
+              {getStatusLabel(status, t)}
             </div>
           </div>
         }

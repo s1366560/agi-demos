@@ -24,9 +24,7 @@ export {
   EmptyStateCards,
   // Navigation
   LanguageSwitcher,
-  NotificationPanel,
   ThemeToggle,
-  WorkspaceSwitcher,
 } from './ui';
 
 // Type exports for design system

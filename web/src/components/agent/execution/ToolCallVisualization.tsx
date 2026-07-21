@@ -28,7 +28,7 @@ import {
   Network,
 } from 'lucide-react';
 
-import { formatTimeWithSeconds } from '@/utils/date';
+import { formatDuration, formatTimeWithSeconds } from '@/utils/date';
 
 /**
  * Tool execution item for visualization
@@ -78,12 +78,6 @@ const getToolIcon = (toolName: string): React.ReactNode => {
   return TOOL_ICONS[toolName] || TOOL_ICONS.default;
 };
 
-// Format duration
-const formatDuration = (ms: number): string => {
-  if (ms < 1000) return `${String(ms)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-};
-
 // Format timestamp
 const formatTime = (timestamp: number): string => {
   return formatTimeWithSeconds(timestamp);
@@ -95,7 +89,9 @@ const formatTime = (timestamp: number): string => {
 const StatusIcon: React.FC<{ status: 'running' | 'success' | 'failed' }> = ({ status }) => {
   switch (status) {
     case 'running':
-      return <RefreshCcw className="animate-spin text-blue-500" size={16} />;
+      return (
+        <RefreshCcw className="animate-spin motion-reduce:animate-none text-blue-500" size={16} />
+      );
     case 'success':
       return <CheckCircle className="text-emerald-500" size={16} />;
     case 'failed':
@@ -122,10 +118,11 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
       }`}
     >
       {executions.map((exec) => (
-        <div
+        <button
           key={exec.id}
+          type="button"
           onClick={() => onToolClick?.(exec)}
-          className={`p-3 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
+          className={`w-full p-3 rounded-lg border cursor-pointer text-left transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
             exec.status === 'running'
               ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
               : exec.status === 'success'
@@ -133,7 +130,7 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
                 : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
           }`}
         >
-          <div className="flex items-center gap-2 mb-2">
+          <span className="flex items-center gap-2 mb-2">
             <span className="text-lg">{getToolIcon(exec.toolName)}</span>
             <span
               className={`font-medium ${
@@ -143,9 +140,9 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
               {exec.toolName}
             </span>
             <StatusIcon status={exec.status} />
-          </div>
+          </span>
 
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             {exec.duration !== undefined && (
               <span className="flex items-center gap-1">
                 <Clock className="text-2xs" size={12} />
@@ -166,8 +163,8 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
                 defaultValue: exec.status.toUpperCase(),
               })}
             </Tag>
-          </div>
-        </div>
+          </span>
+        </button>
       ))}
     </div>
   );
@@ -256,9 +253,11 @@ const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) 
                   </div>
                 }
               >
-                <div
+                <button
+                  type="button"
                   onClick={() => onToolClick?.(exec)}
-                  className={`absolute top-1/2 -translate-y-1/2 h-6 rounded cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:opacity-80 ${
+                  aria-label={exec.toolName}
+                  className={`absolute top-1/2 -translate-y-1/2 h-6 rounded cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                     exec.status === 'running'
                       ? 'bg-blue-500 animate-pulse motion-reduce:animate-none'
                       : exec.status === 'success'
@@ -319,9 +318,10 @@ const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
               </div>
             }
           >
-            <div
+            <button
+              type="button"
               onClick={() => onToolClick?.(exec)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-left transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                 exec.status === 'running'
                   ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700'
                   : exec.status === 'success'
@@ -330,18 +330,18 @@ const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
               }`}
             >
               <span className="text-lg">{getToolIcon(exec.toolName)}</span>
-              <div>
-                <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
+              <span>
+                <span className="block text-xs font-medium text-slate-700 dark:text-slate-200">
                   {exec.toolName}
-                </div>
+                </span>
                 {exec.duration !== undefined && (
-                  <div className="text-2xs text-slate-500 dark:text-slate-400">
+                  <span className="block text-2xs text-slate-500 dark:text-slate-400">
                     {formatDuration(exec.duration)}
-                  </div>
+                  </span>
                 )}
-              </div>
+              </span>
               <StatusIcon status={exec.status} />
-            </div>
+            </button>
           </Tooltip>
 
           {/* Arrow connector */}
@@ -542,7 +542,9 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
               value: opt.value,
               label: (
                 <Tooltip title={opt.label}>
-                  <span className="px-1">{opt.icon}</span>
+                  <span className="px-1" aria-label={opt.label}>
+                    {opt.icon}
+                  </span>
                 </Tooltip>
               ),
             }))}

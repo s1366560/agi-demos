@@ -4,7 +4,7 @@ import TenantHeader from '@/components/layout/TenantHeader';
 
 import { fireEvent, render, screen } from '../../utils';
 
-const togglePanel = vi.fn();
+const setPanel = vi.fn();
 const setTheme = vi.fn();
 const logout = vi.fn();
 const listTenants = vi.fn().mockResolvedValue(undefined);
@@ -63,8 +63,8 @@ vi.mock('@/stores/auth', () => ({
 
 vi.mock('@/stores/backgroundStore', () => ({
   useRunningCount: () => 0,
-  useBackgroundStore: (selector: (state: { togglePanel: typeof togglePanel }) => unknown) =>
-    selector({ togglePanel }),
+  useBackgroundStore: (selector: (state: { setPanel: typeof setPanel }) => unknown) =>
+    selector({ setPanel }),
 }));
 
 vi.mock('@/stores/theme', () => ({
@@ -140,12 +140,16 @@ describe('TenantHeader', () => {
     expect(screen.getByRole('button', { name: 'Extensions & Integrations' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Core Operations' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Projects' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/projects'
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Agent Building' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Agent Configuration' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/agents');
+    expect(screen.getByRole('link', { name: 'Agent Configuration' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/agents'
+    );
   });
 
   it('keeps desktop navigation visually bounded from header actions', () => {
@@ -164,7 +168,7 @@ describe('TenantHeader', () => {
       'overflow-hidden',
       'mr-2'
     );
-    expect(screen.getByRole('button', { name: 'Search' }).parentElement).toHaveClass('flex-none');
+    expect(screen.getByRole('link', { name: 'Search' }).parentElement).toHaveClass('flex-none');
   });
 
   it('keeps contextual navigation reachable in the tablet header range', () => {
@@ -182,9 +186,10 @@ describe('TenantHeader', () => {
     expect(screen.getAllByText('Core Operations').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Agent Building').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Projects' }));
-
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/projects'
+    );
   });
 
   it('exposes the dead letter queue in contextual navigation', () => {
@@ -201,9 +206,34 @@ describe('TenantHeader', () => {
 
     expect(screen.getAllByText('Governance & Management').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dead Letter Queue' }));
+    expect(screen.getByRole('link', { name: 'Dead Letter Queue' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/dead-letter-queue'
+    );
+  });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/dead-letter-queue');
+  it('closes a navigation menu with Escape and returns focus to the trigger', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Core Operations' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('link', { name: 'Projects' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: 'Projects' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
   it('routes tenant-level search to the project discovery view', () => {
@@ -216,9 +246,10 @@ describe('TenantHeader', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
+    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/projects'
+    );
   });
 
   it('routes project-level search to the deep search view', () => {
@@ -232,9 +263,10 @@ describe('TenantHeader', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/project/project-1/advanced-search');
+    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/project/project-1/advanced-search'
+    );
   });
 
   it('does not derive project navigation from another tenant project', () => {
@@ -256,9 +288,25 @@ describe('TenantHeader', () => {
 
     expect(screen.queryByRole('button', { name: 'Knowledge Base' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/projects'
+    );
+  });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
+  it('opens the background tasks panel from the header action', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Background tasks' }));
+
+    expect(setPanel).toHaveBeenCalledWith(true);
   });
 
   it('opens the notification dropdown from the header action', () => {
@@ -293,12 +341,16 @@ describe('TenantHeader', () => {
     expect(screen.queryByRole('button', { name: 'Core Operations' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Project Workspace' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Workspaces' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/project/project-1/workspaces');
+    expect(screen.getByRole('link', { name: 'Workspaces' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/project/project-1/workspaces'
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Knowledge Base' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Memories' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/project/project-1/memories');
+    expect(screen.getByRole('link', { name: 'Memories' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/project/project-1/memories'
+    );
   });
 
   it('groups project contextual navigation in the overflow menu', () => {
@@ -331,9 +383,9 @@ describe('TenantHeader', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Project Workspace' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Blackboard' }));
 
-    expect(mockNavigate).toHaveBeenCalledWith(
+    expect(screen.getByRole('link', { name: 'Blackboard' })).toHaveAttribute(
+      'href',
       '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-current'
     );
   });
@@ -398,6 +450,41 @@ describe('TenantHeader', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it('exposes profile, settings and billing as links in the user menu', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    const trigger = screen.getByRole('button', { name: 'User menu' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/profile'
+    );
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/settings'
+    );
+    expect(screen.getByRole('link', { name: 'Billing' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/billing'
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: 'Profile' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it('falls back to /tenant base path when tenantId is empty', () => {
     tenantState.currentTenant = null;
     tenantState.tenants = [];
@@ -412,11 +499,13 @@ describe('TenantHeader', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Core Operations' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Agent Workspace' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/agent-workspace');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Core Operations' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Projects' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/projects');
+    expect(screen.getByRole('link', { name: 'Agent Workspace' })).toHaveAttribute(
+      'href',
+      '/tenant/agent-workspace'
+    );
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/tenant/projects'
+    );
   });
 });

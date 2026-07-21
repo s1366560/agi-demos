@@ -14,6 +14,7 @@ vi.mock('react-i18next', () => ({
         'tenant.create': 'Create Workspace',
         'common.logout': 'Logout',
         'common.search': 'Search',
+        'common.skipToContent': 'Skip to main content',
       };
       return translations[key] || key;
     },

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 
 import {
   AlertCircle,
@@ -13,10 +13,7 @@ import {
   FileText,
   Film,
   Image as ImageIcon,
-  MoreVertical,
   Network,
-  RefreshCw,
-  Trash2,
   Users,
 } from 'lucide-react';
 
@@ -24,9 +21,8 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { formatDateOnly } from '@/utils/date';
 
-import { LazyDropdown, Modal, message } from '@/components/ui/lazyAntd';
-
 import { projectAPI, memoryAPI } from '../../services/api';
+import { logger } from '../../utils/logger';
 
 import type { Project, Memory } from '../../types/memory';
 
@@ -36,13 +32,6 @@ interface ProjectOverviewStats {
   storage_limit: number;
   active_nodes: number;
   collaborators: number;
-}
-
-interface DropdownClickInfo {
-  key: string;
-  domEvent: {
-    stopPropagation: () => void;
-  };
 }
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
@@ -68,22 +57,18 @@ const readMetadataString = (memory: Memory, key: string): string => {
 };
 
 export const ProjectOverview: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { projectId } = useParams();
-  const navigate = useNavigate();
   const { projectBasePath, tenantBasePath, tenantId } = useProjectBasePath();
   const [stats, setStats] = useState<ProjectOverviewStats | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const loadRequestRef = useRef(0);
 
-  // Action states
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [memoryToDelete, setMemoryToDelete] = useState<Memory | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const numberFormatter = new Intl.NumberFormat(i18n.language);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -106,7 +91,7 @@ export const ProjectOverview: React.FC = () => {
           setMemories(memoriesData.memories);
         } catch (error) {
           if (loadRequestRef.current !== requestId) return;
-          console.error('Failed to fetch project data:', error);
+          logger.error('[ProjectOverview] Failed to fetch project data:', error);
           setLoadError(
             error instanceof Error
               ? error.message
@@ -127,53 +112,16 @@ export const ProjectOverview: React.FC = () => {
     };
   }, [projectId, reloadToken, tenantId, t]);
 
-  const handleReprocess = async (memoryId: string) => {
-    if (!projectId) return;
-    try {
-      await memoryAPI.reprocess(projectId, memoryId);
-      message.success(t('common.status.processing_started') || 'Processing started');
-      // Optimistic update
-      setMemories((prev: Memory[]) =>
-        prev.map((m: Memory) => (m.id === memoryId ? { ...m, processing_status: 'PENDING' } : m))
-      );
-    } catch (error) {
-      console.error('Failed to reprocess:', error);
-      message.error(t('common.errors.processing_failed') || 'Processing failed');
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!memoryToDelete || !projectId) return;
-
-    setIsDeleting(true);
-    try {
-      await memoryAPI.delete(projectId, memoryToDelete.id);
-      message.success(t('common.status.deleted') || 'Memory deleted');
-
-      // Refresh list
-      const memoriesData = await memoryAPI.list(projectId, { page: 1, page_size: 5 });
-      setMemories(memoriesData.memories);
-
-      // Refresh stats
-      const statsData = await projectAPI.getStats(projectId);
-      setStats(statsData as ProjectOverviewStats);
-
-      setDeleteModalOpen(false);
-      setMemoryToDelete(null);
-    } catch (error) {
-      console.error('Failed to delete memory:', error);
-      message.error(t('common.errors.delete_failed') || 'Delete failed');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   if (!projectId) {
     return <div className="p-8 text-center text-slate-500">{t('project.overview.not_found')}</div>;
   }
 
   if (isLoading) {
-    return <div className="p-8 text-center text-slate-500">{t('common.loading')}</div>;
+    return (
+      <div className="p-8 text-center text-slate-500" role="status">
+        {t('common.loading')}
+      </div>
+    );
   }
 
   if (loadError || !stats) {
@@ -265,7 +213,7 @@ export const ProjectOverview: React.FC = () => {
       // Use first 50 chars of content as title
       const contentPreview = memory.content || readMetadataString(memory, 'source_content');
       if (contentPreview) {
-        return contentPreview.substring(0, 50) + (contentPreview.length > 50 ? '...' : '');
+        return contentPreview.substring(0, 50) + (contentPreview.length > 50 ? '…' : '');
       }
       return t('project.memories.untitled');
     }
@@ -300,8 +248,8 @@ export const ProjectOverview: React.FC = () => {
                     {t('common.stats.totalMemories')}
                     <Brain size={14} className="text-neutral-400" />
                   </div>
-                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
-                    {stats.memory_count}
+                  <div className="mt-3 text-2xl font-semibold tabular-nums tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                    {numberFormatter.format(stats.memory_count)}
                   </div>
                   <div className="mt-1 text-xs text-neutral-500">
                     {t('project.overview.storedInDb')}
@@ -313,7 +261,7 @@ export const ProjectOverview: React.FC = () => {
                     {t('common.stats.storageUsed')}
                     <Cloud size={14} className="text-neutral-400" />
                   </div>
-                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                  <div className="mt-3 text-2xl font-semibold tabular-nums tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
                     {formatStorage(stats.storage_used)}
                   </div>
                   <div className="mt-2 h-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
@@ -334,8 +282,8 @@ export const ProjectOverview: React.FC = () => {
                     {t('common.stats.activeNodes')}
                     <Network size={14} className="text-neutral-400" />
                   </div>
-                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
-                    {stats.active_nodes}
+                  <div className="mt-3 text-2xl font-semibold tabular-nums tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                    {numberFormatter.format(stats.active_nodes)}
                   </div>
                   <div className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
                     <CheckCircle size={13} className="text-[#0070f3]" />
@@ -348,8 +296,8 @@ export const ProjectOverview: React.FC = () => {
                     {t('common.stats.collaborators')}
                     <Users size={14} className="text-neutral-400" />
                   </div>
-                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
-                    {stats.collaborators}
+                  <div className="mt-3 text-2xl font-semibold tabular-nums tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                    {numberFormatter.format(stats.collaborators)}
                   </div>
                   <div className="mt-1 text-xs text-neutral-500">
                     {t('project.overview.projectMembers')}
@@ -392,13 +340,12 @@ export const ProjectOverview: React.FC = () => {
                     <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-wide text-neutral-500">
                       {t('project.memories.size')}
                     </th>
-                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-neutral-500"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                   {memories.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-5 py-12 text-center text-sm text-neutral-500">
+                      <td colSpan={4} className="px-5 py-12 text-center text-sm text-neutral-500">
                         {t('project.memories.noMemories')}
                       </td>
                     </tr>
@@ -409,26 +356,26 @@ export const ProjectOverview: React.FC = () => {
                       return (
                         <tr
                           key={memory.id}
-                          onClick={() => {
-                            void navigate(`${projectBasePath}/memory/${memory.id}`);
-                          }}
-                          className="group cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                          className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900"
                         >
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
                               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
                                 {memory.content_type === 'image' ? (
-                                  <ImageIcon size={16} />
+                                  <ImageIcon size={16} aria-hidden="true" />
                                 ) : memory.content_type === 'video' ? (
-                                  <Film size={16} />
+                                  <Film size={16} aria-hidden="true" />
                                 ) : (
-                                  <FileText size={16} />
+                                  <FileText size={16} aria-hidden="true" />
                                 )}
                               </div>
                               <div className="min-w-0">
-                                <div className="truncate font-medium text-neutral-950 dark:text-neutral-50">
+                                <Link
+                                  to={`${projectBasePath}/memory/${memory.id}`}
+                                  className="block truncate rounded-sm font-medium text-neutral-950 transition-colors hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:text-neutral-50 dark:hover:text-neutral-300"
+                                >
                                   {memoryTitle}
-                                </div>
+                                </Link>
                                 <div className="text-xs text-neutral-500">
                                   {t('common.time.updated', {
                                     time: formatDate(memory.updated_at || memory.created_at),
@@ -448,54 +395,8 @@ export const ProjectOverview: React.FC = () => {
                               {status.label}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-right font-mono text-neutral-600 dark:text-neutral-300">
+                          <td className="px-5 py-3 text-right font-mono tabular-nums text-neutral-600 dark:text-neutral-300">
                             {formatStorage(memory.content.length)}
-                          </td>
-                          <td className="px-5 py-3 text-right">
-                            <LazyDropdown
-                              menu={{
-                                items: [
-                                  {
-                                    key: 'reprocess',
-                                    label: t('common.actions.reprocess') || 'Reprocess',
-                                    icon: <RefreshCw size={14} />,
-                                  },
-                                  {
-                                    key: 'delete',
-                                    label: t('common.actions.delete') || 'Delete',
-                                    danger: true,
-                                    icon: <Trash2 size={14} />,
-                                  },
-                                ],
-                                onClick: ({ key, domEvent }: DropdownClickInfo) => {
-                                  domEvent.stopPropagation();
-                                  if (key === 'reprocess') {
-                                    void handleReprocess(memory.id);
-                                  }
-                                  if (key === 'delete') {
-                                    setMemoryToDelete(memory);
-                                    setDeleteModalOpen(true);
-                                  }
-                                },
-                              }}
-                              trigger={['click']}
-                            >
-                              <button
-                                type="button"
-                                aria-label={t('project.memories.openActions', {
-                                  name: memoryTitle,
-                                })}
-                                title={t('project.memories.openActions', {
-                                  name: memoryTitle,
-                                })}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                className="rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50"
-                              >
-                                <MoreVertical size={16} />
-                              </button>
-                            </LazyDropdown>
                           </td>
                         </tr>
                       );
@@ -534,8 +435,8 @@ export const ProjectOverview: React.FC = () => {
                 <Users size={16} />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-neutral-950 dark:text-neutral-50">
-                  {stats.collaborators} {t('common.stats.members')}
+                <p className="text-sm font-medium tabular-nums text-neutral-950 dark:text-neutral-50">
+                  {numberFormatter.format(stats.collaborators)} {t('common.stats.members')}
                 </p>
                 <p className="mt-0.5 text-xs text-neutral-500">
                   {t('project.overview.collaborating')}
@@ -577,32 +478,6 @@ export const ProjectOverview: React.FC = () => {
           </section>
         </aside>
       </div>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        title={t('project.memories.deleteTitle') || 'Delete Memory'}
-        open={deleteModalOpen}
-        onOk={() => {
-          void handleDelete();
-        }}
-        onCancel={() => {
-          setDeleteModalOpen(false);
-          setMemoryToDelete(null);
-        }}
-        okText={t('common.actions.delete') || 'Delete'}
-        cancelText={t('common.actions.cancel') || 'Cancel'}
-        okButtonProps={{ danger: true, loading: isDeleting }}
-      >
-        <p>
-          {t('project.memories.deleteConfirmation') ||
-            'Are you sure you want to delete this memory? This action cannot be undone.'}
-        </p>
-        {memoryToDelete && (
-          <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-            <p className="font-medium text-slate-900 dark:text-white">{memoryToDelete.title}</p>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };

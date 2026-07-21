@@ -6,6 +6,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Card, Descriptions, Empty, message, Spin, Tag, Typography } from 'antd';
 import { ArrowLeft, Copy, Rocket } from 'lucide-react';
 
+import { formatDateTime } from '@/utils/date';
+
 import { instanceTemplateService } from '../../services/instanceTemplateService';
 import { useGeneMarketActions, useGenes } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
@@ -30,6 +32,7 @@ export const TemplateDetail: React.FC = () => {
   const [template, setTemplate] = useState<InstanceTemplateResponse | null>(null);
   const [items, setItems] = useState<TemplateItemResponse[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isCloning, setIsCloning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const genes = useGenes();
@@ -47,12 +50,15 @@ export const TemplateDetail: React.FC = () => {
       setTemplate(templateRes);
       setItems(itemsRes);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to load template';
+      const msg =
+        err instanceof Error
+          ? err.message
+          : t('tenant.templateDetail.loadFailed', 'Failed to load template');
       setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [templateId]);
+  }, [templateId, t]);
 
   useEffect(() => {
     void fetchData();
@@ -62,7 +68,8 @@ export const TemplateDetail: React.FC = () => {
   }, [fetchData, listGenes, tenantId]);
 
   const handleClone = async () => {
-    if (!templateId || !template) return;
+    if (!templateId || !template || isCloning) return;
+    setIsCloning(true);
     try {
       const cloned = await instanceTemplateService.clone(
         templateId,
@@ -72,6 +79,8 @@ export const TemplateDetail: React.FC = () => {
       void navigate(`../instance-templates/${cloned.id}`);
     } catch {
       message.error(t('tenant.templateDetail.cloneError', 'Failed to clone template'));
+    } finally {
+      setIsCloning(false);
     }
   };
 
@@ -116,7 +125,7 @@ export const TemplateDetail: React.FC = () => {
         >
           {t('common.back', 'Back')}
         </Button>
-        <Title level={3} className="!mb-0">
+        <Title level={1} className="!mb-0">
           {template.name}
         </Title>
         {template.is_published && (
@@ -163,7 +172,7 @@ export const TemplateDetail: React.FC = () => {
             {template.image_version || '-'}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.templateDetail.fields.createdAt', 'Created At')}>
-            {new Date(template.created_at).toLocaleString()}
+            {formatDateTime(template.created_at)}
           </Descriptions.Item>
         </Descriptions>
       </Card>
@@ -211,6 +220,8 @@ export const TemplateDetail: React.FC = () => {
         </Button>
         <Button
           icon={<Copy size={16} />}
+          loading={isCloning}
+          disabled={isCloning}
           onClick={() => {
             void handleClone();
           }}

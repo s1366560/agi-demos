@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Alert, Empty, Input, Modal, Pagination, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Empty, Input, Modal, Pagination, Spin, Tag, Typography } from 'antd';
 import { Search } from 'lucide-react';
 
 import { geneMarketService, type GeneResponse } from '@/services/geneMarketService';
@@ -29,7 +29,7 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
   onCancel,
   onSelect,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -37,6 +37,11 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const compactNumber = useMemo(
+    () => new Intl.NumberFormat(i18n.language, { notation: 'compact' }),
+    [i18n.language]
+  );
 
   const fetchPage = useCallback(
     async (nextPage: number, query: string) => {
@@ -60,14 +65,18 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
         setItems(data.genes);
         setTotal(data.total);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load marketplace');
+        setError(
+          err instanceof Error
+            ? err.message
+            : t('workspaceDetail.genes.marketplaceLoadFailed', 'Failed to load marketplace')
+        );
         setItems([]);
         setTotal(0);
       } finally {
         setLoading(false);
       }
     },
-    [tenantId]
+    [tenantId, t]
   );
 
   useEffect(() => {
@@ -121,9 +130,13 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
       <div className="space-y-3">
         <Input
           allowClear
+          aria-label={t(
+            'workspaceDetail.genes.marketplaceSearchPlaceholder',
+            'Search marketplace genes…'
+          )}
           placeholder={t(
             'workspaceDetail.genes.marketplaceSearchPlaceholder',
-            'Search marketplace genes...'
+            'Search marketplace genes…'
           )}
           prefix={<Search size={14} />}
           value={search}
@@ -134,11 +147,27 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
           onBlur={handleSearch}
         />
 
-        {error && <Alert type="error" showIcon title={error} />}
+        {error && (
+          <Alert
+            type="error"
+            showIcon
+            title={error}
+            action={
+              <Button
+                size="small"
+                onClick={() => {
+                  void fetchPage(page, search);
+                }}
+              >
+                {t('common.retry', 'Retry')}
+              </Button>
+            }
+          />
+        )}
 
-        <div className="min-h-[240px] max-h-[420px] overflow-y-auto rounded border border-slate-200">
+        <div className="min-h-[240px] max-h-[420px] overflow-y-auto rounded border border-slate-200 dark:border-slate-700">
           {loading ? (
-            <div className="flex h-40 items-center justify-center">
+            <div className="flex h-40 items-center justify-center" role="status">
               <Spin />
             </div>
           ) : items.length === 0 ? (
@@ -152,12 +181,12 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
               />
             </div>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-700">
               {items.map((gene) => (
                 <li key={gene.id}>
                   <button
                     type="button"
-                    className="w-full px-4 py-3 text-left hover:bg-slate-50"
+                    className="w-full px-4 py-3 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 dark:hover:bg-slate-800"
                     onClick={() => {
                       onSelect(marketplaceGeneToPayload(gene), gene);
                     }}
@@ -180,15 +209,17 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({
                         </div>
                         {gene.description && (
                           <Typography.Paragraph
-                            className="m-0 mt-1 text-xs text-slate-500"
+                            className="m-0 mt-1 text-xs text-slate-500 dark:text-slate-400"
                             ellipsis={{ rows: 2, tooltip: gene.description }}
                           >
                             {gene.description}
                           </Typography.Paragraph>
                         )}
                       </div>
-                      <div className="shrink-0 text-xs text-slate-400">
-                        <span>↓ {gene.install_count}</span>
+                      <div className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                        <span className="tabular-nums">
+                          ↓ {compactNumber.format(gene.install_count)}
+                        </span>
                       </div>
                     </div>
                   </button>

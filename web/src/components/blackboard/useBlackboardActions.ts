@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ObjectiveFormValues } from '@/components/workspace/objectives/ObjectiveCreateModal';
 
 import type { BlackboardPost, CyberObjectiveType } from '@/types/workspace';
+import { confirmAction } from '@/utils/confirmAction';
 
 export interface BlackboardActionCallbacks {
   onLoadReplies: (postId: string) => Promise<boolean>;
@@ -316,6 +317,20 @@ export function useBlackboardActions({
   };
 
   const handleDeleteObjective = async (objectiveId: string) => {
+    const confirmed = await confirmAction({
+      title: t('blackboard.confirm.deleteObjectiveTitle', 'Delete this objective?'),
+      content: t(
+        'blackboard.confirm.deleteObjectiveContent',
+        'This objective will be permanently deleted. This action cannot be undone.'
+      ),
+      okText: t('common.delete', 'Delete'),
+      cancelText: t('common.cancel', 'Cancel'),
+      danger: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+
     try {
       await deleteObjective(tenantId, projectId, workspaceId, objectiveId);
     } catch {
@@ -327,11 +342,25 @@ export function useBlackboardActions({
     try {
       await projectObjectiveToTask(tenantId, projectId, workspaceId, objectiveId);
     } catch {
-      message?.error(t('blackboard.errors.createObjective', 'Failed to create objective'));
+      message?.error(t('blackboard.errors.projectObjective', 'Failed to project objective to task'));
     }
   };
 
   const handleDeleteGene = async (geneId: string) => {
+    const confirmed = await confirmAction({
+      title: t('blackboard.confirm.deleteGeneTitle', 'Delete this gene?'),
+      content: t(
+        'blackboard.confirm.deleteGeneContent',
+        'This gene will be permanently deleted. This action cannot be undone.'
+      ),
+      okText: t('common.delete', 'Delete'),
+      cancelText: t('common.cancel', 'Cancel'),
+      danger: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+
     try {
       await deleteGene(tenantId, projectId, workspaceId, geneId);
     } catch {

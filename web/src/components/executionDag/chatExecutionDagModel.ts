@@ -2,19 +2,9 @@ import type { GraphNodeState, GraphRunState } from '@/stores/graphStore';
 
 import type { AgentGraphApiResponse } from '@/services/agent/graph/agentGraphApi';
 
-import type { ExecutionDagEdge, ExecutionDagModel, ExecutionDagNode } from './types';
+import { uniqueEdges } from './dagModelUtils';
 
-function uniqueEdges(edges: ExecutionDagEdge[]): ExecutionDagEdge[] {
-  const seen = new Set<string>();
-  return edges.filter((edge) => {
-    const key = `${edge.kind}:${edge.sourceId}:${edge.targetId}`;
-    if (seen.has(key) || edge.sourceId === edge.targetId) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
+import type { ExecutionDagEdge, ExecutionDagModel, ExecutionDagNode } from './types';
 
 function rootId(run: GraphRunState): string {
   return `graph-root:${run.graphRunId}`;

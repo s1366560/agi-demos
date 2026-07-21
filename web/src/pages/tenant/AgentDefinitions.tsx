@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 
 import {
   Badge,
@@ -18,6 +18,7 @@ import {
 import { Bot, Edit2, Eye, MoreVertical, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 
 import { AgentDefinitionModal } from '../../components/agent/AgentDefinitionModal';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   useClearDefinitionError,
   useDefinitionError,
@@ -33,6 +34,8 @@ import {
 import { useUser } from '../../stores/auth';
 import { useProjectStore } from '../../stores/project';
 import { useCurrentTenant } from '../../stores/tenant';
+import { getDefinitionListPath } from '../../utils/agentDefinitionPath';
+import { canManageTenantAgents } from '../../utils/permissions';
 
 import type { AgentDefinition } from '../../types/multiAgent';
 import type { MenuProps } from 'antd';
@@ -41,31 +44,34 @@ type StatusFilter = 'all' | 'enabled' | 'disabled';
 type ScopeFilter = string;
 type SortField = 'name' | 'recent' | 'invocations';
 
-function canManageTenantAgents(
-  user: ReturnType<typeof useUser>,
-  tenant: ReturnType<typeof useCurrentTenant>
-): boolean {
-  const roles = new Set((user?.roles ?? []).map((role) => role.toLowerCase()));
-  return (
-    roles.has('admin') ||
-    roles.has('owner') ||
-    roles.has('system_admin') ||
-    tenant?.owner_id === user?.id
-  );
-}
+const parseStatusFilter = (value: string | null): StatusFilter =>
+  value === 'enabled' || value === 'disabled' ? value : 'all';
+
+const parseSortField = (value: string | null): SortField =>
+  value === 'recent' || value === 'invocations' ? value : 'name';
 
 export const AgentDefinitions: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
-  const [sortField, setSortField] = useState<SortField>('name');
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() =>
+    parseStatusFilter(searchParams.get('status'))
+  );
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>(
+    () => searchParams.get('scope') ?? 'all'
+  );
+  const [sortField, setSortField] = useState<SortField>(() =>
+    parseSortField(searchParams.get('sort'))
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDef, setEditingDef] = useState<AgentDefinition | null>(null);
   const [createProjectId, setCreateProjectId] = useState<string | null>(null);
+
+  // Debounce the search box so typing does not fire a request per keystroke
+  const debouncedSearch = useDebounce(search, 400);
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
@@ -114,16 +120,7 @@ export const AgentDefinitions: React.FC = () => {
 
   const selectedProjectId = scopeFilter !== 'all' && scopeFilter !== 'tenant' ? scopeFilter : null;
 
-  const listPath = useMemo(() => {
-    const segments = location.pathname.split('/').filter(Boolean);
-    const definitionsIndex = segments.lastIndexOf('agent-definitions');
-
-    if (definitionsIndex === -1) {
-      return '/tenant/agent-definitions';
-    }
-
-    return `/${segments.slice(0, definitionsIndex + 1).join('/')}`;
-  }, [location.pathname]);
+  const listPath = useMemo(() => getDefinitionListPath(location.pathname), [location.pathname]);
 
   const loadDefinitionsPage = useCallback(
     (options?: { page?: number; pageSize?: number }) => {
@@ -136,7 +133,7 @@ export const AgentDefinitions: React.FC = () => {
         tenant_id: tenantId,
         project_id: selectedProjectId,
         scope: scopeFilter === 'tenant' ? 'tenant' : undefined,
-        search: search.trim() || undefined,
+        search: debouncedSearch.trim() || undefined,
         sort: sortField,
         enabled: statusFilter === 'all' ? undefined : statusFilter === 'enabled',
         limit: nextPageSize,
@@ -147,7 +144,7 @@ export const AgentDefinitions: React.FC = () => {
       listDefinitionsPage,
       pageSize,
       scopeFilter,
-      search,
+      debouncedSearch,
       selectedProjectId,
       sortField,
       statusFilter,
@@ -182,11 +179,39 @@ export const AgentDefinitions: React.FC = () => {
 
   useEffect(() => {
     setFilters({
-      search,
+      search: debouncedSearch,
       enabled: statusFilter === 'all' ? null : statusFilter === 'enabled',
       projectId: selectedProjectId,
     });
-  }, [search, selectedProjectId, statusFilter, setFilters]);
+  }, [debouncedSearch, selectedProjectId, statusFilter, setFilters]);
+
+  // Reflect filters/sort/search in the URL so views are shareable and restorable
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (search.trim()) {
+      next.set('q', search.trim());
+    } else {
+      next.delete('q');
+    }
+    if (statusFilter !== 'all') {
+      next.set('status', statusFilter);
+    } else {
+      next.delete('status');
+    }
+    if (scopeFilter !== 'all') {
+      next.set('scope', scopeFilter);
+    } else {
+      next.delete('scope');
+    }
+    if (sortField !== 'name') {
+      next.set('sort', sortField);
+    } else {
+      next.delete('sort');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [search, statusFilter, scopeFilter, sortField, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -368,25 +393,35 @@ export const AgentDefinitions: React.FC = () => {
           })}
         </span>
         <span className="text-slate-300 dark:text-slate-600">|</span>
-        <span>
-          {t('tenant.agentDefinitions.stats.enabled', {
-            count: enabledCount,
-            defaultValue: '{{count}} enabled',
+        <span
+          className="flex items-center gap-4"
+          title={t('tenant.agentDefinitions.stats.pageScopeHint', {
+            defaultValue: 'These counts reflect the current page',
           })}
-        </span>
-        <span className="text-slate-300 dark:text-slate-600">|</span>
-        <span>
-          {t('tenant.agentDefinitions.stats.tenantScoped', {
-            count: tenantDefinitionCount,
-            defaultValue: '{{count}} tenant',
-          })}
-        </span>
-        <span className="text-slate-300 dark:text-slate-600">|</span>
-        <span>
-          {t('tenant.agentDefinitions.stats.projectScoped', {
-            count: projectDefinitionCount,
-            defaultValue: '{{count}} project',
-          })}
+        >
+          <span>
+            {t('tenant.agentDefinitions.stats.enabled', {
+              count: enabledCount,
+              defaultValue: '{{count}} enabled',
+            })}
+          </span>
+          <span className="text-slate-300 dark:text-slate-600">|</span>
+          <span>
+            {t('tenant.agentDefinitions.stats.tenantScoped', {
+              count: tenantDefinitionCount,
+              defaultValue: '{{count}} tenant',
+            })}
+          </span>
+          <span className="text-slate-300 dark:text-slate-600">|</span>
+          <span>
+            {t('tenant.agentDefinitions.stats.projectScoped', {
+              count: projectDefinitionCount,
+              defaultValue: '{{count}} project',
+            })}
+          </span>
+          <span className="text-xs text-slate-400 dark:text-slate-500">
+            {t('tenant.agentDefinitions.stats.currentPageNote', { defaultValue: '(current page)' })}
+          </span>
         </span>
       </div>
 
@@ -402,19 +437,20 @@ export const AgentDefinitions: React.FC = () => {
             }}
             aria-label={t('common.search', 'Search...')}
             placeholder={t('common.search', 'Search...')}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary outline-none"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" role="group" aria-label={t('tenant.agentDefinitions.filters.groupLabel', { defaultValue: 'Status filter' })}>
           {(['all', 'enabled', 'disabled'] as StatusFilter[]).map((sf) => (
             <button
               key={sf}
               type="button"
+              aria-pressed={statusFilter === sf}
               onClick={() => {
                 setStatusFilter(sf);
               }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                 statusFilter === sf
                   ? 'bg-primary text-white'
                   : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
@@ -480,7 +516,7 @@ export const AgentDefinitions: React.FC = () => {
           title={t('tenant.agentDefinitions.refresh', {
             defaultValue: 'Refresh agent definitions',
           })}
-          className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
         >
           <RefreshCw size={16} />
         </button>
@@ -490,6 +526,29 @@ export const AgentDefinitions: React.FC = () => {
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Spin size="large" />
+        </div>
+      ) : error ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400"
+        >
+          <p className="text-lg font-medium text-slate-700 dark:text-slate-300">
+            {t('tenant.agentDefinitions.loadFailed', {
+              defaultValue: 'Failed to load agent definitions',
+            })}
+          </p>
+          <p className="mt-1 max-w-md text-center text-sm">{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              clearError();
+              void loadDefinitionsPage({ page });
+            }}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <RefreshCw size={14} />
+            {t('common.retry', 'Retry')}
+          </button>
         </div>
       ) : definitions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400">
@@ -559,7 +618,7 @@ export const AgentDefinitions: React.FC = () => {
                         name: def.display_name ?? def.name,
                         defaultValue: 'Open actions for {{name}}',
                       })}
-                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
                     >
                       <MoreVertical size={14} />
                     </button>
@@ -569,12 +628,10 @@ export const AgentDefinitions: React.FC = () => {
             >
               <div className="space-y-2">
                 <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                  {def.system_prompt
-                    ? def.system_prompt.substring(0, 120) +
-                      (def.system_prompt.length > 120 ? '...' : '')
-                    : t('tenant.agentDefinitions.noSystemPrompt', {
-                        defaultValue: 'No system prompt',
-                      })}
+                  {def.system_prompt ||
+                    t('tenant.agentDefinitions.noSystemPrompt', {
+                      defaultValue: 'No system prompt',
+                    })}
                 </p>
 
                 <div className="flex flex-wrap gap-1">

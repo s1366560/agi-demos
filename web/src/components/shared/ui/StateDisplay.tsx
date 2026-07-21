@@ -56,8 +56,12 @@ const LoadingComponent: FC<StateLoadingProps> = ({
   const config = sizeMap[size];
 
   const content = (
-    <div className={`flex flex-col items-center justify-center gap-3 ${config.padding}`}>
+    <div
+      className={`flex flex-col items-center justify-center gap-3 ${config.padding}`}
+      role="status"
+    >
       <Loader2
+        aria-hidden="true"
         className={`${config.spinner} animate-spin motion-reduce:animate-none text-primary`}
       />
       {message && (
@@ -124,7 +128,7 @@ const EmptyComponent: FC<StateEmptyProps> = ({
           flex items-center justify-center mb-4
         "
       >
-        <Icon size={28} className="text-slate-300 dark:text-slate-600" />
+        <Icon aria-hidden="true" size={28} className="text-slate-300 dark:text-slate-600" />
       </div>
       <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">{title}</h3>
       {description && (
@@ -197,7 +201,7 @@ const ErrorComponent: FC<StateErrorProps> = ({
           flex items-center justify-center mb-4
         "
       >
-        <AlertCircle size={28} className="text-red-500 dark:text-red-400" />
+        <AlertCircle aria-hidden="true" size={28} className="text-red-500 dark:text-red-400" />
       </div>
       <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">
         {resolvedTitle}
@@ -214,6 +218,7 @@ const ErrorComponent: FC<StateErrorProps> = ({
               inline-flex items-center gap-1.5 px-4 py-2
               bg-primary text-white text-sm font-medium
               rounded-lg hover:bg-primary/90 transition-colors
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
             "
           >
             {t('components.stateDisplay.tryAgain', { defaultValue: 'Try Again' })}
@@ -228,6 +233,7 @@ const ErrorComponent: FC<StateErrorProps> = ({
               bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400
               text-sm font-medium rounded-lg
               hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
             "
           >
             {t('components.stateDisplay.dismiss', { defaultValue: 'Dismiss' })}

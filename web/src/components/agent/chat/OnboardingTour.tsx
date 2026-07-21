@@ -109,6 +109,12 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const currentStep = TOUR_STEPS[step];
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Move keyboard focus into the tour card when it opens / advances
+  useEffect(() => {
+    cardRef.current?.focus();
+  }, [step]);
 
   // Measure target element position on step change and window resize
   const measure = useCallback(() => {
@@ -157,7 +163,9 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
   }, [onComplete]);
 
   const isLast = step === TOUR_STEPS.length - 1;
-  const transition = reducedMotion ? 'none' : 'all 0.3s ease';
+  const transition = reducedMotion
+    ? 'none'
+    : 'top 0.3s ease, left 0.3s ease, width 0.3s ease, height 0.3s ease, box-shadow 0.3s ease';
 
   const spotlightStyle = useMemo<React.CSSProperties | undefined>(() => {
     if (!targetRect) return undefined;
@@ -194,7 +202,9 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
 
       {/* Tooltip card */}
       <div
-        className="absolute z-[102] w-[360px] rounded-lg bg-slate-50 dark:bg-slate-800 shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 border border-slate-200 dark:border-slate-700 p-5"
+        ref={cardRef}
+        tabIndex={-1}
+        className="absolute z-[102] w-[360px] rounded-lg bg-slate-50 dark:bg-slate-800 shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 border border-slate-200 dark:border-slate-700 p-5 focus:outline-none"
         style={{
           top: cardPos.top,
           left: cardPos.left,

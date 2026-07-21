@@ -57,6 +57,3 @@ export type { CodeViewerProps } from './CodeViewer';
 
 export { FileDownloader } from './FileDownloader';
 export type { FileDownloaderProps } from './FileDownloader';
-
-export { ArtifactGallery } from './ArtifactGallery';
-export type { ArtifactGalleryProps } from './ArtifactGallery';

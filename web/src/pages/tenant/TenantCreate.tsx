@@ -33,7 +33,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
     setError(null);
 
     try {
-      await tenantService.createTenant(name, description);
+      await tenantService.createTenant(name.trim(), description);
       setName('');
       setDescription('');
       if (onSuccess) {
@@ -63,7 +63,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
       onClose={handleClose}
       title={t('tenant.create_modal.title')}
       size="md"
-      isDirty={isLoading}
+      isDirty={() => name.trim() !== '' || description.trim() !== ''}
       closeOnBackdrop={!isLoading}
       footer={
         <>
@@ -78,7 +78,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
           <button
             type="submit"
             form="tenant-create-page-form"
-            disabled={isLoading || !name}
+            disabled={isLoading || !name.trim()}
             className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
           >
             {isLoading ? (

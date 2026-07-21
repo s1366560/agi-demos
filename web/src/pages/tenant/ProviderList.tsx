@@ -90,8 +90,52 @@ const PROVIDER_TYPE_FILTER_OPTIONS: Array<{ value: ProviderType; label: string }
 ];
 
 type ViewMode = 'cards' | 'table';
-type SortField = 'name' | 'health' | 'responseTime' | 'createdAt';
+type SortField = 'name' | 'health' | 'responseTime';
 type SortOrder = 'asc' | 'desc';
+
+interface SortableThProps {
+  field: SortField;
+  sortField: SortField;
+  sortOrder: SortOrder;
+  onSort: (field: SortField) => void;
+  children: React.ReactNode;
+}
+
+const SortableTh: React.FC<SortableThProps> = ({
+  field,
+  sortField,
+  sortOrder,
+  onSort,
+  children,
+}) => {
+  const isActive = sortField === field;
+  return (
+    <th
+      scope="col"
+      aria-sort={isActive ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          onSort(field);
+        }}
+        className="flex items-center gap-2 rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        {children}
+        {isActive ? (
+          sortOrder === 'asc' ? (
+            <ArrowUp size={14} aria-hidden="true" />
+          ) : (
+            <ArrowDown size={14} aria-hidden="true" />
+          )
+        ) : (
+          <ArrowUpDown size={14} className="opacity-50" aria-hidden="true" />
+        )}
+      </button>
+    </th>
+  );
+};
 
 export const ProviderList: React.FC = () => {
   const { t } = useTranslation();
@@ -275,9 +319,6 @@ export const ProviderList: React.FC = () => {
         case 'responseTime':
           comparison = (a.response_time_ms || 0) - (b.response_time_ms || 0);
           break;
-        case 'createdAt':
-          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-          break;
       }
       return sortOrder === 'asc' ? comparison : -comparison;
     });
@@ -307,9 +348,15 @@ export const ProviderList: React.FC = () => {
       </div>
 
       {/* View Toggle */}
-      <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit">
+      <div
+        role="tablist"
+        aria-label={t('tenant.providers.title')}
+        className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit"
+      >
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'my-providers'}
           onClick={() => {
             setActiveTab('my-providers');
           }}
@@ -323,6 +370,8 @@ export const ProviderList: React.FC = () => {
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'marketplace'}
           onClick={() => {
             setActiveTab('marketplace');
           }}
@@ -336,6 +385,8 @@ export const ProviderList: React.FC = () => {
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'assignments'}
           onClick={() => {
             setActiveTab('assignments');
           }}
@@ -528,30 +579,14 @@ export const ProviderList: React.FC = () => {
                 <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                   <thead className="bg-slate-50 dark:bg-slate-800/50">
                     <tr>
-                      <th
-                        className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-primary"
-                        onClick={() => {
-                          handleSort('name');
-                        }}
+                      <SortableTh
+                        field="name"
+                        sortField={sortField}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
                       >
-                        <div className="flex items-center gap-2">
-                          {t('tenant.providers.columns.provider')}
-                          {sortField === 'name' ||
-                          sortField === 'health' ||
-                          sortField === 'responseTime' ? (
-                            sortOrder === 'asc' ? (
-                              <ArrowUp size={14} />
-                            ) : (
-                              <ArrowDown size={14} />
-                            )
-                          ) : (
-                            <ArrowUpDown
-                              size={14}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            />
-                          )}
-                        </div>
-                      </th>
+                        {t('tenant.providers.columns.provider')}
+                      </SortableTh>
                       <th
                         className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
                         scope="col"
@@ -564,54 +599,22 @@ export const ProviderList: React.FC = () => {
                       >
                         {t('common.forms.model')}
                       </th>
-                      <th
-                        className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-primary"
-                        onClick={() => {
-                          handleSort('health');
-                        }}
+                      <SortableTh
+                        field="health"
+                        sortField={sortField}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
                       >
-                        <div className="flex items-center gap-2">
-                          {t('common.stats.healthStatus')}
-                          {sortField === 'name' ||
-                          sortField === 'health' ||
-                          sortField === 'responseTime' ? (
-                            sortOrder === 'asc' ? (
-                              <ArrowUp size={14} />
-                            ) : (
-                              <ArrowDown size={14} />
-                            )
-                          ) : (
-                            <ArrowUpDown
-                              size={14}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            />
-                          )}
-                        </div>
-                      </th>
-                      <th
-                        className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-primary"
-                        onClick={() => {
-                          handleSort('responseTime');
-                        }}
+                        {t('common.stats.healthStatus')}
+                      </SortableTh>
+                      <SortableTh
+                        field="responseTime"
+                        sortField={sortField}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
                       >
-                        <div className="flex items-center gap-2">
-                          {t('tenant.providers.columns.responseTime')}
-                          {sortField === 'name' ||
-                          sortField === 'health' ||
-                          sortField === 'responseTime' ? (
-                            sortOrder === 'asc' ? (
-                              <ArrowUp size={14} />
-                            ) : (
-                              <ArrowDown size={14} />
-                            )
-                          ) : (
-                            <ArrowUpDown
-                              size={14}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            />
-                          )}
-                        </div>
-                      </th>
+                        {t('tenant.providers.columns.responseTime')}
+                      </SortableTh>
                       <th className="relative px-6 py-3" scope="col">
                         <span className="sr-only">{t('tenant.providers.columns.actions')}</span>
                       </th>
@@ -710,7 +713,7 @@ export const ProviderList: React.FC = () => {
                             </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm tabular-nums text-slate-600 dark:text-slate-400">
                           {provider.response_time_ms
                             ? `${String(provider.response_time_ms)}ms`
                             : t('tenant.providers.notAvailable')}
@@ -725,6 +728,7 @@ export const ProviderList: React.FC = () => {
                               disabled={checkingHealth === provider.id}
                               className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50"
                               title={t('common.actions.checkHealth')}
+                              aria-label={t('common.actions.checkHealth')}
                             >
                               {checkingHealth === provider.id ? (
                                 <Loader2
@@ -742,6 +746,7 @@ export const ProviderList: React.FC = () => {
                               }}
                               className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                               title={t('common.edit')}
+                              aria-label={t('common.edit')}
                             >
                               <Pencil size={18} />
                             </button>
@@ -752,6 +757,7 @@ export const ProviderList: React.FC = () => {
                               }}
                               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                               title={t('common.delete')}
+                              aria-label={t('common.delete')}
                             >
                               <Trash2 size={18} />
                             </button>

@@ -192,13 +192,17 @@ describe('ProjectOverview - Performance Optimizations', () => {
       expect(screen.getByText(/active memories/i)).toBeInTheDocument();
     });
 
-    it('labels memory row action buttons with the memory title', async () => {
+    it('labels memory title links with the memory title', async () => {
       renderWithRouter(<ProjectOverview />);
 
-      expect(
-        await screen.findByRole('button', { name: 'Open actions for Memory 1' })
-      ).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Open actions for Memory 2' })).toBeInTheDocument();
+      expect(await screen.findByRole('link', { name: 'Memory 1' })).toHaveAttribute(
+        'href',
+        '/project/p1/memory/m1'
+      );
+      expect(screen.getByRole('link', { name: 'Memory 2' })).toHaveAttribute(
+        'href',
+        '/project/p1/memory/m2'
+      );
     });
 
     it('links the show more action to the full memories page', async () => {
@@ -462,7 +466,7 @@ describe('ProjectOverview - Performance Optimizations', () => {
       renderWithRouter(<ProjectOverview />);
 
       await waitFor(() => {
-        const element = screen.getByText(/A{10,}\.{3}/);
+        const element = screen.getByText(`${'A'.repeat(50)}…`);
         expect(element).toBeInTheDocument();
       });
     });
@@ -552,17 +556,16 @@ describe('ProjectOverview - Performance Optimizations', () => {
   });
 
   describe('Navigation Handlers (useCallback)', () => {
-    it('should navigate to memory detail on row click', async () => {
-      // This test verifies the onClick handler is properly attached
+    it('should link each memory title to its detail page', async () => {
       renderWithRouter(<ProjectOverview />);
 
       await waitFor(() => {
         expect(screen.getByText('Memory 1')).toBeInTheDocument();
       });
 
-      // The table row should be clickable
-      const row = screen.getByText('Memory 1').closest('tr');
-      expect(row).toHaveClass('cursor-pointer');
+      // The memory title links to the memory detail page (row actions live in MemoryList)
+      const link = screen.getByRole('link', { name: 'Memory 1' });
+      expect(link).toHaveAttribute('href', '/project/p1/memory/m1');
     });
   });
 

@@ -473,9 +473,9 @@ export const AgentWorkspace: FC = () => {
           className="bg-white dark:bg-surface-dark rounded-xl border border-red-200 dark:border-red-900/60 shadow-sm p-8 max-w-lg text-center"
         >
           <AlertCircle size={32} className="mx-auto text-red-500 dark:text-red-400" />
-          <h2 className="mt-4 text-base font-semibold text-slate-900 dark:text-white">
+          <p className="mt-4 text-base font-semibold text-slate-900 dark:text-white">
             {t('agent.workspace.projectsLoadFailed', 'Failed to load projects')}
-          </h2>
+          </p>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 break-words">
             {projectLoadError}
           </p>

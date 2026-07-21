@@ -21,6 +21,7 @@ use super::{
         DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
         DesktopRunStatus, WorkspaceToolGrant,
     },
+    composer_context::ComposerContextItem,
     provider_usage_store::{self, ProviderUsageRecord, ProviderUsageStatistic},
     resource_registry::{
         apply_workspace_agent_policy_mutation, ensure_workspace_agent_policy_in_transaction,
@@ -215,6 +216,7 @@ pub(super) struct CreateRunInput<'a> {
     pub(super) delivery: RunInputDelivery,
     pub(super) content: &'a str,
     pub(super) references: Vec<RunInputReference>,
+    pub(super) context_items: Vec<ComposerContextItem>,
     pub(super) now: &'a str,
 }
 
@@ -2962,7 +2964,8 @@ impl DesktopSessionStore {
                 && existing.message_id == input.message_id
                 && existing.delivery == input.delivery
                 && existing.content == input.content
-                && existing.references == input.references;
+                && existing.references == input.references
+                && existing.context_items == input.context_items;
             if matches {
                 return Ok((existing, false));
             }
@@ -3020,6 +3023,7 @@ impl DesktopSessionStore {
             queue_position,
             content: content.to_string(),
             references: input.references,
+            context_items: input.context_items,
             applied_round: None,
             applied_at: None,
             promotion_idempotency_key: None,

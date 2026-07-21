@@ -1000,7 +1000,8 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               <div className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-help transition-colors">
                 <Route size={11} className="text-blue-500" />
                 <span className="hidden sm:inline">
-                  {executionPathDecision?.path.replace(/_/g, ' ') || 'Insights'}
+                  {executionPathDecision?.path.replace(/_/g, ' ') ||
+                    t('agent.lifecycle.insights.label')}
                 </span>
               </div>
             </LazyTooltip>
@@ -1030,6 +1031,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip title={t('agent.lifecycle.controls.pause')}>
               <button
                 type="button"
+                aria-label={t('agent.lifecycle.controls.pause')}
                 onClick={() => {
                   void handlePauseAgent();
                 }}
@@ -1057,6 +1059,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip title={t('agent.lifecycle.controls.resume')}>
               <button
                 type="button"
+                aria-label={t('agent.lifecycle.controls.resume')}
                 onClick={() => {
                   void handleResumeAgent();
                 }}
@@ -1102,6 +1105,11 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               >
                 <button
                   type="button"
+                  aria-label={
+                    enablePoolManagement && poolEnabled
+                      ? t('agent.lifecycle.controls.terminateInstance')
+                      : t('agent.lifecycle.controls.stopAgent')
+                  }
                   disabled={isActionPending}
                   className={`
                     p-1 rounded transition-colors
@@ -1134,6 +1142,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               <LazyTooltip title={t('agent.lifecycle.controls.restartAgent')}>
                 <button
                   type="button"
+                  aria-label={t('agent.lifecycle.controls.restartAgent')}
                   disabled={isActionPending}
                   className={`
                     p-1 rounded transition-colors
@@ -1164,7 +1173,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <div className="space-y-1">
               <div>
                 {isLoading
-                  ? t('agent.statusBar.connection.loading', 'Loading...')
+                  ? t('agent.statusBar.connection.loading', 'Loading…')
                   : status.connection.websocket
                     ? t('agent.statusBar.connection.websocketConnected', 'WebSocket Connected')
                     : t('agent.statusBar.connection.ready', 'Ready')}

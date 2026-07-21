@@ -41,7 +41,7 @@ import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
 
 import { authAPI } from '@/services/api';
 
-import { NotificationDropdown } from './AppHeader/NotificationDropdown';
+import { NotificationDropdown } from './NotificationDropdown';
 import {
   getContextualTopNavItems,
   groupTenantTopNavItems,
@@ -242,11 +242,11 @@ function GroupedNavMenu({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
   const updateMenuPosition = useCallback(() => {
@@ -279,6 +279,22 @@ function GroupedNavMenu({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Escape closes the menu and returns focus to the trigger.
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleEscapeKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -319,21 +335,21 @@ function GroupedNavMenu({
                 {group.items.map((item) => {
                   const isActive = isContextualTopNavItemActive(location.pathname, item);
                   return (
-                    <button
+                    <Link
                       key={item.id}
-                      type="button"
+                      to={item.path}
                       onClick={() => {
-                        void navigate(item.path);
                         setOpen(false);
                       }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm no-underline transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
                         isActive
                           ? 'text-primary bg-primary/5'
                           : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                       }`}
                     >
                       {item.label}
-                    </button>
+                    </Link>
                   );
                 })}
               </div>
@@ -346,11 +362,15 @@ function GroupedNavMenu({
   return (
     <div className="relative shrink-0" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           updateMenuPosition();
           setOpen((currentOpen) => !currentOpen);
         }}
+        aria-label={buttonLabel}
+        aria-expanded={open}
+        aria-haspopup="menu"
         className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           isAnyActive
             ? 'bg-primary/10 text-primary'
@@ -372,14 +392,26 @@ function GroupedNavMenu({
 function BackgroundTasksButton() {
   const { t } = useTranslation();
   const runningCount = useRunningCount();
-  const togglePanel = useBackgroundStore((s) => s.togglePanel);
+  const setPanel = useBackgroundStore((s) => s.setPanel);
+  const backgroundTasksLabel =
+    runningCount > 0
+      ? t(
+          'components.layout.header.backgroundTasksWithCount',
+          'Background tasks, {{count}} running',
+          {
+            count: runningCount,
+          }
+        )
+      : t('components.layout.header.backgroundTasks', 'Background tasks');
 
   return (
     <button
       type="button"
-      onClick={togglePanel}
+      onClick={() => {
+        setPanel(true);
+      }}
       className="relative p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      aria-label={t('components.layout.header.backgroundTasks', 'Background tasks')}
+      aria-label={backgroundTasksLabel}
     >
       <Activity size={18} />
       {runningCount > 0 && (
@@ -396,19 +428,15 @@ function BackgroundTasksButton() {
  */
 function SearchButton({ searchPath }: { searchPath: string }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigate(searchPath);
-      }}
+    <Link
+      to={searchPath}
       className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       aria-label={t('common.search', 'Search')}
     >
       <Search size={18} />
-    </button>
+    </Link>
   );
 }
 
@@ -433,6 +461,7 @@ function HeaderUserMenu({
   const listTenants = useTenantStore((state) => state.listTenants);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const normalizedTheme = theme as 'light' | 'dark' | 'system';
   const availableTenants = tenants.length > 0 ? tenants : currentTenant ? [currentTenant] : [];
 
@@ -445,6 +474,22 @@ function HeaderUserMenu({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Escape closes the menu and returns focus to the trigger.
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleEscapeKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (open && tenants.length === 0) {
@@ -508,16 +553,25 @@ function HeaderUserMenu({
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           setOpen(!open);
         }}
         className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         aria-label={t('components.layout.header.userMenu', 'User menu')}
+        aria-expanded={open}
+        aria-haspopup="menu"
       >
         <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-xs font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={displayName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
           ) : (
             initials
           )}
@@ -617,24 +671,24 @@ function HeaderUserMenu({
             <MenuLink
               icon={<User size={16} />}
               label={t('user.profile', 'Profile')}
+              to={`${basePath}/profile`}
               onClick={() => {
-                void navigate(`${basePath}/profile`);
                 setOpen(false);
               }}
             />
             <MenuLink
               icon={<Settings size={16} />}
               label={t('user.settings', 'Settings')}
+              to={`${basePath}/settings`}
               onClick={() => {
-                void navigate(`${basePath}/settings`);
                 setOpen(false);
               }}
             />
             <MenuLink
               icon={<CreditCard size={16} />}
               label={t('user.billing', 'Billing')}
+              to={`${basePath}/billing`}
               onClick={() => {
-                void navigate(`${basePath}/billing`);
                 setOpen(false);
               }}
             />
@@ -659,21 +713,23 @@ function HeaderUserMenu({
 function MenuLink({
   icon,
   label,
+  to,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
+  to: string;
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Link
+      to={to}
       onClick={onClick}
       className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
     >
       <span className="text-slate-400">{icon}</span>
       {label}
-    </button>
+    </Link>
   );
 }
 

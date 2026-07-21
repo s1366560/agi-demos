@@ -55,7 +55,9 @@ export interface VirtualGridProps<T> {
   emptyMessage?: string | undefined;
   /** Custom component to render when empty - takes precedence over emptyMessage */
   emptyComponent?: React.ReactNode | undefined;
-  /** Number of columns: 1, 2, or 'responsive' for 1 on mobile, 2 on desktop */
+  /** Number of columns: 1, 2, or 'responsive' for 1 on mobile, 2 on desktop.
+   * Note: virtualization only applies to single-column layouts; multi-column
+   * grids render all items (virtual rows are always full-width). */
   columns?: 1 | 2 | 'responsive' | undefined;
   /** Optional className for the grid container */
   className?: string | undefined;
@@ -103,8 +105,9 @@ function VirtualGridInternal<T>({
   // Detect test environment - render all items without virtualization
   const isTestEnvironment = process.env.NODE_ENV === 'test' || isVitestWindowFake();
 
-  // For small item counts or test environment, render all items
-  const shouldRenderAll = items.length <= 10 || isTestEnvironment;
+  // For small item counts, test environment, or multi-column layouts
+  // (virtual rows are full-width, so grid columns cannot apply), render all.
+  const shouldRenderAll = items.length <= 10 || isTestEnvironment || columns !== 1;
 
   // Determine grid columns classes - use useMemo for derived state
   const gridClasses = useMemo(() => {
@@ -176,6 +179,8 @@ function VirtualGridInternal<T>({
       <div
         data-testid="virtual-grid"
         className={gridClasses}
+        role="list"
+        aria-rowcount={items.length}
         style={{
           position: 'relative',
           height: totalSize,
@@ -191,6 +196,8 @@ function VirtualGridInternal<T>({
             <div
               key={virtualRow.key}
               data-testid={`virtual-row-${String(virtualRow.index)}`}
+              role="listitem"
+              aria-rowindex={virtualRow.index + 1}
               style={{
                 position: 'absolute',
                 top: 0,

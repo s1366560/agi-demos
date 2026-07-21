@@ -8,6 +8,8 @@
 import * as React from 'react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 type ResizeDirection = 'horizontal' | 'vertical';
 
 interface ResizerProps {
@@ -39,6 +41,7 @@ export const Resizer: React.FC<ResizerProps> = ({
   className = '',
   position = 'right',
 }) => {
+  const { t } = useTranslation();
   const [isDragging, setIsDragging] = useState(false);
   const startPosRef = useRef(0);
   const startSizeRef = useRef(currentSize);
@@ -142,8 +145,10 @@ export const Resizer: React.FC<ResizerProps> = ({
       const step = e.shiftKey ? 50 : 10;
       let newSize = currentSize;
       if (direction === 'horizontal') {
-        if (e.key === 'ArrowRight') newSize = currentSize + step;
-        else if (e.key === 'ArrowLeft') newSize = currentSize - step;
+        // Panels that grow toward the left (position="left") invert the arrows.
+        const sign = position === 'left' ? -1 : 1;
+        if (e.key === 'ArrowRight') newSize = currentSize + step * sign;
+        else if (e.key === 'ArrowLeft') newSize = currentSize - step * sign;
         else return;
       } else {
         if (e.key === 'ArrowDown') newSize = currentSize + step;
@@ -153,7 +158,7 @@ export const Resizer: React.FC<ResizerProps> = ({
       e.preventDefault();
       onResize(Math.max(minSize, Math.min(maxSize, newSize)));
     },
-    [direction, currentSize, minSize, maxSize, onResize]
+    [direction, position, currentSize, minSize, maxSize, onResize]
   );
 
   return (
@@ -163,6 +168,7 @@ export const Resizer: React.FC<ResizerProps> = ({
       aria-valuemin={minSize}
       aria-valuemax={maxSize}
       aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
+      aria-label={t('agent.resizer.label', { defaultValue: 'Resize panel' })}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
@@ -175,6 +181,7 @@ export const Resizer: React.FC<ResizerProps> = ({
         hover:bg-slate-200/50 dark:hover:bg-slate-700/50
         ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
         transition-colors duration-150
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
         group
         ${className}
       `}

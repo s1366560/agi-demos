@@ -50,6 +50,8 @@ import { FileDownloader } from './FileDownloader';
 import { ImageViewer } from './ImageViewer';
 import { VideoPlayer } from './VideoPlayer';
 
+import { formatFileSize } from '@/utils/format';
+
 import type {
   ArtifactRendererRootProps,
   ArtifactImageProps,
@@ -113,13 +115,6 @@ const CATEGORY_COLORS: Record<ArtifactCategory, string> = {
 // ========================================
 // Utility Functions
 // ========================================
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
 
 function markComponent<P>(component: React.FC<P>, marker: symbol, displayName: string): void {
   const marked = component as React.FC<P> &

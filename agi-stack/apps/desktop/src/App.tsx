@@ -247,6 +247,7 @@ import type {
   ConversationTimelineState,
   ChangeSnapshot,
   CodeRangeReference,
+  ComposerContextItem,
   DesktopApprovalRequest,
   DesktopArtifactDelivery,
   DesktopArtifactVersion,
@@ -4214,7 +4215,11 @@ export function App() {
       definition,
       workspaceId,
     );
-    const policyDigest = canonicalJsonSha256({ baseFingerprint, policySelection });
+    const policyDigest = canonicalJsonSha256({
+      baseFingerprint,
+      policySelection,
+      contextItems: input.contextItems,
+    });
     const fingerprint = policyDigest ? `sha256:${policyDigest}` : '';
     const storage = browserTaskSessionCreationStorage();
     const storedAttempt = readTaskSessionCreationAttempt(storage, fingerprint);
@@ -4235,6 +4240,10 @@ export function App() {
       const request = buildLocalTaskSessionRequest(definition, workspaceId, attempt.idempotencyKey);
       const result = await client.createTaskSession({
         ...request,
+        initial_message: {
+          ...request.initial_message,
+          context_items: input.contextItems,
+        },
         ...(policySelection ? { workspace_policy: policySelection } : {}),
       });
       const session: NewTaskSession = {
@@ -4303,7 +4312,11 @@ export function App() {
     return conversation;
   };
 
-  const sendMessageContent = async (rawContent: string, onWorkspaceMessageSaved?: () => void) => {
+  const sendMessageContent = async (
+    rawContent: string,
+    contextItems: ComposerContextItem[],
+    onWorkspaceMessageSaved?: () => void,
+  ) => {
     const content = rawContent.trim();
     if (!content) return;
     const canSendConversationMessage = Boolean(
@@ -4345,6 +4358,7 @@ export function App() {
           delivery: effectiveRunInputDeliveryValue,
           content,
           references: runInputReferences,
+          contextItems,
         });
         if (runInputRequestRef.current?.signature !== signature) {
           const requestId =
@@ -4363,6 +4377,7 @@ export function App() {
           idempotencyKey: request.idempotencyKey,
           delivery: effectiveRunInputDeliveryValue,
           references: runInputReferences,
+          contextItems,
         });
         onWorkspaceMessageSaved?.();
         setRunInputReferences([]);
@@ -4389,7 +4404,7 @@ export function App() {
         }
         return;
       }
-      const saved = await api.sendMessage(content);
+      const saved = await api.sendMessage(content, undefined, contextItems);
       setDataset((current) => ({ ...current, messages: [...current.messages, saved] }));
       onWorkspaceMessageSaved?.();
       upsertAgentTaskSignal({
@@ -4486,8 +4501,12 @@ export function App() {
   const sendMessageContentRef = useRef(sendMessageContent);
   sendMessageContentRef.current = sendMessageContent;
   const sendChatMessage = useCallback(
-    (content: string, onWorkspaceMessageSaved?: () => void) => {
-      void sendMessageContentRef.current(content, onWorkspaceMessageSaved);
+    (
+      content: string,
+      contextItems: ComposerContextItem[],
+      onWorkspaceMessageSaved?: () => void,
+    ) => {
+      void sendMessageContentRef.current(content, contextItems, onWorkspaceMessageSaved);
     },
     [],
   );
@@ -5596,6 +5615,9 @@ export function App() {
 
   const renderChatPanel = () => (
     <ChatPanel
+      api={api}
+      conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
+      selectedConversationId={selectedConversation?.id ?? null}
       messages={dataset.messages}
       timelineState={selectedConversation ? sessionTimeline : null}
       agentTaskSignals={agentTaskSignals}
@@ -5743,6 +5765,7 @@ export function App() {
 
   const renderNewThreadComposer = () => (
     <NewThreadComposer
+      api={api}
       workspace={selectedWorkspace}
       conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
       mode={preferredTaskMode}
@@ -5774,6 +5797,10 @@ export function App() {
       onOpenThread={(conversation) =>
         selectConversation(config.projectId, config.workspaceId, conversation, 'chat')
       }
+      onManageModels={() => {
+        setSettingsInitialSection('models');
+        setSettingsWindowOpen(true);
+      }}
     />
   );
 

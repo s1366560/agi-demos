@@ -16,10 +16,12 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { Loader2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { restApi } from '../../services/agent/restApi';
 import { useAgentV3Store } from '../../stores/agentV3';
+import { formatDateTime } from '../../utils/date';
 
 import type { DecisionOption, HITLRequestFromApi } from '../../types/hitl.unified';
 
@@ -38,7 +40,7 @@ const badgeBase =
   'inline-flex h-[18px] items-center rounded-full border border-slate-200 bg-slate-100 px-2 text-[11px] font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
 
 const actionBtnBase =
-  'inline-flex h-[26px] items-center rounded border border-slate-200 px-2 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700';
+  'inline-flex h-[26px] items-center rounded border border-slate-200 px-2 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
 function getMetaString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   if (!metadata) return null;
@@ -58,7 +60,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
     const [filter, setFilter] = useState<FilterType>('all');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
-    const [resolvingId, setResolvingId] = useState<string | null>(null);
+    const [resolving, setResolving] = useState<{ id: string; accept: boolean } | null>(null);
     const [resolveError, setResolveError] = useState<string | null>(null);
 
     const { respondToDecision, respondToClarification, respondToPermission } = useAgentV3Store(
@@ -111,7 +113,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
      */
     const handleResolve = useCallback(
       async (req: HITLRequestFromApi, accept: boolean) => {
-        setResolvingId(req.id);
+        setResolving({ id: req.id, accept });
         setResolveError(null);
         try {
           if (req.request_type === 'decision') {
@@ -136,7 +138,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         } catch (err) {
           setResolveError(err instanceof Error ? err.message : String(err));
         } finally {
-          setResolvingId(null);
+          setResolving(null);
           void fetchPending();
         }
       },
@@ -150,6 +152,13 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
     );
 
     if (!conversationId) return null;
+
+    const filterLabels: Record<FilterType, string> = {
+      all: t('agent.hitl.center.filter.all', { defaultValue: 'All' }),
+      clarification: t('agent.hitl.center.filter.clarification', { defaultValue: 'Clarification' }),
+      decision: t('agent.hitl.center.filter.decision', { defaultValue: 'Decision' }),
+      env_var: t('agent.hitl.center.filter.envVar', { defaultValue: 'Env var' }),
+    };
 
     return (
       <aside
@@ -178,7 +187,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
           >
             {filterOptions.map((opt) => (
               <option key={opt} value={opt}>
-                {opt}
+                {filterLabels[opt]}
               </option>
             ))}
           </select>
@@ -186,7 +195,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
 
         {loading && visible.length === 0 && (
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t('agent.hitl.center.loading', { defaultValue: 'Loading...' })}
+            {t('agent.hitl.center.loading', { defaultValue: 'Loading…' })}
           </p>
         )}
 
@@ -216,7 +225,11 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
           {visible.map((req) => {
             const category = getMetaString(req.metadata, 'category');
             const visibility = getMetaString(req.metadata, 'visibility');
-            const isResolving = resolvingId === req.id;
+            const isResolving = resolving?.id === req.id;
+            const decisionOptions =
+              req.request_type === 'decision' ? ((req.options ?? []) as DecisionOption[]) : [];
+            const acceptOptionLabel = decisionOptions[0]?.label;
+            const rejectOptionLabel = decisionOptions[decisionOptions.length - 1]?.label;
             const supportsInlineResolve =
               req.request_type === 'decision' || req.request_type === 'permission';
             return (
@@ -251,7 +264,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                     {req.question}
                   </p>
                   <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                    {new Date(req.created_at).toLocaleString()}
+                    {formatDateTime(req.created_at)}
                   </p>
                 </button>
                 <div className="mt-2 flex items-center justify-end gap-2">
@@ -261,24 +274,52 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                         type="button"
                         className={`${actionBtnBase} border-primary bg-primary text-white hover:bg-primary-600 dark:border-primary-500 dark:bg-primary-500 dark:hover:bg-primary-600`}
                         disabled={isResolving}
+                        title={
+                          acceptOptionLabel
+                            ? t('agent.hitl.center.acceptOption', {
+                                defaultValue: 'Submit: {{option}}',
+                                option: acceptOptionLabel,
+                              })
+                            : undefined
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleResolve(req, true);
                         }}
                         data-testid="hitl-accept-btn"
                       >
+                        {isResolving && resolving.accept ? (
+                          <Loader2
+                            size={12}
+                            className="mr-1 animate-spin motion-reduce:animate-none"
+                          />
+                        ) : null}
                         {t('agent.hitl.center.accept', { defaultValue: 'Accept' })}
                       </button>
                       <button
                         type="button"
                         className={`${actionBtnBase} bg-white text-slate-900 hover:border-slate-900 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-100`}
                         disabled={isResolving}
+                        title={
+                          rejectOptionLabel
+                            ? t('agent.hitl.center.rejectOption', {
+                                defaultValue: 'Submit: {{option}}',
+                                option: rejectOptionLabel,
+                              })
+                            : undefined
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleResolve(req, false);
                         }}
                         data-testid="hitl-reject-btn"
                       >
+                        {isResolving && !resolving.accept ? (
+                          <Loader2
+                            size={12}
+                            className="mr-1 animate-spin motion-reduce:animate-none"
+                          />
+                        ) : null}
                         {t('agent.hitl.center.reject', { defaultValue: 'Reject' })}
                       </button>
                     </>

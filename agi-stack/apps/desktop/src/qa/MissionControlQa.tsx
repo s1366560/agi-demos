@@ -3,6 +3,7 @@ import { Theme } from '@radix-ui/themes';
 import { useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
+import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
 import { MyWorkQueue } from '../features/my-work/MyWorkQueue';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import {
@@ -30,6 +31,11 @@ declare global {
 const now = '2026-07-20T09:40:00Z';
 const projectId = 'project-desktop-client';
 const workspaceId = 'workspace-desktop-client';
+const api: ComposerCatalogClient = {
+  listManagedAgents: async () => [],
+  listManagedSkills: async () => [],
+  listManagedPlugins: async () => [],
+};
 
 const workspaces: WorkspaceSummary[] = [
   {
@@ -169,6 +175,9 @@ const modelOptions: WorkspaceRuntimeModelOption[] = [
     providerLabel: 'OpenAI',
     modelId: 'gpt-5.6-terra',
     selected: true,
+    roles: ['default', 'fast', 'vision'],
+    description: 'OpenAI · openai',
+    contextWindow: '128k',
   },
   {
     value: JSON.stringify(['openai', 'gpt-5.6-sol']),
@@ -176,6 +185,9 @@ const modelOptions: WorkspaceRuntimeModelOption[] = [
     providerLabel: 'OpenAI',
     modelId: 'gpt-5.6-sol',
     selected: false,
+    roles: ['coding'],
+    description: 'OpenAI · openai',
+    contextWindow: '192k',
   },
 ];
 
@@ -327,6 +339,7 @@ function MissionControlQa() {
           <div className="mission-control-qa-main">
             {view === 'home' ? (
               <NewThreadComposer
+                api={api}
                 workspace={currentWorkspace}
                 conversations={recentConversations}
                 mode={mode}
@@ -345,6 +358,7 @@ function MissionControlQa() {
                 onModeChange={setMode}
                 onCreate={recordCreate}
                 onOpenThread={() => undefined}
+                onManageModels={() => undefined}
               />
             ) : (
               <MyWorkQueue

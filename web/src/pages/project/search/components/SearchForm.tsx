@@ -4,7 +4,7 @@
  * Handles the search input, mode selection, and voice search.
  */
 
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -78,6 +78,26 @@ export const SearchForm = memo<SearchFormProps>(
     canExportResults = false,
   }) => {
     const { t } = useTranslation();
+    const headerRef = useRef<HTMLElement>(null);
+
+    // Close the history dropdown on Escape or outside click.
+    useEffect(() => {
+      if (!showHistory) return;
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') onHistoryToggle();
+      };
+      const handleMouseDown = (event: MouseEvent) => {
+        if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
+          onHistoryToggle();
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('mousedown', handleMouseDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener('mousedown', handleMouseDown);
+      };
+    }, [showHistory, onHistoryToggle]);
 
     const handleSearchKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
@@ -108,7 +128,7 @@ export const SearchForm = memo<SearchFormProps>(
     }, [searchMode, t]);
 
     return (
-      <header className="flex shrink-0 flex-col gap-4 px-4 pb-2 pt-5 sm:px-6">
+      <header ref={headerRef} className="flex shrink-0 flex-col gap-4 px-4 pb-2 pt-5 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -230,7 +250,10 @@ export const SearchForm = memo<SearchFormProps>(
                 aria-label={getInputLabel()}
                 className="block h-10 w-full rounded border border-transparent bg-transparent pl-10 pr-12 text-sm text-slate-950 outline-none transition-[color,background-color,border-color,box-shadow,opacity] placeholder:text-slate-400 focus:border-slate-300 focus:bg-slate-50 focus:ring-2 focus:ring-slate-950/10 dark:text-slate-50 dark:focus:border-slate-700 dark:focus:bg-slate-900/50 dark:focus:ring-slate-50/10"
                 placeholder={getPlaceholder()}
-                type="text"
+                type="search"
+                name="search"
+                autoComplete="off"
+                spellCheck={searchMode !== 'graphTraversal' && searchMode !== 'community'}
                 value={getInputValue()}
                 onChange={(e) => {
                   if (searchMode === 'graphTraversal') onStartEntityUuidChange(e.target.value);
@@ -252,6 +275,12 @@ export const SearchForm = memo<SearchFormProps>(
                   <button
                     type="button"
                     onClick={onVoiceSearch}
+                    aria-pressed={isListening}
+                    aria-label={
+                      isListening
+                        ? t('project.search.input.listening')
+                        : t('project.search.input.voice_search')
+                    }
                     className={`rounded p-1.5 transition-colors ${
                       isListening
                         ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse motion-reduce:animate-none'
@@ -272,7 +301,7 @@ export const SearchForm = memo<SearchFormProps>(
               type="button"
               onClick={onSearch}
               disabled={loading}
-              className="inline-flex h-10 shrink-0 items-center gap-2 rounded bg-slate-950 px-5 text-sm font-semibold text-white transition-[color,background-color,border-color,box-shadow,opacity] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950/20 disabled:opacity-50 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus:ring-slate-50/20"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded bg-slate-950 px-5 text-sm font-semibold text-white transition-[color,background-color,border-color,box-shadow,opacity] hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/20 disabled:opacity-50 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/20"
             >
               <span>
                 {loading
@@ -285,12 +314,22 @@ export const SearchForm = memo<SearchFormProps>(
               <button
                 type="button"
                 onClick={onConfigToggle}
+                aria-expanded={isConfigOpen}
+                aria-label={
+                  isConfigOpen
+                    ? t('project.search.config.collapse', 'Collapse config')
+                    : t('project.search.config.expand', 'Expand config')
+                }
                 className={`inline-flex h-10 w-10 items-center justify-center rounded border transition-colors ${
                   isConfigOpen
                     ? 'border-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-slate-50'
                     : 'border-slate-300 bg-slate-100 text-slate-950 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50'
                 }`}
-                title={isConfigOpen ? 'Collapse Config' : 'Expand Config'}
+                title={
+                  isConfigOpen
+                    ? t('project.search.config.collapse', 'Collapse config')
+                    : t('project.search.config.expand', 'Expand config')
+                }
               >
                 {isConfigOpen ? (
                   <PanelRightClose className="h-4 w-4" />
@@ -321,7 +360,8 @@ const SearchModeButton = memo<SearchModeButtonProps>(
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex h-9 shrink-0 items-center gap-2 rounded px-3 text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity] focus:outline-none focus:ring-2 focus:ring-slate-950/10 dark:focus:ring-slate-50/10 ${
+      aria-pressed={mode === currentMode}
+      className={`inline-flex h-9 shrink-0 items-center gap-2 rounded px-3 text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/10 dark:focus-visible:ring-slate-50/10 ${
         mode === currentMode
           ? 'bg-slate-950 text-white shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-slate-50 dark:text-slate-950'
           : 'text-slate-500 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-50'
@@ -373,9 +413,9 @@ const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onIte
       <div className="mb-2 px-2 text-xs font-medium text-slate-500 dark:text-slate-400">
         {t('project.search.actions.recent')}
       </div>
-      {history.map((item, idx) => (
+      {history.map((item) => (
         <button
-          key={idx}
+          key={item.timestamp}
           type="button"
           onClick={() => {
             onItemClick(item);

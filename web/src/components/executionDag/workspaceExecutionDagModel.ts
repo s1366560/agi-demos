@@ -5,6 +5,8 @@ import {
   shortId,
 } from '@/components/blackboard/tabs/planRunSnapshotModel';
 
+import { uniqueEdges } from './dagModelUtils';
+
 import type { WorkspaceAgent, WorkspacePlanNode, WorkspacePlanSnapshot } from '@/types/workspace';
 
 import type { ExecutionDagEdge, ExecutionDagModel, ExecutionDagNode } from './types';
@@ -15,20 +17,6 @@ interface WorkspaceExecutionDagOptions {
 
 function readText(value: unknown): string {
   return typeof value === 'string' ? value : '';
-}
-
-function uniqueEdges(edges: ExecutionDagEdge[]): ExecutionDagEdge[] {
-  const seen = new Set<string>();
-  const result: ExecutionDagEdge[] = [];
-  for (const edge of edges) {
-    const key = `${edge.kind}:${edge.sourceId}:${edge.targetId}`;
-    if (seen.has(key) || edge.sourceId === edge.targetId) {
-      continue;
-    }
-    seen.add(key);
-    result.push(edge);
-  }
-  return result;
 }
 
 export function resolveWorkspaceAgentLabel(

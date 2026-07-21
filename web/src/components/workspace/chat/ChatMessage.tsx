@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Avatar, Typography } from 'antd';
 import { Bot, User } from 'lucide-react';
 
@@ -42,6 +44,7 @@ export interface ChatMessageProps {
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
+  const { t } = useTranslation();
   const isAgent = message.sender_type === 'agent';
 
   const timeFormatter = useLocaleDateFormat({
@@ -65,7 +68,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
           <div className="flex items-baseline space-x-2 mb-1">
             {!isOwn && (
               <Text type="secondary" className="text-xs">
-                {(message.metadata.sender_name as string) || (isAgent ? 'Agent' : 'User')}
+                {(message.metadata.sender_name as string) ||
+                  (isAgent
+                    ? t('workspaceDetail.chat.senderAgent', { defaultValue: 'Agent' })
+                    : t('workspaceDetail.chat.senderUser', { defaultValue: 'User' }))}
               </Text>
             )}
             <Text type="secondary" className="text-[10px]">

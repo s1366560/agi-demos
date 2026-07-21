@@ -12,6 +12,8 @@ import { memo, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { message, Popconfirm } from 'antd';
+
 import { useConversationParticipants } from '../../hooks/useConversationParticipants';
 import { useMentionCandidates } from '../../hooks/useMentionCandidates';
 
@@ -34,6 +36,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
       roster,
       loading,
       error,
+      refresh,
       removeParticipant,
       setCoordinator,
       setFocusedAgent,
@@ -56,7 +59,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
       return (
         <aside className={className} aria-busy="true">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t('agent.participants.loading', { defaultValue: 'Loading roster...' })}
+            {t('agent.participants.loading', { defaultValue: 'Loading roster…' })}
           </p>
         </aside>
       );
@@ -65,9 +68,18 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
     if (error) {
       return (
         <aside className={className}>
-          <p className="text-sm text-red-600 dark:text-red-400">
+          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
             {t('agent.participants.error', { defaultValue: 'Failed to load roster' })}
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              void refresh();
+            }}
+            className="mt-2 rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {t('agent.participants.retry', { defaultValue: 'Retry' })}
+          </button>
         </aside>
       );
     }
@@ -130,7 +142,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                   <button
                     type="button"
                     onClick={() => onSelectAgent?.(agentId)}
-                    className="flex-1 text-left text-sm font-medium text-slate-900 hover:text-primary dark:text-slate-100 dark:hover:text-primary-400"
+                    className="flex-1 rounded text-left text-sm font-medium text-slate-900 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-slate-100 dark:hover:text-primary-400"
                   >
                     {participantLabel}
                   </button>
@@ -152,9 +164,26 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                       <button
                         type="button"
                         onClick={() => {
-                          void setFocusedAgent(agentId);
+                          void (async () => {
+                            try {
+                              await setFocusedAgent(agentId);
+                              void message.success(
+                                t('agent.participants.setFocusedSuccess', {
+                                  defaultValue: 'Focused agent updated',
+                                })
+                              );
+                            } catch (err) {
+                              void message.error(
+                                err instanceof Error
+                                  ? err.message
+                                  : t('agent.participants.actionFailed', {
+                                      defaultValue: 'Action failed',
+                                    })
+                              );
+                            }
+                          })();
                         }}
-                        className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-primary-400"
+                        className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-primary-400"
                         title={t('agent.participants.setFocused', {
                           defaultValue: 'Set as focused agent',
                         })}
@@ -170,9 +199,26 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                       <button
                         type="button"
                         onClick={() => {
-                          void setCoordinator(agentId);
+                          void (async () => {
+                            try {
+                              await setCoordinator(agentId);
+                              void message.success(
+                                t('agent.participants.setCoordinatorSuccess', {
+                                  defaultValue: 'Coordinator updated',
+                                })
+                              );
+                            } catch (err) {
+                              void message.error(
+                                err instanceof Error
+                                  ? err.message
+                                  : t('agent.participants.actionFailed', {
+                                      defaultValue: 'Action failed',
+                                    })
+                              );
+                            }
+                          })();
                         }}
-                        className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-primary-400"
+                        className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-primary-400"
                         title={t('agent.participants.setCoordinator', {
                           defaultValue: 'Set as coordinator',
                         })}
@@ -184,22 +230,42 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                         ★
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => {
+                    <Popconfirm
+                      title={t('agent.participants.removeConfirmTitle', {
+                        name: participantLabel,
+                        defaultValue: `Remove ${participantLabel} from the conversation?`,
+                      })}
+                      onConfirm={() => {
                         void (async () => {
-                          await removeParticipant(agentId);
-                          onRemoveAgent?.(agentId);
+                          try {
+                            await removeParticipant(agentId);
+                            onRemoveAgent?.(agentId);
+                          } catch (err) {
+                            void message.error(
+                              err instanceof Error
+                                ? err.message
+                                : t('agent.participants.actionFailed', {
+                                    defaultValue: 'Action failed',
+                                  })
+                            );
+                          }
                         })();
                       }}
-                      className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-50 hover:text-red-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-red-400"
-                      aria-label={t('agent.participants.remove', {
-                        name: participantLabel,
-                        defaultValue: `Remove ${participantLabel}`,
-                      })}
+                      okText={t('agent.participants.removeOk', { defaultValue: 'Remove' })}
+                      cancelText={t('agent.participants.cancel', { defaultValue: 'Cancel' })}
+                      okButtonProps={{ danger: true }}
                     >
-                      ×
-                    </button>
+                      <button
+                        type="button"
+                        className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-red-400"
+                        aria-label={t('agent.participants.remove', {
+                          name: participantLabel,
+                          defaultValue: `Remove ${participantLabel}`,
+                        })}
+                      >
+                        ×
+                      </button>
+                    </Popconfirm>
                   </div>
                 </li>
               );
@@ -263,7 +329,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                     }
                   })();
                 }}
-                className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="">
                   {t('agent.participants.addPlaceholder', { defaultValue: 'Select an agent…' })}

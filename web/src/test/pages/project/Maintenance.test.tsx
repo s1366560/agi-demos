@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Maintenance } from '../../../pages/project/Maintenance';
 import { graphService } from '../../../services/graphService';
 
+const confirmActionMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../services/graphService', () => ({
   graphService: {
     getGraphStats: vi.fn().mockResolvedValue({
@@ -34,6 +36,10 @@ vi.mock('../../../services/graphService', () => ({
   },
 }));
 
+vi.mock('../../../utils/confirmAction', () => ({
+  confirmAction: confirmActionMock,
+}));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
@@ -58,6 +64,7 @@ function deferred<T>() {
 describe('Maintenance', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    confirmActionMock.mockResolvedValue(true);
     (useParams as any).mockReturnValue({ projectId: 'p1' });
     (graphService.getMaintenanceStatus as any).mockResolvedValue({ recommendations: [] });
     (graphService.invalidateStaleEdges as any).mockResolvedValue({
@@ -125,16 +132,19 @@ describe('Maintenance', () => {
   });
 
   it('starts deduplication merge through the maintenance API', async () => {
-    (graphService.deduplicateEntities as any).mockResolvedValue({
-      dry_run: false,
-      task_id: 'dedup-task-1',
-    });
+    const operation = deferred<{ dry_run: boolean; task_id: string }>();
+    (graphService.deduplicateEntities as any).mockReturnValue(operation.promise);
 
     render(<Maintenance />);
 
     fireEvent.click(screen.getByText('Merge Duplicates'));
 
-    expect(screen.getByText('Deduplicating...')).toBeInTheDocument();
+    expect(await screen.findByText('Deduplicating...')).toBeInTheDocument();
+
+    await act(async () => {
+      operation.resolve({ dry_run: false, task_id: 'dedup-task-1' });
+      await operation.promise;
+    });
 
     await waitFor(() => {
       expect(graphService.deduplicateEntities).toHaveBeenCalledWith({
@@ -221,13 +231,19 @@ describe('Maintenance', () => {
   });
 
   it('cleans stale edges through the maintenance API', async () => {
-    (graphService.invalidateStaleEdges as any).mockResolvedValue({ deleted: 3 });
+    const operation = deferred<{ deleted: number }>();
+    (graphService.invalidateStaleEdges as any).mockReturnValue(operation.promise);
 
     render(<Maintenance />);
 
     fireEvent.click(screen.getByText('Clean'));
 
-    expect(screen.getByText('Cleaning...')).toBeInTheDocument();
+    expect(await screen.findByText('Cleaning...')).toBeInTheDocument();
+
+    await act(async () => {
+      operation.resolve({ deleted: 3 });
+      await operation.promise;
+    });
 
     await waitFor(() => {
       expect(graphService.invalidateStaleEdges).toHaveBeenCalledWith({
@@ -258,17 +274,20 @@ describe('Maintenance', () => {
   });
 
   it('handles community rebuild', async () => {
-    (graphService.rebuildCommunities as any).mockResolvedValue({
-      status: 'submitted',
-      task_id: 'task-123',
-    });
+    const operation = deferred<{ status: string; task_id: string }>();
+    (graphService.rebuildCommunities as any).mockReturnValue(operation.promise);
 
     render(<Maintenance />);
 
     const rebuildBtn = screen.getByText('Rebuild');
     fireEvent.click(rebuildBtn);
 
-    expect(screen.getByText('Rebuilding...')).toBeInTheDocument();
+    expect(await screen.findByText('Rebuilding...')).toBeInTheDocument();
+
+    await act(async () => {
+      operation.resolve({ status: 'submitted', task_id: 'task-123' });
+      await operation.promise;
+    });
 
     await waitFor(() => {
       expect(graphService.rebuildCommunities).toHaveBeenCalledWith(true, 'p1');

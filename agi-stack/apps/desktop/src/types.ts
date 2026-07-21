@@ -241,6 +241,21 @@ export type WorkspaceMessage = {
   metadata?: Record<string, unknown> | null;
 };
 
+export type ComposerContextKind =
+  | 'attachment'
+  | 'agent'
+  | 'skill'
+  | 'plugin'
+  | 'command'
+  | 'thread';
+
+export type ComposerContextItem = {
+  kind: ComposerContextKind;
+  resource_id: string;
+  label: string;
+  metadata?: Record<string, string | number | boolean | null>;
+};
+
 export type WorkspaceTask = {
   id: string;
   workspace_id?: string;
@@ -325,6 +340,7 @@ export type CreateTaskSessionRequest = {
   };
   initial_message: {
     content: string;
+    context_items?: ComposerContextItem[];
   };
   workspace_policy?: WorkspaceAgentPolicySelection;
 };
@@ -513,6 +529,7 @@ export type CreateRunInputRequest = {
   idempotencyKey: string;
   delivery: RunInputDelivery;
   references: RunInputReference[];
+  contextItems: ComposerContextItem[];
 };
 
 export type DesktopRunInput = {
@@ -528,6 +545,7 @@ export type DesktopRunInput = {
   queue_position?: number | null;
   content: string;
   references: RunInputReference[];
+  context_items?: ComposerContextItem[];
   applied_round?: number | null;
   applied_at?: string | null;
   promotion_idempotency_key?: string | null;

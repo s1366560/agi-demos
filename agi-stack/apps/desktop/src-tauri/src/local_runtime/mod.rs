@@ -62,6 +62,7 @@ mod authorized_tool_host;
 mod automation;
 mod automation_store;
 mod changes;
+mod composer_context;
 #[cfg(test)]
 mod managed_resource_tests;
 mod provider_credentials;
@@ -99,6 +100,7 @@ use authority_store::{
 };
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
+use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
@@ -5645,6 +5647,8 @@ struct WorkspaceMessageBody {
     content: String,
     parent_message_id: Option<String>,
     mentions: Option<Vec<String>>,
+    #[serde(default)]
+    context_items: Vec<ComposerContextItem>,
 }
 
 async fn create_workspace_message(
@@ -5660,6 +5664,13 @@ async fn create_workspace_message(
         &project_id,
         &workspace_id,
     )?;
+    validate_composer_context_items(&body.context_items).map_err(invalid_composer_context)?;
+    validate_composer_context_authority(
+        &state,
+        &authenticated,
+        &workspace_id,
+        &body.context_items,
+    )?;
     let message = json!({
         "id": format!("local-message-{}", Uuid::new_v4()),
         "workspace_id": &workspace_id,
@@ -5669,7 +5680,10 @@ async fn create_workspace_message(
         "content": body.content,
         "mentions": body.mentions.unwrap_or_default(),
         "created_at": now_iso(),
-        "metadata": { "runtime": "local" },
+        "metadata": {
+            "runtime": "local",
+            "context_items": body.context_items,
+        },
     });
     state
         .append_workspace_message(&workspace_id, message.clone())
@@ -6460,6 +6474,86 @@ struct CreateRunInputBody {
     delivery: RunInputDelivery,
     #[serde(default)]
     references: Vec<RunInputReference>,
+    #[serde(default)]
+    context_items: Vec<ComposerContextItem>,
+}
+
+fn invalid_composer_context(detail: &'static str) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({ "detail": detail })),
+    )
+}
+
+fn validate_composer_context_authority(
+    state: &LocalRuntimeState,
+    authenticated: &AuthenticatedContext,
+    workspace_id: &str,
+    items: &[ComposerContextItem],
+) -> Result<(), (StatusCode, Json<Value>)> {
+    for item in items {
+        let available = match item.kind {
+            ComposerContextKind::Attachment => item.resource_id.starts_with("file:"),
+            ComposerContextKind::Command => {
+                matches!(
+                    item.resource_id.as_str(),
+                    "/plan" | "/review" | "/verify" | "/summarize"
+                )
+            }
+            ComposerContextKind::Thread => state
+                .session_store
+                .conversation(&item.resource_id)
+                .map_err(local_store_error)?
+                .is_some_and(|thread| {
+                    thread.project_id == authenticated.workspace.project_id
+                        && thread.workspace_id.as_deref() == Some(workspace_id)
+                }),
+            ComposerContextKind::Agent => state
+                .session_store
+                .managed_resource(
+                    ManagedResourceKind::Agent,
+                    "project",
+                    &authenticated.workspace.project_id,
+                    &item.resource_id,
+                )
+                .map_err(local_store_error)?
+                .is_some_and(|resource| {
+                    resource.get("enabled").and_then(Value::as_bool) != Some(false)
+                        && resource.get("status").and_then(Value::as_str) != Some("disabled")
+                }),
+            ComposerContextKind::Skill => state
+                .session_store
+                .managed_resource(
+                    ManagedResourceKind::Skill,
+                    "tenant",
+                    &authenticated.workspace.tenant_id,
+                    &item.resource_id,
+                )
+                .map_err(local_store_error)?
+                .is_some_and(|resource| {
+                    resource.get("status").and_then(Value::as_str) == Some("active")
+                }),
+            ComposerContextKind::Plugin => state
+                .session_store
+                .managed_resource(
+                    ManagedResourceKind::Plugin,
+                    "tenant",
+                    &authenticated.workspace.tenant_id,
+                    &item.resource_id,
+                )
+                .map_err(local_store_error)?
+                .is_some_and(|resource| {
+                    resource.get("enabled").and_then(Value::as_bool) == Some(true)
+                        && resource.get("discovered").and_then(Value::as_bool) == Some(true)
+                }),
+        };
+        if !available {
+            return Err(invalid_composer_context(
+                "context resource is unavailable in the active workspace",
+            ));
+        }
+    }
+    Ok(())
 }
 
 async fn list_run_inputs(
@@ -6507,6 +6601,7 @@ async fn create_run_input(
             })),
         ));
     }
+    validate_composer_context_items(&body.context_items).map_err(invalid_composer_context)?;
     let run = state
         .session_store
         .run(&run_id)
@@ -6518,6 +6613,21 @@ async fn create_run_input(
             )
         })?;
     ensure_active_project(&authenticated, &run.project_id)?;
+    let run_conversation = state
+        .session_store
+        .conversation(&run.conversation_id)
+        .map_err(local_store_error)?
+        .ok_or_else(|| invalid_composer_context("run conversation was not found"))?;
+    let run_workspace_id = run_conversation
+        .workspace_id
+        .as_deref()
+        .ok_or_else(|| invalid_composer_context("run conversation has no workspace"))?;
+    validate_composer_context_authority(
+        &state,
+        &authenticated,
+        run_workspace_id,
+        &body.context_items,
+    )?;
     if run.revision != body.expected_run_revision {
         return Err((
             StatusCode::CONFLICT,
@@ -6569,6 +6679,7 @@ async fn create_run_input(
             delivery: body.delivery,
             content: &body.message,
             references: body.references,
+            context_items: body.context_items,
             now: &created_at,
         });
     let (input, created) = match outcome {
@@ -6596,6 +6707,7 @@ async fn create_run_input(
                 "delivery_mode": input.delivery,
                 "input_status": input.status,
                 "references": input.references,
+                "context_items": input.context_items,
             }),
         );
         state.append_timeline(&run.conversation_id, item);
@@ -13519,6 +13631,11 @@ mod tests {
             },
             "initial_message": {
                 "content": "Build the approved desktop task flow",
+                "context_items": [{
+                    "kind": "command",
+                    "resource_id": "/plan",
+                    "label": "/plan"
+                }],
             },
         })
     }
@@ -13542,6 +13659,10 @@ mod tests {
         assert_eq!(first.status(), StatusCode::CREATED);
         let first = response_json(first).await;
         assert_eq!(first["replayed"], false);
+        assert_eq!(
+            first["initial_message"]["metadata"]["context_items"][0]["resource_id"],
+            "/plan"
+        );
         assert_eq!(first["workspace"]["name"], "Atomic task session");
         assert_eq!(first["workspace"]["is_archived"], false);
         assert_eq!(
@@ -17574,6 +17695,7 @@ mod tests {
                 delivery: RunInputDelivery::QueueNext,
                 content: "Run this after the authoritative execution settles",
                 references: Vec::new(),
+                context_items: Vec::new(),
                 now: &now_iso(),
             })
             .expect("queue next input")
@@ -17730,6 +17852,11 @@ mod tests {
                             "idempotency_key": "steer-now-key",
                             "delivery": "steer_now",
                             "references": [],
+                            "context_items": [{
+                                "kind": "command",
+                                "resource_id": "/verify",
+                                "label": "/verify"
+                            }],
                         })
                         .to_string(),
                     ))
@@ -17745,6 +17872,10 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("json");
         assert_eq!(payload["delivery_mode"], "steer_now");
         assert_eq!(payload["input"]["status"], "pending_boundary");
+        assert_eq!(
+            payload["input"]["context_items"][0]["resource_id"],
+            "/verify"
+        );
         assert_eq!(payload["run_revision"], running.revision);
         let directive = control
             .directive(&conversation.id, 4)
@@ -17753,7 +17884,10 @@ mod tests {
         let RunDirective::Steer(instruction) = directive else {
             panic!("expected steering directive");
         };
-        assert_eq!(instruction.content, "Keep the public API stable");
+        assert_eq!(
+            instruction.content,
+            "Keep the public API stable\n\nStructured composer context:\n- Command: /verify (/verify)"
+        );
         control
             .acknowledge_steering(&conversation.id, &instruction.id, 4)
             .await

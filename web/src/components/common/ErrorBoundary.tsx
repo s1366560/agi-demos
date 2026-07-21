@@ -10,8 +10,12 @@ import { Result, Button } from 'antd';
 interface Props {
   /** Child components to be wrapped by the error boundary */
   children: ReactNode;
-  /** Custom fallback UI to render when an error is caught */
-  fallback?: ReactNode | undefined;
+  /**
+   * Custom fallback UI to render when an error is caught.
+   * Accepts a static node or a render function receiving the caught
+   * error and a reset callback (for retry / recovery actions).
+   */
+  fallback?: ReactNode | ((error: Error | undefined, onReset: () => void) => ReactNode) | undefined;
   /** Optional context identifier for error source (e.g., "Agent", "Project", "Tenant") */
   context?: string | undefined;
   /** Optional custom error handler callback */
@@ -117,9 +121,9 @@ export class ErrorBoundary extends Component<Props, State> {
     const { children, fallback, showHomeButton = true } = this.props;
 
     if (hasError) {
-      // Custom fallback UI
+      // Custom fallback UI (static node or render function)
       if (fallback) {
-        return fallback;
+        return typeof fallback === 'function' ? fallback(error, this.handleReset) : fallback;
       }
 
       // Default error UI

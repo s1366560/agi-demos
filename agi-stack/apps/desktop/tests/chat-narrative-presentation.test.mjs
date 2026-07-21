@@ -53,7 +53,8 @@ test('raw task and error payloads stay collapsed until a person opens them', () 
 });
 
 test('session composer exposes localized context actions and compact delivery controls', () => {
-  assert.match(chatSource, /t\('session\.attach'\)/);
+  assert.match(chatSource, /<ComposerPlusMenu/);
+  assert.match(chatSource, /t\('composer\.addedContext'\)/);
   assert.match(chatSource, /t\('session\.context'\)/);
   assert.match(chatSource, /className="composer-delivery-switch"/);
   assert.match(chatSource, /t\('session\.steerNow'\)/);

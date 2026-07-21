@@ -13,7 +13,7 @@
  * - Keyboard navigation
  */
 
-import { memo, useState, useEffect, useRef, useCallback } from 'react';
+import { memo, useState, useEffect, useRef, useCallback, useId } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -44,6 +44,8 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
     const [duration, setDuration] = useState(0);
     const contentRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
+    const contentId = useId();
+    const labelId = useId();
 
     // Track thinking duration
     useEffect(() => {
@@ -88,8 +90,8 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
 
     // Truncate content for collapsed preview
     const previewText = content
-      ? content.slice(0, 100).replace(/\n/g, ' ').trim() + (content.length > 100 ? '...' : '')
-      : t('agent.thinking.analyzing', 'Analyzing your request...');
+      ? content.slice(0, 100).replace(/\n/g, ' ').trim() + (content.length > 100 ? '…' : '')
+      : t('agent.thinking.analyzing', 'Analyzing your request…');
 
     // Calculate progress percentage
     const progressPercentage =
@@ -117,7 +119,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
               }}
               onKeyDown={handleKeyDown}
               aria-expanded={expanded}
-              aria-controls="thinking-content"
+              aria-controls={contentId}
               aria-label={
                 expanded
                   ? tFallback(t, 'agent.thinking.collapse', 'Collapse thinking')
@@ -131,7 +133,10 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                 <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />
               )}
 
-              <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0">
+              <span
+                id={labelId}
+                className="text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0"
+              >
                 {t('agent.thinking.title', 'Thinking')}
               </span>
 
@@ -188,9 +193,9 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
 
             {/* Expandable content */}
             <div
-              id="thinking-content"
+              id={contentId}
               role="region"
-              aria-labelledby="thinking-label"
+              aria-labelledby={labelId}
               className={`
                 overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform,max-height] duration-300 ease-in-out
                 ${expanded ? 'max-h-[400px]' : 'max-h-0'}

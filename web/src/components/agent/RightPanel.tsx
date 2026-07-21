@@ -7,7 +7,7 @@
  * - Draggable resize support
  */
 
-import { useCallback, useEffect, memo, useMemo, useRef, useState } from 'react';
+import { useEffect, memo, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -31,7 +31,7 @@ import { useUrlState } from '../../hooks/useUrlState';
 import { AgentGraphView } from './AgentGraphView';
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { buildWorkspaceAgentNodes } from './multiAgent/workspaceAgentPanelModel';
-import { ResizeHandle } from './RightPanelComponents';
+import { Resizer } from './Resizer';
 import { TaskList } from './TaskList';
 import { TaskLanePanel } from './tasks/TaskLanePanel';
 import { WorkspaceTaskPlanPanel } from './workspace/WorkspaceTaskPlanPanel';
@@ -320,6 +320,7 @@ const AgentSessionMessagesPanel = memo<{
   const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const requestSeqRef = useRef(0);
 
   useEffect(() => {
@@ -349,7 +350,7 @@ const AgentSessionMessagesPanel = memo<{
     return () => {
       requestSeqRef.current += 1;
     };
-  }, [projectId, sessionId]);
+  }, [projectId, sessionId, retryCount]);
 
   if (!sessionId) {
     return (
@@ -389,8 +390,20 @@ const AgentSessionMessagesPanel = memo<{
             <div className="h-16 rounded-md bg-slate-100 dark:bg-slate-800" />
           </div>
         ) : error ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
-            {error}
+          <div
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300"
+            role="alert"
+          >
+            <p className="break-words">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setRetryCount((count) => count + 1);
+              }}
+              className="mt-2 rounded-md border border-amber-300 px-2 py-1 font-medium text-amber-800 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+            >
+              {tFallback(t, 'agent.rightPanel.agentSession.retry', 'Retry')}
+            </button>
           </div>
         ) : events.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -624,15 +637,6 @@ export const RightPanel = memo<RightPanelProps>(
       };
     }, [projectId, tenantId, workspaceId]);
 
-    const handleResize = useCallback(
-      (delta: number) => {
-        if (!onWidthChange) return;
-        const newWidth = Math.max(minWidth, Math.min(maxWidth, width - delta));
-        onWidthChange(newWidth);
-      },
-      [width, onWidthChange, minWidth, maxWidth]
-    );
-
     if (collapsed) {
       return null;
     }
@@ -643,7 +647,15 @@ export const RightPanel = memo<RightPanelProps>(
         data-testid="right-panel"
       >
         {onWidthChange ? (
-          <ResizeHandle onResize={handleResize} direction="horizontal" position="left" />
+          <Resizer
+            direction="horizontal"
+            currentSize={width}
+            minSize={minWidth}
+            maxSize={maxWidth}
+            onResize={onWidthChange}
+            position="left"
+            className="left-0 -ml-1.5"
+          />
         ) : null}
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -667,9 +679,15 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-50 dark:bg-slate-800/70">
+              <div
+                className="inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-50 dark:bg-slate-800/70"
+                role="tablist"
+                aria-label={tFallback(t, 'agent.rightPanel.tabs.ariaLabel', 'Panel views')}
+              >
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'tasks'}
                   onClick={() => {
                     setPreferredTab('tasks');
                   }}
@@ -692,6 +710,12 @@ export const RightPanel = memo<RightPanelProps>(
                         ? tFallback(t, 'agent.rightPanel.switchToList', 'Switch to list view')
                         : tFallback(t, 'agent.rightPanel.switchToLane', 'Switch to lane view')
                     }
+                    aria-label={
+                      taskView === 'lanes'
+                        ? tFallback(t, 'agent.rightPanel.switchToList', 'Switch to list view')
+                        : tFallback(t, 'agent.rightPanel.switchToLane', 'Switch to lane view')
+                    }
+                    aria-pressed={taskView === 'lanes'}
                     className="ml-1 px-2 py-1 text-xs rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                     data-testid="task-view-toggle"
                   >
@@ -702,6 +726,8 @@ export const RightPanel = memo<RightPanelProps>(
                 ) : null}
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'agent'}
                   onClick={() => {
                     if (hasAgentSession) {
                       setPreferredTab('agent');
@@ -721,6 +747,8 @@ export const RightPanel = memo<RightPanelProps>(
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'insights'}
                   onClick={() => {
                     if (hasInsights) {
                       setPreferredTab('insights');
@@ -737,6 +765,8 @@ export const RightPanel = memo<RightPanelProps>(
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'agents'}
                   onClick={() => {
                     if (hasAgents) {
                       setPreferredTab('agents');
@@ -753,6 +783,8 @@ export const RightPanel = memo<RightPanelProps>(
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'graph'}
                   onClick={() => {
                     if (hasGraph) {
                       setPreferredTab('graph');
@@ -779,6 +811,7 @@ export const RightPanel = memo<RightPanelProps>(
                     size="small"
                     icon={<X size={18} />}
                     onClick={onClose}
+                    aria-label={tFallback(t, 'agent.rightPanel.close', 'Close panel')}
                     className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                     data-testid="close-button"
                   />
