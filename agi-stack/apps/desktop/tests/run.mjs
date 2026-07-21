@@ -106,6 +106,7 @@ const testFiles = [
   'skill-package-management.test.mjs',
   'subagent-library-management.test.mjs',
   'plugin-management-model.test.mjs',
+  'plugin-runtime-activity.test.mjs',
   'channel-connection-management.test.mjs',
   'tauri-command-surface.test.mjs',
   'managed-resource-model.test.mjs',

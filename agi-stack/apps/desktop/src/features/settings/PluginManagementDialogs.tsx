@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import {
+  CheckCircledIcon,
   ComponentInstanceIcon,
   Cross2Icon,
   ExclamationTriangleIcon,
@@ -10,6 +11,7 @@ import {
 import { useI18n } from '../../i18n';
 import type {
   ManagedPlugin,
+  PluginActionDetails,
   PluginConfigRecord,
   PluginConfigSchema,
   UpdatePluginConfigRequest,
@@ -18,12 +20,15 @@ import {
   pluginConfigDraftFrom,
   pluginConfigFields,
   pluginConfigMutationFromDraft,
+  pluginCapabilityCountEntries,
   validatePluginConfigDraft,
   validatePluginRequirement,
+  type PluginActionTimelineEntry,
   type PluginConfigDraft,
   type PluginConfigErrors,
   type PluginConfigField,
 } from './pluginManagementModel';
+import type { usePluginManagement } from './usePluginManagement';
 import { useModalDialog } from './useModalDialog';
 
 import './PluginManagementDialogs.css';
@@ -224,6 +229,150 @@ export function PluginConfigDialog({
         </div>
       </footer>
     </DialogFrame>
+  );
+}
+
+export function PluginRuntimeActivityDialog({
+  management,
+}: {
+  management: ReturnType<typeof usePluginManagement>;
+}) {
+  const { locale, t } = useI18n();
+  const dialogRef = useModalDialog({
+    active: management.activityOpen,
+    nested: true,
+    onClose: management.closeActivity,
+  });
+  if (!management.activityOpen) return null;
+
+  const trace = management.lastActionDetails?.control_plane_trace;
+  return (
+    <DialogFrame
+      dialogRef={dialogRef}
+      title={t('settings.pluginActivity.title')}
+      description={t('settings.pluginActivity.description')}
+      busy={management.activityLoading}
+      onClose={management.closeActivity}
+    >
+      <div className="plugin-management-body plugin-activity-body">
+        <div className="plugin-activity-toolbar">
+          <span>{t('settings.pluginActivity.sessionNote')}</span>
+          <button
+            type="button"
+            disabled={management.activityLoading}
+            onClick={() => void management.refreshActivity()}
+          >
+            <ReloadIcon className={management.activityLoading ? 'managed-resource-spin' : ''} />
+            {t('settings.pluginActivity.refresh')}
+          </button>
+        </div>
+        <DialogError error={management.activityError} />
+        {trace ? (
+          <ActivitySection title={t('settings.pluginActivity.latestTrace')}>
+            <div className="plugin-activity-trace">
+              <strong>{trace.action}</strong>
+              <code>{trace.trace_id}</code>
+              <span>{new Date(trace.timestamp).toLocaleString(locale)}</span>
+            </div>
+            <CapabilityCounts details={management.lastActionDetails} />
+          </ActivitySection>
+        ) : null}
+        <ActivitySection title={t('settings.pluginActivity.diagnostics')}>
+          {management.activityLoading && management.diagnostics.length === 0 ? (
+            <div className="plugin-management-state compact">
+              <ReloadIcon className="managed-resource-spin" />
+              <span>{t('settings.pluginActivity.loading')}</span>
+            </div>
+          ) : management.diagnostics.length > 0 ? (
+            <div className="plugin-activity-diagnostics">
+              {management.diagnostics.map((diagnostic, index) => (
+                <article key={`${diagnostic.plugin_name}:${diagnostic.code}:${index}`}>
+                  <span data-level={diagnostic.level}>{diagnostic.level}</span>
+                  <div>
+                    <strong>{diagnostic.plugin_name || t('settings.pluginActivity.runtime')}</strong>
+                    <code>{diagnostic.code}</code>
+                    <p>{diagnostic.message}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="plugin-activity-empty">{t('settings.pluginActivity.noDiagnostics')}</p>
+          )}
+        </ActivitySection>
+        <ActivitySection title={t('settings.pluginActivity.timeline')}>
+          {management.actionTimeline.length > 0 ? (
+            <div className="plugin-activity-timeline">
+              {management.actionTimeline.map((entry) => (
+                <TimelineEntry key={entry.id} entry={entry} locale={locale} />
+              ))}
+            </div>
+          ) : (
+            <p className="plugin-activity-empty">{t('settings.pluginActivity.noTimeline')}</p>
+          )}
+        </ActivitySection>
+      </div>
+      <footer className="plugin-management-footer">
+        <button type="button" className="secondary" onClick={management.closeActivity}>
+          {t('common.close')}
+        </button>
+      </footer>
+    </DialogFrame>
+  );
+}
+
+function ActivitySection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="plugin-activity-section">
+      <h3>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function CapabilityCounts({ details }: { details: PluginActionDetails | null }) {
+  const { t } = useI18n();
+  const counts = details?.control_plane_trace?.capability_counts;
+  const reloadPlan = details?.channel_reload_plan;
+  if (!counts && !reloadPlan) return null;
+  return (
+    <div className="plugin-activity-metrics">
+      {counts
+        ? pluginCapabilityCountEntries(counts).map(([key, value]) => (
+            <span key={key}>
+              <b>{value}</b> {t(`settings.pluginActivity.capability.${key}`)}
+            </span>
+          ))
+        : null}
+      {reloadPlan
+        ? Object.entries(reloadPlan).map(([key, value]) => (
+            <span key={key}>
+              <b>{value}</b> {t('settings.pluginActivity.reloadMetric', { name: key })}
+            </span>
+          ))
+        : null}
+    </div>
+  );
+}
+
+function TimelineEntry({
+  entry,
+  locale,
+}: {
+  entry: PluginActionTimelineEntry;
+  locale: string;
+}) {
+  return (
+    <article data-success={entry.success}>
+      {entry.success ? <CheckCircledIcon /> : <ExclamationTriangleIcon />}
+      <div>
+        <strong>{entry.action}</strong>
+        <span>{new Date(entry.timestamp).toLocaleString(locale)}</span>
+        <p>{entry.message}</p>
+        <code>{entry.id}</code>
+        <CapabilityCounts details={entry.details} />
+      </div>
+    </article>
   );
 }
 

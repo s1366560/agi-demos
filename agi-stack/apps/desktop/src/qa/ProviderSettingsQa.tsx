@@ -328,6 +328,44 @@ let plugins: QaPlugin[] = [
   },
 ];
 
+const pluginDiagnostics = [
+  {
+    plugin_name: 'google-drive',
+    code: 'plugin_not_discovered',
+    message: 'The package is installed but has not registered runtime capabilities.',
+    level: 'warning',
+  },
+];
+let pluginActionSerial = 0;
+
+function pluginActionResponse(action: string, message: string, pluginName?: string) {
+  pluginActionSerial += 1;
+  return {
+    success: true,
+    message,
+    details: {
+      diagnostics: pluginDiagnostics,
+      control_plane_trace: {
+        trace_id: `qa-plugin-${action}-${pluginActionSerial}`,
+        action,
+        plugin_name: pluginName ?? null,
+        tenant_id: QA_TENANT_ID,
+        timestamp: NOW,
+        capability_counts: {
+          channel_types: 5,
+          tool_factories: 4,
+          registered_tool_factories: 4,
+          hooks: 2,
+          commands: 3,
+          services: 2,
+          providers: 3,
+        },
+      },
+      channel_reload_plan: { reused: 2, restarted: 1 },
+    },
+  };
+}
+
 const pluginSchemas: Record<string, PluginConfigSchema> = {
   github: {
     plugin_name: 'github',
@@ -1154,7 +1192,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     );
   }
   if (method === 'GET' && path.endsWith('/plugins')) {
-    return jsonResponse({ plugins });
+    return jsonResponse({ items: plugins, diagnostics: pluginDiagnostics });
   }
 
   if (method === 'POST' && path.endsWith('/plugins/install')) {
@@ -1186,11 +1224,11 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       config: { retries: 3, enabled: true, mode: 'safe' },
       updated_at: NOW,
     };
-    return jsonResponse({ success: true, message: 'Plugin installed.' });
+    return jsonResponse(pluginActionResponse('install', 'Plugin installed.', 'release-notifier'));
   }
 
   if (method === 'POST' && path.endsWith('/plugins/reload')) {
-    return jsonResponse({ success: true, message: 'Plugin runtime reloaded.' });
+    return jsonResponse(pluginActionResponse('reload', 'Plugin runtime reloaded.'));
   }
 
   const pluginConfigSchemaMatch = path.match(
@@ -1325,7 +1363,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     plugins = plugins.filter((plugin) => plugin.name !== pluginName);
     const { [pluginName]: _removed, ...remainingConfigs } = pluginConfigs;
     pluginConfigs = remainingConfigs;
-    return jsonResponse({ success: true, message: 'Plugin uninstalled.' });
+    return jsonResponse(pluginActionResponse('uninstall', 'Plugin uninstalled.', pluginName));
   }
   if (method === 'GET' && path === '/api/v1/agent/definitions') {
     return jsonResponse({ definitions: agents });
@@ -1729,7 +1767,9 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     plugins = plugins.map((plugin) =>
       plugin.name === pluginName ? { ...plugin, enabled } : plugin
     );
-    return jsonResponse(plugins.find((plugin) => plugin.name === pluginName) ?? null);
+    return jsonResponse(
+      pluginActionResponse(enabled ? 'enable' : 'disable', 'Plugin status updated.', pluginName)
+    );
   }
 
   const agentStatusMatch = path.match(/^\/api\/v1\/agent\/definitions\/([^/]+)\/enabled$/);

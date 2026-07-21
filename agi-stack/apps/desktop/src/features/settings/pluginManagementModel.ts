@@ -1,4 +1,7 @@
 import type {
+  PluginActionDetails,
+  PluginActionResponse,
+  PluginCapabilityCounts,
   PluginConfigRecord,
   PluginConfigSchema,
   PluginConfigSchemaProperty,
@@ -35,6 +38,58 @@ export type PluginConfigErrorCode =
   | 'invalid_number'
   | 'invalid_option';
 export type PluginConfigErrors = Record<string, PluginConfigErrorCode>;
+
+export type PluginActionTimelineEntry = {
+  id: string;
+  action: string;
+  message: string;
+  success: boolean;
+  timestamp: string;
+  details: PluginActionDetails | null;
+};
+
+export type PluginCapabilityCountEntry = readonly [keyof PluginCapabilityCounts, number];
+
+export function pluginActionTimelineEntry(
+  response: PluginActionResponse,
+  fallbackAction: string,
+  now = new Date().toISOString(),
+): PluginActionTimelineEntry {
+  const details = response.details ?? null;
+  const trace = details?.control_plane_trace;
+  return {
+    id: trace?.trace_id || `${now}:${fallbackAction}`,
+    action: trace?.action || fallbackAction,
+    message: response.message,
+    success: response.success,
+    timestamp: trace?.timestamp || now,
+    details,
+  };
+}
+
+export function prependPluginActionTimeline(
+  current: PluginActionTimelineEntry[],
+  response: PluginActionResponse,
+  fallbackAction: string,
+  now = new Date().toISOString(),
+): PluginActionTimelineEntry[] {
+  const entry = pluginActionTimelineEntry(response, fallbackAction, now);
+  return [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, 10);
+}
+
+export function pluginCapabilityCountEntries(
+  counts: PluginCapabilityCounts,
+): PluginCapabilityCountEntry[] {
+  return [
+    ['channel_types', counts.channel_types],
+    ['tool_factories', counts.tool_factories],
+    ['registered_tool_factories', counts.registered_tool_factories],
+    ['hooks', counts.hooks],
+    ['commands', counts.commands],
+    ['services', counts.services],
+    ['providers', counts.providers],
+  ];
+}
 
 export function validatePluginRequirement(requirement: string): 'required' | null {
   return requirement.trim() ? null : 'required';

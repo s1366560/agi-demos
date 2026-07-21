@@ -4,10 +4,17 @@ import { DesktopApiClient } from '../../api/client';
 import type {
   DesktopRuntimeConfig,
   ManagedPlugin,
+  PluginActionDetails,
+  PluginActionResponse,
   PluginConfigRecord,
   PluginConfigSchema,
+  PluginDiagnostic,
   UpdatePluginConfigRequest,
 } from '../../types';
+import {
+  prependPluginActionTimeline,
+  type PluginActionTimelineEntry,
+} from './pluginManagementModel';
 
 export type PluginDialogState =
   | { kind: 'install'; key: string }
@@ -41,6 +48,12 @@ export function usePluginManagement({
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [reloadBusy, setReloadBusy] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<PluginDiagnostic[]>([]);
+  const [lastActionDetails, setLastActionDetails] = useState<PluginActionDetails | null>(null);
+  const [actionTimeline, setActionTimeline] = useState<PluginActionTimelineEntry[]>([]);
   const contextKeyRef = useRef(contextKey);
   contextKeyRef.current = contextKey;
 
@@ -50,7 +63,49 @@ export function usePluginManagement({
     setDialogError(null);
     setReloadBusy(false);
     setReloadError(null);
+    setActivityOpen(false);
+    setActivityLoading(false);
+    setActivityError(null);
+    setDiagnostics([]);
+    setLastActionDetails(null);
+    setActionTimeline([]);
   }, [active, contextKey]);
+
+  const recordAction = useCallback(
+    (response: PluginActionResponse, fallbackAction: string) => {
+      const details = response.details ?? null;
+      setLastActionDetails(details);
+      if (details?.diagnostics) setDiagnostics(details.diagnostics);
+      setActionTimeline((current) =>
+        prependPluginActionTimeline(current, response, fallbackAction),
+      );
+    },
+    [],
+  );
+
+  const refreshActivity = useCallback(async () => {
+    const requestContextKey = contextKey;
+    setActivityLoading(true);
+    setActivityError(null);
+    try {
+      const runtime = await new DesktopApiClient(config).getManagedPluginRuntime();
+      if (contextKeyRef.current === requestContextKey) setDiagnostics(runtime.diagnostics);
+    } catch (caught) {
+      if (contextKeyRef.current === requestContextKey) setActivityError(errorMessage(caught));
+    } finally {
+      if (contextKeyRef.current === requestContextKey) setActivityLoading(false);
+    }
+  }, [config, contextKey]);
+
+  const openActivity = useCallback(() => {
+    if (!canManage) return;
+    setActivityOpen(true);
+    void refreshActivity();
+  }, [canManage, refreshActivity]);
+
+  const closeActivity = useCallback(() => {
+    setActivityOpen(false);
+  }, []);
 
   const closeDialog = useCallback(() => {
     if (!dialogBusy) setDialog(null);
@@ -110,8 +165,9 @@ export function usePluginManagement({
       setDialogBusy(true);
       setDialogError(null);
       try {
-        await new DesktopApiClient(config).installManagedPlugin(requirement);
+        const response = await new DesktopApiClient(config).installManagedPlugin(requirement);
         if (contextKeyRef.current !== requestContextKey) return;
+        recordAction(response, 'install');
         setDialog(null);
         await onReload();
       } catch (caught) {
@@ -120,7 +176,7 @@ export function usePluginManagement({
         if (contextKeyRef.current === requestContextKey) setDialogBusy(false);
       }
     },
-    [canManage, config, contextKey, dialog, onReload],
+    [canManage, config, contextKey, dialog, onReload, recordAction],
   );
 
   const reload = useCallback(async () => {
@@ -129,14 +185,17 @@ export function usePluginManagement({
     setReloadBusy(true);
     setReloadError(null);
     try {
-      await new DesktopApiClient(config).reloadManagedPlugins();
-      if (contextKeyRef.current === requestContextKey) await onReload();
+      const response = await new DesktopApiClient(config).reloadManagedPlugins();
+      if (contextKeyRef.current === requestContextKey) {
+        recordAction(response, 'reload');
+        await onReload();
+      }
     } catch (caught) {
       if (contextKeyRef.current === requestContextKey) setReloadError(errorMessage(caught));
     } finally {
       if (contextKeyRef.current === requestContextKey) setReloadBusy(false);
     }
-  }, [canManage, config, contextKey, onReload]);
+  }, [canManage, config, contextKey, onReload, recordAction]);
 
   const saveConfig = useCallback(
     async (input: UpdatePluginConfigRequest) => {
@@ -164,8 +223,11 @@ export function usePluginManagement({
     setDialogBusy(true);
     setDialogError(null);
     try {
-      await new DesktopApiClient(config).uninstallManagedPlugin(dialog.plugin.name);
+      const response = await new DesktopApiClient(config).uninstallManagedPlugin(
+        dialog.plugin.name,
+      );
       if (contextKeyRef.current !== requestContextKey) return;
+      recordAction(response, 'uninstall');
       setDialog(null);
       onUninstalled();
       await onReload();
@@ -174,7 +236,7 @@ export function usePluginManagement({
     } finally {
       if (contextKeyRef.current === requestContextKey) setDialogBusy(false);
     }
-  }, [canManage, config, contextKey, dialog, onReload, onUninstalled]);
+  }, [canManage, config, contextKey, dialog, onReload, onUninstalled, recordAction]);
 
   return {
     dialog,
@@ -182,11 +244,21 @@ export function usePluginManagement({
     dialogError,
     reloadBusy,
     reloadError,
+    activityOpen,
+    activityLoading,
+    activityError,
+    diagnostics,
+    lastActionDetails,
+    actionTimeline,
     closeDialog,
     openInstall,
     openConfig,
     install,
     reload,
+    openActivity,
+    closeActivity,
+    refreshActivity,
+    recordAction,
     saveConfig,
     uninstall,
   };

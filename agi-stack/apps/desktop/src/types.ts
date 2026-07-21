@@ -1072,10 +1072,48 @@ export type ManagedPlugin = {
   [key: string]: unknown;
 };
 
+export type PluginDiagnostic = {
+  plugin_name: string;
+  code: string;
+  message: string;
+  level: string;
+};
+
+export type ManagedPluginRuntime = {
+  items: ManagedPlugin[];
+  diagnostics: PluginDiagnostic[];
+};
+
+export type PluginCapabilityCounts = {
+  channel_types: number;
+  tool_factories: number;
+  registered_tool_factories: number;
+  hooks: number;
+  commands: number;
+  services: number;
+  providers: number;
+};
+
+export type PluginControlPlaneTrace = {
+  trace_id: string;
+  action: string;
+  plugin_name?: string | null;
+  tenant_id?: string | null;
+  timestamp: string;
+  capability_counts: PluginCapabilityCounts;
+};
+
+export type PluginActionDetails = {
+  diagnostics?: PluginDiagnostic[];
+  control_plane_trace?: PluginControlPlaneTrace;
+  channel_reload_plan?: Record<string, number>;
+  [key: string]: unknown;
+};
+
 export type PluginActionResponse = {
   success: boolean;
   message: string;
-  details?: Record<string, unknown> | null;
+  details?: PluginActionDetails | null;
 };
 
 export type PluginConfigSchemaProperty = {

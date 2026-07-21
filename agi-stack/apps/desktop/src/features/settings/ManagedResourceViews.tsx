@@ -88,6 +88,7 @@ export function ManagedResourceWorkspace({
   onSubAgentLibrary,
   onImportSubAgent,
   onChannels,
+  onPluginActivity,
   onReload,
   onRemove,
 }: {
@@ -117,6 +118,7 @@ export function ManagedResourceWorkspace({
   onSubAgentLibrary: () => void;
   onImportSubAgent: (item: ManagedResource) => void;
   onChannels: () => void;
+  onPluginActivity: () => void;
   onReload: () => void;
   onRemove: (item: ManagedResource) => void;
 }) {
@@ -137,6 +139,15 @@ export function ManagedResourceWorkspace({
             <div className="managed-resource-header-actions">
               {section === 'plugins' ? (
                 <>
+                  <button
+                    type="button"
+                    className="managed-resource-reload"
+                    disabled={busy}
+                    onClick={onPluginActivity}
+                  >
+                    <ClockIcon />
+                    {t('settings.pluginActivity.action')}
+                  </button>
                   {mode === 'cloud' ? (
                     <button
                       type="button"

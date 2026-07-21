@@ -414,7 +414,13 @@ export function SettingsWindow({
         await client.setManagedSkillStatus(skill.id, action.nextActive ? 'active' : 'disabled');
       } else if (action.kind === 'set_plugin_enabled') {
         const plugin = item as ManagedPlugin;
-        await client.setManagedPluginEnabled(plugin.id, action.nextActive);
+        const response = await client.setManagedPluginEnabled(plugin.id, action.nextActive);
+        if (
+          activeSectionRef.current === mutationSection &&
+          resourceContextKeyRef.current === mutationContextKey
+        ) {
+          pluginManagement.recordAction(response, action.nextActive ? 'enable' : 'disable');
+        }
       } else if (action.kind === 'set_subagent_enabled') {
         const subagent = item as ManagedSubAgent;
         await client.setManagedSubAgentEnabled(subagent.id, action.nextActive);
@@ -663,6 +669,7 @@ export function SettingsWindow({
                     void subAgentLibrary.importFilesystem(item as ManagedSubAgent)
                   }
                   onChannels={channelManagement.launch}
+                  onPluginActivity={pluginManagement.openActivity}
                   onReload={() => void pluginManagement.reload()}
                   onRemove={(item) => {
                     if (section === 'plugins') {

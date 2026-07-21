@@ -1,7 +1,11 @@
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import { ChannelConnectionsDialog } from './ChannelConnectionsDialog';
-import { PluginConfigDialog, PluginInstallDialog } from './PluginManagementDialogs';
+import {
+  PluginConfigDialog,
+  PluginInstallDialog,
+  PluginRuntimeActivityDialog,
+} from './PluginManagementDialogs';
 import { SkillManagementDialogs } from './SkillManagementDialogs';
 import { SubAgentEditorDialog } from './SubAgentEditorDialog';
 import { SubAgentLibraryDialog } from './SubAgentLibraryDialog';
@@ -83,6 +87,7 @@ export function SettingsManagementDialogs({
           onUninstall={() => void plugins.uninstall()}
         />
       ) : null}
+      <PluginRuntimeActivityDialog management={plugins} />
       <ChannelConnectionsDialog management={channels} />
       {subagentDefinitions.dialog ? (
         <SubAgentEditorDialog

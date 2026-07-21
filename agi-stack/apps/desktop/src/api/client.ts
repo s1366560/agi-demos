@@ -52,6 +52,7 @@ import type {
   ManagedChannelTestResult,
   ManagedLlmProvider,
   ManagedPlugin,
+  ManagedPluginRuntime,
   ManagedSkill,
   ManagedSkillContent,
   ManagedSkillCreateMutation,
@@ -1390,20 +1391,30 @@ export class DesktopApiClient {
   }
 
   async listManagedPlugins(signal?: AbortSignal): Promise<ManagedPlugin[]> {
+    return (await this.getManagedPluginRuntime(signal)).items;
+  }
+
+  async getManagedPluginRuntime(signal?: AbortSignal): Promise<ManagedPluginRuntime> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const payload = await this.request<unknown>(
       `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins`,
       { signal },
     );
-    return readArray<ManagedPlugin>(payload, ['items', 'plugins', 'data']).map((plugin) => ({
-      ...plugin,
-      id: plugin.id ?? plugin.name,
-    }));
+    return {
+      items: readArray<ManagedPlugin>(payload, ['items', 'plugins', 'data']).map((plugin) => ({
+        ...plugin,
+        id: plugin.id ?? plugin.name,
+      })),
+      diagnostics: readArray(payload, ['diagnostics']),
+    };
   }
 
-  async setManagedPluginEnabled(pluginId: string, enabled: boolean): Promise<unknown> {
+  async setManagedPluginEnabled(
+    pluginId: string,
+    enabled: boolean,
+  ): Promise<PluginActionResponse> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<unknown>(
+    return this.request<PluginActionResponse>(
       `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
         pluginId,
       )}/${enabled ? 'enable' : 'disable'}`,
