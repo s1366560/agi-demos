@@ -23,6 +23,7 @@ import {
   ComposerPlusMenu,
   type ComposerCatalogClient,
 } from '../chat/ComposerPlusMenu';
+import { appendComposerContextItem } from '../chat/chatComposerModel';
 import { PickerMenu } from '../chat/PickerMenu';
 import '../chat/ComposerMenus.css';
 import './NewThreadComposer.css';
@@ -120,13 +121,7 @@ export function NewThreadComposer({
   };
 
   const addContextItem = (item: ComposerContextItem) => {
-    setContextItems((current) =>
-      current.some(
-        (candidate) => candidate.kind === item.kind && candidate.resource_id === item.resource_id,
-      )
-        ? current
-        : [...current, item],
-    );
+    setContextItems((current) => appendComposerContextItem(current, item));
   };
   const modelPickerOptions = modelOptions.map((option) => ({
     value: option.value,

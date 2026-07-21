@@ -74,6 +74,7 @@ function CloudSessionQueueQa() {
   const socket = useAgentSocket(config, true, 1, 'conversation-cloud');
   const sentMessages = QaWebSocket.latest?.sent ?? [];
   const agentMessages = sentMessages.filter((message) => message.type === 'send_message');
+  const latestAgentMessage = agentMessages[agentMessages.length - 1];
 
   return (
     <main
@@ -104,6 +105,20 @@ function CloudSessionQueueQa() {
             <dt>Agent turns sent</dt>
             <dd data-qa-agent-turns>{agentMessages.length}</dd>
           </div>
+          <div>
+            <dt>Selected Agent</dt>
+            <dd data-qa-agent>{String(latestAgentMessage?.agent_id ?? 'not sent')}</dd>
+          </div>
+          <div>
+            <dt>Forced skill</dt>
+            <dd data-qa-skill>{String(latestAgentMessage?.forced_skill_name ?? 'not sent')}</dd>
+          </div>
+          <div>
+            <dt>Composer context</dt>
+            <dd data-qa-context>
+              {latestAgentMessage?.app_model_context ? 'preserved' : 'not sent'}
+            </dd>
+          </div>
         </dl>
         <div style={{ display: 'flex', gap: 12 }}>
           <button
@@ -115,6 +130,14 @@ function CloudSessionQueueQa() {
                   projectId: 'project-cloud',
                   message: 'Prepare a structured plan',
                   messageId: 'message-cloud-1',
+                  agentId: 'definition-reviewer',
+                  forcedSkillName: 'source-research',
+                  mentions: ['agent-research'],
+                  appModelContext: {
+                    desktop_composer_context: {
+                      resources: [{ kind: 'plugin', resource_id: 'github' }],
+                    },
+                  },
                 }),
               );
             }}

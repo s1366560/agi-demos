@@ -12,4 +12,7 @@ test('cloud session QA exercises the production socket queue before opening real
   assert.match(source, /socket\.sendAgentMessage\(\{/);
   assert.match(source, /QaWebSocket\.latest\?\.open\(\)/);
   assert.match(source, /messageId: 'message-cloud-1'/);
+  assert.match(source, /agentId: 'definition-reviewer'/);
+  assert.match(source, /forcedSkillName: 'source-research'/);
+  assert.match(source, /data-qa-context/);
 });

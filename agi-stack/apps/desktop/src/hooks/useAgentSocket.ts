@@ -45,6 +45,10 @@ export type AgentRunMessage = {
   projectId: string;
   message: string;
   messageId?: string;
+  agentId?: string;
+  forcedSkillName?: string;
+  mentions?: string[];
+  appModelContext?: Record<string, unknown>;
 };
 
 export type AgentRunSocketMessage = {
@@ -53,6 +57,10 @@ export type AgentRunSocketMessage = {
   project_id: string;
   message: string;
   message_id: string;
+  agent_id?: string;
+  forced_skill_name?: string;
+  mentions?: string[];
+  app_model_context?: Record<string, unknown>;
 };
 
 export type PendingAgentMessageQueue = Map<string, AgentRunSocketMessage>;
@@ -88,12 +96,21 @@ function agentRunSocketMessage(message: AgentRunMessage): AgentRunSocketMessage 
   const messageId =
     message.messageId?.trim() ||
     `desktop-agent-${Date.now()}-${(pendingAgentMessageSequence += 1)}`;
+  const agentId = message.agentId?.trim();
+  const forcedSkillName = message.forcedSkillName?.trim();
+  const mentions = message.mentions?.map((mention) => mention.trim()).filter(Boolean);
   return {
     type: 'send_message',
     conversation_id: conversationId,
     project_id: projectId,
     message: content,
     message_id: messageId,
+    ...(agentId ? { agent_id: agentId } : {}),
+    ...(forcedSkillName ? { forced_skill_name: forcedSkillName } : {}),
+    ...(mentions?.length ? { mentions: [...new Set(mentions)] } : {}),
+    ...(message.appModelContext && Object.keys(message.appModelContext).length
+      ? { app_model_context: message.appModelContext }
+      : {}),
   };
 }
 

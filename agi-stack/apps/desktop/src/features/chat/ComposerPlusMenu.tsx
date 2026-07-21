@@ -20,6 +20,7 @@ import type {
   ManagedAgentDefinition,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSubAgent,
   WorkspaceAgentBinding,
 } from '../../types';
 
@@ -42,6 +43,7 @@ type Category = {
     | 'attachments'
     | 'agents'
     | 'agentDefinitions'
+    | 'subagents'
     | 'skills'
     | 'plugins'
     | 'commands'
@@ -56,6 +58,7 @@ export type ComposerCatalogClient = {
   listManagedAgents: (signal?: AbortSignal) => Promise<ManagedAgentDefinition[]>;
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listManagedPlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
+  listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
 };
 
 type ComposerPlusMenuProps = {
@@ -81,6 +84,7 @@ export function ComposerPlusMenu({
     agents: ManagedAgentDefinition[];
     skills: ManagedSkill[];
     plugins: ManagedPlugin[];
+    subagents: ManagedSubAgent[];
   } | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -114,9 +118,10 @@ export function ComposerPlusMenu({
       api.listManagedAgents(controller.signal),
       api.listManagedSkills(controller.signal),
       api.listManagedPlugins(controller.signal),
+      api.listManagedSubAgents?.(controller.signal) ?? Promise.resolve([]),
     ])
-      .then(([workspaceAgents, agents, skills, plugins]) =>
-        setCatalog({ workspaceAgents, agents, skills, plugins }),
+      .then(([workspaceAgents, agents, skills, plugins, subagents]) =>
+        setCatalog({ workspaceAgents, agents, skills, plugins, subagents }),
       )
       .catch((caught) => {
         if (!controller.signal.aborted) {
@@ -174,8 +179,33 @@ export function ComposerPlusMenu({
               agent.id,
               agent.display_name?.trim() || agent.name,
               agent.model_name ?? undefined,
-              { mention_target: false },
+              {
+                mention_target: false,
+                execution_slot: 'agent',
+                execution_agent_id: agent.id,
+              },
               'agent-definition',
+            ),
+          ),
+      },
+      {
+        id: 'subagents',
+        label: t('composer.subagents'),
+        Icon: PersonIcon,
+        items: (catalog?.subagents ?? [])
+          .filter((agent) => agent.enabled)
+          .map((agent) =>
+            resourceItem(
+              'agent',
+              agent.id,
+              agent.display_name?.trim() || agent.name,
+              agent.model ?? undefined,
+              {
+                mention_target: false,
+                execution_slot: 'subagent',
+                execution_subagent_name: agent.name,
+              },
+              'subagent',
             ),
           ),
       },
@@ -185,7 +215,12 @@ export function ComposerPlusMenu({
         Icon: MagicWandIcon,
         items: (catalog?.skills ?? [])
           .filter((skill) => skill.status === 'active')
-          .map((skill) => resourceItem('skill', skill.id, skill.name, skill.description)),
+          .map((skill) =>
+            resourceItem('skill', skill.id, skill.name, skill.description, {
+              execution_slot: 'skill',
+              execution_skill_name: skill.name,
+            }),
+          ),
       },
       {
         id: 'plugins',
@@ -200,7 +235,9 @@ export function ComposerPlusMenu({
         label: t('composer.commands'),
         Icon: SlashIcon,
         items: COMMANDS.map((command) =>
-          resourceItem('command', command.id, command.id, t(command.descriptionKey)),
+          resourceItem('command', command.id, command.id, t(command.descriptionKey), {
+            execution_slot: 'command',
+          }),
         ),
       },
       {

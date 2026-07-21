@@ -84,7 +84,7 @@ import {
 } from './features/chat/ChatPanel';
 import { markA2UIActionAnswered } from './features/chat/a2uiAction';
 import {
-  composerMentionIds,
+  composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
 } from './features/chat/chatComposerModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
@@ -4160,6 +4160,10 @@ export function App() {
       projectId: input.projectId,
       message: input.message,
       messageId: input.messageId,
+      agentId: input.agentId,
+      forcedSkillName: input.forcedSkillName,
+      mentions: input.mentions,
+      appModelContext: input.appModelContext,
     });
     const transport = newTaskAgentTurnTransport(input.config.mode, queued);
     if (transport === 'socket') {
@@ -4252,12 +4256,20 @@ export function App() {
       clearTaskSessionCreationAttempt(storage, fingerprint);
       if (result.policy) workspaceAgentPolicy.acceptPolicy(result.policy);
       activateNewTaskSession(session);
+      const execution = composerAgentExecutionContext(
+        buildPlanningPrompt(definition),
+        input.contextItems,
+      );
       await runNewTaskAgentTurn({
         config: session.config,
         conversationId: session.conversation.id,
         projectId: session.config.projectId,
-        message: buildPlanningPrompt(definition),
+        message: execution.message,
         messageId: `desktop-plan-${crypto.randomUUID()}`,
+        agentId: execution.agentId,
+        forcedSkillName: execution.forcedSkillName,
+        mentions: execution.mentions,
+        appModelContext: execution.appModelContext,
       });
     } catch (caught) {
       setNewThreadError(caught instanceof Error ? caught.message : String(caught));
@@ -4317,7 +4329,8 @@ export function App() {
   ) => {
     const content = rawContent.trim();
     if (!content) return;
-    const mentions = composerMentionIds(contextItems);
+    const execution = composerAgentExecutionContext(content, contextItems);
+    const mentions = execution.mentions;
     const canSendConversationMessage = Boolean(
       sessionProjection?.capabilities.canSendMessage &&
         sessionProjection.capabilities.allowedActions.includes('send_message'),
@@ -4434,8 +4447,12 @@ export function App() {
           const queued = socket.sendAgentMessage({
             conversationId: conversation.id,
             projectId: config.projectId,
-            message: content,
+            message: execution.message,
             messageId,
+            agentId: execution.agentId,
+            forcedSkillName: execution.forcedSkillName,
+            mentions: execution.mentions,
+            appModelContext: execution.appModelContext,
           });
           setConversationTimeline((current) => {
             if (current.conversationId !== conversation.id) return current;

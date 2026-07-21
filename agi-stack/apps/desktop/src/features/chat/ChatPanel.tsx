@@ -47,7 +47,7 @@ import { isImportantTimelineItem } from './chatTimelinePresentation';
 import { SessionEmptyState, WorkspaceTranscriptMessage } from './ChatTranscript';
 import { ChatWorkflowStrip } from './ChatWorkflowStrip';
 import type { ChatWorkflowTarget } from './ChatWorkflowStrip';
-import { chatComposerPresentation } from './chatComposerModel';
+import { appendComposerContextItem, chatComposerPresentation } from './chatComposerModel';
 import type { ChatComposerVariant } from './chatComposerModel';
 import './ChatPanel.css';
 import './ComposerMenus.css';
@@ -774,13 +774,7 @@ function ChatComposer({
     });
   }, [canSend, contextItems, input, onSend]);
   const addContextItem = useCallback((item: ComposerContextItem) => {
-    setContextItems((current) =>
-      current.some(
-        (candidate) => candidate.kind === item.kind && candidate.resource_id === item.resource_id,
-      )
-        ? current
-        : [...current, item],
-    );
+    setContextItems((current) => appendComposerContextItem(current, item));
   }, []);
 
   return (

@@ -103,6 +103,10 @@ export type NewTaskAgentTurnInput = {
   projectId: string;
   message: string;
   messageId: string;
+  agentId?: string;
+  forcedSkillName?: string;
+  mentions?: string[];
+  appModelContext?: Record<string, unknown>;
 };
 
 export type NewTaskResumeDraft = {

@@ -78,6 +78,50 @@ test('failed socket flush preserves pending cloud turns for the next reconnect',
   assert.equal(queue.size, 2);
 });
 
+test('queued cloud turns preserve Agent, skill, mention, and composer context routing', () => {
+  const queue = createPendingAgentMessageQueue();
+  enqueuePendingAgentRunMessage(queue, {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    message: '/review Review this change',
+    messageId: 'message-context-1',
+    agentId: 'definition-reviewer',
+    forcedSkillName: 'source-research',
+    mentions: ['agent-research'],
+    appModelContext: {
+      desktop_composer_context: {
+        resources: [{ kind: 'plugin', resource_id: 'github' }],
+      },
+    },
+  });
+
+  const sent = [];
+  assert.equal(
+    flushPendingAgentRunMessages(queue, (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    1,
+  );
+  assert.deepEqual(sent, [
+    {
+      type: 'send_message',
+      conversation_id: 'conversation-1',
+      project_id: 'project-1',
+      message: '/review Review this change',
+      message_id: 'message-context-1',
+      agent_id: 'definition-reviewer',
+      forced_skill_name: 'source-research',
+      mentions: ['agent-research'],
+      app_model_context: {
+        desktop_composer_context: {
+          resources: [{ kind: 'plugin', resource_id: 'github' }],
+        },
+      },
+    },
+  ]);
+});
+
 test('buildHitlSocketMessage preserves the backend WebSocket contract', () => {
   assert.deepEqual(
     buildHitlSocketMessage({
