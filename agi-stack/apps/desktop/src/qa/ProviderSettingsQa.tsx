@@ -135,7 +135,10 @@ const initialRoutingPolicy: LlmProviderRoutingPolicy = {
   roles: {
     default: { provider_id: 'provider-openai', model_id: 'gpt-5.1' },
     fast: { provider_id: 'provider-openai', model_id: 'gpt-5.1-mini' },
-    coding: { provider_id: 'provider-anthropic', model_id: 'claude-sonnet-4-5' },
+    coding: {
+      provider_id: 'provider-anthropic',
+      model_id: 'claude-sonnet-4-5',
+    },
     vision: { provider_id: 'provider-openai', model_id: 'gpt-4.1' },
   },
   fallbacks: [
@@ -169,18 +172,24 @@ let routingPolicy = initialRoutingPolicy;
 let skills: ManagedSkill[] = [
   {
     id: 'competitive-research',
-    name: 'Competitive research',
+    tenant_id: QA_TENANT_ID,
+    project_id: null,
+    name: 'competitive-research',
     description: 'Builds an evidence-backed market brief from verified sources.',
     status: 'active',
     scope: 'tenant',
     tools: ['web_search', 'browser', 'documents', 'citations'],
     current_version: 4,
     is_system_skill: false,
+    full_content:
+      '---\nname: competitive-research\ndescription: "Builds an evidence-backed market brief from verified sources."\n---\n\n# Competitive research\n\nVerify every source.\n',
+    metadata: { owner: 'strategy' },
+    spec_version: '1.0',
     updated_at: NOW,
   },
   {
     id: 'code-verification',
-    name: 'Code verification',
+    name: 'code-verification',
     description: 'Runs tests and collects structured review evidence.',
     status: 'active',
     scope: 'system',
@@ -191,13 +200,19 @@ let skills: ManagedSkill[] = [
   },
   {
     id: 'meeting-brief',
-    name: 'Meeting brief',
+    tenant_id: QA_TENANT_ID,
+    project_id: null,
+    name: 'meeting-brief',
     description: 'Prepares an agenda and decision record from project context.',
     status: 'disabled',
     scope: 'tenant',
     tools: ['read', 'documents'],
     current_version: 1,
     is_system_skill: false,
+    full_content:
+      '---\nname: meeting-brief\ndescription: "Prepares an agenda and decision record from project context."\n---\n\n# Meeting brief\n',
+    metadata: {},
+    spec_version: '1.0',
     updated_at: '2026-07-11T05:20:00.000Z',
   },
 ];
@@ -270,11 +285,22 @@ const pluginSchemas: Record<string, PluginConfigSchema> = {
       type: 'object',
       required: ['repository', 'access_token'],
       properties: {
-        repository: { type: 'string', title: 'Repository', description: 'owner/repository' },
+        repository: {
+          type: 'string',
+          title: 'Repository',
+          description: 'owner/repository',
+        },
         access_token: { type: 'string' },
         sync_interval: { type: 'integer', minimum: 1, maximum: 60 },
-        include_drafts: { type: 'boolean', title: 'Include draft pull requests' },
-        review_mode: { type: 'string', enum: ['safe', 'fast'], title: 'Review mode' },
+        include_drafts: {
+          type: 'boolean',
+          title: 'Include draft pull requests',
+        },
+        review_mode: {
+          type: 'string',
+          enum: ['safe', 'fast'],
+          title: 'Review mode',
+        },
       },
     },
     config_ui_hints: {
@@ -291,7 +317,10 @@ const pluginSchemas: Record<string, PluginConfigSchema> = {
     enabled: true,
     discovered: true,
     schema_supported: true,
-    config_schema: { type: 'object', properties: { workspace: { type: 'string' } } },
+    config_schema: {
+      type: 'object',
+      properties: { workspace: { type: 'string' } },
+    },
     secret_paths: [],
   },
   'release-notifier': {
@@ -309,7 +338,11 @@ const pluginSchemas: Record<string, PluginConfigSchema> = {
         token: { type: 'string' },
         retries: { type: 'integer', minimum: 0, maximum: 10 },
         enabled: { type: 'boolean', title: 'Send release notifications' },
-        mode: { type: 'string', enum: ['safe', 'fast'], title: 'Delivery mode' },
+        mode: {
+          type: 'string',
+          enum: ['safe', 'fast'],
+          title: 'Delivery mode',
+        },
       },
     },
     config_ui_hints: { token: { label: 'Access token', sensitive: true } },
@@ -415,7 +448,9 @@ let subagents: ManagedSubAgent[] = [
     project_id: null,
     name: 'filesystem-researcher',
     display_name: 'Research specialist',
-    trigger: { description: 'Collects verified evidence from governed sources.' },
+    trigger: {
+      description: 'Collects verified evidence from governed sources.',
+    },
     model: 'anthropic/claude-sonnet-4-5',
     enabled: false,
     source: 'filesystem',
@@ -522,6 +557,12 @@ function stringArray(value: unknown, fallback: string[] = []): string[] {
     : fallback;
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -532,7 +573,7 @@ function numberValue(value: unknown, fallback: number): number {
 
 function agentFromBody(
   body: Record<string, unknown>,
-  current?: ManagedAgentDefinition,
+  current?: ManagedAgentDefinition
 ): ManagedAgentDefinition {
   const trigger = current?.trigger;
   const currentTrigger =
@@ -554,7 +595,7 @@ function agentFromBody(
     trigger: {
       description: stringValue(
         body.trigger_description,
-        stringValue(currentTrigger.description, 'Default agent trigger'),
+        stringValue(currentTrigger.description, 'Default agent trigger')
       ),
       keywords: stringArray(body.trigger_keywords, stringArray(currentTrigger.keywords)),
       examples: stringArray(body.trigger_examples, stringArray(currentTrigger.examples)),
@@ -565,23 +606,17 @@ function agentFromBody(
     max_iterations: numberValue(body.max_iterations, numberValue(current?.max_iterations, 10)),
     allowed_tools: stringArray(body.allowed_tools, current?.allowed_tools ?? []),
     allowed_skills: stringArray(body.allowed_skills, current?.allowed_skills ?? []),
-    allowed_mcp_servers: stringArray(
-      body.allowed_mcp_servers,
-      current?.allowed_mcp_servers ?? [],
-    ),
+    allowed_mcp_servers: stringArray(body.allowed_mcp_servers, current?.allowed_mcp_servers ?? []),
     fallback_models: stringArray(body.fallback_models, stringArray(current?.fallback_models)),
     can_spawn: booleanValue(body.can_spawn, booleanValue(current?.can_spawn, false)),
-    max_spawn_depth: numberValue(
-      body.max_spawn_depth,
-      numberValue(current?.max_spawn_depth, 3),
-    ),
+    max_spawn_depth: numberValue(body.max_spawn_depth, numberValue(current?.max_spawn_depth, 3)),
     agent_to_agent_enabled: booleanValue(
       body.agent_to_agent_enabled,
-      booleanValue(current?.agent_to_agent_enabled, false),
+      booleanValue(current?.agent_to_agent_enabled, false)
     ),
     agent_to_agent_allowlist: stringArray(
       body.agent_to_agent_allowlist,
-      stringArray(current?.agent_to_agent_allowlist),
+      stringArray(current?.agent_to_agent_allowlist)
     ),
     discoverable: booleanValue(body.discoverable, booleanValue(current?.discoverable, true)),
     max_retries: numberValue(body.max_retries, numberValue(current?.max_retries, 0)),
@@ -621,34 +656,32 @@ function routingTargetAvailable(target: LlmRouteTarget): boolean {
   const provider = providers.find((item) => item.id === target.provider_id);
   if (!provider) return false;
   const supportedProvider = ['anthropic', 'openai', 'openai_compatible'].includes(
-    provider.provider_type,
+    provider.provider_type
   );
   const credentialReady =
     provider.auth_method === 'none' || provider.credential_configured === true;
   const models = new Set([provider.llm_model, ...(provider.allowed_models ?? [])].filter(Boolean));
   return Boolean(
     supportedProvider &&
-      ['configuration_valid', 'healthy'].includes(provider.health_status ?? '') &&
-      provider.is_active === true &&
-      provider.is_enabled !== false &&
-      provider.base_url?.trim() &&
-      credentialReady &&
-      models.has(target.model_id),
+    ['configuration_valid', 'healthy'].includes(provider.health_status ?? '') &&
+    provider.is_active === true &&
+    provider.is_enabled !== false &&
+    provider.base_url?.trim() &&
+    credentialReady &&
+    models.has(target.model_id)
   );
 }
 
 function safeProviderFromBody(
   body: Record<string, unknown>,
-  current?: ManagedLlmProvider,
+  current?: ManagedLlmProvider
 ): ManagedLlmProvider {
   const nextRevision = (current?.revision ?? 0) + 1;
   const apiKeySubmitted = Boolean(stringValue(body.api_key).trim());
   const rawAuthMethod = stringValue(body.auth_method, current?.auth_method ?? 'api_key');
-  const authMethod: LlmProviderAuthMethod = [
-    'api_key',
-    'environment',
-    'none',
-  ].includes(rawAuthMethod)
+  const authMethod: LlmProviderAuthMethod = ['api_key', 'environment', 'none'].includes(
+    rawAuthMethod
+  )
     ? (rawAuthMethod as LlmProviderAuthMethod)
     : 'api_key';
   const environmentVariable =
@@ -723,6 +756,35 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   if (method === 'GET' && path === '/api/v1/skills/') {
     return jsonResponse({ skills });
   }
+  if (method === 'POST' && path === '/api/v1/skills/') {
+    const payload = readJsonBody(body);
+    const name = stringValue(payload.name).trim();
+    if (!name) return jsonResponse({ detail: 'Skill name is required.' }, 422);
+    if (skills.some((skill) => skill.name === name)) {
+      return jsonResponse({ detail: 'Skill already exists.' }, 409);
+    }
+    const created: ManagedSkill = {
+      id: name,
+      tenant_id: QA_TENANT_ID,
+      project_id: stringValue(payload.project_id) || null,
+      name,
+      description: stringValue(payload.description),
+      status: 'active',
+      scope: stringValue(payload.scope) || 'tenant',
+      tools: stringArray(payload.tools, ['*']),
+      full_content: stringValue(payload.full_content) || null,
+      metadata: recordValue(payload.metadata),
+      license: stringValue(payload.license) || null,
+      compatibility: stringValue(payload.compatibility) || null,
+      allowed_tools_raw: stringValue(payload.allowed_tools_raw) || null,
+      spec_version: stringValue(payload.spec_version) || '1.0',
+      current_version: 0,
+      is_system_skill: false,
+      updated_at: NOW,
+    };
+    skills = [created, ...skills];
+    return jsonResponse(created);
+  }
   if (method === 'GET' && path.endsWith('/plugins')) {
     return jsonResponse({ plugins });
   }
@@ -764,7 +826,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
 
   const pluginConfigSchemaMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config-schema$/,
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config-schema$/
   );
   if (method === 'GET' && pluginConfigSchemaMatch) {
     const pluginName = decodeURIComponent(pluginConfigSchemaMatch[1]);
@@ -775,7 +837,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
 
   const pluginConfigMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config$/,
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config$/
   );
   if (pluginConfigMatch) {
     const pluginName = decodeURIComponent(pluginConfigMatch[1]);
@@ -794,7 +856,10 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         ...pluginConfigs,
         [pluginName]: {
           ...current,
-          config: { ...current.config, ...(nextConfig as Record<string, unknown>) },
+          config: {
+            ...current.config,
+            ...(nextConfig as Record<string, unknown>),
+          },
           updated_at: NOW,
         },
       };
@@ -803,7 +868,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
 
   const pluginUninstallMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/uninstall$/,
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/uninstall$/
   );
   if (method === 'POST' && pluginUninstallMatch) {
     const pluginName = decodeURIComponent(pluginUninstallMatch[1]);
@@ -857,7 +922,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         ...draft.fallbacks,
       ];
       const fallbackKeys = draft.fallbacks.map((target) =>
-        JSON.stringify([target.provider_id, target.model_id]),
+        JSON.stringify([target.provider_id, target.model_id])
       );
       if (
         targets.some((target) => !routingTargetAvailable(target)) ||
@@ -888,9 +953,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       : jsonResponse({ detail: 'Provider model catalog not found.' }, 404);
   }
 
-  const discoveryMatch = path.match(
-    /^\/api\/v1\/llm-providers\/([^/]+)\/models\/discover$/,
-  );
+  const discoveryMatch = path.match(/^\/api\/v1\/llm-providers\/([^/]+)\/models\/discover$/);
   if (method === 'POST' && discoveryMatch) {
     const providerId = decodeURIComponent(discoveryMatch[1]);
     const provider = providers.find((item) => item.id === providerId);
@@ -919,12 +982,11 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const catalog = modelCatalogs[providerType];
     const configured = Boolean(
       stringValue(draft.name) &&
-        providerType &&
-        stringValue(draft.base_url) &&
-        (authMethod === 'none' ||
-          (authMethod === 'api_key' && stringValue(draft.api_key)) ||
-          (authMethod === 'environment' &&
-            QA_ENVIRONMENT_SECRETS.has(environmentVariable))),
+      providerType &&
+      stringValue(draft.base_url) &&
+      (authMethod === 'none' ||
+        (authMethod === 'api_key' && stringValue(draft.api_key)) ||
+        (authMethod === 'environment' && QA_ENVIRONMENT_SECRETS.has(environmentVariable)))
     );
     return jsonResponse({
       status: configured ? 'healthy' : 'needs_credentials',
@@ -957,14 +1019,65 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     return jsonResponse(skills.find((skill) => skill.id === skillId) ?? null);
   }
 
+  const skillContentMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/content$/);
+  if (skillContentMatch) {
+    const skillId = decodeURIComponent(skillContentMatch[1]);
+    const skill = skills.find((item) => item.id === skillId);
+    if (!skill) return jsonResponse({ detail: 'Skill not found.' }, 404);
+    if (method === 'GET') {
+      return jsonResponse({
+        skill_id: skill.id,
+        name: skill.name,
+        full_content: skill.full_content ?? null,
+        scope: skill.scope,
+        is_system_skill: skill.is_system_skill ?? false,
+      });
+    }
+    if (method === 'PUT') {
+      const fullContent = stringValue(readJsonBody(body).full_content);
+      skills = skills.map((item) =>
+        item.id === skillId ? { ...item, full_content: fullContent, updated_at: NOW } : item
+      );
+      return jsonResponse(skills.find((item) => item.id === skillId) ?? null);
+    }
+  }
+
+  const skillMatch = path.match(/^\/api\/v1\/skills\/([^/]+)$/);
+  if (skillMatch) {
+    const skillId = decodeURIComponent(skillMatch[1]);
+    const current = skills.find((item) => item.id === skillId);
+    if (!current) return jsonResponse({ detail: 'Skill not found.' }, 404);
+    if (method === 'PUT') {
+      const payload = readJsonBody(body);
+      const updated: ManagedSkill = {
+        ...current,
+        name: stringValue(payload.name) || current.name,
+        description: stringValue(payload.description) || current.description,
+        tools: stringArray(payload.tools, current.tools),
+        metadata: recordValue(payload.metadata),
+        license: stringValue(payload.license) || null,
+        compatibility: stringValue(payload.compatibility) || null,
+        allowed_tools_raw: stringValue(payload.allowed_tools_raw) || null,
+        spec_version: stringValue(payload.spec_version) || '1.0',
+        updated_at: NOW,
+      };
+      skills = skills.map((item) => (item.id === skillId ? updated : item));
+      return jsonResponse(updated);
+    }
+    if (method === 'DELETE') {
+      skills = skills.filter((item) => item.id !== skillId);
+      return new Response(null, { status: 204 });
+    }
+  }
+
   const pluginStatusMatch = path.match(
-    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/(enable|disable)$/,
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/(enable|disable)$/
   );
   if (method === 'POST' && pluginStatusMatch) {
     const pluginName = decodeURIComponent(pluginStatusMatch[1]);
     const enabled = pluginStatusMatch[2] === 'enable';
     plugins = plugins.map((plugin) =>
-      plugin.name === pluginName ? { ...plugin, enabled } : plugin,
+      plugin.name === pluginName ? { ...plugin, enabled } : plugin
     );
     return jsonResponse(plugins.find((plugin) => plugin.name === pluginName) ?? null);
   }
@@ -974,9 +1087,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const agentId = decodeURIComponent(agentStatusMatch[1]);
     const enabled = booleanValue(readJsonBody(body).enabled, false);
     agents = agents.map((agent) =>
-      agent.id === agentId
-        ? { ...agent, enabled, status: enabled ? 'active' : 'disabled' }
-        : agent,
+      agent.id === agentId ? { ...agent, enabled, status: enabled ? 'active' : 'disabled' } : agent
     );
     return jsonResponse(agents.find((agent) => agent.id === agentId) ?? null);
   }
@@ -1002,7 +1113,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const subagentId = decodeURIComponent(subagentStatusMatch[1]);
     const enabled = url.searchParams.get('enabled') === 'true';
     subagents = subagents.map((subagent) =>
-      subagent.id === subagentId ? { ...subagent, enabled } : subagent,
+      subagent.id === subagentId ? { ...subagent, enabled } : subagent
     );
     return jsonResponse(subagents.find((subagent) => subagent.id === subagentId) ?? null);
   }
@@ -1055,7 +1166,7 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
             response_time_ms: 172,
             error_message: null,
           }
-        : item,
+        : item
     );
     return jsonResponse({
       status: 'healthy',
@@ -1147,5 +1258,5 @@ qaRoot.render(
     <I18nProvider>
       <ProviderSettingsQa />
     </I18nProvider>
-  </React.StrictMode>,
+  </React.StrictMode>
 );

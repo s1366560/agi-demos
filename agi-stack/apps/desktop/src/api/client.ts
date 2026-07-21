@@ -49,6 +49,9 @@ import type {
   ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSkillContent,
+  ManagedSkillCreateMutation,
+  ManagedSkillMutation,
   ManagedSubAgent,
   PluginActionResponse,
   PluginConfigRecord,
@@ -1221,6 +1224,53 @@ export class DesktopApiClient {
       `/api/v1/skills/${encodeURIComponent(skillId)}/status?${params.toString()}`,
       { method: 'PATCH' },
     );
+  }
+
+  async createManagedSkill(input: ManagedSkillCreateMutation): Promise<ManagedSkill> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkill>(`/api/v1/skills/?${params.toString()}`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  async getManagedSkillContent(skillId: string): Promise<ManagedSkillContent> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkillContent>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/content?${params.toString()}`,
+    );
+  }
+
+  async updateManagedSkill(
+    skillId: string,
+    input: Omit<ManagedSkillMutation, 'full_content'>,
+  ): Promise<ManagedSkill> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkill>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}`,
+      { method: 'PUT', body: input },
+    );
+  }
+
+  async updateManagedSkillContent(skillId: string, fullContent: string): Promise<ManagedSkill> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkill>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/content?${params.toString()}`,
+      { method: 'PUT', body: { full_content: fullContent } },
+    );
+  }
+
+  async deleteManagedSkill(skillId: string): Promise<void> {
+    const params = this.managedSkillTenantParams();
+    await this.request<void>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}?${params.toString()}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  private managedSkillTenantParams(): URLSearchParams {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    return new URLSearchParams({ tenant_id: tenantId });
   }
 
   async listManagedPlugins(signal?: AbortSignal): Promise<ManagedPlugin[]> {

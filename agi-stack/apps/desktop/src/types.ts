@@ -897,15 +897,50 @@ export type LlmProviderValidationOutcome = {
 
 export type ManagedSkill = {
   id: string;
+  tenant_id?: string;
+  project_id?: string | null;
   name: string;
   description: string;
   status: string;
   scope: string;
   tools: string[];
+  full_content?: string | null;
+  metadata?: Record<string, unknown> | null;
+  license?: string | null;
+  compatibility?: string | null;
+  allowed_tools_raw?: string | null;
+  spec_version?: string;
   current_version?: number;
   is_system_skill?: boolean;
+  source?: string;
+  file_path?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
+};
+
+export type ManagedSkillMutation = {
+  name: string;
+  description: string;
+  tools: string[];
+  full_content?: string;
+  metadata: Record<string, unknown>;
+  license: string | null;
+  compatibility: string | null;
+  allowed_tools_raw: string | null;
+  spec_version: string;
+};
+
+export type ManagedSkillCreateMutation = ManagedSkillMutation & {
+  scope: 'tenant' | 'project';
+  project_id: string | null;
+};
+
+export type ManagedSkillContent = {
+  skill_id: string;
+  name: string;
+  full_content: string | null;
+  scope: string;
+  is_system_skill: boolean;
 };
 
 export type ManagedPlugin = {

@@ -22,7 +22,6 @@ import type {
   ConnectionState,
   DesktopRuntimeConfig,
   ManagedAgentDefinition,
-  ManagedAgentDefinitionMutation,
   ManagedPlugin,
   ManagedSkill,
   ManagedSubAgent,
@@ -44,6 +43,7 @@ import {
 } from './managedResourceModel';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
 import { PluginConfigDialog, PluginInstallDialog } from './PluginManagementDialogs';
+import { SkillEditorDialog } from './SkillEditorDialog';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -60,7 +60,9 @@ import {
   type SettingsSection,
 } from './settingsNavigationModel';
 import { useModalDialog } from './useModalDialog';
+import { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
 import { usePluginManagement } from './usePluginManagement';
+import { useSkillManagement } from './useSkillManagement';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -113,7 +115,11 @@ const sectionMeta = {
     description: 'settings.notificationsDescription',
     Icon: BellIcon,
   },
-  models: { label: 'settings.models', description: 'settings.modelsDescription', Icon: CubeIcon },
+  models: {
+    label: 'settings.models',
+    description: 'settings.modelsDescription',
+    Icon: CubeIcon,
+  },
   skills: {
     label: 'settings.skills',
     description: 'settings.skillsDescription',
@@ -124,7 +130,11 @@ const sectionMeta = {
     description: 'settings.pluginsDescription',
     Icon: ComponentInstanceIcon,
   },
-  agents: { label: 'settings.agents', description: 'settings.agentsDescription', Icon: PersonIcon },
+  agents: {
+    label: 'settings.agents',
+    description: 'settings.agentsDescription',
+    Icon: PersonIcon,
+  },
   subagents: {
     label: 'settings.subagents',
     description: 'settings.subagentsDescription',
@@ -161,12 +171,6 @@ export function SettingsWindow({
   const [resourceFilter, setResourceFilter] = useState<ManagedResourceListFilter>('all');
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
-  const [agentEditor, setAgentEditor] = useState<{
-    definition: ManagedAgentDefinition | null;
-    key: string;
-  } | null>(null);
-  const [agentEditorBusy, setAgentEditorBusy] = useState(false);
-  const [agentEditorError, setAgentEditorError] = useState<string | null>(null);
   const resourceRequestId = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeSectionRef = useRef(section);
@@ -186,10 +190,13 @@ export function SettingsWindow({
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
   const isResourceSection = isResource(section);
   const canManageProviders = providerManagementAllowed(config.mode, auth.user?.roles ?? []);
-  const canManageAgentDefinitions = (auth.user?.roles ?? []).some((role) => {
-    const normalized = role.trim().toLowerCase();
-    return normalized === 'admin' || normalized === 'owner';
-  });
+  const normalizedRoles = new Set(
+    (auth.user?.roles ?? []).map((role) => role.trim().toLowerCase())
+  );
+  const canManageAgentDefinitions = normalizedRoles.has('admin') || normalizedRoles.has('owner');
+  const canCreateSkills =
+    canManageAgentDefinitions ||
+    (config.mode === 'cloud' && normalizedRoles.has('member') && Boolean(config.projectId));
   const canManagePluginControlPlane = canManageAgentDefinitions;
   const settingsDialogRef = useModalDialog({
     active: open,
@@ -207,14 +214,24 @@ export function SettingsWindow({
     setLoadedResourceContextKey(null);
     setResourceItems([]);
     setSelectedResourceId(null);
-    setAgentEditor(null);
-    setAgentEditorError(null);
-    setResourceCounts({ models: null, skills: null, plugins: null, agents: null, subagents: null });
+    setResourceCounts({
+      models: null,
+      skills: null,
+      plugins: null,
+      agents: null,
+      subagents: null,
+    });
   }, [initialSection, open]);
 
   useEffect(() => {
     if (!open) return;
-    setResourceCounts({ models: null, skills: null, plugins: null, agents: null, subagents: null });
+    setResourceCounts({
+      models: null,
+      skills: null,
+      plugins: null,
+      agents: null,
+      subagents: null,
+    });
   }, [config.projectId, config.tenantId, open]);
 
   const loadResources = useCallback(
@@ -242,7 +259,7 @@ export function SettingsWindow({
           [resourceSection]: items.length < 100 ? items.length : null,
         }));
         setSelectedResourceId((current) =>
-          current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
+          current && items.some((item) => item.id === current) ? current : (items[0]?.id ?? null)
         );
       } catch (error) {
         if (requestId !== resourceRequestId.current || signal?.aborted) return;
@@ -254,10 +271,14 @@ export function SettingsWindow({
         if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config, resourceContextKey],
+    [config, resourceContextKey]
   );
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
+  const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
+  const reloadAgentResources = useCallback(() => loadResources('agents'), [loadResources]);
   const clearPluginSelection = useCallback(() => setSelectedResourceId(null), []);
+  const clearResourceSelection = useCallback(() => setSelectedResourceId(null), []);
+  const selectSavedResource = useCallback((id: string) => setSelectedResourceId(id), []);
   const pluginManagement = usePluginManagement({
     active: open,
     config,
@@ -265,6 +286,24 @@ export function SettingsWindow({
     canManage: canManagePluginControlPlane,
     onReload: reloadPluginResources,
     onUninstalled: clearPluginSelection,
+  });
+  const skillManagement = useSkillManagement({
+    active: open,
+    config,
+    contextKey: resourceContextKey,
+    canCreate: canCreateSkills,
+    onReload: reloadSkillResources,
+    onSaved: selectSavedResource,
+    onDeleted: clearResourceSelection,
+  });
+  const agentManagement = useAgentDefinitionManagement({
+    active: open,
+    config,
+    contextKey: resourceContextKey,
+    canManage: canManageAgentDefinitions,
+    onReload: reloadAgentResources,
+    onSaved: selectSavedResource,
+    onDeleted: clearResourceSelection,
   });
 
   useEffect(() => {
@@ -291,7 +330,7 @@ export function SettingsWindow({
         section,
         resourceContextKey,
         loadedResourceSection,
-        loadedResourceContextKey,
+        loadedResourceContextKey
       )
     ) {
       return [];
@@ -315,7 +354,7 @@ export function SettingsWindow({
         section,
         resourceContextKey,
         loadedResourceSection,
-        loadedResourceContextKey,
+        loadedResourceContextKey
       )
         ? null
         : resolveManagedResourceSelection(filteredItems, selectedResourceId),
@@ -328,7 +367,7 @@ export function SettingsWindow({
       resourceLoading,
       section,
       selectedResourceId,
-    ],
+    ]
   );
 
   useEffect(() => {
@@ -341,25 +380,22 @@ export function SettingsWindow({
       workspace: [t(sectionMeta.workspace.label), t(sectionMeta.workspace.description)],
       general: [t(sectionMeta.general.label), t(sectionMeta.general.description)],
       appearance: [t(sectionMeta.appearance.label), t(sectionMeta.appearance.description)],
-      notifications: [
-        t(sectionMeta.notifications.label),
-        t(sectionMeta.notifications.description),
-      ],
+      notifications: [t(sectionMeta.notifications.label), t(sectionMeta.notifications.description)],
       models: [t(sectionMeta.models.label), t(sectionMeta.models.description)],
       skills: [t(sectionMeta.skills.label), t(sectionMeta.skills.description)],
       plugins: [t(sectionMeta.plugins.label), t(sectionMeta.plugins.description)],
       agents: [t(sectionMeta.agents.label), t(sectionMeta.agents.description)],
       subagents: [t(sectionMeta.subagents.label), t(sectionMeta.subagents.description)],
     }),
-    [t],
+    [t]
   );
   const filteredSettingSections = useMemo(
     () => filterSettingsSections(query, settingsSearchCopy),
-    [query, settingsSearchCopy],
+    [query, settingsSearchCopy]
   );
   const visibleSections = useMemo(
     () => new Set(filteredSettingSections),
-    [filteredSettingSections],
+    [filteredSettingSections]
   );
   const updateModelCount = useCallback((count: number | null) => {
     setResourceCounts((current) => ({ ...current, models: count }));
@@ -386,7 +422,7 @@ export function SettingsWindow({
       config.mode,
       auth.user?.roles ?? [],
       section,
-      item,
+      item
     );
     const action = managedResourceAction(section, item, canManageResource, config.mode);
     if (!action) return;
@@ -422,57 +458,6 @@ export function SettingsWindow({
       }
     } finally {
       setActionBusyId(null);
-    }
-  };
-
-  const openAgentEditor = (definition: ManagedAgentDefinition | null) => {
-    setAgentEditorError(null);
-    setAgentEditor({ definition, key: `${definition?.id ?? 'new'}:${crypto.randomUUID()}` });
-  };
-
-  const saveAgentDefinition = async (input: ManagedAgentDefinitionMutation) => {
-    if (!agentEditor || !canManageAgentDefinitions) return;
-    const mutationContextKey = resourceContextKey;
-    const existingId = agentEditor.definition?.id ?? null;
-    setAgentEditorBusy(true);
-    setAgentEditorError(null);
-    try {
-      const client = new DesktopApiClient(config);
-      const saved = existingId
-        ? await client.updateManagedAgentDefinition(existingId, input)
-        : await client.createManagedAgentDefinition(input);
-      if (resourceContextKeyRef.current !== mutationContextKey) return;
-      setAgentEditor(null);
-      await loadResources('agents');
-      setSelectedResourceId(saved.id);
-    } catch (caught) {
-      if (resourceContextKeyRef.current === mutationContextKey) {
-        setAgentEditorError(caught instanceof Error ? caught.message : String(caught));
-      }
-    } finally {
-      if (resourceContextKeyRef.current === mutationContextKey) setAgentEditorBusy(false);
-    }
-  };
-
-  const deleteAgentDefinition = async () => {
-    const definitionId = agentEditor?.definition?.id;
-    if (!definitionId || !canManageAgentDefinitions) return;
-    const mutationContextKey = resourceContextKey;
-    setAgentEditorBusy(true);
-    setAgentEditorError(null);
-    try {
-      const client = new DesktopApiClient(config);
-      await client.deleteManagedAgentDefinition(definitionId);
-      if (resourceContextKeyRef.current !== mutationContextKey) return;
-      setAgentEditor(null);
-      setSelectedResourceId(null);
-      await loadResources('agents');
-    } catch (caught) {
-      if (resourceContextKeyRef.current === mutationContextKey) {
-        setAgentEditorError(caught instanceof Error ? caught.message : String(caught));
-      }
-    } finally {
-      if (resourceContextKeyRef.current === mutationContextKey) setAgentEditorBusy(false);
     }
   };
 
@@ -524,10 +509,10 @@ export function SettingsWindow({
                           ? 'settings.accountContext'
                           : group.id === 'preferences'
                             ? 'settings.preferences'
-                            : 'settings.aiResources',
+                            : 'settings.aiResources'
                       )}
                       sections={group.sections.filter((candidate) =>
-                        visibleSections.has(candidate),
+                        visibleSections.has(candidate)
                       )}
                       active={section}
                       counts={resourceCounts}
@@ -626,11 +611,13 @@ export function SettingsWindow({
                   busy={actionBusyId !== null || pluginManagement.reloadBusy}
                   mode={config.mode}
                   canCreate={
-                    section === 'plugins'
-                      ? canManagePluginControlPlane
-                      : section === 'agents'
-                        ? canManageAgentDefinitions
-                        : false
+                    section === 'skills'
+                      ? canCreateSkills
+                      : section === 'plugins'
+                        ? canManagePluginControlPlane
+                        : section === 'agents'
+                          ? canManageAgentDefinitions
+                          : false
                   }
                   canManage={
                     selectedResource
@@ -638,7 +625,7 @@ export function SettingsWindow({
                           config.mode,
                           auth.user?.roles ?? [],
                           section,
-                          selectedResource,
+                          selectedResource
                         )
                       : false
                   }
@@ -651,14 +638,16 @@ export function SettingsWindow({
                   onRetry={() => void loadResources(section)}
                   onAction={(item) => void toggleResource(item)}
                   onCreate={() => {
+                    if (section === 'skills') void skillManagement.open(null);
                     if (section === 'plugins') pluginManagement.openInstall();
-                    if (section === 'agents') openAgentEditor(null);
+                    if (section === 'agents') agentManagement.open(null);
                   }}
                   onEdit={(item) => {
+                    if (section === 'skills') void skillManagement.open(item as ManagedSkill);
                     if (section === 'plugins') {
                       void pluginManagement.openConfig(item as ManagedPlugin);
                     }
-                    if (section === 'agents') openAgentEditor(item as ManagedAgentDefinition);
+                    if (section === 'agents') agentManagement.open(item as ManagedAgentDefinition);
                   }}
                   onReload={() => void pluginManagement.reload()}
                   onRemove={(item) => {
@@ -671,19 +660,35 @@ export function SettingsWindow({
             </main>
           </div>
         </section>
-        {agentEditor ? (
+        {agentManagement.dialog ? (
           <AgentDefinitionEditorDialog
-            key={agentEditor.key}
-            definition={agentEditor.definition}
+            key={agentManagement.dialog.key}
+            definition={agentManagement.dialog.definition}
             projects={auth.projects.filter((project) => project.tenant_id === config.tenantId)}
             initialProjectId={config.projectId || null}
-            busy={agentEditorBusy}
-            error={agentEditorError}
-            onClose={() => {
-              if (!agentEditorBusy) setAgentEditor(null);
-            }}
-            onSave={(input) => void saveAgentDefinition(input)}
-            onDelete={agentEditor.definition ? () => void deleteAgentDefinition() : null}
+            busy={agentManagement.busy}
+            error={agentManagement.error}
+            onClose={agentManagement.close}
+            onSave={(input) => void agentManagement.save(input)}
+            onDelete={
+              agentManagement.dialog.definition ? () => void agentManagement.remove() : null
+            }
+          />
+        ) : null}
+        {skillManagement.dialog ? (
+          <SkillEditorDialog
+            key={skillManagement.dialog.key}
+            skill={skillManagement.dialog.skill}
+            projects={auth.projects.filter((project) => project.tenant_id === config.tenantId)}
+            initialProjectId={config.projectId || null}
+            allowTenantScope={canManageAgentDefinitions}
+            loading={skillManagement.dialog.loading}
+            contentReady={skillManagement.dialog.contentReady}
+            busy={skillManagement.busy}
+            error={skillManagement.error}
+            onClose={skillManagement.close}
+            onSave={(input) => void skillManagement.save(input)}
+            onDelete={skillManagement.dialog.skill ? () => void skillManagement.remove() : null}
           />
         ) : null}
         {pluginManagement.dialog?.kind === 'install' ? (
@@ -761,15 +766,10 @@ function SettingsGroup({
 
 function isResource(section: SettingsSection): section is ResourceSection {
   return (
-    section === 'skills' ||
-    section === 'plugins' ||
-    section === 'agents' ||
-    section === 'subagents'
+    section === 'skills' || section === 'plugins' || section === 'agents' || section === 'subagents'
   );
 }
 
-function isCountedSection(
-  section: SettingsSection,
-): section is keyof SettingsResourceCounts {
+function isCountedSection(section: SettingsSection): section is keyof SettingsResourceCounts {
   return section === 'models' || isResource(section);
 }

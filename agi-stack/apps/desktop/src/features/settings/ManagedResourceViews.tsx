@@ -113,20 +113,32 @@ export function ManagedResourceWorkspace({
             <span>{t(meta.eyebrow)}</span>
             <h1>{t(meta.label)}</h1>
           </div>
-          {canCreate && (section === 'agents' || section === 'plugins') ? (
+          {canCreate && (section === 'skills' || section === 'agents' || section === 'plugins') ? (
             <div className="managed-resource-header-actions">
               {section === 'plugins' ? (
-                <button type="button" className="managed-resource-reload" disabled={busy} onClick={onReload}>
+                <button
+                  type="button"
+                  className="managed-resource-reload"
+                  disabled={busy}
+                  onClick={onReload}
+                >
                   <ReloadIcon className={busy ? 'managed-resource-spin' : ''} />
                   {t('settings.pluginManager.reload')}
                 </button>
               ) : null}
-              <button type="button" className="managed-resource-create" disabled={busy} onClick={onCreate}>
+              <button
+                type="button"
+                className="managed-resource-create"
+                disabled={busy}
+                onClick={onCreate}
+              >
                 <PlusIcon />
                 {t(
                   section === 'plugins'
                     ? 'settings.pluginManager.install'
-                    : 'settings.agentEditor.createAction',
+                    : section === 'skills'
+                      ? 'settings.skillEditor.createAction'
+                      : 'settings.agentEditor.createAction'
                 )}
               </button>
             </div>
@@ -137,8 +149,12 @@ export function ManagedResourceWorkspace({
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={t('settings.searchResources', { resource: t(meta.label).toLowerCase() })}
-            aria-label={t('settings.searchResources', { resource: t(meta.label).toLowerCase() })}
+            placeholder={t('settings.searchResources', {
+              resource: t(meta.label).toLowerCase(),
+            })}
+            aria-label={t('settings.searchResources', {
+              resource: t(meta.label).toLowerCase(),
+            })}
           />
         </label>
         <div className="managed-resource-filters" role="group" aria-label={t('settings.status')}>
@@ -156,7 +172,10 @@ export function ManagedResourceWorkspace({
         </div>
         <div className="managed-resource-count">
           <span>
-            {t('settings.resourceCount', { count: items.length, resource: t(meta.label) })}
+            {t('settings.resourceCount', {
+              count: items.length,
+              resource: t(meta.label),
+            })}
           </span>
         </div>
         <div className="managed-resource-list">
@@ -279,10 +298,11 @@ function ResourceDetail({
   const editable =
     canManage &&
     !resourceIsImmutable(section, item, mode) &&
-    (section === 'agents' ||
-      (section === 'plugins' && (item as { schema_supported?: unknown }).schema_supported === true));
-  const removable =
-    section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);
+    (section === 'skills' ||
+      section === 'agents' ||
+      (section === 'plugins' &&
+        (item as { schema_supported?: unknown }).schema_supported === true));
+  const removable = section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);
   const notice = resourceIsImmutable(section, item, mode)
     ? t('settings.immutableResource')
     : !canManage
@@ -349,8 +369,7 @@ function ResourceDetail({
           <div>
             <span>
               {t(meta.singular).toUpperCase()} ·{' '}
-              {factValue(facts, 'scope')?.toUpperCase() ||
-                t('settings.currentScope').toUpperCase()}
+              {factValue(facts, 'scope')?.toUpperCase() || t('settings.currentScope').toUpperCase()}
             </span>
             <h1>{view.title}</h1>
             <p>{view.description || t('settings.noDescription')}</p>
@@ -384,12 +403,14 @@ function ResourceDetail({
             </div>
           ) : null}
           <section className="managed-resource-fact-grid">
-            {facts.filter((fact) => fact.key !== 'updatedAt').map((fact) => (
-              <div key={fact.key}>
-                <span>{t(`settings.fact.${fact.key}`)}</span>
-                <b>{formatFactValue(fact.key, fact.value, locale, t)}</b>
-              </div>
-            ))}
+            {facts
+              .filter((fact) => fact.key !== 'updatedAt')
+              .map((fact) => (
+                <div key={fact.key}>
+                  <span>{t(`settings.fact.${fact.key}`)}</span>
+                  <b>{formatFactValue(fact.key, fact.value, locale, t)}</b>
+                </div>
+              ))}
             {facts.filter((fact) => fact.key !== 'updatedAt').length === 0 ? (
               <div>
                 <span>{t('settings.status')}</span>
@@ -484,7 +505,7 @@ export function SettingsState({
 
 function formatMeta(
   values: ReturnType<typeof managedResourceView>['meta'],
-  t: (key: string, values?: Record<string, string | number>) => string,
+  t: (key: string, values?: Record<string, string | number>) => string
 ): string[] {
   return values.map((value) => {
     if (value.kind === 'tool_count') return t('settings.toolCount', { count: value.count });
@@ -496,7 +517,7 @@ function formatMeta(
 
 function factValue(
   facts: ReturnType<typeof managedResourceFacts>,
-  key: ReturnType<typeof managedResourceFacts>[number]['key'],
+  key: ReturnType<typeof managedResourceFacts>[number]['key']
 ): string | null {
   return facts.find((fact) => fact.key === key)?.value ?? null;
 }
@@ -505,13 +526,16 @@ function formatFactValue(
   key: ReturnType<typeof managedResourceFacts>[number]['key'],
   value: string | null,
   locale: string,
-  t: (key: string) => string,
+  t: (key: string) => string
 ): string {
   if (!value) return t('settings.notAvailable');
   if (key === 'discovery') return t(`settings.discovery.${value}`);
   if (key !== 'updatedAt') return value;
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp)
-    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp)
+    ? new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(timestamp)
     : value;
 }

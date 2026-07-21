@@ -2615,6 +2615,123 @@ test('managed skill APIs preserve tenant and project collection scope and status
   }
 });
 
+test('managed skill author APIs preserve tenant scope and SKILL.md content contracts', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    const method = init?.method ?? 'GET';
+    if (method === 'DELETE') return new Response(null, { status: 204 });
+    if (String(input).includes('/content') && method === 'GET') {
+      return new Response(
+        JSON.stringify({
+          skill_id: 'skill/1',
+          name: 'repository-review',
+          full_content: '# Repository review',
+          scope: 'tenant',
+          is_system_skill: false,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        id: 'skill/1',
+        name: 'repository-review',
+        description: 'Review repository changes',
+        status: 'active',
+        scope: 'tenant',
+        tools: ['git_diff'],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant 1',
+    });
+    const createInput = {
+      name: 'repository-review',
+      description: 'Review repository changes',
+      scope: 'tenant',
+      project_id: null,
+      tools: ['git_diff'],
+      full_content: '# Repository review',
+      metadata: {},
+      license: null,
+      compatibility: null,
+      allowed_tools_raw: 'git_diff',
+      spec_version: '1.0',
+    };
+
+    const created = await client.createManagedSkill(createInput);
+    const content = await client.getManagedSkillContent(created.id);
+    await client.updateManagedSkill(created.id, {
+      name: createInput.name,
+      description: 'Review repository changes safely',
+      tools: createInput.tools,
+      metadata: createInput.metadata,
+      license: createInput.license,
+      compatibility: createInput.compatibility,
+      allowed_tools_raw: createInput.allowed_tools_raw,
+      spec_version: createInput.spec_version,
+    });
+    await client.updateManagedSkillContent(created.id, '# Repository review\n\nUpdated.');
+    await client.deleteManagedSkill(created.id);
+
+    assert.equal(content.full_content, '# Repository review');
+    assert.deepEqual(
+      calls.map((call) => [
+        String(call.input),
+        call.init?.method ?? 'GET',
+        call.init?.body ? JSON.parse(call.init.body) : undefined,
+      ]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/skills/?tenant_id=tenant+1',
+          'POST',
+          createInput,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/skills/skill%2F1/content?tenant_id=tenant+1',
+          'GET',
+          undefined,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/skills/skill%2F1?tenant_id=tenant+1',
+          'PUT',
+          {
+            name: 'repository-review',
+            description: 'Review repository changes safely',
+            tools: ['git_diff'],
+            metadata: {},
+            license: null,
+            compatibility: null,
+            allowed_tools_raw: 'git_diff',
+            spec_version: '1.0',
+          },
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/skills/skill%2F1/content?tenant_id=tenant+1',
+          'PUT',
+          { full_content: '# Repository review\n\nUpdated.' },
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/skills/skill%2F1?tenant_id=tenant+1',
+          'DELETE',
+          undefined,
+        ],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('managed plugin APIs preserve authoritative ids and toggle by id', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

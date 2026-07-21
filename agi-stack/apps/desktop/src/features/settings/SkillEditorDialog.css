@@ -1,0 +1,25 @@
+.skill-editor-dialog {
+  width: min(920px, calc(100vw - 48px));
+}
+
+.skill-editor-icon {
+  color: #62d8c7;
+  background: #102622;
+  border-color: #32675f;
+}
+
+.skill-editor-code {
+  min-height: 180px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace !important;
+  line-height: 1.55;
+}
+
+.skill-editor-loading {
+  display: flex;
+  min-height: 300px;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  color: #91a3b4;
+  font-size: 12px;
+}
