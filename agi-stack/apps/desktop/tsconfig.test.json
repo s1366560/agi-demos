@@ -46,6 +46,7 @@
     "src/features/settings/managedResourceModel.ts",
     "src/features/settings/agentDefinitionFormModel.ts",
     "src/features/settings/skillEditorModel.ts",
+    "src/features/settings/subAgentEditorModel.ts",
     "src/features/settings/pluginManagementModel.ts",
     "src/features/settings/providerManagementModel.ts",
     "src/features/settings/workspaceRuntimeProviderModel.ts",

@@ -62,6 +62,7 @@ import type {
   ManagedSkillVersionList,
   ManagedSkillZipImportInput,
   ManagedSubAgent,
+  ManagedSubAgentMutation,
   ManagedSubAgentTemplateList,
   PluginActionResponse,
   PluginConfigRecord,
@@ -1577,6 +1578,36 @@ export class DesktopApiClient {
     return this.request<ManagedSubAgent>(
       `/api/v1/subagents/filesystem/${encodeURIComponent(name)}/import?${params.toString()}`,
       { method: 'POST' },
+    );
+  }
+
+  async createManagedSubAgent(input: ManagedSubAgentMutation): Promise<ManagedSubAgent> {
+    const params = new URLSearchParams();
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    return this.request<ManagedSubAgent>(`/api/v1/subagents/?${params.toString()}`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  async updateManagedSubAgent(
+    subagentId: string,
+    input: ManagedSubAgentMutation,
+  ): Promise<ManagedSubAgent> {
+    const params = new URLSearchParams();
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    return this.request<ManagedSubAgent>(
+      `/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}`,
+      { method: 'PUT', body: input },
+    );
+  }
+
+  async deleteManagedSubAgent(subagentId: string): Promise<void> {
+    const params = new URLSearchParams();
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    await this.request<void>(
+      `/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}`,
+      { method: 'DELETE' },
     );
   }
 

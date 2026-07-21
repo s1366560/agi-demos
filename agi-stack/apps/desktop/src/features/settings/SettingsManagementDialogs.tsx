@@ -2,12 +2,14 @@ import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import { PluginConfigDialog, PluginInstallDialog } from './PluginManagementDialogs';
 import { SkillManagementDialogs } from './SkillManagementDialogs';
+import { SubAgentEditorDialog } from './SubAgentEditorDialog';
 import { SubAgentLibraryDialog } from './SubAgentLibraryDialog';
 import type { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
 import type { usePluginManagement } from './usePluginManagement';
 import type { useSkillManagement } from './useSkillManagement';
 import type { useSkillPackageManagement } from './useSkillPackageManagement';
 import type { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
+import type { useSubAgentDefinitionManagement } from './useSubAgentDefinitionManagement';
 
 export function SettingsManagementDialogs({
   auth,
@@ -17,6 +19,7 @@ export function SettingsManagementDialogs({
   skills,
   skillPackages,
   plugins,
+  subagentDefinitions,
   subagents,
 }: {
   auth: AuthState;
@@ -26,6 +29,7 @@ export function SettingsManagementDialogs({
   skills: ReturnType<typeof useSkillManagement>;
   skillPackages: ReturnType<typeof useSkillPackageManagement>;
   plugins: ReturnType<typeof usePluginManagement>;
+  subagentDefinitions: ReturnType<typeof useSubAgentDefinitionManagement>;
   subagents: ReturnType<typeof useSubAgentLibraryManagement>;
 }) {
   const projects = auth.projects.filter((project) => project.tenant_id === config.tenantId);
@@ -73,6 +77,23 @@ export function SettingsManagementDialogs({
           onClose={plugins.closeDialog}
           onSave={(input) => void plugins.saveConfig(input)}
           onUninstall={() => void plugins.uninstall()}
+        />
+      ) : null}
+      {subagentDefinitions.dialog ? (
+        <SubAgentEditorDialog
+          key={subagentDefinitions.dialog.key}
+          definition={subagentDefinitions.dialog.definition}
+          projects={projects}
+          initialProjectId={config.projectId || null}
+          busy={subagentDefinitions.busy}
+          error={subagentDefinitions.error}
+          onClose={subagentDefinitions.close}
+          onSave={(input) => void subagentDefinitions.save(input)}
+          onDelete={
+            subagentDefinitions.dialog.definition
+              ? () => void subagentDefinitions.remove()
+              : null
+          }
         />
       ) : null}
       {subagents.dialog ? (

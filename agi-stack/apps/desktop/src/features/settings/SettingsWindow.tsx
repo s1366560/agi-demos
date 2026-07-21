@@ -64,6 +64,7 @@ import { usePluginManagement } from './usePluginManagement';
 import { useSkillManagement } from './useSkillManagement';
 import { useSkillPackageManagement } from './useSkillPackageManagement';
 import { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
+import { useSubAgentDefinitionManagement } from './useSubAgentDefinitionManagement';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -333,7 +334,14 @@ export function SettingsWindow({
     canManage: canManageAgentDefinitions,
     onReload: reloadSubAgentResources,
   });
-
+  const subAgentDefinitions = useSubAgentDefinitionManagement({
+    active: open,
+    config,
+    contextKey: resourceContextKey,
+    canManage: canManageAgentDefinitions,
+    onReload: reloadSubAgentResources,
+    onDeleted: clearResourceSelection,
+  });
   useEffect(() => {
     if (!open || !isResourceSection) return;
     const controller = new AbortController();
@@ -581,7 +589,6 @@ export function SettingsWindow({
                   onSignOut={onSignOut}
                 />
               ) : null}
-
               {section === 'workspace' ? (
                 <WorkspaceSettingsPage
                   auth={auth}
@@ -634,7 +641,8 @@ export function SettingsWindow({
                   error={resourceError}
                   actionError={
                     resourceActionError ?? pluginManagement.reloadError ??
-                    skillPackageManagement.packageActionError ?? subAgentLibrary.error
+                    skillPackageManagement.packageActionError ?? subAgentLibrary.error ??
+                    subAgentDefinitions.error
                   }
                   busy={
                     actionBusyId !== null ||
@@ -642,6 +650,7 @@ export function SettingsWindow({
                     skillPackageManagement.importBusy ||
                     skillPackageManagement.exportBusyId !== null ||
                     subAgentLibrary.importBusyId !== null ||
+                    subAgentDefinitions.busy ||
                     (skillPackageManagement.versionsDialog?.rollbackVersion ?? null) !== null
                   }
                   mode={config.mode}
@@ -650,7 +659,7 @@ export function SettingsWindow({
                       ? canCreateSkills
                       : section === 'plugins'
                         ? canManagePluginControlPlane
-                        : section === 'agents'
+                        : section === 'agents' || section === 'subagents'
                           ? canManageAgentDefinitions
                           : false
                   }
@@ -676,6 +685,7 @@ export function SettingsWindow({
                     if (section === 'skills') void skillManagement.open(null);
                     if (section === 'plugins') pluginManagement.openInstall();
                     if (section === 'agents') agentManagement.open(null);
+                    if (section === 'subagents') subAgentDefinitions.open(null);
                   }}
                   onImport={skillPackageManagement.openImport}
                   onEdit={(item) => {
@@ -684,6 +694,9 @@ export function SettingsWindow({
                       void pluginManagement.openConfig(item as ManagedPlugin);
                     }
                     if (section === 'agents') agentManagement.open(item as ManagedAgentDefinition);
+                    if (section === 'subagents') {
+                      subAgentDefinitions.open(item as ManagedSubAgent);
+                    }
                   }}
                   onVersions={(item) => {
                     if (section !== 'skills') return;
@@ -726,6 +739,7 @@ export function SettingsWindow({
           skills={skillManagement}
           skillPackages={skillPackageManagement}
           plugins={pluginManagement}
+          subagentDefinitions={subAgentDefinitions}
           subagents={subAgentLibrary}
         />
       </div>
@@ -776,13 +790,11 @@ function SettingsGroup({
     </section>
   );
 }
-
 function isResource(section: SettingsSection): section is ResourceSection {
   return (
     section === 'skills' || section === 'plugins' || section === 'agents' || section === 'subagents'
   );
 }
-
 function isCountedSection(section: SettingsSection): section is keyof SettingsResourceCounts {
   return section === 'models' || isResource(section);
 }

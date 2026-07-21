@@ -156,15 +156,26 @@ export function ManagedResourceWorkspace({
                 </button>
               ) : null}
               {section === 'subagents' ? (
-                <button
-                  type="button"
-                  className="managed-resource-create"
-                  disabled={busy}
-                  onClick={onSubAgentLibrary}
-                >
-                  <PlusIcon />
-                  {t('settings.subagentLibrary.action')}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="managed-resource-reload"
+                    disabled={busy}
+                    onClick={onSubAgentLibrary}
+                  >
+                    <PersonIcon />
+                    {t('settings.subagentLibrary.action')}
+                  </button>
+                  <button
+                    type="button"
+                    className="managed-resource-create"
+                    disabled={busy}
+                    onClick={onCreate}
+                  >
+                    <PlusIcon />
+                    {t('settings.subagentEditor.createAction')}
+                  </button>
+                </>
               ) : (
                 <button
                   type="button"
@@ -353,6 +364,7 @@ function ResourceDetail({
     !resourceIsImmutable(section, item, mode) &&
     (section === 'skills' ||
       section === 'agents' ||
+      section === 'subagents' ||
       (section === 'plugins' &&
         (item as { schema_supported?: unknown }).schema_supported === true));
   const removable = section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);

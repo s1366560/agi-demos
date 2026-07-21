@@ -823,6 +823,53 @@ function agentFromBody(
   };
 }
 
+function subagentFromBody(
+  body: Record<string, unknown>,
+  current?: ManagedSubAgent,
+): ManagedSubAgent {
+  const currentTrigger =
+    current?.trigger && typeof current.trigger === 'object' ? current.trigger : {};
+  const name = stringValue(body.name, current?.name ?? 'new_subagent');
+  return {
+    ...current,
+    id: current?.id ?? `subagent-${name}`,
+    tenant_id: QA_TENANT_ID,
+    project_id:
+      typeof body.project_id === 'string' || body.project_id === null
+        ? body.project_id
+        : (current?.project_id ?? null),
+    name,
+    display_name: stringValue(body.display_name, current?.display_name ?? name),
+    system_prompt: stringValue(body.system_prompt, current?.system_prompt ?? ''),
+    trigger: {
+      description: stringValue(
+        body.trigger_description,
+        stringValue(currentTrigger.description, 'Use for delegated specialist work.'),
+      ),
+      keywords: stringArray(body.trigger_keywords, stringArray(currentTrigger.keywords)),
+      examples: stringArray(body.trigger_examples, stringArray(currentTrigger.examples)),
+    },
+    model: stringValue(body.model, current?.model ?? 'inherit'),
+    color: stringValue(body.color, current?.color ?? 'blue'),
+    allowed_tools: stringArray(body.allowed_tools, current?.allowed_tools ?? []),
+    allowed_skills: stringArray(body.allowed_skills, current?.allowed_skills ?? []),
+    allowed_mcp_servers: stringArray(
+      body.allowed_mcp_servers,
+      current?.allowed_mcp_servers ?? [],
+    ),
+    max_tokens: numberValue(body.max_tokens, current?.max_tokens ?? 4096),
+    temperature: numberValue(body.temperature, current?.temperature ?? 0.7),
+    max_iterations: numberValue(body.max_iterations, current?.max_iterations ?? 10),
+    enabled: current?.enabled ?? true,
+    source: 'database',
+    total_invocations: current?.total_invocations ?? 0,
+    success_rate: current?.success_rate ?? 0,
+    avg_execution_time_ms: current?.avg_execution_time_ms ?? 0,
+    created_at: current?.created_at ?? NOW,
+    updated_at: NOW,
+  };
+}
+
 function isRouteTarget(value: unknown): value is LlmRouteTarget {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const target = value as Record<string, unknown>;
@@ -1145,6 +1192,11 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     agents = [created, ...agents];
     return jsonResponse(created, 201);
   }
+  if (method === 'POST' && path === '/api/v1/subagents/') {
+    const created = subagentFromBody(readJsonBody(body));
+    subagents = [created, ...subagents];
+    return jsonResponse(created, 201);
+  }
   if (method === 'GET' && path === '/api/v1/subagents/') {
     return jsonResponse({ subagents, total: subagents.length });
   }
@@ -1197,6 +1249,21 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     };
     subagents = subagents.map((item) => (item.id === existing.id ? created : item));
     return jsonResponse(created, 201);
+  }
+  const managedSubagentMatch = path.match(/^\/api\/v1\/subagents\/([^/]+)$/);
+  if (managedSubagentMatch) {
+    const subagentId = decodeURIComponent(managedSubagentMatch[1]);
+    const current = subagents.find((item) => item.id === subagentId);
+    if (!current) return jsonResponse({ detail: 'SubAgent not found.' }, 404);
+    if (method === 'PUT') {
+      const updated = subagentFromBody(readJsonBody(body), current);
+      subagents = subagents.map((item) => (item.id === subagentId ? updated : item));
+      return jsonResponse(updated);
+    }
+    if (method === 'DELETE') {
+      subagents = subagents.filter((item) => item.id !== subagentId);
+      return new Response(null, { status: 204 });
+    }
   }
   if (method === 'GET' && path === '/api/v1/llm-providers/') {
     return jsonResponse(providers);

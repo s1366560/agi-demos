@@ -1182,6 +1182,7 @@ export type ManagedSubAgent = {
     examples?: string[];
   };
   model?: string | null;
+  color?: string;
   enabled: boolean;
   source?: 'filesystem' | 'database';
   allowed_tools?: string[];
@@ -1191,8 +1192,32 @@ export type ManagedSubAgent = {
   total_invocations?: number;
   success_rate?: number;
   avg_execution_time_ms?: number;
+  max_tokens?: number;
+  temperature?: number;
+  max_iterations?: number;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
+};
+
+export type ManagedSubAgentMutation = {
+  name: string;
+  display_name: string;
+  system_prompt: string;
+  trigger_description: string;
+  trigger_examples: string[];
+  trigger_keywords: string[];
+  model: string;
+  color: string;
+  allowed_tools: string[];
+  allowed_skills: string[];
+  allowed_mcp_servers: string[];
+  max_tokens: number;
+  temperature: number;
+  max_iterations: number;
+  project_id: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 export type ManagedSubAgentTemplate = {
