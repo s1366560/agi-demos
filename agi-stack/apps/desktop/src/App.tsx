@@ -87,6 +87,7 @@ import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
 } from './features/chat/chatComposerModel';
+import { mergeThoughtStreamChunk } from './features/chat/chatTimelineModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
@@ -569,7 +570,12 @@ function agentTaskUpdateFromSocketEvent(
     };
   }
 
-  if (type === 'act' || type === 'observe' || type.startsWith('text_')) {
+  if (
+    type === 'act' ||
+    type === 'observe' ||
+    type.startsWith('text_') ||
+    type.startsWith('thought_')
+  ) {
     return {
       conversationId,
       messageId,
@@ -813,6 +819,32 @@ function mergeLiveTimelineEvent(
   const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
   if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
     return mergeStreamingTextEvent(existing, payload, type);
+  }
+  if (type === 'thought_start' || type === 'thought_delta' || type === 'thought') {
+    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+    const nowMs = Date.now();
+    const eventTimeUs =
+      numberField(payload, 'time_us') ??
+      numberField(payload, 'event_time_us') ??
+      numberField(payload, 'eventTimeUs') ??
+      nowMs * 1000;
+    const eventCounter =
+      numberField(payload, 'counter') ??
+      numberField(payload, 'event_counter') ??
+      numberField(payload, 'eventCounter') ??
+      0;
+    const content =
+      readStringField(data, type === 'thought_delta' ? 'delta' : 'thought') ??
+      readStringField(data, 'content') ??
+      '';
+    return mergeThoughtStreamChunk(existing, {
+      kind: type === 'thought_start' ? 'start' : type === 'thought_delta' ? 'delta' : 'complete',
+      messageId: streamingMessageId(payload),
+      content,
+      eventTimeUs,
+      eventCounter,
+      payload: data,
+    });
   }
   const timeline =
     type === 'a2ui_action_answered' ? markA2UIActionAnswered(existing, event) : existing;

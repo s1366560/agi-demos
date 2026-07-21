@@ -35,6 +35,76 @@ export type ToolCallDiffStat = {
   deletions: number;
 };
 
+export type ThoughtStreamChunk = {
+  kind: 'start' | 'delta' | 'complete';
+  messageId: string;
+  content: string;
+  eventTimeUs: number;
+  eventCounter: number;
+  payload?: Record<string, unknown>;
+};
+
+export function mergeThoughtStreamChunk(
+  existing: AgentTimelineItem[],
+  chunk: ThoughtStreamChunk,
+): AgentTimelineItem[] {
+  const activeIndex = findActiveThoughtIndex(existing, chunk.messageId);
+  if (chunk.kind !== 'start' && activeIndex >= 0) {
+    const updated = existing.map((item, index) => {
+      if (index !== activeIndex) return item;
+      return {
+        ...item,
+        eventTimeUs: chunk.eventTimeUs,
+        eventCounter: chunk.eventCounter,
+        timestamp: Math.floor(chunk.eventTimeUs / 1000),
+        content:
+          chunk.kind === 'delta'
+            ? `${item.content ?? ''}${chunk.content}`
+            : chunk.content || item.content,
+        payload: chunk.payload ?? item.payload,
+        metadata: { ...(item.metadata ?? {}), streaming: chunk.kind !== 'complete' },
+      };
+    });
+    return sortTimelineItems(updated);
+  }
+
+  return sortTimelineItems([
+    ...existing,
+    {
+      id: `streaming-thought-${chunk.messageId}-${chunk.eventTimeUs}-${chunk.eventCounter}`,
+      type: 'thought',
+      eventTimeUs: chunk.eventTimeUs,
+      eventCounter: chunk.eventCounter,
+      timestamp: Math.floor(chunk.eventTimeUs / 1000),
+      message_id: chunk.messageId,
+      content: chunk.content,
+      payload: chunk.payload,
+      metadata: { streaming: chunk.kind !== 'complete' },
+    },
+  ]);
+}
+
+function findActiveThoughtIndex(items: AgentTimelineItem[], messageId: string): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (
+      item.type === 'thought' &&
+      item.message_id === messageId &&
+      item.metadata?.streaming === true
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function sortTimelineItems(items: AgentTimelineItem[]): AgentTimelineItem[] {
+  return items.sort((left, right) => {
+    if (left.eventTimeUs !== right.eventTimeUs) return left.eventTimeUs - right.eventTimeUs;
+    return left.eventCounter - right.eventCounter;
+  });
+}
+
 export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
   const pairs: ToolCallPair[] = [];
   let pendingCall: AgentTimelineItem | null = null;

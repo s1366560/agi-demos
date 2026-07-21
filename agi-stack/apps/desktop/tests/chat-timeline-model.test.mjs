@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -6,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
   detectPayloadLanguage,
   formatToolCallDuration,
+  mergeThoughtStreamChunk,
   pairToolCallItems,
   toolActivityRows,
   shouldShowAgentWorkingIndicator,
@@ -17,6 +19,81 @@ const {
   toolCallPairStatus,
   toolCallPresentationKind,
 } = require('/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js');
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+test('streaming thought chunks merge into one readable timeline item and then settle', () => {
+  let items = mergeThoughtStreamChunk([], {
+    kind: 'start',
+    messageId: 'message-1',
+    content: '',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+    payload: { thought_level: 'reasoning' },
+  });
+  items = mergeThoughtStreamChunk(items, {
+    kind: 'delta',
+    messageId: 'message-1',
+    content: 'Inspect ',
+    eventTimeUs: 1_100_000,
+    eventCounter: 2,
+    payload: { delta: 'Inspect ' },
+  });
+  items = mergeThoughtStreamChunk(items, {
+    kind: 'delta',
+    messageId: 'message-1',
+    content: 'the tests.',
+    eventTimeUs: 1_200_000,
+    eventCounter: 3,
+    payload: { delta: 'the tests.' },
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, 'thought');
+  assert.equal(items[0].content, 'Inspect the tests.');
+  assert.equal(items[0].metadata.streaming, true);
+
+  items = mergeThoughtStreamChunk(items, {
+    kind: 'complete',
+    messageId: 'message-1',
+    content: 'Inspect the tests before editing.',
+    eventTimeUs: 1_300_000,
+    eventCounter: 4,
+    payload: { thought: 'Inspect the tests before editing.' },
+  });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].content, 'Inspect the tests before editing.');
+  assert.equal(items[0].metadata.streaming, false);
+});
+
+test('a second thought stream under the same Agent message remains a separate step', () => {
+  const completed = mergeThoughtStreamChunk([], {
+    kind: 'complete',
+    messageId: 'message-1',
+    content: 'First thought',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  });
+  const withNext = mergeThoughtStreamChunk(completed, {
+    kind: 'start',
+    messageId: 'message-1',
+    content: '',
+    eventTimeUs: 2_000_000,
+    eventCounter: 2,
+  });
+
+  assert.equal(withNext.length, 2);
+  assert.equal(withNext[0].content, 'First thought');
+  assert.equal(withNext[1].metadata.streaming, true);
+});
+
+test('live Agent events route thought start, delta, and completion through the stream merger', () => {
+  assert.match(
+    appSource,
+    /type === 'thought_start'[\s\S]*?type === 'thought_delta'[\s\S]*?type === 'thought'/,
+  );
+  assert.match(appSource, /mergeThoughtStreamChunk\(existing/);
+  assert.match(appSource, /type\.startsWith\('thought_'\)/);
+});
 
 test('act items pair with the observe that answers them, preserving order', () => {
   const pairs = pairToolCallItems([
