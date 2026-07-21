@@ -8,11 +8,13 @@ import { AlertTriangle, Info, Lightbulb, Wrench } from 'lucide-react';
 
 import { MaintenanceOperation } from '../../components/maintenance/MaintenanceOperation';
 import { graphService } from '../../services/graphService';
+import { confirmAction } from '../../utils/confirmAction';
+import { logger } from '../../utils/logger';
 
 import type { EmbeddingStatus, GraphStats, MaintenanceStatus } from '../../services/graphService';
 
 const formatStat = (value: number | undefined): string =>
-  value === undefined ? '-' : String(value);
+  value === undefined ? '-' : value.toLocaleString();
 
 export const Maintenance: React.FC = () => {
   const { t } = useTranslation();
@@ -26,6 +28,7 @@ export const Maintenance: React.FC = () => {
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus | null>(null);
   const [maintenanceStatus, setMaintenanceStatus] = useState<MaintenanceStatus | null>(null);
   const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
+  const [initialLoadRetryToken, setInitialLoadRetryToken] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'info' | 'error'>('info');
   const activeProjectIdRef = useRef<string | undefined>(projectId);
@@ -45,7 +48,7 @@ export const Maintenance: React.FC = () => {
         }
       } catch (error) {
         if (isActiveProject(requestProjectId)) {
-          console.error(error);
+          logger.error('Failed to refresh maintenance status', error);
         }
       }
     },
@@ -66,7 +69,7 @@ export const Maintenance: React.FC = () => {
 
     let isCurrent = true;
     const reportInitialLoadError = (error: unknown) => {
-      console.error(error);
+      logger.error('Failed to load maintenance data', error);
       if (isCurrent) {
         setInitialLoadError(t('project.maintenance.messages.initial_load_failed'));
       }
@@ -98,7 +101,7 @@ export const Maintenance: React.FC = () => {
     return () => {
       isCurrent = false;
     };
-  }, [tenantId, projectId, t]);
+  }, [tenantId, projectId, t, initialLoadRetryToken]);
 
   const handleRefresh = async () => {
     const requestProjectId = projectId;
@@ -120,7 +123,7 @@ export const Maintenance: React.FC = () => {
       setMessageType('info');
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to refresh graph', e);
       setMessage(t('project.maintenance.messages.refresh_failed'));
       setMessageType('error');
     } finally {
@@ -145,7 +148,7 @@ export const Maintenance: React.FC = () => {
       setMessageType('info');
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to check duplicate entities', e);
       setMessage(t('project.maintenance.messages.dedup_failed'));
       setMessageType('error');
     }
@@ -154,6 +157,14 @@ export const Maintenance: React.FC = () => {
   const handleDedupMerge = async () => {
     const requestProjectId = projectId;
     if (!requestProjectId) return;
+    if (
+      !(await confirmAction({
+        title: t('project.maintenance.confirm.dedup_merge'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setDedupProcessing(true);
     try {
       const res = await graphService.deduplicateEntities({
@@ -173,7 +184,7 @@ export const Maintenance: React.FC = () => {
       void refreshMaintenanceStatus(requestProjectId);
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to merge duplicate entities', e);
       setMessage(t('project.maintenance.messages.dedup_merge_failed'));
       setMessageType('error');
     } finally {
@@ -198,7 +209,7 @@ export const Maintenance: React.FC = () => {
       setMessageType('info');
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to check stale edges', e);
       setMessage(t('project.maintenance.messages.clean_failed'));
       setMessageType('error');
     }
@@ -207,6 +218,14 @@ export const Maintenance: React.FC = () => {
   const handleClean = async () => {
     const requestProjectId = projectId;
     if (!requestProjectId) return;
+    if (
+      !(await confirmAction({
+        title: t('project.maintenance.confirm.clean_stale'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setCleanProcessing(true);
     try {
       const res = await graphService.invalidateStaleEdges({
@@ -221,7 +240,7 @@ export const Maintenance: React.FC = () => {
       void refreshMaintenanceStatus(requestProjectId);
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to clean stale edges', e);
       setMessage(t('project.maintenance.messages.clean_failed'));
       setMessageType('error');
     } finally {
@@ -234,6 +253,14 @@ export const Maintenance: React.FC = () => {
   const handleRebuild = async () => {
     const requestProjectId = projectId;
     if (!requestProjectId) return;
+    if (
+      !(await confirmAction({
+        title: t('project.maintenance.confirm.rebuild'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setRebuildLoading(true);
     try {
       const res = await graphService.rebuildCommunities(true, requestProjectId);
@@ -252,7 +279,7 @@ export const Maintenance: React.FC = () => {
       setMessageType('info');
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to rebuild communities', e);
       setMessage(t('project.maintenance.messages.rebuild_failed'));
       setMessageType('error');
     } finally {
@@ -285,7 +312,7 @@ export const Maintenance: React.FC = () => {
       setMessageType('info');
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to export graph data', e);
       setMessage(t('project.maintenance.messages.export_failed'));
       setMessageType('error');
     }
@@ -294,6 +321,14 @@ export const Maintenance: React.FC = () => {
   const handleRebuildEmbeddings = async () => {
     const requestProjectId = projectId;
     if (!requestProjectId) return;
+    if (
+      !(await confirmAction({
+        title: t('project.maintenance.confirm.rebuild_embeddings'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setEmbeddingLoading(true);
     try {
       const res = await graphService.rebuildEmbeddings(requestProjectId);
@@ -308,7 +343,7 @@ export const Maintenance: React.FC = () => {
       }
     } catch (e) {
       if (!isActiveProject(requestProjectId)) return;
-      console.error(e);
+      logger.error('Failed to rebuild embeddings', e);
       setMessage(t('project.maintenance.messages.embedding_failed'));
       setMessageType('error');
     } finally {
@@ -331,9 +366,18 @@ export const Maintenance: React.FC = () => {
         {initialLoadError && (
           <div
             role="alert"
-            className="mt-4 rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+            className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-900/20 dark:text-red-300"
           >
-            {initialLoadError}
+            <span>{initialLoadError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setInitialLoadRetryToken((token) => token + 1);
+              }}
+              className="rounded-md border border-red-200 px-3 py-1 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/40"
+            >
+              {t('project.maintenance.messages.retry')}
+            </button>
           </div>
         )}
         {message && (
@@ -360,7 +404,7 @@ export const Maintenance: React.FC = () => {
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-surface-dark p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm text-center">
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">
+            <p className="text-3xl font-bold text-slate-900 tabular-nums dark:text-white">
               {formatStat(stats?.entity_count)}
             </p>
             <p className="text-xs text-slate-500 uppercase tracking-wider mt-1">
@@ -368,7 +412,7 @@ export const Maintenance: React.FC = () => {
             </p>
           </div>
           <div className="bg-white dark:bg-surface-dark p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm text-center">
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">
+            <p className="text-3xl font-bold text-slate-900 tabular-nums dark:text-white">
               {formatStat(stats?.episodic_count)}
             </p>
             <p className="text-xs text-slate-500 uppercase tracking-wider mt-1">
@@ -376,7 +420,7 @@ export const Maintenance: React.FC = () => {
             </p>
           </div>
           <div className="bg-white dark:bg-surface-dark p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm text-center">
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">
+            <p className="text-3xl font-bold text-slate-900 tabular-nums dark:text-white">
               {formatStat(stats?.community_count)}
             </p>
             <p className="text-xs text-slate-500 uppercase tracking-wider mt-1">
@@ -384,7 +428,7 @@ export const Maintenance: React.FC = () => {
             </p>
           </div>
           <div className="bg-white dark:bg-surface-dark p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm text-center">
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">
+            <p className="text-3xl font-bold text-slate-900 tabular-nums dark:text-white">
               {formatStat(stats?.edge_count)}
             </p>
             <p className="text-xs text-slate-500 uppercase tracking-wider mt-1">
@@ -543,7 +587,7 @@ export const Maintenance: React.FC = () => {
                       {recommendation.type.replaceAll('_', ' ')}
                     </p>
                     <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-2xs font-semibold uppercase text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
-                      {recommendation.priority}
+                      {t(`project.maintenance.recommendations.priority.${recommendation.priority}`)}
                     </span>
                   </div>
                   <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">

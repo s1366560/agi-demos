@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   RefreshCw,
   Copy,
@@ -11,6 +13,8 @@ import {
   Loader2,
   type LucideIcon,
 } from 'lucide-react';
+
+import { confirmAction } from '@/utils/confirmAction';
 
 interface MaintenanceOperationProps {
   title: string;
@@ -44,7 +48,31 @@ export const MaintenanceOperation: React.FC<MaintenanceOperationProps> = ({
   loading = false,
   warning = false,
 }) => {
+  const { t } = useTranslation();
   const IconComponent = iconMap[icon] || Wrench;
+
+  const handleAction = async () => {
+    if (!warning) {
+      onAction();
+      return;
+    }
+
+    const confirmed = await confirmAction({
+      title: t('project.maintenance.ops.confirm.title', {
+        operation: title,
+        defaultValue: 'Run "{{operation}}"?',
+      }),
+      content: t('project.maintenance.ops.confirm.content', {
+        defaultValue: 'This operation may modify or remove graph data and cannot be undone.',
+      }),
+      okText: t('common.confirm', { defaultValue: 'Confirm' }),
+      cancelText: t('common.cancel', { defaultValue: 'Cancel' }),
+      danger: true,
+    });
+    if (confirmed) {
+      onAction();
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 sm:p-6 md:flex-row md:items-center md:justify-between">
@@ -67,16 +95,18 @@ export const MaintenanceOperation: React.FC<MaintenanceOperationProps> = ({
             type="button"
             onClick={onSecondaryAction}
             disabled={loading}
-            className="min-h-10 flex-1 rounded-lg px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
+            className="min-h-10 flex-1 rounded-lg px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
           >
             {secondaryActionLabel}
           </button>
         )}
         <button
           type="button"
-          onClick={onAction}
+          onClick={() => {
+            void handleAction();
+          }}
           disabled={loading}
-          className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50 sm:flex-none ${warning ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-primary hover:bg-primary/90'}`}
+          className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 sm:flex-none ${warning ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-primary hover:bg-primary/90'}`}
         >
           {loading && <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />}
           {actionLabel}

@@ -9,6 +9,7 @@
     "create": "Create",
     "search": "Search",
     "loading": "Loading…",
+    "skipToContent": "Skip to main content",
     "success": "Success",
     "error": "Error",
     "required": "Required",
@@ -27,6 +28,11 @@
     "next": "Next",
     "remove": "Remove",
     "close": "Close",
+    "closeDialog": "Close dialog",
+    "discard": "Discard",
+    "unsavedChanges": "You have unsaved changes. Discard them and close?",
+    "reload": "Reload",
+    "initializationSlow": "Initialization is taking longer than expected.",
     "done": "Done",
     "retry": "Retry",
     "view": "View",
@@ -807,9 +813,16 @@
       "deleteReply": "Failed to delete reply",
       "createObjective": "Failed to create objective",
       "deleteObjective": "Failed to delete objective",
+      "projectObjective": "Failed to project objective to task",
       "deleteGene": "Failed to delete gene",
       "updateGene": "Failed to update gene",
       "createGene": "Failed to create gene"
+    },
+    "confirm": {
+      "deleteObjectiveTitle": "Delete this objective?",
+      "deleteObjectiveContent": "This objective will be permanently deleted. This action cannot be undone.",
+      "deleteGeneTitle": "Delete this gene?",
+      "deleteGeneContent": "This gene will be permanently deleted. This action cannot be undone."
     },
     "arrangement": {
       "eyebrow": "Workstation arrangement",
@@ -898,6 +911,12 @@
         "nodeUpdated": "Seat details updated.",
         "agentRemoved": "Agent removed from the workstation.",
         "nodeRemoved": "Seat removed from the workstation."
+      },
+      "confirm": {
+        "removeAgentTitle": "Remove this agent?",
+        "removeAgentContent": "The agent will be unbound from this workstation.",
+        "removeNodeTitle": "Remove this seat?",
+        "removeNodeContent": "This node will be permanently removed from the topology."
       },
       "shortcuts": {
         "pan": "Pan the grid",
@@ -1159,6 +1178,10 @@
         "executionBackend": {
           "externalAcp": "External ACP ({{agentKey}})",
           "memstack": "MemStack Native"
+        },
+        "binding": {
+          "priority": "Priority",
+          "score": "Score"
         }
       },
       "stats": {
@@ -1844,6 +1867,8 @@
         "empty": "No evolution jobs yet",
         "apply": "Apply",
         "reject": "Reject",
+        "applyConfirm": "Apply this evolution job? It will overwrite the skill content.",
+        "rejectConfirm": "Reject this evolution job?",
         "applySuccess": "Evolution job applied",
         "applyFailed": "Failed to apply evolution job",
         "rejectSuccess": "Evolution job rejected",
@@ -2338,7 +2363,9 @@
       "project_storage": "Project Storage Distribution",
       "no_data": "No data available",
       "creation_trend": "Creation trend",
-      "storage_distribution": "Storage distribution"
+      "storage_distribution": "Storage distribution",
+      "chart_memories": "Memories",
+      "load_error": "Failed to load analytics"
     },
     "billing": {
       "title": "Billing",
@@ -2357,6 +2384,10 @@
       "upgrading": "Upgrading…",
       "upgrade_success": "Plan upgraded successfully",
       "upgrade_error": "Failed to upgrade plan. Please try again.",
+      "confirm_upgrade_title": "Confirm plan upgrade",
+      "confirm_upgrade_content": "Upgrade to the {{plan}} plan?",
+      "confirm_upgrade_ok": "Upgrade",
+      "load_error": "Failed to load billing details",
       "sales_unavailable": "Sales contact is not configured in this build.",
       "enterprise": {
         "title": "Enterprise Plan",
@@ -3964,7 +3995,8 @@
         "title": "Create New Project",
         "subtitle": "Set up a new memory environment"
       },
-      "deleteConfirm": "Are you sure you want to delete this project?"
+      "deleteConfirm": "Are you sure you want to delete this project?",
+      "deleteFailed": "Failed to delete project"
     },
     "newProject": {
       "title": "Create New Project",
@@ -3984,7 +4016,8 @@
       "loose": "Loose (0.1)",
       "strict": "Strict (1.0)",
       "enableCommunityDetection": "Enable community detection",
-      "submit": "Create Project"
+      "submit": "Create Project",
+      "discardConfirm": "Discard unsaved changes?"
     },
     "create": {
       "title": "Create workspace",
@@ -4036,7 +4069,8 @@
       },
       "submit": "Create organization",
       "subtitle": "Create a tenant workspace for projects, members, and memory resources.",
-      "title": "Create organization"
+      "title": "Create organization",
+      "discardConfirm": "Discard unsaved changes?"
     },
     "entry": {
       "loadingTitle": "Checking tenant access",
@@ -4058,6 +4092,7 @@
       "refresh": "Refresh",
       "resumeSubmitted": "Submitted {{count}} pending tasks",
       "resumeFailed": "Failed to resume pending tasks",
+      "loadFailed": "Failed to load task data",
       "stats": {
         "failed": "Failed",
         "pending": "Pending",
@@ -4522,7 +4557,8 @@
           "no_relationships": "No relationships found",
           "close": "Close entity details",
           "select_prompt": "Select an entity",
-          "click_prompt": "Click on an entity from the list to view its details and relationships"
+          "click_prompt": "Click on an entity from the list to view its details and relationships",
+          "relationships_error": "Failed to load relationships"
         }
       }
     },
@@ -4538,6 +4574,10 @@
       },
       "ops": {
         "title": "Maintenance Operations",
+        "confirm": {
+          "title": "Run \"{{operation}}\"?",
+          "content": "This operation may modify or remove graph data and cannot be undone."
+        },
         "refresh": {
           "title": "Incremental Refresh",
           "desc": "Reprocess recent episodes and update graph without full rebuild",
@@ -4583,6 +4623,7 @@
         "refreshed": "Refreshed {{count}} episodes",
         "refreshed_text": "Refreshed {{text}}",
         "initial_load_failed": "Failed to load maintenance data",
+        "retry": "Retry",
         "refresh_failed": "Failed to refresh graph",
         "duplicates_found": "Found {{count}} potential duplicates",
         "dedup_failed": "Failed to check duplicate entities",
@@ -4600,9 +4641,20 @@
         "embedding_rebuilt": "Rebuilt embeddings for {{count}} nodes",
         "embedding_failed": "Failed to rebuild embeddings"
       },
+      "confirm": {
+        "dedup_merge": "Merge duplicate entities? This cannot be undone.",
+        "clean_stale": "Delete stale edges? This cannot be undone.",
+        "rebuild": "Rebuild communities? This may take a while.",
+        "rebuild_embeddings": "Rebuild embeddings for all nodes? This may take a while."
+      },
       "recommendations": {
         "title": "Recommendations",
         "none": "No recommendations at this time",
+        "priority": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        },
         "high_duplication": {
           "title": "High duplication rate detected",
           "desc": "We found {{count}} potentially duplicate entities. Running 'Deduplicate Entities' is recommended."
@@ -4863,6 +4915,13 @@
       "untitled": "Untitled memory"
     },
     "schema": {
+      "navLabel": "Schema navigation",
+      "tabs": {
+        "overview": "Overview",
+        "entityTypes": "Entity Types",
+        "edgeTypes": "Edge Types",
+        "mapping": "Mapping"
+      },
       "overview": {
         "title": "Schema Overview",
         "subtitle": "Visual representation of the Pydantic models defining your graph structure. View entities, relationships, and their attribute definitions.",
@@ -5802,6 +5861,7 @@
         "title": "No agents spawned yet",
         "description": "Multi-agent activity will appear here when agents are spawned during a conversation."
       },
+      "toggleChildren": "Toggle child agents of {{name}}",
       "traceChain": {
         "emptyTitle": "No chain data",
         "emptyDescription": "Select a trace to view its execution chain.",
@@ -6037,7 +6097,9 @@
     "agentMessageIndicator": {
       "from": "From",
       "to": "To",
-      "message": "Message"
+      "message": "Message",
+      "directionSent": "Sent",
+      "directionReceived": "Received"
     },
     "planReviewGate": {
       "title": "Review gate",
@@ -6231,7 +6293,10 @@
       "status": "Status",
       "keywordMatch": "Keyword Match",
       "semanticMatch": "Semantic Match",
-      "delegated": "Delegated"
+      "delegated": "Delegated",
+      "statusStarted": "Started",
+      "statusCompleted": "Completed",
+      "statusFailed": "Failed"
     },
     "thoughtBubble": {
       "ariaLabel": "Agent thinking process",
@@ -6566,6 +6631,10 @@
         "activeToolCalls": "Active tool calls: {{count}}",
         "activeCount": "{{count}} active",
         "online": "Online"
+      },
+      "slots": {
+        "suggestions": "Suggestions",
+        "artifacts": "Artifacts"
       }
     },
     "projectSelector": {
@@ -6598,6 +6667,7 @@
       "deleteDescription": "This conversation and its messages will be permanently removed.",
       "deletedToast": "Conversation deleted",
       "deleteFailed": "Failed to delete conversation",
+      "renameFailed": "Failed to rename conversation",
       "undo": "Undo",
       "untitled": "Untitled",
       "needsInput": "Needs input",
@@ -6610,6 +6680,7 @@
       "startNewChat": "Start a new chat to begin",
       "selectProject": "Select a project",
       "selectProjectTitle": "Select Project",
+      "unknownProject": "Unknown Project",
       "projectSwitcher": "Project switcher",
       "searchProjects": "Search projects",
       "searchProjectsPlaceholder": "Search all authorized projects",
@@ -6640,7 +6711,10 @@
       "showSummary": "Show summary",
       "collapse": "Collapse summary",
       "regenerate": "Regenerate summary",
-      "generating": "Generating summary…"
+      "generating": "Generating summary…",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "regenerateError": "Failed to regenerate summary. Please try again."
     },
     "messageBubble": {
       "reasoning": "Reasoning",
@@ -6663,7 +6737,19 @@
       "uploadFailed": "Upload failed",
       "openInCanvas": "Canvas",
       "openSandboxFileInCanvas": "Open {{path}} in Canvas",
-      "subAgentIcon": "SubAgent Icon"
+      "subAgentIcon": "SubAgent Icon",
+      "unknownTool": "Unknown Tool",
+      "granted": "Granted",
+      "denied": "Denied",
+      "pill": {
+        "steps": "Steps",
+        "tasks": "Tasks",
+        "remaining": "Remaining",
+        "artifacts": "Artifacts",
+        "llmCalls": "LLM calls",
+        "tokens": "Tokens",
+        "cost": "Cost"
+      }
     },
     "inputBar": {
       "placeholder": "Ask me anything, or type '/' for commands…",
@@ -6695,6 +6781,17 @@
     },
     "mention": {
       "label": "Mention an agent"
+    },
+    "mobileSidebar": {
+      "title": "Conversation history"
+    },
+    "turnPlaceholder": {
+      "itemsHidden": "{{count}} items hidden",
+      "itemsHidden_one": "{{count}} item hidden",
+      "itemsHidden_other": "{{count}} items hidden",
+      "expandTurn": "Expand turn ({{count}} hidden)",
+      "expandTurn_one": "Expand turn ({{count}} hidden)",
+      "expandTurn_other": "Expand turn ({{count}} hidden)"
     },
     "mentions": {
       "title": "Mention entities or memories",
@@ -6969,6 +7066,12 @@
       "search": "Search templates…",
       "noResults": "No templates found",
       "closeLibrary": "Close template library",
+      "deleteConfirmTitle": "Delete this template?",
+      "deleteConfirmContent": "This action cannot be undone.",
+      "deleteFailed": "Failed to delete template",
+      "deleted": "Template deleted",
+      "saved": "Template saved",
+      "saveFailed": "Failed to save template",
       "all": "All",
       "analysis": "Analysis",
       "code": "Code",
@@ -7071,7 +7174,9 @@
         "empty": "No pending requests.",
         "accept": "Accept",
         "reject": "Reject",
-        "open": "Open"
+        "open": "Open",
+        "acceptOption": "Accept option",
+        "rejectOption": "Reject option"
       },
       "title": {
         "clarification": "Needs clarification",
@@ -7250,6 +7355,7 @@
       "setCoordinator": "Set as coordinator",
       "setCoordinatorFor": "Set {{name}} as coordinator",
       "remove": "Remove {{name}}",
+      "removeConfirmTitle": "Remove participant?",
       "autonomousRequiresCoordinator": "Autonomous mode requires a coordinator. Click ★ on a participant to assign.",
       "isolatedSuggestsFocused": "Isolated mode works best with one focused agent. Click ◎ on a participant to set it.",
       "noneAvailable": "No more agents available. Add agents to the linked workspace to see them here.",
@@ -7324,9 +7430,16 @@
       "save": "Save Changes",
       "saving": "Saving…"
     },
+    "confirm": {
+      "discard_title": "Discard changes?",
+      "discard_content": "Your unsaved profile changes will be lost.",
+      "discard_ok": "Discard"
+    },
     "toast": {
       "success_title": "Successfully saved!",
-      "success_desc": "Your profile information has been updated."
+      "success_desc": "Your profile information has been updated.",
+      "error_title": "Unable to save profile",
+      "error_desc": "Please try again."
     }
   },
   "comparison": {
@@ -7608,6 +7721,8 @@
       "membersLabel": "Members",
       "agentsLabel": "Agents",
       "add": "Add",
+      "noMembers": "No members yet",
+      "noAgents": "No agents yet",
       "removeAgentConfirm": "Remove this agent?",
       "remove": "Remove",
       "cancel": "Cancel",
@@ -7653,9 +7768,14 @@
       "noMessages": "No messages yet. Start the conversation!",
       "messageInputAria": "Chat message input",
       "messagePlaceholder": "Type a message… (Use @ to mention)",
+      "mentionListAria": "Mention suggestions",
       "mentionBroadcast": "broadcast",
       "mentionHuman": "human",
-      "mentionAgent": "agent"
+      "mentionAgent": "agent",
+      "sendFailed": "Failed to send message",
+      "loadFailed": "Failed to load messages",
+      "senderAgent": "Agent",
+      "senderUser": "User"
     },
     "taskExperience": {
       "title": "Task experience",
@@ -7781,7 +7901,11 @@
       "progressLabel": "Progress (%)",
       "parentObjectiveLabel": "Parent Objective",
       "parentObjectiveRequired": "Please select a parent objective",
-      "parentObjectivePlaceholder": "Select parent objective"
+      "parentObjectivePlaceholder": "Select parent objective",
+      "edit": "Edit",
+      "delete": "Delete",
+      "startExecution": "Start execution",
+      "openActions": "Open actions for {{name}}"
     },
     "genes": {
       "title": "Cyber Genes",
@@ -7798,6 +7922,7 @@
       "updateSuccess": "Gene updated",
       "importFromMarketplace": "Import from Marketplace",
       "marketplaceSearchPlaceholder": "Search marketplace genes…",
+      "marketplaceLoadFailed": "Failed to load marketplace",
       "noMarketplaceResults": "No marketplace genes found",
       "errors": {
         "nameRequired": "Name is required"
@@ -7852,7 +7977,11 @@
       "noActiveGenes": "No active genes available in this workspace."
     },
     "presence": {
-      "online": "Online"
+      "online": "Online",
+      "idle": "Idle",
+      "busy": "Busy",
+      "error": "Error",
+      "statusLabel": "{{name}} ({{status}})"
     },
     "agents": {
       "addTitle": "Add Agent to Workspace",
@@ -7899,7 +8028,8 @@
     "failed": "Failed to change password.",
     "passwordMismatch": "Passwords do not match.",
     "passwordRequired": "Password is required.",
-    "passwordMinLength": "Password must be at least 8 characters."
+    "passwordMinLength": "Password must be at least 8 characters.",
+    "signOut": "Sign out"
   },
   "admin": {
     "poolDashboard": {
@@ -8030,6 +8160,9 @@
         "eventType": "Event Type",
         "errorType": "Error Type",
         "selected": "Selected"
+      },
+      "pagination": {
+        "total": "Total {{count}} messages"
       },
       "errorTypeDistribution": "Error Type Distribution",
       "confirm": {
@@ -8654,6 +8787,7 @@
         "expandSidebar": "Expand sidebar",
         "collapseSidebar": "Collapse sidebar",
         "backgroundTasks": "Background tasks",
+        "backgroundTasksWithCount": "Background tasks, {{count}} running",
         "userMenu": "User menu",
         "breadcrumb": "Breadcrumb",
         "toggleTheme": "Toggle theme"
@@ -9393,6 +9527,7 @@
       "cardContentFailed": "This card content could not be rendered.",
       "surfaceContentAvailable": "Other content on this surface is still available.",
       "tabFailed": "This tab could not be rendered.",
+      "tabFallbackTitle": "Tab {{index}}",
       "tabDetail": "\"{{title}}\" failed to render. You can still switch to other tabs.",
       "modalTriggerFailed": "This modal trigger could not be rendered.",
       "surfaceRestAvailable": "The rest of the surface is still available.",
@@ -9497,6 +9632,7 @@
     "trigger": "Command palette (⌘K)",
     "placeholder": "Search commands, pages, conversations…",
     "resultsLabel": "Command results",
+    "resultsCount": "{{count}} results",
     "noResults": "No results found",
     "groups": {
       "actions": "Actions",

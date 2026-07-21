@@ -12,7 +12,7 @@ export type StatusTone = 'idle' | 'ok' | 'running' | 'warning' | 'error';
 const TONE_DOT: Record<StatusTone, string> = {
   idle: 'bg-slate-300 dark:bg-slate-600',
   ok: 'bg-emerald-500',
-  running: 'bg-sky-500 animate-pulse',
+  running: 'bg-sky-500 animate-pulse motion-reduce:animate-none',
   warning: 'bg-amber-500',
   error: 'bg-rose-500',
 };

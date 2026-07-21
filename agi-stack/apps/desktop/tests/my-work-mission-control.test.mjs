@@ -92,34 +92,28 @@ function renderMyWork(overrides = {}) {
   );
 }
 
-test('My Work renders the source Mission Control queue anatomy', () => {
+test('My Work renders the source inbox queue anatomy', () => {
   const markup = renderMyWork();
 
-  assert.match(markup, /MISSION CONTROL/);
-  assert.match(markup, /<kbd>(?:⌘ K|Ctrl K)<\/kbd>/);
-  assert.match(markup, />All<\/button>/);
-  assert.match(markup, />Assigned to me<\/button>/);
-  assert.match(markup, />Recent<\/button>/);
-  assert.equal((markup.match(/class="my-work-group-heading"/g) ?? []).length, 3);
+  assert.match(markup, /MY WORK/);
+  assert.match(markup, />Inbox</);
+  assert.doesNotMatch(markup, /class="my-work-inbox-actions"/);
+  assert.equal((markup.match(/class="my-work-inbox-group /g) ?? []).length, 3);
   assert.match(markup, /Needs input/);
-  assert.match(markup, /class="my-work-task-menu"/);
-  assert.match(markup, /class="my-work-inline-action"/);
+  assert.match(markup, /Running/);
+  assert.match(markup, /Ready review/);
+  assert.equal((markup.match(/class="my-work-inbox-card"/g) ?? []).length, 4);
 });
 
-test('My Work replaces the authority inspector with a task canvas hierarchy', () => {
+test('My Work uses flat cards that navigate directly to authoritative threads', () => {
   const markup = renderMyWork();
 
-  assert.match(markup, /class="my-work-progress-strip"/);
-  assert.match(markup, /Stage data unavailable/);
-  assert.doesNotMatch(markup, />Understand<|>Analyze<|>Draft<|>Review</);
-  assert.match(markup, /class="my-work-insight-grid"/);
-  assert.match(markup, /class="my-work-artifact-panel"/);
-  assert.match(markup, /class="my-work-action-dock"/);
-  assert.match(markup, /class="my-work-steer-composer"/);
-  assert.match(markup, /Task updated/);
-  assert.equal((markup.match(/>Open session<\/button>/g) ?? []).length, 2);
+  assert.match(markup, /class="my-work-inbox-progress indeterminate"/);
+  assert.match(markup, /Workspace One/);
+  assert.match(markup, /Project One/);
+  assert.match(markup, /Provide requested input/);
   assert.doesNotMatch(markup, /<textarea/);
-  assert.doesNotMatch(markup, /Authority ID|Current authority|Persisted record only/);
+  assert.doesNotMatch(markup, /Authority ID|Current authority|Persisted record only|Open session/);
 });
 
 test('My Work loading and error states never render a stale task canvas', () => {
@@ -127,24 +121,21 @@ test('My Work loading and error states never render a stale task canvas', () => 
   const refreshingMarkup = renderMyWork({ loading: true });
   const errorMarkup = renderMyWork({ items: [], error: 'Not found' });
 
-  assert.doesNotMatch(loadingMarkup, /class="my-work-detail"/);
-  assert.match(refreshingMarkup, /class="my-work-refreshing"/);
-  assert.match(refreshingMarkup, /Updating current work/);
-  assert.match(refreshingMarkup, /class="my-work-action-dock"[^]*?<button type="button" class="primary" disabled=""/);
-  assert.doesNotMatch(errorMarkup, /class="my-work-detail"/);
+  assert.match(loadingMarkup, /aria-busy="true"/);
+  assert.match(refreshingMarkup, /aria-busy="true"/);
+  assert.match(refreshingMarkup, /class="my-work-inbox-groups"/);
   assert.match(errorMarkup, /role="alert"/);
 });
 
-test('My Work exposes unavailable filters to assistive technology and distinguishes Code mode', () => {
+test('My Work keeps Work and Code items together in one cross-mode inbox', () => {
   const markup = renderMyWork({
     mode: 'code',
     items: items.map((item) => ({ ...item, capability_mode: 'code' })),
   });
 
-  assert.match(markup, /CODE SESSIONS/);
-  assert.match(markup, /role="group"/);
-  assert.match(markup, /aria-describedby="my-work-filter-unavailable"/);
-  assert.match(markup, /id="my-work-filter-unavailable"/);
+  assert.match(markup, />Inbox</);
+  assert.match(markup, /class="my-work-inbox-groups"/);
+  assert.doesNotMatch(markup, /my-work-filter-unavailable|role="group"/);
 });
 
 test('My Work search owns Command-K while the global palette remains the fallback', () => {

@@ -9,30 +9,13 @@ import { useTranslation } from 'react-i18next';
 
 import { message } from 'antd';
 import {
-  Activity,
-  AlertCircle,
   AlertTriangle,
-  Ban,
-  Brain,
   CheckCircle,
-  Cloud,
-  FlaskConical,
-  Globe,
   Grid3x3,
-  Info,
-  Loader2,
   MessageCircle,
-  RefreshCcw,
-  Search,
   Server,
-  Settings,
-  Sparkles,
-  Square,
-  StopCircle,
   Terminal,
-  User,
   Wrench,
-  Zap,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -40,6 +23,8 @@ import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 
 import { mcpAPI } from '@/services/mcpService';
+
+import { renderDynamicIcon } from '@/components/shared/DynamicIcon';
 
 import { McpAppsTabV2 } from './McpAppsTabV2';
 import { McpLogsTabV2 } from './McpLogsTabV2';
@@ -49,57 +34,6 @@ import { McpToolsTabV2 } from './McpToolsTabV2';
 import { getRuntimeStatus } from './types';
 
 import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';
-
-const renderDynamicIcon = (name: string, size: number, className: string = '') => {
-  switch (name) {
-    case 'check_circle':
-      return <CheckCircle size={size} className={className} />;
-    case 'progress_activity':
-      return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop':
-      return <Square size={size} className={className} />;
-    case 'stop_circle':
-      return <StopCircle size={size} className={className} />;
-    case 'error':
-      return <AlertCircle size={size} className={className} />;
-    case 'warning':
-      return <AlertTriangle size={size} className={className} />;
-    case 'terminal':
-      return <Terminal size={size} className={className} />;
-    case 'http':
-      return <Globe size={size} className={className} />;
-    case 'cloud':
-      return <Cloud size={size} className={className} />;
-    case 'globe':
-      return <Globe size={size} className={className} />;
-    case 'zap':
-      return <Zap size={size} className={className} />;
-    case 'block':
-      return <Ban size={size} className={className} />;
-    case 'search':
-      return <Search size={size} className={className} />;
-    case 'person':
-      return <User size={size} className={className} />;
-    case 'auto_awesome':
-      return <Sparkles size={size} className={className} />;
-    case 'monitor_heart':
-      return <Activity size={size} className={className} />;
-    case 'refresh':
-      return <RefreshCcw size={size} className={className} />;
-    case 'sync':
-      return <RefreshCcw size={size} className={className} />;
-    case 'science':
-      return <FlaskConical size={size} className={className} />;
-    case 'settings':
-      return <Settings size={size} className={className} />;
-    case 'psychology':
-      return <Brain size={size} className={className} />;
-    case 'info':
-      return <Info size={size} className={className} />;
-    default:
-      return <AlertCircle size={size} className={className} />;
-  }
-};
 
 // ============================================================================
 // Stats Card Component

@@ -204,9 +204,9 @@ export function FinalResponseDisplay({ content, version, generatedAt }: FinalRes
       {/* Action Sidebar */}
       <div className="w-72 shrink-0 space-y-4 data-[html2canvas-ignore]:hidden">
         <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md p-4 shadow-sm sticky top-6">
-          <h4 className="text-2xs font-bold text-text-muted uppercase tracking-wider mb-4">
+          <h3 className="text-2xs font-bold text-text-muted uppercase tracking-wider mb-4">
             {t('components.finalResponseDisplay.actions', { defaultValue: 'Actions' })}
-          </h4>
+          </h3>
           <div className="space-y-2">
             <button
               type="button"
@@ -233,7 +233,7 @@ export function FinalResponseDisplay({ content, version, generatedAt }: FinalRes
             >
               <Download className="w-4 h-4" />
               {isExporting
-                ? t('components.finalResponseDisplay.exporting', { defaultValue: 'Exporting...' })
+                ? t('components.finalResponseDisplay.exporting', { defaultValue: 'Exporting…' })
                 : t('components.finalResponseDisplay.exportAsPdf', {
                     defaultValue: 'Export as PDF',
                   })}

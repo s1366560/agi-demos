@@ -6,12 +6,13 @@
  */
 
 import type React from 'react';
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 
+import { message } from 'antd';
 import {
   Image as ImageIcon,
   Film,
@@ -42,6 +43,8 @@ import {
 import { useCanvasStore, type CanvasContentType } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
+import { useTemplateActions } from '@/stores/templateStore';
+import { useCurrentTenant } from '@/stores/tenant';
 
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
@@ -452,9 +455,39 @@ async function openSandboxPathInCanvas(path: string): Promise<void> {
   requestCanvasViewMode();
 }
 
+/**
+ * Hook returning a handler that persists a message as a prompt template
+ * and surfaces success/error feedback.
+ */
+function useSaveTemplate(content: string) {
+  const { t } = useTranslation();
+  const currentTenant = useCurrentTenant();
+  const { createTemplate } = useTemplateActions();
+  const tenantId = currentTenant?.id;
+
+  return useCallback(
+    (title: string, category: string) => {
+      void (async () => {
+        if (!tenantId) {
+          void message.error(t('agent.templates.saveFailed', 'Failed to save template'));
+          return;
+        }
+        const created = await createTemplate(tenantId, { title, content, category });
+        if (created) {
+          void message.success(t('agent.templates.saved', 'Template saved'));
+        } else {
+          void message.error(t('agent.templates.saveFailed', 'Failed to save template'));
+        }
+      })();
+    },
+    [content, createTemplate, tenantId, t]
+  );
+}
+
 const ExecutionSummaryPanel: React.FC<{
   summary: ReturnType<typeof normalizeExecutionSummary>;
 }> = ({ summary }) => {
+  const { t } = useTranslation();
   const countFormatter = useLocaleNumberFormat();
   if (!summary) {
     return null;
@@ -474,31 +507,43 @@ const ExecutionSummaryPanel: React.FC<{
   return (
     <div className="mb-3 flex flex-wrap gap-2">
       {summary.stepCount > 0 ? (
-        <SummaryPill label="Steps" value={formatCount(summary.stepCount, countFormatter)} />
+        <SummaryPill
+          label={t('agent.messageBubble.pill.steps', 'Steps')}
+          value={formatCount(summary.stepCount, countFormatter)}
+        />
       ) : null}
       {taskSummary ? (
         <SummaryPill
-          label="Tasks"
+          label={t('agent.messageBubble.pill.tasks', 'Tasks')}
           value={`${formatCount(taskSummary.completed, countFormatter)}/${formatCount(taskSummary.total, countFormatter)}`}
         />
       ) : null}
       {taskSummary && taskSummary.remaining > 0 ? (
-        <SummaryPill label="Remaining" value={formatCount(taskSummary.remaining, countFormatter)} />
+        <SummaryPill
+          label={t('agent.messageBubble.pill.remaining', 'Remaining')}
+          value={formatCount(taskSummary.remaining, countFormatter)}
+        />
       ) : null}
       {summary.artifactCount > 0 ? (
-        <SummaryPill label="Artifacts" value={formatCount(summary.artifactCount, countFormatter)} />
+        <SummaryPill
+          label={t('agent.messageBubble.pill.artifacts', 'Artifacts')}
+          value={formatCount(summary.artifactCount, countFormatter)}
+        />
       ) : null}
       {summary.callCount > 0 ? (
-        <SummaryPill label="LLM calls" value={formatCount(summary.callCount, countFormatter)} />
+        <SummaryPill
+          label={t('agent.messageBubble.pill.llmCalls', 'LLM calls')}
+          value={formatCount(summary.callCount, countFormatter)}
+        />
       ) : null}
       {summary.totalTokens.total > 0 ? (
         <SummaryPill
-          label="Tokens"
+          label={t('agent.messageBubble.pill.tokens', 'Tokens')}
           value={formatCount(summary.totalTokens.total, countFormatter)}
         />
       ) : null}
       {summary.totalCost > 0 ? (
-        <SummaryPill label="Cost" value={summary.totalCostFormatted} />
+        <SummaryPill label={t('agent.messageBubble.pill.cost', 'Cost')} value={summary.totalCostFormatted} />
       ) : null}
     </div>
   );
@@ -615,9 +660,10 @@ const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | unde
 
 // Format tool output for display
 const formatToolOutput = (
-  output: unknown
+  output: unknown,
+  noOutputLabel: string
 ): { type: 'text' | 'json' | 'error'; content: string } => {
-  if (!output) return { type: 'text', content: 'No output' };
+  if (!output) return { type: 'text', content: noOutputLabel };
 
   if (typeof output === 'string') {
     if (output.toLowerCase().includes('error:') || output.toLowerCase().includes('failed')) {
@@ -970,6 +1016,7 @@ const ASSISTANT_COMPONENTS: Components = {
 const AssistantMessage: React.FC<AssistantMessageProps> = memo(
   ({ content, timestamp, metadata, artifacts, isStreaming, isPinned, onPin, onReply }) => {
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+    const handleSaveTemplate = useSaveTemplate(content || '');
     const markdownContent = useMemo(() => linkifySandboxPaths(content), [content]);
     const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(markdownContent);
     const executionSummary = normalizeExecutionSummary(metadata?.executionSummary);
@@ -1029,9 +1076,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
             onClose={() => {
               setShowSaveTemplate(false);
             }}
-            onSave={() => {
-              setShowSaveTemplate(false);
-            }}
+            onSave={handleSaveTemplate}
           />
         )}
       </div>
@@ -1092,6 +1137,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content, timestamp }) => {
             onClick={() => {
               setExpanded(!expanded);
             }}
+            aria-expanded={expanded}
             className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -1161,11 +1207,12 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
             onClick={() => {
               setExpanded(!expanded);
             }}
+            aria-expanded={expanded}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <span className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">
-                {event.toolName || 'Unknown Tool'}
+                {event.toolName || t('agent.messageBubble.unknownTool', 'Unknown Tool')}
               </span>
               <span
                 className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor}`}
@@ -1217,7 +1264,10 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
                     {t('agent.messageBubble.output', 'Output')}
                   </p>
                   {(() => {
-                    const formatted = formatToolOutput(observeEvent.toolOutput);
+                    const formatted = formatToolOutput(
+                      observeEvent.toolOutput,
+                      t('agent.messageBubble.noOutput', 'No output')
+                    );
                     if (formatted.type === 'error') {
                       return (
                         <div className="rounded-lg p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
@@ -1282,6 +1332,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
             onClick={() => {
               setExpanded(!expanded);
             }}
+            aria-expanded={expanded}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <div className="flex items-center gap-2">
@@ -1330,6 +1381,7 @@ WorkPlan.displayName = 'MessageBubble.WorkPlan';
 const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply }) => {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const fullText = 'fullText' in event ? (event.fullText as string) : '';
+  const handleSaveTemplate = useSaveTemplate(fullText);
   const markdownContent = useMemo(() => linkifySandboxPaths(fullText), [fullText]);
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(markdownContent);
   const executionSummary = normalizeExecutionSummary(event.metadata?.executionSummary);
@@ -1390,9 +1442,7 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
             onClose={() => {
               setShowSaveTemplate(false);
             }}
-            onSave={() => {
-              setShowSaveTemplate(false);
-            }}
+            onSave={handleSaveTemplate}
           />
         ) : null}
       </div>
@@ -1553,12 +1603,6 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
     }
   };
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${String(bytes)} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   const isImage = event.category === 'image';
   const url = artifactUrl || artifactPreviewUrl;
 
@@ -1634,7 +1678,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                   className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''}
                 />
                 {refreshingUrl
-                  ? t('agent.messageBubble.refreshing', 'Refreshing...')
+                  ? t('agent.messageBubble.refreshing', 'Refreshing…')
                   : t('agent.messageBubble.refreshLink', 'Refresh Link')}
               </button>
             </div>
@@ -1649,7 +1693,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
               </span>
             </div>
             <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
-              {formatSize(event.sizeBytes)}
+              {formatBytesSize(event.sizeBytes)}
             </span>
             {url && (
               <a
@@ -1678,7 +1722,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             {!url && artifactStatus === 'uploading' && (
               <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
                 <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-                {t('agent.messageBubble.uploading', 'Uploading...')}
+                {t('agent.messageBubble.uploading', 'Uploading…')}
               </span>
             )}
             {!url && artifactStatus === 'error' && (
@@ -1702,7 +1746,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                   className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''}
                 />
                 {refreshingUrl
-                  ? t('agent.messageBubble.refreshing', 'Refreshing...')
+                  ? t('agent.messageBubble.refreshing', 'Refreshing…')
                   : t('agent.messageBubble.refreshLink', 'Refresh')}
               </button>
             )}
@@ -1740,6 +1784,7 @@ const getContent = (event: TimelineEvent): string => {
 
 const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
   ({ event, isStreaming, allEvents, isPinned, onPin, onReply }) => {
+    const { t } = useTranslation();
     switch (event.type) {
       case 'user_message': {
         const rawContent = getContent(event);
@@ -1971,7 +2016,13 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             requestId={e.requestId || permissionData?.request_id || ''}
             permissionData={permissionData}
             isAnswered={e.answered === true}
-            answeredValue={e.granted !== undefined ? (e.granted ? 'Granted' : 'Denied') : undefined}
+            answeredValue={
+              e.granted !== undefined
+                ? e.granted
+                  ? t('agent.messageBubble.granted', 'Granted')
+                  : t('agent.messageBubble.denied', 'Denied')
+                : undefined
+            }
             expiresAt={e.expiresAt}
             createdAt={e.createdAt || String(event.timestamp)}
           />
@@ -1989,7 +2040,11 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             hitlType="permission"
             requestId={e.requestId || ''}
             isAnswered={true}
-            answeredValue={e.granted ? 'Granted' : 'Denied'}
+            answeredValue={
+              e.granted
+                ? t('agent.messageBubble.granted', 'Granted')
+                : t('agent.messageBubble.denied', 'Denied')
+            }
             createdAt={e.createdAt || String(event.timestamp)}
           />
         );
@@ -2010,7 +2065,13 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             requestId={e.requestId || permissionData?.request_id || ''}
             permissionData={permissionData}
             isAnswered={e.answered === true}
-            answeredValue={e.granted !== undefined ? (e.granted ? 'Granted' : 'Denied') : undefined}
+            answeredValue={
+              e.granted !== undefined
+                ? e.granted
+                  ? t('agent.messageBubble.granted', 'Granted')
+                  : t('agent.messageBubble.denied', 'Denied')
+                : undefined
+            }
             expiresAt={e.expiresAt}
             createdAt={e.createdAt || String(event.timestamp)}
           />
@@ -2028,7 +2089,11 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             hitlType="permission"
             requestId={e.requestId || ''}
             isAnswered={true}
-            answeredValue={e.granted ? 'Granted' : 'Denied'}
+            answeredValue={
+              e.granted
+                ? t('agent.messageBubble.granted', 'Granted')
+                : t('agent.messageBubble.denied', 'Denied')
+            }
             createdAt={e.createdAt || String(event.timestamp)}
           />
         );

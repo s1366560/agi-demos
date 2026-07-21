@@ -51,6 +51,11 @@ export function buildSessionNarrative(items: AgentTimelineItem[]): SessionNarrat
 
   const flushToolItems = () => {
     if (!toolItems.length) return;
+    if (!toolItems.some((item) => item.type === 'act' || item.type === 'observe')) {
+      narrative.push(...toolItems.map((item) => ({ kind: 'item' as const, id: item.id, item })));
+      toolItems = [];
+      return;
+    }
     narrative.push({
       kind: 'tool_group',
       id: `tool-group:${toolItems[0].id}:${toolItems[toolItems.length - 1].id}`,
@@ -62,7 +67,7 @@ export function buildSessionNarrative(items: AgentTimelineItem[]): SessionNarrat
   };
 
   items.forEach((item) => {
-    if (item.type === 'act' || item.type === 'observe') {
+    if (item.type === 'thought' || item.type === 'act' || item.type === 'observe') {
       toolItems.push(item);
       return;
     }

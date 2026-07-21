@@ -87,20 +87,28 @@ export const ChartComponents: React.FC<ChartComponentsProps> = ({
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       {/* Memory Growth Chart */}
       <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
           {t('tenant.analytics.creation_trend')}
-        </h3>
-        <div className="h-80 w-full relative">
+        </h2>
+        <div
+          className="h-80 w-full relative"
+          role="img"
+          aria-label={t('tenant.analytics.creation_trend')}
+        >
           <Line options={lineOptions} data={memoryGrowthData} />
         </div>
       </div>
 
       {/* Storage Distribution */}
       <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
           {t('tenant.analytics.storage_distribution')}
-        </h3>
-        <div className="h-80 w-full relative flex items-center justify-center">
+        </h2>
+        <div
+          className="h-80 w-full relative flex items-center justify-center"
+          role="img"
+          aria-label={t('tenant.analytics.storage_distribution')}
+        >
           {projectsLength > 0 ? (
             <Pie options={pieOptions} data={projectStorageData} />
           ) : (

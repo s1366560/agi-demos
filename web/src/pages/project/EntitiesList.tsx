@@ -52,6 +52,8 @@ import { VirtualGrid } from '../../components/common';
 import { getEntityTypeColor } from '../../components/graph';
 import { graphService } from '../../services/graphService';
 
+import { logger } from '../../utils/logger';
+
 import type {
   EntitiesListRootProps,
   EntitiesListHeaderProps,
@@ -61,36 +63,11 @@ import type {
   EntitiesListPaginationProps,
   EntitiesListDetailProps,
   EntitiesListCompound,
+  Entity,
+  EntityType,
+  Relationship,
   SortOption,
 } from './entities/types';
-
-interface Entity {
-  uuid: string;
-  name: string;
-  entity_type: string;
-  summary: string;
-  created_at?: string | undefined;
-}
-
-interface EntityType {
-  entity_type: string;
-  count: number;
-}
-
-interface Relationship {
-  edge_id: string;
-  relation_type: string;
-  direction: string;
-  fact: string;
-  score: number;
-  created_at?: string | undefined;
-  related_entity: {
-    uuid: string;
-    name: string;
-    entity_type: string;
-    summary: string;
-  };
-}
 
 const ENTITY_LIST_HEIGHT = 600;
 const ENTITY_CARD_ESTIMATE_SIZE = 116;
@@ -116,7 +93,7 @@ const EntityListItem: React.FC<EntityListItemProps> = memo(
         onClick={() => {
           onClick(entity);
         }}
-        className={`group w-full rounded-md border bg-white p-4 text-left transition-[background-color,border-color,box-shadow] hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-950/10 dark:bg-surface-dark dark:hover:bg-slate-900/60 dark:focus:ring-slate-50/10 ${
+        className={`group w-full rounded-md border bg-white p-4 text-left transition-[background-color,border-color,box-shadow] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/10 dark:bg-surface-dark dark:hover:bg-slate-900/60 dark:focus-visible:ring-slate-50/10 ${
           isSelected
             ? 'border-primary shadow-[0_0_0_1px_rgba(30,63,174,0.16)] dark:border-primary-light'
             : 'border-slate-200 dark:border-slate-800'
@@ -140,7 +117,7 @@ const EntityListItem: React.FC<EntityListItemProps> = memo(
           </span>
         </div>
         <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <span className="font-mono">{entity.uuid.slice(0, 8)}...</span>
+          <span className="font-mono">{entity.uuid.slice(0, 8)}…</span>
           <span>
             {createdLabel}: {entity.created_at ? formatDateOnly(entity.created_at) : unknownLabel}
           </span>
@@ -260,6 +237,8 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
     const [loading, setLoading] = useState(shouldLoadEntities);
     const [loadingTypes, setLoadingTypes] = useState(shouldLoadEntityTypes);
     const [error, setError] = useState<string | null>(null);
+    const [relationshipsLoading, setRelationshipsLoading] = useState(false);
+    const [relationshipsError, setRelationshipsError] = useState<string | null>(null);
     const [page, setPage] = useState(0);
     const [totalCount, setTotalCount] = useState(0);
 
@@ -301,7 +280,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
         setEntityTypes(result.entity_types);
       } catch (err) {
         if (entityTypesRequestRef.current !== requestId) return;
-        console.error('Failed to load entity types:', err);
+        logger.error('[EntitiesList] Failed to load entity types:', err);
       } finally {
         if (entityTypesRequestRef.current === requestId) {
           setLoadingTypes(false);
@@ -328,7 +307,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
         setTotalCount(result.total);
       } catch (err) {
         if (entitiesRequestRef.current !== requestId) return;
-        console.error('Failed to load entities:', err);
+        logger.error('[EntitiesList] Failed to load entities:', err);
         setError(t('project.graph.entities.error'));
       } finally {
         if (entitiesRequestRef.current === requestId) {
@@ -341,6 +320,8 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
     const loadRelationships = async (entityUuid: string) => {
       const requestId = relationshipsRequestRef.current + 1;
       relationshipsRequestRef.current = requestId;
+      setRelationshipsLoading(true);
+      setRelationshipsError(null);
       try {
         const result = await graphService.getEntityRelationships(entityUuid, { limit: 50 });
         const mappedRelationships: Relationship[] = result.relationships.map((rel, index) => ({
@@ -356,7 +337,12 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
         setRelationships(mappedRelationships);
       } catch (err) {
         if (relationshipsRequestRef.current !== requestId) return;
-        console.error('Failed to load relationships:', err);
+        logger.error('[EntitiesList] Failed to load relationships:', err);
+        setRelationshipsError(t('project.graph.entities.detail.relationships_error'));
+      } finally {
+        if (relationshipsRequestRef.current === requestId) {
+          setRelationshipsLoading(false);
+        }
       }
     };
 
@@ -485,7 +471,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
               type="button"
               onClick={handleRefresh}
               disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950/20 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus:ring-slate-50/20"
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/20 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/20"
             >
               {loading ? (
                 <Loader2
@@ -509,39 +495,16 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
           >
             <div className="flex flex-col gap-3 p-3">
               <div className="flex min-w-0 flex-col gap-2">
-                <label
-                  htmlFor="entity-type-filter"
+                <span
+                  id="entity-type-filter-label"
                   className="text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
                   {t('project.graph.entities.filter.type')}
-                </label>
-                <select
-                  id="entity-type-filter"
-                  value={entityTypeFilter}
-                  onChange={(e) => {
-                    setEntityTypeFilter(e.target.value);
-                    setPage(0);
-                  }}
-                  disabled={loadingTypes}
-                  className="sr-only"
-                >
-                  <option value="">
-                    {t('project.graph.entities.filter.all_types')} ({totalCount})
-                  </option>
-                  {loadingTypes ? (
-                    <option disabled>{t('common.loading', 'Loading...')}</option>
-                  ) : (
-                    entityTypes.map((et) => (
-                      <option key={et.entity_type} value={et.entity_type}>
-                        {et.entity_type} ({et.count})
-                      </option>
-                    ))
-                  )}
-                </select>
+                </span>
                 <div
                   className="flex w-full gap-1 overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950/30"
                   role="group"
-                  aria-label={t('project.graph.entities.filter.type_options')}
+                  aria-labelledby="entity-type-filter-label"
                 >
                   {entityTypeOptions.map((option) => {
                     const isActive = entityTypeFilter === option.entity_type;
@@ -555,7 +518,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                           setPage(0);
                         }}
                         disabled={loadingTypes}
-                        className={`inline-flex h-8 shrink-0 items-center gap-2 rounded px-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-slate-50/10 ${
+                        className={`inline-flex h-8 shrink-0 items-center gap-2 rounded px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-slate-50/10 ${
                           isActive
                             ? 'bg-white text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.10)] dark:bg-slate-800 dark:text-slate-50 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]'
                             : 'text-slate-500 hover:bg-white hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100'
@@ -587,6 +550,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                   <input
                     type="text"
                     placeholder={t('project.graph.entities.filter.search_placeholder')}
+                    aria-label={t('project.graph.entities.filter.search_placeholder')}
                     value={searchInput}
                     onChange={(e) => {
                       setSearchInput(e.target.value);
@@ -642,7 +606,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                   <button
                     type="button"
                     onClick={handleClearFilters}
-                    className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-950/10 dark:text-slate-300 dark:hover:text-slate-50 dark:focus:ring-slate-50/10"
+                    className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/10 dark:text-slate-300 dark:hover:text-slate-50 dark:focus-visible:ring-slate-50/10"
                   >
                     {t('project.graph.entities.filter.clear')}
                   </button>
@@ -657,7 +621,11 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
           {includeList && (
             <div className="min-w-0 space-y-4">
               {loading ? (
-                <div className="space-y-3" aria-label={t('project.graph.entities.loading')}>
+                <div
+                  className="space-y-3"
+                  role="status"
+                  aria-label={t('project.graph.entities.loading')}
+                >
                   {Array.from({ length: 5 }, (_, index) => (
                     <div
                       key={`entity-skeleton-${String(index)}`}
@@ -685,7 +653,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                   <button
                     type="button"
                     onClick={handleRefresh}
-                    className="mt-5 inline-flex h-9 items-center rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus:ring-slate-50/20"
+                    className="mt-5 inline-flex h-9 items-center rounded-md bg-slate-950 px-4 text-sm font-medium text-slate-50 transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/20 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus-visible:ring-slate-50/20"
                   >
                     {t('common.actions.retry', 'Retry')}
                   </button>
@@ -729,7 +697,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                           <button
                             type="button"
                             onClick={handleClearFilters}
-                            className="mt-5 inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-950 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-950/10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-50 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
+                            className="mt-5 inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-950 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-50 dark:hover:bg-slate-800 dark:focus-visible:ring-slate-50/10"
                           >
                             {t('project.graph.entities.filter.clear')}
                           </button>
@@ -803,7 +771,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                       }}
                       aria-label={t('project.graph.entities.detail.close', 'Close entity details')}
                       title={t('project.graph.entities.detail.close', 'Close entity details')}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-950/10 dark:hover:bg-slate-800 dark:hover:text-slate-50 dark:focus:ring-slate-50/10"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus:ring-slate-950/10 dark:hover:bg-slate-800 dark:hover:text-slate-50 dark:focus-visible:ring-slate-50/10"
                     >
                       <X size={16} aria-hidden="true" />
                     </button>
@@ -863,7 +831,35 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                           count: relationships.length,
                         })}
                       </h3>
-                      {relationships.length > 0 ? (
+                      {relationshipsLoading ? (
+                        <p
+                          className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
+                          role="status"
+                        >
+                          <Loader2
+                            size={16}
+                            className="animate-spin motion-reduce:animate-none"
+                            aria-hidden="true"
+                          />
+                          {t('common.loading', 'Loading…')}
+                        </p>
+                      ) : relationshipsError ? (
+                        <div className="flex items-center gap-3 text-sm">
+                          <p className="flex items-center gap-2 text-status-text-error dark:text-status-text-error-dark">
+                            <AlertCircle size={16} aria-hidden="true" />
+                            {relationshipsError}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void loadRelationships(selectedEntity.uuid);
+                            }}
+                            className="font-medium text-slate-600 transition-colors hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/10 dark:text-slate-300 dark:hover:text-slate-50 dark:focus-visible:ring-slate-50/10"
+                          >
+                            {t('common.actions.retry', 'Retry')}
+                          </button>
+                        </div>
+                      ) : relationships.length > 0 ? (
                         <div className="space-y-2 max-h-96 overflow-y-auto">
                           {relationships.map((rel) => (
                             <div

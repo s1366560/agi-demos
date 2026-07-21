@@ -40,7 +40,7 @@ describe('MentionInput', () => {
     render(<MentionInput members={members} agents={agents} onSend={onSend} />);
 
     const input = screen.getByLabelText('Chat message input');
-    expect(input).toHaveAttribute('placeholder', 'Type a message... (Use @ to mention)');
+    expect(input).toHaveAttribute('placeholder', 'Type a message… (Use @ to mention)');
 
     fireEvent.change(input, { target: { value: 'Hello team' } });
     fireEvent.keyDown(input, { key: 'Enter' });

@@ -19,6 +19,7 @@ import type {
   AutomationToggleInput,
   AutomationUpdateInput,
   ConversationMessagesResponse,
+  ComposerContextItem,
   ChangeSnapshot,
   CreateTaskSessionRequest,
   CreateTaskSessionResponse,
@@ -63,6 +64,9 @@ import type {
   WorkspaceMessage,
   WorkspaceContextResponse,
   WorkspaceContextSwitchOutcome,
+  WorkspaceAgentPolicy,
+  WorkspaceAgentPolicyMutationInput,
+  WorkspaceToolGrant,
   WorkspaceAgentBinding,
   WorkspaceAuthorityCollection,
   WorkspaceMemberSummary,
@@ -502,6 +506,81 @@ export class DesktopApiClient {
     return requireCreateTaskSessionResponse(payload, tenantId, projectId, input);
   }
 
+  async getWorkspaceAgentPolicy(
+    projectId: string,
+    workspaceId: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceAgentPolicy> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const payload = await this.request<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+        requireValue(projectId, 'project id'),
+      )}/workspaces/${encodeURIComponent(
+        requireValue(workspaceId, 'workspace id'),
+      )}/agent-policy`,
+      { signal },
+    );
+    return normalizeWorkspaceAgentPolicy(payload);
+  }
+
+  async updateWorkspaceAgentPolicy(
+    input: WorkspaceAgentPolicyMutationInput,
+  ): Promise<WorkspaceAgentPolicy> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const payload = await this.request<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+        requireValue(input.projectId, 'project id'),
+      )}/workspaces/${encodeURIComponent(
+        requireValue(input.workspaceId, 'workspace id'),
+      )}/agent-policy`,
+      {
+        method: 'PATCH',
+        body: {
+          expected_revision: input.expected_revision,
+          capability_mode: input.capabilityMode,
+          route: input.route,
+          reasoning_effort: input.reasoning_effort,
+          permission_mode: input.permission_mode,
+        },
+      },
+    );
+    return normalizeWorkspaceAgentPolicy(payload);
+  }
+
+  async listWorkspaceToolGrants(
+    projectId: string,
+    workspaceId: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceToolGrant[]> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const payload = await this.request<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+        requireValue(projectId, 'project id'),
+      )}/workspaces/${encodeURIComponent(
+        requireValue(workspaceId, 'workspace id'),
+      )}/tool-grants`,
+      { signal },
+    );
+    return readArray<unknown>(payload, ['items']).map(normalizeWorkspaceToolGrant);
+  }
+
+  async revokeWorkspaceToolGrant(
+    projectId: string,
+    workspaceId: string,
+    grantId: string,
+  ): Promise<WorkspaceToolGrant> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    const payload = await this.request<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+        requireValue(projectId, 'project id'),
+      )}/workspaces/${encodeURIComponent(
+        requireValue(workspaceId, 'workspace id'),
+      )}/tool-grants/${encodeURIComponent(requireValue(grantId, 'grant id'))}`,
+      { method: 'DELETE' },
+    );
+    return normalizeWorkspaceToolGrant(payload);
+  }
+
   async createWorkspaceForProject(
     projectId: string,
     name: string,
@@ -545,7 +624,11 @@ export class DesktopApiClient {
     return readArray<WorkspaceMessage>(payload, ['messages', 'items', 'data']);
   }
 
-  async sendMessage(content: string, parentMessageId?: string): Promise<WorkspaceMessage> {
+  async sendMessage(
+    content: string,
+    parentMessageId?: string,
+    contextItems: ComposerContextItem[] = [],
+  ): Promise<WorkspaceMessage> {
     const path = this.workspacePath('/messages');
     return this.request<WorkspaceMessage>(path, {
       method: 'POST',
@@ -554,6 +637,7 @@ export class DesktopApiClient {
         sender_type: 'human',
         parent_message_id: parentMessageId || undefined,
         mentions: [],
+        context_items: contextItems,
       },
     });
   }
@@ -829,6 +913,7 @@ export class DesktopApiClient {
           idempotency_key: input.idempotencyKey,
           delivery: input.delivery,
           references: input.references,
+          context_items: input.contextItems,
         },
       },
     );
@@ -1604,17 +1689,22 @@ function normalizeWorkspaceSummary(
   };
 }
 
-const TASK_SESSION_RESPONSE_KEYS = new Set([
+const TASK_SESSION_REQUIRED_RESPONSE_KEYS = new Set([
   'replayed',
   'workspace',
   'conversation',
   'initial_message',
 ]);
+const TASK_SESSION_OPTIONAL_RESPONSE_KEYS = new Set(['policy', 'capability_version']);
 const TASK_SESSION_CAPABILITY_KEYS = new Set([
   'schema_version',
   'atomic_creation',
   'initial_conversation_mode',
   'initial_plan_mode',
+]);
+const TASK_SESSION_CAPABILITY_OPTIONAL_KEYS = new Set([
+  'workspace_agent_policy',
+  'capability_version',
 ]);
 
 function requireCreateTaskSessionResponse(
@@ -1625,7 +1715,11 @@ function requireCreateTaskSessionResponse(
 ): CreateTaskSessionResponse {
   if (
     !isRecord(payload) ||
-    !hasExactKeys(payload, TASK_SESSION_RESPONSE_KEYS) ||
+    !hasRequiredAndOptionalKeys(
+      payload,
+      TASK_SESSION_REQUIRED_RESPONSE_KEYS,
+      TASK_SESSION_OPTIONAL_RESPONSE_KEYS,
+    ) ||
     typeof payload.replayed !== 'boolean'
   ) {
     throw invalidTaskSessionResponse(payload);
@@ -1690,13 +1784,23 @@ function requireCreateTaskSessionResponse(
       metadata: initialMessage.metadata,
       created_at: initialMessage.created_at,
     },
+    ...(payload.policy === undefined
+      ? {}
+      : { policy: normalizeWorkspaceAgentPolicy(payload.policy) }),
+    ...(typeof payload.capability_version === 'string'
+      ? { capability_version: payload.capability_version }
+      : {}),
   };
 }
 
 function isAtomicTaskSessionCapability(payload: unknown): boolean {
   return (
     isRecord(payload) &&
-    hasExactKeys(payload, TASK_SESSION_CAPABILITY_KEYS) &&
+    hasRequiredAndOptionalKeys(
+      payload,
+      TASK_SESSION_CAPABILITY_KEYS,
+      TASK_SESSION_CAPABILITY_OPTIONAL_KEYS,
+    ) &&
     payload.schema_version === 1 &&
     payload.atomic_creation === true &&
     payload.initial_conversation_mode === 'workspace' &&
@@ -1952,6 +2056,18 @@ function hasExactKeys(record: Record<string, unknown>, expected: ReadonlySet<str
   return keys.length === expected.size && keys.every((key) => expected.has(key));
 }
 
+function hasRequiredAndOptionalKeys(
+  record: Record<string, unknown>,
+  required: ReadonlySet<string>,
+  optional: ReadonlySet<string>,
+): boolean {
+  const keys = Object.keys(record);
+  return (
+    [...required].every((key) => Object.hasOwn(record, key)) &&
+    keys.every((key) => required.has(key) || optional.has(key))
+  );
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -2150,6 +2266,79 @@ function normalizeLlmProviderRoutingPolicy(payload: unknown): LlmProviderRouting
       return normalized;
     }),
     updated_at: updatedAt,
+  };
+}
+
+function normalizeWorkspaceAgentPolicy(payload: unknown): WorkspaceAgentPolicy {
+  const routing = normalizeLlmProviderRoutingPolicy(payload);
+  if (!isRecord(payload)) {
+    throw new DesktopApiError('Invalid workspace agent policy response', 502, payload);
+  }
+  const reasoningEffort = payload.reasoning_effort;
+  const permissionMode = payload.permission_mode;
+  const capabilityVersion = payload.capability_version;
+  if (
+    (reasoningEffort !== 'low' && reasoningEffort !== 'medium' && reasoningEffort !== 'high') ||
+    (permissionMode !== 'ask' &&
+      permissionMode !== 'automatic' &&
+      permissionMode !== 'full_access') ||
+    typeof capabilityVersion !== 'string' ||
+    !capabilityVersion.trim()
+  ) {
+    throw new DesktopApiError('Invalid workspace agent policy response', 502, payload);
+  }
+  return {
+    ...routing,
+    reasoning_effort: reasoningEffort,
+    permission_mode: permissionMode,
+    capability_version: capabilityVersion,
+  };
+}
+
+function normalizeWorkspaceToolGrant(payload: unknown): WorkspaceToolGrant {
+  if (!isRecord(payload)) {
+    throw new DesktopApiError('Invalid workspace tool grant response', 502, payload);
+  }
+  const id = readCompatString(payload, 'id');
+  const workspaceId = readCompatString(payload, 'workspace_id', 'workspaceId');
+  const canonicalToolName = readCompatString(
+    payload,
+    'canonical_tool_name',
+    'canonicalToolName',
+  );
+  const sourceHitlRequestId = readCompatString(
+    payload,
+    'source_hitl_request_id',
+    'sourceHitlRequestId',
+  );
+  const revision = readCompatInteger(payload, 'revision');
+  const createdAt = readCompatString(payload, 'created_at', 'createdAt');
+  if (
+    !id ||
+    !workspaceId ||
+    !canonicalToolName ||
+    !sourceHitlRequestId ||
+    revision == null ||
+    revision < 1 ||
+    !createdAt
+  ) {
+    throw new DesktopApiError('Invalid workspace tool grant response', 502, payload);
+  }
+  return {
+    id,
+    workspace_id: workspaceId,
+    canonical_tool_name: canonicalToolName,
+    source_hitl_request_id: sourceHitlRequestId,
+    revision,
+    created_at: createdAt,
+    ...(readCompatString(payload, 'created_by', 'createdBy')
+      ? { created_by: readCompatString(payload, 'created_by', 'createdBy')! }
+      : {}),
+    ...(readCompatString(payload, 'granted_by', 'grantedBy')
+      ? { granted_by: readCompatString(payload, 'granted_by', 'grantedBy')! }
+      : {}),
+    revoked_by: readCompatString(payload, 'revoked_by', 'revokedBy') || null,
+    revoked_at: readCompatString(payload, 'revoked_at', 'revokedAt') || null,
   };
 }
 

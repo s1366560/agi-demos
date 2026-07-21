@@ -309,7 +309,9 @@ class ACPRunnerInstanceModel(IdGeneratorMixin, Base):
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     current_sessions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_sessions: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     connection_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -367,7 +369,9 @@ class ACPRunnerSessionModel(IdGeneratorMixin, Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
-    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         Index("ix_acp_runner_sessions_runner", "tenant_id", "runner_id", "status"),
@@ -548,6 +552,42 @@ class WorkspaceMemberModel(Base):
         UniqueConstraint("workspace_id", "user_id", name="uq_workspace_members_workspace_user"),
         Index("ix_workspace_members_workspace_role", "workspace_id", "role"),
     )
+
+
+class WorkspaceAgentPolicyModel(Base):
+    """Versioned Workspace policy shared by Work and Code agent runs."""
+
+    __tablename__ = "workspace_agent_policies"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    roles_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    fallbacks_json: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list, nullable=False)
+    reasoning_effort: Mapped[str] = mapped_column(
+        String(16), default="medium", server_default="medium", nullable=False
+    )
+    permission_mode: Mapped[str] = mapped_column(
+        String(24), default="ask", server_default="ask", nullable=False
+    )
+    updated_by: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_workspace_agent_policies_scope", "tenant_id", "project_id"),)
 
 
 class WorkspaceAgentModel(Base):
@@ -2185,6 +2225,13 @@ class AgentTaskModel(IdGeneratorMixin, Base):
         index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    estimated_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_refs: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -2209,6 +2256,72 @@ class AgentTaskModel(IdGeneratorMixin, Base):
     )
 
     __table_args__ = (Index("ix_agent_tasks_conv_status", "conversation_id", "status"),)
+
+
+class AgentPlanVersionModel(Base):
+    """Immutable snapshot of a conversation's structured plan."""
+
+    __tablename__ = "agent_plan_versions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    tasks_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    policy_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "version", name="uq_agent_plan_versions_conv_version"),
+        Index("ix_agent_plan_versions_conversation", "conversation_id", "version"),
+    )
+
+
+class AgentPlanRunModel(Base):
+    """Run authority created by atomic plan approval."""
+
+    __tablename__ = "agent_plan_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    plan_version_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("agent_plan_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="queued", nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    permission_profile: Mapped[str] = mapped_column(String(30), nullable=False)
+    authorization_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (Index("ix_agent_plan_runs_conversation", "conversation_id", "created_at"),)
 
 
 class MCPAppModel(Base):
@@ -2546,9 +2659,7 @@ class CronOperationModel(Base):
             "job_id",
             "scheduled_for",
             unique=True,
-            postgresql_where=text(
-                "operation_kind = 'execute_run' AND trigger_type = 'scheduled'"
-            ),
+            postgresql_where=text("operation_kind = 'execute_run' AND trigger_type = 'scheduled'"),
         ),
         Index(
             "ix_agistack_cron_operations_claim",
@@ -3111,7 +3222,9 @@ class RetrievalStoreModel(Base):
     tenant_id: Mapped[str] = mapped_column(
         String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    engine_type: Mapped[str] = mapped_column(String(50), nullable=False, default="memstack_pgvector")
+    engine_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="memstack_pgvector"
+    )
     connection_config_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     index_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="disconnected")
@@ -3619,6 +3732,12 @@ class TrustPolicyModel(Base):
     action_type: Mapped[str] = mapped_column(String(50), nullable=False)
     granted_by: Mapped[str] = mapped_column(String(36), nullable=False)
     grant_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    scope: Mapped[str] = mapped_column(String(30), default="agent", nullable=False)
+    canonical_tool_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_hitl_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    revoked_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

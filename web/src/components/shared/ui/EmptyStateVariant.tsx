@@ -247,7 +247,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
         )}
 
         {/* Title */}
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">{title}</h1>
+        <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">{title}</h2>
 
         {/* Subtitle */}
         {subtitle && (
@@ -284,6 +284,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
                   hover:shadow-md
                   transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ease-out
                   text-left
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
                 `}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -299,10 +300,11 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
                   </div>
                   <ArrowRight
                     size={14}
+                    aria-hidden="true"
                     className="
                       text-slate-300 dark:text-slate-600
-                      opacity-0 group-hover:opacity-100
-                      group-hover:translate-x-0.5
+                      opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100
+                      group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5
                       transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
                     "
                   />

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
-import { Alert, Button, Collapse, Empty, Spin, Space, Tag, Typography, message } from 'antd';
+import { Alert, Button, Collapse, Empty, Spin, Space, Tag, Typography } from 'antd';
 import { ArrowLeft, Package, RefreshCw } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
@@ -163,7 +163,6 @@ const renderTags = (items: string[] | undefined, emptyLabel: string): React.Reac
 
 export const PluginDetail: React.FC = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const { tenantId: urlTenantId, pluginName: encodedPluginName } = useParams<{
     tenantId?: string | undefined;
     pluginName?: string | undefined;
@@ -178,6 +177,7 @@ export const PluginDetail: React.FC = () => {
   const [diagnostics, setDiagnostics] = useState<PluginDiagnostic[]>([]);
   const [schema, setSchema] = useState<PluginConfigSchema | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [schemaError, setSchemaError] = useState<string | null>(null);
 
   const backPath = useMemo(() => {
@@ -189,6 +189,7 @@ export const PluginDetail: React.FC = () => {
     if (!tenantId || !pluginName) return;
 
     setLoading(true);
+    setLoadError(null);
     setSchemaError(null);
     try {
       const pluginList = await channelService.listTenantPlugins(tenantId);
@@ -221,7 +222,7 @@ export const PluginDetail: React.FC = () => {
         setSchema(null);
       }
     } catch (error) {
-      message.error(
+      setLoadError(
         error instanceof Error ? error.message : t('tenant.pluginHub.messages.loadPluginsFailed')
       );
       setPlugin(null);
@@ -278,17 +279,14 @@ export const PluginDetail: React.FC = () => {
               <Package size={20} className="text-slate-700 dark:text-slate-200" />
             </div>
             <div className="min-w-0">
-              <Button
-                type="link"
-                className="mb-1 h-auto p-0 text-slate-500"
-                icon={<ArrowLeft size={16} />}
-                onClick={() => {
-                  void navigate(backPath);
-                }}
+              <Link
+                to={backPath}
+                className="mb-1 inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
+                <ArrowLeft size={16} aria-hidden="true" />
                 {t('tenant.pluginHub.pluginDetail.back')}
-              </Button>
-              <Title level={4} style={{ margin: 0 }} className="break-all">
+              </Link>
+              <Title level={1} style={{ margin: 0 }} className="break-all">
                 {pluginName}
               </Title>
               <Text type="secondary">{t('tenant.pluginHub.pluginDetail.subtitle')}</Text>
@@ -309,7 +307,25 @@ export const PluginDetail: React.FC = () => {
       <Spin spinning={loading}>
         {!plugin ? (
           <section className="rounded-lg border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-surface-dark">
-            <Empty description={t('tenant.pluginHub.pluginDetail.notFound')} />
+            {loadError && !loading ? (
+              <Alert
+                type="error"
+                showIcon
+                title={t('tenant.pluginHub.messages.loadPluginsFailed')}
+                description={loadError}
+                action={
+                  <Button
+                    onClick={() => {
+                      void loadPlugin();
+                    }}
+                  >
+                    {t('common.retry')}
+                  </Button>
+                }
+              />
+            ) : (
+              !loading && <Empty description={t('tenant.pluginHub.pluginDetail.notFound')} />
+            )}
           </section>
         ) : (
           <div className="space-y-4">

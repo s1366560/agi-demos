@@ -267,28 +267,6 @@ describe('EnhancedSearch Compound Component', () => {
     });
   });
 
-  describe('History Sub-Component', () => {
-    it('should render history component', () => {
-      render(
-        <EnhancedSearch>
-          <EnhancedSearch.History />
-        </EnhancedSearch>
-      );
-
-      expect(screen.getByTestId('search-history')).toBeInTheDocument();
-    });
-
-    it('should not render history when excluded', () => {
-      render(
-        <EnhancedSearch>
-          <EnhancedSearch.Form />
-        </EnhancedSearch>
-      );
-
-      expect(screen.queryByTestId('search-history')).not.toBeInTheDocument();
-    });
-  });
-
   describe('Multiple Sub-Components Together', () => {
     it('should render all sub-components when included', () => {
       render(
@@ -297,7 +275,6 @@ describe('EnhancedSearch Compound Component', () => {
           <EnhancedSearch.Config />
           <EnhancedSearch.Results />
           <EnhancedSearch.Graph />
-          <EnhancedSearch.History />
         </EnhancedSearch>
       );
 
@@ -305,7 +282,6 @@ describe('EnhancedSearch Compound Component', () => {
       expect(screen.getByTestId('search-config')).toBeInTheDocument();
       expect(screen.getByTestId('search-results')).toBeInTheDocument();
       expect(screen.getByTestId('cytoscape-graph')).toBeInTheDocument();
-      expect(screen.getByTestId('search-history')).toBeInTheDocument();
     });
   });
 
@@ -345,7 +321,6 @@ describe('EnhancedSearch Compound Component', () => {
       expect(EnhancedSearch.Results).toBeDefined();
       expect(EnhancedSearch.Graph).toBeDefined();
       expect(EnhancedSearch.Error).toBeDefined();
-      expect(EnhancedSearch.History).toBeDefined();
     });
 
     it('should use Root component as alias', () => {

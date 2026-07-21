@@ -23,23 +23,17 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
+import { logger } from '@/utils/logger';
 
+import { LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
+
+import { formatStorage } from '../../hooks/useDateFormatter';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
-import type { TFunction } from 'i18next';
 
-// Hoist formatStorage outside component to avoid recreation on every render (rendering-hoist-jsx)
-const formatStorage = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-  const sizeLabel = sizes[unitIndex] ?? 'TB';
-  const value = Number.parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(1));
-  return `${String(value)} ${sizeLabel}`;
-};
+import type { TFunction } from 'i18next';
 
 const formatStorageUsagePercent = (bytes: number, maxBytes?: number | null): string => {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0%';
@@ -48,7 +42,8 @@ const formatStorageUsagePercent = (bytes: number, maxBytes?: number | null): str
     typeof maxBytes === 'number' && Number.isFinite(maxBytes) && maxBytes > 0
       ? maxBytes
       : fallbackLimit;
-  return `${String(Math.min((bytes / limit) * 100, 100))}%`;
+  const percent = Math.min((bytes / limit) * 100, 100);
+  return `${String(Math.round(percent * 10) / 10)}%`;
 };
 
 // Hoist formatTime outside component to avoid recreation on every render (rendering-hoist-jsx)
@@ -81,6 +76,7 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 const ProjectListInner: React.FC<ProjectListProps> = () => {
   const { t } = useTranslation();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
+  const message = useLazyMessage();
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const { listProjects, deleteProject, projects, isLoading, total, ownerIds } = useProjectStore(
     useShallow((state) => ({
@@ -121,6 +117,28 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
     }
   }, [listProjects, projectQueryParams, tenantId]);
 
+  // Close the row action menu on Escape or outside click
+  useEffect(() => {
+    if (!activeMenu) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveMenu(null);
+      }
+    };
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('[data-project-menu-root]')) {
+        setActiveMenu(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [activeMenu]);
+
   // Create formatTime function using translation hook
   const formatTime = createFormatTime(t);
   const visibilityFilterLabel = t('tenant.projects.filters.visibilityLabel');
@@ -154,7 +172,8 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         await listProjects(tenantId, projectQueryParams);
         setActiveMenu(null);
       } catch (error) {
-        console.error('Failed to delete project:', error);
+        logger.error('Failed to delete project', error);
+        message?.error(t('tenant.projects.deleteFailed'));
       }
     }
   };
@@ -207,6 +226,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
             }}
             className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
             placeholder={t('tenant.projects.searchPlaceholder')}
+            aria-label={t('tenant.projects.searchPlaceholder')}
           />
         </div>
         {/* Filters */}
@@ -296,7 +316,9 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
 
       {/* Projects Grid/List */}
       {isLoading ? (
-        <div className="text-center py-10 text-slate-500">{t('tenant.projects.loading')}</div>
+        <div className="flex justify-center py-10" role="status">
+          <LazySpin size="large" />
+        </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {projects.map((project) => (
@@ -365,7 +387,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     {project.stats?.member_count ?? 0} {t('common.stats.members')}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 relative">
+                <div className="flex items-center gap-2 relative" data-project-menu-root>
                   <span className="text-xs text-slate-500">
                     {formatTime(project.stats?.last_active)}
                   </span>
@@ -373,6 +395,8 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     type="button"
                     aria-label={t('tenant.projects.openActions', { name: project.name })}
                     title={t('tenant.projects.openActions', { name: project.name })}
+                    aria-haspopup="menu"
+                    aria-expanded={activeMenu === project.id}
                     onClick={(e) => {
                       e.preventDefault();
                       setActiveMenu(activeMenu === project.id ? null : project.id);
@@ -383,9 +407,13 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                   </button>
 
                   {activeMenu === project.id && (
-                    <div className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10">
+                    <div
+                      role="menu"
+                      className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10"
+                    >
                       <Link
                         to={`${tenantBasePath}/projects/${project.id}/edit`}
+                        role="menuitem"
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
                         onClick={() => {
                           setActiveMenu(null);
@@ -396,6 +424,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                       </Link>
                       <button
                         type="button"
+                        role="menuitem"
                         onClick={(e) => {
                           e.preventDefault();
                           void handleDelete(project.id);
@@ -537,11 +566,13 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                       {formatTime(project.stats?.last_active)}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="relative">
+                      <div className="relative" data-project-menu-root>
                         <button
                           type="button"
                           aria-label={t('tenant.projects.openActions', { name: project.name })}
                           title={t('tenant.projects.openActions', { name: project.name })}
+                          aria-haspopup="menu"
+                          aria-expanded={activeMenu === project.id}
                           onClick={(e) => {
                             e.preventDefault();
                             setActiveMenu(activeMenu === project.id ? null : project.id);
@@ -551,9 +582,13 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                           <MoreVertical size={16} />
                         </button>
                         {activeMenu === project.id && (
-                          <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10">
+                          <div
+                            role="menu"
+                            className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10"
+                          >
                             <Link
                               to={`${tenantBasePath}/projects/${project.id}/edit`}
+                              role="menuitem"
                               className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
                               onClick={() => {
                                 setActiveMenu(null);
@@ -564,6 +599,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                             </Link>
                             <button
                               type="button"
+                              role="menuitem"
                               onClick={(e) => {
                                 e.preventDefault();
                                 void handleDelete(project.id);

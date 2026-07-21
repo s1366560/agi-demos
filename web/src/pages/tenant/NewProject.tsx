@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
 
@@ -9,6 +9,8 @@ import { BackendStoreSelectors } from '@/components/project/BackendStoreSelector
 
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
+import { confirmAction } from '../../utils/confirmAction';
+import { logger } from '../../utils/logger';
 
 export const NewProject: React.FC = () => {
   const { t } = useTranslation();
@@ -20,20 +22,35 @@ export const NewProject: React.FC = () => {
     name: '',
     description: '',
     memory_rules: {
-      max_episodes: 1000,
-      retention_days: 30,
+      max_episodes: '1000',
+      retention_days: '30',
       auto_refresh: true,
-      refresh_interval: 24,
+      refresh_interval: '24',
     },
     graph_config: {
-      max_nodes: 5000,
-      max_edges: 10000,
+      max_nodes: '5000',
+      max_edges: '10000',
       similarity_threshold: 0.7,
       community_detection: true,
     },
     graph_store_id: null as string | null,
     retrieval_store_id: null as string | null,
   });
+
+  const isDirty = formData.name.trim() !== '' || formData.description.trim() !== '';
+
+  const handleCancel = async () => {
+    if (
+      isDirty &&
+      !(await confirmAction({
+        title: t('tenant.newProject.discardConfirm'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    void navigate(currentTenant ? `/tenant/${currentTenant.id}/projects` : '/tenant');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +59,22 @@ export const NewProject: React.FC = () => {
     try {
       await createProject(currentTenant.id, {
         ...formData,
+        memory_rules: {
+          ...formData.memory_rules,
+          max_episodes: parseInt(formData.memory_rules.max_episodes, 10) || 1000,
+          retention_days: parseInt(formData.memory_rules.retention_days, 10) || 30,
+          refresh_interval: parseInt(formData.memory_rules.refresh_interval, 10) || 24,
+        },
+        graph_config: {
+          ...formData.graph_config,
+          max_nodes: parseInt(formData.graph_config.max_nodes, 10) || 5000,
+          max_edges: parseInt(formData.graph_config.max_edges, 10) || 10000,
+        },
         tenant_id: currentTenant.id,
       });
       void navigate(`/tenant/${currentTenant.id}/projects`);
     } catch (err) {
-      console.error('Failed to create project:', err);
+      logger.error('Failed to create project', err);
     }
   };
 
@@ -61,8 +89,11 @@ export const NewProject: React.FC = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex items-center gap-2">
-          <AlertCircle size={16} />
+        <div
+          role="alert"
+          className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex items-center gap-2"
+        >
+          <AlertCircle size={16} aria-hidden="true" />
           {error}
         </div>
       )}
@@ -86,11 +117,18 @@ export const NewProject: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="col-span-1 md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label
+                htmlFor="new-project-name"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+              >
                 {t('common.forms.name')} <span className="text-red-500">*</span>
               </label>
               <input
+                id="new-project-name"
                 type="text"
+                name="name"
+                autoComplete="organization"
+                spellCheck={false}
                 required
                 value={formData.name}
                 onChange={(e) => {
@@ -101,10 +139,14 @@ export const NewProject: React.FC = () => {
               />
             </div>
             <div className="col-span-1 md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label
+                htmlFor="new-project-description"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+              >
                 {t('common.forms.description')}
               </label>
               <textarea
+                id="new-project-description"
                 rows={3}
                 value={formData.description}
                 onChange={(e) => {
@@ -147,10 +189,14 @@ export const NewProject: React.FC = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="new-project-max-episodes"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('tenant.newProject.maxEpisodes')}
                   </label>
                   <input
+                    id="new-project-max-episodes"
                     type="number"
                     min="100"
                     max="10000"
@@ -160,7 +206,7 @@ export const NewProject: React.FC = () => {
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
-                          max_episodes: parseInt(e.target.value) || 1000,
+                          max_episodes: e.target.value,
                         },
                       });
                     }}
@@ -168,10 +214,14 @@ export const NewProject: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="new-project-retention-days"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('tenant.newProject.retentionDays')}
                   </label>
                   <input
+                    id="new-project-retention-days"
                     type="number"
                     min="1"
                     max="365"
@@ -181,7 +231,7 @@ export const NewProject: React.FC = () => {
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
-                          retention_days: parseInt(e.target.value) || 30,
+                          retention_days: e.target.value,
                         },
                       });
                     }}
@@ -191,10 +241,14 @@ export const NewProject: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label
+                  htmlFor="new-project-refresh-interval"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                >
                   {t('tenant.newProject.refreshInterval')}
                 </label>
                 <input
+                  id="new-project-refresh-interval"
                   type="number"
                   min="1"
                   max="168"
@@ -204,7 +258,7 @@ export const NewProject: React.FC = () => {
                       ...formData,
                       memory_rules: {
                         ...formData.memory_rules,
-                        refresh_interval: parseInt(e.target.value) || 24,
+                        refresh_interval: e.target.value,
                       },
                     });
                   }}
@@ -225,7 +279,7 @@ export const NewProject: React.FC = () => {
                     }}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-primary/20 dark:peer-focus-visible:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
                 </label>
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {t('tenant.newProject.enableAutoRefresh')}
@@ -248,10 +302,14 @@ export const NewProject: React.FC = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="new-project-max-nodes"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('tenant.newProject.maxNodes')}
                   </label>
                   <input
+                    id="new-project-max-nodes"
                     type="number"
                     min="100"
                     value={formData.graph_config.max_nodes}
@@ -260,7 +318,7 @@ export const NewProject: React.FC = () => {
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
-                          max_nodes: parseInt(e.target.value) || 5000,
+                          max_nodes: e.target.value,
                         },
                       });
                     }}
@@ -268,10 +326,14 @@ export const NewProject: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <label
+                    htmlFor="new-project-max-edges"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+                  >
                     {t('tenant.newProject.maxEdges')}
                   </label>
                   <input
+                    id="new-project-max-edges"
                     type="number"
                     min="100"
                     value={formData.graph_config.max_edges}
@@ -280,7 +342,7 @@ export const NewProject: React.FC = () => {
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
-                          max_edges: parseInt(e.target.value) || 10000,
+                          max_edges: e.target.value,
                         },
                       });
                     }}
@@ -291,7 +353,10 @@ export const NewProject: React.FC = () => {
 
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  <label
+                    htmlFor="new-project-similarity-threshold"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                  >
                     {t('tenant.newProject.similarityThreshold')}
                   </label>
                   <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
@@ -299,6 +364,7 @@ export const NewProject: React.FC = () => {
                   </span>
                 </div>
                 <input
+                  id="new-project-similarity-threshold"
                   type="range"
                   min="0.1"
                   max="1.0"
@@ -337,7 +403,7 @@ export const NewProject: React.FC = () => {
                     }}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-primary/20 dark:peer-focus-visible:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
                 </label>
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {t('tenant.newProject.enableCommunityDetection')}
@@ -349,12 +415,15 @@ export const NewProject: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-          <Link
-            to={currentTenant ? `/tenant/${currentTenant.id}/projects` : '/tenant'}
+          <button
+            type="button"
+            onClick={() => {
+              void handleCancel();
+            }}
             className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
           >
             {t('common.cancel')}
-          </Link>
+          </button>
           <button
             type="submit"
             disabled={isLoading || !formData.name.trim()}

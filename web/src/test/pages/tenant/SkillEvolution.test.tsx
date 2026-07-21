@@ -28,6 +28,7 @@ vi.mock('@/services/skillService', () => ({
 
 vi.mock('@/components/ui/lazyAntd', () => ({
   LazyEmpty: ({ description }: { description?: string }) => <div>{description}</div>,
+  LazyPopconfirm: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   LazySpin: () => <div>Loading</div>,
   useLazyMessage: () => lazyMessageMocks,
 }));

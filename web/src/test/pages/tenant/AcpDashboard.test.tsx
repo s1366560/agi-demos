@@ -20,8 +20,9 @@ vi.mock('@/services/acpService', () => ({
 }));
 
 vi.mock('@/stores/tenant', () => ({
-  useTenantStore: (selector: (state: { currentTenant: { id: string; name: string } | null }) => unknown) =>
-    selector({ currentTenant: null }),
+  useTenantStore: (
+    selector: (state: { currentTenant: { id: string; name: string } | null }) => unknown
+  ) => selector({ currentTenant: null }),
 }));
 
 function statusFixture(overrides: Partial<TenantACPStatus> = {}): TenantACPStatus {
@@ -155,7 +156,7 @@ describe('AcpDashboard', () => {
         'local-acp',
         expect.objectContaining({
           cwd: '/tmp',
-          prompt: '请只回复 PONG',
+          prompt: 'Reply with PONG only',
           timeoutSeconds: 30,
         })
       );

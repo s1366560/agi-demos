@@ -2,28 +2,29 @@ import { useCallback, useEffect, useMemo, useState, memo, type FC } from 'react'
 
 import { useTranslation } from 'react-i18next';
 
-import { Check, CreditCard, Download, Loader2, Receipt } from 'lucide-react';
+import { Empty, Pagination } from 'antd';
+import { Check, CreditCard, Download, Receipt } from 'lucide-react';
 
+import { formatStorage } from '../../hooks/useDateFormatter';
 import { billingService } from '../../services/billingService';
 import { useTenantStore } from '../../stores/tenant';
+import { confirmAction } from '../../utils/confirmAction';
+import { formatDateTime } from '../../utils/date';
+
+import { LoadingState } from './utils/LoadingState';
 
 import type { BillingInfo, UpgradePlanRequest } from '../../services/billingService';
 
-// Loading state component
-const LoadingState = memo<{ message: string }>(({ message }) => (
-  <div className="p-8 text-center text-slate-500">
-    <Loader2 size={16} className="animate-spin motion-reduce:animate-none mr-2" />
-    {message}
-  </div>
-));
-LoadingState.displayName = 'LoadingState';
+const INVOICES_PER_PAGE = 10;
 
 export const Billing: FC = memo(() => {
   const { t } = useTranslation();
   const { currentTenant } = useTenantStore();
   const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [actionLoading, setActionLoading] = useState<UpgradePlanRequest['plan'] | null>(null);
+  const [invoicePage, setInvoicePage] = useState(1);
   const [actionMessage, setActionMessage] = useState<{
     type: 'success' | 'error' | 'info';
     text: string;
@@ -31,11 +32,14 @@ export const Billing: FC = memo(() => {
 
   const fetchBillingInfo = useCallback(async () => {
     if (currentTenant) {
+      setLoading(true);
+      setLoadError(false);
       try {
         const data = await billingService.getBillingInfo(currentTenant.id);
         setBillingInfo(data);
       } catch (error) {
         console.error('Failed to fetch billing info:', error);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
@@ -62,6 +66,14 @@ export const Billing: FC = memo(() => {
     async (plan: UpgradePlanRequest['plan']) => {
       if (!currentTenant) return;
 
+      const confirmed = await confirmAction({
+        title: t('tenant.billing.confirm_upgrade_title'),
+        content: t('tenant.billing.confirm_upgrade_content', { plan: formatPlanName(plan) }),
+        okText: t('tenant.billing.confirm_upgrade_ok', { plan: formatPlanName(plan) }),
+        cancelText: t('common.cancel'),
+      });
+      if (!confirmed) return;
+
       setActionLoading(plan);
       setActionMessage(null);
       try {
@@ -78,24 +90,24 @@ export const Billing: FC = memo(() => {
         setActionLoading(null);
       }
     },
-    [currentTenant, fetchBillingInfo, t]
+    [currentTenant, fetchBillingInfo, formatPlanName, t]
   );
-
-  // Format storage bytes to human-readable
-  const formatStorage = useMemo(() => {
-    return (bytes: number): string => {
-      const gb = bytes / (1024 * 1024 * 1024);
-      return `${gb.toFixed(0)} GB`;
-    };
-  }, []);
 
   // Format date string
   const formatDate = useMemo(() => {
-    return (dateStr: string): string => {
+    return (dateStr: string): string => formatDateTime(dateStr) || dateStr;
+  }, []);
+
+  // Format an invoice amount with its ISO currency code
+  const formatAmount = useMemo(() => {
+    return (amount: number, currency: string): string => {
       try {
-        return new Date(dateStr).toLocaleDateString();
+        return new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency: currency.toUpperCase(),
+        }).format(amount);
       } catch {
-        return dateStr;
+        return `$${amount.toFixed(2)} ${currency.toUpperCase()}`;
       }
     };
   }, []);
@@ -158,15 +170,55 @@ export const Billing: FC = memo(() => {
       usersUsed: usage.users,
       usersLimit,
     };
-  }, [billingInfo, formatStorage]);
+  }, [billingInfo]);
 
-  if (!currentTenant) return null;
+  if (!currentTenant) {
+    return (
+      <div className="flex items-center justify-center p-16">
+        <Empty description={t('common.noTenant')} />
+      </div>
+    );
+  }
 
   if (loading) {
     return <LoadingState message={t('common.loading')} />;
   }
 
+  if (loadError) {
+    return (
+      <div className="max-w-full mx-auto flex flex-col gap-8">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            {t('tenant.billing.title')}
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">{t('tenant.billing.subtitle')}</p>
+        </div>
+        <div
+          role="alert"
+          className="rounded-[28px] border border-rose-200/80 bg-rose-50 px-6 py-8 dark:border-rose-900/60 dark:bg-rose-950/40"
+        >
+          <p className="text-lg font-semibold tracking-[-0.02em] text-rose-900 dark:text-rose-100">
+            {t('tenant.billing.load_error')}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void fetchBillingInfo();
+            }}
+            className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-rose-300 px-5 text-sm font-medium text-rose-800 transition-colors duration-150 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 dark:border-rose-800 dark:text-rose-100 dark:hover:bg-rose-900/60"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const invoices = billingInfo?.invoices || [];
+  const pagedInvoices = invoices.slice(
+    (invoicePage - 1) * INVOICES_PER_PAGE,
+    invoicePage * INVOICES_PER_PAGE
+  );
 
   return (
     <div className="max-w-full mx-auto flex flex-col gap-8">
@@ -218,7 +270,7 @@ export const Billing: FC = memo(() => {
             </div>
             <div className="flex gap-3">
               <button
-                className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 disabled={!nextPlan || actionLoading !== null}
                 type="button"
                 onClick={() => {
@@ -247,7 +299,14 @@ export const Billing: FC = memo(() => {
                   / {usageStats.storageLimit}
                 </span>
               </p>
-              <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+                role="progressbar"
+                aria-valuenow={Math.round(usageStats.storagePercent)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('tenant.billing.storage_usage')}
+              >
                 <div
                   className="h-full bg-purple-500 transition-[width]"
                   style={{ width: `${String(usageStats.storagePercent)}%` }}
@@ -264,7 +323,14 @@ export const Billing: FC = memo(() => {
                   / {usageStats.projectsLimit}
                 </span>
               </p>
-              <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+                role="progressbar"
+                aria-valuenow={Math.round(usageStats.projectsPercent)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('tenant.billing.projects')}
+              >
                 <div
                   className="h-full bg-blue-500 transition-[width]"
                   style={{ width: `${String(usageStats.projectsPercent)}%` }}
@@ -281,7 +347,14 @@ export const Billing: FC = memo(() => {
                   / {usageStats.usersLimit}
                 </span>
               </p>
-              <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+                role="progressbar"
+                aria-valuenow={Math.round(usageStats.usersPercent)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('tenant.billing.users')}
+              >
                 <div
                   className="h-full bg-green-500 transition-[width]"
                   style={{ width: `${String(usageStats.usersPercent)}%` }}
@@ -325,7 +398,7 @@ export const Billing: FC = memo(() => {
             </ul>
           </div>
           <button
-            className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 font-bold py-3 rounded-lg transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 font-bold py-3 rounded-lg transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
             disabled={currentPlan === 'enterprise' || actionLoading !== null}
             type="button"
             onClick={() => {
@@ -353,23 +426,35 @@ export const Billing: FC = memo(() => {
           <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider"
+                >
                   {t('tenant.billing.history.date')}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider"
+                >
                   {t('tenant.billing.history.amount')}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider"
+                >
                   {t('tenant.billing.history.status')}
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider"
+                >
                   {t('tenant.billing.history.actions')}
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-surface-dark divide-y divide-slate-200 dark:divide-slate-800">
-              {invoices.length > 0 ? (
-                invoices.map((invoice) => (
+              {pagedInvoices.length > 0 ? (
+                pagedInvoices.map((invoice) => (
                   <tr
                     key={invoice.id}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
@@ -377,8 +462,8 @@ export const Billing: FC = memo(() => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                       {formatDate(invoice.created_at)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                      ${invoice.amount.toFixed(2)} {invoice.currency.toUpperCase()}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white tabular-nums">
+                      {formatAmount(invoice.amount, invoice.currency)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -420,6 +505,19 @@ export const Billing: FC = memo(() => {
             </tbody>
           </table>
         </div>
+        {invoices.length > INVOICES_PER_PAGE && (
+          <div className="flex justify-end border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+            <Pagination
+              current={invoicePage}
+              pageSize={INVOICES_PER_PAGE}
+              total={invoices.length}
+              showSizeChanger={false}
+              onChange={(page) => {
+                setInvoicePage(page);
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

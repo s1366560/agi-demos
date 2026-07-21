@@ -329,10 +329,10 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <label className="text-2xs uppercase font-bold text-red-600 flex items-center gap-1">
+          <span className="text-2xs uppercase font-bold text-red-600 flex items-center gap-1">
             <AlertCircle size={12} />
             {t('components.messageStream.error', { defaultValue: 'Error' })}
-          </label>
+          </span>
           {isFolded && (
             <button
               type="button"
@@ -361,10 +361,10 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <label className="text-2xs uppercase font-bold text-emerald-600 flex items-center gap-1">
+        <span className="text-2xs uppercase font-bold text-emerald-600 flex items-center gap-1">
           <TerminalSquare size={12} />
           {t('components.messageStream.output', { defaultValue: 'Output' })}
-        </label>
+        </span>
         {isFolded && (
           <button
             type="button"
@@ -852,12 +852,12 @@ export function ToolExecutionCardDisplay({
             {/* Preparing State - streaming arguments */}
             {status === 'preparing' && partialArguments && (
               <div className="space-y-1">
-                <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                <span className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
                   <FileEdit size={12} />
                   {t('components.messageStream.buildingArguments', {
                     defaultValue: 'Building Arguments',
                   })}
-                </label>
+                </span>
                 <div
                   ref={streamingArgsRef}
                   className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-md text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto"
@@ -877,7 +877,7 @@ export function ToolExecutionCardDisplay({
                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
                   <p className="text-xs text-blue-600 dark:text-blue-400 italic">
                     {t('components.messageStream.preparingToolCall', {
-                      defaultValue: 'Preparing tool call...',
+                      defaultValue: 'Preparing tool call…',
                     })}
                   </p>
                 </div>
@@ -887,10 +887,10 @@ export function ToolExecutionCardDisplay({
             {/* Input Parameters */}
             {parameters && status !== 'preparing' && (
               <div className="space-y-1">
-                <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                <span className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
                   <FileInput size={12} />
                   {t('components.messageStream.input', { defaultValue: 'Input' })}
-                </label>
+                </span>
                 <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-md text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto">
                   <pre className="whitespace-pre-wrap break-words">
                     {JSON.stringify(parameters, null, 2)}
@@ -902,11 +902,11 @@ export function ToolExecutionCardDisplay({
             {/* Execution Mode */}
             {executionMode && (
               <div className="space-y-1">
-                <label className="text-2xs uppercase font-bold text-text-muted">
+                <span className="text-2xs uppercase font-bold text-text-muted">
                   {t('components.messageStream.executionMode', {
                     defaultValue: 'Execution Mode',
                   })}
-                </label>
+                </span>
                 <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-md text-xs font-mono text-slate-600 dark:text-text-muted">
                   {executionMode}
                 </div>
@@ -916,16 +916,16 @@ export function ToolExecutionCardDisplay({
             {/* Running State */}
             {status === 'running' && (
               <div className="space-y-2">
-                <label className="text-2xs uppercase font-bold text-text-muted">
+                <span className="text-2xs uppercase font-bold text-text-muted">
                   {t('components.messageStream.liveResults', { defaultValue: 'Live Results' })}
-                </label>
+                </span>
                 <div className="border border-dashed border-slate-200 dark:border-border-dark rounded-md p-6 flex flex-col items-center justify-center gap-2 text-center bg-slate-50/50 dark:bg-background-dark/20">
                   <Loader2
                     size={30}
                     className="text-slate-300 dark:text-border-dark animate-spin"
                   />
                   <p className="text-xs text-text-muted italic">
-                    {t('components.messageStream.executing', { defaultValue: 'Executing...' })}
+                    {t('components.messageStream.executing', { defaultValue: 'Executing…' })}
                   </p>
                 </div>
               </div>

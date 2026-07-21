@@ -7,7 +7,7 @@ import { memo, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Drawer, Progress } from 'antd';
+import { Drawer, Popconfirm, Progress } from 'antd';
 import {
   Rocket,
   CheckCircle2,
@@ -101,23 +101,38 @@ const ExecutionItem = memo<{
                 onClick={() => {
                   onClear(execution.executionId);
                 }}
-                className="p-0.5 rounded text-slate-400 hover:text-red-500 transition-colors"
+                className="p-0.5 rounded text-slate-400 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 title={t('agent.background.clear', 'Clear')}
+                aria-label={t('agent.background.clear', 'Clear')}
               >
                 <Trash2 size={12} />
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
+              <Popconfirm
+                title={t('agent.background.killConfirmTitle', 'Stop this execution?')}
+                description={t(
+                  'agent.background.killConfirmDescription',
+                  'The running task will be terminated.'
+                )}
+                onConfirm={() => {
                   onKill(execution.executionId);
                 }}
-                className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                title={t('agent.background.kill', 'Stop execution')}
+                okText={t('agent.background.kill', 'Stop execution')}
+                cancelText={t('agent.background.cancel', 'Cancel')}
+                okButtonProps={{ danger: true }}
               >
-                <StopCircle size={14} />
-              </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  title={t('agent.background.kill', 'Stop execution')}
+                  aria-label={t('agent.background.kill', 'Stop execution')}
+                >
+                  <StopCircle size={14} />
+                </button>
+              </Popconfirm>
             )}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
@@ -263,13 +278,20 @@ const BackgroundSubAgentDrawer = memo(() => {
       destroyOnHidden
       extra={
         sorted.length > 0 && (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+          <Popconfirm
+            title={t('agent.background.clearAllConfirmTitle', 'Clear all execution records?')}
+            onConfirm={clearAll}
+            okText={t('agent.background.clearAll', 'Clear all')}
+            cancelText={t('agent.background.cancel', 'Cancel')}
+            okButtonProps={{ danger: true }}
           >
-            {t('agent.background.clearAll', 'Clear all')}
-          </button>
+            <button
+              type="button"
+              className="text-xs text-slate-400 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+            >
+              {t('agent.background.clearAll', 'Clear all')}
+            </button>
+          </Popconfirm>
         )
       }
     >

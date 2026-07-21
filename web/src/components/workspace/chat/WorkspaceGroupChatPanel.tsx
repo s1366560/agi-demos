@@ -52,7 +52,7 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
     }
   }, [workspaceId, tenantId, projectId, currentWorkspace?.id, loadWorkspaceSurface]);
 
-  // Close picker on click outside
+  // Close picker on click outside or Escape
   useEffect(() => {
     if (!pickerOpen) return;
     const handler = (e: MouseEvent) => {
@@ -60,9 +60,16 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
         setPickerOpen(false);
       }
     };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPickerOpen(false);
+      }
+    };
     document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
     return () => {
       document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keyHandler);
     };
   }, [pickerOpen]);
 

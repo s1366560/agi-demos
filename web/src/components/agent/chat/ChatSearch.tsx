@@ -87,8 +87,8 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
         const start = Math.max(0, matchIdx - 30);
         const end = Math.min(text.length, matchIdx + query.length + 30);
         let preview = text.slice(start, end);
-        if (start > 0) preview = '...' + preview;
-        if (end < text.length) preview = preview + '...';
+        if (start > 0) preview = '…' + preview;
+        if (end < text.length) preview = preview + '…';
 
         found.push({
           eventIndex: idx,
@@ -166,8 +166,8 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
   if (!visible) return null;
 
   return (
-    <div className="absolute top-2 right-4 z-50 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 px-3 py-2 animate-fade-in-up">
-      <Search size={14} className="text-slate-400 flex-shrink-0" />
+    <div className="absolute top-2 right-4 z-50 flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 px-3 py-2 animate-fade-in-up focus-within:ring-2 focus-within:ring-primary/50">
+      <Search size={14} className="text-slate-400 flex-shrink-0" aria-hidden="true" />
       <input
         ref={inputRef}
         type="text"
@@ -176,11 +176,12 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
           setQuery(e.target.value);
         }}
         onKeyDown={handleKeyDown}
-        placeholder={t('agent.search.placeholder', 'Search in conversation...')}
+        placeholder={t('agent.search.placeholder', 'Search in conversation…')}
+        aria-label={t('agent.search.placeholder', 'Search in conversation…')}
         className="w-48 bg-transparent text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
       />
       {query && (
-        <span className="text-xs text-slate-400 whitespace-nowrap">
+        <span className="text-xs text-slate-400 whitespace-nowrap" aria-live="polite">
           {matches.length > 0
             ? `${String(currentIndex + 1)}/${String(matches.length)}`
             : t('agent.search.noResults', '0 results')}

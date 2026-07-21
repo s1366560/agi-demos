@@ -58,6 +58,7 @@ const testFiles = [
   'auxiliary-view.test.mjs',
   'auth-context-model.test.mjs',
   'chat-composer-model.test.mjs',
+  'composer-context.test.mjs',
   'chat-narrative-presentation.test.mjs',
   'chat-timeline-model.test.mjs',
   'desktop-shell-fidelity.test.mjs',

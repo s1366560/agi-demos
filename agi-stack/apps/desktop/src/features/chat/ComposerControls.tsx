@@ -10,6 +10,9 @@ export type ComposerModelOption = {
   value: string;
   modelId: string;
   providerLabel: string;
+  description?: string;
+  contextWindow?: string | null;
+  roles?: string[];
 };
 
 type ComposerControlsProps = {
@@ -294,9 +297,19 @@ function ComposerModelSwitch({
                 onClick={() => onSelect(option.value)}
               >
                 <span>
-                  <b>{option.modelId}</b>
-                  <small>{option.providerLabel}</small>
+                  <b>
+                    {option.modelId}
+                    {option.roles?.map((role) => (
+                      <em className="composer-model-role" key={role}>
+                        {t(`task.modelRole.${role}`)}
+                      </em>
+                    ))}
+                  </b>
+                  <small>{option.description ?? option.providerLabel}</small>
                 </span>
+                {option.contextWindow ? (
+                  <small className="composer-model-context">{option.contextWindow}</small>
+                ) : null}
                 {selected === option.value ? <CheckIcon aria-hidden="true" /> : null}
               </button>
             ))}

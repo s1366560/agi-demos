@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::composer_context::ComposerContextItem;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum RunInputDelivery {
@@ -53,6 +55,8 @@ pub(super) struct DesktopRunInput {
     pub queue_position: Option<u64>,
     pub content: String,
     pub references: Vec<RunInputReference>,
+    #[serde(default)]
+    pub context_items: Vec<ComposerContextItem>,
     pub applied_round: Option<u64>,
     pub applied_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -65,11 +69,13 @@ pub(super) struct DesktopRunInput {
 
 impl DesktopRunInput {
     pub(super) fn steering_content(&self) -> String {
-        if self.references.is_empty() {
+        if self.references.is_empty() && self.context_items.is_empty() {
             return self.content.clone();
         }
         let mut content = self.content.clone();
-        content.push_str("\n\nAuthoritative change references:");
+        if !self.references.is_empty() {
+            content.push_str("\n\nAuthoritative change references:");
+        }
         for reference in &self.references {
             match reference {
                 RunInputReference::CodeRange {
@@ -84,6 +90,15 @@ impl DesktopRunInput {
                         "\n- {path}:{start_line}-{end_line} ({side:?}, snapshot {snapshot_id})"
                     ));
                 }
+            }
+        }
+        if !self.context_items.is_empty() {
+            content.push_str("\n\nStructured composer context:");
+            for item in &self.context_items {
+                content.push_str(&format!(
+                    "\n- {:?}: {} ({})",
+                    item.kind, item.label, item.resource_id
+                ));
             }
         }
         content

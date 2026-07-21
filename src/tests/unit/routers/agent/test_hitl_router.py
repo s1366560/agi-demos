@@ -38,6 +38,45 @@ def _hitl_request(*, status: HITLRequestStatus = HITLRequestStatus.PENDING) -> H
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "allow", "granted": True, "scope": "once"},
+        {"action": "allow_always", "granted": True, "scope": "workspace_tool"},
+        {"action": "deny", "granted": False, "scope": "once"},
+        {"granted": True},
+    ],
+)
+def test_permission_response_shape_accepts_canonical_and_legacy_payloads(
+    payload: dict[str, object],
+) -> None:
+    hitl_router._validate_hitl_response_shape(hitl_type="permission", response_data=payload)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "allow_always", "granted": True, "scope": "once"},
+        {"action": "allow", "granted": False, "scope": "once"},
+        {
+            "action": "allow_always",
+            "granted": True,
+            "scope": "workspace_tool",
+            "tool_name": "client-spoofed-tool",
+        },
+    ],
+)
+def test_permission_response_shape_rejects_inconsistent_or_spoofed_payloads(
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        hitl_router._validate_hitl_response_shape(hitl_type="permission", response_data=payload)
+
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_get_pending_hitl_requests_sanitizes_internal_errors() -> None:
     with pytest.raises(HTTPException) as exc_info:

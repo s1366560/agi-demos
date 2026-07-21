@@ -5,7 +5,6 @@
  */
 
 // Primary Agent Chat Components (Modern Design)
-export { ConversationSidebar } from './ConversationSidebar';
 export { MessageArea } from './MessageArea';
 export { MessageBubble } from './MessageBubble';
 export { InputBar } from './InputBar';
@@ -22,32 +21,14 @@ export { AgentChatContent } from './AgentChatContent';
 export { Resizer } from './Resizer';
 
 // Utility Components
-export { ProjectSelector } from './ProjectSelector';
 export { TenantAgentConfigEditor } from './TenantAgentConfigEditor';
 export { TenantAgentConfigView } from './TenantAgentConfigView';
-export { ReportViewer } from './ReportViewer';
-export { TableView } from './TableView';
-export { UnifiedHITLPanel } from './UnifiedHITLPanel';
 export { InlineHITLCard } from './InlineHITLCard';
-export { CostTracker, CostTrackerCompact, CostTrackerPanel } from './CostTracker';
-export { ExecutionStatsCard } from './ExecutionStatsCard';
-export { ExecutionTimelineChart } from './ExecutionTimelineChart';
 export { AgentProgressBar } from './AgentProgressBar';
-export { StepAdjustmentModal } from './StepAdjustmentModal';
-export { CodeExecutorResultCard } from './CodeExecutorResultCard';
-export { FileDownloadButton } from './FileDownloadButton';
-export { WebScrapeResultCard } from './WebScrapeResultCard';
-export { WebSearchResultCard } from './WebSearchResultCard';
-export { SkillExecutionCard } from './SkillExecutionCard';
 
-// Layout & Chat Components
-export { ChatHistorySidebar } from './layout';
-export { IdleState } from './chat';
+// Timeline Components
 export { TimelineEventItem } from './TimelineEventItem';
-export { ToolExecutionLive, ReasoningLog, FinalReport, FollowUpPills } from './execution';
 export { PatternStats, PatternList, PatternInspector } from './patterns';
 
 // Types
-export type { StarterTile } from './chat';
-export type { SidebarConversationStatus, Conversation } from './layout';
 export type { PatternStatus, WorkflowPattern } from './patterns';

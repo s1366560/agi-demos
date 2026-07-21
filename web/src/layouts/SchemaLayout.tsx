@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { LayoutDashboard, Box, Network, GitMerge } from 'lucide-react';
@@ -9,24 +10,41 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 import { RouteErrorBoundary } from '../components/common/RouteErrorBoundary';
 
 export const SchemaLayout: React.FC = () => {
+  const { t } = useTranslation();
   const { projectBasePath } = useProjectBasePath();
 
   const tabs = [
-    { name: 'Overview', path: '', icon: LayoutDashboard, exact: true },
-    { name: 'Entity Types', path: 'entities', icon: Box },
-    { name: 'Edge Types', path: 'edges', icon: Network },
-    { name: 'Mapping', path: 'mapping', icon: GitMerge },
+    {
+      id: 'overview',
+      label: t('schema.tabs.overview', 'Overview'),
+      path: '',
+      icon: LayoutDashboard,
+      exact: true,
+    },
+    {
+      id: 'entity-types',
+      label: t('schema.tabs.entityTypes', 'Entity Types'),
+      path: 'entities',
+      icon: Box,
+    },
+    {
+      id: 'edge-types',
+      label: t('schema.tabs.edgeTypes', 'Edge Types'),
+      path: 'edges',
+      icon: Network,
+    },
+    { id: 'mapping', label: t('schema.tabs.mapping', 'Mapping'), path: 'mapping', icon: GitMerge },
   ];
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-[#111521] min-h-0">
       {/* Schema Header / Tabs */}
       <div className="flex-none px-8 pt-6 border-b border-slate-200 dark:border-[#2a324a] bg-white dark:bg-[#121521]">
-        <div className="flex flex-col gap-4">
+        <nav aria-label={t('schema.navLabel', 'Schema navigation')} className="flex flex-col gap-4">
           <div className="flex gap-6 -mb-px overflow-x-auto">
             {tabs.map((tab) => (
               <NavLink
-                key={tab.name}
+                key={tab.id}
                 to={
                   tab.path === ''
                     ? `${projectBasePath}/schema`
@@ -43,11 +61,11 @@ export const SchemaLayout: React.FC = () => {
                                 `}
               >
                 <tab.icon className="w-4 h-4" />
-                {tab.name}
+                {tab.label}
               </NavLink>
             ))}
           </div>
-        </div>
+        </nav>
       </div>
 
       {/* Content Area */}

@@ -12,19 +12,22 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
 import type { ComponentType, LazyExoticComponent, ReactNode } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Spin, Empty as EmptyComponent } from 'antd';
 
 // ============================================================================
 // Default Loading Fallback
 // ============================================================================
 
-export const DefaultFallback: React.FC<{ message?: string | undefined }> = ({
-  message = 'Loading...',
-}) => (
-  <div className="flex items-center justify-center p-4">
-    <span className="text-sm text-slate-500">{message}</span>
-  </div>
-);
+export const DefaultFallback: React.FC<{ message?: string | undefined }> = ({ message }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center p-4" role="status">
+      <span className="text-sm text-slate-500">{message ?? t('common.loading')}</span>
+    </div>
+  );
+};
 
 export const SpinnerFallback: React.FC = () => (
   <div className="flex items-center justify-center p-4">

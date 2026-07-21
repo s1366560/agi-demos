@@ -55,7 +55,7 @@ import {
   groupTenantTopNavItems,
   isContextualTopNavItemActive,
 } from '@/components/layout/tenantNavigation';
-import { LazyButton, LazyInput, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyButton, LazyInput, LazyTooltip, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { Resizer } from '../agent/Resizer';
 
@@ -75,7 +75,6 @@ interface ConversationItemProps {
   grouped?: boolean | undefined;
   isActive: boolean;
   href: string;
-  onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onRename?: ((e: React.MouseEvent) => void) | undefined;
 }
@@ -364,7 +363,7 @@ function conversationActivityDate(conversation: Conversation): string {
 
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
 const ConversationItem: React.FC<ConversationItemProps> = memo(
-  ({ activeItemRef, conversation, grouped = false, isActive, href, onSelect, onDelete, onRename }) => {
+  ({ activeItemRef, conversation, grouped = false, isActive, href, onDelete, onRename }) => {
     const { t } = useTranslation();
     const timeAgo = React.useMemo(() => {
       try {
@@ -388,7 +387,6 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
       <Link
         ref={activeItemRef}
         to={href}
-        onClick={onSelect}
         aria-current={isActive ? 'page' : undefined}
         className={`
         group relative block w-full p-3 rounded-xl mb-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
@@ -486,45 +484,42 @@ const ConversationGroupHeader: React.FC<{
   conversationCount: number;
   onToggle: () => void;
   workspaceTitle: string;
-}> = memo(({ collapsed, conversationCount, onToggle, workspaceTitle }) => (
-  <div className="mb-1 mt-3 first:mt-1">
-    <button
-      type="button"
-      aria-expanded={!collapsed}
-      onClick={onToggle}
-      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-slate-800/40"
-    >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
-        {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span
-          className="block truncate text-[12px] font-medium leading-5 text-slate-700 dark:text-slate-300"
-          title={workspaceTitle}
-        >
-          {workspaceTitle}
-        </span>
-      </span>
-      <span
-        className="shrink-0 rounded-full bg-slate-100 px-1.5 text-[10px] leading-4 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-        aria-label={`${conversationCount.toString()} conversations`}
-      >
-        {conversationCount}
-      </span>
-    </button>
-  </div>
-));
-ConversationGroupHeader.displayName = 'ConversationGroupHeader';
+}> = memo(({ collapsed, conversationCount, onToggle, workspaceTitle }) => {
+  const { t } = useTranslation();
 
-// Simple Tooltip component for collapsed state
-const Tooltip: React.FC<{ children: React.ReactNode; title: string }> = ({ children, title }) => (
-  <div className="group relative">
-    {children}
-    <div className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-      {title}
+  return (
+    <div className="mb-1 mt-3 first:mt-1">
+      <button
+        type="button"
+        aria-expanded={!collapsed}
+        onClick={onToggle}
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-slate-800/40"
+      >
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
+          {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span
+            className="block truncate text-[12px] font-medium leading-5 text-slate-700 dark:text-slate-300"
+            title={workspaceTitle}
+          >
+            {workspaceTitle}
+          </span>
+        </span>
+        <span
+          className="shrink-0 rounded-full bg-slate-100 px-1.5 text-[10px] leading-4 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+          aria-label={t('agent.sidebar.conversationCount', {
+            count: conversationCount,
+            defaultValue: '{{count}} conversations',
+          })}
+        >
+          {conversationCount}
+        </span>
+      </button>
     </div>
-  </div>
-);
+  );
+});
+ConversationGroupHeader.displayName = 'ConversationGroupHeader';
 
 export interface TenantChatSidebarProps {
   tenantId?: string | undefined;
@@ -1010,11 +1005,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     [conversations, isAgentWorkspaceRoute, selectedProjectId]
   );
   const selectedProjectName = useMemo(
-    () => projectById.get(selectedProjectId ?? '')?.name || 'Unknown Project',
-    [projectById, selectedProjectId]
+    () =>
+      projectById.get(selectedProjectId ?? '')?.name ||
+      t('agent.sidebar.unknownProject', 'Unknown Project'),
+    [projectById, selectedProjectId, t]
   );
   const emptyProjectOptionLabel = isProjectSearchLoading
-    ? t('agent.sidebar.searchingProjects', 'Searching projects...')
+    ? t('agent.sidebar.searchingProjects', 'Searching projects…')
     : isAgentWorkspaceRoute || projectSearchQuery.trim()
       ? t('agent.sidebar.noProjectsFound', 'No projects found')
       : t('agent.sidebar.searchProjectsToSelect', 'Search to select a project');
@@ -1123,20 +1120,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     autoFillProjectIdRef.current = selectedProjectId;
     autoFillLoadCountRef.current = 0;
   }, [selectedProjectId]);
-
-  const handleSelectConversation = useCallback(
-    (id: string, projectId: string) => {
-      void navigate(
-        buildAgentWorkspacePath({
-          tenantId,
-          conversationId: id,
-          projectId,
-          workspaceId: workspaceIdFromQuery,
-        })
-      );
-    },
-    [navigate, tenantId, workspaceIdFromQuery]
-  );
 
   // Keep route-driven or distant conversation switches anchored to the selected item.
   useLayoutEffect(() => {
@@ -1339,10 +1322,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       setNewTitle('');
     } catch (error) {
       console.error('Failed to rename conversation:', error);
+      messageApi?.error(t('agent.sidebar.renameFailed', 'Failed to rename conversation'));
     } finally {
       setIsRenaming(false);
     }
-  }, [renamingConversation, newTitle, selectedProjectId, renameConversation]);
+  }, [renamingConversation, newTitle, selectedProjectId, renameConversation, messageApi, t]);
 
   const handleRenameCancel = useCallback(() => {
     setRenamingConversation(null);
@@ -1639,8 +1623,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               }}
             />
             {isProjectSearchLoading ? (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                {t('agent.sidebar.searchingProjects', 'Searching projects...')}
+              <span
+                role="status"
+                aria-live="polite"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400"
+              >
+                {t('agent.sidebar.searchingProjects', 'Searching projects…')}
               </span>
             ) : null}
           </div>
@@ -1657,7 +1645,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                     <button
                       type="button"
                       aria-current={isSelectedProject ? 'true' : undefined}
-                      className="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 dark:text-slate-200 dark:hover:bg-slate-800"
                       onClick={() => {
                         handleProjectChange(project.id);
                       }}
@@ -1700,7 +1688,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                     aria-hidden="true"
                   />
                   {isProjectSearchLoadingMore
-                    ? t('agent.sidebar.loadingMoreProjects', 'Loading...')
+                    ? t('agent.sidebar.loadingMoreProjects', 'Loading…')
                     : t('agent.sidebar.loadMoreProjects', 'Load more')}
                 </button>
               ) : null}
@@ -1712,7 +1700,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Collapsed Project Indicator */}
       {collapsed && selectedProjectId && (
         <div className="px-2 pb-2 flex justify-center">
-          <Tooltip
+          <LazyTooltip
+            placement="right"
             title={
               projectById.get(selectedProjectId)?.name ||
               t('agent.sidebar.selectProjectTitle', 'Select Project')
@@ -1729,17 +1718,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   t('agent.sidebar.selectProjectTitle', 'Select Project'),
                 defaultValue: 'Expand project sidebar for {{project}}',
               })}
-              title={t('agent.sidebar.expandProjectSidebar', {
-                project:
-                  projectById.get(selectedProjectId)?.name ||
-                  t('agent.sidebar.selectProjectTitle', 'Select Project'),
-                defaultValue: 'Expand project sidebar for {{project}}',
-              })}
               className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
               <FolderOpen size={20} className="text-slate-500" />
             </button>
-          </Tooltip>
+          </LazyTooltip>
         </div>
       )}
 
@@ -1750,6 +1733,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           icon={<Plus size={collapsed ? 20 : 18} />}
           onClick={handleNewConversation}
           disabled={!isAgentWorkspaceRoute || !selectedProjectId}
+          aria-label={t('agent.sidebar.newChat', 'New Chat')}
           className={`
             ${collapsed ? 'w-10 h-10 p-0' : 'w-full h-10'}
             bg-primary hover:bg-primary-600 shadow-sm
@@ -1769,8 +1753,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         {!collapsed && (
           <div className="px-3">
             {conversationsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
+              <div className="flex items-center justify-center py-8" role="status">
+                <div
+                  className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">{t('common.loading', 'Loading…')}</span>
               </div>
             ) : (
               <>
@@ -1806,9 +1794,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                             projectId: conv.projectId,
                             workspaceId: workspaceIdFromQuery,
                           })}
-                          onSelect={() => {
-                            handleSelectConversation(conv.id, conv.projectId);
-                          }}
                           onDelete={(e) => {
                             handleDeleteConversation(conv, e);
                           }}
@@ -1848,9 +1833,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                                   projectId: conv.projectId,
                                   workspaceId: workspaceIdFromQuery,
                                 })}
-                                onSelect={() => {
-                                  handleSelectConversation(conv.id, conv.projectId);
-                                }}
                                 onDelete={(e) => {
                                   handleDeleteConversation(conv, e);
                                 }}
@@ -1865,8 +1847,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   })
                 )}
                 {isLoadingMore && (
-                  <div className="flex items-center justify-center py-3">
-                    <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
+                  <div className="flex items-center justify-center py-3" role="status">
+                    <div
+                      className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                    <span className="sr-only">{t('common.loading', 'Loading…')}</span>
                   </div>
                 )}
               </>
@@ -1909,48 +1895,63 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       )}
 
       {renamingConversation ? (
-        <div className="absolute inset-x-3 bottom-3 z-20 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <div role="dialog" aria-modal="true" aria-labelledby="tenant-sidebar-rename-title">
-            <h2
-              id="tenant-sidebar-rename-title"
-              className="text-sm font-semibold text-slate-900 dark:text-slate-100"
-            >
-              {t('agent.sidebar.renameTitle', 'Rename Conversation')}
-            </h2>
-            <LazyInput
-              className="mt-3"
-              placeholder={t('agent.sidebar.renamePlaceholder', 'Enter conversation title')}
-              value={newTitle}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                setNewTitle(e.target.value);
+        <>
+          <div className="fixed inset-0 z-10" aria-hidden="true" onClick={handleRenameCancel} />
+          <div className="absolute inset-x-3 bottom-3 z-20 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tenant-sidebar-rename-title"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  handleRenameCancel();
+                }
               }}
-              onPressEnter={handleRenameSubmit}
-              autoFocus
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <LazyButton size="small" onClick={handleRenameCancel}>
-                {t('common.cancel', 'Cancel')}
-              </LazyButton>
-              <LazyButton
-                size="small"
-                type="primary"
-                loading={isRenaming}
-                disabled={!newTitle.trim()}
-                onClick={() => {
-                  void handleRenameSubmit();
-                }}
+            >
+              <h2
+                id="tenant-sidebar-rename-title"
+                className="text-sm font-semibold text-slate-900 dark:text-slate-100"
               >
-                {t('agent.sidebar.rename', 'Rename')}
-              </LazyButton>
+                {t('agent.sidebar.renameTitle', 'Rename Conversation')}
+              </h2>
+              <LazyInput
+                className="mt-3"
+                placeholder={t('agent.sidebar.renamePlaceholder', 'Enter conversation title')}
+                value={newTitle}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setNewTitle(e.target.value);
+                }}
+                onPressEnter={handleRenameSubmit}
+                autoFocus
+              />
+              <div className="mt-3 flex justify-end gap-2">
+                <LazyButton size="small" onClick={handleRenameCancel}>
+                  {t('common.cancel', 'Cancel')}
+                </LazyButton>
+                <LazyButton
+                  size="small"
+                  type="primary"
+                  loading={isRenaming}
+                  disabled={!newTitle.trim()}
+                  onClick={() => {
+                    void handleRenameSubmit();
+                  }}
+                >
+                  {t('agent.sidebar.rename', 'Rename')}
+                </LazyButton>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       ) : null}
       <AppModal
         open={deleteTarget !== null}
         onClose={cancelDeleteConversation}
         title={t('agent.sidebar.deleteTitle', 'Delete Conversation')}
-        description={t('agent.sidebar.deleteDescription', 'This conversation and its messages will be permanently removed.')}
+        description={t(
+          'agent.sidebar.deleteDescription',
+          'This conversation and its messages will be permanently removed.'
+        )}
         size="sm"
         closeOnEscape={!isDeleting}
         closeOnBackdrop={!isDeleting}

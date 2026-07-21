@@ -526,7 +526,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
               }`}
             />
             <span className="text-sm text-white font-medium">
-              {status === 'connecting' && t('agent.voiceCall.connecting', 'Connecting...')}
+              {status === 'connecting' && t('agent.voiceCall.connecting', 'Connecting…')}
               {status === 'connected' && formatDuration(duration)}
               {status === 'error' && t('agent.voiceCall.error', 'Error')}
             </span>
@@ -630,6 +630,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
                 ? t('agent.voiceCall.unmute', { defaultValue: 'Unmute' })
                 : t('agent.voiceCall.mute', { defaultValue: 'Mute' })
             }
+            aria-label={
+              isMuted
+                ? t('agent.voiceCall.unmute', { defaultValue: 'Unmute' })
+                : t('agent.voiceCall.mute', { defaultValue: 'Mute' })
+            }
             className={`
               w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${isMuted ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' : 'bg-slate-700 text-white hover:bg-slate-600'}
@@ -643,6 +648,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             type="button"
             onClick={storeToggleCamera}
             title={
+              isCameraOn
+                ? t('agent.voiceCall.turnOffCamera', { defaultValue: 'Turn off camera' })
+                : t('agent.voiceCall.turnOnCamera', { defaultValue: 'Turn on camera' })
+            }
+            aria-label={
               isCameraOn
                 ? t('agent.voiceCall.turnOffCamera', { defaultValue: 'Turn off camera' })
                 : t('agent.voiceCall.turnOnCamera', { defaultValue: 'Turn on camera' })
@@ -673,6 +683,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
                 ? t('agent.voiceCall.switchToVideo', { defaultValue: 'Switch to video' })
                 : t('agent.voiceCall.switchToAudio', { defaultValue: 'Switch to audio' })
             }
+            aria-label={
+              callMode === 'audio'
+                ? t('agent.voiceCall.switchToVideo', { defaultValue: 'Switch to video' })
+                : t('agent.voiceCall.switchToAudio', { defaultValue: 'Switch to audio' })
+            }
             className="w-11 h-11 rounded-full bg-slate-700 text-white hover:bg-slate-600 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]"
           >
             <Video size={20} />
@@ -685,6 +700,8 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
               setShowDeviceSettings(!showDeviceSettings);
             }}
             title={t('agent.voiceCall.deviceSettings', { defaultValue: 'Device settings' })}
+            aria-label={t('agent.voiceCall.deviceSettings', { defaultValue: 'Device settings' })}
+            aria-expanded={showDeviceSettings}
             className={`
               w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${showDeviceSettings ? 'bg-slate-600 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}
@@ -698,6 +715,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             type="button"
             onClick={handleEndCall}
             title={t('agent.voiceCall.endCall', { defaultValue: 'End call' })}
+            aria-label={t('agent.voiceCall.endCall', { defaultValue: 'End call' })}
             className="w-14 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 transition-[color,background-color,border-color,box-shadow,opacity]"
           >
             <PhoneOff size={22} />

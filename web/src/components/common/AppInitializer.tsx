@@ -18,7 +18,9 @@ interface AppInitializerProps {
 /**
  * Initial loading screen
  */
-const InitialLoadingScreen: React.FC = () => {
+const InitialLoadingScreen: React.FC<{ timedOut?: boolean | undefined }> = ({
+  timedOut = false,
+}) => {
   const { t } = useTranslation();
 
   return (
@@ -35,10 +37,34 @@ const InitialLoadingScreen: React.FC = () => {
         </div>
 
         {/* Loading spinner */}
-        <div className="flex items-center gap-2 text-slate-500">
+        <div
+          className="flex items-center gap-2 text-slate-500"
+          role="status"
+          aria-live="polite"
+        >
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
           <span className="text-sm">{t('common.loading')}</span>
         </div>
+
+        {/* Timeout fallback: i18n may have failed to initialize */}
+        {timedOut && (
+          <div className="flex flex-col items-center gap-2 text-center" role="alert">
+            <p className="text-sm text-slate-500">
+              {t('common.initializationSlow', {
+                defaultValue: 'Initialization is taking longer than expected.',
+              })}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.reload();
+              }}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              {t('common.reload', { defaultValue: 'Reload' })}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -49,6 +75,7 @@ const InitialLoadingScreen: React.FC = () => {
  */
 export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
   const { i18n } = useTranslation();
 
   useEffect(() => {
@@ -73,8 +100,19 @@ export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
     return undefined;
   }, [i18n.isInitialized, isReady]);
 
+  // Surface a recovery path if initialization hangs (e.g. i18n never resolves).
+  useEffect(() => {
+    if (isReady) return undefined;
+    const timeout = setTimeout(() => {
+      setTimedOut(true);
+    }, 15000);
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [isReady]);
+
   if (!isReady) {
-    return <InitialLoadingScreen />;
+    return <InitialLoadingScreen timedOut={timedOut} />;
   }
 
   return <>{children}</>;

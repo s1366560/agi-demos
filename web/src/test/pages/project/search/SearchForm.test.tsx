@@ -30,7 +30,7 @@ describe('SearchForm', () => {
   it('names the query input for assistive technologies', () => {
     render(<SearchForm {...baseProps} />);
 
-    expect(screen.getByRole('textbox', { name: 'Search query' })).toHaveValue('memory query');
+    expect(screen.getByRole('searchbox', { name: 'Search query' })).toHaveValue('memory query');
   });
 
   it('renders a working export action when results can be exported', () => {

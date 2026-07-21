@@ -118,9 +118,14 @@ export const OAuthCallback: React.FC = () => {
       // Get redirect URL from state or default to home
       let redirectUrl = '/';
 
-      // Check if state contains a redirect URL (encoded JSON)
+      // Check if state contains a redirect URL (encoded JSON).
+      // Only allow same-origin paths (starting with a single '/') to
+      // prevent open-redirects to external sites.
       if (state) {
-        redirectUrl = parseRedirectUrl(state) ?? redirectUrl;
+        const parsed = parseRedirectUrl(state);
+        if (parsed?.startsWith('/') && !parsed.startsWith('//')) {
+          redirectUrl = parsed;
+        }
       }
 
       // Short delay to show success state before redirect
@@ -198,22 +203,22 @@ export const OAuthCallback: React.FC = () => {
           </div>
 
           {/* Status Content */}
-          <div className="text-center">
+          <div className="text-center" aria-live="polite">
             {status === 'loading' && (
               <>
                 <div className="mx-auto w-16 h-16 flex items-center justify-center mb-6 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                  <Loader2 className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-spin" />
+                  <Loader2 className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  {t('login.oauth.processing', 'Completing sign in...')}
+                  {t('login.oauth.processing', 'Completing sign in…')}
                 </h2>
                 <p className="text-gray-600 dark:text-slate-400">
                   {providerName
                     ? t('login.oauth.authenticatingWith', {
                         provider: providerName,
-                        defaultValue: `Authenticating with ${providerName}...`,
+                        defaultValue: `Authenticating with ${providerName}…`,
                       })
-                    : t('login.oauth.authenticating', 'Authenticating...')}
+                    : t('login.oauth.authenticating', 'Authenticating…')}
                 </p>
               </>
             )}
@@ -227,7 +232,7 @@ export const OAuthCallback: React.FC = () => {
                   {t('login.oauth.success', 'Sign in successful!')}
                 </h2>
                 <p className="text-gray-600 dark:text-slate-400">
-                  {t('login.oauth.redirecting', 'Redirecting you now...')}
+                  {t('login.oauth.redirecting', 'Redirecting you now…')}
                 </p>
               </>
             )}
@@ -248,7 +253,7 @@ export const OAuthCallback: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleRetry}
-                  className="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  className="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 transition-colors"
                 >
                   {t('login.oauth.tryAgain', 'Try again')}
                 </button>

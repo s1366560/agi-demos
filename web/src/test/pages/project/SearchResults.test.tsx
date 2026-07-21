@@ -22,6 +22,7 @@ describe('SearchResults', () => {
 
     const heading = screen.getByRole('heading', { name: 'Retrieval Results' });
     expect(heading.closest('section')).toHaveClass('min-w-0');
-    expect(heading.closest('.cursor-pointer')).toHaveClass('flex-col');
+    expect(heading.closest('button')).toHaveClass('min-w-0', 'flex-wrap');
+    expect(heading.closest('button')?.parentElement).toHaveClass('flex-col');
   });
 });

@@ -53,7 +53,7 @@ const StringListEditor: React.FC<{
           />
           <button
             type="button"
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             onClick={() => {
               onChange(value.filter((_, i) => i !== idx));
             }}
@@ -66,7 +66,7 @@ const StringListEditor: React.FC<{
       <button
         type="button"
         onClick={handleAdd}
-        className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
+        className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       >
         <Plus size={12} /> {t('workspaceDetail.genes.config.addItem', 'Add')}
       </button>
@@ -123,7 +123,7 @@ const KVListEditor: React.FC<{
           />
           <button
             type="button"
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             onClick={() => {
               removeKey(k);
             }}
@@ -136,7 +136,7 @@ const KVListEditor: React.FC<{
       <button
         type="button"
         onClick={addEntry}
-        className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
+        className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       >
         <Plus size={12} /> {t('workspaceDetail.genes.config.addEntry', 'Add entry')}
       </button>

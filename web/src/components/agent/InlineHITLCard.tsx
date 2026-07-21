@@ -15,7 +15,7 @@ import React, { memo, useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Input, Form } from 'antd';
+import { Input, Form, message } from 'antd';
 import {
   HelpCircle,
   GitBranch,
@@ -495,7 +495,7 @@ const ClarificationContent: React.FC<{
           onChange={(e) => {
             setCustomInput(e.target.value);
           }}
-          placeholder={t('agent.hitl.placeholder.enter_answer', 'Enter your answer...')}
+          placeholder={t('agent.hitl.placeholder.enter_answer', 'Enter your answer…')}
           rows={3}
           className="mt-2 rounded-md"
         />
@@ -541,11 +541,26 @@ const DecisionContent: React.FC<{
   const hasOptions = options.length > 0;
   const question = cleanDisplayText(data.question);
 
-  const toggleMultiSelect = useCallback((optionId: string) => {
-    setSelectedMultiple((prev) =>
-      prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId]
-    );
-  }, []);
+  const toggleMultiSelect = useCallback(
+    (optionId: string) => {
+      setSelectedMultiple((prev) => {
+        if (prev.includes(optionId)) {
+          return prev.filter((id) => id !== optionId);
+        }
+        const max = data.max_selections;
+        if (max && prev.length >= max) {
+          void message.warning(
+            t('agent.hitl.multiselect.limitReached', 'You can only select up to {{max}} items', {
+              max,
+            })
+          );
+          return prev;
+        }
+        return [...prev, optionId];
+      });
+    },
+    [data.max_selections, t]
+  );
 
   const handleSubmit = useCallback(() => {
     if (!hasOptions && data.allow_custom && customInput.trim()) {
@@ -624,13 +639,13 @@ const DecisionContent: React.FC<{
                         ? 'border-amber-300 bg-amber-50/70 dark:bg-amber-950/30 shadow-sm'
                         : isAnswered
                           ? 'border-slate-100 dark:border-slate-800 opacity-60'
-                          : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 cursor-pointer'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700'
                     }
                   `}
                 >
                   <button
                     type="button"
-                    className="w-full p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 rounded-md disabled:cursor-default"
+                    className="w-full p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 rounded-md cursor-pointer disabled:cursor-default"
                     onClick={
                       !isAnswered
                         ? () => {
@@ -806,7 +821,7 @@ const DecisionContent: React.FC<{
             onChange={(e) => {
               setCustomInput(e.target.value);
             }}
-            placeholder={t('agent.hitl.placeholder.enter_decision', 'Enter your decision...')}
+            placeholder={t('agent.hitl.placeholder.enter_decision', 'Enter your decision…')}
             rows={3}
             className="mt-2 rounded-md"
           />
@@ -912,6 +927,7 @@ const EnvVarContent: React.FC<{
                           field: label,
                         })
                       }
+                      autoComplete="new-password"
                       className="rounded-md"
                     />
                   ) : field.input_type === 'textarea' ? (
@@ -1241,6 +1257,11 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
           useUnifiedHITLStore.getState().updateRequestStatus(requestId, 'answered');
         } catch (error) {
           console.error('Failed to submit HITL response:', error);
+          void message.error(
+            error instanceof Error
+              ? error.message
+              : t('agent.hitl.errors.submitFailed', 'Failed to submit response. Please try again.')
+          );
         } finally {
           setLocalSubmitting(false);
         }
@@ -1252,6 +1273,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
         respondToDecision,
         respondToEnvVar,
         respondToPermission,
+        t,
       ]
     );
 
@@ -1294,7 +1316,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
             <div
               className={`flex items-center justify-between gap-3 px-3 py-2 border-b ${headerBgClass}`}
             >
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2" aria-live="polite">
                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                   {title}
                 </span>

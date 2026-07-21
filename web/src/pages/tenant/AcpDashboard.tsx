@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -30,6 +30,8 @@ import { Pencil, PlayCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTenantStore } from '@/stores/tenant';
 
 import { acpService } from '@/services/acpService';
+
+import { formatDateTime } from '@/utils/date';
 
 import {
   ACP_SECRET_UNCHANGED_SENTINEL,
@@ -79,8 +81,7 @@ interface TestFormValues {
 }
 
 function formatTime(value?: string | null): string {
-  if (!value) return '-';
-  return new Date(value).toLocaleString();
+  return value ? formatDateTime(value) : '-';
 }
 
 function recordToEntries(record: Record<string, ACPConfigValue>): ConfigEntryFormValue[] {
@@ -170,6 +171,9 @@ export const AcpDashboard: React.FC = () => {
   const [testResult, setTestResult] = useState<TenantACPTestResponse | null>(null);
   const [form] = Form.useForm<AgentFormValues>();
   const [testForm] = Form.useForm<TestFormValues>();
+  // True once the first successful load completes; polling then refreshes in
+  // the background without flashing table spinners every interval.
+  const hasLoadedRef = useRef(false);
 
   const agents = statusData?.agents ?? [];
   const sessions = statusData?.sessions ?? [];
@@ -177,12 +181,15 @@ export const AcpDashboard: React.FC = () => {
 
   const loadStatus = useCallback(async () => {
     if (!tenantId) return;
-    setLoading(true);
+    if (!hasLoadedRef.current) {
+      setLoading(true);
+    }
     try {
       const response = await acpService.getStatus(tenantId);
       const pools = await acpService.listRunnerPools(tenantId);
       setStatusData(response);
       setRunnerPools(pools);
+      hasLoadedRef.current = true;
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('tenant.acp.errors.loadFailed'));
     } finally {
@@ -230,12 +237,12 @@ export const AcpDashboard: React.FC = () => {
       setTestResult(null);
       testForm.setFieldsValue({
         cwd: '/tmp',
-        prompt: '请只回复 PONG',
+        prompt: t('tenant.acp.test.defaultPrompt', { defaultValue: 'Reply with PONG only' }),
         timeoutSeconds: 30,
       });
       setTestDrawerOpen(true);
     },
-    [testForm]
+    [testForm, t]
   );
 
   const submitAgent = useCallback(async () => {
@@ -517,6 +524,7 @@ export const AcpDashboard: React.FC = () => {
               </Form.Item>
               <Button
                 icon={<X size={16} />}
+                aria-label={t('common.remove', { defaultValue: 'Remove' })}
                 onClick={() => {
                   remove(field.name);
                 }}
@@ -560,7 +568,7 @@ export const AcpDashboard: React.FC = () => {
             loading={loading}
             onClick={() => void loadStatus()}
           >
-            {t('common.retry')}
+            {t('common.refresh')}
           </Button>
           <Button type="primary" icon={<Plus size={16} />} onClick={openCreateDrawer}>
             {t('tenant.acp.actions.addAgent')}
@@ -628,6 +636,7 @@ export const AcpDashboard: React.FC = () => {
               <Card>
                 <Table
                   rowKey="session_id"
+                  loading={loading}
                   columns={sessionColumns}
                   dataSource={sessions}
                   pagination={{ pageSize: 8 }}
@@ -642,6 +651,7 @@ export const AcpDashboard: React.FC = () => {
               <Card>
                 <Table
                   rowKey={(event) => `${event.agent_id}-${event.action}-${event.timestamp}`}
+                  loading={loading}
                   columns={eventColumns}
                   dataSource={recentEvents}
                   pagination={{ pageSize: 8 }}
@@ -711,13 +721,17 @@ export const AcpDashboard: React.FC = () => {
             name="requiredLabelsText"
             label={t('tenant.acp.form.requiredLabels', { defaultValue: 'Required labels JSON' })}
           >
-            <Input.TextArea rows={3} placeholder={'{"region":"local"}'} />
+            <Input.TextArea rows={3} spellCheck={false} placeholder={'{"region":"local"}'} />
           </Form.Item>
           <Form.Item
             name="cwdPolicyText"
             label={t('tenant.acp.form.cwdPolicy', { defaultValue: 'CWD policy JSON' })}
           >
-            <Input.TextArea rows={3} placeholder={'{"allowed_roots":["/workspace"]}'} />
+            <Input.TextArea
+              rows={3}
+              spellCheck={false}
+              placeholder={'{"allowed_roots":["/workspace"]}'}
+            />
           </Form.Item>
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
@@ -740,7 +754,7 @@ export const AcpDashboard: React.FC = () => {
                     <Input placeholder="uv" />
                   </Form.Item>
                   <Form.Item name="argsText" label={t('tenant.acp.form.args')}>
-                    <Input.TextArea rows={4} placeholder={'run\npython\n-m\nagent'} />
+                    <Input.TextArea rows={4} spellCheck={false} placeholder={'run\npython\n-m\nagent'} />
                   </Form.Item>
                 </>
               );
@@ -791,20 +805,24 @@ export const AcpDashboard: React.FC = () => {
           </Form.Item>
         </Form>
         {testResult ? (
-          <Alert
-            className="mt-4"
-            type={testResult.success ? 'success' : 'error'}
-            showIcon
-            title={testResult.success ? t('tenant.acp.test.success') : t('tenant.acp.test.failure')}
-            description={
-              <Space orientation="vertical" size={4}>
-                <Text>{t('tenant.acp.test.duration', { duration: testResult.durationMs })}</Text>
-                <Text>{t('tenant.acp.test.updates', { count: testResult.updatesCount })}</Text>
-                {testResult.assistantText ? <Text>{testResult.assistantText}</Text> : null}
-                {testResult.error ? <Text type="danger">{testResult.error}</Text> : null}
-              </Space>
-            }
-          />
+          <div role="status" aria-live="polite">
+            <Alert
+              className="mt-4"
+              type={testResult.success ? 'success' : 'error'}
+              showIcon
+              title={
+                testResult.success ? t('tenant.acp.test.success') : t('tenant.acp.test.failure')
+              }
+              description={
+                <Space orientation="vertical" size={4}>
+                  <Text>{t('tenant.acp.test.duration', { duration: testResult.durationMs })}</Text>
+                  <Text>{t('tenant.acp.test.updates', { count: testResult.updatesCount })}</Text>
+                  {testResult.assistantText ? <Text>{testResult.assistantText}</Text> : null}
+                  {testResult.error ? <Text type="danger">{testResult.error}</Text> : null}
+                </Space>
+              }
+            />
+          </div>
         ) : null}
       </Drawer>
     </div>

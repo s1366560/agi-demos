@@ -11,8 +11,20 @@ import { useMemo } from 'react';
 
 import { useAgentV3Store } from '../stores/agentV3';
 
-import type { ConversationStatus } from '../components/agent/ConversationSidebar';
 import type { HITLSummary } from '../types/conversationState';
+
+/**
+ * Conversation status for UI display
+ *
+ * Was previously imported from the now-removed `components/agent/ConversationSidebar`;
+ * defined locally so this hook stays self-contained.
+ */
+export interface ConversationStatus {
+  /** Whether this conversation is currently streaming */
+  isStreaming: boolean;
+  /** Pending HITL request summary (if any) */
+  pendingHITL: HITLSummary | null;
+}
 
 /**
  * Get status map for all conversations

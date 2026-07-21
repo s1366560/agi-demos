@@ -122,7 +122,10 @@ export const Login: React.FC = () => {
           </div>
 
           {error && (
-            <div className="mb-6 flex items-center p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg">
+            <div
+              role="alert"
+              className="mb-6 flex items-center p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg"
+            >
               <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mr-3 flex-shrink-0" />
               <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
             </div>

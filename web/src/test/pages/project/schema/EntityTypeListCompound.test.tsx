@@ -172,7 +172,7 @@ describe('EntityTypeList Compound Component', () => {
       const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
       render(<EntityTypeList />);
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('Search entity types...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Search entity types…')).toBeInTheDocument();
       });
     });
 
@@ -224,47 +224,17 @@ describe('EntityTypeList Compound Component', () => {
   describe('Toolbar Sub-Component', () => {
     it('should render search input', async () => {
       const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
-      render(
-        <EntityTypeList.Toolbar
-          search=""
-          onSearchChange={vi.fn()}
-          viewMode="list"
-          onViewModeChange={vi.fn()}
-        />
-      );
-      expect(screen.getByPlaceholderText('Search entity types...')).toBeInTheDocument();
+      render(<EntityTypeList.Toolbar search="" onSearchChange={vi.fn()} />);
+      expect(screen.getByPlaceholderText('Search entity types…')).toBeInTheDocument();
     });
 
     it('should call onSearchChange when typing', async () => {
       const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
       const onSearchChange = vi.fn();
-      render(
-        <EntityTypeList.Toolbar
-          search=""
-          onSearchChange={onSearchChange}
-          viewMode="list"
-          onViewModeChange={vi.fn()}
-        />
-      );
-      const input = screen.getByPlaceholderText('Search entity types...');
+      render(<EntityTypeList.Toolbar search="" onSearchChange={onSearchChange} />);
+      const input = screen.getByPlaceholderText('Search entity types…');
       fireEvent.change(input, { target: { value: 'Person' } });
       expect(onSearchChange).toHaveBeenCalledWith('Person');
-    });
-
-    it('should call onViewModeChange when grid view clicked', async () => {
-      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
-      const onViewModeChange = vi.fn();
-      render(
-        <EntityTypeList.Toolbar
-          search=""
-          onSearchChange={vi.fn()}
-          viewMode="list"
-          onViewModeChange={onViewModeChange}
-        />
-      );
-      const gridButton = screen.getByTitle('Grid View');
-      fireEvent.click(gridButton);
-      expect(onViewModeChange).toHaveBeenCalledWith('grid');
     });
   });
 
@@ -376,7 +346,7 @@ describe('EntityTypeList Compound Component', () => {
     it('should render loading message', async () => {
       const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
       render(<EntityTypeList.Loading />);
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
+      expect(screen.getByText('Loading…')).toBeInTheDocument();
     });
   });
 

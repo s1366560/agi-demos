@@ -9,6 +9,7 @@
 import React, { useEffect, useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
 import {
   Card,
@@ -79,7 +80,10 @@ const StatusTag: React.FC<{ status: string }> = ({ status }) => {
     paused: { color: 'orange', icon: <PauseCircle size={16} /> },
     unhealthy: { color: 'red', icon: <AlertCircle size={16} /> },
     degraded: { color: 'gold', icon: <AlertCircle size={16} /> },
-    initializing: { color: 'cyan', icon: <RefreshCw size={16} className="animate-spin" /> },
+    initializing: {
+      color: 'cyan',
+      icon: <RefreshCw size={16} className="animate-spin motion-reduce:animate-none" />,
+    },
     terminated: { color: 'default', icon: <Square size={16} /> },
     initialization_failed: { color: 'red', icon: <XCircle size={16} /> },
   };
@@ -141,6 +145,7 @@ const PoolDashboard: React.FC = () => {
   } = usePoolStore();
 
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Initial load
   useEffect(() => {
@@ -149,10 +154,42 @@ const PoolDashboard: React.FC = () => {
     void fetchMetrics();
   }, [fetchStatus, fetchInstances, fetchMetrics]);
 
-  // Auto-refresh
+  // Restore page/tier view state from the URL once on mount
+  useEffect(() => {
+    const pageParam = Number(searchParams.get('page'));
+    if (Number.isInteger(pageParam) && pageParam > 1) {
+      setPage(pageParam);
+    }
+    const tierParam = searchParams.get('tier');
+    if (tierParam === 'hot' || tierParam === 'warm' || tierParam === 'cold') {
+      setTierFilter(tierParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reflect page/tier state in the URL so the view survives reload and sharing
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (currentPage > 1) {
+      next.set('page', String(currentPage));
+    } else {
+      next.delete('page');
+    }
+    if (tierFilter) {
+      next.set('tier', tierFilter);
+    } else {
+      next.delete('tier');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [currentPage, tierFilter, searchParams, setSearchParams]);
+
+  // Auto-refresh (skipped while the tab is hidden)
   useEffect(() => {
     if (autoRefresh) {
       refreshTimerRef.current = setInterval(() => {
+        if (document.visibilityState === 'hidden') return;
         void fetchStatus();
         void fetchInstances();
         void fetchMetrics();
@@ -250,10 +287,10 @@ const PoolDashboard: React.FC = () => {
       width: 120,
       render: (_: unknown, record: PoolInstance) => (
         <Space orientation="vertical" size={0}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 12 }} className="tabular-nums">
             {t('admin.poolDashboard.columns.active')}: {record.active_requests}
           </Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 12 }} className="tabular-nums">
             {t('admin.poolDashboard.columns.total')}: {record.total_requests}
           </Text>
         </Space>
@@ -264,7 +301,7 @@ const PoolDashboard: React.FC = () => {
       dataIndex: 'memory_used_mb',
       key: 'memory_used_mb',
       width: 100,
-      render: (mb: number) => `${mb.toFixed(1)} MB`,
+      render: (mb: number) => <span className="tabular-nums">{`${mb.toFixed(1)} MB`}</span>,
     },
     {
       title: t('admin.poolDashboard.columns.lastRequest'),

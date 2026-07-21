@@ -112,6 +112,7 @@ const TerminalTab: React.FC<{
               type="text"
               size="small"
               icon={<RefreshCw size={14} />}
+              aria-label={t('components.sandboxSection.reconnect')}
               className="text-slate-400 hover:text-white"
               onClick={() => {
                 setSessionId(null);
@@ -172,6 +173,20 @@ const DesktopTab: React.FC<{
     }
   }, [desktopStatus?.running, isDesktopLoading, sandboxId, onStartDesktop]);
 
+  // Escape exits fullscreen (mouse and keyboard users alike)
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isFullscreen]);
+
   if (!desktopStatus?.running) {
     return (
       <div className="h-full flex items-center justify-center bg-slate-900">
@@ -200,7 +215,9 @@ const DesktopTab: React.FC<{
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-900">
+    <div
+      className={`h-full flex flex-col bg-slate-900 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}
+    >
       {/* Desktop Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
         <div className="flex items-center gap-2">
@@ -222,6 +239,11 @@ const DesktopTab: React.FC<{
               type="text"
               size="small"
               icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              aria-label={
+                isFullscreen
+                  ? t('components.sandboxSection.exitFullscreen')
+                  : t('components.sandboxSection.fullscreen')
+              }
               onClick={() => {
                 setIsFullscreen(!isFullscreen);
               }}
@@ -233,6 +255,7 @@ const DesktopTab: React.FC<{
               type="text"
               size="small"
               icon={<Square size={14} />}
+              aria-label={t('components.sandboxSection.stopDesktop')}
               onClick={() => {
                 void onStopDesktop();
               }}
@@ -244,7 +267,7 @@ const DesktopTab: React.FC<{
       </div>
 
       {/* Desktop Viewer */}
-      <div className={`flex-1 min-h-0 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      <div className="flex-1 min-h-0">
         <RemoteDesktopViewer
           sandboxId={sandboxId}
           projectId={projectId}

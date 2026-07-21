@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConversationPickerModal } from '@/components/agent/comparison/ConversationPickerModal';
 import { SaveTemplateModal } from '@/components/agent/chat/SaveTemplateModal';
 import { ShortcutOverlay } from '@/components/agent/chat/ShortcutOverlay';
-import { UndoConfirmation } from '@/components/agent/chat/UndoConfirmation';
 import { VariableInputModal } from '@/components/agent/chat/VariableInputModal';
 
 import type { Conversation } from '@/types/agent';
@@ -72,26 +71,6 @@ describe('agent custom modal accessibility', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
-  });
-
-  it('gives undo confirmation a dialog description and Escape cancel path', () => {
-    const onCancel = vi.fn();
-    render(
-      <UndoConfirmation
-        visible
-        toolName="terminal.run"
-        onCancel={onCancel}
-        onConfirm={vi.fn().mockResolvedValue(undefined)}
-      />
-    );
-
-    const dialog = screen.getByRole('dialog', { name: 'Undo Action' });
-    expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(dialog).toHaveAccessibleDescription(/attempt to revert/i);
-    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onCancel).toHaveBeenCalled();
   });
 
   it('names the conversation picker dialog and its search field', () => {

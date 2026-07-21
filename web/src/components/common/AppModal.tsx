@@ -17,7 +17,11 @@ import React, { useCallback, useEffect, useId, useRef } from 'react';
 
 import { createPortal } from 'react-dom';
 
+import { useTranslation } from 'react-i18next';
+
 import { X } from 'lucide-react';
+
+import { confirmAction } from '@/utils/confirmAction';
 
 export type AppModalSize = 'sm' | 'md' | 'lg' | 'xl';
 export type AppModalPosition = 'center' | 'side';
@@ -81,6 +85,7 @@ export const AppModal: React.FC<AppModalProps> = ({
   const previouslyFocused = useRef<Element | null>(null);
   const titleId = useId();
   const descId = useId();
+  const { t } = useTranslation();
 
   const checkDirty = useCallback((): boolean => {
     if (typeof isDirty === 'function') return isDirty();
@@ -89,14 +94,23 @@ export const AppModal: React.FC<AppModalProps> = ({
 
   const attemptClose = useCallback(() => {
     if (checkDirty()) {
-      const msg = dirtyConfirmText || 'You have unsaved changes. Discard them and close?';
-      // Use window.confirm only for the discard-decision edge case (one-off,
-      // user-initiated). This is the ONLY window.confirm allowed by this
-      // component; deletes etc. use AppModal-based confirm flows elsewhere.
-      if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+      const msg =
+        dirtyConfirmText ||
+        t('common.unsavedChanges', {
+          defaultValue: 'You have unsaved changes. Discard them and close?',
+        });
+      void confirmAction({
+        title: msg,
+        okText: t('common.discard', { defaultValue: 'Discard' }),
+        cancelText: t('common.cancel', { defaultValue: 'Cancel' }),
+        danger: true,
+      }).then((confirmed) => {
+        if (confirmed) onClose();
+      });
+      return;
     }
     onClose();
-  }, [checkDirty, dirtyConfirmText, onClose]);
+  }, [checkDirty, dirtyConfirmText, onClose, t]);
 
   // Mount/unmount effects: body scroll lock + focus save/restore.
   useEffect(() => {
@@ -203,8 +217,8 @@ export const AppModal: React.FC<AppModalProps> = ({
           tabIndex={-1}
           className={
             isSide
-              ? `app-modal__panel app-modal__panel--side relative flex h-full w-full ${SIZE_MAX_WIDTH[size]} flex-col overflow-hidden border-l border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl outline-none ${className ?? ''}`
-              : `app-modal__panel relative w-full ${SIZE_MAX_WIDTH[size]} overflow-hidden rounded-lg border border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl outline-none ${className ?? ''}`
+              ? `app-modal__panel app-modal__panel--side relative flex h-full w-full ${SIZE_MAX_WIDTH[size]} flex-col overflow-hidden border-l border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#38d6ff)] ${className ?? ''}`
+              : `app-modal__panel relative w-full ${SIZE_MAX_WIDTH[size]} overflow-hidden rounded-lg border border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#38d6ff)] ${className ?? ''}`
           }
         >
           {(title || !hideCloseButton || headerActions) && (
@@ -228,7 +242,7 @@ export const AppModal: React.FC<AppModalProps> = ({
                 <button
                   type="button"
                   onClick={attemptClose}
-                  aria-label="Close dialog"
+                  aria-label={t('common.closeDialog', { defaultValue: 'Close dialog' })}
                   className="app-modal__close -mr-2 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--color-muted,#8996a9)] transition-colors hover:bg-[var(--color-panel-2,#111720)] hover:text-[var(--color-text,#e7edf6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary,#38d6ff)]"
                 >
                   <X size={18} aria-hidden="true" />

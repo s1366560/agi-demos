@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { Alert, Badge, Dropdown, Modal, Spin, Switch, Tag } from 'antd';
+import { Alert, Badge, Dropdown, message, Modal, Spin, Switch, Tag } from 'antd';
 import {
   ArrowLeft,
   Bot,
@@ -23,6 +23,9 @@ import { AgentDefinitionModal } from '../../components/agent/AgentDefinitionModa
 import { definitionsService } from '../../services/agent/definitionsService';
 import { useUser } from '../../stores/auth';
 import { useCurrentTenant } from '../../stores/tenant';
+import { getDefinitionListPath } from '../../utils/agentDefinitionPath';
+import { formatDateTime } from '../../utils/date';
+import { canManageTenantAgents } from '../../utils/permissions';
 
 import type { AgentBinding, AgentDefinition } from '../../types/multiAgent';
 import type { MenuProps } from 'antd';
@@ -34,23 +37,12 @@ const surface =
 const actionButton =
   'inline-flex h-9 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-3 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] disabled:cursor-not-allowed disabled:opacity-60 dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]';
 
-function getDefinitionListPath(pathname: string): string {
-  const segments = pathname.split('/').filter(Boolean);
-  const definitionsIndex = segments.lastIndexOf('agent-definitions');
-
-  if (definitionsIndex === -1) {
-    return '/tenant/agent-definitions';
-  }
-
-  return `/${segments.slice(0, definitionsIndex + 1).join('/')}`;
-}
-
 function formatDate(value: string | null | undefined): string {
-  return value ? new Date(value).toLocaleString() : '';
+  return value ? formatDateTime(value) : '';
 }
 
 function formatNumber(value: number | null | undefined): string {
-  return value === null || value === undefined ? '' : String(value);
+  return value === null || value === undefined ? '' : value.toLocaleString();
 }
 
 function formatMilliseconds(value: number | null | undefined): string {
@@ -63,19 +55,6 @@ function formatPercent(value: number | null | undefined): string {
 
 function jsonBlock(value: unknown): string {
   return JSON.stringify(value ?? null, null, 2);
-}
-
-function canManageTenantAgents(
-  user: ReturnType<typeof useUser>,
-  tenant: ReturnType<typeof useCurrentTenant>
-): boolean {
-  const roles = new Set((user?.roles ?? []).map((role) => role.toLowerCase()));
-  return (
-    roles.has('admin') ||
-    roles.has('owner') ||
-    roles.has('system_admin') ||
-    tenant?.owner_id === user?.id
-  );
 }
 
 function isEmptyArray(value: unknown[] | null | undefined): boolean {
@@ -154,6 +133,8 @@ function JsonViewer({ value }: { value: unknown }) {
 }
 
 function BindingSummary({ bindings }: { bindings: AgentBinding[] }) {
+  const { t } = useTranslation();
+
   if (bindings.length === 0) {
     return <span className={mutedText}>-</span>;
   }
@@ -168,10 +149,20 @@ function BindingSummary({ bindings }: { bindings: AgentBinding[] }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className={`font-mono text-xs ${pageText}`}>{binding.id}</span>
             <Tag color={binding.enabled ? 'success' : 'default'}>
-              {binding.enabled ? 'enabled' : 'disabled'}
+              {binding.enabled ? t('common.status.enabled') : t('common.status.disabled')}
             </Tag>
-            <Tag>priority {binding.priority}</Tag>
-            <Tag>score {binding.specificity_score}</Tag>
+            <Tag>
+              {t('tenant.agentDefinitions.detail.binding.priority', {
+                defaultValue: 'priority {{value}}',
+                value: binding.priority,
+              })}
+            </Tag>
+            <Tag>
+              {t('tenant.agentDefinitions.detail.binding.score', {
+                defaultValue: 'score {{value}}',
+                value: binding.specificity_score,
+              })}
+            </Tag>
           </div>
           <div className={`mt-2 grid gap-1 text-xs ${mutedText} sm:grid-cols-2`}>
             <span>channel_type: {binding.channel_type ?? '-'}</span>
@@ -253,11 +244,17 @@ export const AgentDefinitionDetail: React.FC = () => {
           tenant_id: tenantId,
         });
         setDefinition(updated);
+      } catch {
+        void message.error(
+          t('tenant.agentDefinitions.messages.toggleFailed', {
+            defaultValue: 'Failed to update the agent status',
+          })
+        );
       } finally {
         setIsSubmitting(false);
       }
     },
-    [definition, tenantId]
+    [definition, tenantId, t]
   );
 
   const handleDelete = useCallback(async () => {
@@ -269,10 +266,16 @@ export const AgentDefinitionDetail: React.FC = () => {
     try {
       await definitionsService.delete(definition.id, { tenant_id: tenantId });
       void navigate(listPath);
+    } catch {
+      void message.error(
+        t('tenant.agentDefinitions.messages.deleteFailed', {
+          defaultValue: 'Failed to delete the agent definition',
+        })
+      );
     } finally {
       setIsSubmitting(false);
     }
-  }, [definition, listPath, navigate, tenantId]);
+  }, [definition, listPath, navigate, tenantId, t]);
 
   const confirmDelete = useCallback(() => {
     if (!definition) {
@@ -331,6 +334,12 @@ export const AgentDefinitionDetail: React.FC = () => {
           type="error"
           title={error ?? t('tenant.agentDefinitions.detail.notFound', 'Agent not found')}
         />
+        {error ? (
+          <button type="button" className={actionButton} onClick={() => void loadDefinition()}>
+            <RefreshCw size={16} />
+            {t('common.retry', 'Retry')}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -341,7 +350,7 @@ export const AgentDefinitionDetail: React.FC = () => {
         <div className="min-w-0">
           <button
             type="button"
-            className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-[oklch(0.48_0.01_255)] transition-colors hover:text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.68_0.008_255)] dark:hover:text-[oklch(0.94_0.006_255)]"
+            className="mb-4 inline-flex items-center gap-2 rounded-[4px] text-sm font-medium text-[oklch(0.48_0.01_255)] transition-colors hover:text-[oklch(0.24_0.01_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:text-[oklch(0.68_0.008_255)] dark:hover:text-[oklch(0.94_0.006_255)]"
             onClick={() => void navigate(listPath)}
           >
             <ArrowLeft size={16} />
@@ -401,7 +410,7 @@ export const AgentDefinitionDetail: React.FC = () => {
               <Dropdown menu={{ items: menuItems ?? [] }} trigger={['click']}>
                 <button
                   type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-[4px] border border-[oklch(0.86_0.006_255)] text-[oklch(0.42_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.78_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[4px] border border-[oklch(0.86_0.006_255)] text-[oklch(0.42_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.78_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
                   aria-label={t('tenant.agentDefinitions.openActions', {
                     name: definition.display_name ?? definition.name,
                     defaultValue: 'Open actions for {{name}}',
@@ -447,8 +456,16 @@ export const AgentDefinitionDetail: React.FC = () => {
                     })
               }
             />
-            <InfoRow label="Discoverable" value={String(definition.discoverable)} />
-            <InfoRow label="Enabled" value={String(definition.enabled)} />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.discoverable', {
+                defaultValue: 'Discoverable',
+              })}
+              value={String(definition.discoverable)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.enabled', { defaultValue: 'Enabled' })}
+              value={String(definition.enabled)}
+            />
           </Section>
 
           <Section
@@ -469,13 +486,28 @@ export const AgentDefinitionDetail: React.FC = () => {
             })}
             icon={<Route size={16} />}
           >
-            <InfoRow label="Mode" value={definition.trigger?.mode} />
-            <InfoRow label="Semantic" value={definition.trigger?.semantic} />
             <InfoRow
-              label="Keywords"
+              label={t('tenant.agentDefinitions.detail.labels.mode', { defaultValue: 'Mode' })}
+              value={definition.trigger?.mode}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.semantic', {
+                defaultValue: 'Semantic',
+              })}
+              value={definition.trigger?.semantic}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.keywords', {
+                defaultValue: 'Keywords',
+              })}
               value={<StringList values={definition.trigger?.keywords} />}
             />
-            <InfoRow label="Raw trigger" value={<JsonViewer value={definition.trigger} />} />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.rawTrigger', {
+                defaultValue: 'Raw trigger',
+              })}
+              value={<JsonViewer value={definition.trigger} />}
+            />
           </Section>
 
           <Section
@@ -545,7 +577,12 @@ export const AgentDefinitionDetail: React.FC = () => {
             })}
             icon={<Network size={16} />}
           >
-            <InfoRow label="Bindings" value={<BindingSummary bindings={definition.bindings} />} />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.bindings', {
+                defaultValue: 'Bindings',
+              })}
+              value={<BindingSummary bindings={definition.bindings} />}
+            />
           </Section>
 
           <Section
@@ -585,7 +622,9 @@ export const AgentDefinitionDetail: React.FC = () => {
               value={formatNumber(definition.max_retries)}
             />
             <InfoRow
-              label="Fallback models"
+              label={t('tenant.agentDefinitions.detail.labels.fallbackModels', {
+                defaultValue: 'Fallback models',
+              })}
               value={<StringList values={definition.fallback_models} />}
             />
           </Section>
@@ -700,12 +739,24 @@ export const AgentDefinitionDetail: React.FC = () => {
             })}
             icon={<Clock3 size={16} />}
           >
-            <InfoRow label="Invocations" value={formatNumber(definition.total_invocations)} />
             <InfoRow
-              label="Avg execution time"
+              label={t('tenant.agentDefinitions.detail.labels.invocations', {
+                defaultValue: 'Invocations',
+              })}
+              value={formatNumber(definition.total_invocations)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.avgExecutionTime', {
+                defaultValue: 'Avg execution time',
+              })}
               value={formatMilliseconds(definition.avg_execution_time_ms)}
             />
-            <InfoRow label="Success rate" value={formatPercent(definition.success_rate)} />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.successRate', {
+                defaultValue: 'Success rate',
+              })}
+              value={formatPercent(definition.success_rate)}
+            />
           </Section>
 
           <Section
@@ -714,8 +765,18 @@ export const AgentDefinitionDetail: React.FC = () => {
             })}
             icon={<Clock3 size={16} />}
           >
-            <InfoRow label="Created at" value={formatDate(definition.created_at)} />
-            <InfoRow label="Updated at" value={formatDate(definition.updated_at)} />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.createdAt', {
+                defaultValue: 'Created at',
+              })}
+              value={formatDate(definition.created_at)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.detail.labels.updatedAt', {
+                defaultValue: 'Updated at',
+              })}
+              value={formatDate(definition.updated_at)}
+            />
           </Section>
 
           <Section

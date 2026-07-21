@@ -27,7 +27,10 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { tenantAPI } from '@/services/api';
 
+import { formatStorage } from '@/hooks/useDateFormatter';
+
 import { formatDateOnly } from '@/utils/date';
+
 
 import type { Tenant } from '@/types/memory';
 
@@ -49,15 +52,6 @@ interface OrgStatsResponse {
   clusters?: {
     total?: number | undefined;
   };
-}
-
-function formatStorage(bytes: number): string {
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  const mb = bytes / (1024 * 1024);
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  const gb = bytes / (1024 * 1024 * 1024);
-  return `${gb.toFixed(1)} GB`;
 }
 
 const OrgInfoForm: React.FC<OrgInfoFormProps> = ({ tenant }) => {

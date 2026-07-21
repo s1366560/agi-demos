@@ -3,6 +3,8 @@ import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { Link } from 'react-router-dom';
+
 import { Bot, ChevronRight, ChevronDown, Circle } from 'lucide-react';
 
 import type { AgentNode } from '../../../types/multiAgent';
@@ -92,6 +94,11 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(
               event.stopPropagation();
               toggleExpand();
             }}
+            aria-expanded={expanded}
+            aria-label={t('agent.multiAgent.toggleChildren', {
+              name: node.name ?? node.agentId.slice(0, 8),
+              defaultValue: 'Toggle child agents of {{name}}',
+            })}
             className="mt-0.5 flex-shrink-0 p-0.5 rounded hover:bg-slate-200
                 dark:hover:bg-slate-700 transition-colors"
           >
@@ -145,14 +152,14 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(
     return (
       <div>
         {canOpenSession && !hasChildren && sessionHref ? (
-          <a
-            href={sessionHref}
+          <Link
+            to={sessionHref}
             data-session-id={node.sessionId}
             className={`${rowClassName} w-full text-left`}
             style={rowStyle}
           >
             {rowContent}
-          </a>
+          </Link>
         ) : (
           <div
             role={canOpenSession ? 'button' : undefined}

@@ -54,6 +54,8 @@ def attempt(
     *,
     agent_config: dict[str, object] | None = None,
     workspace_metadata: dict[str, object] | None = None,
+    workspace_name: str | None = None,
+    plan_tasks: tuple[dict[str, object], ...] = (),
     updated_at: datetime | None = None,
 ) -> WorkspaceAttemptAuthority:
     return WorkspaceAttemptAuthority(
@@ -66,6 +68,8 @@ def attempt(
         attempt_number=2,
         conversation_agent_config=agent_config,
         workspace_metadata=workspace_metadata,
+        workspace_name=workspace_name,
+        plan_tasks=plan_tasks,
         created_at=NOW - timedelta(minutes=2),
         updated_at=updated_at,
     )
@@ -244,3 +248,45 @@ async def test_capability_mode_does_not_infer_from_workspace_use_case() -> None:
     )
 
     assert response.items[0].capability_mode is None
+
+
+async def test_projects_workspace_and_structured_plan_without_message_inference() -> None:
+    reader = FakeProjectMyWorkReader(
+        attempts=[
+            attempt(
+                "structured-attempt",
+                "conversation-structured",
+                "running",
+                workspace_name="Mission Control",
+                plan_tasks=(
+                    {
+                        "title": "Inspect policy authority",
+                        "description": "Read the persisted workspace policy.",
+                        "status": "completed",
+                    },
+                    {
+                        "title": "Apply the runtime snapshot",
+                        "description": "Bind the approved policy revision to this run.",
+                        "result_summary": "Runtime is using policy revision 7.",
+                        "status": "in_progress",
+                    },
+                    {
+                        "title": "Verify audit records",
+                        "status": "pending",
+                    },
+                ),
+            )
+        ]
+    )
+
+    response = await ProjectMyWorkService(reader).list_for_project(
+        project_id="project-1",
+        user_id="user-1",
+        now=NOW,
+    )
+
+    item = response.items[0]
+    assert item.workspace_name == "Mission Control"
+    assert item.phase == "Apply the runtime snapshot"
+    assert item.summary == "Runtime is using policy revision 7."
+    assert item.progress == 33

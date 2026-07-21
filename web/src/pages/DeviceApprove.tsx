@@ -133,13 +133,18 @@ export const DeviceApprove: React.FC = () => {
           {error && <Alert type="error" title={error} showIcon />}
 
           <Space orientation="vertical" size={8} style={{ width: '100%' }}>
-            <Text strong>{t('device.codeLabel')}</Text>
+            <label htmlFor="device-code-input">
+              <Text strong>{t('device.codeLabel')}</Text>
+            </label>
             <Input
+              id="device-code-input"
               autoFocus
               size="large"
               placeholder={t('device.codePlaceholder')}
               value={code}
               maxLength={CODE_LEN}
+              autoComplete="off"
+              spellCheck={false}
               onChange={(e) => {
                 setCode(normalize(e.target.value));
               }}

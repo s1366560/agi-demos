@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import type { WorkspaceMember, WorkspaceAgent } from '@/types/workspace';
 
 export interface MentionInputProps {
-  onSend: (content: string, mentions: string[]) => void;
+  /** Returns true when the message was accepted/sent; the draft is kept on failure. */
+  onSend: (content: string, mentions: string[]) => boolean | Promise<boolean>;
   members: WorkspaceMember[];
   agents: WorkspaceAgent[];
   disabled?: boolean;
@@ -36,6 +37,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
 
   const allMentions = useMemo<MentionOption[]>(
     () => [
@@ -88,12 +90,16 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (content.trim()) {
-        onSend(
+        const result = onSend(
           content.trim(),
           selectedMentions.map((mention) => mention.id)
         );
-        setContent('');
-        setSelectedMentions([]);
+        void Promise.resolve(result).then((sent) => {
+          if (sent) {
+            setContent('');
+            setSelectedMentions([]);
+          }
+        });
       }
     }
   };
@@ -158,17 +164,24 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     <div className="relative w-full" ref={containerRef}>
       {showDropdown && filteredMentions.length > 0 && (
         <div
-          className="absolute z-10 w-64 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-md shadow-lg"
+          id={listboxId}
+          role="listbox"
+          aria-label={t('workspaceDetail.chat.mentionListAria', 'Mention suggestions')}
+          className="absolute z-10 w-64 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-md shadow-lg dark:bg-slate-800 dark:border-slate-700"
           style={{ bottom: '100%', left: 0, marginBottom: '8px' }}
         >
           {filteredMentions.map((mention, idx) => (
             <button
               type="button"
               key={`${mention.type}-${mention.id}`}
+              id={`${listboxId}-opt-${idx}`}
+              role="option"
+              aria-selected={idx === selectedIndex}
+              tabIndex={-1}
               className={`w-full px-4 py-2 cursor-pointer text-sm flex items-center justify-between border-0 ${
                 idx === selectedIndex
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-slate-700 hover:bg-slate-50 bg-white'
+                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
+                  : 'text-slate-700 hover:bg-slate-50 bg-white dark:text-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700'
               }`}
               onClick={() => {
                 selectMention(mention);
@@ -178,7 +191,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
               }}
             >
               <span>{mention.name}</span>
-              <span className="text-xs text-slate-400 capitalize">
+              <span className="text-xs text-slate-400 capitalize dark:text-slate-500">
                 {mentionTypeLabels[mention.type]}
               </span>
             </button>
@@ -189,15 +202,24 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       <textarea
         ref={textareaRef}
         aria-label={t('workspaceDetail.chat.messageInputAria', 'Chat message input')}
+        role="combobox"
+        aria-expanded={showDropdown && filteredMentions.length > 0}
+        aria-controls={listboxId}
+        aria-autocomplete="list"
+        aria-activedescendant={
+          showDropdown && filteredMentions.length > 0
+            ? `${listboxId}-opt-${selectedIndex}`
+            : undefined
+        }
         value={content}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         disabled={disabled}
         placeholder={t(
           'workspaceDetail.chat.messagePlaceholder',
-          'Type a message... (Use @ to mention)'
+          'Type a message… (Use @ to mention)'
         )}
-        className="w-full min-h-[60px] max-h-32 p-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-slate-50 disabled:text-slate-500"
+        className="w-full min-h-[60px] max-h-32 p-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-slate-50 disabled:text-slate-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
         rows={2}
       />
     </div>

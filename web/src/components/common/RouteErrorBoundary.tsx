@@ -54,7 +54,7 @@ function RouteErrorFallback({
     </LazyButton>,
     <LazyButton type="primary" key="back" onClick={handleGoBack}>
       {fallbackPath
-        ? t('error.goToPage', { defaultValue: `Go to ${fallbackPath}` })
+        ? t('error.goToPage', { defaultValue: 'Go to page' })
         : t('error.goBack', { defaultValue: 'Go Back' })}
     </LazyButton>,
     <LazyButton key="home" onClick={() => navigate('/')}>
@@ -135,14 +135,14 @@ export function RouteErrorBoundary({
   return (
     <ErrorBoundary
       context={context}
-      fallback={
+      fallback={(error, onReset) => (
         <RouteErrorFallback
-          error={undefined}
+          error={error}
           context={context}
           fallbackPath={fallbackPath}
-          onReset={() => {}}
+          onReset={onReset}
         />
-      }
+      )}
       onError={(error: Error, errorInfo: ErrorInfo) => {
         console.error(`[${context}] Route error:`, error);
         console.error('Component stack:', errorInfo.componentStack);

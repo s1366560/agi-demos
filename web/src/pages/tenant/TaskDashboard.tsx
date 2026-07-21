@@ -6,6 +6,7 @@ import { message } from 'antd';
 import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, Play, RefreshCw } from 'lucide-react';
 
 import { formatTimeOnly } from '@/utils/date';
+import { logger } from '@/utils/logger';
 
 import { TaskList } from '../../components/tasks/TaskList';
 import { taskAPI } from '../../services/api';
@@ -23,7 +24,7 @@ const ChartLoading: React.FC<{ height?: string | undefined }> = ({ height = '200
       <div className="text-center">
         <Loader2 size={24} className="text-blue-600 animate-spin motion-reduce:animate-none" />
         <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
-          {t('tenant.tasks.charts.loading', { defaultValue: 'Loading chart...' })}
+          {t('tenant.tasks.charts.loading', { defaultValue: 'Loading chart…' })}
         </p>
       </div>
     </div>
@@ -68,6 +69,8 @@ const TaskDashboardInner: React.FC<{
   setLoading: (l: boolean) => void;
   refreshing: boolean;
   setRefreshing: (r: boolean) => void;
+  loadError: string | null;
+  setLoadError: (e: string | null) => void;
   queueHistory: { time: string; count: number }[];
   setQueueHistory: (
     h:
@@ -84,6 +87,8 @@ const TaskDashboardInner: React.FC<{
   setLoading,
   refreshing,
   setRefreshing,
+  loadError,
+  setLoadError,
   queueHistory,
   setQueueHistory,
 }) => {
@@ -99,6 +104,7 @@ const TaskDashboardInner: React.FC<{
 
       setStats(statsData);
       setQueueDepth(queueData);
+      setLoadError(null);
 
       // Update queue history for chart
       setQueueHistory((prev: { time: string; count: number }[]) => {
@@ -118,15 +124,17 @@ const TaskDashboardInner: React.FC<{
       setLoading(false);
       setRefreshing(false);
     } catch (error) {
-      console.error('Failed to fetch task dashboard data:', error);
+      logger.error('Failed to fetch task dashboard data', error);
+      setLoadError(t('tenant.tasks.loadFailed'));
       setLoading(false);
       setRefreshing(false);
     }
-  }, [setStats, setQueueDepth, setQueueHistory, setLoading, setRefreshing]);
+  }, [setStats, setQueueDepth, setQueueHistory, setLoading, setRefreshing, setLoadError, t]);
 
   useEffect(() => {
     void fetchData();
     const interval = setInterval(() => {
+      if (document.hidden) return;
       void fetchData();
     }, 5000);
     return () => {
@@ -245,8 +253,39 @@ const TaskDashboardInner: React.FC<{
 
   if (loading && !stats) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div
+        className="flex items-center justify-center h-full"
+        role="status"
+        aria-label={t('common.loading')}
+      >
         <div className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!stats && loadError) {
+    return (
+      <div className="mx-auto max-w-full flex flex-col gap-6">
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{loadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-md border border-red-200 px-3 py-1 text-sm font-medium transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:border-red-800 dark:hover:bg-red-900/40"
+          >
+            <RefreshCw
+              className={`size-4 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+            />
+            {t('common.retry')}
+          </button>
+        </div>
       </div>
     );
   }
@@ -256,9 +295,9 @@ const TaskDashboardInner: React.FC<{
       {/* Page Heading */}
       <div className="flex flex-wrap justify-between items-end gap-4 py-2">
         <div className="flex flex-col gap-1">
-          <h2 className="text-slate-900 dark:text-white tracking-tight text-[32px] font-bold leading-tight">
+          <h1 className="text-slate-900 dark:text-white tracking-tight text-[32px] font-bold leading-tight">
             {t('tenant.tasks.title')}
-          </h2>
+          </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">
             {t('tenant.tasks.subtitle')}
           </p>
@@ -292,6 +331,28 @@ const TaskDashboardInner: React.FC<{
       </div>
 
       {/* KPI Stats Cards */}
+      {loadError ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{loadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-md border border-red-200 px-3 py-1 text-sm font-medium transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:border-red-800 dark:hover:bg-red-900/40"
+          >
+            <RefreshCw
+              className={`size-4 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+            />
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Tasks */}
         <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -302,7 +363,7 @@ const TaskDashboardInner: React.FC<{
             <ListTodo className="text-slate-400 dark:text-slate-500 size-5" />
           </div>
           <div className="flex items-end gap-2 mt-2">
-            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none">
+            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none tabular-nums">
               {stats?.total.toLocaleString()}
             </p>
           </div>
@@ -317,7 +378,7 @@ const TaskDashboardInner: React.FC<{
             <Gauge className="text-slate-400 dark:text-slate-500 size-5" />
           </div>
           <div className="flex items-end gap-2 mt-2">
-            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none">
+            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none tabular-nums">
               {stats?.throughput_per_minute?.toFixed(1) || '0.0'}/min
             </p>
           </div>
@@ -332,7 +393,7 @@ const TaskDashboardInner: React.FC<{
             <Hourglass className="text-slate-400 dark:text-slate-500 size-5" />
           </div>
           <div className="flex items-end gap-2 mt-2">
-            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none">
+            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none tabular-nums">
               {stats?.pending.toLocaleString()}
             </p>
           </div>
@@ -347,7 +408,7 @@ const TaskDashboardInner: React.FC<{
             <AlertCircle className="text-red-500 size-5" />
           </div>
           <div className="flex items-end gap-2 mt-2">
-            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none">
+            <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none tabular-nums">
               {stats?.failed.toLocaleString()}
             </p>
             <span className="text-slate-500 dark:text-slate-400 text-xs font-normal">
@@ -372,7 +433,7 @@ const TaskDashboardInner: React.FC<{
             </div>
             <div className="text-right">
               <p className="text-slate-900 dark:text-white text-2xl font-bold">
-                {t('tenant.tasks.charts.current')}: {queueDepth?.total}
+                {t('tenant.tasks.charts.current')}: {queueDepth?.total ?? queueDepth?.depth ?? 0}
               </p>
             </div>
           </div>
@@ -431,7 +492,10 @@ const TaskDashboardInner: React.FC<{
                   <div
                     className={`h-full ${item.color} rounded-full transition-[width] duration-500`}
                     style={{
-                      width: `${Math.max(2, (item.value / item.total) * 100).toString()}%`,
+                      width:
+                        item.value === 0
+                          ? '0%'
+                          : `${Math.max(2, (item.value / item.total) * 100).toString()}%`,
                     }}
                   ></div>
                 </div>
@@ -495,7 +559,7 @@ const ChartJSLibInner: React.FC<{ children: (props: ChartComponents) => React.Re
         }
       })
       .catch((error: unknown) => {
-        console.error('Failed to load chart modules:', error);
+        logger.error('Failed to load chart modules', error);
       });
     return () => {
       mounted = false;
@@ -515,6 +579,7 @@ export const TaskDashboard: React.FC = () => {
   const [queueDepth, setQueueDepth] = useState<QueueDepth | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [queueHistory, setQueueHistory] = useState<{ time: string; count: number }[]>([]);
 
   // Only render charts on client-side to avoid hydration issues (rendering-hydration-no-flicker)
@@ -528,7 +593,7 @@ export const TaskDashboard: React.FC = () => {
 
   if (!isClient) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full" role="status">
         <div className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
@@ -547,6 +612,8 @@ export const TaskDashboard: React.FC = () => {
           setLoading={setLoading}
           refreshing={refreshing}
           setRefreshing={setRefreshing}
+          loadError={loadError}
+          setLoadError={setLoadError}
           queueHistory={queueHistory}
           setQueueHistory={setQueueHistory}
         />

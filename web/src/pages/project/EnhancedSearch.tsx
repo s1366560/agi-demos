@@ -38,6 +38,7 @@ import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph';
 
 import { graphService } from '../../services/graphService';
 import { useProjectStore } from '../../stores/project';
+import { logger } from '../../utils/logger';
 
 import { SearchForm, SearchResults, SearchConfig } from './search';
 
@@ -49,7 +50,6 @@ import type {
   EnhancedSearchResultsProps,
   EnhancedSearchGraphProps,
   EnhancedSearchErrorProps,
-  EnhancedSearchHistoryProps,
   EnhancedSearchCompound,
 } from './search/types';
 
@@ -111,7 +111,6 @@ const CONFIG_SYMBOL = Symbol('EnhancedSearchConfig');
 const RESULTS_SYMBOL = Symbol('EnhancedSearchResults');
 const GRAPH_SYMBOL = Symbol('EnhancedSearchGraph');
 const ERROR_SYMBOL = Symbol('EnhancedSearchError');
-const HISTORY_SYMBOL = Symbol('EnhancedSearchHistory');
 
 // ========================================
 // Sub-Components (Marker Components)
@@ -131,9 +130,6 @@ function GraphMarker(_props: EnhancedSearchGraphProps) {
   return null;
 }
 function ErrorMarker(_props: EnhancedSearchErrorProps) {
-  return null;
-}
-function HistoryMarker(_props: EnhancedSearchHistoryProps) {
   return null;
 }
 
@@ -234,11 +230,13 @@ markComponent(ConfigMarker, CONFIG_SYMBOL, 'EnhancedSearchConfig');
 markComponent(ResultsMarker, RESULTS_SYMBOL, 'EnhancedSearchResults');
 markComponent(GraphMarker, GRAPH_SYMBOL, 'EnhancedSearchGraph');
 markComponent(ErrorMarker, ERROR_SYMBOL, 'EnhancedSearchError');
-markComponent(HistoryMarker, HISTORY_SYMBOL, 'EnhancedSearchHistory');
 
 // ========================================
 // Main Component
 // ========================================
+
+// No backend tag listing exists yet; user-added tags still work via the config panel.
+const NO_AVAILABLE_TAGS: string[] = [];
 
 const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
   ({
@@ -278,14 +276,10 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       (child): child is React.ReactElement<EnhancedSearchErrorProps> =>
         hasMarker<EnhancedSearchErrorProps>(child, ERROR_SYMBOL)
     );
-    const historyChild = childrenArray.find(
-      (child): child is React.ReactElement<EnhancedSearchHistoryProps> =>
-        hasMarker<EnhancedSearchHistoryProps>(child, HISTORY_SYMBOL)
-    );
 
     // Determine if using compound mode
     const hasSubComponents = Boolean(
-      formChild || configChild || resultsChild || graphChild || errorChild || historyChild
+      formChild || configChild || resultsChild || graphChild || errorChild
     );
 
     // In legacy mode, include all sections by default
@@ -295,7 +289,6 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     const includeResults = hasSubComponents ? !!resultsChild : true;
     const includeGraph = hasSubComponents ? !!graphChild : true;
     const includeError = hasSubComponents ? !!errorChild : true;
-    const includeHistory = hasSubComponents ? !!historyChild : true;
 
     // State
     const [query, setQuery] = useState('');
@@ -334,7 +327,6 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     // Faceted Search State
     const [selectedEntityTypes, setSelectedEntityTypes] = useState<string[]>([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
-    const [availableTags] = useState<string[]>(['architecture', 'meeting', 'decisions', 'Q3']);
 
     // Community Search State
     const [communityUuid, setCommunityUuid] = useState('');
@@ -532,7 +524,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
           }
         }
       } catch (err) {
-        console.error('Search failed:', err);
+        logger.error('[EnhancedSearch] Search failed:', err);
         setError(t('project.search.errors.search_failed'));
       } finally {
         setLoading(false);
@@ -715,7 +707,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                 customTimeRange={customTimeRange}
                 selectedEntityTypes={selectedEntityTypes}
                 selectedTags={selectedTags}
-                availableTags={availableTags}
+                availableTags={NO_AVAILABLE_TAGS}
                 communityUuid={communityUuid}
                 includeEpisodes={includeEpisodes}
                 onMobileConfigClose={() => {
@@ -744,8 +736,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                 <div
                   className="flex items-center gap-2 rounded-md border border-error-border bg-error-bg p-3 text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark"
                   data-testid="search-error"
+                  role="alert"
                 >
-                  <AlertCircle className="h-5 w-5" />
+                  <AlertCircle className="h-5 w-5" aria-hidden="true" />
                   <span className="text-sm">{error}</span>
                 </div>
               )}
@@ -823,39 +816,6 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                   onCopyId={handleCopyId}
                 />
               )}
-
-              {/* Search History */}
-              {includeHistory && (
-                <div
-                  className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4"
-                  data-testid="search-history"
-                >
-                  <h3 className="text-sm font-medium mb-2">
-                    {t('project.search.actions.searchHistory', 'Search History')}
-                  </h3>
-                  {searchHistory.length > 0 ? (
-                    <ul className="space-y-1">
-                      {searchHistory.map((item, index) => (
-                        <li
-                          key={index}
-                          className="text-xs text-slate-600 dark:text-slate-400 cursor-pointer hover:text-slate-900 dark:hover:text-white"
-                          onClick={() => {
-                            setQuery(item.query);
-                            setSearchMode(item.mode as SearchMode);
-                            setShowHistory(false);
-                          }}
-                        >
-                          {item.query} ({item.mode})
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-slate-500 dark:text-slate-500">
-                      {t('project.search.actions.noHistory', 'No search history')}
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </main>
@@ -875,7 +835,6 @@ EnhancedSearchCompound.Config = ConfigMarker;
 EnhancedSearchCompound.Results = ResultsMarker;
 EnhancedSearchCompound.Graph = GraphMarker;
 EnhancedSearchCompound.Error = ErrorMarker;
-EnhancedSearchCompound.History = HistoryMarker;
 EnhancedSearchCompound.Root = EnhancedSearchMemo;
 
 // Export compound component

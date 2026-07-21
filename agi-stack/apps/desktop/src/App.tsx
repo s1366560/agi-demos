@@ -92,6 +92,7 @@ import {
 } from './features/session/SessionPlanReview';
 import { SessionTerminalCanvas } from './features/session/SessionTerminalCanvas';
 import { SessionWorkspace } from './features/session/SessionWorkspace';
+import { canonicalJsonSha256 } from './features/session/canonicalJsonDigest';
 import {
   artifactDeliveryRequest,
   artifactReviewRequest,
@@ -186,6 +187,7 @@ import {
   type SettingsEntry,
 } from './features/settings/settingsEntryRouting';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
+import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
 import {
   NewTaskFlow,
@@ -194,6 +196,11 @@ import {
   type NewTaskSession,
 } from './features/task/NewTaskFlow';
 import {
+  NewThreadComposer,
+  type NewThreadComposerInput,
+} from './features/task/NewThreadComposer';
+import {
+  buildPlanningPrompt,
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
   clearLegacyPlanApprovalRecovery,
@@ -203,8 +210,18 @@ import {
   planTaskSignature,
   readLegacyPlanApprovalRecovery,
   type NewTaskAgentTurnOutcome,
+  type NewTaskDefinition,
 } from './features/task/newTaskPlanModel';
-import { resolveNewTaskWorkspaceAuthority } from './features/task/newTaskSessionModel';
+import {
+  browserTaskSessionCreationStorage,
+  buildLocalTaskSessionRequest,
+  clearTaskSessionCreationAttempt,
+  readTaskSessionCreationAttempt,
+  resolveNewTaskWorkspaceAuthority,
+  taskSessionCreationAttempt,
+  taskSessionCreationFingerprint,
+  writeTaskSessionCreationAttempt,
+} from './features/task/newTaskSessionModel';
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { beginDesktopRuntimeScopeTransition } from './features/workspace/workspaceOverviewModel';
 import {
@@ -230,6 +247,7 @@ import type {
   ConversationTimelineState,
   ChangeSnapshot,
   CodeRangeReference,
+  ComposerContextItem,
   DesktopApprovalRequest,
   DesktopArtifactDelivery,
   DesktopArtifactVersion,
@@ -1493,6 +1511,8 @@ export function App() {
   const [newTaskResumeDraft, setNewTaskResumeDraft] =
     useState<NewTaskResumeDraft | null>(null);
   const [preferredTaskMode, setPreferredTaskMode] = useState<'work' | 'code'>('work');
+  const [newThreadCreating, setNewThreadCreating] = useState(false);
+  const [newThreadError, setNewThreadError] = useState<string | null>(null);
   const [settingsWindowOpen, setSettingsWindowOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('account');
   const [commandQuery, setCommandQuery] = useState('');
@@ -1700,6 +1720,19 @@ export function App() {
     runtimeProjectionRefreshRevision,
     runtimeModelRole,
   );
+  const workspaceAgentPolicy = useWorkspaceAgentPolicy(
+    config,
+    identityAuthenticated && showRuntimeConfig && connection === 'ready',
+  );
+  const canManageWorkspacePolicy = useMemo(() => {
+    if (auth.user?.roles.some((role) => role === 'admin' || role === 'owner')) return true;
+    if (dataset.workspaceMembers.status !== 'ready') return false;
+    const membership = dataset.workspaceMembers.items.find(
+      (member) =>
+        member.workspace_id === config.workspaceId && member.user_id === auth.user?.user_id,
+    );
+    return membership?.role === 'manager' || membership?.role === 'owner';
+  }, [auth.user, config.workspaceId, dataset.workspaceMembers]);
 
   const syncLocalRuntimeConfig = useCallback(
     async (nextConfig: DesktopRuntimeConfig): Promise<DesktopRuntimeConfig> => {
@@ -4005,7 +4038,10 @@ export function App() {
     setNewTaskOpen(true);
   };
 
-  const startNewSession = () => openNewTask();
+  const startNewSession = () => {
+    setNewThreadError(null);
+    switchSection('home');
+  };
 
   const resumeSessionTaskListReview = () => {
     const projection = sessionProjection;
@@ -4145,6 +4181,93 @@ export function App() {
     throw new Error(t('task.liveConnectionRequired'));
   };
 
+  const createComposerThread = async (input: NewThreadComposerInput) => {
+    const policy = workspaceAgentPolicy.policy;
+    const actorId = auth.user?.user_id.trim() ?? '';
+    const workspaceId = config.workspaceId.trim();
+    const title = input.prompt.split(/\r?\n/, 1)[0].trim().slice(0, 96);
+    if (!actorId || !workspaceId || !title || !policy) {
+      setNewThreadError(t('task.creationContextUnavailable'));
+      return;
+    }
+    const definition: NewTaskDefinition = {
+      title,
+      objective: input.prompt,
+      kind: input.mode === 'code' ? 'programming' : 'general',
+      workspaceRoot: config.workspaceRoot,
+      contextSources: ['project_memory', 'project_files'],
+    };
+    const policySelection =
+      canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode
+        ? {
+            expected_revision: policy.revision,
+            route: {
+              provider_id: input.model.providerId,
+              model_id: input.model.modelId,
+            },
+            reasoning_effort: input.reasoningEffort,
+            permission_mode: input.permissionMode,
+          }
+        : undefined;
+    const baseFingerprint = taskSessionCreationFingerprint(
+      config,
+      actorId,
+      definition,
+      workspaceId,
+    );
+    const policyDigest = canonicalJsonSha256({
+      baseFingerprint,
+      policySelection,
+      contextItems: input.contextItems,
+    });
+    const fingerprint = policyDigest ? `sha256:${policyDigest}` : '';
+    const storage = browserTaskSessionCreationStorage();
+    const storedAttempt = readTaskSessionCreationAttempt(storage, fingerprint);
+    const attempt = taskSessionCreationAttempt(
+      storedAttempt,
+      fingerprint,
+      () => `desktop-task-session-${crypto.randomUUID()}`,
+    );
+    if (!fingerprint || !writeTaskSessionCreationAttempt(storage, attempt)) {
+      setNewThreadError(t('task.creationRecoveryUnavailable'));
+      return;
+    }
+
+    setNewThreadCreating(true);
+    setNewThreadError(null);
+    try {
+      const client = new DesktopApiClient(config);
+      const request = buildLocalTaskSessionRequest(definition, workspaceId, attempt.idempotencyKey);
+      const result = await client.createTaskSession({
+        ...request,
+        initial_message: {
+          ...request.initial_message,
+          context_items: input.contextItems,
+        },
+        ...(policySelection ? { workspace_policy: policySelection } : {}),
+      });
+      const session: NewTaskSession = {
+        workspace: result.workspace,
+        conversation: result.conversation,
+        config: { ...config, workspaceId: result.workspace.id },
+      };
+      clearTaskSessionCreationAttempt(storage, fingerprint);
+      if (result.policy) workspaceAgentPolicy.acceptPolicy(result.policy);
+      activateNewTaskSession(session);
+      await runNewTaskAgentTurn({
+        config: session.config,
+        conversationId: session.conversation.id,
+        projectId: session.config.projectId,
+        message: buildPlanningPrompt(definition),
+        messageId: `desktop-plan-${crypto.randomUUID()}`,
+      });
+    } catch (caught) {
+      setNewThreadError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setNewThreadCreating(false);
+    }
+  };
+
   const ensureAgentConversation = async (firstMessage: string): Promise<AgentConversation> => {
     const scopeKey = agentConversationScopeKey(config);
     if (
@@ -4189,7 +4312,11 @@ export function App() {
     return conversation;
   };
 
-  const sendMessageContent = async (rawContent: string, onWorkspaceMessageSaved?: () => void) => {
+  const sendMessageContent = async (
+    rawContent: string,
+    contextItems: ComposerContextItem[],
+    onWorkspaceMessageSaved?: () => void,
+  ) => {
     const content = rawContent.trim();
     if (!content) return;
     const canSendConversationMessage = Boolean(
@@ -4231,6 +4358,7 @@ export function App() {
           delivery: effectiveRunInputDeliveryValue,
           content,
           references: runInputReferences,
+          contextItems,
         });
         if (runInputRequestRef.current?.signature !== signature) {
           const requestId =
@@ -4249,6 +4377,7 @@ export function App() {
           idempotencyKey: request.idempotencyKey,
           delivery: effectiveRunInputDeliveryValue,
           references: runInputReferences,
+          contextItems,
         });
         onWorkspaceMessageSaved?.();
         setRunInputReferences([]);
@@ -4275,7 +4404,7 @@ export function App() {
         }
         return;
       }
-      const saved = await api.sendMessage(content);
+      const saved = await api.sendMessage(content, undefined, contextItems);
       setDataset((current) => ({ ...current, messages: [...current.messages, saved] }));
       onWorkspaceMessageSaved?.();
       upsertAgentTaskSignal({
@@ -4372,8 +4501,12 @@ export function App() {
   const sendMessageContentRef = useRef(sendMessageContent);
   sendMessageContentRef.current = sendMessageContent;
   const sendChatMessage = useCallback(
-    (content: string, onWorkspaceMessageSaved?: () => void) => {
-      void sendMessageContentRef.current(content, onWorkspaceMessageSaved);
+    (
+      content: string,
+      contextItems: ComposerContextItem[],
+      onWorkspaceMessageSaved?: () => void,
+    ) => {
+      void sendMessageContentRef.current(content, contextItems, onWorkspaceMessageSaved);
     },
     [],
   );
@@ -5482,6 +5615,9 @@ export function App() {
 
   const renderChatPanel = () => (
     <ChatPanel
+      api={api}
+      conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
+      selectedConversationId={selectedConversation?.id ?? null}
       messages={dataset.messages}
       timelineState={selectedConversation ? sessionTimeline : null}
       agentTaskSignals={agentTaskSignals}
@@ -5627,6 +5763,47 @@ export function App() {
     />
   );
 
+  const renderNewThreadComposer = () => (
+    <NewThreadComposer
+      api={api}
+      workspace={selectedWorkspace}
+      conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
+      mode={preferredTaskMode}
+      policy={workspaceAgentPolicy.policy}
+      modelOptions={
+        preferredTaskMode === 'code'
+          ? workspaceAgentPolicy.codeModelOptions
+          : workspaceAgentPolicy.workModelOptions
+      }
+      canManagePolicy={canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode}
+      loadingPolicy={workspaceAgentPolicy.loading}
+      compatibilityMode={workspaceAgentPolicy.compatibilityMode}
+      disabledReason={
+        newTaskDisabledReason ??
+        (workspaceAgentPolicy.error
+          ? t('task.policyUnavailable')
+          : workspaceAgentPolicy.policy &&
+              (preferredTaskMode === 'code'
+                ? workspaceAgentPolicy.codeModelOptions
+                : workspaceAgentPolicy.workModelOptions
+              ).length === 0
+            ? t('task.noModelsAvailable')
+            : null)
+      }
+      creating={newThreadCreating}
+      error={newThreadError}
+      onModeChange={setPreferredTaskMode}
+      onCreate={(input) => void createComposerThread(input)}
+      onOpenThread={(conversation) =>
+        selectConversation(config.projectId, config.workspaceId, conversation, 'chat')
+      }
+      onManageModels={() => {
+        setSettingsInitialSection('models');
+        setSettingsWindowOpen(true);
+      }}
+    />
+  );
+
   const renderAuxiliaryView = (section: 'home' | 'search') => (
     <AuxiliaryView
       section={section}
@@ -5713,9 +5890,8 @@ export function App() {
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
     if (activeSection === 'automations') return renderAutomationsPage();
-    if (activeSection === 'home' || activeSection === 'search') {
-      return renderAuxiliaryView(activeSection);
-    }
+    if (activeSection === 'home') return renderNewThreadComposer();
+    if (activeSection === 'search') return renderAuxiliaryView('search');
     return renderWorkspaceOverview();
   };
 
@@ -5763,7 +5939,6 @@ export function App() {
                   ? activeSection
                   : null
             }
-            mode={preferredTaskMode}
             taskCount={dataset.myWork.length}
             tenantName={
               auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
@@ -5791,10 +5966,6 @@ export function App() {
             }
             expandedWorkspaceIds={expandedWorkspaceIds}
             newTaskDisabledReason={newTaskDisabledReason}
-            onModeChange={(mode) => {
-              setPreferredTaskMode(mode);
-              switchSection('board');
-            }}
             onNavigate={(section) => {
               if (section === 'home') switchSection('home');
               if (section === 'my-work') switchSection('board');

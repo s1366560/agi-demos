@@ -239,13 +239,13 @@ function isTextArtifact(artifact: Artifact): boolean {
   );
 }
 
-function isPdfFile(path: string, mimeType?: string | undefined): boolean {
+function isPdfFile(path: string, mimeType?: string): boolean {
   return (
     mimeType?.toLowerCase().includes('application/pdf') === true || getFileExtension(path) === 'pdf'
   );
 }
 
-function isPreviewableByUrl(path: string, mimeType?: string | undefined): boolean {
+function isPreviewableByUrl(path: string, mimeType?: string): boolean {
   const mime = (mimeType ?? '').toLowerCase();
   return (
     isPdfFile(path, mime) ||

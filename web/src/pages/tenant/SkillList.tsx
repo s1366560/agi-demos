@@ -42,6 +42,7 @@ import { skillAPI } from '@/services/skillService';
 import type { SkillListParams as SkillApiListParams } from '@/services/skillService';
 
 import { SkillModal } from '@/components/skill/SkillModal';
+import { SkillVersionList } from '@/components/skill/SkillVersionList';
 import {
   useLazyMessage,
   LazyPopconfirm,
@@ -288,8 +289,6 @@ export const SkillList: FC = () => {
   }, [libraryView, skills]);
 
   const visibleCount = filteredSkills.length;
-  const managedCount = useMemo(() => skills.filter(isManagedSkill).length, [skills]);
-  const readonlyCount = total - managedCount;
   const configBySystemSkillName = useMemo(
     () => new Map(tenantConfigs.map((config) => [config.system_skill_name, config.action])),
     [tenantConfigs]
@@ -669,11 +668,11 @@ export const SkillList: FC = () => {
         >
           {(
             [
-              { key: 'all' as const, count: total },
-              { key: 'managed' as const, count: managedCount },
-              { key: 'readonly' as const, count: readonlyCount },
-            ] satisfies Array<{ key: SkillLibraryView; count: number }>
-          ).map(({ key, count }) => {
+              { key: 'all' as const },
+              { key: 'managed' as const },
+              { key: 'readonly' as const },
+            ] satisfies Array<{ key: SkillLibraryView }>
+          ).map(({ key }) => {
             const active = libraryView === key;
             return (
               <button
@@ -690,7 +689,6 @@ export const SkillList: FC = () => {
                 aria-pressed={active}
               >
                 {t(`tenant.skills.libraryViews.${key}`)}
-                <span className="text-[11px] opacity-70">{count}</span>
               </button>
             );
           })}
@@ -786,7 +784,7 @@ export const SkillList: FC = () => {
                       onClick={() => {
                         handleView(skill);
                       }}
-                      className={`min-w-0 truncate text-left text-sm font-semibold hover:underline ${pageText}`}
+                      className={`min-w-0 truncate rounded-[2px] text-left text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${pageText}`}
                     >
                       {skill.name}
                     </button>
@@ -1089,65 +1087,17 @@ export const SkillList: FC = () => {
           <div className="flex justify-center py-10">
             <LazySpin />
           </div>
-        ) : versionRows.length === 0 ? (
-          <div className="py-8">
-            <LazyEmpty description={t('tenant.skills.versions.empty')} />
-          </div>
         ) : (
-          <div className="max-h-[420px] overflow-auto divide-y divide-[oklch(0.9_0.006_255)] dark:divide-[oklch(0.28_0.006_255)]">
-            {versionRows.map((version) => {
-              const isCurrent = versionSkill?.current_version === version.version_number;
-              return (
-                <div
-                  key={version.id}
-                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`text-sm font-semibold ${pageText}`}>
-                        {version.version_label ?? `#${String(version.version_number)}`}
-                      </span>
-                      <span className={`text-xs ${mutedText}`}>#{version.version_number}</span>
-                      {isCurrent ? (
-                        <span className="rounded-full border border-[oklch(0.78_0.08_155)] bg-[oklch(0.96_0.035_155)] px-2 py-0.5 text-[11px] font-medium text-[oklch(0.38_0.11_155)] dark:border-[oklch(0.44_0.08_155)] dark:bg-[oklch(0.24_0.04_155)] dark:text-[oklch(0.76_0.09_155)]">
-                          {t('tenant.skills.versions.current')}
-                        </span>
-                      ) : null}
-                    </div>
-                    {version.change_summary ? (
-                      <div className={`mt-1 text-sm ${mutedText}`}>{version.change_summary}</div>
-                    ) : null}
-                    <div className={`mt-1 text-xs ${mutedText}`}>
-                      {t('tenant.skills.versions.createdBy', {
-                        author: version.created_by,
-                        date: new Date(version.created_at).toLocaleString(),
-                      })}
-                    </div>
-                  </div>
-                  {!isCurrent ? (
-                    <LazyPopconfirm
-                      title={t('tenant.skills.versions.rollbackConfirm')}
-                      onConfirm={() => {
-                        void handleRollback(version.version_number);
-                      }}
-                      okText={t('common.confirm')}
-                      cancelText={t('common.cancel')}
-                    >
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-3 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] disabled:cursor-not-allowed disabled:opacity-60 dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
-                        disabled={rollbackVersion !== null}
-                      >
-                        <RotateCcw size={14} />
-                        {rollbackVersion === version.version_number
-                          ? t('tenant.skills.versions.rollingBack')
-                          : t('tenant.skills.versions.rollback')}
-                      </button>
-                    </LazyPopconfirm>
-                  ) : null}
-                </div>
-              );
-            })}
+          <div className="max-h-[420px] overflow-auto">
+            <SkillVersionList
+              versions={versionRows}
+              currentVersion={versionSkill?.current_version}
+              rollbackVersion={rollbackVersion}
+              emptyDescription={t('tenant.skills.versions.empty')}
+              onRollback={(versionNumber) => {
+                void handleRollback(versionNumber);
+              }}
+            />
           </div>
         )}
       </Modal>

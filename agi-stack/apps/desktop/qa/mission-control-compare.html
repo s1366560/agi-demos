@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mission Control visual comparison</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: #03070b; color: #dbe7f2; font: 16px system-ui; }
+      header { height: 44px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; text-align: center; background: #111923; }
+      main { display: grid; grid-template-columns: var(--capture-width) var(--capture-width); }
+      img { display: block; width: var(--capture-width); height: var(--capture-height); object-fit: contain; }
+      body.vertical header { grid-template-columns: 1fr; height: auto; }
+      body.vertical header strong { padding: 12px; }
+      body.vertical main { grid-template-columns: var(--capture-width); }
+    </style>
+  </head>
+  <body>
+    <header><strong>Source prototype</strong><strong>Implementation</strong></header>
+    <main><img id="source" alt="Source prototype" /><img id="implementation" alt="Implementation" /></main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const view = params.get('view') === 'my-work' ? 'my-work' : 'home';
+      const width = params.get('width') === '1100' ? 1100 : 1440;
+      const height = width === 1100 ? 800 : 1024;
+      const vertical = params.get('layout') === 'vertical';
+      const sourceName = view === 'home'
+        ? `codex-01-home-composer-${width}.png`
+        : `codex-02-my-work-inbox-${width}.png`;
+      const implementationName = view === 'home'
+        ? `mission-control-home-${width}-final.png`
+        : `mission-control-my-work-${width}-final.png`;
+      if (vertical) {
+        document.body.classList.add('vertical');
+        document.querySelector('header').innerHTML = '<strong>Source prototype</strong><strong>Implementation</strong>';
+      }
+      document.documentElement.style.setProperty('--capture-width', `${width}px`);
+      document.documentElement.style.setProperty('--capture-height', `${height}px`);
+      document.getElementById('source').src = `/design-prototype/memstack-desktop-agent-mission-control/qa/${sourceName}`;
+      document.getElementById('implementation').src = `/artifacts/design-qa/${implementationName}`;
+    </script>
+  </body>
+</html>

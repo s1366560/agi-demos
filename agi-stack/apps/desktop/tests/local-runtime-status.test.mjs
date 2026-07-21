@@ -192,6 +192,9 @@ test('workspace model selector exposes only routable enabled models and marks th
       providerLabel: 'OpenAI production',
       modelId: 'gpt-primary',
       selected: true,
+      roles: ['default'],
+      description: 'OpenAI production · openai_compatible',
+      contextWindow: null,
     },
     {
       value: workspaceRuntimeModelSelectionValue('provider-a', 'gpt-fast'),
@@ -199,6 +202,9 @@ test('workspace model selector exposes only routable enabled models and marks th
       providerLabel: 'OpenAI production',
       modelId: 'gpt-fast',
       selected: false,
+      roles: [],
+      description: 'OpenAI production · openai_compatible',
+      contextWindow: null,
     },
   ]);
 

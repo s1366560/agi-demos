@@ -76,11 +76,15 @@ describe('BackgroundSubAgentPanel', () => {
     expect(screen.getByText('Downloading files...')).toBeInTheDocument();
   });
 
-  it('calls kill action when stop button is clicked on running agent', () => {
+  it('calls kill action when stop button is clicked on running agent', async () => {
     render(<BackgroundSubAgentPanel />);
 
     const killButton = screen.getByTitle('Stop execution');
     fireEvent.click(killButton);
+
+    // The trigger and confirmation action share the same accessible name.
+    const stopButtons = await screen.findAllByRole('button', { name: 'Stop execution' });
+    fireEvent.click(stopButtons[stopButtons.length - 1]!);
 
     expect(mockKill).toHaveBeenCalledWith('exec-1');
   });
@@ -94,11 +98,16 @@ describe('BackgroundSubAgentPanel', () => {
     expect(mockClear).toHaveBeenCalledWith('exec-2');
   });
 
-  it('calls clearAll action when clear all button is clicked', () => {
+  it('calls clearAll action when clear all button is clicked', async () => {
     render(<BackgroundSubAgentPanel />);
 
     const clearAllButton = screen.getByText('Clear all');
     fireEvent.click(clearAllButton);
+
+    // Confirm the destructive action in the Popconfirm dialog (trigger and OK
+    // share the label, so pick the dialog's button)
+    const matches = await screen.findAllByText('Clear all');
+    fireEvent.click(matches[matches.length - 1]!);
 
     expect(mockClearAll).toHaveBeenCalled();
   });

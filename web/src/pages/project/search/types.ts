@@ -14,7 +14,7 @@ import type { SearchMode, SearchResult, RetrievalMode } from '.';
 /**
  * Time range options for temporal search
  */
-export type TimeRange = 'last30' | 'custom';
+export type TimeRange = 'all' | 'last30' | 'custom';
 
 /**
  * View mode for results display
@@ -179,14 +179,6 @@ export interface EnhancedSearchErrorProps {
 }
 
 /**
- * Props for History sub-component
- */
-export interface EnhancedSearchHistoryProps {
-  /** Optional custom class name */
-  className?: string | undefined;
-}
-
-/**
  * EnhancedSearch compound component interface
  * Extends React.FC with sub-component properties
  */
@@ -201,8 +193,6 @@ export interface EnhancedSearchCompound extends React.FC<EnhancedSearchRootProps
   Graph: React.FC<EnhancedSearchGraphProps>;
   /** Error message sub-component */
   Error: React.FC<EnhancedSearchErrorProps>;
-  /** Search history sub-component */
-  History: React.FC<EnhancedSearchHistoryProps>;
   /** Root component alias */
   Root: React.FC<EnhancedSearchRootProps>;
 }

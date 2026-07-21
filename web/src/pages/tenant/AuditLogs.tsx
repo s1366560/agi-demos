@@ -42,6 +42,8 @@ import {
   useRuntimeHookAuditSummaryLoading,
 } from '../../stores/audit';
 import { useTenantStore } from '../../stores/tenant';
+import { useDebounce } from '../../hooks/useDebounce';
+import { formatDateTime } from '../../utils/date';
 
 import type {
   AuditEntry,
@@ -55,18 +57,18 @@ const PAGE_SIZE = 20;
 
 type AuditViewMode = 'all' | 'runtime-hooks';
 
-const RESOURCE_TYPE_OPTIONS = [
-  { value: '', label: 'All Types' },
-  { value: 'instance', label: 'Instance' },
-  { value: 'project', label: 'Project' },
-  { value: 'user', label: 'User' },
-  { value: 'tenant', label: 'Tenant' },
-  { value: 'api_key', label: 'API Key' },
-  { value: 'member', label: 'Member' },
-  { value: 'skill', label: 'Skill' },
-  { value: 'subagent', label: 'SubAgent' },
-  { value: 'mcp_server', label: 'MCP Server' },
-];
+const RESOURCE_TYPE_VALUES = [
+  '',
+  'instance',
+  'project',
+  'user',
+  'tenant',
+  'api_key',
+  'member',
+  'skill',
+  'subagent',
+  'mcp_server',
+] as const;
 
 const RUNTIME_HOOK_ACTION_VALUES = [
   'runtime_hook.custom_execution_blocked',
@@ -92,11 +94,7 @@ const RUNTIME_HOOK_ISOLATION_VALUES = ['host', 'sandbox'] as const;
 
 function formatTimestamp(ts: string | null | undefined): string {
   if (!ts) return '—';
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return ts;
-  }
+  return formatDateTime(ts) || ts;
 }
 
 function getTopCountEntry(
@@ -335,6 +333,12 @@ export const AuditLogs: React.FC = () => {
   const [isolationModeFilter, setIsolationModeFilter] = useState('');
   const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [listLoadFailed, setListLoadFailed] = useState(false);
+
+  // Debounce free-text filters so typing does not fire a request per keystroke
+  const debouncedActorFilter = useDebounce(actorFilter, 400);
+  const debouncedActionFilter = useDebounce(actionFilter, 400);
+  const debouncedHookNameFilter = useDebounce(hookNameFilter, 400);
 
   const getLocalizedLabel = useCallback(
     (key: string, fallback: string): string => {
@@ -379,6 +383,20 @@ export const AuditLogs: React.FC = () => {
         `tenant.auditLogs.runtimeHookSummary.isolationLabels.${isolationMode}`,
         formatFallbackLabel(isolationMode)
       ),
+    [getLocalizedLabel]
+  );
+
+  const resourceTypeOptions = useMemo(
+    () =>
+      RESOURCE_TYPE_VALUES.map((value) => ({
+        value,
+        label: getLocalizedLabel(
+          value
+            ? `tenant.auditLogs.resourceTypes.${value}`
+            : 'tenant.auditLogs.resourceTypes.all',
+          value ? formatFallbackLabel(value) : 'All Types'
+        ),
+      })),
     [getLocalizedLabel]
   );
 
@@ -449,13 +467,20 @@ export const AuditLogs: React.FC = () => {
       page: currentPage,
       page_size: PAGE_SIZE,
     };
-    if (actorFilter) params.actor = actorFilter;
-    if (actionFilter) params.action = actionFilter;
+    if (debouncedActorFilter) params.actor = debouncedActorFilter;
+    if (debouncedActionFilter) params.action = debouncedActionFilter;
     if (resourceTypeFilter) params.resource_type = resourceTypeFilter;
     if (fromDate) params.from_date = fromDate;
     if (toDate) params.to_date = toDate;
     return params;
-  }, [currentPage, actorFilter, actionFilter, resourceTypeFilter, fromDate, toDate]);
+  }, [
+    currentPage,
+    debouncedActorFilter,
+    debouncedActionFilter,
+    resourceTypeFilter,
+    fromDate,
+    toDate,
+  ]);
 
   const buildRuntimeHookParams = useCallback((): RuntimeHookAuditListParams => {
     const params: RuntimeHookAuditListParams = {
@@ -463,7 +488,7 @@ export const AuditLogs: React.FC = () => {
       page_size: PAGE_SIZE,
     };
     if (runtimeActionFilter) params.action = runtimeActionFilter;
-    if (hookNameFilter) params.hook_name = hookNameFilter;
+    if (debouncedHookNameFilter) params.hook_name = debouncedHookNameFilter;
     if (executorKindFilter) params.executor_kind = executorKindFilter;
     if (hookFamilyFilter) params.hook_family = hookFamilyFilter;
     if (isolationModeFilter) params.isolation_mode = isolationModeFilter;
@@ -471,7 +496,7 @@ export const AuditLogs: React.FC = () => {
   }, [
     currentPage,
     runtimeActionFilter,
-    hookNameFilter,
+    debouncedHookNameFilter,
     executorKindFilter,
     hookFamilyFilter,
     isolationModeFilter,
@@ -507,12 +532,17 @@ export const AuditLogs: React.FC = () => {
     fetchRuntimeHookSummary,
   ]);
 
+  const runLoadCurrentView = useCallback(() => {
+    setListLoadFailed(false);
+    loadCurrentView().catch(() => {
+      setListLoadFailed(true);
+    });
+  }, [loadCurrentView]);
+
   useEffect(() => {
     if (!tenantId) return;
-    loadCurrentView().catch(() => {
-      /* handled by store */
-    });
-  }, [tenantId, loadCurrentView]);
+    runLoadCurrentView();
+  }, [tenantId, runLoadCurrentView]);
 
   useEffect(() => {
     return () => {
@@ -637,6 +667,7 @@ export const AuditLogs: React.FC = () => {
             <button
               type="button"
               data-testid="audit-view-all"
+              aria-pressed={viewMode === 'all'}
               onClick={() => {
                 setCurrentPage(1);
                 setSelectedEntry(null);
@@ -653,6 +684,7 @@ export const AuditLogs: React.FC = () => {
             <button
               type="button"
               data-testid="audit-view-runtime-hooks"
+              aria-pressed={viewMode === 'runtime-hooks'}
               onClick={() => {
                 setCurrentPage(1);
                 setSelectedEntry(null);
@@ -670,11 +702,7 @@ export const AuditLogs: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => {
-              loadCurrentView().catch(() => {
-                /* handled by store */
-              });
-            }}
+            onClick={runLoadCurrentView}
             disabled={isLoading || isRuntimeHookSummaryLoading}
             aria-label={t('common.refresh', 'Refresh')}
             title={t('common.refresh', 'Refresh')}
@@ -721,7 +749,7 @@ export const AuditLogs: React.FC = () => {
                 {viewMode === 'runtime-hooks' ? (runtimeHookSummary?.total ?? total) : total}
               </p>
             </div>
-            <History size={16} className="text-4xl text-primary-500" />
+            <History size={36} className="text-primary-500" />
           </div>
         </div>
 
@@ -741,7 +769,7 @@ export const AuditLogs: React.FC = () => {
                   : logs.length}
               </p>
             </div>
-            <Boxes size={16} className="text-4xl text-blue-500" />
+            <Boxes size={36} className="text-blue-500" />
           </div>
         </div>
 
@@ -760,9 +788,9 @@ export const AuditLogs: React.FC = () => {
               </p>
             </div>
             {viewMode === 'runtime-hooks' ? (
-              <Activity size={16} className="text-4xl text-purple-500" />
+              <Activity size={36} className="text-purple-500" />
             ) : (
-              <BookOpen size={16} className="text-4xl text-purple-500" />
+              <BookOpen size={36} className="text-purple-500" />
             )}
           </div>
         </div>
@@ -900,7 +928,7 @@ export const AuditLogs: React.FC = () => {
                 setResourceTypeFilter(val);
               }}
               className="w-full sm:w-44"
-              options={RESOURCE_TYPE_OPTIONS}
+              options={resourceTypeOptions}
               placeholder={t('tenant.auditLogs.filterResourceType')}
             />
             <DatePicker
@@ -1061,6 +1089,23 @@ export const AuditLogs: React.FC = () => {
         <div className="flex items-center justify-center py-20">
           <LazySpin size="large" />
         </div>
+      ) : listLoadFailed ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center py-20 text-slate-500 dark:text-slate-400"
+        >
+          <p className="text-lg font-medium text-slate-700 dark:text-slate-300">
+            {t('tenant.auditLogs.loadFailed', 'Failed to load audit logs')}
+          </p>
+          <button
+            type="button"
+            onClick={runLoadCurrentView}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <RefreshCw size={14} />
+            {t('common.retry', 'Retry')}
+          </button>
+        </div>
       ) : logs.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <LazyEmpty description={t('tenant.auditLogs.noLogs')} />
@@ -1071,22 +1116,40 @@ export const AuditLogs: React.FC = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-                  <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400"
+                  >
                     {t('tenant.auditLogs.colTimestamp')}
                   </th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400"
+                  >
                     {t('tenant.auditLogs.colActor')}
                   </th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400"
+                  >
                     {t('tenant.auditLogs.colAction')}
                   </th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400"
+                  >
                     {t('tenant.auditLogs.colResourceType')}
                   </th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400"
+                  >
                     {t('tenant.auditLogs.colResourceId')}
                   </th>
-                  <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
+                  <th
+                    scope="col"
+                    className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-400"
+                  >
                     {t('common.actions.label')}
                   </th>
                 </tr>
@@ -1115,7 +1178,10 @@ export const AuditLogs: React.FC = () => {
                         ? runtimeHookResourceTypeLabel
                         : entry.resource_type}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs truncate max-w-50">
+                    <td
+                      className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs truncate max-w-50"
+                      title={entry.resource_id ?? undefined}
+                    >
                       {entry.resource_id ?? '-'}
                     </td>
                     <td className="px-4 py-3 text-right">

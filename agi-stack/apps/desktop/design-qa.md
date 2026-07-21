@@ -86,6 +86,179 @@ final result: passed
 
 ---
 
+# Agent chat timeline iteration design QA
+
+Date: 2026-07-21
+
+Scope: the latest Codex-aligned message anatomy and worklog timeline from the Desktop Mission
+Control prototype, including structured thinking, tool kinds, edit diff stats, and live elapsed
+time.
+
+## Source and implementation evidence
+
+- Source component truth:
+  `design-prototype/memstack-desktop-agent-mission-control/src/components/ConversationDetail.jsx`
+  and `ConversationDetail.css`.
+- Source full-view capture:
+  `design-prototype/memstack-desktop-agent-mission-control/qa/codex-06-thread-running-1440.png`.
+- Implementation QA route:
+  `http://127.0.0.1:5173/qa/session-conversation.html`.
+- Implementation captures:
+  `artifacts/design-qa/session-timeline-1440x1024.png`,
+  `artifacts/design-qa/session-timeline-expanded-1440x1024.png`, and
+  `artifacts/design-qa/session-timeline-collapsed-1440x1024.png`.
+- Same-canvas full-view comparison:
+  `artifacts/design-qa/session-timeline-comparison-1440.png`.
+
+The reference and implementation were reviewed together at `1440 x 1024`. A final focused
+capture was repeated after moving structured thinking into the worklog group. The QA route uses
+the production `AgentTimeline`, message renderer, tool-pairing model, and i18n provider rather than
+a visual substitute.
+
+## Visual and interaction verification
+
+- User turns are plain gray rounded bubbles without avatars, author headers, or visible timestamps.
+- Assistant turns render as plain Markdown on the canvas, preserving bold lead-ins, lists, code,
+  tables, and message actions on hover/focus.
+- Thinking and adjacent `act`/`observe` events form one expandable worklog. Tool count remains the
+  number of structural calls and excludes thinking rows.
+- Search, read, command, edit, and check rows use structured `display.kind` metadata and the Radix
+  icon family. Unknown tools stay generic; no tool-name or message-text classification is used.
+- Edit rows show structured `+N/-N` diff stats, command rows retain monospace treatment, and the
+  live row uses a spinner with localized `Worked for {duration}` copy.
+- Tool groups are flat and transparent, collapsed by default in production, and expose a trailing
+  chevron. Expanded details remain reachable by keyboard and pointer.
+- Native Tauri launch passed through `make -C agi-stack run-desktop`; the application loaded the
+  persisted session timeline and composer without a fatal surface.
+
+## Comparison history
+
+### Iteration 1 — blocked
+
+- [P1] Message turns still carried avatar/header anatomy from the older desktop design.
+- [P1] Tool activity used card-like groups and did not receive a structured presentation kind from
+  the local Rust runtime.
+- [P2] Thinking rendered above the tool group instead of as the first worklog row.
+- [P2] The running indicator lacked the prototype's spinner and elapsed-duration treatment.
+
+Fixes: flattened message and worklog anatomy, removed visible identity chrome, added structured
+Rust `display.kind`, `round`, and normalized diff metadata, moved adjacent thinking into the
+worklog group, and added localized elapsed-time presentation.
+
+### Iteration 2 — passed
+
+Post-fix comparison shows the prototype's message hierarchy, flat worklog density, icon semantics,
+diff treatment, and running row with no actionable P0, P1, or P2 difference. Existing demo seed
+events remain immutable; new local runtime events carry the richer presentation contract.
+
+## Protocol and regression verification
+
+- Desktop UI and contract tests: 479 passed.
+- TypeScript type check and Vite production build: passed; the existing large-chunk advisory
+  remains.
+- Rust timeline presentation tests: 4 passed.
+- Rust demo seed compatibility tests: 3 passed.
+- GitNexus impact: `AgentTimeline` CRITICAL due to direct ChatPanel and QA consumers;
+  `NarrativeMessageFrame`, `ToolCallPairView`, and `TimelineItemView` HIGH; the final
+  `buildSessionNarrative` grouping adjustment LOW with one direct Chat consumer.
+
+final result: passed
+
+---
+
+# Composer context and picker iteration design QA
+
+Date: 2026-07-21
+
+Scope: the latest Composer-plus menu and described model/effort pickers from the Desktop Mission
+Control prototype, applied to both new-thread and live-session composers with authoritative Rust
+context transport.
+
+## Source and implementation evidence
+
+- Source component truth:
+  `design-prototype/memstack-desktop-agent-mission-control/src/components/ComposerPlusMenu.jsx`,
+  `NewThreadComposer.jsx`, and `PickerMenu.jsx`.
+- Source full-view captures:
+  `design-prototype/memstack-desktop-agent-mission-control/qa/codex-01-home-composer-1440.png`
+  and `codex-01-home-composer-1100.png`.
+- Implementation captures:
+  `artifacts/design-qa/composer-1440x1024.png` and
+  `artifacts/design-qa/composer-1100x800.png`.
+- Same-canvas comparisons:
+  `artifacts/design-qa/composer-comparison-1440.png`,
+  `artifacts/design-qa/composer-comparison-1100.png`, and
+  `artifacts/design-qa/composer-focused-comparison-1440.png`.
+- Interactive states:
+  `artifacts/design-qa/composer-plus-menu-1440x1024.png`,
+  `artifacts/design-qa/composer-model-menu-1440x1024.png`,
+  `artifacts/design-qa/composer-effort-menu-1100x800.png`, and
+  `artifacts/design-qa/session-context-chip-1440x1024.png`.
+- Session responsive captures:
+  `artifacts/design-qa/session-1440x1024.png` and
+  `artifacts/design-qa/session-1100x800.png`.
+
+The reference and implementation images were placed together at identical `1440 x 1024` and
+`1100 x 800` viewports before review. The focused comparison covers the heading, composer,
+suggestions, and first recent-thread row at readable scale.
+
+## Visual and interaction verification
+
+- Heading, 680-pixel composer, textarea height, flat dark surfaces, border radii, toolbar density,
+  three-column suggestion cards, and recent-thread hierarchy remain aligned at both viewports.
+- The latest source change is represented by a leading Add control, six expandable categories,
+  removable context chips, and upward-opening model/effort menus. Menus use the prototype's
+  252/264-pixel widths and remain inside the compact viewport.
+- `/plan` was added and removed in the new-thread composer; `/verify` was added and removed in the
+  session composer. Both use structured context records rather than prompt parsing.
+- Escape closed both plus and picker menus. Model options expose authoritative role badges and
+  descriptions, effort exposes Low/Medium/High descriptions, and permission preserves the actual
+  Workspace policy value.
+- File selection is wired to the native browser file input. Screenshot capture remains visibly
+  unavailable because the local Runtime exposes no capture authority; no successful state is
+  fabricated.
+- Non-manager read-only behavior remains inspectable while mutations stay disabled. The model
+  footer routes to the existing Models settings surface.
+- Browser console warnings and errors: zero.
+
+## Comparison history
+
+### Iteration 1 — blocked
+
+- [P2] The 1440-pixel toolbar wrapped Permission mode to a second row because Provider and policy
+  labels exceeded the prototype density.
+- [P2] The 1100-pixel suggestion cards collapsed to one column even though the source retains
+  three columns.
+- [P2] Picker and plus menus were wider than the source and visually dominated the compact state.
+- [P1] The deterministic QA pages attempted to load catalogs from a nonexistent local backend,
+  making interaction evidence depend on a synthetic network error.
+
+Fixes: used the authoritative model ID in the compact trigger, removed the redundant permission
+prefix while preserving its accessible label, retained three suggestion columns, restored the
+source menu widths, and supplied an empty structural catalog authority to QA fixtures. Production
+continues to load only real active/enabled/discovered Agents, Skills, and Plugins.
+
+### Iteration 2 — passed
+
+Post-fix full-view and focused comparisons show no actionable P0, P1, or P2 difference. All
+primary menu, chip, keyboard, responsive, and session interactions were repeated after the fixes.
+
+## Protocol and regression verification
+
+- Desktop UI/contract tests: 474 passed.
+- TypeScript type check and Vite production build: passed; the pre-existing large-chunk advisory
+  remains.
+- Local Rust Runtime tests: 232 passed.
+- Rust formatting and Clippy with warnings denied: passed.
+- Native Tauri launch: passed through `make -C agi-stack run-desktop`; the Vite/Tauri process
+  remained live through browser QA.
+- GitNexus change detection reports the expected high-risk App/runtime orchestration surface; no
+  `LocalConversation` change was introduced.
+
+final result: passed
+
+---
+
 # Automations management design QA
 
 Date: 2026-07-20

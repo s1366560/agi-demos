@@ -263,6 +263,7 @@ vi.mock('@/components/ui/lazyAntd', () => ({
     );
   },
   LazyInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+  LazyTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 function LocationProbe() {

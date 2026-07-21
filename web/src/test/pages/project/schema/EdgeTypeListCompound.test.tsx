@@ -29,32 +29,38 @@ vi.mock('react-router-dom', () => ({
   useParams: () => ({ projectId: 'test-project-1' }),
 }));
 
-// Mock i18n
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: string | Record<string, unknown>) => {
-      const defaultValue =
-        typeof options === 'string'
-          ? options
-          : typeof options === 'object' &&
-              options !== null &&
-              typeof options.defaultValue === 'string'
-            ? options.defaultValue
-            : key;
+const translationMock = vi.hoisted(() => {
+  const t = (key: string, options?: string | Record<string, unknown>) => {
+    const defaultValue =
+      typeof options === 'string'
+        ? options
+        : typeof options === 'object' &&
+            options !== null &&
+            typeof options.defaultValue === 'string'
+          ? options.defaultValue
+          : key;
 
-      if (typeof options !== 'object' || options === null) {
-        return defaultValue;
-      }
+    if (typeof options !== 'object' || options === null) {
+      return defaultValue;
+    }
 
-      return defaultValue.replace(/\{\{(\w+)\}\}/g, (_, token: string) =>
-        String(options[token] ?? '')
-      );
-    },
+    return defaultValue.replace(/\{\{(\w+)\}\}/g, (_, token: string) =>
+      String(options[token] ?? '')
+    );
+  };
+
+  return {
+    t,
     i18n: {
       changeLanguage: () => Promise.resolve(),
       language: 'en-US',
     },
-  }),
+  };
+});
+
+// Mock i18n with stable references, matching react-i18next's render contract.
+vi.mock('react-i18next', () => ({
+  useTranslation: () => translationMock,
 }));
 
 // Mock schemaAPI
@@ -181,7 +187,7 @@ describe('EdgeTypeList Compound Component', () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       render(<EdgeTypeList />);
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('Search edge types...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Search edge types…')).toBeInTheDocument();
       });
     });
 
@@ -239,14 +245,14 @@ describe('EdgeTypeList Compound Component', () => {
     it('should render search input', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       render(<EdgeTypeList.Toolbar search="" onSearchChange={vi.fn()} onCreate={vi.fn()} />);
-      expect(screen.getByPlaceholderText('Search edge types...')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search edge types…')).toBeInTheDocument();
     });
 
     it('should call onSearchChange when typing', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       const onSearchChange = vi.fn();
       render(<EdgeTypeList.Toolbar search="" onSearchChange={onSearchChange} onCreate={vi.fn()} />);
-      const input = screen.getByPlaceholderText('Search edge types...');
+      const input = screen.getByPlaceholderText('Search edge types…');
       fireEvent.change(input, { target: { value: 'KNOWS' } });
       expect(onSearchChange).toHaveBeenCalledWith('KNOWS');
     });
@@ -396,7 +402,7 @@ describe('EdgeTypeList Compound Component', () => {
     it('should render loading message', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       render(<EdgeTypeList.Loading />);
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
+      expect(screen.getByText('Loading…')).toBeInTheDocument();
     });
   });
 

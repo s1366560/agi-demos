@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { message } from 'antd';
 import {
   X,
   FileText,
@@ -141,17 +142,17 @@ export const InputBar = memo<InputBarProps>(
       if (voiceCallStatus !== 'idle') {
         void useVoiceCallStore.getState().endCall();
       } else {
-        if (!activeConversationId) {
-          console.warn('[InputBar] Cannot start voice call without an active conversation');
-          return;
-        }
-        if (!projectId) {
-          console.warn('[InputBar] Cannot start voice call without a projectId');
+        if (!activeConversationId || !projectId) {
+          void message.warning(
+            t('agent.inputBar.voiceCallNeedsContext', {
+              defaultValue: 'Open a conversation in a project to start a voice call.',
+            })
+          );
           return;
         }
         void useVoiceCallStore.getState().startCall(activeConversationId, projectId);
       }
-    }, [voiceCallStatus, activeConversationId, projectId]);
+    }, [voiceCallStatus, activeConversationId, projectId, t]);
 
     const capabilities = useActiveModelCapabilities(activeModelOverride);
 
@@ -558,7 +559,7 @@ export const InputBar = memo<InputBarProps>(
             />
             {projectId && (
               <MentionPopover
-                ref={mentionPopoverRef}
+                ref={isSharedMode ? undefined : mentionPopoverRef}
                 query={mentionQuery}
                 projectId={projectId}
                 conversationId={conversationId ?? null}
@@ -574,6 +575,7 @@ export const InputBar = memo<InputBarProps>(
             )}
             {isSharedMode && conversationId && (
               <MentionPicker
+                ref={mentionPopoverRef}
                 conversationId={conversationId}
                 query={mentionQuery}
                 open={mentionVisible}
@@ -588,6 +590,8 @@ export const InputBar = memo<InputBarProps>(
                   setMentionVisible(false);
                   setMentionQuery('');
                 }}
+                selectedIndex={mentionSelectedIndex}
+                onSelectedIndexChange={setMentionSelectedIndex}
               />
             )}
             <div
@@ -655,11 +659,11 @@ export const InputBar = memo<InputBarProps>(
                 }}
                 aria-label={t(
                   'agent.inputBar.placeholder',
-                  "Ask me anything, or type '/' for commands..."
+                  "Ask me anything, or type '/' for commands…"
                 )}
                 placeholder={t(
                   'agent.inputBar.placeholder',
-                  "Ask me anything, or type '/' for commands..."
+                  "Ask me anything, or type '/' for commands…"
                 )}
                 rows={1}
                 data-testid="chat-input"

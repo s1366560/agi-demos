@@ -9,6 +9,7 @@
     "create": "创建",
     "search": "搜索",
     "loading": "加载中…",
+    "skipToContent": "跳转到主要内容",
     "success": "成功",
     "error": "错误",
     "required": "必填",
@@ -27,6 +28,11 @@
     "next": "下一页",
     "remove": "移除",
     "close": "关闭",
+    "closeDialog": "关闭对话框",
+    "discard": "放弃更改",
+    "unsavedChanges": "您有未保存的更改。确定放弃并关闭吗？",
+    "reload": "重新加载",
+    "initializationSlow": "初始化时间超出预期。",
     "done": "完成",
     "retry": "重试",
     "view": "查看",
@@ -807,9 +813,16 @@
       "deleteReply": "删除回复失败",
       "createObjective": "创建目标失败",
       "deleteObjective": "删除目标失败",
+      "projectObjective": "将目标转为任务失败",
       "deleteGene": "删除基因失败",
       "updateGene": "更新基因失败",
       "createGene": "创建基因失败"
+    },
+    "confirm": {
+      "deleteObjectiveTitle": "确定删除此目标？",
+      "deleteObjectiveContent": "此目标将被永久删除，此操作无法撤销。",
+      "deleteGeneTitle": "确定删除此基因？",
+      "deleteGeneContent": "此基因将被永久删除，此操作无法撤销。"
     },
     "arrangement": {
       "eyebrow": "工位编排",
@@ -898,6 +911,12 @@
         "nodeUpdated": "席位信息已更新。",
         "agentRemoved": "Agent 已从工位中移除。",
         "nodeRemoved": "席位已移除。"
+      },
+      "confirm": {
+        "removeAgentTitle": "确定移除此 Agent？",
+        "removeAgentContent": "该 Agent 将从此工位解绑。",
+        "removeNodeTitle": "确定移除此席位？",
+        "removeNodeContent": "此节点将从拓扑中永久移除。"
       },
       "shortcuts": {
         "pan": "平移网格",
@@ -1106,7 +1125,8 @@
         "title": "创建新项目",
         "subtitle": "设置新的记忆环境"
       },
-      "deleteConfirm": "您确定要删除此项目吗？"
+      "deleteConfirm": "您确定要删除此项目吗？",
+      "deleteFailed": "删除项目失败"
     },
     "newProject": {
       "title": "创建新项目",
@@ -1126,7 +1146,8 @@
       "loose": "宽松 (0.1)",
       "strict": "严格 (1.0)",
       "enableCommunityDetection": "启用社区检测",
-      "submit": "创建项目"
+      "submit": "创建项目",
+      "discardConfirm": "确定放弃未保存的更改吗？"
     },
     "users": {
       "joinedAt": "加入于 {{date}}",
@@ -1235,6 +1256,10 @@
         "executionBackend": {
           "externalAcp": "External ACP（{{agentKey}}）",
           "memstack": "MemStack 原生"
+        },
+        "binding": {
+          "priority": "优先级",
+          "score": "分数"
         }
       },
       "stats": {
@@ -1438,7 +1463,8 @@
         "premium": "商业高级",
         "enterprise": "企业版"
       },
-      "submit": "创建组织"
+      "submit": "创建组织",
+      "discardConfirm": "确定放弃未保存的更改吗？"
     },
     "settings": {
       "title": "组织设置",
@@ -1490,6 +1516,10 @@
       "contact_sales": "联系销售",
       "upgrade_success": "计划升级成功",
       "upgrade_error": "升级计划失败，请重试。",
+      "confirm_upgrade_title": "确认升级计划",
+      "confirm_upgrade_content": "确定升级到 {{plan}} 计划吗？",
+      "confirm_upgrade_ok": "升级",
+      "load_error": "加载账单详情失败",
       "sales_unavailable": "当前版本未配置销售联系渠道。",
       "enterprise": {
         "title": "企业版计划",
@@ -2035,7 +2065,9 @@
       "quota": "存储配额",
       "loading": "加载分析数据…",
       "memory_growth": "记忆增长趋势",
-      "project_storage": "项目存储分布"
+      "project_storage": "项目存储分布",
+      "chart_memories": "记忆",
+      "load_error": "加载分析数据失败"
     },
     "tasks": {
       "title": "任务状态看板",
@@ -2043,6 +2075,7 @@
       "refresh": "刷新",
       "resumeSubmitted": "已提交 {{count}} 个待处理任务",
       "resumeFailed": "恢复待处理任务失败",
+      "loadFailed": "加载任务数据失败",
       "new_task": "新建任务",
       "stats": {
         "total": "总任务数 (累计)",
@@ -2571,6 +2604,8 @@
         "empty": "暂无进化任务",
         "apply": "应用",
         "reject": "拒绝",
+        "applyConfirm": "确定应用此进化任务吗？这将覆盖技能内容。",
+        "rejectConfirm": "确定拒绝此进化任务吗？",
         "applySuccess": "进化任务已应用",
         "applyFailed": "进化任务应用失败",
         "rejectSuccess": "进化任务已拒绝",
@@ -4533,7 +4568,8 @@
           "no_relationships": "未找到关系",
           "close": "关闭实体详情",
           "select_prompt": "选择一个实体",
-          "click_prompt": "从列表中点击一个实体以查看其详情和关系"
+          "click_prompt": "从列表中点击一个实体以查看其详情和关系",
+          "relationships_error": "加载关系失败"
         }
       }
     },
@@ -4549,6 +4585,10 @@
       },
       "ops": {
         "title": "维护操作",
+        "confirm": {
+          "title": "确定运行“{{operation}}”？",
+          "content": "此操作可能会修改或删除图谱数据，且无法撤销。"
+        },
         "refresh": {
           "title": "增量刷新",
           "desc": "重新处理最近的片段并更新图谱，无需完全重建",
@@ -4594,6 +4634,7 @@
         "refreshed": "已刷新 {{count}} 个 Episodes",
         "refreshed_text": "已刷新 {{text}}",
         "initial_load_failed": "维护数据加载失败",
+        "retry": "重试",
         "refresh_failed": "刷新图谱失败",
         "duplicates_found": "发现 {{count}} 个潜在重复项",
         "dedup_failed": "检查重复实体失败",
@@ -4611,9 +4652,20 @@
         "embedding_rebuilt": "成功重建 {{count}} 个节点的 embeddings",
         "embedding_failed": "重建 embeddings 失败"
       },
+      "confirm": {
+        "dedup_merge": "确定合并重复实体吗？此操作无法撤销。",
+        "clean_stale": "确定删除陈旧边吗？此操作无法撤销。",
+        "rebuild": "确定重建社区吗？该过程可能需要一段时间。",
+        "rebuild_embeddings": "确定重建所有节点的向量吗？该过程可能需要一段时间。"
+      },
       "recommendations": {
         "title": "建议",
         "none": "暂无建议",
+        "priority": {
+          "low": "低",
+          "medium": "中",
+          "high": "高"
+        },
         "high_duplication": {
           "title": "检测到高重复率",
           "desc": "我们发现了 {{count}} 个潜在的重复实体。建议运行“实体去重”。"
@@ -4868,6 +4920,13 @@
       "untitled": "未命名记忆"
     },
     "schema": {
+      "navLabel": "Schema 导航",
+      "tabs": {
+        "overview": "概览",
+        "entityTypes": "实体类型",
+        "edgeTypes": "关系类型",
+        "mapping": "映射"
+      },
       "overview": {
         "title": "Schema 概览",
         "subtitle": "定义图谱结构的 Pydantic 模型的直观表示。查看实体、关系及其属性定义。",
@@ -5825,6 +5884,7 @@
         "title": "尚未生成 Agent",
         "description": "对话过程中生成 Agent 后，多智能体活动会显示在这里。"
       },
+      "toggleChildren": "切换 {{name}} 的子 Agent",
       "traceChain": {
         "emptyTitle": "暂无链路数据",
         "emptyDescription": "选择一条 trace 查看它的执行链路。",
@@ -6060,7 +6120,9 @@
     "agentMessageIndicator": {
       "from": "来自",
       "to": "发送至",
-      "message": "消息"
+      "message": "消息",
+      "directionSent": "已发送",
+      "directionReceived": "已接收"
     },
     "planReviewGate": {
       "title": "审查关口",
@@ -6254,7 +6316,10 @@
       "status": "状态",
       "keywordMatch": "关键词匹配",
       "semanticMatch": "语义匹配",
-      "delegated": "已委派"
+      "delegated": "已委派",
+      "statusStarted": "已开始",
+      "statusCompleted": "已完成",
+      "statusFailed": "已失败"
     },
     "thoughtBubble": {
       "ariaLabel": "Agent 思考过程",
@@ -6589,6 +6654,10 @@
         "activeToolCalls": "活跃工具调用：{{count}}",
         "activeCount": "{{count}} 个活跃",
         "online": "在线"
+      },
+      "slots": {
+        "suggestions": "建议",
+        "artifacts": "产物"
       }
     },
     "projectSelector": {
@@ -6621,6 +6690,7 @@
       "deleteDescription": "该对话及其所有消息将被永久删除。",
       "deletedToast": "对话已删除",
       "deleteFailed": "删除对话失败",
+      "renameFailed": "重命名对话失败",
       "undo": "撤销",
       "untitled": "未命名",
       "needsInput": "等待输入",
@@ -6633,6 +6703,7 @@
       "startNewChat": "开始一个新的对话吧",
       "selectProject": "选择项目",
       "selectProjectTitle": "选择项目",
+      "unknownProject": "未知项目",
       "projectSwitcher": "项目切换器",
       "searchProjects": "搜索项目",
       "searchProjectsPlaceholder": "搜索所有有权限的项目",
@@ -6663,7 +6734,10 @@
       "showSummary": "显示摘要",
       "collapse": "收起摘要",
       "regenerate": "重新生成摘要",
-      "generating": "正在生成摘要…"
+      "generating": "正在生成摘要…",
+      "showMore": "展开更多",
+      "showLess": "收起",
+      "regenerateError": "重新生成摘要失败，请重试。"
     },
     "messageBubble": {
       "reasoning": "推理",
@@ -6686,7 +6760,19 @@
       "uploadFailed": "上传失败",
       "openInCanvas": "画布",
       "openSandboxFileInCanvas": "在画布中打开 {{path}}",
-      "subAgentIcon": "SubAgent 图标"
+      "subAgentIcon": "SubAgent 图标",
+      "unknownTool": "未知工具",
+      "granted": "已允许",
+      "denied": "已拒绝",
+      "pill": {
+        "steps": "步骤",
+        "tasks": "任务",
+        "remaining": "剩余",
+        "artifacts": "产物",
+        "llmCalls": "LLM 调用",
+        "tokens": "Token",
+        "cost": "成本"
+      }
     },
     "inputBar": {
       "placeholder": "输入任何问题，或输入 / 使用命令…",
@@ -6718,6 +6804,17 @@
     },
     "mention": {
       "label": "提及 Agent"
+    },
+    "mobileSidebar": {
+      "title": "对话历史"
+    },
+    "turnPlaceholder": {
+      "itemsHidden": "已隐藏 {{count}} 项",
+      "itemsHidden_one": "已隐藏 {{count}} 项",
+      "itemsHidden_other": "已隐藏 {{count}} 项",
+      "expandTurn": "展开本轮（已隐藏 {{count}} 项）",
+      "expandTurn_one": "展开本轮（已隐藏 {{count}} 项）",
+      "expandTurn_other": "展开本轮（已隐藏 {{count}} 项）"
     },
     "mentions": {
       "title": "提及实体或记忆",
@@ -6992,6 +7089,12 @@
       "search": "搜索模板…",
       "noResults": "未找到模板",
       "closeLibrary": "关闭模板库",
+      "deleteConfirmTitle": "删除此模板？",
+      "deleteConfirmContent": "此操作无法撤销。",
+      "deleteFailed": "删除模板失败",
+      "deleted": "模板已删除",
+      "saved": "模板已保存",
+      "saveFailed": "保存模板失败",
       "all": "全部",
       "analysis": "分析",
       "code": "代码",
@@ -7094,7 +7197,9 @@
         "empty": "暂无待处理请求。",
         "accept": "接受",
         "reject": "拒绝",
-        "open": "打开"
+        "open": "打开",
+        "acceptOption": "接受选项",
+        "rejectOption": "拒绝选项"
       },
       "title": {
         "clarification": "需要澄清",
@@ -7273,6 +7378,7 @@
       "setCoordinator": "设为协调者",
       "setCoordinatorFor": "将 {{name}} 设为协调者",
       "remove": "移除 {{name}}",
+      "removeConfirmTitle": "移除参与者？",
       "autonomousRequiresCoordinator": "自治模式需要协调者。点击参与者旁的 ★ 进行分配。",
       "isolatedSuggestsFocused": "隔离模式最好设置一个聚焦智能体。点击参与者旁的 ◎ 进行设置。",
       "noneAvailable": "暂无更多可添加智能体。请先向关联工作空间添加智能体。",
@@ -7347,9 +7453,16 @@
       "save": "保存更改",
       "saving": "保存中…"
     },
+    "confirm": {
+      "discard_title": "放弃更改？",
+      "discard_content": "未保存的个人资料更改将会丢失。",
+      "discard_ok": "放弃"
+    },
     "toast": {
       "success_title": "保存成功！",
-      "success_desc": "您的个人资料已更新。"
+      "success_desc": "您的个人资料已更新。",
+      "error_title": "无法保存个人资料",
+      "error_desc": "请重试。"
     }
   },
   "comparison": {
@@ -7631,6 +7744,8 @@
       "membersLabel": "成员",
       "agentsLabel": "Agent",
       "add": "添加",
+      "noMembers": "暂无成员",
+      "noAgents": "暂无 Agent",
       "removeAgentConfirm": "确定移除此 Agent？",
       "remove": "移除",
       "cancel": "取消",
@@ -7676,9 +7791,14 @@
       "noMessages": "暂无消息，开始对话吧！",
       "messageInputAria": "聊天消息输入框",
       "messagePlaceholder": "输入消息…（使用 @ 提及）",
+      "mentionListAria": "提及建议",
       "mentionBroadcast": "广播",
       "mentionHuman": "成员",
-      "mentionAgent": "智能体"
+      "mentionAgent": "智能体",
+      "sendFailed": "消息发送失败",
+      "loadFailed": "消息加载失败",
+      "senderAgent": "智能体",
+      "senderUser": "用户"
     },
     "taskExperience": {
       "title": "任务体验",
@@ -7804,7 +7924,11 @@
       "progressLabel": "进度（%）",
       "parentObjectiveLabel": "父级目标",
       "parentObjectiveRequired": "请选择父级目标",
-      "parentObjectivePlaceholder": "选择父级目标"
+      "parentObjectivePlaceholder": "选择父级目标",
+      "edit": "编辑",
+      "delete": "删除",
+      "startExecution": "开始执行",
+      "openActions": "打开 {{name}} 的操作菜单"
     },
     "genes": {
       "title": "赛博基因",
@@ -7821,6 +7945,7 @@
       "updateSuccess": "基因已更新",
       "importFromMarketplace": "从基因市场导入",
       "marketplaceSearchPlaceholder": "搜索基因市场…",
+      "marketplaceLoadFailed": "加载基因市场失败",
       "noMarketplaceResults": "未找到基因市场结果",
       "errors": {
         "nameRequired": "名称为必填项"
@@ -7875,7 +8000,11 @@
       "noActiveGenes": "该工作区暂无可用的启用基因。"
     },
     "presence": {
-      "online": "在线"
+      "online": "在线",
+      "idle": "空闲",
+      "busy": "忙碌",
+      "error": "错误",
+      "statusLabel": "{{name}}（{{status}}）"
     },
     "agents": {
       "addTitle": "添加智能体到工作区",
@@ -7922,7 +8051,8 @@
     "failed": "密码修改失败。",
     "passwordMismatch": "两次输入的密码不一致。",
     "passwordRequired": "密码为必填项。",
-    "passwordMinLength": "密码长度至少为 8 个字符。"
+    "passwordMinLength": "密码长度至少为 8 个字符。",
+    "signOut": "退出登录"
   },
   "admin": {
     "poolDashboard": {
@@ -8053,6 +8183,9 @@
         "eventType": "事件类型",
         "errorType": "错误类型",
         "selected": "已选择"
+      },
+      "pagination": {
+        "total": "共 {{count}} 条消息"
       },
       "detail": {
         "title": "消息详情",
@@ -8677,6 +8810,7 @@
         "expandSidebar": "展开侧边栏",
         "collapseSidebar": "折叠侧边栏",
         "backgroundTasks": "后台任务",
+        "backgroundTasksWithCount": "后台任务，{{count}} 个正在运行",
         "userMenu": "用户菜单",
         "breadcrumb": "面包屑导航",
         "toggleTheme": "切换主题"
@@ -9416,6 +9550,7 @@
       "cardContentFailed": "此卡片内容无法渲染。",
       "surfaceContentAvailable": "此界面上的其他内容仍可使用。",
       "tabFailed": "此标签页无法渲染。",
+      "tabFallbackTitle": "标签页 {{index}}",
       "tabDetail": "“{{title}}”渲染失败。你仍可切换到其他标签页。",
       "modalTriggerFailed": "此弹窗触发器无法渲染。",
       "surfaceRestAvailable": "界面的其余部分仍可使用。",
@@ -9520,6 +9655,7 @@
     "trigger": "命令面板 (⌘K)",
     "placeholder": "搜索命令、页面、会话…",
     "resultsLabel": "命令结果",
+    "resultsCount": "{{count}} 条结果",
     "noResults": "未找到结果",
     "groups": {
       "actions": "操作",

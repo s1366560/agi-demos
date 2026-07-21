@@ -83,6 +83,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     subagents,
     support,
     system,
+    task_sessions,
     tasks,
     tenant_skill_configs,
     tenant_webhooks,
@@ -92,6 +93,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     trust,
     tunnel,
     webhooks,
+    workspace_agent_policy,
     workspace_autonomy,
     workspace_chat,
     workspace_plans,
@@ -234,10 +236,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_autonomy_idle_waker()
 
     # Initialize Workspace Supervisor (WTP fan-in consumer, Phase 2).
-    workspace_supervisor_enabled = (
-        os.getenv("WORKSPACE_SUPERVISOR_ENABLED", "true").strip().lower()
-        in {"1", "true", "yes", "on"}
-    )
+    workspace_supervisor_enabled = os.getenv(
+        "WORKSPACE_SUPERVISOR_ENABLED", "true"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     if workspace_supervisor_enabled:
         try:
             from src.infrastructure.agent.workspace.workspace_supervisor import (
@@ -736,6 +737,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(workspace_autonomy.router)
     app.include_router(workspace_tasks.router)
     app.include_router(workspace_plans.router)
+    app.include_router(workspace_agent_policy.router)
+    app.include_router(workspace_agent_policy.legacy_router)
+    app.include_router(task_sessions.router)
     app.include_router(workspaces.router)
     app.include_router(cron.router)
     app.include_router(ai_tools.router)
@@ -795,6 +799,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Trust System (graduated autonomy policies and approval decisions)
     app.include_router(trust.router)
+    app.include_router(trust.workspace_router)
 
     # SMTP Configuration (tenant-scoped mail server settings)
     app.include_router(smtp_config.router)

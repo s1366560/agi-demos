@@ -2,9 +2,29 @@ use std::{collections::HashSet, fmt};
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::session_store::DesktopSessionStore;
+
+pub(super) const WORKSPACE_AGENT_POLICY_CAPABILITY_VERSION: &str = "workspace-agent-policy-v1";
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum WorkspaceAgentCapabilityMode {
+    Work,
+    Code,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct WorkspaceAgentPolicyMutation {
+    pub(super) expected_revision: u64,
+    pub(super) capability_mode: WorkspaceAgentCapabilityMode,
+    pub(super) route: Value,
+    pub(super) reasoning_effort: String,
+    pub(super) permission_mode: String,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ManagedResourceKind {
@@ -25,7 +45,7 @@ impl ManagedResourceKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(super) enum ResourceRegistryError {
     NotFound,
     InvalidRoutingPolicy(String),
@@ -177,7 +197,7 @@ impl DesktopSessionStore {
         if let Some(policy) =
             query_workspace_routing_policy(&transaction, tenant_id, project_id, workspace_id)?
         {
-            return Ok(policy);
+            return with_workspace_agent_policy_defaults(policy);
         }
         let baseline = query_routing_policy(&transaction, tenant_id)?
             .or(legacy_routing_policy(&transaction, tenant_id)?)
@@ -202,7 +222,7 @@ impl DesktopSessionStore {
         transaction
             .commit()
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
-        Ok(policy)
+        with_workspace_agent_policy_defaults(policy)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -238,6 +258,9 @@ impl DesktopSessionStore {
             });
         }
         let next_revision = current_revision.saturating_add(1);
+        let current_policy =
+            query_workspace_routing_policy(&transaction, tenant_id, project_id, workspace_id)?
+                .unwrap_or_else(|| json!({}));
         let policy = json!({
             "tenant_id": tenant_id,
             "project_id": project_id,
@@ -245,6 +268,15 @@ impl DesktopSessionStore {
             "revision": next_revision,
             "roles": roles,
             "fallbacks": fallbacks,
+            "reasoning_effort": current_policy
+                .get("reasoning_effort")
+                .and_then(Value::as_str)
+                .unwrap_or("medium"),
+            "permission_mode": current_policy
+                .get("permission_mode")
+                .and_then(Value::as_str)
+                .unwrap_or("ask"),
+            "capability_version": WORKSPACE_AGENT_POLICY_CAPABILITY_VERSION,
             "updated_at": iso_from_millis(now_ms),
         });
         let value_json = serde_json::to_string(&policy)
@@ -268,6 +300,32 @@ impl DesktopSessionStore {
                 ],
             )
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        Ok(policy)
+    }
+
+    pub(super) fn patch_workspace_agent_policy(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        mutation: &WorkspaceAgentPolicyMutation,
+        now_ms: i64,
+    ) -> Result<Value, ResourceRegistryError> {
+        let mut connection = self.connection().map_err(ResourceRegistryError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+        let policy = apply_workspace_agent_policy_mutation(
+            &transaction,
+            tenant_id,
+            project_id,
+            workspace_id,
+            mutation,
+            now_ms,
+        )?;
         transaction
             .commit()
             .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
@@ -625,6 +683,166 @@ fn query_workspace_routing_policy(
         .transpose()
 }
 
+pub(super) fn apply_workspace_agent_policy_mutation(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+    project_id: &str,
+    workspace_id: &str,
+    mutation: &WorkspaceAgentPolicyMutation,
+    now_ms: i64,
+) -> Result<Value, ResourceRegistryError> {
+    if !matches!(
+        mutation.reasoning_effort.as_str(),
+        "low" | "medium" | "high"
+    ) {
+        return Err(ResourceRegistryError::InvalidRoutingPolicy(
+            "reasoning_effort must be low, medium, or high".to_string(),
+        ));
+    }
+    if !matches!(
+        mutation.permission_mode.as_str(),
+        "ask" | "automatic" | "full_access"
+    ) {
+        return Err(ResourceRegistryError::InvalidRoutingPolicy(
+            "permission_mode must be ask, automatic, or full_access".to_string(),
+        ));
+    }
+    validate_routing_target(transaction, tenant_id, &mutation.route)?;
+    let baseline = query_routing_policy(transaction, tenant_id)?
+        .or(legacy_routing_policy(transaction, tenant_id)?)
+        .unwrap_or_else(|| empty_routing_policy(tenant_id, now_ms));
+    let mut policy =
+        query_workspace_routing_policy(transaction, tenant_id, project_id, workspace_id)?
+            .unwrap_or(workspace_routing_policy_from_baseline(
+                baseline,
+                tenant_id,
+                project_id,
+                workspace_id,
+                now_ms,
+            )?);
+    let current_revision = policy.get("revision").and_then(Value::as_u64).unwrap_or(0);
+    if mutation.expected_revision != current_revision {
+        return Err(ResourceRegistryError::RevisionConflict {
+            expected: mutation.expected_revision,
+            actual: current_revision,
+        });
+    }
+    let object = policy.as_object_mut().ok_or_else(|| {
+        ResourceRegistryError::Storage("workspace agent policy must be an object".to_string())
+    })?;
+    let roles = object
+        .get_mut("roles")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| {
+            ResourceRegistryError::InvalidRoutingPolicy(
+                "routing roles must be an object".to_string(),
+            )
+        })?;
+    if roles.get("default").map_or(true, Value::is_null) {
+        roles.insert("default".to_string(), mutation.route.clone());
+    }
+    let role = match mutation.capability_mode {
+        WorkspaceAgentCapabilityMode::Work => "default",
+        WorkspaceAgentCapabilityMode::Code => "coding",
+    };
+    roles.insert(role.to_string(), mutation.route.clone());
+    let next_revision = current_revision.saturating_add(1);
+    object.insert("revision".to_string(), json!(next_revision));
+    object.insert(
+        "reasoning_effort".to_string(),
+        json!(mutation.reasoning_effort),
+    );
+    object.insert(
+        "permission_mode".to_string(),
+        json!(mutation.permission_mode),
+    );
+    object.insert(
+        "capability_version".to_string(),
+        json!(WORKSPACE_AGENT_POLICY_CAPABILITY_VERSION),
+    );
+    object.insert("updated_at".to_string(), json!(iso_from_millis(now_ms)));
+    let roles = object.get("roles").cloned().unwrap_or(Value::Null);
+    let fallbacks = object
+        .get("fallbacks")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    validate_routing_policy_targets(transaction, tenant_id, &roles, &fallbacks)?;
+    let value_json = serde_json::to_string(&policy)
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    transaction
+        .execute(
+            "INSERT INTO desktop_llm_workspace_routing_policies(
+               tenant_id, project_id, workspace_id, revision, updated_at_ms, value_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(tenant_id, project_id, workspace_id) DO UPDATE SET
+               revision = excluded.revision,
+               updated_at_ms = excluded.updated_at_ms,
+               value_json = excluded.value_json",
+            params![
+                tenant_id,
+                project_id,
+                workspace_id,
+                next_revision,
+                now_ms,
+                value_json
+            ],
+        )
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    Ok(policy)
+}
+
+pub(super) fn ensure_workspace_agent_policy_in_transaction(
+    transaction: &rusqlite::Transaction<'_>,
+    tenant_id: &str,
+    project_id: &str,
+    workspace_id: &str,
+    now_ms: i64,
+) -> Result<Value, ResourceRegistryError> {
+    if let Some(policy) =
+        query_workspace_routing_policy(transaction, tenant_id, project_id, workspace_id)?
+    {
+        return with_workspace_agent_policy_defaults(policy);
+    }
+    let baseline = query_routing_policy(transaction, tenant_id)?
+        .or(legacy_routing_policy(transaction, tenant_id)?)
+        .unwrap_or_else(|| empty_routing_policy(tenant_id, now_ms));
+    let policy = workspace_routing_policy_from_baseline(
+        baseline,
+        tenant_id,
+        project_id,
+        workspace_id,
+        now_ms,
+    )?;
+    let value_json = serde_json::to_string(&policy)
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    transaction
+        .execute(
+            "INSERT INTO desktop_llm_workspace_routing_policies(
+               tenant_id, project_id, workspace_id, revision, updated_at_ms, value_json
+             ) VALUES (?1, ?2, ?3, 0, ?4, ?5)",
+            params![tenant_id, project_id, workspace_id, now_ms, value_json],
+        )
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    Ok(policy)
+}
+
+fn with_workspace_agent_policy_defaults(mut policy: Value) -> Result<Value, ResourceRegistryError> {
+    let object = policy.as_object_mut().ok_or_else(|| {
+        ResourceRegistryError::Storage("workspace agent policy must be an object".to_string())
+    })?;
+    object
+        .entry("reasoning_effort".to_string())
+        .or_insert_with(|| json!("medium"));
+    object
+        .entry("permission_mode".to_string())
+        .or_insert_with(|| json!("ask"));
+    object.insert(
+        "capability_version".to_string(),
+        json!(WORKSPACE_AGENT_POLICY_CAPABILITY_VERSION),
+    );
+    Ok(policy)
+}
+
 fn workspace_routing_policy_from_baseline(
     mut policy: Value,
     tenant_id: &str,
@@ -640,6 +858,12 @@ fn workspace_routing_policy_from_baseline(
     object.insert("workspace_id".to_string(), json!(workspace_id));
     object.insert("revision".to_string(), json!(0));
     object.insert("updated_at".to_string(), json!(iso_from_millis(now_ms)));
+    object.insert("reasoning_effort".to_string(), json!("medium"));
+    object.insert("permission_mode".to_string(), json!("ask"));
+    object.insert(
+        "capability_version".to_string(),
+        json!(WORKSPACE_AGENT_POLICY_CAPABILITY_VERSION),
+    );
     Ok(policy)
 }
 

@@ -114,11 +114,16 @@ export const InviteAccept: React.FC = () => {
    * Verify the invitation token on mount
    */
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void verifyInvitation();
-    }, 0);
+    let cancelled = false;
+
+    void Promise.resolve().then(() => {
+      if (!cancelled) {
+        void verifyInvitation();
+      }
+    });
+
     return () => {
-      window.clearTimeout(timeoutId);
+      cancelled = true;
     };
   }, [verifyInvitation]);
 
@@ -387,7 +392,7 @@ export const InviteAccept: React.FC = () => {
               <Text strong>{t('inviteAccept.fields.workspaceId', 'Workspace ID')}:</Text>
               <br />
               <Text copyable={{ text: invitationDetails.tenantId }}>
-                {invitationDetails.tenantId.slice(0, 8)}...
+                {invitationDetails.tenantId.slice(0, 8)}…
               </Text>
             </Paragraph>
             <Paragraph className="mb-2">
@@ -422,28 +427,30 @@ export const InviteAccept: React.FC = () => {
           />
         )}
 
-        {pageState === 'accepting' ? (
-          <div className="text-center py-4">
-            <Text>{t('inviteAccept.accepting', 'Accepting invitation...')}</Text>
-          </div>
-        ) : (
-          <Space orientation="vertical" className="w-full">
-            <Button
-              type="primary"
-              size="large"
-              block
-              icon={<CheckCircle2 size={16} />}
-              onClick={() => {
-                void handleAccept();
-              }}
-            >
-              {t('inviteAccept.actions.accept', 'Accept Invitation')}
-            </Button>
-            <Button size="large" block danger icon={<XCircle size={16} />} onClick={handleDecline}>
-              {t('inviteAccept.actions.decline', 'Decline')}
-            </Button>
-          </Space>
-        )}
+        <Space orientation="vertical" className="w-full">
+          <Button
+            type="primary"
+            size="large"
+            block
+            icon={<CheckCircle2 size={16} />}
+            loading={pageState === 'accepting'}
+            onClick={() => {
+              void handleAccept();
+            }}
+          >
+            {t('inviteAccept.actions.accept', 'Accept Invitation')}
+          </Button>
+          <Button
+            size="large"
+            block
+            danger
+            icon={<XCircle size={16} />}
+            disabled={pageState === 'accepting'}
+            onClick={handleDecline}
+          >
+            {t('inviteAccept.actions.decline', 'Decline')}
+          </Button>
+        </Space>
       </Card>
     </div>
   );

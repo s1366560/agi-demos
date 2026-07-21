@@ -1,30 +1,22 @@
-import { useTranslation } from 'react-i18next';
-
 import { NON_AUTHORITATIVE } from './blackboardSurfaceContract';
+import { SurfaceBadge } from './SurfaceBadge';
 
 interface DerivedSurfaceBadgeProps {
   labelKey: string;
   fallbackLabel: string;
 }
 
+/**
+ * @deprecated Use `SurfaceBadge` with `boundary="derived"` directly.
+ * Thin wrapper kept for existing consumers.
+ */
 export function DerivedSurfaceBadge({ labelKey, fallbackLabel }: DerivedSurfaceBadgeProps) {
-  const { t } = useTranslation();
-
   return (
-    <div
-      data-blackboard-surface="derived"
-      data-blackboard-authority={NON_AUTHORITATIVE}
-      className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border-light bg-surface-muted px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted"
-    >
-      <span>{t(labelKey, fallbackLabel)}</span>
-      <span aria-hidden="true" className="text-text-muted dark:text-text-muted">
-        ·
-      </span>
-      <span>{t('blackboard.derivedBoundary', 'derived')}</span>
-      <span aria-hidden="true" className="text-text-muted dark:text-text-muted">
-        ·
-      </span>
-      <span>{t('blackboard.nonAuthoritativeBoundary', 'non-authoritative')}</span>
-    </div>
+    <SurfaceBadge
+      labelKey={labelKey}
+      fallbackLabel={fallbackLabel}
+      boundary="derived"
+      authority={NON_AUTHORITATIVE}
+    />
   );
 }

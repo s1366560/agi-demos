@@ -94,7 +94,7 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
           className="text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded mb-4 max-h-32 overflow-auto whitespace-pre-wrap text-slate-600 dark:text-slate-300"
         >
           {content.slice(0, 200)}
-          {content.length > 200 ? '...' : ''}
+          {content.length > 200 ? '…' : ''}
         </pre>
       </AppModal>
     );

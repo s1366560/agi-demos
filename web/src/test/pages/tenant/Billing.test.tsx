@@ -5,8 +5,13 @@ import { billingService } from '../../../services/billingService';
 import { useTenantStore } from '../../../stores/tenant';
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
+const confirmActionMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../stores/tenant');
 vi.mock('../../../services/billingService');
+vi.mock('../../../utils/confirmAction', () => ({
+  confirmAction: confirmActionMock,
+}));
 
 const tenant = {
   id: 't1',
@@ -39,6 +44,7 @@ const billingInfo = {
 describe('Billing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    confirmActionMock.mockResolvedValue(true);
     vi.mocked(useTenantStore).mockReturnValue({
       currentTenant: tenant,
     } as any);

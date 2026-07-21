@@ -30,11 +30,12 @@ export const GeneList: React.FC<GeneListProps> = ({
   const [filterCategory, setFilterCategory] = useState<string>('All');
 
   const filteredGenes = useMemo(() => {
-    let result = genes;
-    if (filterCategory !== 'All') {
-      result = genes.filter((g) => g.category.toLowerCase() === filterCategory.toLowerCase());
-    }
-    return result.sort(
+    const result =
+      filterCategory === 'All'
+        ? genes
+        : genes.filter((g) => g.category.toLowerCase() === filterCategory.toLowerCase());
+    // Sort a copy — never mutate the `genes` prop array in place.
+    return [...result].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [genes, filterCategory]);

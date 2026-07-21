@@ -12,6 +12,7 @@ import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { message } from 'antd';
 import {
   Code2,
   FileText,
@@ -28,6 +29,7 @@ import {
 
 import { useTemplateStore, useTemplateActions } from '@/stores/templateStore';
 import { useCurrentTenant } from '@/stores/tenant';
+import { confirmAction } from '@/utils/confirmAction';
 
 import type { PromptTemplateData } from '@/services/templateService';
 
@@ -302,9 +304,29 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
     const handleDeleteCustom = useCallback(
       (e: React.MouseEvent, templateId: string) => {
         e.stopPropagation();
-        void deleteTemplate(templateId);
+        void (async () => {
+          const confirmed = await confirmAction({
+            title: t('agent.templates.deleteConfirmTitle', 'Delete this template?'),
+            content: t(
+              'agent.templates.deleteConfirmContent',
+              'This action cannot be undone.'
+            ),
+            okText: t('common.delete', 'Delete'),
+            cancelText: t('common.cancel', 'Cancel'),
+            danger: true,
+          });
+          if (!confirmed) return;
+          const previousError = useTemplateStore.getState().error;
+          await deleteTemplate(templateId);
+          const deleteError = useTemplateStore.getState().error;
+          if (deleteError && deleteError !== previousError) {
+            void message.error(t('agent.templates.deleteFailed', 'Failed to delete template'));
+          } else {
+            void message.success(t('agent.templates.deleted', 'Template deleted'));
+          }
+        })();
       },
-      [deleteTemplate]
+      [deleteTemplate, t]
     );
 
     if (!visible) return null;
@@ -341,7 +363,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
 
         {/* Search */}
         <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-primary/50">
             <Search size={14} className="text-slate-400 flex-shrink-0" />
             <input
               ref={searchRef}
@@ -350,8 +372,8 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
               onChange={(e) => {
                 setSearch(e.target.value);
               }}
-              placeholder={t('agent.templates.search', 'Search templates...')}
-              aria-label={t('agent.templates.search', 'Search templates...')}
+              placeholder={t('agent.templates.search', 'Search templates…')}
+              aria-label={t('agent.templates.search', 'Search templates…')}
               className="flex-1 bg-transparent text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
             />
           </div>
@@ -464,7 +486,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           customLoading ? (
             <div className="px-4 py-8 text-center text-sm text-slate-400">
               <Loader2 size={16} className="inline animate-spin motion-reduce:animate-none mr-2" />
-              {t('common.loading', 'Loading...')}
+              {t('common.loading', 'Loading…')}
             </div>
           ) : filteredCustom.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-slate-400">
@@ -513,7 +535,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                         onClick={(e) => {
                           handleDeleteCustom(e, tmpl.id);
                         }}
-                        className="mt-2 mr-3 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                        className="mt-2 mr-3 p-1 rounded-md opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                         aria-label={t('common.delete', 'Delete')}
                       >
                         <Trash2 size={12} />

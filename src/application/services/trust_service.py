@@ -47,6 +47,9 @@ class TrustService:
         action_type: str,
         granted_by: str,
         grant_type: str,
+        scope: str = "agent",
+        canonical_tool_name: str | None = None,
+        source_hitl_request_id: str | None = None,
     ) -> TrustPolicy:
         policy = TrustPolicy(
             tenant_id=tenant_id,
@@ -55,10 +58,20 @@ class TrustService:
             action_type=action_type,
             granted_by=granted_by,
             grant_type=grant_type,
+            scope=scope,
+            canonical_tool_name=canonical_tool_name,
+            source_hitl_request_id=source_hitl_request_id,
         )
         saved = await self._policy_repo.save(policy)
         logger.info("Created trust policy %s for agent %s", saved.id, agent_instance_id)
         return saved
+
+    async def revoke_policy(self, policy_id: str, *, revoked_by: str) -> TrustPolicy | None:
+        return await self._policy_repo.revoke(
+            policy_id,
+            revoked_by=revoked_by,
+            revoked_at=datetime.now(UTC),
+        )
 
     async def check_trust(
         self,

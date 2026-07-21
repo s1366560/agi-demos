@@ -36,6 +36,7 @@ import { useThemeStore } from '@/stores/theme';
 
 import { deriveTopNavigationItems } from '@/config/navigation';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+import { formatDateOnly } from '@/utils/date';
 
 export interface CommandPaletteProps {
   open: boolean;
@@ -181,8 +182,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     items.push(...actions);
 
     // Navigation group
-    const navContext = tenantId ? 'tenant' : ('tenant' as const);
-    const navItems = deriveTopNavigationItems(navContext, { tenantId, projectId });
+    const navItems = deriveTopNavigationItems('tenant', { tenantId, projectId });
     for (const nav of navItems) {
       const label = t(nav.label, { defaultValue: nav.label });
       items.push({
@@ -203,9 +203,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       items.push({
         id: `conv-${conv.id}`,
         label: conv.title || conv.id,
-        hint: conv.updated_at
-          ? new Date(conv.updated_at).toLocaleDateString()
-          : undefined,
+        hint: conv.updated_at ? formatDateOnly(conv.updated_at) : undefined,
         icon: ArrowRight,
         group: t('commandPalette.groups.recentConversations', {
           defaultValue: 'Recent conversations',
@@ -318,7 +316,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         className="app-modal__panel flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[var(--color-border,#242d3a)] bg-[var(--color-panel,#0d121a)] text-[var(--color-text,#e7edf6)] shadow-2xl"
       >
         {/* Input */}
-        <div className="flex items-center gap-3 border-b border-[var(--color-border,#242d3a)] px-4 py-3">
+        <div className="flex items-center gap-3 border-b border-[var(--color-border,#242d3a)] px-4 py-3 focus-within:ring-1 focus-within:ring-[var(--color-primary,#38d6ff)]">
           <input
             ref={inputRef}
             id={inputId}
@@ -396,7 +394,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       {Icon ? (
                         <Icon className="h-4 w-4 shrink-0 text-[var(--color-muted,#8996a9)]" />
                       ) : (
-                        <span className="h-4 w-4 shrink-0" />
+                        <span aria-hidden="true" className="h-4 w-4 shrink-0" />
                       )}
                       <span className="flex-1 truncate">{item.label}</span>
                       {item.hint ? (
@@ -425,7 +423,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               {t('commandPalette.hints.select', { defaultValue: 'select' })}
             </span>
           </div>
-          <span>{filteredItems.length} results</span>
+          <span>
+            {t('commandPalette.resultsCount', {
+              count: filteredItems.length,
+              defaultValue: '{{count}} results',
+            })}
+          </span>
         </div>
       </div>
     </div>,

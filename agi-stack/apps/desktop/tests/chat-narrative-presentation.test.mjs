@@ -16,16 +16,13 @@ const i18nSource = readSource('i18n.tsx');
 
 test('session messages use the mission-control narrative hierarchy', () => {
   assert.match(chatSource, /function NarrativeMessageFrame/);
-  assert.match(chatSource, /className="session-thread-avatar"/);
   assert.match(chatSource, /className="session-message-body"/);
   assert.match(chatSource, /<MessageActionMenu content=\{content\} \/>/);
-  assert.match(chatSource, /kind === 'user' \?/);
-  assert.match(chatSource, /<PersonIcon \/>/);
-  assert.match(chatSource, /kind === 'agent' \?/);
-  assert.match(chatSource, /<CodeIcon \/>/);
-  assert.match(chatSource, /<ActivityLogIcon \/>/);
-  assert.match(chatStyles, /grid-template-columns: 34px minmax\(0, 1fr\)/);
-  assert.match(chatStyles, /\.session-thread-message\.user \.session-message-body/);
+  assert.doesNotMatch(chatSource, /className="session-thread-avatar"/);
+  assert.match(chatSource, /className="session-message-context sr-only"/);
+  assert.match(chatStyles, /\.session-thread-message\.user \{[\s\S]*background: #161d27/);
+  assert.match(chatStyles, /\.session-thread-message\.agent \{[\s\S]*background: transparent/);
+  assert.match(chatStyles, /\.session-thread-message\.agent \.transcript-meta \{[\s\S]*opacity: 0/);
 });
 
 test('debug activity collapses by structural event kind without text routing', () => {
@@ -36,8 +33,11 @@ test('debug activity collapses by structural event kind without text routing', (
   );
   assert.match(chatSource, /className="timeline-debug-group"/);
   assert.match(chatSource, /className=\{`timeline-tool-group status-\$\{node\.status\}`\}/);
+  assert.match(chatSource, /toolCallPresentationKind\(pair\)/);
+  assert.match(chatSource, /className=\{`timeline-worklog-row kind-\$\{presentationKind\}/);
   assert.doesNotMatch(chatSource, /open=\{node\.status !== 'complete'/);
   assert.doesNotMatch(chatSource, /match\([^)]*item\.(content|description|reason)/);
+  assert.match(chatStyles, /\.timeline-tool-group,[\s\S]*border: 0;[\s\S]*background: transparent/);
 });
 
 test('raw task and error payloads stay collapsed until a person opens them', () => {
@@ -53,7 +53,8 @@ test('raw task and error payloads stay collapsed until a person opens them', () 
 });
 
 test('session composer exposes localized context actions and compact delivery controls', () => {
-  assert.match(chatSource, /t\('session\.attach'\)/);
+  assert.match(chatSource, /<ComposerPlusMenu/);
+  assert.match(chatSource, /t\('composer\.addedContext'\)/);
   assert.match(chatSource, /t\('session\.context'\)/);
   assert.match(chatSource, /className="composer-delivery-switch"/);
   assert.match(chatSource, /t\('session\.steerNow'\)/);
@@ -66,6 +67,9 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
   for (const key of [
     'session.today',
     'session.workspaceAgent',
+    'session.workedFor',
+    'session.toolKind.command',
+    'session.toolKind.edit',
     'session.runActivity',
     'session.activityMemoryCaptured',
     'session.activityUpdated',

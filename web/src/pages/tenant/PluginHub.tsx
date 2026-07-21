@@ -35,6 +35,7 @@ import {
   getChannelConfigSubmitValues,
   isRecord,
 } from '@/utils/channelConfigSanitizers';
+import { formatDateTime } from '@/utils/date';
 import { formatPluginCapabilityCounts } from '@/utils/pluginCapabilityCounts';
 
 import type {
@@ -1283,10 +1284,14 @@ export const PluginHub: React.FC = () => {
               loading={projectLoading}
             />
             <Input
+              aria-label={t('tenant.pluginHub.pluginsList.installPlaceholder')}
               placeholder={t('tenant.pluginHub.pluginsList.installPlaceholder')}
               value={installRequirement}
               onChange={(event) => {
                 setInstallRequirement(event.target.value);
+              }}
+              onPressEnter={() => {
+                void handleInstallPlugin();
               }}
               style={{ width: 280 }}
             />
@@ -1356,7 +1361,7 @@ export const PluginHub: React.FC = () => {
                       {entry.details?.control_plane_trace?.trace_id ? (
                         <Text code>{entry.details.control_plane_trace.trace_id}</Text>
                       ) : null}
-                      <Text type="secondary">{new Date(entry.timestamp).toLocaleString()}</Text>
+                      <Text type="secondary">{formatDateTime(entry.timestamp)}</Text>
                       <Text>{entry.message}</Text>
                     </Space>
                     {entry.details?.channel_reload_plan ? (

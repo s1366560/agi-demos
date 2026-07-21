@@ -143,6 +143,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                     onChange={(val) => {
                       handleParamChange('temperature', val);
                     }}
+                    aria-label={tFallback(t, 'agent.llmOverride.temperature', 'Temperature')}
                   />
                 </div>
                 <InputNumber<number>
@@ -155,6 +156,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                   onChange={(val) => {
                     handleParamChange('temperature', val);
                   }}
+                  aria-label={tFallback(t, 'agent.llmOverride.temperature', 'Temperature')}
                 />
               </div>
             </div>
@@ -176,6 +178,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                     onChange={(val) => {
                       handleParamChange('top_p', val);
                     }}
+                    aria-label={tFallback(t, 'agent.llmOverride.topP', 'Top P')}
                   />
                 </div>
                 <InputNumber<number>
@@ -188,6 +191,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                   onChange={(val) => {
                     handleParamChange('top_p', val);
                   }}
+                  aria-label={tFallback(t, 'agent.llmOverride.topP', 'Top P')}
                 />
               </div>
             </div>
@@ -211,6 +215,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
               onChange={(val) => {
                 handleParamChange('max_tokens', val);
               }}
+              aria-label={tFallback(t, 'agent.llmOverride.maxTokens', 'Max Tokens')}
             />
           </div>
 
@@ -230,6 +235,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                     onChange={(val) => {
                       handleParamChange('frequency_penalty', val);
                     }}
+                    aria-label={tFallback(t, 'agent.llmOverride.frequencyPenalty', 'Freq. Penalty')}
                   />
                 </div>
                 <InputNumber<number>
@@ -242,6 +248,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                   onChange={(val) => {
                     handleParamChange('frequency_penalty', val);
                   }}
+                  aria-label={tFallback(t, 'agent.llmOverride.frequencyPenalty', 'Freq. Penalty')}
                 />
               </div>
             </div>
@@ -263,6 +270,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                     onChange={(val) => {
                       handleParamChange('presence_penalty', val);
                     }}
+                    aria-label={tFallback(t, 'agent.llmOverride.presencePenalty', 'Pres. Penalty')}
                   />
                 </div>
                 <InputNumber<number>
@@ -275,6 +283,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
                   onChange={(val) => {
                     handleParamChange('presence_penalty', val);
                   }}
+                  aria-label={tFallback(t, 'agent.llmOverride.presencePenalty', 'Pres. Penalty')}
                 />
               </div>
             </div>
@@ -312,6 +321,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
               size="small"
               icon={<Settings2 size={18} />}
               disabled={disabled}
+              aria-label={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
               className={`
                 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                 hover:bg-slate-100 dark:hover:bg-slate-700/50

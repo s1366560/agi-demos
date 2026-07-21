@@ -119,6 +119,7 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
               onClick={handleOpenInCanvas}
               className="p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-600/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               title={t('agent.artifact.openInCanvas', 'Open in Canvas')}
+              aria-label={t('agent.artifact.openInCanvas', 'Open in Canvas')}
             >
               <PanelRight size={14} />
             </button>
@@ -129,6 +130,11 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
               }}
               className="p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-600/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               title={
+                copied
+                  ? t('agent.actions.copied', 'Copied!')
+                  : t('agent.actions.copyCode', 'Copy code')
+              }
+              aria-label={
                 copied
                   ? t('agent.actions.copied', 'Copied!')
                   : t('agent.actions.copyCode', 'Copy code')
@@ -160,12 +166,13 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
 
       {/* Hover actions for blocks without language header */}
       {!isShort && !language && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity">
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/code:opacity-100 group-focus-within/code:opacity-100 transition-opacity">
           <button
             type="button"
             onClick={handleOpenInCanvas}
             className="p-1 rounded bg-slate-700/80 hover:bg-slate-600 transition-colors text-slate-400 hover:text-slate-200"
             title={t('agent.artifact.openInCanvas', 'Open in Canvas')}
+            aria-label={t('agent.artifact.openInCanvas', 'Open in Canvas')}
           >
             <PanelRight size={14} />
           </button>
@@ -176,6 +183,11 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
             }}
             className="p-1 rounded bg-slate-700/80 hover:bg-slate-600 transition-colors text-slate-400 hover:text-slate-200"
             title={
+              copied
+                ? t('agent.actions.copied', 'Copied!')
+                : t('agent.actions.copyCode', 'Copy code')
+            }
+            aria-label={
               copied
                 ? t('agent.actions.copied', 'Copied!')
                 : t('agent.actions.copyCode', 'Copy code')

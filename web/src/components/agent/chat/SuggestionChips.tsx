@@ -53,7 +53,7 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = memo(
                   cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1
                 "
               >
-                <span>{suggestion}</span>
+                <span className="max-w-full truncate">{suggestion}</span>
                 <ArrowUpRight
                   size={12}
                   className="text-slate-300 group-hover/chip:text-primary dark:group-hover/chip:text-primary-300 transition-colors"

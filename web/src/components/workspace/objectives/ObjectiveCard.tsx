@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Dropdown } from 'antd';
 import { Circle, MoreHorizontal, Pencil, PlayCircle, Trash2 } from 'lucide-react';
 
@@ -28,6 +30,7 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
   onDelete,
   onProject,
 }) => {
+  const { t } = useTranslation();
   const isObjective = objective.obj_type === 'objective';
   const progressColor = isObjective ? 'bg-primary' : 'bg-success';
   const progressPct = tasks
@@ -40,7 +43,7 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
           {
             key: 'edit',
             icon: <Pencil size={14} />,
-            label: 'Edit',
+            label: t('workspaceDetail.objectives.edit'),
             onClick: () => {
               onEdit(objective);
             },
@@ -59,7 +62,7 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
             ),
             label: (
               <span className="text-status-text-error dark:text-status-text-error-dark">
-                Delete
+                {t('workspaceDetail.objectives.delete')}
               </span>
             ),
             onClick: () => {
@@ -73,7 +76,7 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
           {
             key: 'project',
             icon: <PlayCircle size={14} />,
-            label: 'Start execution',
+            label: t('workspaceDetail.objectives.startExecution'),
             onClick: () => {
               onProject(objective.id);
             },
@@ -110,8 +113,10 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
             <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
               <button
                 type="button"
-                aria-label={`Open actions for ${objective.title}`}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted opacity-0 transition hover:bg-surface-muted hover:text-text-primary group-hover:opacity-100 dark:text-text-muted dark:hover:bg-background-dark dark:hover:text-text-inverse"
+                aria-label={t('workspaceDetail.objectives.openActions', {
+                  name: objective.title,
+                })}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted opacity-0 transition hover:bg-surface-muted hover:text-text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group-focus-within:opacity-100 group-hover:opacity-100 dark:text-text-muted dark:hover:bg-background-dark dark:hover:text-text-inverse"
               >
                 <MoreHorizontal size={16} />
               </button>

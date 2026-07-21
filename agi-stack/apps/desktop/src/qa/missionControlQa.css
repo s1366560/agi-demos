@@ -1,0 +1,20 @@
+.mission-control-qa-shell {
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--desktop-bg);
+}
+
+.mission-control-qa-shell > .desktop-design-sidebar {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.mission-control-qa-main {
+  grid-column: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}

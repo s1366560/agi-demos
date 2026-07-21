@@ -62,32 +62,33 @@ const { TextArea } = Input;
 // ============================================================================
 
 const StatusTag: React.FC<{ status: DLQMessageStatus }> = ({ status }) => {
+  const { t } = useTranslation();
   const config: Record<DLQMessageStatus, { color: string; icon: React.ReactNode; label: string }> =
     {
       pending: {
         color: 'warning',
         icon: <Clock size={16} />,
-        label: 'Pending',
+        label: t('admin.deadLetterQueue.statuses.pending'),
       },
       retrying: {
         color: 'processing',
         icon: <RefreshCcw size={16} />,
-        label: 'Retrying',
+        label: t('admin.deadLetterQueue.statuses.retrying'),
       },
       discarded: {
         color: 'default',
         icon: <Trash2 size={16} />,
-        label: 'Discarded',
+        label: t('admin.deadLetterQueue.statuses.discarded'),
       },
       expired: {
         color: 'default',
         icon: <Square size={16} />,
-        label: 'Expired',
+        label: t('admin.deadLetterQueue.statuses.expired'),
       },
       resolved: {
         color: 'success',
         icon: <CheckCircle2 size={16} />,
-        label: 'Resolved',
+        label: t('admin.deadLetterQueue.statuses.resolved'),
       },
     };
 
@@ -105,6 +106,15 @@ const formatAge = (seconds: number): string => {
   if (seconds < 3600) return `${String(Math.round(seconds / 60))}m`;
   if (seconds < 86400) return `${String(Math.round(seconds / 3600))}h`;
   return `${String(Math.round(seconds / 86400))}d`;
+};
+
+/** Pretty-print the event payload; fall back to raw text when it is not valid JSON. */
+const formatEventData = (raw: string): string => {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
 };
 
 const getDistributionPercent = (count: number, total: number): number => {
@@ -130,8 +140,10 @@ const DeadLetterQueue: React.FC = () => {
   // State
   const [stats, setStats] = useState<DLQStats | null>(null);
   const [messages, setMessages] = useState<DLQMessage[]>([]);
+  const [totalMessages, setTotalMessages] = useState(0);
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [batchActionLoading, setBatchActionLoading] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [statusFilter, setStatusFilter] = useState<DLQMessageStatus | undefined>(undefined);
   const [eventTypeFilter, setEventTypeFilter] = useState<string | undefined>(undefined);
@@ -142,6 +154,20 @@ const DeadLetterQueue: React.FC = () => {
   const [discardReason, setDiscardReason] = useState('');
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
   const [messagesForDiscard, setMessagesForDiscard] = useState<string[]>([]);
+
+  // Changing a filter always restarts from the first page
+  const handleStatusFilterChange = (value: DLQMessageStatus | undefined): void => {
+    setStatusFilter(value);
+    setPagination((prev) => ({ ...prev, current: 1 }));
+  };
+  const handleEventTypeFilterChange = (value: string | undefined): void => {
+    setEventTypeFilter(value);
+    setPagination((prev) => ({ ...prev, current: 1 }));
+  };
+  const handleErrorTypeFilterChange = (value: string | undefined): void => {
+    setErrorTypeFilter(value);
+    setPagination((prev) => ({ ...prev, current: 1 }));
+  };
 
   // Fetch stats
   const fetchStats = useCallback(async () => {
@@ -168,6 +194,7 @@ const DeadLetterQueue: React.FC = () => {
         offset: (pagination.current - 1) * pagination.pageSize,
       });
       setMessages(data.messages);
+      setTotalMessages(data.total);
     } catch (_error) {
       message.error(t('admin.deadLetterQueue.errors.failedToLoadMessages'));
     } finally {
@@ -203,6 +230,7 @@ const DeadLetterQueue: React.FC = () => {
   const handleRetryBatch = async (): Promise<void> => {
     if (selectedRowKeys.length === 0) return;
 
+    setBatchActionLoading(true);
     try {
       const result = await dlqService.retryMessages(selectedRowKeys as string[]);
       message.success(
@@ -213,6 +241,8 @@ const DeadLetterQueue: React.FC = () => {
       handleRefresh();
     } catch (_error) {
       message.error(t('admin.deadLetterQueue.errors.failedToRetryMessages'));
+    } finally {
+      setBatchActionLoading(false);
     }
   };
 
@@ -230,6 +260,7 @@ const DeadLetterQueue: React.FC = () => {
       return;
     }
 
+    setBatchActionLoading(true);
     try {
       if (messagesForDiscard.length === 1) {
         await dlqService.discardMessage(messagesForDiscard[0] ?? '', discardReason);
@@ -246,6 +277,8 @@ const DeadLetterQueue: React.FC = () => {
       handleRefresh();
     } catch (_error) {
       message.error(t('admin.deadLetterQueue.errors.failedToDiscardMessages'));
+    } finally {
+      setBatchActionLoading(false);
     }
   };
 
@@ -296,7 +329,7 @@ const DeadLetterQueue: React.FC = () => {
       render: (id: string) => (
         <Tooltip title={id}>
           <Text copyable={{ text: id }} style={{ fontFamily: 'monospace' }}>
-            {id.substring(0, 12)}...
+            {id.substring(0, 12)}…
           </Text>
         </Tooltip>
       ),
@@ -345,7 +378,10 @@ const DeadLetterQueue: React.FC = () => {
       key: 'retries',
       width: 80,
       render: (_, record) => (
-        <Text type={record.retry_count >= record.max_retries ? 'danger' : 'secondary'}>
+        <Text
+          type={record.retry_count >= record.max_retries ? 'danger' : 'secondary'}
+          className="tabular-nums"
+        >
           {record.retry_count}/{record.max_retries}
         </Text>
       ),
@@ -355,7 +391,7 @@ const DeadLetterQueue: React.FC = () => {
       dataIndex: 'age_seconds',
       key: 'age',
       width: 80,
-      render: (age: number) => formatAge(age),
+      render: (age: number) => <span className="tabular-nums">{formatAge(age)}</span>,
     },
     {
       title: t('admin.deadLetterQueue.columns.actions'),
@@ -560,11 +596,12 @@ const DeadLetterQueue: React.FC = () => {
           </Col>
           <Col>
             <Select
+              aria-label={t('admin.deadLetterQueue.filters.status')}
               placeholder={t('admin.deadLetterQueue.filters.status')}
               allowClear
               style={{ width: 120 }}
               value={statusFilter}
-              onChange={setStatusFilter}
+              onChange={handleStatusFilterChange}
               options={[
                 { value: 'pending', label: t('admin.deadLetterQueue.statuses.pending') },
                 { value: 'retrying', label: t('admin.deadLetterQueue.statuses.retrying') },
@@ -576,22 +613,24 @@ const DeadLetterQueue: React.FC = () => {
           </Col>
           <Col>
             <Select
+              aria-label={t('admin.deadLetterQueue.filters.eventType')}
               placeholder={t('admin.deadLetterQueue.filters.eventType')}
               allowClear
               style={{ width: 160 }}
               value={eventTypeFilter}
-              onChange={setEventTypeFilter}
+              onChange={handleEventTypeFilterChange}
               options={eventTypes.map((t) => ({ value: t, label: t }))}
               showSearch
             />
           </Col>
           <Col>
             <Select
+              aria-label={t('admin.deadLetterQueue.filters.errorType')}
               placeholder={t('admin.deadLetterQueue.filters.errorType')}
               allowClear
               style={{ width: 200 }}
               value={errorTypeFilter}
-              onChange={setErrorTypeFilter}
+              onChange={handleErrorTypeFilterChange}
               options={errorTypes.map((t) => ({
                 value: t,
                 label: t.split('.').pop(),
@@ -612,6 +651,7 @@ const DeadLetterQueue: React.FC = () => {
                   <Button
                     type="primary"
                     icon={<RefreshCcw size={16} />}
+                    loading={batchActionLoading}
                     onClick={() => void handleRetryBatch()}
                   >
                     {t('admin.deadLetterQueue.actions.retrySelected')}
@@ -619,6 +659,7 @@ const DeadLetterQueue: React.FC = () => {
                   <Button
                     danger
                     icon={<Trash2 size={16} />}
+                    disabled={batchActionLoading}
                     onClick={() => {
                       openDiscardModal(selectedRowKeys as string[]);
                     }}
@@ -643,8 +684,9 @@ const DeadLetterQueue: React.FC = () => {
           pagination={{
             current: pagination.current,
             pageSize: pagination.pageSize,
+            total: totalMessages,
             showSizeChanger: true,
-            showTotal: (total) => `Total ${String(total)} messages`,
+            showTotal: (total) => t('admin.deadLetterQueue.pagination.total', { count: total }),
             onChange: (page, pageSize) => {
               setPagination({ current: page, pageSize });
             },
@@ -736,7 +778,7 @@ const DeadLetterQueue: React.FC = () => {
                   fontSize: 12,
                 }}
               >
-                {JSON.stringify(JSON.parse(selectedMessage.event_data), null, 2)}
+                {formatEventData(selectedMessage.event_data)}
               </pre>
             </Descriptions.Item>
             {selectedMessage.error_traceback && (
@@ -768,6 +810,7 @@ const DeadLetterQueue: React.FC = () => {
           setDiscardModalVisible(false);
         }}
         onOk={() => void handleDiscardConfirm()}
+        confirmLoading={batchActionLoading}
         okText={t('admin.deadLetterQueue.actions.discard')}
         cancelText={t('common.cancel')}
         okButtonProps={{ danger: true }}

@@ -5,8 +5,10 @@
  * Only visible on screens < md (768px).
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import type { FC, ReactNode } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 interface MobileSidebarDrawerProps {
   open: boolean;
@@ -15,6 +17,9 @@ interface MobileSidebarDrawerProps {
 }
 
 export const MobileSidebarDrawer: FC<MobileSidebarDrawerProps> = ({ open, onClose, children }) => {
+  const { t } = useTranslation();
+  const panelRef = useRef<HTMLElement>(null);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -30,6 +35,13 @@ export const MobileSidebarDrawer: FC<MobileSidebarDrawerProps> = ({ open, onClos
     };
   }, [open, handleKeyDown]);
 
+  // Move focus inside the drawer when it opens
+  useEffect(() => {
+    if (open) {
+      panelRef.current?.focus();
+    }
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -41,7 +53,14 @@ export const MobileSidebarDrawer: FC<MobileSidebarDrawerProps> = ({ open, onClos
         aria-hidden="true"
       />
       {/* Drawer panel */}
-      <aside className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-slate-50 dark:bg-slate-900 shadow-lg shadow-slate-950/20 drawer-slide-in">
+      <aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('agent.mobileSidebar.title', 'Conversation history')}
+        tabIndex={-1}
+        className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-slate-50 dark:bg-slate-900 shadow-lg shadow-slate-950/20 drawer-slide-in overscroll-contain focus:outline-none"
+      >
         {children}
       </aside>
     </div>

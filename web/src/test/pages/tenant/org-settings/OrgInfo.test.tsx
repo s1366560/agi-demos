@@ -59,7 +59,7 @@ describe('OrgInfo', () => {
 
     expect(await screen.findByText('7')).toBeInTheDocument();
     expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('1.0 MB')).toBeInTheDocument();
+    expect(screen.getByText('1 MB')).toBeInTheDocument();
     expect(screen.queryByText('48')).not.toBeInTheDocument();
     expect(screen.queryByText('2.4 GB')).not.toBeInTheDocument();
   });
@@ -70,7 +70,7 @@ describe('OrgInfo', () => {
     const uploadButton = screen.getByRole('button', { name: 'Upload Logo' });
     expect(uploadButton).toBeDisabled();
     expect(screen.getByText('Logo upload is not available in this build.')).toBeInTheDocument();
-    expect(await screen.findByText('1.0 MB')).toBeInTheDocument();
+    expect(await screen.findByText('1 MB')).toBeInTheDocument();
   });
 
   it('saves organization name and description through the tenant store', async () => {
@@ -87,7 +87,7 @@ describe('OrgInfo', () => {
         description: 'Memory org',
       });
     });
-    expect(await screen.findByText('1.0 MB')).toBeInTheDocument();
+    expect(await screen.findByText('1 MB')).toBeInTheDocument();
   });
 
   it('shows unavailable stats when the stats request fails', async () => {

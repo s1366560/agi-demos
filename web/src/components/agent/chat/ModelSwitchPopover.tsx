@@ -256,7 +256,7 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
           }}
           notFoundContent={
             loading
-              ? tFallback(t, 'agent.modelSwitch.loadingModels', 'Loading models...')
+              ? tFallback(t, 'agent.modelSwitch.loadingModels', 'Loading models…')
               : tFallback(t, 'agent.modelSwitch.noModels', 'No models available')
           }
         />
@@ -281,6 +281,7 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
               size="small"
               icon={<Bot size={18} />}
               disabled={disabled}
+              aria-label={tFallback(t, 'agent.modelSwitch.switchModel', 'Switch Model')}
               className={`
               text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
               hover:bg-slate-100 dark:hover:bg-slate-700/50

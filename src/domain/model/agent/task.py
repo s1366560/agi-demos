@@ -47,11 +47,22 @@ class AgentTask:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     conversation_id: str
     content: str
+    title: str = ""
+    description: str | None = None
+    estimated_duration_seconds: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result_summary: str | None = None
+    evidence_refs: list[str] = field(default_factory=list)
     status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.MEDIUM
     order_index: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def __post_init__(self) -> None:
+        if not self.title.strip():
+            self.title = self.content
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -59,6 +70,13 @@ class AgentTask:
             "id": self.id,
             "conversation_id": self.conversation_id,
             "content": self.content,
+            "title": self.title,
+            "description": self.description,
+            "estimated_duration_seconds": self.estimated_duration_seconds,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "result_summary": self.result_summary,
+            "evidence_refs": list(self.evidence_refs),
             "status": self.status.value,
             "priority": self.priority.value,
             "order_index": self.order_index,
@@ -80,6 +98,13 @@ class AgentTask:
             id=data.get("id", str(uuid.uuid4())),
             conversation_id=data["conversation_id"],
             content=data["content"],
+            title=data.get("title") or data["content"],
+            description=data.get("description"),
+            estimated_duration_seconds=data.get("estimated_duration_seconds"),
+            started_at=_optional_datetime(data.get("started_at")),
+            completed_at=_optional_datetime(data.get("completed_at")),
+            result_summary=data.get("result_summary"),
+            evidence_refs=[str(value) for value in data.get("evidence_refs", [])],
             status=status,
             priority=priority,
             order_index=data.get("order_index", 0),
@@ -92,3 +117,11 @@ class AgentTask:
         if self.status not in TaskStatus:
             return False
         return self.priority in TaskPriority
+
+
+def _optional_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        return datetime.fromisoformat(value)
+    return None

@@ -6,6 +6,7 @@ import { memo, useState, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { message } from 'antd';
 import { FileText, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
 interface ConversationSummaryCardProps {
@@ -18,6 +19,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
   ({ summary, onRegenerate }) => {
     const { t } = useTranslation();
     const [collapsed, setCollapsed] = useState(false);
+    const [expanded, setExpanded] = useState(false);
     const [regenerating, setRegenerating] = useState(false);
 
     const handleRegenerate = useCallback(async () => {
@@ -25,10 +27,14 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
       setRegenerating(true);
       try {
         await onRegenerate();
+      } catch {
+        void message.error(
+          t('agent.summary.regenerateError', 'Failed to regenerate summary. Please try again.')
+        );
       } finally {
         setRegenerating(false);
       }
-    }, [onRegenerate]);
+    }, [onRegenerate, t]);
 
     if (!summary) return null;
     if (collapsed) {
@@ -86,9 +92,25 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
                 </button>
               )}
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+            <p
+              className={`text-sm text-slate-600 dark:text-slate-300 leading-relaxed ${
+                expanded ? '' : 'line-clamp-2'
+              }`}
+            >
               {summary}
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                setExpanded((prev) => !prev);
+              }}
+              aria-expanded={expanded}
+              className="mt-1 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+            >
+              {expanded
+                ? t('agent.summary.showLess', 'Show less')
+                : t('agent.summary.showMore', 'Show more')}
+            </button>
           </div>
         </div>
       </div>

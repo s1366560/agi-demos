@@ -1,12 +1,15 @@
-import { useEffect, useState, lazy, Suspense, memo, useMemo, useRef, type FC } from 'react';
+import { useEffect, useState, lazy, Suspense, memo, useMemo, useRef, useCallback, type FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Database, Loader2, TrendingUp } from 'lucide-react';
+import { Database, TrendingUp } from 'lucide-react';
 
+import { formatStorage } from '../../hooks/useDateFormatter';
 import { analyticsService } from '../../services/analyticsService';
 import { useTenantStore } from '../../stores/tenant';
+
+import { LoadingState } from './utils/LoadingState';
 
 import type { TenantAnalytics } from '../../types/analytics';
 
@@ -26,7 +29,7 @@ const KPICard = memo<KPICardProps>(({ label, value, subtext, subtextIcon, subtex
   return (
     <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
       <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
-      <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{value}</h3>
+      <p className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{value}</p>
       {subtext && (
         <div
           className={`flex items-center gap-1 mt-2 text-sm font-medium ${subtextColorClass || 'text-slate-500'}`}
@@ -43,15 +46,6 @@ const KPICard = memo<KPICardProps>(({ label, value, subtext, subtextIcon, subtex
   );
 });
 KPICard.displayName = 'KPICard';
-
-// Loading state component
-const LoadingState = memo<{ message: string }>(({ message }) => (
-  <div className="p-8 text-center text-slate-500">
-    <Loader2 size={16} className="animate-spin motion-reduce:animate-none mr-2" />
-    {message}
-  </div>
-));
-LoadingState.displayName = 'LoadingState';
 
 // Analytics header component
 interface AnalyticsHeaderProps {
@@ -92,9 +86,10 @@ export const Analytics: FC = memo(() => {
   const tenantForPlan = currentTenant?.id === tenantId ? currentTenant : null;
   const [analytics, setAnalytics] = useState<TenantAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const requestIdRef = useRef(0);
 
-  useEffect(() => {
+  const loadAnalytics = useCallback(async () => {
     if (!tenantId) {
       return;
     }
@@ -103,38 +98,40 @@ export const Analytics: FC = memo(() => {
     requestIdRef.current = requestId;
     const isCurrentRequest = () => requestIdRef.current === requestId;
 
-    void (async () => {
-      await Promise.resolve();
+    await Promise.resolve();
+    if (!isCurrentRequest()) {
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(false);
+    setAnalytics(null);
+
+    try {
+      const analyticsData = await analyticsService.getTenantAnalytics(tenantId, '30d');
       if (!isCurrentRequest()) {
         return;
       }
-
-      setLoading(true);
-      setAnalytics(null);
-
-      try {
-        const analyticsData = await analyticsService.getTenantAnalytics(tenantId, '30d');
-        if (!isCurrentRequest()) {
-          return;
-        }
-        setAnalytics(analyticsData);
-      } catch (error: unknown) {
-        if (isCurrentRequest()) {
-          console.error('Failed to fetch analytics data:', error);
-        }
-      } finally {
-        if (isCurrentRequest()) {
-          setLoading(false);
-        }
+      setAnalytics(analyticsData);
+    } catch (error: unknown) {
+      if (isCurrentRequest()) {
+        console.error('Failed to fetch analytics data:', error);
+        setLoadError(true);
       }
-    })();
+    } finally {
+      if (isCurrentRequest()) {
+        setLoading(false);
+      }
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    void loadAnalytics();
 
     return () => {
-      if (isCurrentRequest()) {
-        requestIdRef.current += 1;
-      }
+      requestIdRef.current += 1;
     };
-  }, [tenantId]);
+  }, [loadAnalytics]);
 
   // Memoize chart data to prevent recalculation on re-renders
   const chartData = useMemo(() => {
@@ -146,7 +143,7 @@ export const Analytics: FC = memo(() => {
       labels: memoryGrowthLabels,
       datasets: [
         {
-          label: 'Memories',
+          label: t('tenant.analytics.chart_memories'),
           data: memoryGrowthCounts,
           borderColor: 'rgb(99, 102, 241)',
           backgroundColor: 'rgba(99, 102, 241, 0.5)',
@@ -179,7 +176,7 @@ export const Analytics: FC = memo(() => {
     };
 
     return { memoryGrowthData, projectStorageData };
-  }, [analytics]);
+  }, [analytics, t]);
 
   // Memoize chart options
   const lineOptions = useMemo(
@@ -214,12 +211,6 @@ export const Analytics: FC = memo(() => {
     []
   );
 
-  // Format storage bytes to human-readable
-  const formatStorage = (bytes: number): string => {
-    const gb = bytes / (1024 * 1024 * 1024);
-    return `${gb.toFixed(1)} GB`;
-  };
-
   // Calculate average memories per project
   const avgMemoriesPerProject =
     analytics && analytics.summary.total_projects > 0
@@ -231,13 +222,41 @@ export const Analytics: FC = memo(() => {
   // Format total memories with locale
   const totalMemoriesDisplay = analytics ? analytics.summary.total_memories.toLocaleString() : '0';
 
-  // Format storage display
-  const storageDisplay = analytics
-    ? `${formatStorage(analytics.summary.total_storage_bytes)} / 100 GB`
-    : '0 GB / 100 GB';
+  // Format storage display (used bytes; no fixed quota is exposed by the API)
+  const storageDisplay = analytics ? formatStorage(analytics.summary.total_storage_bytes) : '0 GB';
 
   if (loading) {
     return <LoadingState message={t('common.loading')} />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="max-w-full mx-auto flex flex-col gap-8">
+        <AnalyticsHeader
+          title={t('tenant.analytics.title')}
+          subtitle={t('tenant.analytics.workspace_info')}
+          storageLabel={t('tenant.analytics.storage_usage')}
+          storageValue="-"
+        />
+        <div
+          role="alert"
+          className="rounded-[28px] border border-rose-200/80 bg-rose-50 px-6 py-8 dark:border-rose-900/60 dark:bg-rose-950/40"
+        >
+          <p className="text-lg font-semibold tracking-[-0.02em] text-rose-900 dark:text-rose-100">
+            {t('tenant.analytics.load_error')}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void loadAnalytics();
+            }}
+            className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-rose-300 px-5 text-sm font-medium text-rose-800 transition-colors duration-150 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 dark:border-rose-800 dark:text-rose-100 dark:hover:bg-rose-900/60"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

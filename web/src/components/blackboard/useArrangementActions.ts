@@ -15,6 +15,7 @@ import {
 
 import { getErrorMessage } from '@/types/common';
 import type { TopologyNode, WorkspaceAgent } from '@/types/workspace';
+import { confirmAction } from '@/utils/confirmAction';
 
 import type { MoveMode, SelectionState } from './arrangementUtils';
 
@@ -311,15 +312,27 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
       if (params.selection?.kind !== 'empty') {
         return;
       }
-      const agent = await params.bindAgent(params.tenantId, params.projectId, params.workspaceId, {
-        ...data,
-        hex_q: params.selection.q,
-        hex_r: params.selection.r,
-      });
-      params.setSelection({ kind: 'agent', agentId: agent.id });
-      message?.success(
-        t('blackboard.arrangement.messages.agentPlaced', 'Agent placed on the workstation.')
-      );
+      setPendingAction('add-agent');
+      try {
+        const agent = await params.bindAgent(
+          params.tenantId,
+          params.projectId,
+          params.workspaceId,
+          {
+            ...data,
+            hex_q: params.selection.q,
+            hex_r: params.selection.r,
+          }
+        );
+        params.setSelection({ kind: 'agent', agentId: agent.id });
+        message?.success(
+          t('blackboard.arrangement.messages.agentPlaced', 'Agent placed on the workstation.')
+        );
+      } catch (error) {
+        message?.error(getErrorMessage(error));
+      } finally {
+        setPendingAction(null);
+      }
     },
     [message, params, t]
   );
@@ -375,6 +388,20 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
 
   const handleDeleteSelection = useCallback(async () => {
     if (params.selection?.kind === 'agent' && params.selectedAgent) {
+      const confirmed = await confirmAction({
+        title: t('blackboard.arrangement.confirm.removeAgentTitle', 'Remove this agent?'),
+        content: t(
+          'blackboard.arrangement.confirm.removeAgentContent',
+          'The agent will be unbound from this workstation.'
+        ),
+        okText: t('common.delete', 'Delete'),
+        cancelText: t('common.cancel', 'Cancel'),
+        danger: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+
       setPendingAction('delete-agent');
       try {
         await params.unbindAgent(
@@ -397,6 +424,20 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
     }
 
     if (params.selection?.kind === 'node' && params.selectedNode) {
+      const confirmed = await confirmAction({
+        title: t('blackboard.arrangement.confirm.removeNodeTitle', 'Remove this seat?'),
+        content: t(
+          'blackboard.arrangement.confirm.removeNodeContent',
+          'This node will be permanently removed from the topology.'
+        ),
+        okText: t('common.delete', 'Delete'),
+        cancelText: t('common.cancel', 'Cancel'),
+        danger: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+
       setPendingAction('delete-node');
       try {
         await params.deleteTopologyNode(params.workspaceId, params.selectedNode.id);

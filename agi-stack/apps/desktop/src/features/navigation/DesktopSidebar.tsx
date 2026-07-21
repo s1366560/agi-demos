@@ -3,14 +3,10 @@ import { useState } from 'react';
 import {
   BellIcon,
   ChevronUpIcon,
-  CodeIcon,
   CubeIcon,
   DashboardIcon,
   GearIcon,
-  HomeIcon,
-  LightningBoltIcon,
   MagnifyingGlassIcon,
-  MixerHorizontalIcon,
   PersonIcon,
   PlusIcon,
 } from '@radix-ui/react-icons';
@@ -30,7 +26,7 @@ type DesktopSidebarSection = 'home' | 'my-work' | 'automations' | 'search' | 'no
 
 type DesktopSidebarProps = {
   activeSection: DesktopSidebarSection | null;
-  mode: 'work' | 'code';
+  mode?: 'work' | 'code';
   taskCount: number;
   tenantName: string;
   projectName: string;
@@ -44,7 +40,7 @@ type DesktopSidebarProps = {
   workspaceTreeSelectionMode: WorkspaceTreeSelectionMode;
   expandedWorkspaceIds: Set<string>;
   newTaskDisabledReason: string | null;
-  onModeChange: (mode: 'work' | 'code') => void;
+  onModeChange?: (mode: 'work' | 'code') => void;
   onNavigate: (section: DesktopSidebarSection) => void;
   onToggleWorkspace: (workspaceId: string) => void;
   onRetryProject: () => void;
@@ -62,15 +58,12 @@ type DesktopSidebarProps = {
 };
 
 const primaryItems = [
-  { id: 'home', labelKey: 'nav.home', icon: HomeIcon },
   { id: 'my-work', labelKey: 'nav.myWork', icon: DashboardIcon },
-  { id: 'automations', labelKey: 'nav.automations', icon: LightningBoltIcon },
   { id: 'search', labelKey: 'nav.search', icon: MagnifyingGlassIcon },
 ] as const;
 
 export function DesktopSidebar({
   activeSection,
-  mode,
   taskCount,
   tenantName,
   projectName,
@@ -84,7 +77,6 @@ export function DesktopSidebar({
   workspaceTreeSelectionMode,
   expandedWorkspaceIds,
   newTaskDisabledReason,
-  onModeChange,
   onNavigate,
   onToggleWorkspace,
   onRetryProject,
@@ -157,23 +149,6 @@ export function DesktopSidebar({
       </section>
 
       <div className="desktop-design-sidebar-bottom">
-        <div className="desktop-design-mode-switcher" aria-label={t('sidebar.defaultTaskMode')}>
-          <button
-            className={mode === 'work' ? 'active' : ''}
-            type="button"
-            onClick={() => onModeChange('work')}
-          >
-            <MixerHorizontalIcon /> {t('sidebar.workMode')}
-          </button>
-          <button
-            className={mode === 'code' ? 'active' : ''}
-            type="button"
-            onClick={() => onModeChange('code')}
-          >
-            <CodeIcon /> {t('sidebar.codeMode')}
-          </button>
-        </div>
-
         <nav className="desktop-design-footer-nav">
           <button
             className={activeSection === 'notifications' ? 'active' : ''}

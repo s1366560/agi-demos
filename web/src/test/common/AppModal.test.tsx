@@ -2,15 +2,26 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { AppModal } from '@/components/common/AppModal';
 
+const confirmActionMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: confirmActionMock,
+}));
+
 describe('AppModal', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     document.body.style.overflow = '';
+    confirmActionMock.mockResolvedValue(false);
   });
   afterEach(() => cleanup());
 
   it('renders nothing when open=false', () => {
-    render(<AppModal open={false} onClose={() => {}} title="t">body</AppModal>);
+    render(
+      <AppModal open={false} onClose={() => {}} title="t">
+        body
+      </AppModal>
+    );
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
@@ -68,16 +79,14 @@ describe('AppModal', () => {
 
   it('does NOT close on Escape when isDirty=true and user declines confirm', () => {
     const onClose = vi.fn();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(
       <AppModal open onClose={onClose} title="t" isDirty>
         body
       </AppModal>
     );
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(confirmActionMock).toHaveBeenCalledOnce();
     expect(onClose).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it('closes when backdrop is clicked', () => {
