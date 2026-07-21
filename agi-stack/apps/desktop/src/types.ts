@@ -939,6 +939,32 @@ export type ManagedAgentDefinition = {
   [key: string]: unknown;
 };
 
+export type ManagedSubAgent = {
+  id: string;
+  tenant_id: string;
+  project_id?: string | null;
+  name: string;
+  display_name?: string | null;
+  system_prompt?: string;
+  trigger?: {
+    description?: string;
+    keywords?: string[];
+    examples?: string[];
+  };
+  model?: string | null;
+  enabled: boolean;
+  source?: 'filesystem' | 'database';
+  allowed_tools?: string[];
+  allowed_skills?: string[];
+  allowed_mcp_servers?: string[];
+  fallback_models?: string[];
+  total_invocations?: number;
+  success_rate?: number;
+  avg_execution_time_ms?: number;
+  updated_at?: string | null;
+  [key: string]: unknown;
+};
+
 export type PaginatedConversationsResponse = {
   items: AgentConversation[];
   total: number;

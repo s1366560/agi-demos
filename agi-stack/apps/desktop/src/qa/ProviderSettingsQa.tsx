@@ -14,6 +14,7 @@ import type {
   ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSubAgent,
 } from '../types';
 import { DEFAULT_CONFIG } from '../types';
 import '../styles.css';
@@ -293,6 +294,52 @@ let agents: ManagedAgentDefinition[] = [
   },
 ];
 
+let subagents: ManagedSubAgent[] = [
+  {
+    id: 'subagent-release-reviewer',
+    tenant_id: QA_TENANT_ID,
+    project_id: QA_PROJECT_ID,
+    name: 'release-reviewer',
+    display_name: 'Release reviewer',
+    system_prompt: 'Internal delegation policy must never be rendered or searched.',
+    trigger: {
+      description: 'Reviews release readiness and delivery evidence.',
+      keywords: ['release', 'readiness'],
+      examples: ['Review this release candidate'],
+    },
+    model: 'openai/gpt-5.1',
+    enabled: true,
+    source: 'database',
+    allowed_tools: ['read', 'git_diff', 'run_tests'],
+    allowed_skills: ['code-verification'],
+    allowed_mcp_servers: ['github'],
+    fallback_models: ['anthropic/claude-sonnet-4-5'],
+    total_invocations: 18,
+    success_rate: 0.94,
+    avg_execution_time_ms: 1250,
+    updated_at: NOW,
+  },
+  {
+    id: 'subagent-filesystem-researcher',
+    tenant_id: QA_TENANT_ID,
+    project_id: null,
+    name: 'filesystem-researcher',
+    display_name: 'Research specialist',
+    trigger: { description: 'Collects verified evidence from governed sources.' },
+    model: 'anthropic/claude-sonnet-4-5',
+    enabled: false,
+    source: 'filesystem',
+    allowed_tools: ['web_search', 'browser'],
+    allowed_skills: ['competitive-research'],
+    allowed_mcp_servers: [],
+    fallback_models: [],
+    total_invocations: 0,
+    success_rate: 0,
+    avg_execution_time_ms: 0,
+    updated_at: '2026-07-10T04:10:00.000Z',
+  },
+];
+
 const qaAuth: AuthState = {
   status: 'signed_in',
   credentialKind: 'cloud_session',
@@ -526,6 +573,9 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   if (method === 'GET' && path === '/api/v1/agent/definitions') {
     return jsonResponse({ definitions: agents });
   }
+  if (method === 'GET' && path === '/api/v1/subagents/') {
+    return jsonResponse({ subagents, total: subagents.length });
+  }
   if (method === 'GET' && path === '/api/v1/llm-providers/') {
     return jsonResponse(providers);
   }
@@ -684,6 +734,16 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     return jsonResponse(agents.find((agent) => agent.id === agentId) ?? null);
   }
 
+  const subagentStatusMatch = path.match(/^\/api\/v1\/subagents\/([^/]+)\/enable$/);
+  if (method === 'PATCH' && subagentStatusMatch) {
+    const subagentId = decodeURIComponent(subagentStatusMatch[1]);
+    const enabled = url.searchParams.get('enabled') === 'true';
+    subagents = subagents.map((subagent) =>
+      subagent.id === subagentId ? { ...subagent, enabled } : subagent,
+    );
+    return jsonResponse(subagents.find((subagent) => subagent.id === subagentId) ?? null);
+  }
+
   if (method === 'POST' && path === '/api/v1/llm-providers/') {
     const created = safeProviderFromBody(readJsonBody(body));
     providers = [...providers, created];
@@ -786,6 +846,7 @@ function ProviderSettingsQa() {
     'skills',
     'plugins',
     'agents',
+    'subagents',
     'connection',
   ]);
   const initialSection =

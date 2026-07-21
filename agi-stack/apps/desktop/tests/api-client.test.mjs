@@ -2794,3 +2794,72 @@ test('managed agent APIs preserve project scope and the enabled mutation body', 
     globalThis.fetch = originalFetch;
   }
 });
+
+test('managed subagent APIs preserve tenant scope and enabled mutation contracts', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify(
+        calls.length === 1
+          ? {
+              subagents: [
+                {
+                  id: 'subagent/1',
+                  tenant_id: 'tenant 1',
+                  project_id: 'project/1',
+                  name: 'release-reviewer',
+                  display_name: 'Release reviewer',
+                  trigger: { description: 'Review release readiness' },
+                  enabled: false,
+                },
+              ],
+              total: 1,
+            }
+          : {
+              id: 'subagent/1',
+              tenant_id: 'tenant 1',
+              project_id: 'project/1',
+              name: 'release-reviewer',
+              display_name: 'Release reviewer',
+              trigger: { description: 'Review release readiness' },
+              enabled: true,
+            },
+      ),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+      tenantId: 'tenant 1',
+      projectId: 'project/1',
+    });
+
+    const subagents = await client.listManagedSubAgents();
+    const updated = await client.setManagedSubAgentEnabled(subagents[0].id, true);
+
+    assert.equal(updated.enabled, true);
+    assert.deepEqual(
+      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/subagents/?limit=100&include_filesystem=true&tenant_id=tenant+1',
+          'GET',
+          undefined,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/subagents/subagent%2F1/enable?enabled=true&tenant_id=tenant+1',
+          'PATCH',
+          undefined,
+        ],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

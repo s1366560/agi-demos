@@ -19,13 +19,14 @@ const labels = {
   skills: ['Skills', 'Reusable instructions'],
   plugins: ['Plugins', 'External capabilities'],
   agents: ['Agents', 'Roles and autonomy'],
+  subagents: ['SubAgents', 'Delegated specialist workers'],
 };
 
 test('settings information architecture matches the approved prototype order', () => {
   assert.deepEqual(SETTINGS_GROUPS, [
     { id: 'account_context', sections: ['account', 'workspace'] },
     { id: 'preferences', sections: ['general', 'appearance', 'notifications'] },
-    { id: 'ai_resources', sections: ['models', 'skills', 'plugins', 'agents'] },
+    { id: 'ai_resources', sections: ['models', 'skills', 'plugins', 'agents', 'subagents'] },
   ]);
 });
 
@@ -47,6 +48,7 @@ test('empty settings search preserves the full section order', () => {
     'skills',
     'plugins',
     'agents',
+    'subagents',
   ]);
 });
 

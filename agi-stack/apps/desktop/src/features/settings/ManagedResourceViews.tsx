@@ -47,6 +47,12 @@ const sectionMeta = {
     singular: 'settings.agent',
     Icon: PersonIcon,
   },
+  subagents: {
+    label: 'settings.subagents',
+    eyebrow: 'settings.subagentsEyebrow',
+    singular: 'settings.subagent',
+    Icon: PersonIcon,
+  },
 } as const;
 
 export function ManagedResourceWorkspace({

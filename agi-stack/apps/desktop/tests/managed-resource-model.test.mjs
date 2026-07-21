@@ -57,6 +57,31 @@ const agent = {
   fallback_models: ['anthropic/claude-opus-4.1'],
 };
 
+const subagent = {
+  id: 'subagent-reviewer',
+  tenant_id: 'tenant-a',
+  project_id: 'project-a',
+  name: 'release-reviewer',
+  display_name: 'Release reviewer',
+  system_prompt: 'SECRET SUBAGENT POLICY',
+  trigger: {
+    description: 'Review release readiness',
+    keywords: ['release', 'readiness'],
+    examples: ['Review this release'],
+  },
+  model: 'openai/gpt-5.5',
+  enabled: true,
+  source: 'database',
+  allowed_tools: ['read', 'git_diff'],
+  allowed_skills: ['pull-request-review'],
+  allowed_mcp_servers: ['github'],
+  fallback_models: ['anthropic/claude-opus-4.1'],
+  total_invocations: 18,
+  success_rate: 0.94,
+  avg_execution_time_ms: 1250,
+  updated_at: '2026-07-21T02:00:00Z',
+};
+
 test('managed resource activity follows explicit structural status fields', () => {
   assert.equal(resourceIsActive('skills', skill), true);
   assert.equal(resourceIsActive('skills', { ...skill, status: 'deprecated' }), false);
@@ -68,6 +93,8 @@ test('managed resource activity follows explicit structural status fields', () =
     resourceIsActive('agents', { ...agent, enabled: undefined, status: 'disabled' }),
     false,
   );
+  assert.equal(resourceIsActive('subagents', subagent), true);
+  assert.equal(resourceIsActive('subagents', { ...subagent, enabled: false }), false);
 });
 
 test('search uses only declared public fields and never hidden prompt or arbitrary JSON', () => {
@@ -81,6 +108,8 @@ test('search uses only declared public fields and never hidden prompt or arbitra
       .length,
     0,
   );
+  assert.equal(filterManagedResources('subagents', [subagent], 'readiness', 'all').length, 1);
+  assert.equal(filterManagedResources('subagents', [subagent], 'SECRET SUBAGENT', 'all').length, 0);
 });
 
 test('list filtering classifies non-effective resources as attention', () => {
@@ -133,6 +162,18 @@ test('resource views do not invent versions, packages, tools, or agent descripti
     ],
     status: 'active',
   });
+  assert.deepEqual(managedResourceView('subagents', subagent), {
+    id: 'subagent-reviewer',
+    title: 'Release reviewer',
+    description: 'Review release readiness',
+    meta: [
+      { kind: 'text', value: 'release-reviewer' },
+      { kind: 'text', value: 'openai/gpt-5.5' },
+      { kind: 'tool_count', count: 2 },
+      { kind: 'skill_count', count: 1 },
+    ],
+    status: 'active',
+  });
 });
 
 test('facts and capability groups are separated and derive only from response fields', () => {
@@ -150,6 +191,18 @@ test('facts and capability groups are separated and derive only from response fi
     { key: 'channels', values: ['issues'] },
   ]);
   assert.deepEqual(managedResourceCapabilityGroups('agents', agent), [
+    { key: 'tools', values: ['read', 'git_diff'] },
+    { key: 'skills', values: ['pull-request-review'] },
+    { key: 'mcpServers', values: ['github'] },
+    { key: 'fallbackModels', values: ['anthropic/claude-opus-4.1'] },
+  ]);
+  assert.deepEqual(managedResourceFacts('subagents', subagent), [
+    { key: 'model', value: 'openai/gpt-5.5' },
+    { key: 'project', value: 'project-a' },
+    { key: 'source', value: 'database' },
+    { key: 'updatedAt', value: '2026-07-21T02:00:00Z' },
+  ]);
+  assert.deepEqual(managedResourceCapabilityGroups('subagents', subagent), [
     { key: 'tools', values: ['read', 'git_diff'] },
     { key: 'skills', values: ['pull-request-review'] },
     { key: 'mcpServers', values: ['github'] },
@@ -206,6 +259,10 @@ test('status actions honor permission and immutable system resources', () => {
     kind: 'set_agent_enabled',
     nextActive: false,
   });
+  assert.deepEqual(managedResourceAction('subagents', subagent, true, 'cloud'), {
+    kind: 'set_subagent_enabled',
+    nextActive: false,
+  });
   assert.equal(
     managedResourceAction('skills', { ...skill, is_system_skill: true }, true, 'cloud'),
     null,
@@ -232,6 +289,10 @@ test('status actions honor permission and immutable system resources', () => {
     null,
   );
   assert.equal(managedResourceAction('agents', agent, false, 'cloud'), null);
+  assert.equal(
+    managedResourceAction('subagents', { ...subagent, source: 'filesystem' }, true, 'cloud'),
+    null,
+  );
 });
 
 test('resource management permissions match local and cloud endpoint allow-lists', () => {
@@ -239,6 +300,8 @@ test('resource management permissions match local and cloud endpoint allow-lists
   assert.equal(managedResourceManagementAllowed('local', ['member'], 'skills', skill), false);
   assert.equal(managedResourceManagementAllowed('cloud', ['owner'], 'plugins', plugin), true);
   assert.equal(managedResourceManagementAllowed('cloud', ['owner'], 'agents', agent), true);
+  assert.equal(managedResourceManagementAllowed('cloud', ['owner'], 'subagents', subagent), true);
+  assert.equal(managedResourceManagementAllowed('cloud', ['member'], 'subagents', subagent), false);
   assert.equal(
     managedResourceManagementAllowed('cloud', ['member'], 'skills', {
       ...skill,

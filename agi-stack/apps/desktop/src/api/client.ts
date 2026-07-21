@@ -48,6 +48,7 @@ import type {
   ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSubAgent,
   PaginatedConversationsResponse,
   PlanSnapshot,
   ProjectMyWorkResponse,
@@ -1263,6 +1264,27 @@ export class DesktopApiClient {
         query ? `?${query}` : ''
       }`,
       { method: 'PATCH', body: { enabled } },
+    );
+  }
+
+  async listManagedSubAgents(signal?: AbortSignal): Promise<ManagedSubAgent[]> {
+    const params = new URLSearchParams({ limit: '100', include_filesystem: 'true' });
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    const payload = await this.request<unknown>(`/api/v1/subagents/?${params.toString()}`, {
+      signal,
+    });
+    return readArray<ManagedSubAgent>(payload, ['subagents', 'items', 'data']);
+  }
+
+  async setManagedSubAgentEnabled(
+    subagentId: string,
+    enabled: boolean,
+  ): Promise<ManagedSubAgent> {
+    const params = new URLSearchParams({ enabled: String(enabled) });
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    return this.request<ManagedSubAgent>(
+      `/api/v1/subagents/${encodeURIComponent(subagentId)}/enable?${params.toString()}`,
+      { method: 'PATCH' },
     );
   }
 

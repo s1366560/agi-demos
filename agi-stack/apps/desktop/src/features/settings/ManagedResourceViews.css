@@ -169,7 +169,8 @@
   border-color: #375a4d;
 }
 
-.managed-resource-workspace.agents .managed-resource-item.selected .managed-resource-item-icon {
+.managed-resource-workspace.agents .managed-resource-item.selected .managed-resource-item-icon,
+.managed-resource-workspace.subagents .managed-resource-item.selected .managed-resource-item-icon {
   color: #e8ad5b;
   background: #2a2014;
   border-color: #6d5334;
@@ -379,7 +380,8 @@
   border-color: #375a4d;
 }
 
-.managed-resource-identity-icon.agents {
+.managed-resource-identity-icon.agents,
+.managed-resource-identity-icon.subagents {
   color: #e8ad5b;
   background: #2a2014;
   border-color: #6d5334;

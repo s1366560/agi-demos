@@ -25,7 +25,10 @@ import { SettingsState } from './ManagedResourceViews';
 import { projectsForTenant, type SettingsSection } from './settingsNavigationModel';
 import './SettingsCorePages.css';
 
-type ResourceSection = Extract<SettingsSection, 'models' | 'skills' | 'plugins' | 'agents'>;
+type ResourceSection = Extract<
+  SettingsSection,
+  'models' | 'skills' | 'plugins' | 'agents' | 'subagents'
+>;
 export type SettingsResourceCounts = Record<ResourceSection, number | null>;
 
 export function SettingsPage({
@@ -407,6 +410,7 @@ export function GeneralSettingsPage({
     ['skills', MagicWandIcon],
     ['plugins', ComponentInstanceIcon],
     ['agents', PersonIcon],
+    ['subagents', PersonIcon],
   ] as const;
 
   return (

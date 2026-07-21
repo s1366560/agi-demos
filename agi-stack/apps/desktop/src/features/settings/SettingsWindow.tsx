@@ -24,6 +24,7 @@ import type {
   ManagedAgentDefinition,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSubAgent,
 } from '../../types';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import {
@@ -120,6 +121,11 @@ const sectionMeta = {
     Icon: ComponentInstanceIcon,
   },
   agents: { label: 'settings.agents', description: 'settings.agentsDescription', Icon: PersonIcon },
+  subagents: {
+    label: 'settings.subagents',
+    description: 'settings.subagentsDescription',
+    Icon: PersonIcon,
+  },
 } satisfies Record<SettingsSection, { label: string; description: string; Icon: typeof GearIcon }>;
 
 export function SettingsWindow({
@@ -163,6 +169,7 @@ export function SettingsWindow({
     skills: null,
     plugins: null,
     agents: null,
+    subagents: null,
   });
 
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
@@ -185,12 +192,12 @@ export function SettingsWindow({
     setLoadedResourceContextKey(null);
     setResourceItems([]);
     setSelectedResourceId(null);
-    setResourceCounts({ models: null, skills: null, plugins: null, agents: null });
+    setResourceCounts({ models: null, skills: null, plugins: null, agents: null, subagents: null });
   }, [initialSection, open]);
 
   useEffect(() => {
     if (!open) return;
-    setResourceCounts({ models: null, skills: null, plugins: null, agents: null });
+    setResourceCounts({ models: null, skills: null, plugins: null, agents: null, subagents: null });
   }, [config.projectId, config.tenantId, open]);
 
   const loadResources = useCallback(
@@ -206,7 +213,9 @@ export function SettingsWindow({
             ? await client.listManagedSkills(signal)
             : resourceSection === 'plugins'
               ? await client.listManagedPlugins(signal)
-              : await client.listManagedAgents(signal);
+              : resourceSection === 'agents'
+                ? await client.listManagedAgents(signal)
+                : await client.listManagedSubAgents(signal);
         if (requestId !== resourceRequestId.current) return;
         setResourceItems(items);
         setLoadedResourceSection(resourceSection);
@@ -313,6 +322,7 @@ export function SettingsWindow({
       skills: [t(sectionMeta.skills.label), t(sectionMeta.skills.description)],
       plugins: [t(sectionMeta.plugins.label), t(sectionMeta.plugins.description)],
       agents: [t(sectionMeta.agents.label), t(sectionMeta.agents.description)],
+      subagents: [t(sectionMeta.subagents.label), t(sectionMeta.subagents.description)],
     }),
     [t],
   );
@@ -363,6 +373,9 @@ export function SettingsWindow({
       } else if (action.kind === 'set_plugin_enabled') {
         const plugin = item as ManagedPlugin;
         await client.setManagedPluginEnabled(plugin.id, action.nextActive);
+      } else if (action.kind === 'set_subagent_enabled') {
+        const subagent = item as ManagedSubAgent;
+        await client.setManagedSubAgentEnabled(subagent.id, action.nextActive);
       } else {
         const agent = item as ManagedAgentDefinition;
         await client.setManagedAgentEnabled(agent.id, action.nextActive);
@@ -607,7 +620,12 @@ function SettingsGroup({
 }
 
 function isResource(section: SettingsSection): section is ResourceSection {
-  return section === 'skills' || section === 'plugins' || section === 'agents';
+  return (
+    section === 'skills' ||
+    section === 'plugins' ||
+    section === 'agents' ||
+    section === 'subagents'
+  );
 }
 
 function isCountedSection(

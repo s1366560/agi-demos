@@ -2,11 +2,16 @@ import type {
   ManagedAgentDefinition,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSubAgent,
   RuntimeMode,
 } from '../../types';
 
-export type ResourceSection = 'skills' | 'plugins' | 'agents';
-export type ManagedResource = ManagedSkill | ManagedPlugin | ManagedAgentDefinition;
+export type ResourceSection = 'skills' | 'plugins' | 'agents' | 'subagents';
+export type ManagedResource =
+  | ManagedSkill
+  | ManagedPlugin
+  | ManagedAgentDefinition
+  | ManagedSubAgent;
 export type ManagedResourceListFilter = 'all' | 'active' | 'attention';
 export type ManagedResourceStatus = 'active' | 'disabled' | 'attention';
 
@@ -44,7 +49,11 @@ export type ManagedResourceCapabilityGroup = {
 };
 
 export type ManagedResourceAction = {
-  kind: 'set_skill_status' | 'set_plugin_enabled' | 'set_agent_enabled';
+  kind:
+    | 'set_skill_status'
+    | 'set_plugin_enabled'
+    | 'set_agent_enabled'
+    | 'set_subagent_enabled';
   nextActive: boolean;
 };
 
@@ -66,6 +75,9 @@ export function managedResourceStatus(
     const plugin = item as ManagedPlugin;
     if (!plugin.discovered) return 'attention';
     return plugin.enabled ? 'active' : 'disabled';
+  }
+  if (section === 'subagents') {
+    return (item as ManagedSubAgent).enabled ? 'active' : 'disabled';
   }
   const agent = item as ManagedAgentDefinition;
   if (typeof agent.enabled === 'boolean') return agent.enabled ? 'active' : 'disabled';
@@ -127,6 +139,25 @@ export function managedResourceView(
       status: managedResourceStatus(section, item),
     };
   }
+  if (section === 'subagents') {
+    const subagent = item as ManagedSubAgent;
+    const tools = cleanStrings(subagent.allowed_tools);
+    const skills = cleanStrings(subagent.allowed_skills);
+    return {
+      id: subagent.id,
+      title: subagent.display_name || subagent.name || subagent.id,
+      description: stringValue(subagent.trigger?.description),
+      meta: compactMeta([
+        subagent.display_name && subagent.name !== subagent.display_name
+          ? textMeta(subagent.name)
+          : null,
+        textMeta(subagent.model),
+        tools.length > 0 ? { kind: 'tool_count', count: tools.length } : null,
+        skills.length > 0 ? { kind: 'skill_count', count: skills.length } : null,
+      ]),
+      status: managedResourceStatus(section, item),
+    };
+  }
   const agent = item as ManagedAgentDefinition;
   const model = agentModel(agent);
   const tools = cleanStrings(agent.allowed_tools);
@@ -168,6 +199,15 @@ export function managedResourceFacts(
       fact('discovery', plugin.discovered ? 'discovered' : 'unavailable'),
     ]);
   }
+  if (section === 'subagents') {
+    const subagent = item as ManagedSubAgent;
+    return compactFacts([
+      fact('model', subagent.model),
+      fact('project', subagent.project_id),
+      fact('source', subagent.source),
+      fact('updatedAt', subagent.updated_at ?? ''),
+    ]);
+  }
   const agent = item as ManagedAgentDefinition;
   return compactFacts([
     fact('model', agentModel(agent)),
@@ -191,6 +231,15 @@ export function managedResourceCapabilityGroups(
       { key: 'providers', values: cleanStrings(plugin.providers) },
       { key: 'skills', values: cleanStrings(plugin.skills) },
       { key: 'channels', values: cleanStrings(plugin.channel_types) },
+    ]);
+  }
+  if (section === 'subagents') {
+    const subagent = item as ManagedSubAgent;
+    return compactGroups([
+      { key: 'tools', values: cleanStrings(subagent.allowed_tools) },
+      { key: 'skills', values: cleanStrings(subagent.allowed_skills) },
+      { key: 'mcpServers', values: cleanStrings(subagent.allowed_mcp_servers) },
+      { key: 'fallbackModels', values: cleanStrings(subagent.fallback_models) },
     ]);
   }
   const agent = item as ManagedAgentDefinition;
@@ -232,7 +281,9 @@ export function managedResourceAction(
         ? 'set_skill_status'
         : section === 'plugins'
           ? 'set_plugin_enabled'
-          : 'set_agent_enabled',
+          : section === 'subagents'
+            ? 'set_subagent_enabled'
+            : 'set_agent_enabled',
     nextActive: !resourceIsActive(section, item),
   };
 }
@@ -247,8 +298,9 @@ export function managedResourceManagementAllowed(
   const isAdmin = normalizedRoles.has('admin');
   const isOwner = normalizedRoles.has('owner');
   if (mode === 'local') return isAdmin || isOwner;
-  if (section === 'agents') return isAdmin || isOwner;
-  if (section === 'plugins') return isAdmin || isOwner;
+  if (section === 'agents' || section === 'plugins' || section === 'subagents') {
+    return isAdmin || isOwner;
+  }
   const skill = item as ManagedSkill;
   return skill.scope === 'project'
     ? isAdmin || isOwner || normalizedRoles.has('member')
@@ -266,6 +318,9 @@ export function resourceIsImmutable(
   }
   if (section === 'plugins') {
     return mode === 'local' && (item as ManagedPlugin).source === 'builtin';
+  }
+  if (section === 'subagents') {
+    return (item as ManagedSubAgent).source === 'filesystem';
   }
   const agent = item as ManagedAgentDefinition;
   return stringValue(agent.source) === 'builtin' || agent.id.startsWith('builtin:');
@@ -299,6 +354,24 @@ function managedResourceSearchValues(
       ...cleanStrings(plugin.skills),
       ...cleanStrings(plugin.channel_types),
       ...toolNames(plugin),
+    ]);
+  }
+  if (section === 'subagents') {
+    const subagent = item as ManagedSubAgent;
+    return normalizeSearchValues([
+      subagent.id,
+      subagent.name,
+      subagent.display_name,
+      subagent.trigger?.description,
+      subagent.model,
+      subagent.project_id,
+      subagent.source,
+      ...cleanStrings(subagent.trigger?.keywords),
+      ...cleanStrings(subagent.trigger?.examples),
+      ...cleanStrings(subagent.allowed_tools),
+      ...cleanStrings(subagent.allowed_skills),
+      ...cleanStrings(subagent.allowed_mcp_servers),
+      ...cleanStrings(subagent.fallback_models),
     ]);
   }
   const agent = item as ManagedAgentDefinition;
