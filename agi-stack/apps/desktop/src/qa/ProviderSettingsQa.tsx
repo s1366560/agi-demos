@@ -18,6 +18,7 @@ import type {
   ManagedSkillEvolutionJob,
   ManagedSkillVersion,
   ManagedSubAgent,
+  ManagedSubAgentTemplate,
   PluginConfigRecord,
   PluginConfigSchema,
 } from '../types';
@@ -517,6 +518,36 @@ let subagents: ManagedSubAgent[] = [
     success_rate: 0,
     avg_execution_time_ms: 0,
     updated_at: '2026-07-10T04:10:00.000Z',
+  },
+];
+
+const subagentTemplates: ManagedSubAgentTemplate[] = [
+  {
+    id: 'template-incident-commander',
+    tenant_id: QA_TENANT_ID,
+    name: 'incident-commander',
+    version: '1.2.0',
+    display_name: 'Incident commander',
+    description: 'Coordinates evidence, owners, and recovery actions during an incident.',
+    category: 'operations',
+    tags: ['incident', 'recovery'],
+    system_prompt: 'Coordinate the incident response using verified evidence.',
+    trigger_description: 'Use for active service incidents.',
+    trigger_keywords: ['incident', 'outage'],
+    trigger_examples: ['Coordinate this production incident'],
+    model: 'inherit',
+    max_tokens: 4096,
+    temperature: 0.4,
+    max_iterations: 12,
+    allowed_tools: ['read', 'terminal'],
+    author: 'MemStack',
+    is_builtin: true,
+    is_published: true,
+    install_count: 21,
+    rating: 4.9,
+    metadata: null,
+    created_at: NOW,
+    updated_at: NOW,
   },
 ];
 
@@ -1116,6 +1147,56 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
   if (method === 'GET' && path === '/api/v1/subagents/') {
     return jsonResponse({ subagents, total: subagents.length });
+  }
+  if (method === 'GET' && path === '/api/v1/subagents/templates/list') {
+    return jsonResponse({ templates: subagentTemplates, total: subagentTemplates.length });
+  }
+  const subagentTemplateInstallMatch = path.match(
+    /^\/api\/v1\/subagents\/templates\/([^/]+)\/install$/
+  );
+  if (method === 'POST' && subagentTemplateInstallMatch) {
+    const templateId = decodeURIComponent(subagentTemplateInstallMatch[1]);
+    const template = subagentTemplates.find((item) => item.id === templateId);
+    if (!template) return jsonResponse({ detail: 'Template not found.' }, 404);
+    const created: ManagedSubAgent = {
+      id: `subagent-${template.name}`,
+      tenant_id: QA_TENANT_ID,
+      project_id: null,
+      name: template.name,
+      display_name: template.display_name,
+      system_prompt: template.system_prompt,
+      trigger: {
+        description: template.trigger_description || template.name,
+        keywords: template.trigger_keywords,
+        examples: template.trigger_examples,
+      },
+      model: template.model,
+      enabled: true,
+      source: 'database',
+      allowed_tools: template.allowed_tools,
+      total_invocations: 0,
+      success_rate: 0,
+      avg_execution_time_ms: 0,
+      updated_at: NOW,
+    };
+    subagents = [created, ...subagents];
+    return jsonResponse(created, 201);
+  }
+  const filesystemSubagentImportMatch = path.match(
+    /^\/api\/v1\/subagents\/filesystem\/([^/]+)\/import$/
+  );
+  if (method === 'POST' && filesystemSubagentImportMatch) {
+    const name = decodeURIComponent(filesystemSubagentImportMatch[1]);
+    const existing = subagents.find((item) => item.name === name && item.source === 'filesystem');
+    if (!existing) return jsonResponse({ detail: 'Filesystem SubAgent not found.' }, 404);
+    const created = {
+      ...existing,
+      id: `subagent-imported-${name}`,
+      project_id: url.searchParams.get('project_id'),
+      source: 'database' as const,
+    };
+    subagents = subagents.map((item) => (item.id === existing.id ? created : item));
+    return jsonResponse(created, 201);
   }
   if (method === 'GET' && path === '/api/v1/llm-providers/') {
     return jsonResponse(providers);

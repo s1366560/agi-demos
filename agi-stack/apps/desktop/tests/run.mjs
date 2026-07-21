@@ -102,6 +102,7 @@ const testFiles = [
   'agent-definition-form-model.test.mjs',
   'skill-editor-model.test.mjs',
   'skill-package-management.test.mjs',
+  'subagent-library-management.test.mjs',
   'plugin-management-model.test.mjs',
   'tauri-command-surface.test.mjs',
   'managed-resource-model.test.mjs',

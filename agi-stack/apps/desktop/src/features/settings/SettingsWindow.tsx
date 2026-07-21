@@ -27,7 +27,6 @@ import type {
   ManagedSubAgent,
 } from '../../types';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
-import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import {
   ManagedResourceWorkspace,
   type ManagedResource,
@@ -43,8 +42,7 @@ import {
   type ManagedResourceListFilter,
 } from './managedResourceModel';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
-import { PluginConfigDialog, PluginInstallDialog } from './PluginManagementDialogs';
-import { SkillManagementDialogs } from './SkillManagementDialogs';
+import { SettingsManagementDialogs } from './SettingsManagementDialogs';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -65,6 +63,7 @@ import { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
 import { usePluginManagement } from './usePluginManagement';
 import { useSkillManagement } from './useSkillManagement';
 import { useSkillPackageManagement } from './useSkillPackageManagement';
+import { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -237,7 +236,11 @@ export function SettingsWindow({
   }, [config.projectId, config.tenantId, open]);
 
   const loadResources = useCallback(
-    async (resourceSection: ResourceSection, signal?: AbortSignal) => {
+    async (
+      resourceSection: ResourceSection,
+      signal?: AbortSignal,
+      preferredSelectionId?: string,
+    ) => {
       const requestId = resourceRequestId.current + 1;
       resourceRequestId.current = requestId;
       setResourceLoading(true);
@@ -260,9 +263,12 @@ export function SettingsWindow({
           ...current,
           [resourceSection]: items.length < 100 ? items.length : null,
         }));
-        setSelectedResourceId((current) =>
-          current && items.some((item) => item.id === current) ? current : (items[0]?.id ?? null)
-        );
+        setSelectedResourceId((current) => {
+          const target = preferredSelectionId || current;
+          return target && items.some((item) => item.id === target)
+            ? target
+            : (items[0]?.id ?? null);
+        });
       } catch (error) {
         if (requestId !== resourceRequestId.current || signal?.aborted) return;
         setResourceItems([]);
@@ -278,6 +284,11 @@ export function SettingsWindow({
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
   const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
   const reloadAgentResources = useCallback(() => loadResources('agents'), [loadResources]);
+  const reloadSubAgentResources = useCallback(
+    (preferredSelectionId?: string) =>
+      loadResources('subagents', undefined, preferredSelectionId),
+    [loadResources],
+  );
   const clearPluginSelection = useCallback(() => setSelectedResourceId(null), []);
   const clearResourceSelection = useCallback(() => setSelectedResourceId(null), []);
   const selectSavedResource = useCallback((id: string) => setSelectedResourceId(id), []);
@@ -314,6 +325,13 @@ export function SettingsWindow({
     onReload: reloadAgentResources,
     onSaved: selectSavedResource,
     onDeleted: clearResourceSelection,
+  });
+  const subAgentLibrary = useSubAgentLibraryManagement({
+    active: open,
+    config,
+    contextKey: resourceContextKey,
+    canManage: canManageAgentDefinitions,
+    onReload: reloadSubAgentResources,
   });
 
   useEffect(() => {
@@ -381,9 +399,10 @@ export function SettingsWindow({
   );
 
   useEffect(() => {
+    if (resourceLoading) return;
     const nextId = selectedResource?.id ?? null;
     if (nextId !== selectedResourceId) setSelectedResourceId(nextId);
-  }, [selectedResource, selectedResourceId]);
+  }, [resourceLoading, selectedResource, selectedResourceId]);
   const settingsSearchCopy = useMemo(
     (): SettingsSearchCopy => ({
       account: [t(sectionMeta.account.label), t(sectionMeta.account.description)],
@@ -615,13 +634,14 @@ export function SettingsWindow({
                   error={resourceError}
                   actionError={
                     resourceActionError ?? pluginManagement.reloadError ??
-                    skillPackageManagement.packageActionError
+                    skillPackageManagement.packageActionError ?? subAgentLibrary.error
                   }
                   busy={
                     actionBusyId !== null ||
                     pluginManagement.reloadBusy ||
                     skillPackageManagement.importBusy ||
                     skillPackageManagement.exportBusyId !== null ||
+                    subAgentLibrary.importBusyId !== null ||
                     (skillPackageManagement.versionsDialog?.rollbackVersion ?? null) !== null
                   }
                   mode={config.mode}
@@ -683,6 +703,10 @@ export function SettingsWindow({
                   onEvolution={(item, canManage) =>
                     skillPackageManagement.openEvolution(item as ManagedSkill, canManage)
                   }
+                  onSubAgentLibrary={() => void subAgentLibrary.open()}
+                  onImportSubAgent={(item) =>
+                    void subAgentLibrary.importFilesystem(item as ManagedSubAgent)
+                  }
                   onReload={() => void pluginManagement.reload()}
                   onRemove={(item) => {
                     if (section === 'plugins') {
@@ -694,52 +718,16 @@ export function SettingsWindow({
             </main>
           </div>
         </section>
-        {agentManagement.dialog ? (
-          <AgentDefinitionEditorDialog
-            key={agentManagement.dialog.key}
-            definition={agentManagement.dialog.definition}
-            projects={auth.projects.filter((project) => project.tenant_id === config.tenantId)}
-            initialProjectId={config.projectId || null}
-            busy={agentManagement.busy}
-            error={agentManagement.error}
-            onClose={agentManagement.close}
-            onSave={(input) => void agentManagement.save(input)}
-            onDelete={
-              agentManagement.dialog.definition ? () => void agentManagement.remove() : null
-            }
-          />
-        ) : null}
-        <SkillManagementDialogs
-          projects={auth.projects.filter((project) => project.tenant_id === config.tenantId)}
-          initialProjectId={config.projectId || null}
-          allowTenantScope={canManageAgentDefinitions}
-          management={skillManagement}
-          packages={skillPackageManagement}
+        <SettingsManagementDialogs
+          auth={auth}
+          config={config}
+          allowTenantSkillScope={canManageAgentDefinitions}
+          agents={agentManagement}
+          skills={skillManagement}
+          skillPackages={skillPackageManagement}
+          plugins={pluginManagement}
+          subagents={subAgentLibrary}
         />
-        {pluginManagement.dialog?.kind === 'install' ? (
-          <PluginInstallDialog
-            key={pluginManagement.dialog.key}
-            busy={pluginManagement.dialogBusy}
-            error={pluginManagement.dialogError}
-            onClose={pluginManagement.closeDialog}
-            onInstall={(requirement) => void pluginManagement.install(requirement)}
-          />
-        ) : null}
-        {pluginManagement.dialog?.kind === 'config' ? (
-          <PluginConfigDialog
-            key={pluginManagement.dialog.key}
-            plugin={pluginManagement.dialog.plugin}
-            schema={pluginManagement.dialog.schema}
-            record={pluginManagement.dialog.record}
-            loading={pluginManagement.dialog.loading}
-            busy={pluginManagement.dialogBusy}
-            error={pluginManagement.dialogError}
-            initialConfirmUninstall={pluginManagement.dialog.confirmUninstall}
-            onClose={pluginManagement.closeDialog}
-            onSave={(input) => void pluginManagement.saveConfig(input)}
-            onUninstall={() => void pluginManagement.uninstall()}
-          />
-        ) : null}
       </div>
     </Theme>
   );

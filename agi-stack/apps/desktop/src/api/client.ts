@@ -62,6 +62,7 @@ import type {
   ManagedSkillVersionList,
   ManagedSkillZipImportInput,
   ManagedSubAgent,
+  ManagedSubAgentTemplateList,
   PluginActionResponse,
   PluginConfigRecord,
   PluginConfigSchema,
@@ -1545,6 +1546,37 @@ export class DesktopApiClient {
     return this.request<ManagedSubAgent>(
       `/api/v1/subagents/${encodeURIComponent(subagentId)}/enable?${params.toString()}`,
       { method: 'PATCH' },
+    );
+  }
+
+  async listManagedSubAgentTemplates(signal?: AbortSignal): Promise<ManagedSubAgentTemplateList> {
+    const params = new URLSearchParams({ limit: '100' });
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    return this.request<ManagedSubAgentTemplateList>(
+      `/api/v1/subagents/templates/list?${params.toString()}`,
+      { signal },
+    );
+  }
+
+  async installManagedSubAgentTemplate(templateId: string): Promise<ManagedSubAgent> {
+    const params = new URLSearchParams();
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    return this.request<ManagedSubAgent>(
+      `/api/v1/subagents/templates/${encodeURIComponent(templateId)}/install?${params.toString()}`,
+      { method: 'POST' },
+    );
+  }
+
+  async importManagedFilesystemSubAgent(
+    name: string,
+    projectId?: string,
+  ): Promise<ManagedSubAgent> {
+    const params = new URLSearchParams();
+    if (projectId) params.set('project_id', projectId);
+    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
+    return this.request<ManagedSubAgent>(
+      `/api/v1/subagents/filesystem/${encodeURIComponent(name)}/import?${params.toString()}`,
+      { method: 'POST' },
     );
   }
 

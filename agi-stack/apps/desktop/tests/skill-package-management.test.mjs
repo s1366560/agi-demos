@@ -19,6 +19,10 @@ const skillManagementDialogsSource = readFileSync(
   new URL('../src/features/settings/SkillManagementDialogs.tsx', import.meta.url),
   'utf8',
 );
+const settingsManagementDialogsSource = readFileSync(
+  new URL('../src/features/settings/SettingsManagementDialogs.tsx', import.meta.url),
+  'utf8',
+);
 const skillPackageDialogsSource = readFileSync(
   new URL('../src/features/settings/SkillPackageDialogs.tsx', import.meta.url),
   'utf8',
@@ -139,7 +143,7 @@ test('managed skill package APIs preserve JSON, multipart, version, and rollback
 });
 
 test('Desktop skill surfaces expose import, version history, and guarded rollback controls', () => {
-  assert.match(settingsWindowSource, /SkillManagementDialogs/);
+  assert.match(settingsManagementDialogsSource, /SkillManagementDialogs/);
   assert.match(skillManagementDialogsSource, /SkillImportDialog/);
   assert.match(skillManagementDialogsSource, /SkillVersionsDialog/);
   assert.match(settingsWindowSource, /skillPackageManagement\.openImport/);

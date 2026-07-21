@@ -1195,6 +1195,39 @@ export type ManagedSubAgent = {
   [key: string]: unknown;
 };
 
+export type ManagedSubAgentTemplate = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  version: string;
+  display_name: string | null;
+  description: string | null;
+  category: string;
+  tags: string[];
+  system_prompt: string;
+  trigger_description: string | null;
+  trigger_keywords: string[];
+  trigger_examples: string[];
+  model: string;
+  max_tokens: number;
+  temperature: number;
+  max_iterations: number;
+  allowed_tools: string[];
+  author: string | null;
+  is_builtin: boolean;
+  is_published: boolean;
+  install_count: number;
+  rating: number;
+  metadata: Record<string, unknown> | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type ManagedSubAgentTemplateList = {
+  templates: ManagedSubAgentTemplate[];
+  total: number;
+};
+
 export type PaginatedConversationsResponse = {
   items: AgentConversation[];
   total: number;

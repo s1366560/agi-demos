@@ -15,7 +15,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import type { RuntimeMode } from '../../types';
+import type { ManagedSubAgent, RuntimeMode } from '../../types';
 import type {
   ManagedResource,
   ManagedResourceListFilter,
@@ -85,6 +85,8 @@ export function ManagedResourceWorkspace({
   onVersions,
   onExport,
   onEvolution,
+  onSubAgentLibrary,
+  onImportSubAgent,
   onReload,
   onRemove,
 }: {
@@ -111,6 +113,8 @@ export function ManagedResourceWorkspace({
   onVersions: (item: ManagedResource) => void;
   onExport: (item: ManagedResource) => void;
   onEvolution: (item: ManagedResource, canManage: boolean) => void;
+  onSubAgentLibrary: () => void;
+  onImportSubAgent: (item: ManagedResource) => void;
   onReload: () => void;
   onRemove: (item: ManagedResource) => void;
 }) {
@@ -125,7 +129,9 @@ export function ManagedResourceWorkspace({
             <span>{t(meta.eyebrow)}</span>
             <h1>{t(meta.label)}</h1>
           </div>
-          {canCreate && (section === 'skills' || section === 'agents' || section === 'plugins') ? (
+          {(canCreate &&
+            (section === 'skills' || section === 'agents' || section === 'plugins')) ||
+          (section === 'subagents' && canManage) ? (
             <div className="managed-resource-header-actions">
               {section === 'plugins' ? (
                 <button
@@ -149,21 +155,33 @@ export function ManagedResourceWorkspace({
                   {t('settings.skillPackages.importAction')}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="managed-resource-create"
-                disabled={busy}
-                onClick={onCreate}
-              >
-                <PlusIcon />
-                {t(
-                  section === 'plugins'
-                    ? 'settings.pluginManager.install'
-                    : section === 'skills'
-                      ? 'settings.skillEditor.createAction'
-                      : 'settings.agentEditor.createAction'
-                )}
-              </button>
+              {section === 'subagents' ? (
+                <button
+                  type="button"
+                  className="managed-resource-create"
+                  disabled={busy}
+                  onClick={onSubAgentLibrary}
+                >
+                  <PlusIcon />
+                  {t('settings.subagentLibrary.action')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="managed-resource-create"
+                  disabled={busy}
+                  onClick={onCreate}
+                >
+                  <PlusIcon />
+                  {t(
+                    section === 'plugins'
+                      ? 'settings.pluginManager.install'
+                      : section === 'skills'
+                        ? 'settings.skillEditor.createAction'
+                        : 'settings.agentEditor.createAction'
+                  )}
+                </button>
+              )}
             </div>
           ) : null}
         </header>
@@ -246,6 +264,7 @@ export function ManagedResourceWorkspace({
             onVersions={() => onVersions(selected)}
             onExport={() => onExport(selected)}
             onEvolution={() => onEvolution(selected, canManage)}
+            onImportSubAgent={() => onImportSubAgent(selected)}
             onRemove={() => onRemove(selected)}
           />
         ) : (
@@ -306,6 +325,7 @@ function ResourceDetail({
   onVersions,
   onExport,
   onEvolution,
+  onImportSubAgent,
   onRemove,
 }: {
   section: ResourceSection;
@@ -319,6 +339,7 @@ function ResourceDetail({
   onVersions: () => void;
   onExport: () => void;
   onEvolution: () => void;
+  onImportSubAgent: () => void;
   onRemove: () => void;
 }) {
   const { locale, t } = useI18n();
@@ -336,6 +357,8 @@ function ResourceDetail({
         (item as { schema_supported?: unknown }).schema_supported === true));
   const removable = section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);
   const skillCanEvolve = section === 'skills' && !resourceIsImmutable(section, item, mode);
+  const filesystemSubAgent =
+    section === 'subagents' && (item as ManagedSubAgent).source === 'filesystem';
   const notice = resourceIsImmutable(section, item, mode)
     ? t('settings.immutableResource')
     : !canManage
@@ -402,6 +425,17 @@ function ResourceDetail({
             >
               <RocketIcon />
               {t('settings.skillEvolution.action')}
+            </button>
+          ) : null}
+          {filesystemSubAgent && canManage ? (
+            <button
+              type="button"
+              className="managed-resource-secondary-action"
+              disabled={busy}
+              onClick={onImportSubAgent}
+            >
+              <DownloadIcon />
+              {t('settings.subagentLibrary.importFilesystem')}
             </button>
           ) : null}
           {section === 'skills' ? (
