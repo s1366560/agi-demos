@@ -6,11 +6,11 @@ import hashlib
 import json
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,10 +74,50 @@ class ConversationInput(BaseModel):
     capability_mode: Literal["work", "code"]
 
 
+class ComposerContextItemInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["attachment", "agent", "skill", "plugin", "command", "thread"]
+    resource_id: str = Field(min_length=1, max_length=512)
+    label: str = Field(min_length=1, max_length=255)
+    metadata: dict[str, str | int | float | bool | None] | None = None
+
+    @field_validator("resource_id", "label")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("context item text cannot be empty")
+        return normalized
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata_size(
+        cls,
+        value: dict[str, str | int | float | bool | None] | None,
+    ) -> dict[str, str | int | float | bool | None] | None:
+        if value is not None:
+            encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()
+            if len(encoded) > 4 * 1024:
+                raise ValueError("context item metadata is too large")
+        return value
+
+
 class InitialMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     content: str = Field(min_length=1, max_length=100_000)
+    context_items: list[ComposerContextItemInput] = Field(
+        default_factory=list[ComposerContextItemInput],
+        max_length=32,
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_context_items(self) -> Self:
+        identities = {(item.kind, item.resource_id) for item in self.context_items}
+        if len(identities) != len(self.context_items):
+            raise ValueError("context_items cannot contain duplicate resources")
+        return self
 
 
 class WorkspacePolicySelection(BaseModel):
@@ -228,6 +268,10 @@ async def create_task_session(
             "source": "task_session",
             "conversation_id": conversation.id,
             "runtime": "cloud",
+            "context_items": [
+                item.model_dump(mode="json", exclude_none=True)
+                for item in body.initial_message.context_items
+            ],
         },
         created_at=now,
     )
