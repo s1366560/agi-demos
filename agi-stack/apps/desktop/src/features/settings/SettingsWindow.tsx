@@ -43,6 +43,7 @@ import {
   type ManagedResourceListFilter,
 } from './managedResourceModel';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
+import { PluginConfigDialog, PluginInstallDialog } from './PluginManagementDialogs';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -59,6 +60,7 @@ import {
   type SettingsSection,
 } from './settingsNavigationModel';
 import { useModalDialog } from './useModalDialog';
+import { usePluginManagement } from './usePluginManagement';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -188,6 +190,7 @@ export function SettingsWindow({
     const normalized = role.trim().toLowerCase();
     return normalized === 'admin' || normalized === 'owner';
   });
+  const canManagePluginControlPlane = canManageAgentDefinitions;
   const settingsDialogRef = useModalDialog({
     active: open,
     initialFocusRef: searchInputRef,
@@ -204,6 +207,8 @@ export function SettingsWindow({
     setLoadedResourceContextKey(null);
     setResourceItems([]);
     setSelectedResourceId(null);
+    setAgentEditor(null);
+    setAgentEditorError(null);
     setResourceCounts({ models: null, skills: null, plugins: null, agents: null, subagents: null });
   }, [initialSection, open]);
 
@@ -251,6 +256,16 @@ export function SettingsWindow({
     },
     [config, resourceContextKey],
   );
+  const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
+  const clearPluginSelection = useCallback(() => setSelectedResourceId(null), []);
+  const pluginManagement = usePluginManagement({
+    active: open,
+    config,
+    contextKey: resourceContextKey,
+    canManage: canManagePluginControlPlane,
+    onReload: reloadPluginResources,
+    onUninstalled: clearPluginSelection,
+  });
 
   useEffect(() => {
     if (!open || !isResourceSection) return;
@@ -607,10 +622,16 @@ export function SettingsWindow({
                   filter={resourceFilter}
                   loading={resourceLoading}
                   error={resourceError}
-                  actionError={resourceActionError}
-                  busy={actionBusyId !== null}
+                  actionError={resourceActionError ?? pluginManagement.reloadError}
+                  busy={actionBusyId !== null || pluginManagement.reloadBusy}
                   mode={config.mode}
-                  canCreate={canManageAgentDefinitions}
+                  canCreate={
+                    section === 'plugins'
+                      ? canManagePluginControlPlane
+                      : section === 'agents'
+                        ? canManageAgentDefinitions
+                        : false
+                  }
                   canManage={
                     selectedResource
                       ? managedResourceManagementAllowed(
@@ -629,8 +650,22 @@ export function SettingsWindow({
                   }}
                   onRetry={() => void loadResources(section)}
                   onAction={(item) => void toggleResource(item)}
-                  onCreate={() => openAgentEditor(null)}
-                  onEdit={(item) => openAgentEditor(item as ManagedAgentDefinition)}
+                  onCreate={() => {
+                    if (section === 'plugins') pluginManagement.openInstall();
+                    if (section === 'agents') openAgentEditor(null);
+                  }}
+                  onEdit={(item) => {
+                    if (section === 'plugins') {
+                      void pluginManagement.openConfig(item as ManagedPlugin);
+                    }
+                    if (section === 'agents') openAgentEditor(item as ManagedAgentDefinition);
+                  }}
+                  onReload={() => void pluginManagement.reload()}
+                  onRemove={(item) => {
+                    if (section === 'plugins') {
+                      void pluginManagement.openConfig(item as ManagedPlugin, true);
+                    }
+                  }}
                 />
               ) : null}
             </main>
@@ -649,6 +684,30 @@ export function SettingsWindow({
             }}
             onSave={(input) => void saveAgentDefinition(input)}
             onDelete={agentEditor.definition ? () => void deleteAgentDefinition() : null}
+          />
+        ) : null}
+        {pluginManagement.dialog?.kind === 'install' ? (
+          <PluginInstallDialog
+            key={pluginManagement.dialog.key}
+            busy={pluginManagement.dialogBusy}
+            error={pluginManagement.dialogError}
+            onClose={pluginManagement.closeDialog}
+            onInstall={(requirement) => void pluginManagement.install(requirement)}
+          />
+        ) : null}
+        {pluginManagement.dialog?.kind === 'config' ? (
+          <PluginConfigDialog
+            key={pluginManagement.dialog.key}
+            plugin={pluginManagement.dialog.plugin}
+            schema={pluginManagement.dialog.schema}
+            record={pluginManagement.dialog.record}
+            loading={pluginManagement.dialog.loading}
+            busy={pluginManagement.dialogBusy}
+            error={pluginManagement.dialogError}
+            initialConfirmUninstall={pluginManagement.dialog.confirmUninstall}
+            onClose={pluginManagement.closeDialog}
+            onSave={(input) => void pluginManagement.saveConfig(input)}
+            onUninstall={() => void pluginManagement.uninstall()}
           />
         ) : null}
       </div>

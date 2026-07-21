@@ -45,6 +45,7 @@
     "src/features/settings/settingsEntryRouting.ts",
     "src/features/settings/managedResourceModel.ts",
     "src/features/settings/agentDefinitionFormModel.ts",
+    "src/features/settings/pluginManagementModel.ts",
     "src/features/settings/providerManagementModel.ts",
     "src/features/settings/workspaceRuntimeProviderModel.ts",
     "src/features/my-work/MyWorkQueue.tsx",

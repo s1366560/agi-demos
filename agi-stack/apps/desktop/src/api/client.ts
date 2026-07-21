@@ -50,6 +50,9 @@ import type {
   ManagedPlugin,
   ManagedSkill,
   ManagedSubAgent,
+  PluginActionResponse,
+  PluginConfigRecord,
+  PluginConfigSchema,
   PaginatedConversationsResponse,
   PlanSnapshot,
   ProjectMyWorkResponse,
@@ -74,6 +77,7 @@ import type {
   WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
+  UpdatePluginConfigRequest,
 } from '../types';
 
 type RequestOptions = {
@@ -1238,6 +1242,63 @@ export class DesktopApiClient {
         pluginId,
       )}/${enabled ? 'enable' : 'disable'}`,
       { method: 'POST' },
+    );
+  }
+
+  async installManagedPlugin(requirement: string): Promise<PluginActionResponse> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    return this.request<PluginActionResponse>(
+      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/install`,
+      { method: 'POST', body: { requirement: requirement.trim() } },
+    );
+  }
+
+  async reloadManagedPlugins(): Promise<PluginActionResponse> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    return this.request<PluginActionResponse>(
+      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/reload`,
+      { method: 'POST' },
+    );
+  }
+
+  async uninstallManagedPlugin(pluginId: string): Promise<PluginActionResponse> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    return this.request<PluginActionResponse>(
+      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
+        pluginId,
+      )}/uninstall`,
+      { method: 'POST' },
+    );
+  }
+
+  async getManagedPluginConfigSchema(pluginId: string): Promise<PluginConfigSchema> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    return this.request<PluginConfigSchema>(
+      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
+        pluginId,
+      )}/config-schema`,
+    );
+  }
+
+  async getManagedPluginConfig(pluginId: string): Promise<PluginConfigRecord> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    return this.request<PluginConfigRecord>(
+      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
+        pluginId,
+      )}/config`,
+    );
+  }
+
+  async updateManagedPluginConfig(
+    pluginId: string,
+    body: UpdatePluginConfigRequest,
+  ): Promise<PluginConfigRecord> {
+    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+    return this.request<PluginConfigRecord>(
+      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
+        pluginId,
+      )}/config`,
+      { method: 'PUT', body },
     );
   }
 

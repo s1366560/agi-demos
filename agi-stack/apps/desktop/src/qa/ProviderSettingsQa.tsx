@@ -15,6 +15,8 @@ import type {
   ManagedPlugin,
   ManagedSkill,
   ManagedSubAgent,
+  PluginConfigRecord,
+  PluginConfigSchema,
 } from '../types';
 import { DEFAULT_CONFIG } from '../types';
 import '../styles.css';
@@ -217,6 +219,7 @@ let plugins: QaPlugin[] = [
       { name: 'review_pull_request' },
       { name: 'read_issue' },
     ],
+    schema_supported: true,
     updated_at: NOW,
   },
   {
@@ -231,6 +234,7 @@ let plugins: QaPlugin[] = [
     skills: ['incident-triage'],
     channel_types: ['messages', 'threads'],
     tool_definitions: [{ name: 'search_messages' }, { name: 'post_message' }],
+    schema_supported: true,
     updated_at: NOW,
   },
   {
@@ -245,9 +249,95 @@ let plugins: QaPlugin[] = [
     skills: [],
     channel_types: ['documents'],
     tool_definitions: [],
+    schema_supported: false,
     updated_at: '2026-07-09T04:10:00.000Z',
   },
 ];
+
+const pluginSchemas: Record<string, PluginConfigSchema> = {
+  github: {
+    plugin_name: 'github',
+    source: 'entrypoint',
+    package: '@memstack/github',
+    version: '2.4.1',
+    kind: 'mcp',
+    providers: ['github'],
+    skills: ['pull-request-review'],
+    enabled: true,
+    discovered: true,
+    schema_supported: true,
+    config_schema: {
+      type: 'object',
+      required: ['repository', 'access_token'],
+      properties: {
+        repository: { type: 'string', title: 'Repository', description: 'owner/repository' },
+        access_token: { type: 'string' },
+        sync_interval: { type: 'integer', minimum: 1, maximum: 60 },
+        include_drafts: { type: 'boolean', title: 'Include draft pull requests' },
+        review_mode: { type: 'string', enum: ['safe', 'fast'], title: 'Review mode' },
+      },
+    },
+    config_ui_hints: {
+      access_token: { label: 'Access token', sensitive: true },
+      sync_interval: { label: 'Sync interval (minutes)' },
+    },
+    defaults: { sync_interval: 10, include_drafts: false, review_mode: 'safe' },
+    secret_paths: ['access_token'],
+  },
+  slack: {
+    plugin_name: 'slack',
+    providers: ['slack'],
+    skills: ['incident-triage'],
+    enabled: true,
+    discovered: true,
+    schema_supported: true,
+    config_schema: { type: 'object', properties: { workspace: { type: 'string' } } },
+    secret_paths: [],
+  },
+  'release-notifier': {
+    plugin_name: 'release-notifier',
+    providers: ['webhook'],
+    skills: ['release-notification'],
+    enabled: true,
+    discovered: true,
+    schema_supported: true,
+    config_schema: {
+      type: 'object',
+      required: ['endpoint', 'token'],
+      properties: {
+        endpoint: { type: 'string', title: 'Webhook endpoint' },
+        token: { type: 'string' },
+        retries: { type: 'integer', minimum: 0, maximum: 10 },
+        enabled: { type: 'boolean', title: 'Send release notifications' },
+        mode: { type: 'string', enum: ['safe', 'fast'], title: 'Delivery mode' },
+      },
+    },
+    config_ui_hints: { token: { label: 'Access token', sensitive: true } },
+    defaults: { retries: 3, enabled: true, mode: 'safe' },
+    secret_paths: ['token'],
+  },
+};
+
+let pluginConfigs: Record<string, PluginConfigRecord> = {
+  github: {
+    tenant_id: QA_TENANT_ID,
+    plugin_name: 'github',
+    config: {
+      repository: 'memstack/agi-stack',
+      access_token: '__MEMSTACK_SECRET_UNCHANGED__',
+      sync_interval: 10,
+      include_drafts: false,
+      review_mode: 'safe',
+    },
+    updated_at: NOW,
+  },
+  slack: {
+    tenant_id: QA_TENANT_ID,
+    plugin_name: 'slack',
+    config: { workspace: 'northstar' },
+    updated_at: NOW,
+  },
+};
 
 let agents: ManagedAgentDefinition[] = [
   {
@@ -635,6 +725,92 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   }
   if (method === 'GET' && path.endsWith('/plugins')) {
     return jsonResponse({ plugins });
+  }
+
+  if (method === 'POST' && path.endsWith('/plugins/install')) {
+    const requirement = stringValue(readJsonBody(body).requirement).trim();
+    if (!requirement) return jsonResponse({ detail: 'Package requirement is required.' }, 422);
+    if (!plugins.some((plugin) => plugin.name === 'release-notifier')) {
+      plugins = [
+        {
+          name: 'release-notifier',
+          source: 'entrypoint',
+          package: requirement,
+          version: '2.0.0',
+          kind: 'service',
+          enabled: true,
+          discovered: true,
+          providers: ['webhook'],
+          skills: ['release-notification'],
+          channel_types: ['release_events'],
+          tool_definitions: [{ name: 'notify_release' }],
+          schema_supported: true,
+          updated_at: NOW,
+        },
+        ...plugins,
+      ];
+    }
+    pluginConfigs['release-notifier'] ??= {
+      tenant_id: QA_TENANT_ID,
+      plugin_name: 'release-notifier',
+      config: { retries: 3, enabled: true, mode: 'safe' },
+      updated_at: NOW,
+    };
+    return jsonResponse({ success: true, message: 'Plugin installed.' });
+  }
+
+  if (method === 'POST' && path.endsWith('/plugins/reload')) {
+    return jsonResponse({ success: true, message: 'Plugin runtime reloaded.' });
+  }
+
+  const pluginConfigSchemaMatch = path.match(
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config-schema$/,
+  );
+  if (method === 'GET' && pluginConfigSchemaMatch) {
+    const pluginName = decodeURIComponent(pluginConfigSchemaMatch[1]);
+    const schema = pluginSchemas[pluginName];
+    return schema
+      ? jsonResponse(schema)
+      : jsonResponse({ detail: 'Plugin config schema not found.' }, 404);
+  }
+
+  const pluginConfigMatch = path.match(
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/config$/,
+  );
+  if (pluginConfigMatch) {
+    const pluginName = decodeURIComponent(pluginConfigMatch[1]);
+    const current = pluginConfigs[pluginName] ?? {
+      tenant_id: QA_TENANT_ID,
+      plugin_name: pluginName,
+      config: {},
+    };
+    if (method === 'GET') return jsonResponse(current);
+    if (method === 'PUT') {
+      const nextConfig = readJsonBody(body).config;
+      if (!nextConfig || typeof nextConfig !== 'object' || Array.isArray(nextConfig)) {
+        return jsonResponse({ detail: 'Plugin config is invalid.' }, 422);
+      }
+      pluginConfigs = {
+        ...pluginConfigs,
+        [pluginName]: {
+          ...current,
+          config: { ...current.config, ...(nextConfig as Record<string, unknown>) },
+          updated_at: NOW,
+        },
+      };
+      return jsonResponse(pluginConfigs[pluginName]);
+    }
+  }
+
+  const pluginUninstallMatch = path.match(
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/uninstall$/,
+  );
+  if (method === 'POST' && pluginUninstallMatch) {
+    const pluginName = decodeURIComponent(pluginUninstallMatch[1]);
+    plugins = plugins.filter((plugin) => plugin.name !== pluginName);
+    const { [pluginName]: _removed, ...remainingConfigs } = pluginConfigs;
+    pluginConfigs = remainingConfigs;
+    return jsonResponse({ success: true, message: 'Plugin uninstalled.' });
   }
   if (method === 'GET' && path === '/api/v1/agent/definitions') {
     return jsonResponse({ definitions: agents });

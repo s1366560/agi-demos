@@ -924,6 +924,64 @@ export type ManagedPlugin = {
   [key: string]: unknown;
 };
 
+export type PluginActionResponse = {
+  success: boolean;
+  message: string;
+  details?: Record<string, unknown> | null;
+};
+
+export type PluginConfigSchemaProperty = {
+  type?: string;
+  title?: string;
+  description?: string;
+  enum?: Array<string | number | boolean>;
+  minimum?: number;
+  maximum?: number;
+};
+
+export type PluginConfigUiHint = {
+  label?: string;
+  help?: string;
+  placeholder?: string;
+  sensitive?: boolean;
+  advanced?: boolean;
+};
+
+export type PluginConfigSchema = {
+  plugin_name: string;
+  source?: string | null;
+  package?: string | null;
+  version?: string | null;
+  kind?: string | null;
+  manifest_id?: string | null;
+  providers: string[];
+  skills: string[];
+  enabled: boolean;
+  discovered: boolean;
+  schema_supported: boolean;
+  config_schema?: {
+    type?: string;
+    properties?: Record<string, PluginConfigSchemaProperty>;
+    required?: string[];
+  } | null;
+  config_ui_hints?: Record<string, PluginConfigUiHint> | null;
+  defaults?: Record<string, unknown> | null;
+  secret_paths: string[];
+};
+
+export type PluginConfigRecord = {
+  id?: string | null;
+  tenant_id: string;
+  plugin_name: string;
+  config: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type UpdatePluginConfigRequest = {
+  config: Record<string, unknown>;
+};
+
 export type ManagedAgentDefinition = {
   id: string;
   name: string;

@@ -77,6 +77,8 @@ export function ManagedResourceWorkspace({
   onAction,
   onCreate,
   onEdit,
+  onReload,
+  onRemove,
 }: {
   section: ResourceSection;
   items: ManagedResource[];
@@ -97,6 +99,8 @@ export function ManagedResourceWorkspace({
   onAction: (item: ManagedResource) => void;
   onCreate: () => void;
   onEdit: (item: ManagedResource) => void;
+  onReload: () => void;
+  onRemove: (item: ManagedResource) => void;
 }) {
   const { t } = useI18n();
   const meta = sectionMeta[section];
@@ -109,10 +113,23 @@ export function ManagedResourceWorkspace({
             <span>{t(meta.eyebrow)}</span>
             <h1>{t(meta.label)}</h1>
           </div>
-          {section === 'agents' && canCreate ? (
-            <button type="button" className="managed-resource-create" onClick={onCreate}>
-              <PlusIcon /> {t('settings.agentEditor.createAction')}
-            </button>
+          {canCreate && (section === 'agents' || section === 'plugins') ? (
+            <div className="managed-resource-header-actions">
+              {section === 'plugins' ? (
+                <button type="button" className="managed-resource-reload" disabled={busy} onClick={onReload}>
+                  <ReloadIcon className={busy ? 'managed-resource-spin' : ''} />
+                  {t('settings.pluginManager.reload')}
+                </button>
+              ) : null}
+              <button type="button" className="managed-resource-create" disabled={busy} onClick={onCreate}>
+                <PlusIcon />
+                {t(
+                  section === 'plugins'
+                    ? 'settings.pluginManager.install'
+                    : 'settings.agentEditor.createAction',
+                )}
+              </button>
+            </div>
           ) : null}
         </header>
         <label className="managed-resource-search">
@@ -184,6 +201,7 @@ export function ManagedResourceWorkspace({
             mode={mode}
             onAction={() => onAction(selected)}
             onEdit={() => onEdit(selected)}
+            onRemove={() => onRemove(selected)}
           />
         ) : (
           <div className="managed-resource-detail-empty">
@@ -240,6 +258,7 @@ function ResourceDetail({
   mode,
   onAction,
   onEdit,
+  onRemove,
 }: {
   section: ResourceSection;
   item: ManagedResource;
@@ -249,6 +268,7 @@ function ResourceDetail({
   mode: RuntimeMode;
   onAction: () => void;
   onEdit: () => void;
+  onRemove: () => void;
 }) {
   const { locale, t } = useI18n();
   const meta = sectionMeta[section];
@@ -256,7 +276,13 @@ function ResourceDetail({
   const facts = managedResourceFacts(section, item);
   const groups = managedResourceCapabilityGroups(section, item);
   const action = managedResourceAction(section, item, canManage, mode);
-  const editable = section === 'agents' && canManage && !resourceIsImmutable(section, item, mode);
+  const editable =
+    canManage &&
+    !resourceIsImmutable(section, item, mode) &&
+    (section === 'agents' ||
+      (section === 'plugins' && (item as { schema_supported?: unknown }).schema_supported === true));
+  const removable =
+    section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);
   const notice = resourceIsImmutable(section, item, mode)
     ? t('settings.immutableResource')
     : !canManage
@@ -299,7 +325,18 @@ function ResourceDetail({
               disabled={busy}
               onClick={onEdit}
             >
-              <Pencil2Icon /> {t('common.edit')}
+              <Pencil2Icon />
+              {t(section === 'plugins' ? 'settings.pluginManager.configure' : 'common.edit')}
+            </button>
+          ) : null}
+          {removable ? (
+            <button
+              type="button"
+              className="managed-resource-danger-action"
+              disabled={busy}
+              onClick={onRemove}
+            >
+              {t('settings.pluginManager.uninstall')}
             </button>
           ) : null}
         </div>
