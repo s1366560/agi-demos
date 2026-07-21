@@ -92,6 +92,9 @@
 .managed-resource-filters button:focus-visible,
 .managed-resource-item:focus-visible,
 .managed-resource-primary-action:focus-visible,
+.managed-resource-secondary-action:focus-visible,
+.managed-resource-reload:focus-visible,
+.managed-resource-create:focus-visible,
 .managed-resource-catalog-state button:focus-visible {
   outline: 2px solid #38d6ff;
   outline-offset: 2px;
@@ -183,6 +186,13 @@
   background: #162330;
   border: 1px solid #345066;
   border-radius: 7px;
+}
+
+.managed-resource-detail-topbar .managed-resource-secondary-action {
+  min-height: 29px;
+  padding: 0 9px;
+  font-size: 8px;
+  border-radius: 5px;
 }
 
 .managed-resource-create {

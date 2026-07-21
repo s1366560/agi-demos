@@ -1,5 +1,6 @@
 import {
   ComponentInstanceIcon,
+  ClockIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
   MagicWandIcon,
@@ -8,6 +9,7 @@ import {
   PersonIcon,
   PlusIcon,
   ReloadIcon,
+  UploadIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
@@ -76,7 +78,9 @@ export function ManagedResourceWorkspace({
   onRetry,
   onAction,
   onCreate,
+  onImport,
   onEdit,
+  onVersions,
   onReload,
   onRemove,
 }: {
@@ -98,7 +102,9 @@ export function ManagedResourceWorkspace({
   onRetry: () => void;
   onAction: (item: ManagedResource) => void;
   onCreate: () => void;
+  onImport: () => void;
   onEdit: (item: ManagedResource) => void;
+  onVersions: (item: ManagedResource) => void;
   onReload: () => void;
   onRemove: (item: ManagedResource) => void;
 }) {
@@ -124,6 +130,17 @@ export function ManagedResourceWorkspace({
                 >
                   <ReloadIcon className={busy ? 'managed-resource-spin' : ''} />
                   {t('settings.pluginManager.reload')}
+                </button>
+              ) : null}
+              {section === 'skills' ? (
+                <button
+                  type="button"
+                  className="managed-resource-reload"
+                  disabled={busy}
+                  onClick={onImport}
+                >
+                  <UploadIcon />
+                  {t('settings.skillPackages.importAction')}
                 </button>
               ) : null}
               <button
@@ -220,6 +237,7 @@ export function ManagedResourceWorkspace({
             mode={mode}
             onAction={() => onAction(selected)}
             onEdit={() => onEdit(selected)}
+            onVersions={() => onVersions(selected)}
             onRemove={() => onRemove(selected)}
           />
         ) : (
@@ -277,6 +295,7 @@ function ResourceDetail({
   mode,
   onAction,
   onEdit,
+  onVersions,
   onRemove,
 }: {
   section: ResourceSection;
@@ -287,6 +306,7 @@ function ResourceDetail({
   mode: RuntimeMode;
   onAction: () => void;
   onEdit: () => void;
+  onVersions: () => void;
   onRemove: () => void;
 }) {
   const { locale, t } = useI18n();
@@ -347,6 +367,17 @@ function ResourceDetail({
             >
               <Pencil2Icon />
               {t(section === 'plugins' ? 'settings.pluginManager.configure' : 'common.edit')}
+            </button>
+          ) : null}
+          {section === 'skills' ? (
+            <button
+              type="button"
+              className="managed-resource-secondary-action"
+              disabled={busy}
+              onClick={onVersions}
+            >
+              <ClockIcon />
+              {t('settings.skillPackages.versionsAction')}
             </button>
           ) : null}
           {removable ? (

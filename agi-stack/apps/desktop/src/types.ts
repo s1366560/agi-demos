@@ -911,11 +911,48 @@ export type ManagedSkill = {
   allowed_tools_raw?: string | null;
   spec_version?: string;
   current_version?: number;
+  version_label?: string | null;
   is_system_skill?: boolean;
   source?: string;
   file_path?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
+};
+
+export type ManagedSkillImportInput = {
+  skill_md_content: string;
+  resource_files?: Record<string, string>;
+  scope?: 'tenant' | 'project';
+  project_id?: string | null;
+  overwrite?: boolean;
+  change_summary?: string | null;
+};
+
+export type ManagedSkillZipImportInput = Omit<
+  ManagedSkillImportInput,
+  'skill_md_content' | 'resource_files'
+>;
+
+export type ManagedSkillLifecycle = {
+  action: string;
+  skill: ManagedSkill;
+  version_number: number | null;
+  version_label: string | null;
+};
+
+export type ManagedSkillVersion = {
+  id: string;
+  skill_id: string;
+  version_number: number;
+  version_label: string | null;
+  change_summary: string | null;
+  created_by: string;
+  created_at: string;
+};
+
+export type ManagedSkillVersionList = {
+  versions: ManagedSkillVersion[];
+  total: number;
 };
 
 export type ManagedSkillMutation = {

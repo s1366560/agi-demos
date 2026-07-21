@@ -51,7 +51,11 @@ import type {
   ManagedSkill,
   ManagedSkillContent,
   ManagedSkillCreateMutation,
+  ManagedSkillImportInput,
+  ManagedSkillLifecycle,
   ManagedSkillMutation,
+  ManagedSkillVersionList,
+  ManagedSkillZipImportInput,
   ManagedSubAgent,
   PluginActionResponse,
   PluginConfigRecord,
@@ -1268,6 +1272,53 @@ export class DesktopApiClient {
     );
   }
 
+  async importManagedSkillPackage(
+    input: ManagedSkillImportInput,
+  ): Promise<ManagedSkillLifecycle> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkillLifecycle>(`/api/v1/skills/import?${params.toString()}`, {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  async importManagedSkillZip(
+    archive: File,
+    input: ManagedSkillZipImportInput = {},
+  ): Promise<ManagedSkillLifecycle> {
+    const params = this.managedSkillTenantParams();
+    const formData = new FormData();
+    formData.append('archive', archive);
+    formData.append('scope', input.scope ?? 'tenant');
+    formData.append('overwrite', String(input.overwrite ?? false));
+    if (input.project_id) formData.append('project_id', input.project_id);
+    if (input.change_summary) formData.append('change_summary', input.change_summary);
+    return this.request<ManagedSkillLifecycle>(
+      `/api/v1/skills/import/zip?${params.toString()}`,
+      { method: 'POST', body: formData },
+    );
+  }
+
+  async listManagedSkillVersions(
+    skillId: string,
+    signal?: AbortSignal,
+  ): Promise<ManagedSkillVersionList> {
+    const params = this.managedSkillTenantParams();
+    params.set('limit', '50');
+    return this.request<ManagedSkillVersionList>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/versions?${params.toString()}`,
+      { signal },
+    );
+  }
+
+  async rollbackManagedSkill(skillId: string, versionNumber: number): Promise<ManagedSkill> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkill>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/rollback?${params.toString()}`,
+      { method: 'POST', body: { version_number: versionNumber } },
+    );
+  }
+
   private managedSkillTenantParams(): URLSearchParams {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     return new URLSearchParams({ tenant_id: tenantId });
@@ -1574,7 +1625,11 @@ export class DesktopApiClient {
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const headers = new Headers({ Accept: 'application/json' });
-    if (options.body !== undefined) {
+    const formDataBody =
+      typeof FormData !== 'undefined' && options.body instanceof FormData
+        ? options.body
+        : null;
+    if (options.body !== undefined && !formDataBody) {
       headers.set('Content-Type', options.contentType ?? 'application/json');
     }
     const credential = desktopApiCredential(this.config);
@@ -1586,8 +1641,9 @@ export class DesktopApiClient {
       headers.set('X-Agistack-Launch', launchCapability);
     }
 
-    const body =
-      options.body instanceof URLSearchParams
+    const body = formDataBody
+      ? formDataBody
+      : options.body instanceof URLSearchParams
         ? options.body.toString()
         : options.body === undefined
           ? undefined

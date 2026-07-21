@@ -14,6 +14,7 @@ import type {
   ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSkillVersion,
   ManagedSubAgent,
   PluginConfigRecord,
   PluginConfigSchema,
@@ -216,6 +217,40 @@ let skills: ManagedSkill[] = [
     updated_at: '2026-07-11T05:20:00.000Z',
   },
 ];
+
+let skillVersions: Record<string, ManagedSkillVersion[]> = {
+  'competitive-research': [
+    {
+      id: 'competitive-research-v4',
+      skill_id: 'competitive-research',
+      version_number: 4,
+      version_label: '1.3.0',
+      change_summary: 'Require a source-quality review before synthesis.',
+      created_by: 'agent',
+      created_at: NOW,
+    },
+    {
+      id: 'competitive-research-v3',
+      skill_id: 'competitive-research',
+      version_number: 3,
+      version_label: '1.2.0',
+      change_summary: 'Add citation verification.',
+      created_by: 'import',
+      created_at: '2026-07-12T06:10:00.000Z',
+    },
+  ],
+  'meeting-brief': [
+    {
+      id: 'meeting-brief-v1',
+      skill_id: 'meeting-brief',
+      version_number: 1,
+      version_label: '1.0.0',
+      change_summary: 'Initial package import.',
+      created_by: 'import',
+      created_at: '2026-07-11T05:20:00.000Z',
+    },
+  ],
+};
 
 let plugins: QaPlugin[] = [
   {
@@ -563,6 +598,60 @@ function recordValue(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function packageField(content: string, field: string): string {
+  const prefix = `${field}:`;
+  const line = content
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(prefix));
+  return line ? line.slice(prefix.length).trim().replace(/^['"]|['"]$/g, '') : '';
+}
+
+function importedSkill(
+  name: string,
+  content: string,
+  projectId: string | null,
+  current?: ManagedSkill
+): ManagedSkill {
+  const versionNumber = (current?.current_version ?? 0) + 1;
+  return {
+    ...(current ?? {}),
+    id: current?.id ?? name,
+    tenant_id: QA_TENANT_ID,
+    project_id: projectId,
+    name,
+    description:
+      packageField(content, 'description') || current?.description || 'Imported Skill package.',
+    status: current?.status ?? 'active',
+    scope: projectId ? 'project' : 'tenant',
+    tools: current?.tools ?? [],
+    full_content: content,
+    metadata: current?.metadata ?? {},
+    spec_version: current?.spec_version ?? '1.0',
+    current_version: versionNumber,
+    version_label: packageField(content, 'version') || current?.version_label || null,
+    is_system_skill: false,
+    updated_at: NOW,
+  };
+}
+
+function snapshotImportedSkill(
+  skill: ManagedSkill,
+  changeSummary: string,
+  createdBy: string
+): ManagedSkillVersion {
+  const versionNumber = skill.current_version ?? 1;
+  return {
+    id: `${skill.id}-v${versionNumber}-${crypto.randomUUID()}`,
+    skill_id: skill.id,
+    version_number: versionNumber,
+    version_label: skill.version_label ?? null,
+    change_summary: changeSummary || null,
+    created_by: createdBy,
+    created_at: NOW,
+  };
+}
+
 function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -784,6 +873,70 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     };
     skills = [created, ...skills];
     return jsonResponse(created);
+  }
+  if (method === 'POST' && path === '/api/v1/skills/import') {
+    const payload = readJsonBody(body);
+    const content = stringValue(payload.skill_md_content);
+    const name = packageField(content, 'name');
+    if (!name) return jsonResponse({ detail: 'SKILL.md name is required.' }, 422);
+    const current = skills.find((item) => item.name === name);
+    if (current && payload.overwrite !== true) {
+      return jsonResponse({ detail: 'Skill already exists.' }, 409);
+    }
+    const projectId = stringValue(payload.project_id) || null;
+    const next = importedSkill(name, content, projectId, current);
+    skills = current
+      ? skills.map((item) => (item.id === current.id ? next : item))
+      : [next, ...skills];
+    const version = snapshotImportedSkill(
+      next,
+      stringValue(payload.change_summary),
+      'import'
+    );
+    skillVersions[next.id] = [version, ...(skillVersions[next.id] ?? [])];
+    return jsonResponse(
+      {
+        action: current ? 'update' : 'import',
+        skill: next,
+        version_number: version.version_number,
+        version_label: version.version_label,
+      },
+      201
+    );
+  }
+  if (method === 'POST' && path === '/api/v1/skills/import/zip') {
+    const form = body instanceof FormData ? body : null;
+    const archive = form?.get('archive');
+    if (!(archive instanceof File)) {
+      return jsonResponse({ detail: 'Skill ZIP archive is required.' }, 422);
+    }
+    const baseName = archive.name.replace(/\.zip$/i, '').toLowerCase();
+    const name = baseName.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'imported-skill';
+    const current = skills.find((item) => item.name === name);
+    if (current && form?.get('overwrite') !== 'true') {
+      return jsonResponse({ detail: 'Skill already exists.' }, 409);
+    }
+    const projectId = stringValue(form?.get('project_id')) || null;
+    const content = `---\nname: ${name}\ndescription: Imported from ${archive.name}\n---\n\n# ${name}\n`;
+    const next = importedSkill(name, content, projectId, current);
+    skills = current
+      ? skills.map((item) => (item.id === current.id ? next : item))
+      : [next, ...skills];
+    const version = snapshotImportedSkill(
+      next,
+      stringValue(form?.get('change_summary')),
+      'import'
+    );
+    skillVersions[next.id] = [version, ...(skillVersions[next.id] ?? [])];
+    return jsonResponse(
+      {
+        action: current ? 'update' : 'import',
+        skill: next,
+        version_number: version.version_number,
+        version_label: version.version_label,
+      },
+      201
+    );
   }
   if (method === 'GET' && path.endsWith('/plugins')) {
     return jsonResponse({ plugins });
@@ -1017,6 +1170,39 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const status = url.searchParams.get('status') ?? 'disabled';
     skills = skills.map((skill) => (skill.id === skillId ? { ...skill, status } : skill));
     return jsonResponse(skills.find((skill) => skill.id === skillId) ?? null);
+  }
+
+  const skillVersionsMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/versions$/);
+  if (method === 'GET' && skillVersionsMatch) {
+    const skillId = decodeURIComponent(skillVersionsMatch[1]);
+    const versions = skillVersions[skillId] ?? [];
+    return jsonResponse({ versions, total: versions.length });
+  }
+
+  const skillRollbackMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/rollback$/);
+  if (method === 'POST' && skillRollbackMatch) {
+    const skillId = decodeURIComponent(skillRollbackMatch[1]);
+    const current = skills.find((item) => item.id === skillId);
+    if (!current) return jsonResponse({ detail: 'Skill not found.' }, 404);
+    const versionNumber = numberValue(readJsonBody(body).version_number, 0);
+    const target = (skillVersions[skillId] ?? []).find(
+      (version) => version.version_number === versionNumber
+    );
+    if (!target) return jsonResponse({ detail: 'Skill version not found.' }, 400);
+    const updated: ManagedSkill = {
+      ...current,
+      current_version: (current.current_version ?? 0) + 1,
+      version_label: target.version_label,
+      updated_at: NOW,
+    };
+    skills = skills.map((item) => (item.id === skillId ? updated : item));
+    const snapshot = snapshotImportedSkill(
+      updated,
+      `Rollback to version ${versionNumber}`,
+      'rollback'
+    );
+    skillVersions[skillId] = [snapshot, ...(skillVersions[skillId] ?? [])];
+    return jsonResponse(updated);
   }
 
   const skillContentMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/content$/);

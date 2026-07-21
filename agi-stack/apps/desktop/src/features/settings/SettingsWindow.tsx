@@ -38,12 +38,13 @@ import {
   managedResourceAction,
   managedResourceManagementAllowed,
   managedResourceSnapshotIsCurrent,
+  resourceIsImmutable,
   resolveManagedResourceSelection,
   type ManagedResourceListFilter,
 } from './managedResourceModel';
 import { ModelProviderWorkspace } from './ModelProviderWorkspace';
 import { PluginConfigDialog, PluginInstallDialog } from './PluginManagementDialogs';
-import { SkillEditorDialog } from './SkillEditorDialog';
+import { SkillManagementDialogs } from './SkillManagementDialogs';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -63,6 +64,7 @@ import { useModalDialog } from './useModalDialog';
 import { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
 import { usePluginManagement } from './usePluginManagement';
 import { useSkillManagement } from './useSkillManagement';
+import { useSkillPackageManagement } from './useSkillPackageManagement';
 import './SettingsWindow.css';
 
 export type { SettingsSection } from './settingsNavigationModel';
@@ -295,6 +297,14 @@ export function SettingsWindow({
     onReload: reloadSkillResources,
     onSaved: selectSavedResource,
     onDeleted: clearResourceSelection,
+  });
+  const skillPackageManagement = useSkillPackageManagement({
+    active: open,
+    config,
+    contextKey: resourceContextKey,
+    canImport: canCreateSkills,
+    onReload: reloadSkillResources,
+    onSelected: selectSavedResource,
   });
   const agentManagement = useAgentDefinitionManagement({
     active: open,
@@ -608,7 +618,12 @@ export function SettingsWindow({
                   loading={resourceLoading}
                   error={resourceError}
                   actionError={resourceActionError ?? pluginManagement.reloadError}
-                  busy={actionBusyId !== null || pluginManagement.reloadBusy}
+                  busy={
+                    actionBusyId !== null ||
+                    pluginManagement.reloadBusy ||
+                    skillPackageManagement.importBusy ||
+                    (skillPackageManagement.versionsDialog?.rollbackVersion ?? null) !== null
+                  }
                   mode={config.mode}
                   canCreate={
                     section === 'skills'
@@ -642,12 +657,25 @@ export function SettingsWindow({
                     if (section === 'plugins') pluginManagement.openInstall();
                     if (section === 'agents') agentManagement.open(null);
                   }}
+                  onImport={skillPackageManagement.openImport}
                   onEdit={(item) => {
                     if (section === 'skills') void skillManagement.open(item as ManagedSkill);
                     if (section === 'plugins') {
                       void pluginManagement.openConfig(item as ManagedPlugin);
                     }
                     if (section === 'agents') agentManagement.open(item as ManagedAgentDefinition);
+                  }}
+                  onVersions={(item) => {
+                    if (section !== 'skills') return;
+                    const skill = item as ManagedSkill;
+                    const canRollback =
+                      managedResourceManagementAllowed(
+                        config.mode,
+                        auth.user?.roles ?? [],
+                        section,
+                        skill
+                      ) && !resourceIsImmutable(section, skill, config.mode);
+                    skillPackageManagement.openVersions(skill, canRollback);
                   }}
                   onReload={() => void pluginManagement.reload()}
                   onRemove={(item) => {
@@ -675,22 +703,13 @@ export function SettingsWindow({
             }
           />
         ) : null}
-        {skillManagement.dialog ? (
-          <SkillEditorDialog
-            key={skillManagement.dialog.key}
-            skill={skillManagement.dialog.skill}
-            projects={auth.projects.filter((project) => project.tenant_id === config.tenantId)}
-            initialProjectId={config.projectId || null}
-            allowTenantScope={canManageAgentDefinitions}
-            loading={skillManagement.dialog.loading}
-            contentReady={skillManagement.dialog.contentReady}
-            busy={skillManagement.busy}
-            error={skillManagement.error}
-            onClose={skillManagement.close}
-            onSave={(input) => void skillManagement.save(input)}
-            onDelete={skillManagement.dialog.skill ? () => void skillManagement.remove() : null}
-          />
-        ) : null}
+        <SkillManagementDialogs
+          projects={auth.projects.filter((project) => project.tenant_id === config.tenantId)}
+          initialProjectId={config.projectId || null}
+          allowTenantScope={canManageAgentDefinitions}
+          management={skillManagement}
+          packages={skillPackageManagement}
+        />
         {pluginManagement.dialog?.kind === 'install' ? (
           <PluginInstallDialog
             key={pluginManagement.dialog.key}
