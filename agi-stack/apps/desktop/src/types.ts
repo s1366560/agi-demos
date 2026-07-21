@@ -1130,6 +1130,83 @@ export type UpdatePluginConfigRequest = {
   config: Record<string, unknown>;
 };
 
+export type ManagedChannelPluginCatalogItem = {
+  channel_type: string;
+  plugin_name: string;
+  source: string;
+  package?: string;
+  version?: string;
+  enabled: boolean;
+  discovered: boolean;
+  schema_supported: boolean;
+};
+
+export type ManagedChannelPluginConfigSchema = {
+  channel_type: string;
+  plugin_name: string;
+  source: string;
+  package?: string;
+  version?: string;
+  schema_supported: boolean;
+  config_schema?: {
+    type?: string;
+    properties?: Record<string, PluginConfigSchemaProperty>;
+    required?: string[];
+  };
+  config_ui_hints?: Record<string, PluginConfigUiHint>;
+  defaults?: Record<string, unknown>;
+  secret_paths: string[];
+};
+
+export type ManagedChannelConfig = {
+  id: string;
+  project_id: string;
+  channel_type: string;
+  name: string;
+  enabled: boolean;
+  connection_mode: 'websocket' | 'webhook';
+  app_id?: string;
+  webhook_url?: string;
+  webhook_port?: number;
+  webhook_path?: string;
+  domain?: string;
+  extra_settings?: Record<string, unknown>;
+  dm_policy: 'open' | 'allowlist' | 'disabled';
+  group_policy: 'open' | 'allowlist' | 'disabled';
+  allow_from?: string[];
+  group_allow_from?: string[];
+  rate_limit_per_minute: number;
+  status: 'connected' | 'disconnected' | 'error' | 'circuit_open';
+  last_error?: string;
+  description?: string;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type CreateManagedChannelConfigRequest = {
+  channel_type: string;
+  name: string;
+  enabled?: boolean;
+  connection_mode?: 'websocket' | 'webhook';
+  app_id?: string;
+  app_secret?: string;
+  encrypt_key?: string;
+  verification_token?: string;
+  webhook_url?: string;
+  webhook_port?: number;
+  webhook_path?: string;
+  domain?: string;
+  extra_settings?: Record<string, unknown>;
+  description?: string;
+};
+
+export type UpdateManagedChannelConfigRequest = Omit<
+  CreateManagedChannelConfigRequest,
+  'channel_type' | 'name'
+> & { name?: string };
+
+export type ManagedChannelTestResult = { success: boolean; message: string };
+
 export type ManagedAgentDefinition = {
   id: string;
   name: string;

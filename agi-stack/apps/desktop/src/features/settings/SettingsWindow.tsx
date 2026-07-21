@@ -2,17 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
 import {
-  BellIcon,
-  ComponentInstanceIcon,
   Cross2Icon,
-  CubeIcon,
-  FontStyleIcon,
-  GearIcon,
-  IdCardIcon,
   LockClosedIcon,
-  MagicWandIcon,
   MagnifyingGlassIcon,
-  PersonIcon,
 } from '@radix-ui/react-icons';
 
 import { DesktopApiClient } from '../../api/client';
@@ -58,8 +50,10 @@ import {
   type SettingsSearchCopy,
   type SettingsSection,
 } from './settingsNavigationModel';
+import { settingsSectionMeta as sectionMeta } from './settingsSectionMeta';
 import { useModalDialog } from './useModalDialog';
 import { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
+import { useChannelConnectionManagement } from './useChannelConnectionManagement';
 import { usePluginManagement } from './usePluginManagement';
 import { useSkillManagement } from './useSkillManagement';
 import { useSkillPackageManagement } from './useSkillPackageManagement';
@@ -85,64 +79,6 @@ type SettingsWindowProps = {
   onContextChange: (tenantId: string, projectId: string) => Promise<void>;
   onSignOut: () => void | Promise<void>;
 };
-
-const sectionMeta = {
-  account: {
-    label: 'settings.account',
-    description: 'settings.accountDescription',
-    Icon: IdCardIcon,
-  },
-  workspace: {
-    label: 'settings.workspace',
-    description: 'settings.workspaceDescription',
-    Icon: CubeIcon,
-  },
-  general: {
-    label: 'settings.general',
-    description: 'settings.generalDescription',
-    Icon: GearIcon,
-  },
-  connection: {
-    label: 'settings.connectionRecovery',
-    description: 'settings.connectionRecoveryDescription',
-    Icon: GearIcon,
-  },
-  appearance: {
-    label: 'settings.appearance',
-    description: 'settings.appearanceDescription',
-    Icon: FontStyleIcon,
-  },
-  notifications: {
-    label: 'settings.notifications',
-    description: 'settings.notificationsDescription',
-    Icon: BellIcon,
-  },
-  models: {
-    label: 'settings.models',
-    description: 'settings.modelsDescription',
-    Icon: CubeIcon,
-  },
-  skills: {
-    label: 'settings.skills',
-    description: 'settings.skillsDescription',
-    Icon: MagicWandIcon,
-  },
-  plugins: {
-    label: 'settings.plugins',
-    description: 'settings.pluginsDescription',
-    Icon: ComponentInstanceIcon,
-  },
-  agents: {
-    label: 'settings.agents',
-    description: 'settings.agentsDescription',
-    Icon: PersonIcon,
-  },
-  subagents: {
-    label: 'settings.subagents',
-    description: 'settings.subagentsDescription',
-    Icon: PersonIcon,
-  },
-} satisfies Record<SettingsSection, { label: string; description: string; Icon: typeof GearIcon }>;
 
 export function SettingsWindow({
   open,
@@ -300,6 +236,12 @@ export function SettingsWindow({
     canManage: canManagePluginControlPlane,
     onReload: reloadPluginResources,
     onUninstalled: clearPluginSelection,
+  });
+  const channelManagement = useChannelConnectionManagement({
+    active: open,
+    config,
+    contextKey: resourceContextKey,
+    canManage: canManagePluginControlPlane,
   });
   const skillManagement = useSkillManagement({
     active: open,
@@ -720,6 +662,7 @@ export function SettingsWindow({
                   onImportSubAgent={(item) =>
                     void subAgentLibrary.importFilesystem(item as ManagedSubAgent)
                   }
+                  onChannels={channelManagement.launch}
                   onReload={() => void pluginManagement.reload()}
                   onRemove={(item) => {
                     if (section === 'plugins') {
@@ -739,6 +682,7 @@ export function SettingsWindow({
           skills={skillManagement}
           skillPackages={skillPackageManagement}
           plugins={pluginManagement}
+          channels={channelManagement}
           subagentDefinitions={subAgentDefinitions}
           subagents={subAgentLibrary}
         />

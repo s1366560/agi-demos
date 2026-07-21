@@ -1,10 +1,12 @@
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
+import { ChannelConnectionsDialog } from './ChannelConnectionsDialog';
 import { PluginConfigDialog, PluginInstallDialog } from './PluginManagementDialogs';
 import { SkillManagementDialogs } from './SkillManagementDialogs';
 import { SubAgentEditorDialog } from './SubAgentEditorDialog';
 import { SubAgentLibraryDialog } from './SubAgentLibraryDialog';
 import type { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
+import type { useChannelConnectionManagement } from './useChannelConnectionManagement';
 import type { usePluginManagement } from './usePluginManagement';
 import type { useSkillManagement } from './useSkillManagement';
 import type { useSkillPackageManagement } from './useSkillPackageManagement';
@@ -19,6 +21,7 @@ export function SettingsManagementDialogs({
   skills,
   skillPackages,
   plugins,
+  channels,
   subagentDefinitions,
   subagents,
 }: {
@@ -29,6 +32,7 @@ export function SettingsManagementDialogs({
   skills: ReturnType<typeof useSkillManagement>;
   skillPackages: ReturnType<typeof useSkillPackageManagement>;
   plugins: ReturnType<typeof usePluginManagement>;
+  channels: ReturnType<typeof useChannelConnectionManagement>;
   subagentDefinitions: ReturnType<typeof useSubAgentDefinitionManagement>;
   subagents: ReturnType<typeof useSubAgentLibraryManagement>;
 }) {
@@ -79,6 +83,7 @@ export function SettingsManagementDialogs({
           onUninstall={() => void plugins.uninstall()}
         />
       ) : null}
+      <ChannelConnectionsDialog management={channels} />
       {subagentDefinitions.dialog ? (
         <SubAgentEditorDialog
           key={subagentDefinitions.dialog.key}

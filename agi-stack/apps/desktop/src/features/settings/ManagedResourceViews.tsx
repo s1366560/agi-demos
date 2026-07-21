@@ -87,6 +87,7 @@ export function ManagedResourceWorkspace({
   onEvolution,
   onSubAgentLibrary,
   onImportSubAgent,
+  onChannels,
   onReload,
   onRemove,
 }: {
@@ -115,6 +116,7 @@ export function ManagedResourceWorkspace({
   onEvolution: (item: ManagedResource, canManage: boolean) => void;
   onSubAgentLibrary: () => void;
   onImportSubAgent: (item: ManagedResource) => void;
+  onChannels: () => void;
   onReload: () => void;
   onRemove: (item: ManagedResource) => void;
 }) {
@@ -134,15 +136,28 @@ export function ManagedResourceWorkspace({
           (section === 'subagents' && canManage) ? (
             <div className="managed-resource-header-actions">
               {section === 'plugins' ? (
-                <button
-                  type="button"
-                  className="managed-resource-reload"
-                  disabled={busy}
-                  onClick={onReload}
-                >
-                  <ReloadIcon className={busy ? 'managed-resource-spin' : ''} />
-                  {t('settings.pluginManager.reload')}
-                </button>
+                <>
+                  {mode === 'cloud' ? (
+                    <button
+                      type="button"
+                      className="managed-resource-reload"
+                      disabled={busy}
+                      onClick={onChannels}
+                    >
+                      <ComponentInstanceIcon />
+                      {t('settings.channels.action')}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="managed-resource-reload"
+                    disabled={busy}
+                    onClick={onReload}
+                  >
+                    <ReloadIcon className={busy ? 'managed-resource-spin' : ''} />
+                    {t('settings.pluginManager.reload')}
+                  </button>
+                </>
               ) : null}
               {section === 'skills' ? (
                 <button

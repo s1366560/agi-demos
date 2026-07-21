@@ -11,6 +11,9 @@ import type {
   LlmProviderRoutingPolicy,
   LlmRouteTarget,
   ManagedAgentDefinition,
+  ManagedChannelConfig,
+  ManagedChannelPluginCatalogItem,
+  ManagedChannelPluginConfigSchema,
   ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
@@ -427,6 +430,64 @@ let pluginConfigs: Record<string, PluginConfigRecord> = {
     updated_at: NOW,
   },
 };
+
+const channelCatalog: ManagedChannelPluginCatalogItem[] = [
+  {
+    channel_type: 'slack',
+    plugin_name: 'slack',
+    source: 'entrypoint',
+    package: '@memstack/slack',
+    version: '3.2.0',
+    enabled: true,
+    discovered: true,
+    schema_supported: true,
+  },
+];
+
+const channelSchemas: Record<string, ManagedChannelPluginConfigSchema> = {
+  slack: {
+    channel_type: 'slack',
+    plugin_name: 'slack',
+    source: 'entrypoint',
+    package: '@memstack/slack',
+    version: '3.2.0',
+    schema_supported: true,
+    config_schema: {
+      type: 'object',
+      required: ['bot_token', 'connection_mode'],
+      properties: {
+        bot_token: { type: 'string', title: 'Bot token' },
+        connection_mode: { type: 'string', enum: ['websocket', 'webhook'] },
+        mention_required: { type: 'boolean', title: 'Require mention' },
+      },
+    },
+    config_ui_hints: { bot_token: { label: 'Bot token', sensitive: true } },
+    defaults: { connection_mode: 'websocket', mention_required: true },
+    secret_paths: ['bot_token'],
+  },
+};
+
+let channelConfigs: ManagedChannelConfig[] = [
+  {
+    id: 'channel-slack-alerts',
+    project_id: QA_PROJECT_ID,
+    channel_type: 'slack',
+    name: 'Incident alerts',
+    enabled: true,
+    connection_mode: 'websocket',
+    extra_settings: {
+      bot_token: '__MEMSTACK_SECRET_UNCHANGED__',
+      mention_required: true,
+    },
+    dm_policy: 'open',
+    group_policy: 'open',
+    rate_limit_per_minute: 60,
+    status: 'connected',
+    description: 'Production incident routing',
+    created_at: NOW,
+    updated_at: NOW,
+  },
+];
 
 let agents: ManagedAgentDefinition[] = [
   {
@@ -1174,6 +1235,88 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     }
   }
 
+  if (
+    method === 'GET' &&
+    path === `/api/v1/channels/tenants/${QA_TENANT_ID}/plugins/channel-catalog`
+  ) {
+    return jsonResponse({ items: channelCatalog });
+  }
+  const channelSchemaMatch = path.match(
+    /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/channel-catalog\/([^/]+)\/schema$/
+  );
+  if (method === 'GET' && channelSchemaMatch) {
+    const schema = channelSchemas[decodeURIComponent(channelSchemaMatch[1])];
+    return schema ? jsonResponse(schema) : jsonResponse({ detail: 'Schema not found.' }, 404);
+  }
+  if (
+    method === 'GET' &&
+    path === `/api/v1/channels/projects/${QA_PROJECT_ID}/configs`
+  ) {
+    return jsonResponse({ items: channelConfigs, total: channelConfigs.length });
+  }
+  if (
+    method === 'POST' &&
+    path === `/api/v1/channels/projects/${QA_PROJECT_ID}/configs`
+  ) {
+    const payload = readJsonBody(body);
+    const channelType = stringValue(payload.channel_type);
+    const created: ManagedChannelConfig = {
+      id: `channel-${channelType}-${channelConfigs.length + 1}`,
+      project_id: QA_PROJECT_ID,
+      channel_type: channelType,
+      name: stringValue(payload.name),
+      enabled: booleanValue(payload.enabled, true),
+      connection_mode:
+        payload.connection_mode === 'webhook' ? 'webhook' : 'websocket',
+      extra_settings: recordValue(payload.extra_settings),
+      dm_policy: 'open',
+      group_policy: 'open',
+      rate_limit_per_minute: 60,
+      status: 'disconnected',
+      description: stringValue(payload.description),
+      created_at: NOW,
+      updated_at: NOW,
+    };
+    channelConfigs = [created, ...channelConfigs];
+    return jsonResponse(created, 201);
+  }
+  const channelTestMatch = path.match(/^\/api\/v1\/channels\/configs\/([^/]+)\/test$/);
+  if (method === 'POST' && channelTestMatch) {
+    const channelId = decodeURIComponent(channelTestMatch[1]);
+    channelConfigs = channelConfigs.map((channel) =>
+      channel.id === channelId ? { ...channel, status: 'connected' } : channel
+    );
+    return jsonResponse({ success: true, message: 'Connection succeeded.' });
+  }
+  const channelConfigMatch = path.match(/^\/api\/v1\/channels\/configs\/([^/]+)$/);
+  if (channelConfigMatch) {
+    const channelId = decodeURIComponent(channelConfigMatch[1]);
+    const current = channelConfigs.find((channel) => channel.id === channelId);
+    if (!current) return jsonResponse({ detail: 'Channel not found.' }, 404);
+    if (method === 'PUT') {
+      const payload = readJsonBody(body);
+      const updated: ManagedChannelConfig = {
+        ...current,
+        ...(typeof payload.name === 'string' ? { name: payload.name } : {}),
+        ...(typeof payload.enabled === 'boolean' ? { enabled: payload.enabled } : {}),
+        ...(payload.connection_mode === 'websocket' || payload.connection_mode === 'webhook'
+          ? { connection_mode: payload.connection_mode }
+          : {}),
+        ...(typeof payload.description === 'string' ? { description: payload.description } : {}),
+        ...(payload.extra_settings ? { extra_settings: recordValue(payload.extra_settings) } : {}),
+        updated_at: NOW,
+      };
+      channelConfigs = channelConfigs.map((channel) =>
+        channel.id === channelId ? updated : channel
+      );
+      return jsonResponse(updated);
+    }
+    if (method === 'DELETE') {
+      channelConfigs = channelConfigs.filter((channel) => channel.id !== channelId);
+      return new Response(null, { status: 204 });
+    }
+  }
+
   const pluginUninstallMatch = path.match(
     /^\/api\/v1\/channels\/tenants\/[^/]+\/plugins\/([^/]+)\/uninstall$/
   );
@@ -1715,8 +1858,12 @@ try {
 }
 
 function ProviderSettingsQa() {
-  const [config, setConfig] = useState<DesktopRuntimeConfig>(qaConfig);
-  const requestedSection = new URLSearchParams(window.location.search).get('section');
+  const searchParams = new URLSearchParams(window.location.search);
+  const [config, setConfig] = useState<DesktopRuntimeConfig>(() => ({
+    ...qaConfig,
+    mode: searchParams.get('mode') === 'cloud' ? 'cloud' : qaConfig.mode,
+  }));
+  const requestedSection = searchParams.get('section');
   const supportedSections = new Set<SettingsSection>([
     'account',
     'workspace',
