@@ -87,7 +87,10 @@ import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
 } from './features/chat/chatComposerModel';
-import { mergeThoughtStreamChunk } from './features/chat/chatTimelineModel';
+import {
+  mergeAssistantTextStreamChunk,
+  mergeThoughtStreamChunk,
+} from './features/chat/chatTimelineModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
@@ -660,6 +663,11 @@ function readStringField(payload: Record<string, unknown>, key: string): string 
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+function readTextField(payload: Record<string, unknown>, key: string): string | undefined {
+  const value = payload[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
 function mergeTimelineItems(
   existing: AgentTimelineItem[],
   incoming: AgentTimelineItem[],
@@ -834,8 +842,8 @@ function mergeLiveTimelineEvent(
       numberField(payload, 'eventCounter') ??
       0;
     const content =
-      readStringField(data, type === 'thought_delta' ? 'delta' : 'thought') ??
-      readStringField(data, 'content') ??
+      readTextField(data, type === 'thought_delta' ? 'delta' : 'thought') ??
+      readTextField(data, 'content') ??
       '';
     return mergeThoughtStreamChunk(existing, {
       kind: type === 'thought_start' ? 'start' : type === 'thought_delta' ? 'delta' : 'complete',
@@ -870,63 +878,20 @@ function mergeStreamingTextEvent(
     numberField(payload, 'event_counter') ??
     numberField(payload, 'eventCounter') ??
     0;
-  const delta =
-    readStringField(data, 'delta') ??
-    readStringField(data, 'text') ??
-    readStringField(data, 'content') ??
+  const content =
+    (type === 'text_end'
+      ? readTextField(data, 'full_text') ?? readTextField(data, 'fullText')
+      : readTextField(data, 'delta')) ??
+    readTextField(data, 'text') ??
+    readTextField(data, 'content') ??
     '';
-  const existingIndex = existing.findIndex(
-    (item) =>
-      item.message_id === messageId &&
-      item.role === 'assistant' &&
-      Boolean(item.metadata?.streaming),
-  );
-
-  if (existingIndex < 0) {
-    if (type === 'text_end' && !delta) return existing;
-    return mergeTimelineItems(existing, [
-      {
-        id: `streaming-assistant-${messageId}`,
-        type: 'assistant_message',
-        eventTimeUs,
-        eventCounter,
-        timestamp: Math.floor(eventTimeUs / 1000),
-        message_id: messageId,
-        role: 'assistant',
-        content: delta,
-        metadata: { streaming: type !== 'text_end' },
-      },
-    ]);
-  }
-
-  const updated = existing.map((item, index) => {
-    if (index !== existingIndex) return item;
-    return {
-      ...item,
-      eventTimeUs,
-      eventCounter,
-      timestamp: Math.floor(eventTimeUs / 1000),
-      content: type === 'text_delta' ? `${item.content ?? ''}${delta}` : delta || item.content,
-      metadata: { ...(item.metadata ?? {}), streaming: type !== 'text_end' },
-    };
-  });
-  let alreadySorted = true;
-  for (let index = 1; index < updated.length; index += 1) {
-    const previous = updated[index - 1];
-    const current = updated[index];
-    if (
-      previous.eventTimeUs > current.eventTimeUs ||
-      (previous.eventTimeUs === current.eventTimeUs &&
-        previous.eventCounter > current.eventCounter)
-    ) {
-      alreadySorted = false;
-      break;
-    }
-  }
-  if (alreadySorted) return updated;
-  return updated.sort((a, b) => {
-    if (a.eventTimeUs !== b.eventTimeUs) return a.eventTimeUs - b.eventTimeUs;
-    return a.eventCounter - b.eventCounter;
+  return mergeAssistantTextStreamChunk(existing, {
+    kind: type === 'text_start' ? 'start' : type === 'text_delta' ? 'delta' : 'complete',
+    messageId,
+    content,
+    eventTimeUs,
+    eventCounter,
+    payload: data,
   });
 }
 

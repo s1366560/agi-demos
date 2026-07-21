@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
   detectPayloadLanguage,
   formatToolCallDuration,
+  mergeAssistantTextStreamChunk,
   mergeThoughtStreamChunk,
   pairToolCallItems,
   toolActivityRows,
@@ -20,6 +21,55 @@ const {
   toolCallPresentationKind,
 } = require('/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+test('assistant text stream preserves whitespace tokens and settles to authoritative full text', () => {
+  let items = mergeAssistantTextStreamChunk([], {
+    kind: 'start',
+    messageId: 'message-text-1',
+    content: '',
+    eventTimeUs: 1_000_000,
+    eventCounter: 1,
+  });
+  for (const [index, content] of ['Hello', ' ', 'world', '\n\n', 'draft'].entries()) {
+    items = mergeAssistantTextStreamChunk(items, {
+      kind: 'delta',
+      messageId: 'message-text-1',
+      content,
+      eventTimeUs: 1_100_000 + index * 100_000,
+      eventCounter: index + 2,
+    });
+  }
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].content, 'Hello world\n\ndraft');
+  assert.equal(items[0].metadata.streaming, true);
+
+  items = mergeAssistantTextStreamChunk(items, {
+    kind: 'complete',
+    messageId: 'message-text-1',
+    content: 'Hello world\n\nFinal answer.',
+    eventTimeUs: 2_000_000,
+    eventCounter: 7,
+  });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].content, 'Hello world\n\nFinal answer.');
+  assert.equal(items[0].metadata.streaming, false);
+});
+
+test('text end can recover the full response when every delta was missed', () => {
+  const items = mergeAssistantTextStreamChunk([], {
+    kind: 'complete',
+    messageId: 'message-text-replay',
+    content: 'Recovered from text_end.full_text',
+    eventTimeUs: 3_000_000,
+    eventCounter: 1,
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].content, 'Recovered from text_end.full_text');
+  assert.equal(items[0].message_id, 'message-text-replay');
+  assert.equal(items[0].metadata.streaming, false);
+});
 
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
@@ -93,6 +143,12 @@ test('live Agent events route thought start, delta, and completion through the s
   );
   assert.match(appSource, /mergeThoughtStreamChunk\(existing/);
   assert.match(appSource, /type\.startsWith\('thought_'\)/);
+});
+
+test('live Agent text events preserve raw delta whitespace and read text_end full_text', () => {
+  assert.match(appSource, /mergeAssistantTextStreamChunk\(existing/);
+  assert.match(appSource, /readTextField\(data, 'full_text'\)/);
+  assert.match(appSource, /readTextField\(data, 'delta'\)/);
 });
 
 test('act items pair with the observe that answers them, preserving order', () => {

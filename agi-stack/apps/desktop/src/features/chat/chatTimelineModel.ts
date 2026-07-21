@@ -44,6 +44,63 @@ export type ThoughtStreamChunk = {
   payload?: Record<string, unknown>;
 };
 
+export type AssistantTextStreamChunk = {
+  kind: 'start' | 'delta' | 'complete';
+  messageId: string;
+  content: string;
+  eventTimeUs: number;
+  eventCounter: number;
+  payload?: Record<string, unknown>;
+};
+
+export function mergeAssistantTextStreamChunk(
+  existing: AgentTimelineItem[],
+  chunk: AssistantTextStreamChunk,
+): AgentTimelineItem[] {
+  const activeIndex = findActiveAssistantTextIndex(existing, chunk.messageId);
+  const settledIndex =
+    activeIndex < 0 && chunk.kind === 'complete'
+      ? findLastAssistantTextIndex(existing, chunk.messageId)
+      : -1;
+  const targetIndex = activeIndex >= 0 ? activeIndex : settledIndex;
+  if (targetIndex >= 0) {
+    const updated = existing.map((item, index) => {
+      if (index !== targetIndex) return item;
+      const content =
+        chunk.kind === 'delta'
+          ? `${item.content ?? ''}${chunk.content}`
+          : chunk.content || item.content;
+      return {
+        ...item,
+        eventTimeUs: chunk.eventTimeUs,
+        eventCounter: chunk.eventCounter,
+        timestamp: Math.floor(chunk.eventTimeUs / 1000),
+        content,
+        payload: chunk.payload ?? item.payload,
+        metadata: { ...(item.metadata ?? {}), streaming: chunk.kind !== 'complete' },
+      };
+    });
+    return sortTimelineItems(updated);
+  }
+
+  if (chunk.kind === 'complete' && !chunk.content) return existing;
+  return sortTimelineItems([
+    ...existing,
+    {
+      id: `streaming-assistant-${chunk.messageId}`,
+      type: 'assistant_message',
+      eventTimeUs: chunk.eventTimeUs,
+      eventCounter: chunk.eventCounter,
+      timestamp: Math.floor(chunk.eventTimeUs / 1000),
+      message_id: chunk.messageId,
+      role: 'assistant',
+      content: chunk.content,
+      payload: chunk.payload,
+      metadata: { streaming: chunk.kind !== 'complete' },
+    },
+  ]);
+}
+
 export function mergeThoughtStreamChunk(
   existing: AgentTimelineItem[],
   chunk: ThoughtStreamChunk,
@@ -94,6 +151,28 @@ function findActiveThoughtIndex(items: AgentTimelineItem[], messageId: string): 
     ) {
       return index;
     }
+  }
+  return -1;
+}
+
+function findActiveAssistantTextIndex(items: AgentTimelineItem[], messageId: string): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (
+      item.role === 'assistant' &&
+      item.message_id === messageId &&
+      item.metadata?.streaming === true
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findLastAssistantTextIndex(items: AgentTimelineItem[], messageId: string): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.role === 'assistant' && item.message_id === messageId) return index;
   }
   return -1;
 }
