@@ -78,7 +78,7 @@ test('failed socket flush preserves pending cloud turns for the next reconnect',
   assert.equal(queue.size, 2);
 });
 
-test('queued cloud turns preserve Agent, skill, mention, and composer context routing', () => {
+test('queued cloud turns preserve Agent, skill, mention, attachment, and composer context routing', () => {
   const queue = createPendingAgentMessageQueue();
   enqueuePendingAgentRunMessage(queue, {
     conversationId: 'conversation-1',
@@ -88,6 +88,14 @@ test('queued cloud turns preserve Agent, skill, mention, and composer context ro
     agentId: 'definition-reviewer',
     forcedSkillName: 'source-research',
     mentions: ['agent-research'],
+    fileMetadata: [
+      {
+        filename: 'evidence.txt',
+        sandbox_path: '/workspace/input/evidence.txt',
+        mime_type: 'text/plain',
+        size_bytes: 42,
+      },
+    ],
     appModelContext: {
       desktop_composer_context: {
         resources: [{ kind: 'plugin', resource_id: 'github' }],
@@ -113,6 +121,14 @@ test('queued cloud turns preserve Agent, skill, mention, and composer context ro
       agent_id: 'definition-reviewer',
       forced_skill_name: 'source-research',
       mentions: ['agent-research'],
+      file_metadata: [
+        {
+          filename: 'evidence.txt',
+          sandbox_path: '/workspace/input/evidence.txt',
+          mime_type: 'text/plain',
+          size_bytes: 42,
+        },
+      ],
       app_model_context: {
         desktop_composer_context: {
           resources: [{ kind: 'plugin', resource_id: 'github' }],

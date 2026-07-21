@@ -256,6 +256,13 @@ export type ComposerContextItem = {
   metadata?: Record<string, string | number | boolean | null>;
 };
 
+export type AgentInputFileMetadata = {
+  filename: string;
+  sandbox_path: string;
+  mime_type: string;
+  size_bytes: number;
+};
+
 export type WorkspaceTask = {
   id: string;
   workspace_id?: string;

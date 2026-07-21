@@ -5,6 +5,8 @@ import test from 'node:test';
 import {
   appendComposerContextItem,
   composerAgentExecutionContext,
+  composerFileMetadata,
+  composerHasSendableAttachment,
   chatComposerPresentation,
   composerMentionIds,
   workspaceMessageRequiresDefaultAgentLaunch,
@@ -173,6 +175,50 @@ test('composer execution context routes selected Web resources into the cloud Ag
   });
 });
 
+test('uploaded attachment context becomes authoritative sandbox file metadata', () => {
+  const contextItems = [
+    {
+      kind: 'attachment',
+      resource_id: '/workspace/input/evidence.txt',
+      label: 'evidence.txt',
+      metadata: {
+        filename: 'evidence.txt',
+        sandbox_path: '/workspace/input/evidence.txt',
+        mime_type: 'text/plain',
+        size_bytes: 42,
+      },
+    },
+    {
+      kind: 'attachment',
+      resource_id: 'pending:ignored.txt',
+      label: 'ignored.txt',
+      metadata: { filename: 'ignored.txt', size_bytes: 0 },
+    },
+  ];
+
+  assert.deepEqual(composerFileMetadata(contextItems), [
+    {
+      filename: 'evidence.txt',
+      sandbox_path: '/workspace/input/evidence.txt',
+      mime_type: 'text/plain',
+      size_bytes: 42,
+    },
+  ]);
+  assert.equal(composerHasSendableAttachment(contextItems), true);
+  assert.deepEqual(composerAgentExecutionContext('Inspect this evidence', contextItems), {
+    message: 'Inspect this evidence',
+    mentions: [],
+    fileMetadata: [
+      {
+        filename: 'evidence.txt',
+        sandbox_path: '/workspace/input/evidence.txt',
+        mime_type: 'text/plain',
+        size_bytes: 42,
+      },
+    ],
+  });
+});
+
 test('single-slot composer resources replace the prior selection without affecting mentions', () => {
   const mention = {
     kind: 'agent',
@@ -215,4 +261,10 @@ test('composer catalog exposes execution metadata for Agents, SubAgents, skills,
     appSource,
     /composerAgentExecutionContext\([\s\S]*?buildPlanningPrompt\(definition\)[\s\S]*?input\.contextItems/,
   );
+  assert.match(composerPlusMenuSource, /uploadSandboxFile/);
+  assert.match(composerPlusMenuSource, /sandbox_path/);
+  assert.match(composerPlusMenuSource, /onUploadingChange\?\.\(true\)/);
+  assert.match(chatPanelSource, /composerHasSendableAttachment\(contextItems\)/);
+  assert.match(chatPanelSource, /!uploadingAttachments/);
+  assert.match(chatPanelSource, /onUploadingChange=\{setUploadingAttachments\}/);
 });

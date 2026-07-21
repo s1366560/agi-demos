@@ -37,6 +37,15 @@ const qaApi: ComposerCatalogClient = {
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
   listManagedPlugins: async () => [],
+  uploadSandboxFile: async (file) => {
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    return {
+      filename: file.name,
+      sandbox_path: `/workspace/input/${file.name}`,
+      mime_type: file.type || 'application/octet-stream',
+      size_bytes: file.size,
+    };
+  },
 };
 
 const snapshot: ChangeSnapshot = {

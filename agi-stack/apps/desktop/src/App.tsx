@@ -4195,6 +4195,7 @@ export function App() {
       agentId: input.agentId,
       forcedSkillName: input.forcedSkillName,
       mentions: input.mentions,
+      fileMetadata: input.fileMetadata,
       appModelContext: input.appModelContext,
     });
     const transport = newTaskAgentTurnTransport(input.config.mode, queued);
@@ -4301,6 +4302,7 @@ export function App() {
         agentId: execution.agentId,
         forcedSkillName: execution.forcedSkillName,
         mentions: execution.mentions,
+        fileMetadata: execution.fileMetadata,
         appModelContext: execution.appModelContext,
       });
     } catch (caught) {
@@ -4484,6 +4486,7 @@ export function App() {
             agentId: execution.agentId,
             forcedSkillName: execution.forcedSkillName,
             mentions: execution.mentions,
+            fileMetadata: execution.fileMetadata,
             appModelContext: execution.appModelContext,
           });
           setConversationTimeline((current) => {

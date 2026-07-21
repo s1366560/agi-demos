@@ -47,7 +47,11 @@ import { isImportantTimelineItem } from './chatTimelinePresentation';
 import { SessionEmptyState, WorkspaceTranscriptMessage } from './ChatTranscript';
 import { ChatWorkflowStrip } from './ChatWorkflowStrip';
 import type { ChatWorkflowTarget } from './ChatWorkflowStrip';
-import { appendComposerContextItem, chatComposerPresentation } from './chatComposerModel';
+import {
+  appendComposerContextItem,
+  chatComposerPresentation,
+  composerHasSendableAttachment,
+} from './chatComposerModel';
 import type { ChatComposerVariant } from './chatComposerModel';
 import './ChatPanel.css';
 import './ComposerMenus.css';
@@ -762,17 +766,30 @@ function ChatComposer({
   const { t } = useI18n();
   const [input, setInput] = useState(initialInput);
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const disabled = Boolean(disabledReason);
-  const canSend = !disabled && !sending && Boolean(input.trim());
+  const canSend =
+    !disabled &&
+    !sending &&
+    !uploadingAttachments &&
+    (Boolean(input.trim()) || composerHasSendableAttachment(contextItems));
   const composerPresentation = chatComposerPresentation(composerVariant);
   const queuedRunInputs = useMemo(() => visibleQueuedRunInputs(runInputs), [runInputs]);
   const handleSend = useCallback(() => {
     if (!canSend) return;
-    onSend(input, contextItems, () => {
+    const content =
+      input.trim() ||
+      t('composer.attachmentOnlyMessage', {
+        filenames: contextItems
+          .filter((item) => item.kind === 'attachment')
+          .map((item) => item.label)
+          .join(', '),
+      });
+    onSend(content, contextItems, () => {
       setInput('');
       setContextItems([]);
     });
-  }, [canSend, contextItems, input, onSend]);
+  }, [canSend, contextItems, input, onSend, t]);
   const addContextItem = useCallback((item: ComposerContextItem) => {
     setContextItems((current) => appendComposerContextItem(current, item));
   }, []);
@@ -965,6 +982,7 @@ function ChatComposer({
               excludedConversationId={selectedConversationId}
               compact
               onAdd={addContextItem}
+              onUploadingChange={setUploadingAttachments}
             />
             <button
               type="button"

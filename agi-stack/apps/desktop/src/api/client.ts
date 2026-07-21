@@ -8,6 +8,7 @@ import type {
   AgentPlanMode,
   AgentPlanModeResponse,
   AgentPlanTaskListResponse,
+  AgentInputFileMetadata,
   ApprovePlanAndStartRequest,
   ApprovePlanAndStartResponse,
   AutomationCapabilities,
@@ -1706,6 +1707,39 @@ export class DesktopApiClient {
     );
   }
 
+  async uploadSandboxFile(
+    file: Pick<File, 'name' | 'type' | 'size' | 'arrayBuffer'>,
+  ): Promise<AgentInputFileMetadata> {
+    const projectId = requireValue(this.config.projectId, 'project id');
+    const filename = requireValue(file.name, 'filename');
+    const contentBase64 = encodeArrayBufferAsBase64(await file.arrayBuffer());
+    const timeout = Math.min(
+      300,
+      Math.max(60, Math.ceil(file.size / (1024 * 1024)) * 2),
+    );
+    const payload = await this.request<unknown>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/sandbox/execute`,
+      {
+        method: 'POST',
+        body: {
+          tool_name: 'import_file',
+          arguments: {
+            filename,
+            content_base64: contentBase64,
+            destination: '/workspace/input',
+            overwrite: true,
+          },
+          timeout,
+        },
+      },
+    );
+    return requireSandboxUploadMetadata(payload, {
+      filename,
+      mimeType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+    });
+  }
+
   async seedProxyAuthCookie(): Promise<void> {
     const projectId = requireValue(this.config.projectId, 'project id');
     await this.request<unknown>(
@@ -1888,6 +1922,60 @@ export function websocketUrl(baseUrl: string, path: string): string {
   const url = new URL(absoluteUrl(baseUrl, path));
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
+}
+
+function encodeArrayBufferAsBase64(value: ArrayBuffer): string {
+  const bytes = new Uint8Array(value);
+  const chunks: string[] = [];
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
+  }
+  return btoa(chunks.join(''));
+}
+
+function requireSandboxUploadMetadata(
+  payload: unknown,
+  file: { filename: string; mimeType: string; sizeBytes: number },
+): AgentInputFileMetadata {
+  if (
+    !isRecord(payload) ||
+    payload.success !== true ||
+    payload.is_error !== false ||
+    !Array.isArray(payload.content)
+  ) {
+    throw invalidSandboxUploadResponse(payload);
+  }
+  const text = payload.content
+    .filter(isRecord)
+    .map((item) => item.text)
+    .find((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+  if (!text) throw invalidSandboxUploadResponse(payload);
+  let result: unknown;
+  try {
+    result = JSON.parse(text);
+  } catch {
+    throw invalidSandboxUploadResponse(payload);
+  }
+  if (
+    !isRecord(result) ||
+    result.success === false ||
+    !isNonEmptyString(result.path) ||
+    !isUnsignedSafeInteger(result.size_bytes) ||
+    result.size_bytes !== file.sizeBytes
+  ) {
+    throw invalidSandboxUploadResponse(payload);
+  }
+  return {
+    filename: file.filename,
+    sandbox_path: result.path,
+    mime_type: file.mimeType,
+    size_bytes: result.size_bytes,
+  };
+}
+
+function invalidSandboxUploadResponse(payload: unknown): DesktopApiError {
+  return new DesktopApiError('Invalid sandbox upload response', 502, payload);
 }
 
 function readArray<T>(payload: unknown, keys: string[]): T[] {

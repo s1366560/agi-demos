@@ -15,6 +15,7 @@ import {
 import { useI18n } from '../../i18n';
 import type {
   AgentConversation,
+  AgentInputFileMetadata,
   ComposerContextItem,
   ComposerContextKind,
   ManagedAgentDefinition,
@@ -59,7 +60,12 @@ export type ComposerCatalogClient = {
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listManagedPlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
   listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
+  uploadSandboxFile?: (
+    file: Pick<File, 'name' | 'type' | 'size' | 'arrayBuffer'>,
+  ) => Promise<AgentInputFileMetadata>;
 };
+
+const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
 type ComposerPlusMenuProps = {
   api: ComposerCatalogClient;
@@ -67,6 +73,7 @@ type ComposerPlusMenuProps = {
   excludedConversationId?: string | null;
   compact?: boolean;
   onAdd: (item: ComposerContextItem) => void;
+  onUploadingChange?: (uploading: boolean) => void;
 };
 
 export function ComposerPlusMenu({
@@ -75,6 +82,7 @@ export function ComposerPlusMenu({
   excludedConversationId,
   compact = false,
   onAdd,
+  onUploadingChange,
 }: ComposerPlusMenuProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -87,6 +95,8 @@ export function ComposerPlusMenu({
     subagents: ManagedSubAgent[];
   } | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [uploadingFileCount, setUploadingFileCount] = useState(0);
+  const [fileUploadError, setFileUploadError] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -268,21 +278,41 @@ export function ComposerPlusMenu({
     close();
   }
 
-  function handleFiles(files: FileList | null) {
-    for (const file of Array.from(files ?? [])) {
-      onAdd({
-        kind: 'attachment',
-        resource_id: `file:${file.name}:${file.size}:${file.lastModified}`,
-        label: file.name,
-        metadata: {
-          mime_type: file.type || 'application/octet-stream',
-          size_bytes: file.size,
-          last_modified_ms: file.lastModified,
-        },
-      });
-    }
+  async function handleFiles(files: FileList | null) {
+    const selectedFiles = Array.from(files ?? []);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    close();
+    if (!selectedFiles.length) return;
+    if (!api.uploadSandboxFile) {
+      setFileUploadError(t('composer.fileUploadUnavailable'));
+      return;
+    }
+    setFileUploadError(null);
+    setUploadingFileCount(selectedFiles.length);
+    onUploadingChange?.(true);
+    for (const [index, file] of selectedFiles.entries()) {
+      try {
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          throw new Error(t('composer.fileTooLarge'));
+        }
+        const metadata = await api.uploadSandboxFile(file);
+        onAdd({
+          kind: 'attachment',
+          resource_id: metadata.sandbox_path,
+          label: metadata.filename,
+          metadata: { ...metadata },
+        });
+      } catch (caught) {
+        setFileUploadError(
+          t('composer.fileUploadFailed', {
+            filename: file.name,
+            error: caught instanceof Error ? caught.message : String(caught),
+          }),
+        );
+      } finally {
+        setUploadingFileCount(selectedFiles.length - index - 1);
+      }
+    }
+    onUploadingChange?.(false);
   }
 
   return (
@@ -320,6 +350,7 @@ export function ComposerPlusMenu({
                       <button
                         className="plus-menu-item"
                         type="button"
+                        disabled={uploadingFileCount > 0}
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <b><ImageIcon aria-hidden="true" />{t('composer.filesAndPhotos')}</b>
@@ -329,6 +360,16 @@ export function ComposerPlusMenu({
                         <b><CameraIcon aria-hidden="true" />{t('composer.screenshot')}</b>
                         <small>{t('composer.screenshotUnavailable')}</small>
                       </button>
+                      {uploadingFileCount ? (
+                        <div className="plus-menu-empty" role="status" aria-live="polite">
+                          {t('composer.uploadingFiles', { count: uploadingFileCount })}
+                        </div>
+                      ) : null}
+                      {fileUploadError ? (
+                        <div className="plus-menu-empty" role="alert">
+                          {fileUploadError}
+                        </div>
+                      ) : null}
                     </>
                   ) : items?.length ? (
                     items.map((item) => (
@@ -361,7 +402,7 @@ export function ComposerPlusMenu({
         hidden
         tabIndex={-1}
         aria-hidden="true"
-        onChange={(event) => handleFiles(event.target.files)}
+        onChange={(event) => void handleFiles(event.target.files)}
       />
     </div>
   );

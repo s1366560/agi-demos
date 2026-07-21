@@ -119,6 +119,18 @@ function CloudSessionQueueQa() {
               {latestAgentMessage?.app_model_context ? 'preserved' : 'not sent'}
             </dd>
           </div>
+          <div>
+            <dt>Sandbox attachment</dt>
+            <dd data-qa-attachment>
+              {Array.isArray(latestAgentMessage?.file_metadata)
+                ? String(
+                    (latestAgentMessage.file_metadata[0] as
+                      | Record<string, unknown>
+                      | undefined)?.sandbox_path ?? 'not sent',
+                  )
+                : 'not sent'}
+            </dd>
+          </div>
         </dl>
         <div style={{ display: 'flex', gap: 12 }}>
           <button
@@ -133,6 +145,14 @@ function CloudSessionQueueQa() {
                   agentId: 'definition-reviewer',
                   forcedSkillName: 'source-research',
                   mentions: ['agent-research'],
+                  fileMetadata: [
+                    {
+                      filename: 'evidence.txt',
+                      sandbox_path: '/workspace/input/evidence.txt',
+                      mime_type: 'text/plain',
+                      size_bytes: 42,
+                    },
+                  ],
                   appModelContext: {
                     desktop_composer_context: {
                       resources: [{ kind: 'plugin', resource_id: 'github' }],

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { desktopApiCredential, DesktopApiClient } from '../api/client';
 import type {
+  AgentInputFileMetadata,
   AgentWsEvent,
   DesktopRuntimeConfig,
   HitlResponseSubmission,
@@ -48,6 +49,7 @@ export type AgentRunMessage = {
   agentId?: string;
   forcedSkillName?: string;
   mentions?: string[];
+  fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: Record<string, unknown>;
 };
 
@@ -60,6 +62,7 @@ export type AgentRunSocketMessage = {
   agent_id?: string;
   forced_skill_name?: string;
   mentions?: string[];
+  file_metadata?: AgentInputFileMetadata[];
   app_model_context?: Record<string, unknown>;
 };
 
@@ -108,6 +111,9 @@ function agentRunSocketMessage(message: AgentRunMessage): AgentRunSocketMessage 
     ...(agentId ? { agent_id: agentId } : {}),
     ...(forcedSkillName ? { forced_skill_name: forcedSkillName } : {}),
     ...(mentions?.length ? { mentions: [...new Set(mentions)] } : {}),
+    ...(message.fileMetadata?.length
+      ? { file_metadata: message.fileMetadata.map((file) => ({ ...file })) }
+      : {}),
     ...(message.appModelContext && Object.keys(message.appModelContext).length
       ? { app_model_context: message.appModelContext }
       : {}),

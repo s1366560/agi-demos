@@ -14,6 +14,7 @@ import {
 import { useI18n } from '../../i18n';
 import type {
   AgentConversation,
+  AgentInputFileMetadata,
   AgentPlanApprovalCapability,
   AgentPlanTask,
   DesktopExecutionEnvironmentKind,
@@ -106,6 +107,7 @@ export type NewTaskAgentTurnInput = {
   agentId?: string;
   forcedSkillName?: string;
   mentions?: string[];
+  fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: Record<string, unknown>;
 };
 

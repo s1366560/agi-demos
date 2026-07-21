@@ -93,6 +93,7 @@ export function NewThreadComposer({
   const [reasoningEffort, setReasoningEffort] = useState<WorkspaceReasoningEffort>('medium');
   const [permissionMode, setPermissionMode] = useState<WorkspacePermissionMode>('ask');
   const [contextItems, setContextItems] = useState<ComposerContextItem[]>([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   useEffect(() => {
     setModelValue(modelOptions.find((option) => option.selected)?.value ?? modelOptions[0]?.value ?? '');
@@ -107,7 +108,9 @@ export function NewThreadComposer({
     [modelOptions, modelValue],
   );
   const recentThreads = conversations.slice(0, 5);
-  const canSend = Boolean(prompt.trim() && selectedModel && !disabledReason && !creating);
+  const canSend = Boolean(
+    prompt.trim() && selectedModel && !disabledReason && !creating && !uploadingAttachments,
+  );
   const send = () => {
     if (!canSend || !selectedModel) return;
     onCreate({
@@ -210,6 +213,7 @@ export function NewThreadComposer({
               api={api}
               conversations={conversations}
               onAdd={addContextItem}
+              onUploadingChange={setUploadingAttachments}
             />
             <div className="composer-pickers">
               <div className="mode-picker" role="group" aria-label={t('task.mode')}>

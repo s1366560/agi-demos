@@ -1,4 +1,8 @@
-import type { ComposerContextItem, WorkspaceMessage } from '../../types';
+import type {
+  AgentInputFileMetadata,
+  ComposerContextItem,
+  WorkspaceMessage,
+} from '../../types';
 
 export type ChatComposerVariant = 'workspace' | 'session';
 
@@ -7,6 +11,7 @@ export type ComposerAgentExecutionContext = {
   mentions: string[];
   agentId?: string;
   forcedSkillName?: string;
+  fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: {
     desktop_composer_context: {
       resources: Array<Pick<ComposerContextItem, 'kind' | 'resource_id'>>;
@@ -65,6 +70,42 @@ export function composerMentionIds(contextItems: readonly ComposerContextItem[])
   return mentions;
 }
 
+export function composerFileMetadata(
+  contextItems: readonly ComposerContextItem[],
+): AgentInputFileMetadata[] {
+  const files: AgentInputFileMetadata[] = [];
+  for (const item of contextItems) {
+    if (item.kind !== 'attachment') continue;
+    const filename = metadataText(item, 'filename');
+    const sandboxPath = metadataText(item, 'sandbox_path');
+    const mimeType = metadataText(item, 'mime_type');
+    const sizeBytes = item.metadata?.size_bytes;
+    if (
+      !filename ||
+      !sandboxPath ||
+      !mimeType ||
+      typeof sizeBytes !== 'number' ||
+      !Number.isSafeInteger(sizeBytes) ||
+      sizeBytes < 0
+    ) {
+      continue;
+    }
+    files.push({
+      filename,
+      sandbox_path: sandboxPath,
+      mime_type: mimeType,
+      size_bytes: sizeBytes,
+    });
+  }
+  return files;
+}
+
+export function composerHasSendableAttachment(
+  contextItems: readonly ComposerContextItem[],
+): boolean {
+  return composerFileMetadata(contextItems).length > 0;
+}
+
 export function appendComposerContextItem(
   current: ComposerContextItem[],
   item: ComposerContextItem,
@@ -99,6 +140,7 @@ export function composerAgentExecutionContext(
   );
   const command = lastExecutionResourceId(contextItems, 'command');
   const content = rawMessage.trim();
+  const fileMetadata = composerFileMetadata(contextItems);
   const commandMessage = command ? `${command} ${content}` : content;
   const message = subAgentName
     ? `[System Instruction: Delegate this task strictly to SubAgent ${JSON.stringify(
@@ -106,13 +148,17 @@ export function composerAgentExecutionContext(
       )}]\n${commandMessage}`
     : commandMessage;
   const resources = contextItems
-    .filter((item) => item.kind !== 'command' && item.resource_id.trim())
+    .filter(
+      (item) =>
+        item.kind !== 'attachment' && item.kind !== 'command' && item.resource_id.trim(),
+    )
     .map((item) => ({ kind: item.kind, resource_id: item.resource_id.trim() }));
   return {
     message,
     mentions: composerMentionIds(contextItems),
     ...(agentId ? { agentId } : {}),
     ...(forcedSkillName ? { forcedSkillName } : {}),
+    ...(fileMetadata.length ? { fileMetadata } : {}),
     ...(resources.length
       ? { appModelContext: { desktop_composer_context: { resources } } }
       : {}),
