@@ -20,6 +20,7 @@ import type {
   ManagedAgentDefinition,
   ManagedPlugin,
   ManagedSkill,
+  WorkspaceAgentBinding,
 } from '../../types';
 
 const COMMANDS = [
@@ -37,13 +38,21 @@ type CatalogItem = {
 };
 
 type Category = {
-  id: 'attachments' | 'agents' | 'skills' | 'plugins' | 'commands' | 'threads';
+  id:
+    | 'attachments'
+    | 'agents'
+    | 'agentDefinitions'
+    | 'skills'
+    | 'plugins'
+    | 'commands'
+    | 'threads';
   label: string;
   Icon: typeof UploadIcon;
   items?: CatalogItem[];
 };
 
 export type ComposerCatalogClient = {
+  listWorkspaceAgents: (signal?: AbortSignal) => Promise<WorkspaceAgentBinding[]>;
   listManagedAgents: (signal?: AbortSignal) => Promise<ManagedAgentDefinition[]>;
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listManagedPlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
@@ -68,6 +77,7 @@ export function ComposerPlusMenu({
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Category['id'] | null>(null);
   const [catalog, setCatalog] = useState<{
+    workspaceAgents: WorkspaceAgentBinding[];
     agents: ManagedAgentDefinition[];
     skills: ManagedSkill[];
     plugins: ManagedPlugin[];
@@ -100,11 +110,14 @@ export function ComposerPlusMenu({
     const controller = new AbortController();
     setCatalogError(null);
     void Promise.all([
+      api.listWorkspaceAgents(controller.signal),
       api.listManagedAgents(controller.signal),
       api.listManagedSkills(controller.signal),
       api.listManagedPlugins(controller.signal),
     ])
-      .then(([agents, skills, plugins]) => setCatalog({ agents, skills, plugins }))
+      .then(([workspaceAgents, agents, skills, plugins]) =>
+        setCatalog({ workspaceAgents, agents, skills, plugins }),
+      )
       .catch((caught) => {
         if (!controller.signal.aborted) {
           setCatalogError(caught instanceof Error ? caught.message : String(caught));
@@ -119,11 +132,13 @@ export function ComposerPlusMenu({
       resourceId: string,
       label: string,
       detail?: string,
+      metadata?: ComposerContextItem['metadata'],
+      keyScope: string = kind,
     ): CatalogItem => ({
-      key: `${kind}:${resourceId}`,
+      key: `${keyScope}:${resourceId}`,
       label,
       detail,
-      item: { kind, resource_id: resourceId, label },
+      item: { kind, resource_id: resourceId, label, ...(metadata ? { metadata } : {}) },
     });
     return [
       { id: 'attachments', label: t('composer.attachments'), Icon: UploadIcon },
@@ -131,14 +146,36 @@ export function ComposerPlusMenu({
         id: 'agents',
         label: t('composer.agents'),
         Icon: PersonIcon,
+        items: (catalog?.workspaceAgents ?? [])
+          .filter((agent) => agent.is_active)
+          .map((agent) =>
+            resourceItem(
+              'agent',
+              agent.agent_id,
+              `@${agent.display_name?.trim() || agent.agent_id}`,
+              agent.label?.trim() || agent.description?.trim() || undefined,
+              {
+                mention_target: true,
+                workspace_agent_id: agent.id,
+              },
+              'workspace-agent',
+            ),
+          ),
+      },
+      {
+        id: 'agentDefinitions',
+        label: t('composer.agentDefinitions'),
+        Icon: PersonIcon,
         items: (catalog?.agents ?? [])
           .filter((agent) => agent.enabled !== false && agent.status !== 'disabled')
           .map((agent) =>
             resourceItem(
               'agent',
               agent.id,
-              `@${agent.display_name?.trim() || agent.name}`,
+              agent.display_name?.trim() || agent.name,
               agent.model_name ?? undefined,
+              { mention_target: false },
+              'agent-definition',
             ),
           ),
       },
@@ -173,7 +210,12 @@ export function ComposerPlusMenu({
         items: conversations
           .filter((conversation) => conversation.id !== excludedConversationId)
           .map((conversation) =>
-            resourceItem('thread', conversation.id, conversation.title, conversation.summary ?? undefined),
+            resourceItem(
+              'thread',
+              conversation.id,
+              conversation.title,
+              conversation.summary ?? undefined,
+            ),
           ),
       },
     ];
@@ -265,7 +307,8 @@ export function ComposerPlusMenu({
                     ))
                   ) : (
                     <div className="plus-menu-empty">
-                      {catalogError ?? (catalog ? t('composer.noResources') : t('composer.loadingResources'))}
+                      {catalogError ??
+                        (catalog ? t('composer.noResources') : t('composer.loadingResources'))}
                     </div>
                   )}
                 </div>

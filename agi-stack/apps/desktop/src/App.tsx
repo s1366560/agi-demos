@@ -83,6 +83,10 @@ import {
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
 import { markA2UIActionAnswered } from './features/chat/a2uiAction';
+import {
+  composerMentionIds,
+  workspaceMessageRequiresDefaultAgentLaunch,
+} from './features/chat/chatComposerModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
@@ -4319,6 +4323,7 @@ export function App() {
   ) => {
     const content = rawContent.trim();
     if (!content) return;
+    const mentions = composerMentionIds(contextItems);
     const canSendConversationMessage = Boolean(
       sessionProjection?.capabilities.canSendMessage &&
         sessionProjection.capabilities.allowedActions.includes('send_message'),
@@ -4404,7 +4409,7 @@ export function App() {
         }
         return;
       }
-      const saved = await api.sendMessage(content, undefined, contextItems);
+      const saved = await api.sendMessage(content, undefined, contextItems, mentions);
       setDataset((current) => ({ ...current, messages: [...current.messages, saved] }));
       onWorkspaceMessageSaved?.();
       upsertAgentTaskSignal({
@@ -4414,7 +4419,14 @@ export function App() {
         detail: 'Workspace message saved. Opening the Agent conversation.',
       });
 
-      if (config.projectId.trim()) {
+      if (!workspaceMessageRequiresDefaultAgentLaunch(saved)) {
+        upsertAgentTaskSignal({
+          id: signalId,
+          messageId: saved.id,
+          status: 'acknowledged',
+          detail: t('chat.workspaceMentionsRouted', { count: saved.mentions?.length ?? 0 }),
+        });
+      } else if (config.projectId.trim()) {
         try {
           const conversation = await ensureAgentConversation(content);
           const messageId = saved.id || `desktop-${Date.now()}`;

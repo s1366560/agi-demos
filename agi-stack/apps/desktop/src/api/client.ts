@@ -648,6 +648,7 @@ export class DesktopApiClient {
     content: string,
     parentMessageId?: string,
     contextItems: ComposerContextItem[] = [],
+    mentions: string[] = [],
   ): Promise<WorkspaceMessage> {
     const path = this.workspacePath('/messages');
     return this.request<WorkspaceMessage>(path, {
@@ -656,7 +657,7 @@ export class DesktopApiClient {
         content,
         sender_type: 'human',
         parent_message_id: parentMessageId || undefined,
-        mentions: [],
+        mentions,
         context_items: contextItems,
       },
     });

@@ -32,6 +32,18 @@ const now = '2026-07-20T09:40:00Z';
 const projectId = 'project-desktop-client';
 const workspaceId = 'workspace-desktop-client';
 const api: ComposerCatalogClient = {
+  listWorkspaceAgents: async () => [
+    {
+      id: 'workspace-agent-release-reviewer',
+      workspace_id: workspaceId,
+      agent_id: 'release-reviewer',
+      display_name: 'Release reviewer',
+      description: 'Reviews release readiness and delivery evidence.',
+      is_active: true,
+      label: 'Reviewer',
+      status: 'idle',
+    },
+  ],
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
   listManagedPlugins: async () => [],

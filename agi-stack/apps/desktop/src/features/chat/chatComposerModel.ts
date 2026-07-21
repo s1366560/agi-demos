@@ -1,3 +1,5 @@
+import type { ComposerContextItem, WorkspaceMessage } from '../../types';
+
 export type ChatComposerVariant = 'workspace' | 'session';
 
 export type ChatComposerPresentation = Readonly<{
@@ -36,4 +38,23 @@ export function chatComposerPresentation(
   return variant === 'session'
     ? SESSION_COMPOSER_PRESENTATION
     : WORKSPACE_COMPOSER_PRESENTATION;
+}
+
+export function composerMentionIds(contextItems: readonly ComposerContextItem[]): string[] {
+  const seen = new Set<string>();
+  const mentions: string[] = [];
+  for (const item of contextItems) {
+    if (item.kind !== 'agent' || item.metadata?.mention_target !== true) continue;
+    const agentId = item.resource_id.trim();
+    if (!agentId || seen.has(agentId)) continue;
+    seen.add(agentId);
+    mentions.push(agentId);
+  }
+  return mentions;
+}
+
+export function workspaceMessageRequiresDefaultAgentLaunch(
+  message: Pick<WorkspaceMessage, 'mentions'>,
+): boolean {
+  return !message.mentions?.length;
 }
