@@ -5,15 +5,78 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   buildHitlSocketMessage,
+  canQueuePendingAgentRunMessage,
+  createPendingAgentMessageQueue,
   conversationSubscriptionMessages,
   createAgentSocketContextState,
+  enqueuePendingAgentRunMessage,
   eventCursor,
+  flushPendingAgentRunMessages,
   reconnectDelay,
   resetAgentSocketContextState,
   transitionAgentSocketConversationSelection,
   socketEventKey,
   socketEventsSince,
 } = require('/tmp/agistack-desktop-test-dist/src/hooks/useAgentSocket.js');
+
+test('only an authenticated cloud socket may retain a turn for reconnect', () => {
+  assert.equal(canQueuePendingAgentRunMessage('cloud', true, 'ms_sk_session'), true);
+  assert.equal(canQueuePendingAgentRunMessage('cloud', false, 'ms_sk_session'), false);
+  assert.equal(canQueuePendingAgentRunMessage('cloud', true, ''), false);
+  assert.equal(canQueuePendingAgentRunMessage('local', true, 'local-session'), false);
+});
+
+test('cloud agent turns wait in a bounded deduplicated queue until the socket opens', () => {
+  const queue = createPendingAgentMessageQueue();
+  const message = {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    message: 'Prepare the plan',
+    messageId: 'message-1',
+  };
+
+  assert.equal(enqueuePendingAgentRunMessage(queue, message), true);
+  assert.equal(enqueuePendingAgentRunMessage(queue, message), true);
+  assert.equal(queue.size, 1);
+
+  const sent = [];
+  assert.equal(
+    flushPendingAgentRunMessages(queue, (payload) => {
+      sent.push(payload);
+      return true;
+    }),
+    1,
+  );
+  assert.deepEqual(sent, [
+    {
+      type: 'send_message',
+      conversation_id: 'conversation-1',
+      project_id: 'project-1',
+      message: 'Prepare the plan',
+      message_id: 'message-1',
+    },
+  ]);
+  assert.equal(queue.size, 0);
+});
+
+test('failed socket flush preserves pending cloud turns for the next reconnect', () => {
+  const queue = createPendingAgentMessageQueue();
+  enqueuePendingAgentRunMessage(queue, {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    message: 'Prepare the plan',
+    messageId: 'message-1',
+  });
+  enqueuePendingAgentRunMessage(queue, {
+    conversationId: 'conversation-2',
+    projectId: 'project-1',
+    message: 'Review the result',
+    messageId: 'message-2',
+  });
+
+  assert.equal(flushPendingAgentRunMessages(queue, () => false), 0);
+  assert.equal(queue.size, 2);
+});
 
 test('buildHitlSocketMessage preserves the backend WebSocket contract', () => {
   assert.deepEqual(

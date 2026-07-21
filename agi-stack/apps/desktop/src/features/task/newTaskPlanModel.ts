@@ -309,9 +309,9 @@ export function buildExecutionPrompt(): string {
 export function newTaskAgentTurnTransport(
   mode: 'local' | 'cloud',
   socketQueued: boolean,
-): 'socket' | 'local_http' | 'live_socket_required' {
+): 'socket' | 'local_http' | 'cloud_socket_queue' {
   if (socketQueued) return 'socket';
-  return mode === 'local' ? 'local_http' : 'live_socket_required';
+  return mode === 'local' ? 'local_http' : 'cloud_socket_queue';
 }
 
 export function newTaskAgentTurnResolution(

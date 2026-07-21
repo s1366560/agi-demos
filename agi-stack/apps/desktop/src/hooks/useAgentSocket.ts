@@ -12,6 +12,7 @@ const WATCHDOG_INTERVAL_MS = 10_000;
 const STALE_CONNECTION_MS = 60_000;
 const MAX_SOCKET_EVENTS = 200;
 const MAX_EVENT_KEYS = 400;
+const MAX_PENDING_AGENT_MESSAGES = 100;
 
 type AgentEventCursor = {
   conversationId: string;
@@ -39,12 +40,85 @@ export type AgentSocketConversationTransition = {
   subscribeConversationId: string | null;
 };
 
-type AgentRunMessage = {
+export type AgentRunMessage = {
   conversationId: string;
   projectId: string;
   message: string;
   messageId?: string;
 };
+
+export type AgentRunSocketMessage = {
+  type: 'send_message';
+  conversation_id: string;
+  project_id: string;
+  message: string;
+  message_id: string;
+};
+
+export type PendingAgentMessageQueue = Map<string, AgentRunSocketMessage>;
+
+let pendingAgentMessageSequence = 0;
+
+export function createPendingAgentMessageQueue(): PendingAgentMessageQueue {
+  return new Map();
+}
+
+export function canQueuePendingAgentRunMessage(
+  mode: DesktopRuntimeConfig['mode'],
+  enabled: boolean,
+  credential: string,
+): boolean {
+  return mode === 'cloud' && enabled && Boolean(credential.trim());
+}
+
+export function enqueuePendingAgentRunMessage(
+  queue: PendingAgentMessageQueue,
+  message: AgentRunMessage,
+): boolean {
+  const payload = agentRunSocketMessage(message);
+  if (!payload) return false;
+  return enqueuePendingAgentSocketMessage(queue, payload);
+}
+
+function agentRunSocketMessage(message: AgentRunMessage): AgentRunSocketMessage | null {
+  const conversationId = message.conversationId.trim();
+  const projectId = message.projectId.trim();
+  const content = message.message.trim();
+  if (!conversationId || !projectId || !content) return null;
+  const messageId =
+    message.messageId?.trim() ||
+    `desktop-agent-${Date.now()}-${(pendingAgentMessageSequence += 1)}`;
+  return {
+    type: 'send_message',
+    conversation_id: conversationId,
+    project_id: projectId,
+    message: content,
+    message_id: messageId,
+  };
+}
+
+function enqueuePendingAgentSocketMessage(
+  queue: PendingAgentMessageQueue,
+  payload: AgentRunSocketMessage,
+): boolean {
+  const key = `${payload.conversation_id}\u0000${payload.message_id}`;
+  if (!queue.has(key) && queue.size >= MAX_PENDING_AGENT_MESSAGES) return false;
+  queue.set(key, payload);
+  return true;
+}
+
+export function flushPendingAgentRunMessages(
+  queue: PendingAgentMessageQueue,
+  send: (message: AgentRunSocketMessage) => boolean,
+): number {
+  let sent = 0;
+  for (const [key, message] of queue) {
+    if (!send(message)) break;
+    queue.delete(key);
+    sent += 1;
+  }
+  return sent;
+}
 
 export function useAgentSocket(
   config: DesktopRuntimeConfig,
@@ -57,6 +131,7 @@ export function useAgentSocket(
   const [events, setEvents] = useState<AgentWsEvent[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const contextStateRef = useRef(createAgentSocketContextState());
+  const pendingAgentMessagesRef = useRef(createPendingAgentMessageQueue());
   const pendingEventsRef = useRef<AgentWsEvent[]>([]);
   const eventsFlushCancelRef = useRef<(() => void) | null>(null);
 
@@ -64,12 +139,17 @@ export function useAgentSocket(
     () => new DesktopApiClient(config),
     [config.apiBaseUrl, config.apiKey, config.localApiToken, config.mode],
   );
+  const credential = desktopApiCredential(config);
 
   const sendSocketMessage = useCallback((payload: Record<string, unknown>) => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return false;
-    socket.send(JSON.stringify(payload));
-    return true;
+    try {
+      socket.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
   const subscribeConversation = useCallback(
@@ -93,16 +173,31 @@ export function useAgentSocket(
 
   const sendAgentMessage = useCallback(
     (message: AgentRunMessage) => {
-      contextStateRef.current.subscribedConversations.add(message.conversationId);
-      return sendSocketMessage({
-        type: 'send_message',
-        conversation_id: message.conversationId,
-        project_id: message.projectId,
-        message: message.message,
-        message_id: message.messageId,
-      });
+      const conversationId = message.conversationId.trim();
+      if (!conversationId) return false;
+      contextStateRef.current.subscribedConversations.add(conversationId);
+      const payload = agentRunSocketMessage(message);
+      if (!payload) return false;
+      if (sendSocketMessage(payload)) return true;
+      if (!canQueuePendingAgentRunMessage(config.mode, enabled, credential)) return false;
+      return enqueuePendingAgentSocketMessage(pendingAgentMessagesRef.current, payload);
     },
-    [sendSocketMessage],
+    [config.mode, credential, enabled, sendSocketMessage],
+  );
+
+  useEffect(
+    () => () => {
+      pendingAgentMessagesRef.current.clear();
+    },
+    [
+      config.apiBaseUrl,
+      config.apiKey,
+      config.localApiToken,
+      config.mode,
+      config.projectId,
+      config.tenantId,
+      contextRevision,
+    ],
   );
 
   useEffect(() => {
@@ -264,6 +359,15 @@ export function useAgentSocket(
         setConnected(true);
         setError(null);
         sendSubscriptions(socket);
+        flushPendingAgentRunMessages(pendingAgentMessagesRef.current, (payload) => {
+          if (socket.readyState !== WebSocket.OPEN) return false;
+          try {
+            socket.send(JSON.stringify(payload));
+            return true;
+          } catch {
+            return false;
+          }
+        });
         stopConnectionTimers();
         if (config.mode === 'cloud') {
           heartbeatTimer = setInterval(() => {

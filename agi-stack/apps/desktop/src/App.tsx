@@ -2641,9 +2641,7 @@ export function App() {
       ? t('task.disabledAuthRequired')
       : !config.tenantId.trim() || !config.projectId.trim()
         ? t('task.disabledProjectRequired')
-        : newTaskAgentTurnTransport(config.mode, socket.connected) === 'live_socket_required'
-          ? t('task.liveConnectionRequired')
-          : null;
+        : null;
   const chatDisabledReason = !identityAuthenticated
     ? 'Sign in or enter an API key before sending messages.'
     : !showRuntimeConfig
@@ -2656,10 +2654,6 @@ export function App() {
       ? 'Create or select a workspace before sending messages.'
       : connection !== 'ready'
         ? 'Connect the workspace before sending messages.'
-        : !socket.connected && !localRuntimeMode
-          ? socket.error
-            ? `Agent live connection is unavailable: ${socket.error}`
-            : 'Agent live connection is still connecting.'
         : null;
 
   useEffect(() => {

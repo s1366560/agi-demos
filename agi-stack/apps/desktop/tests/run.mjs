@@ -62,6 +62,7 @@ const testFiles = [
   'composer-context.test.mjs',
   'chat-narrative-presentation.test.mjs',
   'chat-timeline-model.test.mjs',
+  'cloud-session-queue-qa.test.mjs',
   'desktop-shell-fidelity.test.mjs',
   'desktop-a11y-i18n.test.mjs',
   'login-screen-fidelity.test.mjs',

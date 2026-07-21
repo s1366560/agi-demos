@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const source = readFileSync(
+  new URL('../src/qa/CloudSessionQueueQa.tsx', import.meta.url),
+  'utf8',
+);
+
+test('cloud session QA exercises the production socket queue before opening realtime', () => {
+  assert.match(source, /useAgentSocket\(config, true, 1, 'conversation-cloud'\)/);
+  assert.match(source, /socket\.sendAgentMessage\(\{/);
+  assert.match(source, /QaWebSocket\.latest\?\.open\(\)/);
+  assert.match(source, /messageId: 'message-cloud-1'/);
+});

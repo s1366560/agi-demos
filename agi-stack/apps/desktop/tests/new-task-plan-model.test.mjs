@@ -171,9 +171,9 @@ test('plan replacement prompt carries only enabled human-reviewed steps', () => 
   assert.match(prompt, /"tasks":/);
 });
 
-test('cloud planning never falls back to the local REST conversation endpoint', () => {
+test('cloud planning can enter the socket queue while local planning keeps its REST fallback', () => {
   assert.equal(newTaskAgentTurnTransport('cloud', true), 'socket');
-  assert.equal(newTaskAgentTurnTransport('cloud', false), 'live_socket_required');
+  assert.equal(newTaskAgentTurnTransport('cloud', false), 'cloud_socket_queue');
   assert.equal(newTaskAgentTurnTransport('local', false), 'local_http');
 });
 
