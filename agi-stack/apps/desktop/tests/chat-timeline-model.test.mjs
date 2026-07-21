@@ -9,6 +9,7 @@ const {
   formatToolCallDuration,
   mergeAssistantTextStreamChunk,
   mergeThoughtStreamChunk,
+  mergeToolStreamItem,
   pairToolCallItems,
   toolActivityRows,
   shouldShowAgentWorkingIndicator,
@@ -164,6 +165,116 @@ test('act items pair with the observe that answers them, preserving order', () =
   assert.equal(pairs[0].result?.id, 'observe-1');
   assert.equal(pairs[1].call.id, 'act-2');
   assert.equal(pairs[1].result?.id, 'observe-2');
+});
+
+test('streamed tool arguments merge into one stable call and settle on observe', () => {
+  let items = mergeToolStreamItem(
+    [],
+    {
+      id: 'delta-1',
+      type: 'act',
+      toolName: 'read_file',
+      toolInput: '',
+      payload: { call_id: 'call-1', accumulated_arguments: '' },
+      message_id: 'message-1',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    'delta',
+  );
+  items = mergeToolStreamItem(
+    items,
+    {
+      id: 'delta-2',
+      type: 'act',
+      toolName: 'read_file',
+      toolInput: '{"path":"README.md"',
+      payload: { call_id: 'call-1', accumulated_arguments: '{"path":"README.md"' },
+      message_id: 'message-1',
+      eventTimeUs: 1_100_000,
+      eventCounter: 2,
+    },
+    'delta',
+  );
+  items = mergeToolStreamItem(
+    items,
+    {
+      id: 'act-1',
+      type: 'act',
+      toolName: 'read_file',
+      toolInput: { path: 'README.md' },
+      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+      message_id: 'message-1',
+      eventTimeUs: 1_200_000,
+      eventCounter: 3,
+    },
+    'act',
+  );
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, 'delta-1');
+  assert.deepEqual(items[0].toolInput, { path: 'README.md' });
+  assert.equal(items[0].metadata.streaming, true);
+
+  items = mergeToolStreamItem(
+    items,
+    {
+      id: 'observe-1',
+      type: 'observe',
+      toolName: 'read_file',
+      toolOutput: 'contents',
+      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+      message_id: 'message-1',
+      eventTimeUs: 1_800_000,
+      eventCounter: 4,
+    },
+    'observe',
+  );
+  assert.equal(items.length, 2);
+  assert.equal(items[0].metadata.streaming, false);
+  assert.equal(pairToolCallItems(items)[0].result?.id, 'observe-1');
+});
+
+test('parallel tool observations pair by call identity instead of arrival order', () => {
+  const pairs = pairToolCallItems([
+    {
+      id: 'act-1',
+      type: 'act',
+      toolName: 'read_file',
+      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+      eventTimeUs: 1,
+    },
+    {
+      id: 'act-2',
+      type: 'act',
+      toolName: 'read_file',
+      payload: { call_id: 'call-2', tool_execution_id: 'exec-2' },
+      eventTimeUs: 2,
+    },
+    {
+      id: 'observe-2',
+      type: 'observe',
+      toolName: 'read_file',
+      payload: { call_id: 'call-2', tool_execution_id: 'exec-2' },
+      eventTimeUs: 3,
+    },
+    {
+      id: 'observe-1',
+      type: 'observe',
+      toolName: 'read_file',
+      payload: { call_id: 'call-1', tool_execution_id: 'exec-1' },
+      eventTimeUs: 4,
+    },
+  ]);
+
+  assert.equal(pairs.length, 2);
+  assert.equal(pairs[0].result?.id, 'observe-1');
+  assert.equal(pairs[1].result?.id, 'observe-2');
+});
+
+test('live Agent tool events route deltas, calls, and observations through the stream merger', () => {
+  assert.match(appSource, /type === 'act_delta'[\s\S]*?type === 'act'[\s\S]*?type === 'observe'/);
+  assert.match(appSource, /mergeToolStreamItem\(/);
 });
 
 test('tool activity rows preserve structured thinking ahead of paired tool calls', () => {

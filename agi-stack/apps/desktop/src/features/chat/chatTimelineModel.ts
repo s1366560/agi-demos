@@ -53,6 +53,58 @@ export type AssistantTextStreamChunk = {
   payload?: Record<string, unknown>;
 };
 
+export type ToolStreamEventKind = 'delta' | 'act' | 'observe';
+
+/**
+ * Merge the three phases of a streamed tool call without creating one card
+ * per argument delta. The backend gives deltas a `call_id`, then adds a
+ * `tool_execution_id` on act/observe, so matching accepts either identifier.
+ */
+export function mergeToolStreamItem(
+  existing: AgentTimelineItem[],
+  incoming: AgentTimelineItem,
+  kind: ToolStreamEventKind,
+): AgentTimelineItem[] {
+  if (kind === 'observe') {
+    const activeIndex = findMatchingActiveToolIndex(existing, incoming);
+    const settled =
+      activeIndex < 0
+        ? existing
+        : existing.map((item, index) =>
+            index === activeIndex
+              ? { ...item, metadata: { ...(item.metadata ?? {}), streaming: false } }
+              : item,
+          );
+    return sortTimelineItems([
+      ...settled,
+      { ...incoming, metadata: { ...(incoming.metadata ?? {}), streaming: false } },
+    ]);
+  }
+
+  const activeIndex = findMatchingActiveToolIndex(existing, incoming);
+  if (activeIndex >= 0) {
+    const updated = existing.map((item, index) => {
+      if (index !== activeIndex) return item;
+      return {
+        ...item,
+        ...incoming,
+        // Keep the skeleton identity and start time stable while arguments stream.
+        id: item.id,
+        eventTimeUs: item.eventTimeUs,
+        eventCounter: item.eventCounter,
+        timestamp: item.timestamp,
+        metadata: { ...(item.metadata ?? {}), ...(incoming.metadata ?? {}), streaming: true },
+      };
+    });
+    return sortTimelineItems(updated);
+  }
+
+  return sortTimelineItems([
+    ...existing,
+    { ...incoming, metadata: { ...(incoming.metadata ?? {}), streaming: true } },
+  ]);
+}
+
 export function mergeAssistantTextStreamChunk(
   existing: AgentTimelineItem[],
   chunk: AssistantTextStreamChunk,
@@ -186,17 +238,19 @@ function sortTimelineItems(items: AgentTimelineItem[]): AgentTimelineItem[] {
 
 export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
   const pairs: ToolCallPair[] = [];
-  let pendingCall: AgentTimelineItem | null = null;
+  const pendingPairIndexes: number[] = [];
   for (const item of items) {
     if (item.type === 'act') {
-      if (pendingCall) pairs.push({ call: pendingCall, result: null });
-      pendingCall = item;
+      pairs.push({ call: item, result: null });
+      pendingPairIndexes.push(pairs.length - 1);
       continue;
     }
     if (item.type === 'observe') {
-      if (pendingCall && toolCallNamesMatch(pendingCall, item)) {
-        pairs.push({ call: pendingCall, result: item });
-        pendingCall = null;
+      const pendingOffset = findMatchingPendingPairOffset(pairs, pendingPairIndexes, item);
+      if (pendingOffset >= 0) {
+        const pairIndex = pendingPairIndexes[pendingOffset];
+        pairs[pairIndex] = { ...pairs[pairIndex], result: item };
+        pendingPairIndexes.splice(pendingOffset, 1);
       } else {
         pairs.push({ call: item, result: null });
       }
@@ -204,7 +258,6 @@ export function pairToolCallItems(items: AgentTimelineItem[]): ToolCallPair[] {
     }
     pairs.push({ call: item, result: null });
   }
-  if (pendingCall) pairs.push({ call: pendingCall, result: null });
   return pairs;
 }
 
@@ -392,6 +445,69 @@ function toolCallNamesMatch(call: AgentTimelineItem, result: AgentTimelineItem):
   const callName = call.toolName ?? '';
   const resultName = result.toolName ?? '';
   return !callName || !resultName || callName === resultName;
+}
+
+function findMatchingActiveToolIndex(
+  items: AgentTimelineItem[],
+  incoming: AgentTimelineItem,
+): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const candidate = items[index];
+    if (
+      candidate.type === 'act' &&
+      candidate.metadata?.streaming === true &&
+      toolItemsReferToSameCall(candidate, incoming)
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findMatchingPendingPairOffset(
+  pairs: ToolCallPair[],
+  pendingPairIndexes: number[],
+  result: AgentTimelineItem,
+): number {
+  for (let offset = pendingPairIndexes.length - 1; offset >= 0; offset -= 1) {
+    if (toolItemsReferToSameCall(pairs[pendingPairIndexes[offset]].call, result)) return offset;
+  }
+  return -1;
+}
+
+function toolItemsReferToSameCall(
+  call: AgentTimelineItem,
+  result: AgentTimelineItem,
+): boolean {
+  const callIdentifiers = toolCallIdentifiers(call);
+  const resultIdentifiers = toolCallIdentifiers(result);
+  if (callIdentifiers.length > 0 && resultIdentifiers.length > 0) {
+    return callIdentifiers.some((identifier) => resultIdentifiers.includes(identifier));
+  }
+  if (
+    call.message_id &&
+    result.message_id &&
+    call.message_id !== result.message_id
+  ) {
+    return false;
+  }
+  return toolCallNamesMatch(call, result);
+}
+
+function toolCallIdentifiers(item: AgentTimelineItem): string[] {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  const identifiers = [
+    item.tool_execution_id,
+    item.execution_id,
+    item.call_id,
+    payload?.tool_execution_id,
+    payload?.execution_id,
+    payload?.call_id,
+    payload?.tool_call_id,
+  ];
+  return identifiers.filter(
+    (identifier): identifier is string => typeof identifier === 'string' && identifier.length > 0,
+  );
 }
 
 function startOfDay(timeMs: number): number {

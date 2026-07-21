@@ -90,6 +90,7 @@ import {
 import {
   mergeAssistantTextStreamChunk,
   mergeThoughtStreamChunk,
+  mergeToolStreamItem,
 } from './features/chat/chatTimelineModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
@@ -780,7 +781,8 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
     item.toolName = readStringField(data, 'tool_name') ?? readStringField(data, 'toolName') ?? '';
     item.toolInput = data.tool_input ?? data.toolInput;
     item.toolOutput = data.observation ?? data.tool_output ?? data.toolOutput ?? '';
-    item.isError = Boolean(data.is_error ?? data.isError);
+    item.error = readStringField(data, 'error');
+    item.isError = Boolean(data.is_error ?? data.isError ?? item.error);
   } else if (type === 'error') {
     item.content = socketErrorDetail(payload) ?? 'Agent run failed.';
     item.error = item.content;
@@ -857,6 +859,13 @@ function mergeLiveTimelineEvent(
   const timeline =
     type === 'a2ui_action_answered' ? markA2UIActionAnswered(existing, event) : existing;
   const item = timelineItemFromSocketEvent(event);
+  if (item && (type === 'act_delta' || type === 'act' || type === 'observe')) {
+    return mergeToolStreamItem(
+      timeline,
+      item,
+      type === 'act_delta' ? 'delta' : type,
+    );
+  }
   return item ? mergeTimelineItems(timeline, [item]) : timeline;
 }
 
