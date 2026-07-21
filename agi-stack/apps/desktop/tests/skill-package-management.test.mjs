@@ -23,6 +23,10 @@ const skillPackageDialogsSource = readFileSync(
   new URL('../src/features/settings/SkillPackageDialogs.tsx', import.meta.url),
   'utf8',
 );
+const skillEvolutionDialogSource = readFileSync(
+  new URL('../src/features/settings/SkillEvolutionDialog.tsx', import.meta.url),
+  'utf8',
+);
 const providerSettingsQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
   'utf8',
@@ -154,4 +158,134 @@ test('Desktop skill surfaces expose import, version history, and guarded rollbac
   assert.match(providerSettingsQaSource, /\/rollback\$/);
   assert.match(i18nSource, /'settings\.skillPackages\.importAction': 'Import'/);
   assert.match(i18nSource, /'settings\.skillPackages\.importAction': '导入'/);
+});
+
+test('managed skill inspection APIs preserve export, version detail, and evolution contracts', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    calls.push({ url, init });
+    if (url.pathname.endsWith('/export')) {
+      return Response.json({
+        format: 'agentskills.io/skill-package',
+        skill,
+        skill_md_content: '---\nname: release-readiness\n---',
+        resource_files: { 'references/checklist.md': 'Verify tests.' },
+        version_number: 3,
+        version_label: '1.2.0',
+      });
+    }
+    if (url.pathname.endsWith('/versions/2')) {
+      return Response.json({
+        id: 'version-2',
+        skill_id: skill.id,
+        version_number: 2,
+        version_label: '1.1.0',
+        change_summary: 'Add evidence checks',
+        created_by: 'agent',
+        created_at: '2026-07-20T10:00:00Z',
+        skill_md_content: '---\nname: release-readiness\n---\n\nVerify.',
+        resource_files: {},
+      });
+    }
+    if (url.pathname.endsWith('/evolution/run')) {
+      return Response.json({ skill_id: skill.id, skill_name: skill.name, result: { queued: true } });
+    }
+    if (url.pathname.includes('/evolution/jobs/')) {
+      return Response.json({ id: 'job-1', status: url.pathname.endsWith('/apply') ? 'applied' : 'rejected' });
+    }
+    return Response.json({
+      skill_id: skill.id,
+      skill_name: skill.name,
+      captured_session_count: 7,
+      jobs: [],
+      route: [],
+      trigger: {
+        capture_hook: 'session_complete',
+        capture_timing: 'After a session completes',
+        scheduled_timing: 'Every 60 minutes',
+        manual_trigger: `/skills/${skill.id}/evolution/run`,
+        min_sessions_per_skill: 5,
+        scoring_min_sessions_per_skill: 3,
+        min_avg_score: 0.8,
+        max_sessions_per_batch: 20,
+        publish_mode: 'review',
+        auto_apply: false,
+        enabled: true,
+      },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    });
+    const exported = await client.exportManagedSkillPackage(skill.id);
+    const version = await client.getManagedSkillVersion(skill.id, 2);
+    const evolution = await client.getManagedSkillEvolution(skill.id);
+    await client.runManagedSkillEvolution(skill.id);
+    await client.applyManagedSkillEvolutionJob('job/1');
+    await client.rejectManagedSkillEvolutionJob('job/2');
+
+    assert.equal(exported.format, 'agentskills.io/skill-package');
+    assert.equal(version.version_number, 2);
+    assert.equal(evolution.captured_session_count, 7);
+    assert.deepEqual(
+      calls.map(({ url, init }) => ({
+        path: url.pathname,
+        tenantId: url.searchParams.get('tenant_id'),
+        method: init.method ?? 'GET',
+      })),
+      [
+        { path: '/api/v1/skills/release-readiness/export', tenantId: 'tenant-1', method: 'GET' },
+        {
+          path: '/api/v1/skills/release-readiness/versions/2',
+          tenantId: 'tenant-1',
+          method: 'GET',
+        },
+        {
+          path: '/api/v1/skills/release-readiness/evolution',
+          tenantId: 'tenant-1',
+          method: 'GET',
+        },
+        {
+          path: '/api/v1/skills/release-readiness/evolution/run',
+          tenantId: 'tenant-1',
+          method: 'POST',
+        },
+        {
+          path: '/api/v1/skills/evolution/jobs/job%2F1/apply',
+          tenantId: 'tenant-1',
+          method: 'POST',
+        },
+        {
+          path: '/api/v1/skills/evolution/jobs/job%2F2/reject',
+          tenantId: 'tenant-1',
+          method: 'POST',
+        },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Desktop skill detail exposes package export, version preview, and governed evolution', () => {
+  assert.match(managedResourceViewsSource, /settings\.skillPackages\.exportAction/);
+  assert.match(managedResourceViewsSource, /settings\.skillEvolution\.action/);
+  assert.match(skillPackageDialogsSource, /settings\.skillPackages\.previewVersion/);
+  assert.match(skillPackageDialogsSource, /skill_md_content/);
+  assert.match(skillEvolutionDialogSource, /settings\.skillEvolution\.run/);
+  assert.match(skillEvolutionDialogSource, /settings\.skillEvolution\.apply/);
+  assert.match(skillEvolutionDialogSource, /settings\.skillEvolution\.reject/);
+  assert.match(i18nSource, /'settings\.skillPackages\.exportAction': 'Export'/);
+  assert.match(i18nSource, /'settings\.skillEvolution\.action': 'Evolution'/);
+  assert.match(i18nSource, /'settings\.skillPackages\.exportAction': '导出'/);
+  assert.match(i18nSource, /'settings\.skillEvolution\.action': '演进'/);
 });

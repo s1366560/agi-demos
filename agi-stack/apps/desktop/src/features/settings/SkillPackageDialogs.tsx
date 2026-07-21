@@ -9,7 +9,12 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import type { ManagedSkill, ManagedSkillVersion, ProjectSummary } from '../../types';
+import type {
+  ManagedSkill,
+  ManagedSkillVersion,
+  ManagedSkillVersionDetail,
+  ProjectSummary,
+} from '../../types';
 import type { SkillImportSubmission } from './useSkillPackageManagement';
 import { useModalDialog } from './useModalDialog';
 
@@ -244,19 +249,27 @@ export function SkillVersionsDialog({
   versions,
   loading,
   rollbackVersion,
+  preview,
+  previewLoading,
   canRollback,
   error,
   onClose,
   onRollback,
+  onPreview,
+  onClosePreview,
 }: {
   skill: ManagedSkill;
   versions: ManagedSkillVersion[];
   loading: boolean;
   rollbackVersion: number | null;
+  preview: ManagedSkillVersionDetail | null;
+  previewLoading: boolean;
   canRollback: boolean;
   error: string | null;
   onClose: () => void;
   onRollback: (versionNumber: number) => void;
+  onPreview: (versionNumber: number) => void;
+  onClosePreview: () => void;
 }) {
   const { locale, t } = useI18n();
   const [confirmVersion, setConfirmVersion] = useState<number | null>(null);
@@ -339,6 +352,14 @@ export function SkillVersionsDialog({
                       </span>
                     </div>
                     <div className="skill-version-action">
+                      <button
+                        type="button"
+                        className="skill-version-rollback"
+                        disabled={busy || previewLoading}
+                        onClick={() => onPreview(version.version_number)}
+                      >
+                        {t('settings.skillPackages.previewVersion')}
+                      </button>
                       {current ? (
                         <span className="skill-version-current">
                           {t('settings.skillPackages.current')}
@@ -380,6 +401,34 @@ export function SkillVersionsDialog({
                 );
               })
             : null}
+          {previewLoading ? (
+            <div className="skill-version-preview skill-package-state">
+              <ReloadIcon className="managed-resource-spin" />
+              <span>{t('settings.skillPackages.loadingPreview')}</span>
+            </div>
+          ) : null}
+          {preview ? (
+            <section className="skill-version-preview">
+              <header>
+                <div>
+                  <strong>
+                    {t('settings.skillPackages.previewTitle', {
+                      version: preview.version_label || `#${preview.version_number}`,
+                    })}
+                  </strong>
+                  <span>
+                    {t('settings.skillPackages.resourceCount', {
+                      count: Object.keys(preview.resource_files ?? {}).length,
+                    })}
+                  </span>
+                </div>
+                <button type="button" onClick={onClosePreview}>
+                  {t('common.close')}
+                </button>
+              </header>
+              <pre>{preview.skill_md_content}</pre>
+            </section>
+          ) : null}
         </div>
 
         {error ? (

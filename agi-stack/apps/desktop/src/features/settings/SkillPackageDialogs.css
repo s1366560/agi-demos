@@ -209,6 +209,8 @@
 
 .skill-version-action {
   display: flex;
+  align-items: center;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -251,6 +253,59 @@
   color: #ffadb6;
   background: #2c151b;
   border-color: #6d313d;
+}
+
+.skill-version-preview {
+  padding: 12px;
+  background: #080d14;
+  border: 1px solid #3c4655;
+  border-radius: 8px;
+}
+
+.skill-version-preview > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.skill-version-preview > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.skill-version-preview header strong {
+  color: #d8cfff;
+  font-size: 10px;
+}
+
+.skill-version-preview header span {
+  color: #657487;
+  font-size: 8px;
+}
+
+.skill-version-preview header button {
+  min-height: 26px;
+  padding: 0 8px;
+  color: #aebdcb;
+  font-size: 8px;
+  background: #162330;
+  border: 1px solid #345066;
+  border-radius: 5px;
+}
+
+.skill-version-preview pre {
+  max-height: 260px;
+  padding: 12px;
+  margin: 0;
+  overflow: auto;
+  color: #cbd7e3;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 9px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 760px) {

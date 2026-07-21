@@ -4,8 +4,10 @@ import { DesktopApiClient } from '../../api/client';
 import type {
   DesktopRuntimeConfig,
   ManagedSkill,
+  ManagedSkillEvolutionDetail,
   ManagedSkillImportInput,
   ManagedSkillVersion,
+  ManagedSkillVersionDetail,
   ManagedSkillZipImportInput,
 } from '../../types';
 
@@ -20,7 +22,19 @@ export type SkillVersionsDialogState = {
   versions: ManagedSkillVersion[];
   loading: boolean;
   rollbackVersion: number | null;
+  preview: ManagedSkillVersionDetail | null;
+  previewLoading: boolean;
   canRollback: boolean;
+};
+
+export type SkillEvolutionDialogState = {
+  key: string;
+  skill: ManagedSkill;
+  detail: ManagedSkillEvolutionDetail | null;
+  loading: boolean;
+  running: boolean;
+  processingJobId: string | null;
+  canManage: boolean;
 };
 
 export function useSkillPackageManagement({
@@ -40,18 +54,26 @@ export function useSkillPackageManagement({
 }) {
   const [importKey, setImportKey] = useState<string | null>(null);
   const [versionsDialog, setVersionsDialog] = useState<SkillVersionsDialogState | null>(null);
+  const [evolutionDialog, setEvolutionDialog] = useState<SkillEvolutionDialogState | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [exportBusyId, setExportBusyId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [packageActionError, setPackageActionError] = useState<string | null>(null);
+  const [evolutionError, setEvolutionError] = useState<string | null>(null);
   const contextKeyRef = useRef(contextKey);
   contextKeyRef.current = contextKey;
 
   useEffect(() => {
     setImportKey(null);
     setVersionsDialog(null);
+    setEvolutionDialog(null);
     setImportBusy(false);
+    setExportBusyId(null);
     setImportError(null);
     setVersionsError(null);
+    setPackageActionError(null);
+    setEvolutionError(null);
   }, [active, contextKey]);
 
   const openImport = useCallback(() => {
@@ -120,6 +142,8 @@ export function useSkillPackageManagement({
         versions: [],
         loading: true,
         rollbackVersion: null,
+        preview: null,
+        previewLoading: false,
         canRollback,
       });
       void loadVersions(skill, key, contextKey);
@@ -173,19 +197,197 @@ export function useSkillPackageManagement({
     [config, contextKey, onReload, onSelected, versionsDialog]
   );
 
+  const previewVersion = useCallback(
+    async (versionNumber: number) => {
+      if (!versionsDialog || versionsDialog.previewLoading) return;
+      const requestContextKey = contextKey;
+      const key = versionsDialog.key;
+      setVersionsError(null);
+      setVersionsDialog((current) =>
+        current?.key === key ? { ...current, preview: null, previewLoading: true } : current
+      );
+      try {
+        const preview = await new DesktopApiClient(config).getManagedSkillVersion(
+          versionsDialog.skill.id,
+          versionNumber
+        );
+        if (contextKeyRef.current !== requestContextKey) return;
+        setVersionsDialog((current) =>
+          current?.key === key ? { ...current, preview, previewLoading: false } : current
+        );
+      } catch (error) {
+        if (contextKeyRef.current !== requestContextKey) return;
+        setVersionsError(errorMessage(error));
+        setVersionsDialog((current) =>
+          current?.key === key ? { ...current, previewLoading: false } : current
+        );
+      }
+    },
+    [config, contextKey, versionsDialog]
+  );
+
+  const closeVersionPreview = useCallback(() => {
+    setVersionsDialog((current) => (current ? { ...current, preview: null } : current));
+  }, []);
+
+  const exportPackage = useCallback(
+    async (skill: ManagedSkill) => {
+      if (exportBusyId) return;
+      const requestContextKey = contextKey;
+      setExportBusyId(skill.id);
+      setPackageActionError(null);
+      try {
+        const exportId = skill.source === 'filesystem' ? skill.name : skill.id;
+        const exported = await new DesktopApiClient(config).exportManagedSkillPackage(exportId);
+        if (contextKeyRef.current !== requestContextKey) return;
+        downloadSkillPackage(skill.name, exported);
+      } catch (error) {
+        if (contextKeyRef.current === requestContextKey) {
+          setPackageActionError(errorMessage(error));
+        }
+      } finally {
+        if (contextKeyRef.current === requestContextKey) setExportBusyId(null);
+      }
+    },
+    [config, contextKey, exportBusyId]
+  );
+
+  const loadEvolution = useCallback(
+    async (skill: ManagedSkill, key: string, requestContextKey: string) => {
+      try {
+        const detail = await new DesktopApiClient(config).getManagedSkillEvolution(skill.id);
+        if (contextKeyRef.current !== requestContextKey) return;
+        setEvolutionDialog((current) =>
+          current?.key === key ? { ...current, detail, loading: false } : current
+        );
+      } catch (error) {
+        if (contextKeyRef.current !== requestContextKey) return;
+        setEvolutionError(errorMessage(error));
+        setEvolutionDialog((current) =>
+          current?.key === key ? { ...current, loading: false } : current
+        );
+      }
+    },
+    [config]
+  );
+
+  const openEvolution = useCallback(
+    (skill: ManagedSkill, canManage: boolean) => {
+      const key = `${skill.id}:evolution:${crypto.randomUUID()}`;
+      setEvolutionError(null);
+      setEvolutionDialog({
+        key,
+        skill,
+        detail: null,
+        loading: true,
+        running: false,
+        processingJobId: null,
+        canManage,
+      });
+      void loadEvolution(skill, key, contextKey);
+    },
+    [contextKey, loadEvolution]
+  );
+
+  const closeEvolution = useCallback(() => {
+    setEvolutionDialog((current) =>
+      current && !current.running && current.processingJobId === null ? null : current
+    );
+  }, []);
+
+  const runEvolution = useCallback(async () => {
+    if (!evolutionDialog?.canManage || evolutionDialog.running) return;
+    const requestContextKey = contextKey;
+    const key = evolutionDialog.key;
+    setEvolutionError(null);
+    setEvolutionDialog((current) =>
+      current?.key === key ? { ...current, running: true } : current
+    );
+    try {
+      const client = new DesktopApiClient(config);
+      await client.runManagedSkillEvolution(evolutionDialog.skill.id);
+      const detail = await client.getManagedSkillEvolution(evolutionDialog.skill.id);
+      if (contextKeyRef.current !== requestContextKey) return;
+      setEvolutionDialog((current) =>
+        current?.key === key ? { ...current, detail, running: false } : current
+      );
+    } catch (error) {
+      if (contextKeyRef.current !== requestContextKey) return;
+      setEvolutionError(errorMessage(error));
+      setEvolutionDialog((current) =>
+        current?.key === key ? { ...current, running: false } : current
+      );
+    }
+  }, [config, contextKey, evolutionDialog]);
+
+  const processEvolutionJob = useCallback(
+    async (jobId: string, action: 'apply' | 'reject') => {
+      if (!evolutionDialog?.canManage || evolutionDialog.processingJobId) return;
+      const requestContextKey = contextKey;
+      const key = evolutionDialog.key;
+      setEvolutionError(null);
+      setEvolutionDialog((current) =>
+        current?.key === key ? { ...current, processingJobId: jobId } : current
+      );
+      try {
+        const client = new DesktopApiClient(config);
+        if (action === 'apply') await client.applyManagedSkillEvolutionJob(jobId);
+        else await client.rejectManagedSkillEvolutionJob(jobId);
+        const reload = action === 'apply' ? onReload() : Promise.resolve();
+        const [detail] = await Promise.all([
+          client.getManagedSkillEvolution(evolutionDialog.skill.id),
+          reload,
+        ]);
+        if (contextKeyRef.current !== requestContextKey) return;
+        setEvolutionDialog((current) =>
+          current?.key === key ? { ...current, detail, processingJobId: null } : current
+        );
+        if (action === 'apply') onSelected(evolutionDialog.skill.id);
+      } catch (error) {
+        if (contextKeyRef.current !== requestContextKey) return;
+        setEvolutionError(errorMessage(error));
+        setEvolutionDialog((current) =>
+          current?.key === key ? { ...current, processingJobId: null } : current
+        );
+      }
+    },
+    [config, contextKey, evolutionDialog, onReload, onSelected]
+  );
+
   return {
     importKey,
     importBusy,
     importError,
     versionsDialog,
+    evolutionDialog,
     versionsError,
+    evolutionError,
+    exportBusyId,
+    packageActionError,
     openImport,
     closeImport,
     importPackage,
     openVersions,
     closeVersions,
     rollback,
+    previewVersion,
+    closeVersionPreview,
+    exportPackage,
+    openEvolution,
+    closeEvolution,
+    runEvolution,
+    processEvolutionJob,
   };
+}
+
+function downloadSkillPackage(skillName: string, value: unknown): void {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${skillName}.agentskill.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function zipImportInput(input: ManagedSkillImportInput): ManagedSkillZipImportInput {

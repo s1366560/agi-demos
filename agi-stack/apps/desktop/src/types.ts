@@ -955,6 +955,82 @@ export type ManagedSkillVersionList = {
   total: number;
 };
 
+export type ManagedSkillVersionDetail = ManagedSkillVersion & {
+  skill_md_content: string;
+  resource_files: Record<string, unknown> | null;
+};
+
+export type ManagedSkillPackage = {
+  format: string;
+  skill: ManagedSkill;
+  skill_md_content: string;
+  resource_files: Record<string, string>;
+  version_number: number | null;
+  version_label: string | null;
+};
+
+export type ManagedSkillEvolutionJob = {
+  id: string;
+  project_id: string | null;
+  skill_name: string;
+  action: string;
+  status: string;
+  rationale: string | null;
+  candidate_preview: string | null;
+  candidate_content: string | null;
+  blocked_by_review: boolean;
+  session_ids: string[];
+  skill_version_id: string | null;
+  created_at: string;
+  applied_at: string | null;
+};
+
+export type ManagedSkillEvolutionRouteEntry = {
+  kind: 'version' | 'evolution_job';
+  id: string;
+  label: string;
+  project_id: string | null;
+  status: string | null;
+  action: string | null;
+  version_number: number | null;
+  version_label: string | null;
+  skill_version_id: string | null;
+  change_summary: string | null;
+  rationale: string | null;
+  candidate_preview: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type ManagedSkillEvolutionTrigger = {
+  capture_hook: string;
+  capture_timing: string;
+  scheduled_timing: string;
+  manual_trigger: string;
+  min_sessions_per_skill: number;
+  scoring_min_sessions_per_skill: number;
+  min_avg_score: number;
+  max_sessions_per_batch: number;
+  publish_mode: string;
+  auto_apply: boolean;
+  enabled: boolean;
+};
+
+export type ManagedSkillEvolutionDetail = {
+  skill_id: string;
+  skill_name: string;
+  captured_session_count: number;
+  jobs: ManagedSkillEvolutionJob[];
+  route: ManagedSkillEvolutionRouteEntry[];
+  trigger: ManagedSkillEvolutionTrigger;
+};
+
+export type ManagedSkillEvolutionRun = {
+  skill_id: string;
+  skill_name: string;
+  result: Record<string, unknown>;
+};
+
 export type ManagedSkillMutation = {
   name: string;
   description: string;

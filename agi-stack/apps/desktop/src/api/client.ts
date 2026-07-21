@@ -51,9 +51,14 @@ import type {
   ManagedSkill,
   ManagedSkillContent,
   ManagedSkillCreateMutation,
+  ManagedSkillEvolutionDetail,
+  ManagedSkillEvolutionJob,
+  ManagedSkillEvolutionRun,
   ManagedSkillImportInput,
   ManagedSkillLifecycle,
   ManagedSkillMutation,
+  ManagedSkillPackage,
+  ManagedSkillVersionDetail,
   ManagedSkillVersionList,
   ManagedSkillZipImportInput,
   ManagedSubAgent,
@@ -1316,6 +1321,57 @@ export class DesktopApiClient {
     return this.request<ManagedSkill>(
       `/api/v1/skills/${encodeURIComponent(skillId)}/rollback?${params.toString()}`,
       { method: 'POST', body: { version_number: versionNumber } },
+    );
+  }
+
+  async exportManagedSkillPackage(skillId: string): Promise<ManagedSkillPackage> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkillPackage>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/export?${params.toString()}`,
+    );
+  }
+
+  async getManagedSkillVersion(
+    skillId: string,
+    versionNumber: number,
+  ): Promise<ManagedSkillVersionDetail> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkillVersionDetail>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/versions/${versionNumber}?${params.toString()}`,
+    );
+  }
+
+  async getManagedSkillEvolution(skillId: string): Promise<ManagedSkillEvolutionDetail> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkillEvolutionDetail>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/evolution?${params.toString()}`,
+    );
+  }
+
+  async runManagedSkillEvolution(skillId: string): Promise<ManagedSkillEvolutionRun> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkillEvolutionRun>(
+      `/api/v1/skills/${encodeURIComponent(skillId)}/evolution/run?${params.toString()}`,
+      { method: 'POST' },
+    );
+  }
+
+  async applyManagedSkillEvolutionJob(jobId: string): Promise<ManagedSkillEvolutionJob> {
+    return this.mutateManagedSkillEvolutionJob(jobId, 'apply');
+  }
+
+  async rejectManagedSkillEvolutionJob(jobId: string): Promise<ManagedSkillEvolutionJob> {
+    return this.mutateManagedSkillEvolutionJob(jobId, 'reject');
+  }
+
+  private async mutateManagedSkillEvolutionJob(
+    jobId: string,
+    action: 'apply' | 'reject',
+  ): Promise<ManagedSkillEvolutionJob> {
+    const params = this.managedSkillTenantParams();
+    return this.request<ManagedSkillEvolutionJob>(
+      `/api/v1/skills/evolution/jobs/${encodeURIComponent(jobId)}/${action}?${params.toString()}`,
+      { method: 'POST' },
     );
   }
 

@@ -14,6 +14,8 @@ import type {
   ManagedLlmProvider,
   ManagedPlugin,
   ManagedSkill,
+  ManagedSkillEvolutionDetail,
+  ManagedSkillEvolutionJob,
   ManagedSkillVersion,
   ManagedSubAgent,
   PluginConfigRecord,
@@ -251,6 +253,24 @@ let skillVersions: Record<string, ManagedSkillVersion[]> = {
     },
   ],
 };
+
+let skillEvolutionJobs: ManagedSkillEvolutionJob[] = [
+  {
+    id: 'competitive-research-evolution-1',
+    project_id: null,
+    skill_name: 'competitive-research',
+    action: 'update',
+    status: 'pending_review',
+    rationale: 'Recent sessions request clearer source confidence checks.',
+    candidate_preview: 'Add a confidence note for every cited source.',
+    candidate_content: '# Competitive research\n\nAdd a confidence note for every cited source.',
+    blocked_by_review: true,
+    session_ids: ['session-1', 'session-2'],
+    skill_version_id: null,
+    created_at: NOW,
+    applied_at: null,
+  },
+];
 
 let plugins: QaPlugin[] = [
   {
@@ -649,6 +669,62 @@ function snapshotImportedSkill(
     change_summary: changeSummary || null,
     created_by: createdBy,
     created_at: NOW,
+  };
+}
+
+function qaEvolutionDetail(skill: ManagedSkill): ManagedSkillEvolutionDetail {
+  const jobs = skillEvolutionJobs.filter((job) => job.skill_name === skill.name);
+  const jobRoute = jobs.map((job) => ({
+    kind: 'evolution_job' as const,
+    id: job.id,
+    label: `Evolution ${job.action}`,
+    project_id: job.project_id,
+    status: job.status,
+    action: job.action,
+    version_number: null,
+    version_label: null,
+    skill_version_id: job.skill_version_id,
+    change_summary: null,
+    rationale: job.rationale,
+    candidate_preview: job.candidate_preview,
+    created_by: null,
+    created_at: job.created_at,
+  }));
+  const versionRoute = (skillVersions[skill.id] ?? []).map((version) => ({
+    kind: 'version' as const,
+    id: version.id,
+    label: version.version_label || `#${version.version_number}`,
+    project_id: skill.project_id ?? null,
+    status: null,
+    action: null,
+    version_number: version.version_number,
+    version_label: version.version_label,
+    skill_version_id: version.id,
+    change_summary: version.change_summary,
+    rationale: null,
+    candidate_preview: null,
+    created_by: version.created_by,
+    created_at: version.created_at,
+  }));
+  return {
+    skill_id: skill.id,
+    skill_name: skill.name,
+    captured_session_count: skill.name === 'competitive-research' ? 12 : 3,
+    jobs,
+    route: [...jobRoute, ...versionRoute],
+    trigger: {
+      capture_hook: 'session_complete',
+      capture_timing: 'After every completed session',
+      scheduled_timing: 'Every 60 minutes',
+      manual_trigger: `/skills/${skill.id}/evolution/run`,
+      min_sessions_per_skill: 5,
+      scoring_min_sessions_per_skill: 3,
+      min_avg_score: 0.8,
+      max_sessions_per_batch: 20,
+      publish_mode: 'review',
+      auto_apply: false,
+      enabled: true,
+    },
   };
 }
 
@@ -1170,6 +1246,103 @@ async function providerQaFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const status = url.searchParams.get('status') ?? 'disabled';
     skills = skills.map((skill) => (skill.id === skillId ? { ...skill, status } : skill));
     return jsonResponse(skills.find((skill) => skill.id === skillId) ?? null);
+  }
+
+  const skillExportMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/export$/);
+  if (method === 'GET' && skillExportMatch) {
+    const exportId = decodeURIComponent(skillExportMatch[1]);
+    const skill = skills.find((item) => item.id === exportId || item.name === exportId);
+    if (!skill) return jsonResponse({ detail: 'Skill not found.' }, 404);
+    return jsonResponse({
+      format: 'agentskills.io/skill-package',
+      skill,
+      skill_md_content: skill.full_content ?? '',
+      resource_files: { 'references/qa.md': 'Desktop export validation.' },
+      version_number: skill.current_version ?? null,
+      version_label: skill.version_label ?? null,
+    });
+  }
+
+  const skillVersionDetailMatch = path.match(
+    /^\/api\/v1\/skills\/([^/]+)\/versions\/(\d+)$/
+  );
+  if (method === 'GET' && skillVersionDetailMatch) {
+    const skillId = decodeURIComponent(skillVersionDetailMatch[1]);
+    const versionNumber = Number(skillVersionDetailMatch[2]);
+    const version = (skillVersions[skillId] ?? []).find(
+      (candidate) => candidate.version_number === versionNumber
+    );
+    const skill = skills.find((item) => item.id === skillId);
+    if (!version || !skill) return jsonResponse({ detail: 'Skill version not found.' }, 404);
+    return jsonResponse({
+      ...version,
+      skill_md_content: `${skill.full_content ?? ''}\n\n<!-- snapshot ${versionNumber} -->`,
+      resource_files: { 'references/qa.md': `Version ${versionNumber}` },
+    });
+  }
+
+  const evolutionJobMatch = path.match(
+    /^\/api\/v1\/skills\/evolution\/jobs\/([^/]+)\/(apply|reject)$/
+  );
+  if (method === 'POST' && evolutionJobMatch) {
+    const jobId = decodeURIComponent(evolutionJobMatch[1]);
+    const action = evolutionJobMatch[2];
+    const job = skillEvolutionJobs.find((candidate) => candidate.id === jobId);
+    if (!job || job.status !== 'pending_review') {
+      return jsonResponse({ detail: 'Evolution job is not pending review.' }, 400);
+    }
+    const nextJob: ManagedSkillEvolutionJob = {
+      ...job,
+      status: action === 'apply' ? 'applied' : 'rejected',
+      blocked_by_review: false,
+      applied_at: action === 'apply' ? NOW : null,
+    };
+    skillEvolutionJobs = skillEvolutionJobs.map((candidate) =>
+      candidate.id === jobId ? nextJob : candidate
+    );
+    if (action === 'apply') {
+      const skill = skills.find((candidate) => candidate.name === job.skill_name);
+      if (skill) {
+        const updated = { ...skill, current_version: (skill.current_version ?? 0) + 1 };
+        skills = skills.map((candidate) => (candidate.id === skill.id ? updated : candidate));
+        const version = snapshotImportedSkill(updated, 'Applied evolution candidate', 'evolution');
+        skillVersions[skill.id] = [version, ...(skillVersions[skill.id] ?? [])];
+        nextJob.skill_version_id = version.id;
+      }
+    }
+    return jsonResponse(nextJob);
+  }
+
+  const skillEvolutionRunMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/evolution\/run$/);
+  if (method === 'POST' && skillEvolutionRunMatch) {
+    const skillId = decodeURIComponent(skillEvolutionRunMatch[1]);
+    const skill = skills.find((candidate) => candidate.id === skillId);
+    if (!skill) return jsonResponse({ detail: 'Skill not found.' }, 404);
+    const job: ManagedSkillEvolutionJob = {
+      id: `${skill.id}-evolution-${crypto.randomUUID()}`,
+      project_id: skill.project_id ?? null,
+      skill_name: skill.name,
+      action: 'update',
+      status: 'pending_review',
+      rationale: 'Manual Desktop evolution validation.',
+      candidate_preview: 'Clarify the validation steps before publishing.',
+      candidate_content: '# Candidate\n\nClarify the validation steps before publishing.',
+      blocked_by_review: true,
+      session_ids: ['session-manual'],
+      skill_version_id: null,
+      created_at: NOW,
+      applied_at: null,
+    };
+    skillEvolutionJobs = [job, ...skillEvolutionJobs];
+    return jsonResponse({ skill_id: skill.id, skill_name: skill.name, result: { queued: true } });
+  }
+
+  const skillEvolutionMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/evolution$/);
+  if (method === 'GET' && skillEvolutionMatch) {
+    const skillId = decodeURIComponent(skillEvolutionMatch[1]);
+    const skill = skills.find((candidate) => candidate.id === skillId);
+    if (!skill) return jsonResponse({ detail: 'Skill not found.' }, 404);
+    return jsonResponse(qaEvolutionDetail(skill));
   }
 
   const skillVersionsMatch = path.match(/^\/api\/v1\/skills\/([^/]+)\/versions$/);

@@ -1,6 +1,7 @@
 import {
   ComponentInstanceIcon,
   ClockIcon,
+  DownloadIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
   MagicWandIcon,
@@ -9,6 +10,7 @@ import {
   PersonIcon,
   PlusIcon,
   ReloadIcon,
+  RocketIcon,
   UploadIcon,
 } from '@radix-ui/react-icons';
 
@@ -81,6 +83,8 @@ export function ManagedResourceWorkspace({
   onImport,
   onEdit,
   onVersions,
+  onExport,
+  onEvolution,
   onReload,
   onRemove,
 }: {
@@ -105,6 +109,8 @@ export function ManagedResourceWorkspace({
   onImport: () => void;
   onEdit: (item: ManagedResource) => void;
   onVersions: (item: ManagedResource) => void;
+  onExport: (item: ManagedResource) => void;
+  onEvolution: (item: ManagedResource, canManage: boolean) => void;
   onReload: () => void;
   onRemove: (item: ManagedResource) => void;
 }) {
@@ -238,6 +244,8 @@ export function ManagedResourceWorkspace({
             onAction={() => onAction(selected)}
             onEdit={() => onEdit(selected)}
             onVersions={() => onVersions(selected)}
+            onExport={() => onExport(selected)}
+            onEvolution={() => onEvolution(selected, canManage)}
             onRemove={() => onRemove(selected)}
           />
         ) : (
@@ -296,6 +304,8 @@ function ResourceDetail({
   onAction,
   onEdit,
   onVersions,
+  onExport,
+  onEvolution,
   onRemove,
 }: {
   section: ResourceSection;
@@ -307,6 +317,8 @@ function ResourceDetail({
   onAction: () => void;
   onEdit: () => void;
   onVersions: () => void;
+  onExport: () => void;
+  onEvolution: () => void;
   onRemove: () => void;
 }) {
   const { locale, t } = useI18n();
@@ -323,6 +335,7 @@ function ResourceDetail({
       (section === 'plugins' &&
         (item as { schema_supported?: unknown }).schema_supported === true));
   const removable = section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);
+  const skillCanEvolve = section === 'skills' && !resourceIsImmutable(section, item, mode);
   const notice = resourceIsImmutable(section, item, mode)
     ? t('settings.immutableResource')
     : !canManage
@@ -378,6 +391,28 @@ function ResourceDetail({
             >
               <ClockIcon />
               {t('settings.skillPackages.versionsAction')}
+            </button>
+          ) : null}
+          {skillCanEvolve ? (
+            <button
+              type="button"
+              className="managed-resource-secondary-action"
+              disabled={busy}
+              onClick={onEvolution}
+            >
+              <RocketIcon />
+              {t('settings.skillEvolution.action')}
+            </button>
+          ) : null}
+          {section === 'skills' ? (
+            <button
+              type="button"
+              className="managed-resource-secondary-action"
+              disabled={busy}
+              onClick={onExport}
+            >
+              <DownloadIcon />
+              {t('settings.skillPackages.exportAction')}
             </button>
           ) : null}
           {removable ? (

@@ -1,5 +1,6 @@
 import type { ProjectSummary } from '../../types';
 import { SkillEditorDialog } from './SkillEditorDialog';
+import { SkillEvolutionDialog } from './SkillEvolutionDialog';
 import { SkillImportDialog, SkillVersionsDialog } from './SkillPackageDialogs';
 import type { useSkillManagement } from './useSkillManagement';
 import type { useSkillPackageManagement } from './useSkillPackageManagement';
@@ -54,10 +55,29 @@ export function SkillManagementDialogs({
           versions={packages.versionsDialog.versions}
           loading={packages.versionsDialog.loading}
           rollbackVersion={packages.versionsDialog.rollbackVersion}
+          preview={packages.versionsDialog.preview}
+          previewLoading={packages.versionsDialog.previewLoading}
           canRollback={packages.versionsDialog.canRollback}
           error={packages.versionsError}
           onClose={packages.closeVersions}
           onRollback={(versionNumber) => void packages.rollback(versionNumber)}
+          onPreview={(versionNumber) => void packages.previewVersion(versionNumber)}
+          onClosePreview={packages.closeVersionPreview}
+        />
+      ) : null}
+      {packages.evolutionDialog ? (
+        <SkillEvolutionDialog
+          key={packages.evolutionDialog.key}
+          skill={packages.evolutionDialog.skill}
+          detail={packages.evolutionDialog.detail}
+          loading={packages.evolutionDialog.loading}
+          running={packages.evolutionDialog.running}
+          processingJobId={packages.evolutionDialog.processingJobId}
+          canManage={packages.evolutionDialog.canManage}
+          error={packages.evolutionError}
+          onClose={packages.closeEvolution}
+          onRun={() => void packages.runEvolution()}
+          onProcessJob={(jobId, action) => void packages.processEvolutionJob(jobId, action)}
         />
       ) : null}
     </>

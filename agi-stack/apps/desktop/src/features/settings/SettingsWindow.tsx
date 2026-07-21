@@ -571,11 +571,9 @@ export function SettingsWindow({
                   onApplied={onClose}
                 />
               ) : null}
-
               {section === 'general' ? (
                 <GeneralSettingsPage counts={resourceCounts} onOpenResource={setSection} />
               ) : null}
-
               {section === 'appearance' || section === 'notifications' ? (
                 <PreferenceSummaryPage section={section} />
               ) : null}
@@ -597,7 +595,6 @@ export function SettingsWindow({
                   />
                 </SettingsPage>
               ) : null}
-
               {section === 'models' ? (
                 <ModelProviderWorkspace
                   key={`${config.mode}|${config.apiBaseUrl}|${config.tenantId}|${config.projectId}|${config.workspaceId}`}
@@ -607,7 +604,6 @@ export function SettingsWindow({
                   onCountChange={updateModelCount}
                 />
               ) : null}
-
               {isResourceSection ? (
                 <ManagedResourceWorkspace
                   section={section}
@@ -617,11 +613,15 @@ export function SettingsWindow({
                   filter={resourceFilter}
                   loading={resourceLoading}
                   error={resourceError}
-                  actionError={resourceActionError ?? pluginManagement.reloadError}
+                  actionError={
+                    resourceActionError ?? pluginManagement.reloadError ??
+                    skillPackageManagement.packageActionError
+                  }
                   busy={
                     actionBusyId !== null ||
                     pluginManagement.reloadBusy ||
                     skillPackageManagement.importBusy ||
+                    skillPackageManagement.exportBusyId !== null ||
                     (skillPackageManagement.versionsDialog?.rollbackVersion ?? null) !== null
                   }
                   mode={config.mode}
@@ -677,6 +677,12 @@ export function SettingsWindow({
                       ) && !resourceIsImmutable(section, skill, config.mode);
                     skillPackageManagement.openVersions(skill, canRollback);
                   }}
+                  onExport={(item) =>
+                    void skillPackageManagement.exportPackage(item as ManagedSkill)
+                  }
+                  onEvolution={(item, canManage) =>
+                    skillPackageManagement.openEvolution(item as ManagedSkill, canManage)
+                  }
                   onReload={() => void pluginManagement.reload()}
                   onRemove={(item) => {
                     if (section === 'plugins') {
