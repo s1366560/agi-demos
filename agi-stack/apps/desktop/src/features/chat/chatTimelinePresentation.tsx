@@ -196,7 +196,7 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       : t('chat.modelSwitch');
   }
   if (lifecycle?.family === 'context') {
-    return item.type === 'context_compressed'
+    return item.type === 'context_compressed' || item.type === 'context_compacted'
       ? t('chat.contextCompressed')
       : t('chat.contextStatus');
   }

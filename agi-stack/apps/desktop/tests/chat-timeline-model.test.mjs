@@ -1003,6 +1003,28 @@ test('context events expose token occupancy and compression results', () => {
       progress: { unit: 'messages', current: 10, total: 18 },
     },
   );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'context-compacted-1',
+      type: 'context_compacted',
+      eventTimeUs: 33_500_000,
+      eventCounter: 3,
+      payload: {
+        conversation_id: 'conversation-release',
+        before_tokens: 12_000,
+        after_tokens: 4_500,
+      },
+    }),
+    {
+      family: 'context',
+      state: 'complete',
+      subject: 'conversation-release',
+      detail: '',
+      isError: false,
+      progress: { unit: 'tokens', current: 4_500, total: 12_000 },
+    },
+  );
 });
 
 test('MCP App events expose the registered app and interactive tool result', () => {

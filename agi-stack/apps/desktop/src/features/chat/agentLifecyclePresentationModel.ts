@@ -312,6 +312,7 @@ const lifecycleEventDefinitions: Record<
     state: 'complete',
     detailFields: ['compression_level', 'compressionLevel'],
   },
+  context_compacted: { family: 'context', state: 'complete' },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -498,9 +499,13 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';
   }
   if (family === 'context') {
-    return item.type === 'context_compressed'
-      ? timelineEventString(item, ['compression_strategy', 'compressionStrategy']) ?? ''
-      : timelineEventString(item, ['compression_level', 'compressionLevel']) ?? '';
+    if (item.type === 'context_compressed') {
+      return timelineEventString(item, ['compression_strategy', 'compressionStrategy']) ?? '';
+    }
+    if (item.type === 'context_compacted') {
+      return timelineEventString(item, ['conversation_id', 'conversationId']) ?? '';
+    }
+    return timelineEventString(item, ['compression_level', 'compressionLevel']) ?? '';
   }
   if (family === 'mcpApp') {
     return (
@@ -777,6 +782,14 @@ function lifecycleProgress(
       return current === null
         ? { unit: 'messages', total }
         : { unit: 'messages', current, total };
+    }
+    if (item.type === 'context_compacted') {
+      const total = timelineEventNumber(item, ['before_tokens', 'beforeTokens']);
+      const current = timelineEventNumber(item, ['after_tokens', 'afterTokens']);
+      if (total === null) return undefined;
+      return current === null
+        ? { unit: 'tokens', total }
+        : { unit: 'tokens', current, total };
     }
   }
   if (family === 'memory') {

@@ -868,6 +868,20 @@ const toolsUpdatedTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const contextCompactedTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'context-compacted-release',
+    type: 'context_compacted',
+    eventTimeUs: 1_784_282_074_000_000,
+    eventCounter: 42,
+    payload: {
+      conversation_id: 'conversation-release',
+      before_tokens: 12_000,
+      after_tokens: 4_500,
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1051,6 +1065,7 @@ function SessionSteeringQa() {
   const internalUiStateEventsMode = searchParams.get('internal-ui-state-events') === '1';
   const channelInboundMessageMode = searchParams.get('channel-inbound-message') === '1';
   const toolsUpdatedEventMode = searchParams.get('tools-updated-event') === '1';
+  const contextCompactedEventMode = searchParams.get('context-compacted-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1125,6 +1140,8 @@ function SessionSteeringQa() {
                                     ? [...timelineState.items, ...channelInboundMessageTimelineItems]
                                     : toolsUpdatedEventMode
                                       ? [...timelineState.items, ...toolsUpdatedTimelineItems]
+                                      : contextCompactedEventMode
+                                        ? [...timelineState.items, ...contextCompactedTimelineItems]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1319,6 +1336,7 @@ function SessionSteeringQa() {
                 internalUiStateEventsMode ||
                 channelInboundMessageMode ||
                 toolsUpdatedEventMode ||
+                contextCompactedEventMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
