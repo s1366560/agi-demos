@@ -14,6 +14,7 @@ import {
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
+import { DesktopMCPAppCanvas } from '../features/chat/DesktopMCPAppCanvas';
 import { LiveArtifactCanvas } from '../features/chat/LiveArtifactCanvas';
 import {
   applyArtifactCanvasStreamEvent,
@@ -25,6 +26,12 @@ import {
   readConversationTitleStreamEvent,
 } from '../features/chat/conversationTitleEventModel';
 import { applyHitlResponseStreamEvent } from '../features/chat/hitlResponseEventModel';
+import {
+  applyMCPAppCanvasStreamEvent,
+  closeMCPAppCanvasTab,
+  emptyMCPAppCanvasState,
+  selectMCPAppCanvasTab,
+} from '../features/chat/mcpAppCanvasEventModel';
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
@@ -562,6 +569,70 @@ const artifactCanvasOpenEvents = [
   },
 ];
 
+const mcpAppResultEvent = {
+  type: 'mcp_app_result',
+  data: {
+    app_id: 'release-verification-dashboard',
+    tool_name: 'show_release_verification',
+    server_name: 'release-tools',
+    resource_uri: 'ui://release/verification-dashboard',
+    resource_html: `<!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body {
+              margin: 0; padding: 24px; color: #172033;
+              background: #f7f9fc; font: 14px system-ui;
+            }
+            main {
+              padding: 22px; border: 1px solid #d8deea;
+              border-radius: 12px; background: white;
+            }
+            h1 { margin: 0 0 8px; font-size: 22px; }
+            p { color: #59657a; }
+            dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+            dl div { padding: 14px; border-radius: 8px; background: #edf7f2; }
+            dt { color: #667085; font-size: 12px; }
+            dd { margin: 4px 0 0; color: #067647; font-size: 20px; font-weight: 700; }
+            button {
+              padding: 9px 13px; border: 0; border-radius: 7px;
+              color: white; background: #6d45d8; cursor: pointer;
+            }
+            #details[hidden] { display: none; }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>Release verification dashboard</h1>
+            <p>Interactive result returned by the release-tools plugin.</p>
+            <dl>
+              <div><dt>Checks</dt><dd>18/18</dd></div>
+              <div><dt>Race runs</dt><dd>50</dd></div>
+              <div><dt>Failures</dt><dd>0</dd></div>
+            </dl>
+            <button type="button" id="toggle">Show verified items</button>
+            <p id="details" hidden>
+              Authentication, model routing, session startup, and event rendering verified.
+            </p>
+          </main>
+          <script>
+            document.getElementById('toggle').addEventListener('click', function () {
+              var details = document.getElementById('details');
+              details.hidden = !details.hidden;
+              this.textContent = details.hidden ? 'Show verified items' : 'Hide verified items';
+            });
+          </script>
+        </body>
+      </html>`,
+    tool_input: { release: '2026.07' },
+    tool_result: { content: [{ type: 'text', text: 'Verification complete' }] },
+    structured_content: { checks: 18, race_runs: 50, failures: 0 },
+    ui_metadata: { title: 'Release verification' },
+    project_id: 'project-desktop',
+  },
+};
+
 const qaConversation: AgentConversation = {
   id: 'conversation-desktop-session',
   project_id: 'project-desktop',
@@ -586,6 +657,7 @@ function SessionSteeringQa() {
   const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
+  const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -598,6 +670,11 @@ function SessionSteeringQa() {
           emptyArtifactCanvasState(),
         )
       : emptyArtifactCanvasState(),
+  );
+  const [mcpAppCanvas, setMCPAppCanvas] = useState(() =>
+    mcpAppEventsMode
+      ? applyMCPAppCanvasStreamEvent(emptyMCPAppCanvasState(), mcpAppResultEvent).state
+      : emptyMCPAppCanvasState(),
   );
   const [qaConversations, setQaConversations] = useState<AgentConversation[]>(() => [
     titleEventsMode ? qaConversation : { ...qaConversation, title: 'Session interaction redesign' },
@@ -805,6 +882,7 @@ function SessionSteeringQa() {
                 doomLoopEventsMode ||
                 hitlResponseEventsMode ||
                 artifactCanvasEventsMode ||
+                mcpAppEventsMode ||
                 titleEventsMode
                   ? 'recorded'
                   : 'live'
@@ -855,7 +933,18 @@ function SessionSteeringQa() {
               onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />
-            {artifactCanvasEventsMode ? (
+            {mcpAppEventsMode ? (
+              <DesktopMCPAppCanvas
+                state={mcpAppCanvas}
+                sandboxProxyUrl="http://127.0.0.1:8000/static/sandbox_proxy.html"
+                onSelect={(tabId) =>
+                  setMCPAppCanvas((current) => selectMCPAppCanvasTab(current, tabId))
+                }
+                onClose={(tabId) =>
+                  setMCPAppCanvas((current) => closeMCPAppCanvasTab(current, tabId))
+                }
+              />
+            ) : artifactCanvasEventsMode ? (
               <LiveArtifactCanvas
                 state={artifactCanvas}
                 onSelect={(artifactId) =>

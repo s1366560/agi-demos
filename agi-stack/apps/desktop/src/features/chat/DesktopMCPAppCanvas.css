@@ -1,0 +1,107 @@
+.desktop-mcp-app-canvas {
+  display: grid;
+  min-height: 0;
+  background: var(--color-panel-solid);
+}
+
+.desktop-mcp-app-canvas > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--gray-a5);
+}
+
+.desktop-mcp-app-canvas > header > span,
+.desktop-mcp-app-canvas > header > span > span {
+  display: flex;
+  min-width: 0;
+}
+
+.desktop-mcp-app-canvas > header > span {
+  align-items: center;
+  gap: 10px;
+}
+
+.desktop-mcp-app-canvas > header > span > span {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.desktop-mcp-app-canvas > header strong,
+.desktop-mcp-app-canvas > header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-mcp-app-canvas > header small {
+  color: var(--gray-10);
+}
+
+.desktop-mcp-app-canvas > nav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--gray-a5);
+}
+
+.desktop-mcp-app-canvas > nav > span {
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+}
+
+.desktop-mcp-app-canvas > nav > span.selected {
+  border-bottom-color: var(--accent-9);
+}
+
+.desktop-mcp-app-canvas > nav button[role='tab'] {
+  padding: 9px 4px 9px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--gray-10);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.desktop-mcp-app-canvas > nav > span.selected button[role='tab'],
+.desktop-mcp-app-canvas > nav button[role='tab']:hover {
+  color: var(--gray-12);
+}
+
+.desktop-mcp-app-frame {
+  min-height: 420px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.desktop-mcp-app-frame iframe {
+  width: 100%;
+  min-height: 400px;
+  border: 1px solid var(--gray-a5);
+  border-radius: 8px;
+  background: white;
+}
+
+.desktop-mcp-app-loading,
+.desktop-mcp-app-error {
+  display: flex;
+  min-height: 240px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--gray-10);
+}
+
+.desktop-mcp-app-error {
+  color: var(--red-11);
+}
+
+.desktop-mcp-app-error span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}

@@ -82,6 +82,7 @@ import {
   type AgentTaskSignalStatus,
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
+import { DesktopMCPAppCanvas } from './features/chat/DesktopMCPAppCanvas';
 import { LiveArtifactCanvas } from './features/chat/LiveArtifactCanvas';
 import {
   applyArtifactCanvasStreamEvent,
@@ -105,6 +106,13 @@ import {
   mergeToolStreamItem,
 } from './features/chat/chatTimelineModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
+import {
+  applyMCPAppCanvasStreamEvent,
+  closeMCPAppCanvasTab,
+  emptyMCPAppCanvasState,
+  selectMCPAppCanvasTab,
+  type MCPAppCanvasState,
+} from './features/chat/mcpAppCanvasEventModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
@@ -906,6 +914,8 @@ function mergeLiveTimelineEvent(
   if (titleEvent.handled) return existing;
   const artifactCanvasResult = applyArtifactCanvasStreamEvent(emptyArtifactCanvasState(), event);
   if (artifactCanvasResult.handled) return existing;
+  const mcpAppCanvasResult = applyMCPAppCanvasStreamEvent(emptyMCPAppCanvasState(), event);
+  if (mcpAppCanvasResult.handled) return existing;
   const hitlResponse = applyHitlResponseStreamEvent(existing, event);
   if (hitlResponse.handled) return hitlResponse.items;
   const timeline = existing;
@@ -1647,6 +1657,9 @@ export function App() {
   const [artifactCanvasState, setArtifactCanvasState] = useState<LiveArtifactCanvasState>(() =>
     emptyArtifactCanvasState(),
   );
+  const [mcpAppCanvasState, setMCPAppCanvasState] = useState<MCPAppCanvasState>(() =>
+    emptyMCPAppCanvasState(),
+  );
   const [agentTaskSignals, setAgentTaskSignals] = useState<AgentTaskSignal[]>([]);
   const pendingNewTaskAgentTurnsRef = useRef(
     new Map<
@@ -1708,6 +1721,7 @@ export function App() {
   const terminalStartGenerationRef = useRef(0);
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
   const artifactCanvasStateRef = useRef(artifactCanvasState);
+  const mcpAppCanvasStateRef = useRef(mcpAppCanvasState);
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
 
@@ -1771,9 +1785,12 @@ export function App() {
     scopedConversation?.id ?? null,
   );
   useEffect(() => {
-    const emptyState = emptyArtifactCanvasState();
-    artifactCanvasStateRef.current = emptyState;
-    setArtifactCanvasState(emptyState);
+    const emptyArtifactState = emptyArtifactCanvasState();
+    const emptyMCPAppState = emptyMCPAppCanvasState();
+    artifactCanvasStateRef.current = emptyArtifactState;
+    mcpAppCanvasStateRef.current = emptyMCPAppState;
+    setArtifactCanvasState(emptyArtifactState);
+    setMCPAppCanvasState(emptyMCPAppState);
   }, [scopedConversationId]);
   const agentDefinitionEvent = useMemo(
     () => latestAgentDefinitionEvent(socket.events),
@@ -2607,17 +2624,31 @@ export function App() {
     if (timelineEvents.length) {
       let nextArtifactCanvas = artifactCanvasStateRef.current;
       let lastArtifactAction: 'open' | 'update' | 'close' | null = null;
+      let nextMCPAppCanvas = mcpAppCanvasStateRef.current;
+      let openedMCPApp = false;
       for (const event of timelineEvents) {
         const result = applyArtifactCanvasStreamEvent(nextArtifactCanvas, event);
-        if (!result.handled) continue;
-        nextArtifactCanvas = result.state;
-        if (result.action) lastArtifactAction = result.action;
+        if (result.handled) {
+          nextArtifactCanvas = result.state;
+          if (result.action) lastArtifactAction = result.action;
+        }
+        const mcpAppResult = applyMCPAppCanvasStreamEvent(nextMCPAppCanvas, event);
+        if (!mcpAppResult.handled) continue;
+        nextMCPAppCanvas = mcpAppResult.state;
+        if (mcpAppResult.action === 'open') openedMCPApp = true;
       }
       if (nextArtifactCanvas !== artifactCanvasStateRef.current) {
         artifactCanvasStateRef.current = nextArtifactCanvas;
         setArtifactCanvasState(nextArtifactCanvas);
       }
-      if (lastArtifactAction === 'open') {
+      if (nextMCPAppCanvas !== mcpAppCanvasStateRef.current) {
+        mcpAppCanvasStateRef.current = nextMCPAppCanvas;
+        setMCPAppCanvasState(nextMCPAppCanvas);
+      }
+      if (openedMCPApp) {
+        setReviewTab('apps');
+        setReviewPanelOpen(true);
+      } else if (lastArtifactAction === 'open') {
         setReviewTab('artifacts');
         setReviewPanelOpen(true);
       } else if (
@@ -5984,6 +6015,8 @@ export function App() {
       artifacts={workspaceArtifacts}
       artifactVersions={displaySessionProjection?.artifactVersions ?? []}
       artifactCanvas={artifactCanvasState}
+      mcpAppCanvas={mcpAppCanvasState}
+      mcpAppSandboxProxyUrl={desktopMCPAppSandboxProxyUrl(config.apiBaseUrl)}
       artifactDeliveries={displaySessionProjection?.artifactDeliveries ?? []}
       toolInvocations={displaySessionProjection?.toolInvocations ?? []}
       currentRun={currentArtifactRun}
@@ -6027,6 +6060,20 @@ export function App() {
         setArtifactCanvasState((current) => {
           const next = selectArtifactCanvasTab(current, artifactId);
           artifactCanvasStateRef.current = next;
+          return next;
+        });
+      }}
+      onSelectMCPAppCanvasTab={(tabId) => {
+        setMCPAppCanvasState((current) => {
+          const next = selectMCPAppCanvasTab(current, tabId);
+          mcpAppCanvasStateRef.current = next;
+          return next;
+        });
+      }}
+      onCloseMCPAppCanvasTab={(tabId) => {
+        setMCPAppCanvasState((current) => {
+          const next = closeMCPAppCanvasTab(current, tabId);
+          mcpAppCanvasStateRef.current = next;
           return next;
         });
       }}
@@ -6171,8 +6218,12 @@ export function App() {
                   setReviewPanelOpen(true);
                 }}
                 canvasRevealKey={
-                  artifactCanvasState.openRevision > 0
-                    ? `${scopedConversationId}:${artifactCanvasState.openRevision}`
+                  artifactCanvasState.openRevision > 0 || mcpAppCanvasState.openRevision > 0
+                    ? [
+                        scopedConversationId,
+                        `artifact:${artifactCanvasState.openRevision}`,
+                        `app:${mcpAppCanvasState.openRevision}`,
+                      ].join(':')
                     : null
                 }
                 onCloseCanvas={() => setReviewPanelOpen(false)}
@@ -6304,6 +6355,14 @@ function workspaceLabel(workspace: { id: string; name?: string; title?: string }
   return workspace?.name ?? workspace?.title ?? workspace?.id ?? 'No workspace';
 }
 
+function desktopMCPAppSandboxProxyUrl(apiBaseUrl: string): string {
+  try {
+    return new URL('/static/sandbox_proxy.html', apiBaseUrl).toString();
+  } catch {
+    return window.location.href;
+  }
+}
+
 function projectSummaryFromConfig(config: DesktopRuntimeConfig): ProjectSummary | null {
   const projectId = config.projectId.trim();
   if (!projectId) return null;
@@ -6331,6 +6390,8 @@ function WorkspaceReviewPanel({
   artifacts,
   artifactVersions,
   artifactCanvas,
+  mcpAppCanvas,
+  mcpAppSandboxProxyUrl,
   artifactDeliveries,
   toolInvocations,
   currentRun,
@@ -6362,6 +6423,8 @@ function WorkspaceReviewPanel({
   onResumeTaskListReview,
   onArtifactAction,
   onSelectArtifactCanvasTab,
+  onSelectMCPAppCanvasTab,
+  onCloseMCPAppCanvasTab,
   onStartTerminal,
   onRefreshChanges,
   onToggleChangeReference,
@@ -6374,6 +6437,8 @@ function WorkspaceReviewPanel({
   artifacts: WorkspaceArtifact[];
   artifactVersions: DesktopArtifactVersion[];
   artifactCanvas: LiveArtifactCanvasState;
+  mcpAppCanvas: MCPAppCanvasState;
+  mcpAppSandboxProxyUrl: string;
   artifactDeliveries: DesktopArtifactDelivery[];
   toolInvocations: DesktopToolInvocation[];
   currentRun: DesktopRun | null;
@@ -6417,6 +6482,8 @@ function WorkspaceReviewPanel({
     feedback?: string,
   ) => Promise<void>;
   onSelectArtifactCanvasTab: (artifactId: string) => void;
+  onSelectMCPAppCanvasTab: (tabId: string) => void;
+  onCloseMCPAppCanvasTab: (tabId: string) => void;
   onStartTerminal: () => void;
   onRefreshChanges: () => void;
   onToggleChangeReference: (reference: CodeRangeReference) => void;
@@ -6480,6 +6547,7 @@ function WorkspaceReviewPanel({
       ]);
       if (artifactIds.size) return `${artifactIds.size}`;
     }
+    if (tab === 'apps' && mcpAppCanvas.tabs.length) return `${mcpAppCanvas.tabs.length}`;
     if (tab === 'sources') {
       if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
       return sourceEvidence.missing.length ? t('session.evidence.missing') : undefined;
@@ -6490,11 +6558,22 @@ function WorkspaceReviewPanel({
     tab: ReviewTab;
     label: string;
     value?: string;
-  }> = configuredCanvasTabs.primary.map((tab) => ({
-    tab: tab.id,
-    label: t(tab.labelKey),
-    value: tabValue(tab.id),
-  }));
+  }> = [
+    ...configuredCanvasTabs.primary.map((tab) => ({
+      tab: tab.id,
+      label: t(tab.labelKey),
+      value: tabValue(tab.id),
+    })),
+    ...(mcpAppCanvas.tabs.length
+      ? [
+          {
+            tab: 'apps' as const,
+            label: t('session.canvasApps'),
+            value: `${mcpAppCanvas.tabs.length}`,
+          },
+        ]
+      : []),
+  ];
   const panelClassName = 'review-panel review-panel-session';
   const tabId = (tab: ReviewTab) => `session-canvas-tab-${tab}`;
   const panelId = 'session-canvas-panel';
@@ -6527,6 +6606,7 @@ function WorkspaceReviewPanel({
     const availableTabs = new Set(
       [...configuredCanvasTabs.primary, ...configuredCanvasTabs.secondary].map((tab) => tab.id),
     );
+    if (mcpAppCanvas.tabs.length) availableTabs.add('apps');
     if (activeTab === 'background' && availableTabs.has('activity')) {
       onTabChange('activity');
       return;
@@ -6538,7 +6618,7 @@ function WorkspaceReviewPanel({
     if (!availableTabs.has(activeTab as SessionCanvasTabId)) {
       onTabChange(configuredCanvasTabs.primary[0]?.id ?? 'plan');
     }
-  }, [activeTab, configuredCanvasTabs, onTabChange]);
+  }, [activeTab, configuredCanvasTabs, mcpAppCanvas.tabs.length, onTabChange]);
 
   return (
     <aside className={panelClassName} aria-label={t('session.canvas')}>
@@ -6826,6 +6906,15 @@ function WorkspaceReviewPanel({
 
         {activeTab === 'activity' || activeTab === 'background' ? (
           <SessionInvocationActivity entries={invocationLedger} />
+        ) : null}
+
+        {activeTab === 'apps' ? (
+          <DesktopMCPAppCanvas
+            state={mcpAppCanvas}
+            sandboxProxyUrl={mcpAppSandboxProxyUrl}
+            onSelect={onSelectMCPAppCanvasTab}
+            onClose={onCloseMCPAppCanvasTab}
+          />
         ) : null}
 
         {activeTab === 'artifacts' ? (
@@ -7539,7 +7628,7 @@ function ReviewEmpty({
 function chatWorkflowTargetForReviewTab(tab: ReviewTab): ChatWorkflowTarget {
   if (tab === 'pull' || tab === 'checks') return 'pull';
   if (tab === 'background' || tab === 'activity') return 'background';
-  if (tab === 'artifacts') return 'artifacts';
+  if (tab === 'artifacts' || tab === 'apps') return 'artifacts';
   if (tab === 'changes') return 'changes';
   return 'plan';
 }

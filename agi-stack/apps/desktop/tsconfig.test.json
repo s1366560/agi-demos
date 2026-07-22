@@ -22,6 +22,7 @@
     "src/features/chat/chatTimelineModel.ts",
     "src/features/chat/artifactCanvasEventModel.ts",
     "src/features/chat/conversationTitleEventModel.ts",
+    "src/features/chat/mcpAppCanvasEventModel.ts",
     "src/features/chat/hitlResponseEventModel.ts",
     "src/hooks/useAgentSocket.ts",
     "src/hooks/useTerminalProxy.ts",

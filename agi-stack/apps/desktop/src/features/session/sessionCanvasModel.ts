@@ -8,6 +8,7 @@ export type SessionCanvasTabId =
   | 'terminal'
   | 'checks'
   | 'artifacts'
+  | 'apps'
   | 'sources'
   | 'verification';
 
@@ -52,6 +53,7 @@ const tabs: Record<SessionCanvasTabId, SessionCanvasTab> = {
   terminal: { id: 'terminal', labelKey: 'session.canvasTerminal' },
   checks: { id: 'checks', labelKey: 'session.canvasChecks' },
   artifacts: { id: 'artifacts', labelKey: 'session.canvasArtifacts' },
+  apps: { id: 'apps', labelKey: 'session.canvasApps' },
   sources: { id: 'sources', labelKey: 'session.canvasSources' },
   verification: { id: 'verification', labelKey: 'session.canvasVerification' },
 };
