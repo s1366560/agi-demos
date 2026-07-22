@@ -2,11 +2,21 @@ import type { AgentTimelineItem } from '../../types';
 
 export type AgentLifecycleFamily =
   | 'subagent'
+  | 'agent'
+  | 'agentMessage'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
 
-export type AgentLifecycleState = 'running' | 'waiting' | 'complete' | 'failed' | 'attention';
+export type AgentLifecycleState =
+  | 'running'
+  | 'waiting'
+  | 'complete'
+  | 'failed'
+  | 'attention'
+  | 'sent'
+  | 'received'
+  | 'stopped';
 
 export type AgentLifecyclePresentation = {
   family: AgentLifecycleFamily;
@@ -125,6 +135,31 @@ const lifecycleEventDefinitions: Record<
     state: 'failed',
     detailFields: ['reason', 'action_taken'],
   },
+  agent_spawned: {
+    family: 'agent',
+    state: 'running',
+    detailFields: ['task_summary', 'taskSummary'],
+  },
+  agent_completed: {
+    family: 'agent',
+    state: 'complete',
+    detailFields: ['result'],
+  },
+  agent_stopped: {
+    family: 'agent',
+    state: 'stopped',
+    detailFields: ['reason'],
+  },
+  agent_message_sent: {
+    family: 'agentMessage',
+    state: 'sent',
+    detailFields: ['message_preview', 'messagePreview'],
+  },
+  agent_message_received: {
+    family: 'agentMessage',
+    state: 'received',
+    detailFields: ['message_preview', 'messagePreview'],
+  },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -161,9 +196,9 @@ const lifecycleEventDefinitions: Record<
 };
 
 /**
- * Convert authoritative SubAgent and graph protocol fields into compact UI
- * semantics. Event type membership and structured status fields are protocol
- * facts; no free-text classification is used here.
+ * Convert authoritative SubAgent, multi-Agent, and graph protocol fields into
+ * compact UI semantics. Event type membership and structured status fields are
+ * protocol facts; no free-text classification is used here.
  */
 export function agentLifecyclePresentation(
   item: AgentTimelineItem,
@@ -192,6 +227,28 @@ export function agentLifecyclePresentation(
 }
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
+  if (family === 'agentMessage') {
+    const from = timelineEventString(item, [
+      'from_agent_name',
+      'fromAgentName',
+      'from_agent_id',
+      'fromAgentId',
+    ]);
+    const to =
+      item.type === 'agent_message_sent'
+        ? timelineEventString(item, [
+            'to_agent_name',
+            'toAgentName',
+            'to_agent_id',
+            'toAgentId',
+          ])
+        : timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']);
+    if (from && to) return `${from} → ${to}`;
+    return from ?? to ?? '';
+  }
+  if (family === 'agent') {
+    return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';
+  }
   if (family === 'graphHandoff') {
     const from = timelineEventString(item, ['from_label', 'fromLabel']);
     const to = timelineEventString(item, ['to_label', 'toLabel']);

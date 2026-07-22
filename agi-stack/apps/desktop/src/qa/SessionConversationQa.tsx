@@ -14,11 +14,11 @@ declare global {
 }
 
 // Visual QA fixture for the agent conversation timeline: day dividers, a
-// reasoning row, paired tool calls (complete / running / failed), SubAgent and
-// graph lifecycle rows, markdown with a highlighted code block, a streaming
-// assistant reply, and the live working indicator. Item timestamps are
-// relative to load time so the day dividers are deterministic ("yesterday"
-// then "today").
+// reasoning row, paired tool calls (complete / running / failed), SubAgent,
+// multi-Agent, and graph lifecycle rows, markdown with a highlighted code
+// block, a streaming assistant reply, and the live working indicator. Item
+// timestamps are relative to load time so the day dividers are deterministic
+// ("yesterday" then "today").
 
 const nowMs = Date.now();
 const HOUR = 3_600_000;
@@ -222,6 +222,64 @@ const conversationItems: AgentTimelineItem[] = [
     eventTimeUs: (nowMs - 1.95 * HOUR) * 1000,
     eventCounter: 15,
     timestamp: nowMs - 1.95 * HOUR,
+  }),
+  item({
+    id: 'agent-spawned-1',
+    type: 'agent_spawned',
+    payload: {
+      agent_name: 'Researcher',
+      task_summary: 'Collect release evidence',
+    },
+    eventTimeUs: (nowMs - 1.945 * HOUR) * 1000,
+    eventCounter: 16,
+    timestamp: nowMs - 1.945 * HOUR,
+  }),
+  item({
+    id: 'agent-message-sent-1',
+    type: 'agent_message_sent',
+    payload: {
+      from_agent_name: 'Planner',
+      to_agent_name: 'Reviewer',
+      message_preview: 'Please verify the patch',
+    },
+    eventTimeUs: (nowMs - 1.94 * HOUR) * 1000,
+    eventCounter: 17,
+    timestamp: nowMs - 1.94 * HOUR,
+  }),
+  item({
+    id: 'agent-message-received-1',
+    type: 'agent_message_received',
+    payload: {
+      agent_name: 'Planner',
+      from_agent_name: 'Reviewer',
+      message_preview: 'Patch verified successfully',
+    },
+    eventTimeUs: (nowMs - 1.935 * HOUR) * 1000,
+    eventCounter: 18,
+    timestamp: nowMs - 1.935 * HOUR,
+  }),
+  item({
+    id: 'agent-completed-1',
+    type: 'agent_completed',
+    payload: {
+      agent_name: 'Verifier',
+      result: 'Release gate failed',
+      success: false,
+    },
+    eventTimeUs: (nowMs - 1.93 * HOUR) * 1000,
+    eventCounter: 19,
+    timestamp: nowMs - 1.93 * HOUR,
+  }),
+  item({
+    id: 'agent-stopped-1',
+    type: 'agent_stopped',
+    payload: {
+      agent_name: 'Researcher',
+      reason: 'Superseded by a newer run',
+    },
+    eventTimeUs: (nowMs - 1.925 * HOUR) * 1000,
+    eventCounter: 20,
+    timestamp: nowMs - 1.925 * HOUR,
   }),
   item({
     id: 'act-3',

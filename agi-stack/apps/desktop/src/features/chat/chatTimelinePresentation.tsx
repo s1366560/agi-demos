@@ -148,6 +148,8 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (timelineHitlType(item)) return t('chat.humanInput');
   const lifecycle = agentLifecyclePresentation(item);
   if (lifecycle?.family === 'subagent') return t('chat.subagent');
+  if (lifecycle?.family === 'agent') return t('chat.agentEvent');
+  if (lifecycle?.family === 'agentMessage') return t('chat.agentMessage');
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
@@ -191,7 +193,9 @@ export function timelineSummary(
 ): string {
   const lifecycle = agentLifecyclePresentation(item);
   if (lifecycle) {
-    return [lifecycle.subject, lifecycle.detail].filter(Boolean).join(' · ') || item.type;
+    return compactTimelineValue(
+      [lifecycle.subject, lifecycle.detail].filter(Boolean).join(' · '),
+    ) || item.type;
   }
   if (item.error) return item.error;
   if (timelineHitlType(item)) return timelineHitlQuestion(item, t);
@@ -215,7 +219,7 @@ export function timelineSummary(
 export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
   const lifecycle = agentLifecyclePresentation(item);
   if (lifecycle) {
-    if (lifecycle.state === 'failed') {
+    if (lifecycle.isError) {
       return { kind: 'error', label: 'chat.status.error', localized: true };
     }
     if (lifecycle.state === 'complete') {
@@ -223,6 +227,15 @@ export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
     }
     if (lifecycle.state === 'attention') {
       return { kind: 'waiting', label: 'chat.status.needsAttention', localized: true };
+    }
+    if (lifecycle.state === 'sent') {
+      return { kind: 'ok', label: 'chat.status.sent', localized: true };
+    }
+    if (lifecycle.state === 'received') {
+      return { kind: 'ok', label: 'chat.status.received', localized: true };
+    }
+    if (lifecycle.state === 'stopped') {
+      return { kind: 'waiting', label: 'chat.status.stopped', localized: true };
     }
     return {
       kind: 'waiting',

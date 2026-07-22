@@ -249,6 +249,108 @@ test('graph lifecycle events render run, node, and handoff semantics without raw
   );
 });
 
+test('agent collaboration lifecycle exposes readable work, completion, and stop states', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-spawned-1',
+      type: 'agent_spawned',
+      eventTimeUs: 6_000_000,
+      eventCounter: 1,
+      payload: {
+        agent_name: 'Researcher',
+        task_summary: 'Collect release evidence',
+      },
+    }),
+    {
+      family: 'agent',
+      state: 'running',
+      subject: 'Researcher',
+      detail: 'Collect release evidence',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-completed-1',
+      type: 'agent_completed',
+      eventTimeUs: 7_000_000,
+      eventCounter: 2,
+      payload: {
+        agent_name: 'Verifier',
+        result: 'Release gate failed',
+        success: false,
+      },
+    }),
+    {
+      family: 'agent',
+      state: 'failed',
+      subject: 'Verifier',
+      detail: 'Release gate failed',
+      isError: true,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-stopped-1',
+      type: 'agent_stopped',
+      eventTimeUs: 8_000_000,
+      eventCounter: 3,
+      payload: { agent_name: 'Researcher', reason: 'Superseded by a newer run' },
+    }),
+    {
+      family: 'agent',
+      state: 'stopped',
+      subject: 'Researcher',
+      detail: 'Superseded by a newer run',
+      isError: false,
+    },
+  );
+});
+
+test('agent messages expose sender to recipient direction for live and history shapes', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-message-sent-1',
+      type: 'agent_message_sent',
+      eventTimeUs: 9_000_000,
+      eventCounter: 1,
+      payload: {
+        from_agent_name: 'Planner',
+        to_agent_name: 'Reviewer',
+        message_preview: 'Please verify the patch',
+      },
+    }),
+    {
+      family: 'agentMessage',
+      state: 'sent',
+      subject: 'Planner → Reviewer',
+      detail: 'Please verify the patch',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-message-received-1',
+      type: 'agent_message_received',
+      eventTimeUs: 10_000_000,
+      eventCounter: 2,
+      agentName: 'Planner',
+      fromAgentName: 'Reviewer',
+      messagePreview: 'Patch verified successfully',
+    }),
+    {
+      family: 'agentMessage',
+      state: 'received',
+      subject: 'Reviewer → Planner',
+      detail: 'Patch verified successfully',
+      isError: false,
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',
