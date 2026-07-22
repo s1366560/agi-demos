@@ -267,6 +267,7 @@ const lifecycleEventDefinitions: Record<
     detailFields: ['denial_reason', 'denialReason', 'policy_layer', 'policyLayer'],
   },
   toolset_changed: { family: 'toolset', state: 'complete' },
+  tools_updated: { family: 'toolset', state: 'ready' },
   doom_loop_detected: { family: 'doomLoop', state: 'failed' },
   doom_loop_intervened: { family: 'doomLoop', state: 'complete' },
   skill_matched: {
@@ -836,10 +837,12 @@ function lifecycleProgress(
     return total === null ? undefined : { unit: 'filteredTools', total };
   }
   if (family === 'toolset') {
-    const total = timelineEventNumber(item, [
+    const explicitTotal = timelineEventNumber(item, [
       'refreshed_tool_count',
       'refreshedToolCount',
     ]);
+    const toolNames = timelineEventStringArray(item, ['tool_names', 'toolNames']);
+    const total = explicitTotal ?? (toolNames.length > 0 ? toolNames.length : null);
     return total === null ? undefined : { unit: 'tools', total };
   }
   if (family === 'parallel') {

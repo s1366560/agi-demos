@@ -290,6 +290,29 @@ test('subagent lifecycle events expose readable subjects, details, and protocol 
       isError: true,
     },
   );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'tools-updated-1',
+      type: 'tools_updated',
+      eventTimeUs: 23_500_000,
+      eventCounter: 4,
+      payload: {
+        project_id: 'project-release',
+        server_name: 'release-tools',
+        tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+        requires_refresh: true,
+      },
+    }),
+    {
+      family: 'toolset',
+      state: 'ready',
+      subject: 'release-tools',
+      detail: '',
+      isError: false,
+      progress: { unit: 'tools', total: 2 },
+    },
+  );
 });
 
 test('graph lifecycle events render run, node, and handoff semantics without raw JSON', () => {

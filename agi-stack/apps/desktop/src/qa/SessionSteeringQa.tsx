@@ -853,6 +853,21 @@ const channelInboundMessageTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const toolsUpdatedTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'tools-updated-release-server',
+    type: 'tools_updated',
+    eventTimeUs: 1_784_282_073_000_000,
+    eventCounter: 41,
+    payload: {
+      project_id: 'project-release',
+      server_name: 'release-tools',
+      tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+      requires_refresh: true,
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1035,6 +1050,7 @@ function SessionSteeringQa() {
   const taskUiStateEventsMode = searchParams.get('task-ui-state-events') === '1';
   const internalUiStateEventsMode = searchParams.get('internal-ui-state-events') === '1';
   const channelInboundMessageMode = searchParams.get('channel-inbound-message') === '1';
+  const toolsUpdatedEventMode = searchParams.get('tools-updated-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1107,6 +1123,8 @@ function SessionSteeringQa() {
                                   ? [...timelineState.items, ...internalUiStateTimelineItems]
                                   : channelInboundMessageMode
                                     ? [...timelineState.items, ...channelInboundMessageTimelineItems]
+                                    : toolsUpdatedEventMode
+                                      ? [...timelineState.items, ...toolsUpdatedTimelineItems]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1300,6 +1318,7 @@ function SessionSteeringQa() {
                 taskUiStateEventsMode ||
                 internalUiStateEventsMode ||
                 channelInboundMessageMode ||
+                toolsUpdatedEventMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
