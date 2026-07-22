@@ -929,6 +929,53 @@ test('MCP App events expose the registered app and interactive tool result', () 
   );
 });
 
+test('memory events expose authoritative recall and capture counts', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'memory-recalled-1',
+      type: 'memory_recalled',
+      eventTimeUs: 36_000_000,
+      eventCounter: 1,
+      payload: {
+        memories: [
+          { id: 'memory-1', category: 'semantic' },
+          { id: 'memory-2', category: 'preference' },
+          { id: 'memory-3', category: 'procedural' },
+        ],
+        count: 3,
+        search_ms: 24,
+      },
+    }),
+    {
+      family: 'memory',
+      state: 'complete',
+      subject: '',
+      detail: '',
+      isError: false,
+      progress: { unit: 'memories', total: 3 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'memory-captured-1',
+      type: 'memory_captured',
+      eventTimeUs: 37_000_000,
+      eventCounter: 2,
+      capturedCount: 2,
+      categories: ['semantic', 'preference'],
+    }),
+    {
+      family: 'memory',
+      state: 'complete',
+      subject: 'semantic, preference',
+      detail: '',
+      isError: false,
+      progress: { unit: 'memories', total: 2 },
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',

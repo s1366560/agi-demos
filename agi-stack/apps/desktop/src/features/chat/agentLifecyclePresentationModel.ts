@@ -16,6 +16,7 @@ export type AgentLifecycleFamily =
   | 'model'
   | 'context'
   | 'mcpApp'
+  | 'memory'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -40,7 +41,14 @@ export type AgentLifecyclePresentation = {
   detail: string;
   isError: boolean;
   progress?: {
-    unit: 'tasks' | 'steps' | 'tools' | 'filteredTools' | 'tokens' | 'messages';
+    unit:
+      | 'tasks'
+      | 'steps'
+      | 'tools'
+      | 'filteredTools'
+      | 'tokens'
+      | 'messages'
+      | 'memories';
     current?: number;
     total: number;
   };
@@ -260,6 +268,8 @@ const lifecycleEventDefinitions: Record<
   },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
+  memory_recalled: { family: 'memory', state: 'complete' },
+  memory_captured: { family: 'memory', state: 'complete' },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -355,6 +365,11 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
       timelineEventString(item, ['tool_name', 'toolName', 'app_id', 'appId']) ??
       ''
     );
+  }
+  if (family === 'memory') {
+    return item.type === 'memory_captured'
+      ? timelineEventStringArray(item, ['categories']).join(', ')
+      : '';
   }
   if (family === 'skill') {
     const skill = timelineEventString(item, ['skill_name', 'skillName']);
@@ -536,6 +551,17 @@ function lifecycleProgress(
         ? { unit: 'messages', total }
         : { unit: 'messages', current, total };
     }
+  }
+  if (family === 'memory') {
+    const explicitCount = timelineEventNumber(item, [
+      item.type === 'memory_recalled' ? 'count' : 'captured_count',
+      'capturedCount',
+    ]);
+    const recalledCount = timelineEventRecordArray(item, ['memories']).length;
+    const total =
+      explicitCount ??
+      (item.type === 'memory_recalled' && recalledCount > 0 ? recalledCount : null);
+    return total === null ? undefined : { unit: 'memories', total };
   }
   if (family === 'skill') {
     if (item.type === 'skill_matched') {

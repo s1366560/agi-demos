@@ -628,6 +628,33 @@ const conversationItems: AgentTimelineItem[] = [
     timestamp: nowMs - 1.8998 * HOUR,
   }),
   item({
+    id: 'memory-recalled-1',
+    type: 'memory_recalled',
+    payload: {
+      memories: [
+        { id: 'memory-1', category: 'semantic', title: 'Pipeline fixture isolation' },
+        { id: 'memory-2', category: 'preference', title: 'Require regression evidence' },
+        { id: 'memory-3', category: 'procedural', title: 'Verify in an isolated worktree' },
+      ],
+      count: 3,
+      search_ms: 24,
+    },
+    eventTimeUs: (nowMs - 1.8997 * HOUR) * 1000,
+    eventCounter: 45,
+    timestamp: nowMs - 1.8997 * HOUR,
+  }),
+  item({
+    id: 'memory-captured-1',
+    type: 'memory_captured',
+    payload: {
+      captured_count: 2,
+      categories: ['semantic', 'preference'],
+    },
+    eventTimeUs: (nowMs - 1.8996 * HOUR) * 1000,
+    eventCounter: 46,
+    timestamp: nowMs - 1.8996 * HOUR,
+  }),
+  item({
     id: 'act-3',
     type: 'act',
     toolName: 'shell_command',

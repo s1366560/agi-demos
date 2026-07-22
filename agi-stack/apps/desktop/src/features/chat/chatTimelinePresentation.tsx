@@ -182,6 +182,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       ? t('chat.mcpAppRegistered')
       : t('chat.mcpAppResult');
   }
+  if (lifecycle?.family === 'memory') {
+    return item.type === 'memory_recalled'
+      ? t('chat.memoryRecalled')
+      : t('chat.memoryCaptured');
+  }
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
