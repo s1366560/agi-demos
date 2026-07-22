@@ -88,6 +88,7 @@ import {
   workspaceMessageRequiresDefaultAgentLaunch,
 } from './features/chat/chatComposerModel';
 import {
+  mergeArtifactStreamItem,
   mergeAssistantCompletionEvent,
   mergeAssistantTextStreamChunk,
   mergeThoughtStreamChunk,
@@ -892,6 +893,12 @@ function mergeLiveTimelineEvent(
   const timeline =
     type === 'a2ui_action_answered' ? markA2UIActionAnswered(existing, event) : existing;
   const item = timelineItemFromSocketEvent(event);
+  if (
+    item &&
+    ['artifact_created', 'artifact_ready', 'artifact_error', 'artifacts_batch'].includes(item.type)
+  ) {
+    return mergeArtifactStreamItem(timeline, item);
+  }
   if (item && (type === 'act_delta' || type === 'act' || type === 'observe')) {
     return mergeToolStreamItem(
       timeline,

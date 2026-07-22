@@ -76,6 +76,86 @@ export type AgentExecutionSummary = {
 export type ToolStreamEventKind = 'delta' | 'act' | 'observe';
 
 /**
+ * Apply artifact lifecycle updates to one stable timeline row. The Web client
+ * treats ready/error as updates to artifact_created; preserving that identity
+ * avoids duplicate rows while an upload settles.
+ */
+export function mergeArtifactStreamItem(
+  existing: AgentTimelineItem[],
+  incoming: AgentTimelineItem,
+): AgentTimelineItem[] {
+  const normalizedIncoming = normalizeArtifactStreamItem(incoming);
+  if (incoming.type === 'artifact_ready' || incoming.type === 'artifact_error') {
+    const artifactId = artifactStreamString(normalizedIncoming, ['artifactId', 'artifact_id']);
+    const targetIndex = artifactId
+      ? findLastArtifactCreatedIndex(existing, artifactId)
+      : -1;
+    if (targetIndex >= 0) {
+      const incomingPayload = isRecord(normalizedIncoming.payload)
+        ? normalizedIncoming.payload
+        : {};
+      return sortTimelineItems(
+        existing.map((item, index) => {
+          if (index !== targetIndex) return item;
+          const currentPayload = isRecord(item.payload) ? item.payload : {};
+          return {
+            ...item,
+            ...(normalizedIncoming.artifactId
+              ? { artifactId: normalizedIncoming.artifactId }
+              : {}),
+            ...(normalizedIncoming.filename ? { filename: normalizedIncoming.filename } : {}),
+            ...(normalizedIncoming.error ? { error: normalizedIncoming.error } : {}),
+            ...(incoming.type === 'artifact_error' ? { isError: true } : {}),
+            payload: { ...currentPayload, ...incomingPayload },
+          };
+        }),
+      );
+    }
+  }
+  return sortTimelineItems([...existing, normalizedIncoming]);
+}
+
+function normalizeArtifactStreamItem(item: AgentTimelineItem): AgentTimelineItem {
+  const artifactId = artifactStreamString(item, ['artifactId', 'artifact_id']);
+  const filename = artifactStreamString(item, ['filename']);
+  const sourceTool = artifactStreamString(item, ['sourceTool', 'source_tool']);
+  const error = artifactStreamString(item, ['error']);
+  return {
+    ...item,
+    ...(artifactId ? { artifactId } : {}),
+    ...(filename ? { filename } : {}),
+    ...(sourceTool ? { sourceTool } : {}),
+    ...(error ? { error } : {}),
+    ...(item.type === 'artifact_error' ? { isError: true } : {}),
+  };
+}
+
+function findLastArtifactCreatedIndex(items: AgentTimelineItem[], artifactId: string): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (
+      item.type === 'artifact_created' &&
+      artifactStreamString(item, ['artifactId', 'artifact_id']) === artifactId
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function artifactStreamString(item: AgentTimelineItem, keys: string[]): string | null {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  for (const source of [item, payload]) {
+    if (!source) continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === 'string' && value) return value;
+    }
+  }
+  return null;
+}
+
+/**
  * Merge the three phases of a streamed tool call without creating one card
  * per argument delta. The backend gives deltas a `call_id`, then adds a
  * `tool_execution_id` on act/observe, so matching accepts either identifier.

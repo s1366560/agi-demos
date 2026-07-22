@@ -18,6 +18,7 @@ export type AgentLifecycleFamily =
   | 'mcpApp'
   | 'memory'
   | 'task'
+  | 'artifact'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -49,7 +50,8 @@ export type AgentLifecyclePresentation = {
       | 'filteredTools'
       | 'tokens'
       | 'messages'
-      | 'memories';
+      | 'memories'
+      | 'artifacts';
     current?: number;
     total: number;
   };
@@ -273,6 +275,22 @@ const lifecycleEventDefinitions: Record<
   memory_captured: { family: 'memory', state: 'complete' },
   task_start: { family: 'task', state: 'running' },
   task_complete: { family: 'task', state: 'complete' },
+  artifact_created: {
+    family: 'artifact',
+    state: 'running',
+    detailFields: ['source_tool', 'sourceTool'],
+  },
+  artifact_ready: {
+    family: 'artifact',
+    state: 'ready',
+    detailFields: ['source_tool', 'sourceTool'],
+  },
+  artifact_error: {
+    family: 'artifact',
+    state: 'failed',
+    detailFields: ['error'],
+  },
+  artifacts_batch: { family: 'artifact', state: 'complete' },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -324,6 +342,7 @@ export function agentLifecyclePresentation(
   const explicitStatus = timelineEventString(item, ['status']);
   if (
     lifecycleFailed(item) ||
+    (definition.family === 'artifact' && Boolean(timelineEventString(item, ['error']))) ||
     explicitStatus === 'failed' ||
     explicitStatus === 'error'
   ) {
@@ -335,6 +354,11 @@ export function agentLifecyclePresentation(
     (timelineEventNumber(item, ['removed_total', 'removedTotal']) ?? 0) > 0
   ) {
     state = 'attention';
+  } else if (
+    item.type === 'artifact_created' &&
+    Boolean(timelineEventString(item, ['url']))
+  ) {
+    state = 'ready';
   }
 
   const subject = lifecycleSubject(item, definition.family);
@@ -378,6 +402,14 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     return item.type === 'task_start'
       ? timelineEventString(item, ['content']) ?? ''
       : '';
+  }
+  if (family === 'artifact') {
+    if (item.type === 'artifacts_batch') {
+      return timelineEventString(item, ['source_tool', 'sourceTool']) ?? '';
+    }
+    return (
+      timelineEventString(item, ['filename', 'artifact_id', 'artifactId']) ?? ''
+    );
   }
   if (family === 'skill') {
     const skill = timelineEventString(item, ['skill_name', 'skillName']);
@@ -578,6 +610,10 @@ function lifecycleProgress(
     return orderIndex === null
       ? { unit: 'tasks', total }
       : { unit: 'tasks', current: orderIndex + 1, total };
+  }
+  if (family === 'artifact' && item.type === 'artifacts_batch') {
+    const total = timelineEventRecordArray(item, ['artifacts']).length;
+    return total > 0 ? { unit: 'artifacts', total } : undefined;
   }
   if (family === 'skill') {
     if (item.type === 'skill_matched') {

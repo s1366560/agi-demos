@@ -116,7 +116,7 @@ export function timelineKind(item: AgentTimelineItem): TimelineKind {
   if (item.role === 'user' || item.type === 'user_message') return 'user';
   if (item.role === 'assistant' || item.type === 'assistant_message') return 'agent';
   if (item.type === 'act' || item.type === 'observe') return 'tool';
-  if (item.type.startsWith('artifact_')) return 'artifact';
+  if (item.type.startsWith('artifact_') || item.type === 'artifacts_batch') return 'artifact';
   return 'runtime';
 }
 
@@ -146,6 +146,10 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (item.type === 'task_start') return t('chat.taskStarted');
   if (item.type === 'task_complete') return t('chat.taskCompleted');
   if (item.type.startsWith('task_')) return t('chat.task');
+  if (item.type === 'artifact_created') return t('chat.artifactCreated');
+  if (item.type === 'artifact_ready') return t('chat.artifactReady');
+  if (item.type === 'artifact_error') return t('chat.artifactFailed');
+  if (item.type === 'artifacts_batch') return t('chat.artifactsBatch');
   if (item.type.startsWith('artifact_')) return t('chat.artifact');
   if (timelineHitlType(item)) return t('chat.humanInput');
   const lifecycle = agentLifecyclePresentation(item);

@@ -52,6 +52,17 @@ test('raw task and error payloads stay collapsed until a person opens them', () 
   assert.doesNotMatch(importancePolicy, /startsWith\('task_'\)|artifact_error/);
 });
 
+test('artifact batch events use artifact presentation instead of generic runtime presentation', () => {
+  assert.match(
+    chatSource,
+    /item\.type\.startsWith\('artifact_'\) \|\| item\.type === 'artifacts_batch'/,
+  );
+  assert.match(chatSource, /item\.type === 'artifact_created'[\s\S]*chat\.artifactCreated/);
+  assert.match(chatSource, /item\.type === 'artifact_ready'[\s\S]*chat\.artifactReady/);
+  assert.match(chatSource, /item\.type === 'artifact_error'[\s\S]*chat\.artifactFailed/);
+  assert.match(chatSource, /item\.type === 'artifacts_batch'[\s\S]*chat\.artifactsBatch/);
+});
+
 test('session composer exposes localized context actions and compact delivery controls', () => {
   assert.match(chatSource, /<ComposerPlusMenu/);
   assert.match(chatSource, /t\('composer\.addedContext'\)/);
@@ -100,6 +111,11 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.memoryCaptured',
     'chat.taskStarted',
     'chat.taskCompleted',
+    'chat.artifactCreated',
+    'chat.artifactReady',
+    'chat.artifactFailed',
+    'chat.artifactsBatch',
+    'chat.artifactsCount',
     'chat.memoriesCount',
     'chat.tokensCount',
     'chat.tokensProgress',

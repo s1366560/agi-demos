@@ -11,6 +11,7 @@ const {
   assistantExecutionSummary,
   detectPayloadLanguage,
   formatToolCallDuration,
+  mergeArtifactStreamItem,
   mergeAssistantTextStreamChunk,
   mergeAssistantCompletionEvent,
   mergeThoughtStreamChunk,
@@ -1063,6 +1064,186 @@ test('task timeline markers expose content, progress, and terminal status', () =
       progress: { unit: 'tasks', current: 4, total: 4 },
     },
   );
+});
+
+test('artifact timeline events expose lifecycle state, source, and batch progress', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'artifact-created-1',
+      type: 'artifact_created',
+      eventTimeUs: 42_000_000,
+      eventCounter: 1,
+      payload: {
+        artifact_id: 'artifact-1',
+        filename: 'release-notes.md',
+        source_tool: 'export_artifact',
+      },
+    }),
+    {
+      family: 'artifact',
+      state: 'running',
+      subject: 'release-notes.md',
+      detail: 'export_artifact',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'artifact-created-ready-1',
+      type: 'artifact_created',
+      eventTimeUs: 43_000_000,
+      eventCounter: 2,
+      artifactId: 'artifact-2',
+      filename: 'verification.pdf',
+      sourceTool: 'publish_report',
+      url: 'https://artifacts.example/verification.pdf',
+    }),
+    {
+      family: 'artifact',
+      state: 'ready',
+      subject: 'verification.pdf',
+      detail: 'publish_report',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'artifact-ready-1',
+      type: 'artifact_ready',
+      eventTimeUs: 44_000_000,
+      eventCounter: 3,
+      payload: {
+        artifact_id: 'artifact-3',
+        filename: 'release.zip',
+        source_tool: 'package_release',
+        url: 'https://artifacts.example/release.zip',
+      },
+    }),
+    {
+      family: 'artifact',
+      state: 'ready',
+      subject: 'release.zip',
+      detail: 'package_release',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'artifact-error-1',
+      type: 'artifact_error',
+      eventTimeUs: 45_000_000,
+      eventCounter: 4,
+      payload: {
+        artifact_id: 'artifact-4',
+        filename: 'broken.tar.gz',
+        error: 'Upload checksum mismatch',
+      },
+    }),
+    {
+      family: 'artifact',
+      state: 'failed',
+      subject: 'broken.tar.gz',
+      detail: 'Upload checksum mismatch',
+      isError: true,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'artifacts-batch-1',
+      type: 'artifacts_batch',
+      eventTimeUs: 46_000_000,
+      eventCounter: 5,
+      payload: {
+        source_tool: 'export_release',
+        artifacts: [
+          { id: 'artifact-5', filename: 'manifest.json' },
+          { id: 'artifact-6', filename: 'checksums.txt' },
+        ],
+      },
+    }),
+    {
+      family: 'artifact',
+      state: 'complete',
+      subject: 'export_release',
+      detail: '',
+      isError: false,
+      progress: { unit: 'artifacts', total: 2 },
+    },
+  );
+});
+
+test('artifact ready and error stream events settle the original created row', () => {
+  const created = {
+    id: 'artifact-created-1',
+    type: 'artifact_created',
+    eventTimeUs: 47_000_000,
+    eventCounter: 1,
+    payload: {
+      artifact_id: 'artifact-1',
+      filename: 'release-notes.md',
+      source_tool: 'export_artifact',
+    },
+  };
+  const createdItems = mergeArtifactStreamItem([], created);
+  assert.equal(createdItems.length, 1);
+  assert.equal(createdItems[0].artifactId, 'artifact-1');
+  assert.equal(createdItems[0].filename, 'release-notes.md');
+
+  const readyItems = mergeArtifactStreamItem(createdItems, {
+    id: 'artifact-ready-1',
+    type: 'artifact_ready',
+    eventTimeUs: 48_000_000,
+    eventCounter: 2,
+    payload: {
+      artifact_id: 'artifact-1',
+      filename: 'release-notes.md',
+      url: 'https://artifacts.example/release-notes.md',
+      preview_url: 'https://artifacts.example/release-notes.preview',
+    },
+  });
+  assert.equal(readyItems.length, 1);
+  assert.equal(readyItems[0].id, 'artifact-created-1');
+  assert.equal(readyItems[0].type, 'artifact_created');
+  assert.equal(
+    readyItems[0].payload.url,
+    'https://artifacts.example/release-notes.md',
+  );
+
+  const errorItems = mergeArtifactStreamItem(createdItems, {
+    id: 'artifact-error-1',
+    type: 'artifact_error',
+    eventTimeUs: 49_000_000,
+    eventCounter: 3,
+    payload: {
+      artifact_id: 'artifact-1',
+      filename: 'release-notes.md',
+      error: 'Upload checksum mismatch',
+    },
+  });
+  assert.equal(errorItems.length, 1);
+  assert.equal(errorItems[0].id, 'artifact-created-1');
+  assert.equal(errorItems[0].type, 'artifact_created');
+  assert.equal(errorItems[0].error, 'Upload checksum mismatch');
+  assert.equal(errorItems[0].isError, true);
+
+  const orphanReady = mergeArtifactStreamItem([], {
+    id: 'artifact-ready-orphan-1',
+    type: 'artifact_ready',
+    eventTimeUs: 50_000_000,
+    eventCounter: 4,
+    payload: {
+      artifact_id: 'artifact-orphan',
+      filename: 'recovered.zip',
+      url: 'https://artifacts.example/recovered.zip',
+    },
+  });
+  assert.equal(orphanReady.length, 1);
+  assert.equal(orphanReady[0].type, 'artifact_ready');
+  assert.equal(orphanReady[0].filename, 'recovered.zip');
 });
 
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
