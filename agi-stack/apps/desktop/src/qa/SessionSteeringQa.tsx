@@ -489,6 +489,55 @@ const subagentTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const memoryTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'memory-release-context',
+    type: 'memory_recalled',
+    eventTimeUs: 1_784_282_044_000_000,
+    eventCounter: 4,
+    payload: {
+      count: 3,
+      search_ms: 24,
+      memories: [
+        {
+          id: 'memory-native-runner',
+          content:
+            'Launch the native Desktop client from the repository root with make -C agi-stack run-desktop so Tauri runtime, signing, and application-vault persistence match the supported development path.',
+          score: 0.96,
+          source: 'repository',
+          category: 'procedural',
+        },
+        {
+          id: 'memory-release-evidence',
+          content:
+            'Release reviews should include the focused regression result, the full suite result, production build output, and a rendered interaction check with console evidence. Keep each evidence item traceable to the exact client state that was exercised.',
+          score: 0.91,
+          source: 'project',
+          category: 'preference',
+        },
+        {
+          id: 'memory-event-rendering',
+          content:
+            'Agent protocol events should render as structured first-class cards rather than exposing raw payload JSON.',
+          score: 0.86,
+          source: 'project',
+          category: 'semantic',
+        },
+      ],
+    },
+  },
+  {
+    id: 'memory-release-captured',
+    type: 'memory_captured',
+    eventTimeUs: 1_784_282_045_000_000,
+    eventCounter: 5,
+    payload: {
+      captured_count: 2,
+      categories: ['procedural', 'preference'],
+    },
+  },
+];
+
 const runtimeInfrastructureTimelineItems: ConversationTimelineState['items'] = [
   {
     id: 'sandbox-runtime-created',
@@ -1611,6 +1660,7 @@ function SessionSteeringQa() {
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
   const subagentEventsMode = searchParams.get('subagent-events') === '1';
+  const memoryEventsMode = searchParams.get('memory-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
@@ -1702,8 +1752,10 @@ function SessionSteeringQa() {
           ? [...timelineState.items, suggestionTimelineItem]
           : subagentEventsMode
             ? [...timelineState.items, ...subagentTimelineItems]
-            : modelOverrideEventsMode
-              ? [...timelineState.items, ...modelOverrideTimelineItems]
+            : memoryEventsMode
+              ? [...timelineState.items, ...memoryTimelineItems]
+              : modelOverrideEventsMode
+                ? [...timelineState.items, ...modelOverrideTimelineItems]
             : llmRuntimeEventsMode
             ? [...timelineState.items, ...llmRuntimeTimelineItems]
             : runtimeEventsMode
@@ -2032,6 +2084,7 @@ function SessionSteeringQa() {
               activityPresence={
                 suggestionsMode ||
                 subagentEventsMode ||
+                memoryEventsMode ||
                 modelOverrideEventsMode ||
                 llmRuntimeEventsMode ||
                 runtimeEventsMode ||

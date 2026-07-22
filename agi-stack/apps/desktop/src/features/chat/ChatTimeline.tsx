@@ -67,6 +67,8 @@ import {
 import type { TimelineKind } from './chatTimelinePresentation';
 import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
+import { MemoryTimelineEvent } from './MemoryTimelineCards';
+import { isMemoryTimelineEvent } from './memoryTimelineModel';
 import {
   MarkdownContent,
   NarrativeMessageFrame,
@@ -252,6 +254,18 @@ export function AgentTimeline({
               <TimelineDayDivider key={`day-${dayKey}`} timeUs={nodeTimeUs} />
             ) : null;
           if (dayKey) lastRenderedDayKey = dayKey;
+          if (node.kind === 'item' && isMemoryTimelineEvent(node.item)) {
+            return (
+              <Fragment key={node.id}>
+                {dayDivider}
+                <MemoryTimelineEvent
+                  key={`${state.conversationId ?? 'unscoped'}:${node.item.id}`}
+                  item={node.item}
+                  conversationId={state.conversationId}
+                />
+              </Fragment>
+            );
+          }
           if (node.kind === 'subagent_group') {
             const groupId = timelineGroupIdentity(narrative, index);
             const open = timelineGroupOpen(
@@ -1054,6 +1068,11 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
   };
 
   narrative.forEach((node) => {
+    if (node.kind === 'item' && isMemoryTimelineEvent(node.item)) {
+      flushActivityItems();
+      grouped.push(node);
+      return;
+    }
     if (node.kind === 'item') {
       const subagentGroup = subagentGroupsByStartItem.get(node.item.id);
       if (subagentGroup) {
