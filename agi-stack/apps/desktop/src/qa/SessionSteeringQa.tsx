@@ -39,8 +39,10 @@ import {
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
 import { SessionAgentsCanvas } from '../features/session/SessionAgentsCanvas';
 import { SessionExecutionGraphCanvas } from '../features/session/SessionExecutionGraphCanvas';
+import { SessionExecutionInsightsCanvas } from '../features/session/SessionExecutionInsightsCanvas';
 import { buildSessionAgentTree } from '../features/session/sessionAgentTreeModel';
 import { buildSessionExecutionGraph } from '../features/session/sessionExecutionGraphModel';
+import { buildSessionExecutionInsights } from '../features/session/sessionExecutionInsightsModel';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
 import type {
@@ -666,6 +668,87 @@ const executionGraphCanvasTimelineItems: ConversationTimelineState['items'] = [
       node_label: 'Publish release',
       agent_definition_id: 'release-publisher',
       agent_session_id: 'conversation-graph-publish',
+    },
+  },
+];
+
+const executionInsightsCanvasTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'insights-release-route',
+    type: 'execution_path_decided',
+    eventTimeUs: 1_784_282_058_000_000,
+    eventCounter: 17,
+    payload: {
+      route_id: 'route-release-verification',
+      trace_id: 'trace-release-verification',
+      path: 'react_loop',
+      confidence: 0.94,
+      reason: 'Release verification requires governed tools and independent evidence.',
+      target: 'workspace-agent',
+      metadata: { domain_lane: 'code' },
+    },
+  },
+  {
+    id: 'insights-release-selection',
+    type: 'selection_trace',
+    eventTimeUs: 1_784_282_059_000_000,
+    eventCounter: 18,
+    payload: {
+      route_id: 'route-release-verification',
+      trace_id: 'trace-release-verification',
+      domain_lane: 'code',
+      initial_count: 12,
+      final_count: 4,
+      removed_total: 8,
+      tool_budget: 4,
+      budget_exceeded_stages: ['semantic_ranker'],
+      stages: [
+        {
+          stage: 'capability_filter',
+          before_count: 12,
+          after_count: 7,
+          removed_count: 5,
+          duration_ms: 2.4,
+          explain: { reason: 'Workspace capability boundary' },
+        },
+        {
+          stage: 'semantic_ranker',
+          before_count: 7,
+          after_count: 4,
+          removed_count: 3,
+          duration_ms: 5.8,
+        },
+      ],
+    },
+  },
+  {
+    id: 'insights-release-policy',
+    type: 'policy_filtered',
+    eventTimeUs: 1_784_282_060_000_000,
+    eventCounter: 19,
+    payload: {
+      route_id: 'route-release-verification',
+      trace_id: 'trace-release-verification',
+      domain_lane: 'code',
+      removed_total: 3,
+      stage_count: 2,
+      tool_budget: 4,
+      budget_exceeded_stages: ['semantic_ranker'],
+    },
+  },
+  {
+    id: 'insights-release-toolset',
+    type: 'toolset_changed',
+    eventTimeUs: 1_784_282_061_000_000,
+    eventCounter: 20,
+    payload: {
+      trace_id: 'trace-release-verification',
+      source: 'plugin_manager',
+      action: 'install',
+      plugin_name: 'github',
+      refresh_status: 'success',
+      refreshed_tool_count: 3,
+      mutation_fingerprint: 'sha256:release-verification',
     },
   },
 ];
@@ -2009,6 +2092,7 @@ function SessionSteeringQa() {
   const subagentEventsMode = searchParams.get('subagent-events') === '1';
   const multiAgentCanvasMode = searchParams.get('multi-agent-canvas') === '1';
   const executionGraphCanvasMode = searchParams.get('execution-graph-canvas') === '1';
+  const executionInsightsCanvasMode = searchParams.get('execution-insights-canvas') === '1';
   const memoryEventsMode = searchParams.get('memory-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
@@ -2091,6 +2175,13 @@ function SessionSteeringQa() {
       ),
     [executionGraphCanvasMode],
   );
+  const sessionExecutionInsights = useMemo(
+    () =>
+      buildSessionExecutionInsights(
+        executionInsightsCanvasMode ? executionInsightsCanvasTimelineItems : [],
+      ),
+    [executionInsightsCanvasMode],
+  );
   const mcpAppHostApi = useMemo(
     () => ({
       callMCPAppTool: async (_appId: string, toolName: string) => ({
@@ -2120,6 +2211,8 @@ function SessionSteeringQa() {
               ? [...timelineState.items, ...multiAgentCanvasTimelineItems]
               : executionGraphCanvasMode
                 ? [...timelineState.items, ...executionGraphCanvasTimelineItems]
+              : executionInsightsCanvasMode
+                ? [...timelineState.items, ...executionInsightsCanvasTimelineItems]
             : mcpAppEventsMode
               ? [...timelineState.items, ...mcpAppTimelineItems]
               : subagentEventsMode
@@ -2458,6 +2551,7 @@ function SessionSteeringQa() {
                 skillEventsMode ||
                 multiAgentCanvasMode ||
                 executionGraphCanvasMode ||
+                executionInsightsCanvasMode ||
                 subagentEventsMode ||
                 memoryEventsMode ||
                 modelOverrideEventsMode ||
@@ -2578,7 +2672,9 @@ function SessionSteeringQa() {
             {workspaceLifecycleEventMode ? (
               <p data-testid="workspace-lifecycle-stream">{qaWorkspaceLifecycleSummary}</p>
             ) : null}
-            {executionGraphCanvasMode ? (
+            {executionInsightsCanvasMode ? (
+              <SessionExecutionInsightsCanvas model={sessionExecutionInsights} />
+            ) : executionGraphCanvasMode ? (
               <>
                 <SessionExecutionGraphCanvas
                   model={sessionExecutionGraph}
