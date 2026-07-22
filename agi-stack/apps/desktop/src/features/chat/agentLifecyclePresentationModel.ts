@@ -13,6 +13,8 @@ export type AgentLifecycleFamily =
   | 'policy'
   | 'toolset'
   | 'skill'
+  | 'model'
+  | 'context'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -26,6 +28,7 @@ export type AgentLifecycleState =
   | 'sent'
   | 'received'
   | 'blocked'
+  | 'scheduled'
   | 'stopped';
 
 export type AgentLifecyclePresentation = {
@@ -35,7 +38,7 @@ export type AgentLifecyclePresentation = {
   detail: string;
   isError: boolean;
   progress?: {
-    unit: 'tasks' | 'steps' | 'tools' | 'filteredTools';
+    unit: 'tasks' | 'steps' | 'tools' | 'filteredTools' | 'tokens' | 'messages';
     current?: number;
     total: number;
   };
@@ -237,6 +240,22 @@ const lifecycleEventDefinitions: Record<
     state: 'attention',
     detailFields: ['error', 'reason'],
   },
+  model_switch_requested: {
+    family: 'model',
+    state: 'scheduled',
+    detailFields: ['reason', 'provider_name', 'providerName', 'provider_type', 'providerType'],
+  },
+  model_override_rejected: {
+    family: 'model',
+    state: 'blocked',
+    detailFields: ['reason'],
+  },
+  context_status: { family: 'context', state: 'complete' },
+  context_compressed: {
+    family: 'context',
+    state: 'complete',
+    detailFields: ['compression_level', 'compressionLevel'],
+  },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -317,6 +336,14 @@ export function agentLifecyclePresentation(
 }
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
+  if (family === 'model') {
+    return timelineEventString(item, ['model']) ?? '';
+  }
+  if (family === 'context') {
+    return item.type === 'context_compressed'
+      ? timelineEventString(item, ['compression_strategy', 'compressionStrategy']) ?? ''
+      : timelineEventString(item, ['compression_level', 'compressionLevel']) ?? '';
+  }
   if (family === 'skill') {
     const skill = timelineEventString(item, ['skill_name', 'skillName']);
     if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
@@ -462,6 +489,30 @@ function lifecycleProgress(
   item: AgentTimelineItem,
   family: AgentLifecycleFamily,
 ): AgentLifecyclePresentation['progress'] {
+  if (family === 'context') {
+    if (item.type === 'context_status') {
+      const total = timelineEventNumber(item, ['token_budget', 'tokenBudget']);
+      const current = timelineEventNumber(item, ['current_tokens', 'currentTokens']);
+      if (total === null) return undefined;
+      return current === null
+        ? { unit: 'tokens', total }
+        : { unit: 'tokens', current, total };
+    }
+    if (item.type === 'context_compressed') {
+      const total = timelineEventNumber(item, [
+        'original_message_count',
+        'originalMessageCount',
+      ]);
+      const current = timelineEventNumber(item, [
+        'final_message_count',
+        'finalMessageCount',
+      ]);
+      if (total === null) return undefined;
+      return current === null
+        ? { unit: 'messages', total }
+        : { unit: 'messages', current, total };
+    }
+  }
   if (family === 'skill') {
     if (item.type === 'skill_matched') {
       const total = timelineEventStringArray(item, ['tools']).length;

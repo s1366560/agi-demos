@@ -167,6 +167,16 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
     if (item.type === 'skill_fallback') return t('chat.skillFallback');
     return t('chat.skillExecution');
   }
+  if (lifecycle?.family === 'model') {
+    return item.type === 'model_override_rejected'
+      ? t('chat.modelOverride')
+      : t('chat.modelSwitch');
+  }
+  if (lifecycle?.family === 'context') {
+    return item.type === 'context_compressed'
+      ? t('chat.contextCompressed')
+      : t('chat.contextStatus');
+  }
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
@@ -261,6 +271,9 @@ export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
     }
     if (lifecycle.state === 'blocked') {
       return { kind: 'waiting', label: 'chat.status.blocked', localized: true };
+    }
+    if (lifecycle.state === 'scheduled') {
+      return { kind: 'waiting', label: 'chat.status.scheduled', localized: true };
     }
     if (lifecycle.state === 'stopped') {
       return { kind: 'waiting', label: 'chat.status.stopped', localized: true };

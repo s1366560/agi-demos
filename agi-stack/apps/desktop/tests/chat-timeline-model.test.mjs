@@ -787,6 +787,98 @@ test('skill results, completion, and fallback expose outcome semantics', () => {
   );
 });
 
+test('model switch events distinguish scheduled changes from rejected overrides', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'model-switch-requested-1',
+      type: 'model_switch_requested',
+      eventTimeUs: 30_000_000,
+      eventCounter: 1,
+      payload: {
+        model: 'gpt-4.1',
+        provider_type: 'openai',
+        provider_name: 'OpenAI production',
+        scope: 'next_turn',
+        reason: 'Need deeper reasoning',
+      },
+    }),
+    {
+      family: 'model',
+      state: 'scheduled',
+      subject: 'gpt-4.1',
+      detail: 'Need deeper reasoning',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'model-override-rejected-1',
+      type: 'model_override_rejected',
+      eventTimeUs: 31_000_000,
+      eventCounter: 2,
+      model: 'claude-sonnet-4',
+      reason: 'Cross-provider switch not allowed',
+      currentModel: 'gpt-4.1',
+      currentProvider: 'openai',
+    }),
+    {
+      family: 'model',
+      state: 'blocked',
+      subject: 'claude-sonnet-4',
+      detail: 'Cross-provider switch not allowed',
+      isError: false,
+    },
+  );
+});
+
+test('context events expose token occupancy and compression results', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'context-status-1',
+      type: 'context_status',
+      eventTimeUs: 32_000_000,
+      eventCounter: 1,
+      payload: {
+        current_tokens: 7_200,
+        token_budget: 16_000,
+        occupancy_pct: 45,
+        compression_level: 'none',
+      },
+    }),
+    {
+      family: 'context',
+      state: 'complete',
+      subject: 'none',
+      detail: '',
+      isError: false,
+      progress: { unit: 'tokens', current: 7_200, total: 16_000 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'context-compressed-1',
+      type: 'context_compressed',
+      eventTimeUs: 33_000_000,
+      eventCounter: 2,
+      compressionStrategy: 'summarize',
+      compressionLevel: 'moderate',
+      originalMessageCount: 18,
+      finalMessageCount: 10,
+      tokensSaved: 3_400,
+    }),
+    {
+      family: 'context',
+      state: 'complete',
+      subject: 'summarize',
+      detail: 'moderate',
+      isError: false,
+      progress: { unit: 'messages', current: 10, total: 18 },
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',
