@@ -633,6 +633,22 @@ const a2uiCanvasTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const a2uiCanvasDeletedTimelineItems: ConversationTimelineState['items'] = [
+  a2uiCanvasTimelineItems[0]!,
+  {
+    id: 'a2ui-release-canvas-deleted',
+    type: 'canvas_updated',
+    eventTimeUs: 1_784_282_062_500_000,
+    eventCounter: 24,
+    payload: {
+      action: 'deleted',
+      block_id: 'release-approval',
+      block: null,
+    },
+  },
+  a2uiCanvasTimelineItems[1]!,
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -808,6 +824,7 @@ function SessionSteeringQa() {
   const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
   const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
   const a2uiCanvasEventsMode = searchParams.get('a2ui-canvas-events') === '1';
+  const a2uiCanvasDeletedEventsMode = searchParams.get('a2ui-canvas-deleted') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -868,7 +885,9 @@ function SessionSteeringQa() {
                       ? [...timelineState.items, ...agentDefinitionTimelineItems]
                       : hitlResponseEventsMode
                         ? [...timelineState.items, ...hitlResponseTimelineItems]
-                        : a2uiCanvasEventsMode
+                        : a2uiCanvasDeletedEventsMode
+                          ? [...timelineState.items, ...a2uiCanvasDeletedTimelineItems]
+                          : a2uiCanvasEventsMode
                           ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                           : timelineState.items;
     return {
@@ -1055,6 +1074,7 @@ function SessionSteeringQa() {
                 doomLoopEventsMode ||
                 hitlResponseEventsMode ||
                 a2uiCanvasEventsMode ||
+                a2uiCanvasDeletedEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
@@ -1078,7 +1098,11 @@ function SessionSteeringQa() {
               runInputsError={null}
               promotingRunInputId={null}
               runInputAuthorityRunId="run-desktop-session-42"
-              respondableHitlRequestIds={a2uiCanvasEventsMode ? ['a2ui-release-action'] : []}
+              respondableHitlRequestIds={
+                a2uiCanvasEventsMode || a2uiCanvasDeletedEventsMode
+                  ? ['a2ui-release-action']
+                  : []
+              }
               references={references}
               onRunInputDeliveryChange={setDelivery}
               onPromoteRunInput={(input) =>

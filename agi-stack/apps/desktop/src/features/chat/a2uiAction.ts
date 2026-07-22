@@ -119,8 +119,7 @@ function canvasComponents(item: AgentTimelineItem, timeline: AgentTimelineItem[]
     );
     if (candidateBlockId !== blockId) continue;
     const block = asRecord(candidatePayload.block ?? candidate.block);
-    const content = stringValue(block?.content);
-    if (content) return content;
+    return stringValue(block?.content);
   }
   return null;
 }

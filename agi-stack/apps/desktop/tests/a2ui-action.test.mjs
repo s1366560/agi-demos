@@ -90,6 +90,45 @@ test('restores a history action from its prior canvas block and persisted allow-
   assert.equal(resolveA2UIActionView(historyAsked, [canvas, historyAsked]).actions[0].label, 'Approve');
 });
 
+test('a deleted or malformed latest canvas revision cannot restore a stale action', () => {
+  const created = {
+    id: 'canvas-created',
+    type: 'canvas_updated',
+    eventTimeUs: 1,
+    eventCounter: 0,
+    payload: {
+      action: 'created',
+      block_id: 'block-1',
+      block: { id: 'block-1', content: components },
+    },
+  };
+  const deleted = {
+    id: 'canvas-deleted',
+    type: 'canvas_updated',
+    eventTimeUs: 1.5,
+    eventCounter: 1,
+    payload: { action: 'deleted', block_id: 'block-1', block: null },
+  };
+  const malformedUpdate = {
+    ...deleted,
+    id: 'canvas-malformed-update',
+    payload: { action: 'updated', block_id: 'block-1', block: null },
+  };
+  const historyAsked = asked({
+    payload: {
+      request_id: 'request-1',
+      block_id: 'block-1',
+      allowed_actions: [{ source_component_id: 'button-1', action_name: 'approve' }],
+    },
+  });
+
+  assert.deepEqual(resolveA2UIActionView(historyAsked, [created, deleted, historyAsked]).actions, []);
+  assert.deepEqual(
+    resolveA2UIActionView(historyAsked, [created, malformedUpdate, historyAsked]).actions,
+    [],
+  );
+});
+
 test('rejects orphan buttons and dynamic context instead of guessing response values', () => {
   const orphanComponents = components.replace('"explicitList":["button-1"]', '"explicitList":[]');
   const orphan = asked();
