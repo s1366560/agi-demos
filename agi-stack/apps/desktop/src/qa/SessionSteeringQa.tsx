@@ -764,6 +764,52 @@ const taskUiStateTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const internalUiStateTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'internal-pattern-match',
+    type: 'pattern_match',
+    eventTimeUs: 1_784_282_068_000_000,
+    eventCounter: 33,
+    payload: { pattern_name: 'internal-pattern-sentinel' },
+  },
+  {
+    id: 'internal-context-summary',
+    type: 'context_summary_generated',
+    eventTimeUs: 1_784_282_068_500_000,
+    eventCounter: 34,
+    payload: { summary_id: 'internal-summary-sentinel' },
+  },
+  {
+    id: 'internal-compact-needed',
+    type: 'compact_needed',
+    eventTimeUs: 1_784_282_069_000_000,
+    eventCounter: 35,
+    payload: { reason: 'internal-compact-sentinel' },
+  },
+  {
+    id: 'internal-screenshot-update',
+    type: 'screenshot_update',
+    eventTimeUs: 1_784_282_069_500_000,
+    eventCounter: 36,
+    payload: {
+      sandbox_id: 'sandbox-release',
+      image_url: 'data:image/png;base64,internal-screenshot-sentinel',
+    },
+  },
+  {
+    id: 'visible-context-compressed',
+    type: 'context_compressed',
+    eventTimeUs: 1_784_282_070_000_000,
+    eventCounter: 37,
+    payload: {
+      compression_strategy: 'context-visible-sentinel',
+      compression_level: 'moderate',
+      original_message_count: 12,
+      final_message_count: 4,
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -944,6 +990,7 @@ function SessionSteeringQa() {
     searchParams.get('a2ui-canvas-incremental') === '1';
   const planUiStateEventsMode = searchParams.get('plan-ui-state-events') === '1';
   const taskUiStateEventsMode = searchParams.get('task-ui-state-events') === '1';
+  const internalUiStateEventsMode = searchParams.get('internal-ui-state-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1012,6 +1059,8 @@ function SessionSteeringQa() {
                               ? [...timelineState.items, ...planUiStateTimelineItems]
                               : taskUiStateEventsMode
                                 ? [...timelineState.items, ...taskUiStateTimelineItems]
+                                : internalUiStateEventsMode
+                                  ? [...timelineState.items, ...internalUiStateTimelineItems]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1203,6 +1252,7 @@ function SessionSteeringQa() {
                 a2uiCanvasIncrementalEventsMode ||
                 planUiStateEventsMode ||
                 taskUiStateEventsMode ||
+                internalUiStateEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

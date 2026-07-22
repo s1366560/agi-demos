@@ -1812,6 +1812,37 @@ test('UI-state events stay out of the visible conversation timeline', () => {
       eventTimeUs: 54_500_000,
       eventCounter: 5,
     },
+    {
+      id: 'pattern-match-1',
+      type: 'pattern_match',
+      payload: { pattern_name: 'internal-pattern-sentinel' },
+      eventTimeUs: 54_510_000,
+      eventCounter: 6,
+    },
+    {
+      id: 'context-summary-generated-1',
+      type: 'context_summary_generated',
+      payload: { summary_id: 'internal-summary-sentinel' },
+      eventTimeUs: 54_520_000,
+      eventCounter: 7,
+    },
+    {
+      id: 'compact-needed-1',
+      type: 'compact_needed',
+      payload: { reason: 'internal-compact-sentinel' },
+      eventTimeUs: 54_530_000,
+      eventCounter: 8,
+    },
+    {
+      id: 'screenshot-update-1',
+      type: 'screenshot_update',
+      payload: {
+        sandbox_id: 'sandbox-release',
+        image_url: 'data:image/png;base64,internal-screenshot-sentinel',
+      },
+      eventTimeUs: 54_540_000,
+      eventCounter: 9,
+    },
     ...[
       'plan_mode_enter',
       'plan_mode_exit',

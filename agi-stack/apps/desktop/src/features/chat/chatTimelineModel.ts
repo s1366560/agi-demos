@@ -105,6 +105,10 @@ export function latestAgentSuggestions(items: AgentTimelineItem[]): string[] {
 const NON_TIMELINE_EVENT_TYPES = new Set([
   'suggestions',
   'canvas_updated',
+  'pattern_match',
+  'context_summary_generated',
+  'compact_needed',
+  'screenshot_update',
   'plan_mode_enter',
   'plan_mode_exit',
   'plan_created',
