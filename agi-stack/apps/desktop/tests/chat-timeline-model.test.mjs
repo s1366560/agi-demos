@@ -1070,6 +1070,52 @@ test('session fork and merge events expose the child lifecycle direction and str
   );
 });
 
+test('conversation participant events expose roster membership and exit context', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'participant-joined-1',
+      type: 'conversation_participant_joined',
+      eventTimeUs: 33_800_000,
+      eventCounter: 1,
+      payload: {
+        conversation_id: 'conversation-release',
+        agent_id: 'agent-reviewer',
+        actor_id: 'agent-coordinator',
+        role: 'participant',
+      },
+    }),
+    {
+      family: 'participant',
+      state: 'ready',
+      subject: 'agent-reviewer',
+      detail: 'participant',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'participant-left-1',
+      type: 'conversation_participant_left',
+      eventTimeUs: 33_900_000,
+      eventCounter: 2,
+      payload: {
+        conversation_id: 'conversation-release',
+        agent_id: 'agent-reviewer',
+        actor_id: 'agent-coordinator',
+        reason: 'review completed',
+      },
+    }),
+    {
+      family: 'participant',
+      state: 'stopped',
+      subject: 'agent-reviewer',
+      detail: 'review completed',
+      isError: false,
+    },
+  );
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({

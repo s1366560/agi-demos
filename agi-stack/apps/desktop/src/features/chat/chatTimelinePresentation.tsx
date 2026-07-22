@@ -180,6 +180,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (lifecycle?.family === 'sessionLifecycle') {
     return item.type === 'session_forked' ? t('chat.sessionForked') : t('chat.sessionMerged');
   }
+  if (lifecycle?.family === 'participant') {
+    return item.type === 'conversation_participant_joined'
+      ? t('chat.participantJoined')
+      : t('chat.participantLeft');
+  }
   if (lifecycle?.family === 'agentDefinition') {
     if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
     if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');

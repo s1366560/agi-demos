@@ -16,6 +16,7 @@ export type AgentLifecycleFamily =
   | 'conversation'
   | 'planReflection'
   | 'sessionLifecycle'
+  | 'participant'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -320,6 +321,16 @@ const lifecycleEventDefinitions: Record<
     state: 'complete',
     detailFields: ['merge_strategy', 'mergeStrategy'],
   },
+  conversation_participant_joined: {
+    family: 'participant',
+    state: 'ready',
+    detailFields: ['role'],
+  },
+  conversation_participant_left: {
+    family: 'participant',
+    state: 'stopped',
+    detailFields: ['reason'],
+  },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -513,6 +524,9 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     ]);
     if (!parent || !child) return parent ?? child ?? '';
     return item.type === 'session_forked' ? `${parent} → ${child}` : `${child} → ${parent}`;
+  }
+  if (family === 'participant') {
+    return timelineEventString(item, ['agent_id', 'agentId']) ?? '';
   }
   if (family === 'agentDefinition') {
     return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';
