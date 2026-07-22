@@ -933,6 +933,50 @@ const participantTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const agentTaskTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'agent-task-assigned-release',
+    type: 'agent_task_assigned',
+    eventTimeUs: 1_784_282_077_000_000,
+    eventCounter: 47,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-coordinator',
+      target_agent_id: 'agent-reviewer',
+      task_id: 'task-release-review',
+      task_title: 'Review the release evidence',
+      rationale: 'Independent verification is required.',
+    },
+  },
+  {
+    id: 'agent-task-refused-release',
+    type: 'agent_task_refused',
+    eventTimeUs: 1_784_282_077_500_000,
+    eventCounter: 48,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-reviewer',
+      task_id: 'task-release-review',
+      reason: 'Missing deployment credentials',
+      suggested_reassignment: 'agent-operator',
+    },
+  },
+  {
+    id: 'agent-progress-declared-release',
+    type: 'agent_progress_declared',
+    eventTimeUs: 1_784_282_078_000_000,
+    eventCounter: 49,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-reviewer',
+      task_id: 'task-release-review',
+      status: 'needs_review',
+      summary: 'Ready for coordinator review',
+      percent_complete: 75,
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1119,6 +1163,7 @@ function SessionSteeringQa() {
   const contextCompactedEventMode = searchParams.get('context-compacted-event') === '1';
   const sessionLifecycleEventsMode = searchParams.get('session-lifecycle-events') === '1';
   const participantEventsMode = searchParams.get('participant-events') === '1';
+  const agentTaskEventsMode = searchParams.get('agent-task-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1199,6 +1244,8 @@ function SessionSteeringQa() {
                                           ? [...timelineState.items, ...sessionLifecycleTimelineItems]
                                           : participantEventsMode
                                             ? [...timelineState.items, ...participantTimelineItems]
+                                            : agentTaskEventsMode
+                                              ? [...timelineState.items, ...agentTaskTimelineItems]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1396,6 +1443,7 @@ function SessionSteeringQa() {
                 contextCompactedEventMode ||
                 sessionLifecycleEventsMode ||
                 participantEventsMode ||
+                agentTaskEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

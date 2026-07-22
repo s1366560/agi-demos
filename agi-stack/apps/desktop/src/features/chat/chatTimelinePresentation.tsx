@@ -185,6 +185,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       ? t('chat.participantJoined')
       : t('chat.participantLeft');
   }
+  if (lifecycle?.family === 'agentTask') {
+    if (item.type === 'agent_task_assigned') return t('chat.agentTaskAssigned');
+    if (item.type === 'agent_task_refused') return t('chat.agentTaskRefused');
+    return t('chat.agentProgressDeclared');
+  }
   if (lifecycle?.family === 'agentDefinition') {
     if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
     if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');

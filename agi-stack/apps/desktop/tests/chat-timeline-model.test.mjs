@@ -1116,6 +1116,80 @@ test('conversation participant events expose roster membership and exit context'
   );
 });
 
+test('structured agent task events expose assignment, refusal, and declared progress', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-task-assigned-1',
+      type: 'agent_task_assigned',
+      eventTimeUs: 34_000_000,
+      eventCounter: 1,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-coordinator',
+        target_agent_id: 'agent-reviewer',
+        task_id: 'task-release-review',
+        task_title: 'Review the release evidence',
+        rationale: 'Independent verification is required.',
+      },
+    }),
+    {
+      family: 'agentTask',
+      state: 'scheduled',
+      subject: 'agent-coordinator → agent-reviewer',
+      detail: 'Review the release evidence',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-task-refused-1',
+      type: 'agent_task_refused',
+      eventTimeUs: 34_100_000,
+      eventCounter: 2,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-reviewer',
+        task_id: 'task-release-review',
+        reason: 'Missing deployment credentials',
+        suggested_reassignment: 'agent-operator',
+      },
+    }),
+    {
+      family: 'agentTask',
+      state: 'blocked',
+      subject: 'agent-reviewer',
+      detail: 'Missing deployment credentials · agent-operator',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-progress-declared-1',
+      type: 'agent_progress_declared',
+      eventTimeUs: 34_200_000,
+      eventCounter: 3,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-reviewer',
+        task_id: 'task-release-review',
+        status: 'needs_review',
+        summary: 'Ready for coordinator review',
+        percent_complete: 75,
+      },
+    }),
+    {
+      family: 'agentTask',
+      state: 'attention',
+      subject: 'task-release-review',
+      detail: 'Ready for coordinator review',
+      isError: false,
+      progress: { unit: 'percent', current: 75, total: 100 },
+    },
+  );
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({

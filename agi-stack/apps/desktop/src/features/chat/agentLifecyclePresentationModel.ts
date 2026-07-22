@@ -17,6 +17,7 @@ export type AgentLifecycleFamily =
   | 'planReflection'
   | 'sessionLifecycle'
   | 'participant'
+  | 'agentTask'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -63,7 +64,8 @@ export type AgentLifecyclePresentation = {
       | 'tokens'
       | 'messages'
       | 'memories'
-      | 'artifacts';
+      | 'artifacts'
+      | 'percent';
     current?: number;
     total: number;
   };
@@ -331,6 +333,21 @@ const lifecycleEventDefinitions: Record<
     state: 'stopped',
     detailFields: ['reason'],
   },
+  agent_task_assigned: {
+    family: 'agentTask',
+    state: 'scheduled',
+    detailFields: ['task_title', 'taskTitle'],
+  },
+  agent_task_refused: {
+    family: 'agentTask',
+    state: 'blocked',
+    detailFields: ['reason'],
+  },
+  agent_progress_declared: {
+    family: 'agentTask',
+    state: 'running',
+    detailFields: ['summary'],
+  },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -446,6 +463,10 @@ export function agentLifecyclePresentation(
     timelineEventBoolean(item, 'has_adjustments') === true
   ) {
     state = 'attention';
+  } else if (item.type === 'agent_progress_declared') {
+    if (explicitStatus === 'blocked') state = 'blocked';
+    if (explicitStatus === 'done') state = 'complete';
+    if (explicitStatus === 'needs_review') state = 'attention';
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   } else if (
@@ -527,6 +548,18 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
   }
   if (family === 'participant') {
     return timelineEventString(item, ['agent_id', 'agentId']) ?? '';
+  }
+  if (family === 'agentTask') {
+    const actor = timelineEventString(item, ['actor_agent_id', 'actorAgentId']);
+    if (item.type === 'agent_task_assigned') {
+      const target = timelineEventString(item, ['target_agent_id', 'targetAgentId']);
+      if (actor && target) return `${actor} → ${target}`;
+      return actor ?? target ?? '';
+    }
+    if (item.type === 'agent_progress_declared') {
+      return timelineEventString(item, ['task_id', 'taskId']) ?? actor ?? '';
+    }
+    return actor ?? '';
   }
   if (family === 'agentDefinition') {
     return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';
@@ -672,6 +705,14 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
   const lifecycle = lifecycleEventDefinitions[item.type];
+  if (item.type === 'agent_task_refused') {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['reason']),
+        timelineEventString(item, ['suggested_reassignment', 'suggestedReassignment']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
   if (item.type === 'reflection_complete') {
     return uniqueStrings(
       [
@@ -792,6 +833,11 @@ function lifecycleProgress(
   if (family === 'conversation' && item.type === 'agent_goal_completed') {
     const total = timelineEventStringArray(item, ['artifacts']).length;
     return total > 0 ? { unit: 'artifacts', total } : undefined;
+  }
+  if (family === 'agentTask' && item.type === 'agent_progress_declared') {
+    const current = timelineEventNumber(item, ['percent_complete', 'percentComplete']);
+    if (current === null || current < 0 || current > 100) return undefined;
+    return { unit: 'percent', current, total: 100 };
   }
   if (family === 'context') {
     if (item.type === 'context_status') {
