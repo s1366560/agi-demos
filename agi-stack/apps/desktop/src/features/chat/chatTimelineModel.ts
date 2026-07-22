@@ -53,6 +53,26 @@ export type AssistantTextStreamChunk = {
   payload?: Record<string, unknown>;
 };
 
+export type AssistantCompletionChunk = {
+  messageId: string;
+  content: string;
+  eventTimeUs: number;
+  eventCounter: number;
+  payload?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  artifacts?: unknown[];
+};
+
+export type AgentExecutionSummary = {
+  stepCount: number;
+  artifactCount: number;
+  callCount: number;
+  totalCost: number;
+  totalCostFormatted: string;
+  totalTokens: number;
+  tasks: { total: number; completed: number; remaining: number } | null;
+};
+
 export type ToolStreamEventKind = 'delta' | 'act' | 'observe';
 
 /**
@@ -153,6 +173,92 @@ export function mergeAssistantTextStreamChunk(
   ]);
 }
 
+/**
+ * Apply the authoritative `complete` event to the latest assistant response
+ * in the current turn. Completion message IDs are not guaranteed to match
+ * preceding text stream IDs, so the user-message boundary is the stable key.
+ */
+export function mergeAssistantCompletionEvent(
+  existing: AgentTimelineItem[],
+  chunk: AssistantCompletionChunk,
+): AgentTimelineItem[] {
+  const targetIndex = findCurrentTurnAssistantIndex(existing);
+  if (targetIndex >= 0) {
+    const updated = existing.map((item, index) => {
+      if (index !== targetIndex) return item;
+      return {
+        ...item,
+        content: chunk.content || item.content,
+        payload: chunk.payload ?? item.payload,
+        metadata: {
+          ...(item.metadata ?? {}),
+          ...(chunk.metadata ?? {}),
+          streaming: false,
+        },
+        ...(chunk.artifacts ? { artifacts: chunk.artifacts } : {}),
+      };
+    });
+    return sortTimelineItems(updated);
+  }
+
+  const hasMetadata = Boolean(chunk.metadata && Object.keys(chunk.metadata).length > 0);
+  if (!chunk.content && !hasMetadata && !chunk.artifacts?.length) return existing;
+  return sortTimelineItems([
+    ...existing,
+    {
+      id: `completed-assistant-${chunk.messageId}`,
+      type: 'assistant_message',
+      eventTimeUs: chunk.eventTimeUs,
+      eventCounter: chunk.eventCounter,
+      timestamp: Math.floor(chunk.eventTimeUs / 1000),
+      message_id: chunk.messageId,
+      role: 'assistant',
+      content: chunk.content,
+      payload: chunk.payload,
+      metadata: { ...(chunk.metadata ?? {}), streaming: false },
+      ...(chunk.artifacts ? { artifacts: chunk.artifacts } : {}),
+    },
+  ]);
+}
+
+export function assistantExecutionSummary(
+  item: AgentTimelineItem,
+): AgentExecutionSummary | null {
+  const metadata = isRecord(item.metadata) ? item.metadata : null;
+  const raw = metadata?.executionSummary ?? metadata?.execution_summary;
+  if (!isRecord(raw)) return null;
+  const tasks = isRecord(raw.tasks)
+    ? {
+        total: finiteNumber(raw.tasks.total),
+        completed: finiteNumber(raw.tasks.completed),
+        remaining: finiteNumber(raw.tasks.remaining),
+      }
+    : null;
+  const tokens = isRecord(raw.totalTokens)
+    ? raw.totalTokens
+    : isRecord(raw.total_tokens)
+      ? raw.total_tokens
+      : null;
+  const summary = {
+    stepCount: recordNumber(raw, 'stepCount', 'step_count'),
+    artifactCount: recordNumber(raw, 'artifactCount', 'artifact_count'),
+    callCount: recordNumber(raw, 'callCount', 'call_count'),
+    totalCost: recordNumber(raw, 'totalCost', 'total_cost'),
+    totalCostFormatted:
+      recordString(raw, 'totalCostFormatted', 'total_cost_formatted') ?? '$0.000000',
+    totalTokens: tokens ? finiteNumber(tokens.total) : 0,
+    tasks,
+  };
+  const visible =
+    summary.stepCount > 0 ||
+    summary.artifactCount > 0 ||
+    summary.callCount > 0 ||
+    summary.totalCost > 0 ||
+    summary.totalTokens > 0 ||
+    Boolean(summary.tasks && summary.tasks.total > 0);
+  return visible ? summary : null;
+}
+
 export function mergeThoughtStreamChunk(
   existing: AgentTimelineItem[],
   chunk: ThoughtStreamChunk,
@@ -225,6 +331,22 @@ function findLastAssistantTextIndex(items: AgentTimelineItem[], messageId: strin
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (item.role === 'assistant' && item.message_id === messageId) return index;
+  }
+  return -1;
+}
+
+function findCurrentTurnAssistantIndex(items: AgentTimelineItem[]): number {
+  let turnStartIndex = -1;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.role === 'user' || item.type === 'user_message') {
+      turnStartIndex = index;
+      break;
+    }
+  }
+  for (let index = items.length - 1; index > turnStartIndex; index -= 1) {
+    const item = items[index];
+    if (item.role === 'assistant' || item.type === 'assistant_message') return index;
   }
   return -1;
 }
@@ -518,6 +640,27 @@ function startOfDay(timeMs: number): number {
 
 function nonNegativeInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function recordNumber(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+): number {
+  return finiteNumber(record[camelKey] ?? record[snakeKey]);
+}
+
+function recordString(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+): string | null {
+  const value = record[camelKey] ?? record[snakeKey];
+  return typeof value === 'string' && value ? value : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

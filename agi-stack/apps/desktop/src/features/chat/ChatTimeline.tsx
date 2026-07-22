@@ -28,6 +28,7 @@ import type { SessionActivityPresence, SessionNarrativeNode } from '../session/s
 import { resolveA2UIActionView } from './a2uiAction';
 import type { A2UIActionView } from './a2uiAction';
 import {
+  assistantExecutionSummary,
   detectPayloadLanguage,
   formatToolCallDuration,
   shouldShowAgentWorkingIndicator,
@@ -767,7 +768,12 @@ function TimelineItemBody({
     return <MarkdownContent content={content} className="transcript-content thought-content" />;
   }
   if (kind === 'user' || kind === 'agent') {
-    return <MarkdownContent content={content} className="transcript-content" />;
+    return (
+      <>
+        {kind === 'agent' ? <AssistantExecutionSummary item={item} /> : null}
+        <MarkdownContent content={content} className="transcript-content" />
+      </>
+    );
   }
   return (
     <Text
@@ -778,6 +784,50 @@ function TimelineItemBody({
     >
       {content}
     </Text>
+  );
+}
+
+function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
+  const { t } = useI18n();
+  const summary = assistantExecutionSummary(item);
+  if (!summary) return null;
+  const pills: Array<{ label: string; value: string }> = [];
+  if (summary.stepCount > 0) {
+    pills.push({ label: t('chat.summary.steps'), value: String(summary.stepCount) });
+  }
+  if (summary.tasks && summary.tasks.total > 0) {
+    pills.push({
+      label: t('chat.summary.tasks'),
+      value: `${summary.tasks.completed}/${summary.tasks.total}`,
+    });
+    if (summary.tasks.remaining > 0) {
+      pills.push({
+        label: t('chat.summary.remaining'),
+        value: String(summary.tasks.remaining),
+      });
+    }
+  }
+  if (summary.artifactCount > 0) {
+    pills.push({ label: t('chat.summary.artifacts'), value: String(summary.artifactCount) });
+  }
+  if (summary.callCount > 0) {
+    pills.push({ label: t('chat.summary.calls'), value: String(summary.callCount) });
+  }
+  if (summary.totalTokens > 0) {
+    pills.push({ label: t('chat.summary.tokens'), value: String(summary.totalTokens) });
+  }
+  if (summary.totalCost > 0) {
+    pills.push({ label: t('chat.summary.cost'), value: summary.totalCostFormatted });
+  }
+  return (
+    <div className="assistant-execution-summary" aria-label={t('chat.executionSummary')}>
+      {pills.map((pill) => (
+        <span key={pill.label}>
+          <small>{pill.label}</small>
+          <strong>{pill.value}</strong>
+        </span>
+      ))}
+    </div>
   );
 }
 

@@ -88,6 +88,7 @@ import {
   workspaceMessageRequiresDefaultAgentLaunch,
 } from './features/chat/chatComposerModel';
 import {
+  mergeAssistantCompletionEvent,
   mergeAssistantTextStreamChunk,
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
@@ -829,6 +830,38 @@ function mergeLiveTimelineEvent(
   const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
   if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
     return mergeStreamingTextEvent(existing, payload, type);
+  }
+  if (type === 'complete') {
+    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+    const nowMs = Date.now();
+    const eventTimeUs =
+      numberField(payload, 'time_us') ??
+      numberField(payload, 'event_time_us') ??
+      numberField(payload, 'eventTimeUs') ??
+      nowMs * 1000;
+    const eventCounter =
+      numberField(payload, 'counter') ??
+      numberField(payload, 'event_counter') ??
+      numberField(payload, 'eventCounter') ??
+      0;
+    const executionSummary =
+      objectField(data, 'execution_summary') ?? objectField(data, 'executionSummary');
+    const traceUrl = readStringField(data, 'trace_url') ?? readStringField(data, 'traceUrl');
+    const artifacts = Array.isArray(data.artifacts) ? data.artifacts : undefined;
+    const metadata = {
+      ...(traceUrl ? { traceUrl } : {}),
+      ...(executionSummary ? { executionSummary } : {}),
+      ...(artifacts?.length ? { artifacts } : {}),
+    };
+    return mergeAssistantCompletionEvent(existing, {
+      messageId: streamingMessageId(payload),
+      content: readTextField(data, 'content') ?? '',
+      eventTimeUs,
+      eventCounter,
+      payload: data,
+      metadata,
+      artifacts,
+    });
   }
   if (type === 'thought_start' || type === 'thought_delta' || type === 'thought') {
     const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};

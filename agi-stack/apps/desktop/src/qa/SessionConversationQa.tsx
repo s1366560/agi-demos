@@ -144,6 +144,17 @@ const conversationItems: AgentTimelineItem[] = [
     role: 'assistant',
     content:
       '已定位竞态：共享可变状态让上一个任务的 runner 保持存活。修复方案：\n\n- 将 fixture 作用域收窄到 `job_id`\n- 增加并发回归覆盖\n\n```ts\nexport async function withIsolatedFixture<T>(\n  jobId: string,\n  run: (fixture: Fixture) => Promise<T>,\n): Promise<T> {\n  const fixture = await createFixture({ scope: jobId });\n  try {\n    return await run(fixture);\n  } finally {\n    await fixture.dispose();\n  }\n}\n```\n\n验证证据已同步到右侧变更面板。',
+    metadata: {
+      executionSummary: {
+        step_count: 6,
+        artifact_count: 2,
+        call_count: 4,
+        total_cost: 0.01842,
+        total_cost_formatted: '$0.018420',
+        total_tokens: { total: 12480 },
+        tasks: { total: 3, completed: 3, remaining: 0 },
+      },
+    },
     eventTimeUs: (nowMs - 25.4 * HOUR) * 1000,
     eventCounter: 9,
     timestamp: nowMs - 25.4 * HOUR,

@@ -79,6 +79,14 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.copyMessage',
     'chat.status.waitingForInput',
     'chat.workflowShortcuts',
+    'chat.executionSummary',
+    'chat.summary.steps',
+    'chat.summary.tasks',
+    'chat.summary.remaining',
+    'chat.summary.artifacts',
+    'chat.summary.calls',
+    'chat.summary.tokens',
+    'chat.summary.cost',
   ]) {
     assert.equal(
       (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length,
@@ -88,6 +96,13 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
   }
   assert.doesNotMatch(chatSource, /aria-label="[A-Za-z]/);
   assert.doesNotMatch(chatSource, /placeholder="[A-Za-z]/);
+});
+
+test('completed Agent replies render the authoritative execution summary', () => {
+  assert.match(chatSource, /function AssistantExecutionSummary/);
+  assert.match(chatSource, /assistantExecutionSummary\(item\)/);
+  assert.match(chatSource, /className="assistant-execution-summary"/);
+  assert.match(chatStyles, /\.assistant-execution-summary/);
 });
 
 test('narrative content is bounded without discarding authoritative markdown', () => {

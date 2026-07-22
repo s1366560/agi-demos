@@ -5,9 +5,11 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  assistantExecutionSummary,
   detectPayloadLanguage,
   formatToolCallDuration,
   mergeAssistantTextStreamChunk,
+  mergeAssistantCompletionEvent,
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
   pairToolCallItems,
@@ -70,6 +72,76 @@ test('text end can recover the full response when every delta was missed', () =>
   assert.equal(items[0].content, 'Recovered from text_end.full_text');
   assert.equal(items[0].message_id, 'message-text-replay');
   assert.equal(items[0].metadata.streaming, false);
+});
+
+test('complete merges content and execution metadata into the latest assistant turn', () => {
+  const existing = [
+    {
+      id: 'user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Run it',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'streaming-assistant-stream-conversation-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      message_id: 'stream-conversation-1',
+      content: 'Draft',
+      metadata: { streaming: false },
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+    },
+  ];
+  const items = mergeAssistantCompletionEvent(existing, {
+    messageId: 'server-final-message-id',
+    content: 'Authoritative final answer',
+    eventTimeUs: 3_000_000,
+    eventCounter: 3,
+    metadata: {
+      traceUrl: 'https://trace.example/run',
+      executionSummary: { step_count: 4, call_count: 2, total_tokens: { total: 3200 } },
+    },
+    artifacts: [{ artifact_id: 'artifact-1' }],
+  });
+
+  assert.equal(items.length, 2);
+  assert.equal(items[1].id, 'streaming-assistant-stream-conversation-1');
+  assert.equal(items[1].content, 'Authoritative final answer');
+  assert.equal(items[1].metadata.streaming, false);
+  assert.equal(items[1].metadata.traceUrl, 'https://trace.example/run');
+  assert.deepEqual(items[1].artifacts, [{ artifact_id: 'artifact-1' }]);
+  assert.deepEqual(assistantExecutionSummary(items[1]), {
+    stepCount: 4,
+    artifactCount: 0,
+    callCount: 2,
+    totalCost: 0,
+    totalCostFormatted: '$0.000000',
+    totalTokens: 3200,
+    tasks: null,
+  });
+});
+
+test('complete can create a final assistant response when text streaming was absent', () => {
+  const items = mergeAssistantCompletionEvent([], {
+    messageId: 'message-complete-only',
+    content: 'Completed without text events',
+    eventTimeUs: 4_000_000,
+    eventCounter: 1,
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].role, 'assistant');
+  assert.equal(items[0].content, 'Completed without text events');
+  assert.equal(items[0].metadata.streaming, false);
+});
+
+test('live Agent complete events preserve final content and execution summary metadata', () => {
+  assert.match(appSource, /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/);
+  assert.match(appSource, /objectField\(data, 'execution_summary'\)/);
+  assert.match(appSource, /readTextField\(data, 'content'\)/);
 });
 
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {

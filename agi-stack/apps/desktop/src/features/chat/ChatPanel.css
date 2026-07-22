@@ -337,6 +337,36 @@
   overflow-wrap: anywhere;
 }
 
+.assistant-execution-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.assistant-execution-summary > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-height: 23px;
+  padding: 3px 7px;
+  border: 1px solid rgba(56, 214, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(56, 214, 255, 0.055);
+  color: #b8c5d4;
+}
+
+.assistant-execution-summary small {
+  color: #718092;
+  font-size: 9px;
+}
+
+.assistant-execution-summary strong {
+  color: #c9eaf2;
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .session-chat-narrative .session-thread-message.user .transcript-content {
   color: #d5dce5;
 }
