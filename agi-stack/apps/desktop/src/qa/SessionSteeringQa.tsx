@@ -649,6 +649,39 @@ const a2uiCanvasDeletedTimelineItems: ConversationTimelineState['items'] = [
   a2uiCanvasTimelineItems[1]!,
 ];
 
+const a2uiCanvasIncrementalTimelineItems: ConversationTimelineState['items'] = [
+  a2uiCanvasTimelineItems[0]!,
+  {
+    id: 'a2ui-release-canvas-updated',
+    type: 'canvas_updated',
+    eventTimeUs: 1_784_282_062_500_000,
+    eventCounter: 24,
+    payload: {
+      action: 'updated',
+      block_id: 'release-approval',
+      block: {
+        id: 'release-approval',
+        block_type: 'a2ui_surface',
+        title: 'Updated release approval',
+        content: JSON.stringify({
+          surfaceUpdate: {
+            surfaceId: 'release-surface',
+            components: [
+              {
+                id: 'approve-label',
+                component: {
+                  Text: { text: { literalString: 'Ship verified release' } },
+                },
+              },
+            ],
+          },
+        }),
+      },
+    },
+  },
+  a2uiCanvasTimelineItems[1]!,
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -825,6 +858,8 @@ function SessionSteeringQa() {
   const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
   const a2uiCanvasEventsMode = searchParams.get('a2ui-canvas-events') === '1';
   const a2uiCanvasDeletedEventsMode = searchParams.get('a2ui-canvas-deleted') === '1';
+  const a2uiCanvasIncrementalEventsMode =
+    searchParams.get('a2ui-canvas-incremental') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -887,9 +922,11 @@ function SessionSteeringQa() {
                         ? [...timelineState.items, ...hitlResponseTimelineItems]
                         : a2uiCanvasDeletedEventsMode
                           ? [...timelineState.items, ...a2uiCanvasDeletedTimelineItems]
+                          : a2uiCanvasIncrementalEventsMode
+                            ? [...timelineState.items, ...a2uiCanvasIncrementalTimelineItems]
                           : a2uiCanvasEventsMode
-                          ? [...timelineState.items, ...a2uiCanvasTimelineItems]
-                          : timelineState.items;
+                            ? [...timelineState.items, ...a2uiCanvasTimelineItems]
+                            : timelineState.items;
     return {
       ...timelineState,
       items,
@@ -1075,6 +1112,7 @@ function SessionSteeringQa() {
                 hitlResponseEventsMode ||
                 a2uiCanvasEventsMode ||
                 a2uiCanvasDeletedEventsMode ||
+                a2uiCanvasIncrementalEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
@@ -1099,7 +1137,9 @@ function SessionSteeringQa() {
               promotingRunInputId={null}
               runInputAuthorityRunId="run-desktop-session-42"
               respondableHitlRequestIds={
-                a2uiCanvasEventsMode || a2uiCanvasDeletedEventsMode
+                a2uiCanvasEventsMode ||
+                a2uiCanvasDeletedEventsMode ||
+                a2uiCanvasIncrementalEventsMode
                   ? ['a2ui-release-action']
                   : []
               }
@@ -1121,7 +1161,7 @@ function SessionSteeringQa() {
               onRefresh={() => undefined}
               onLoadEarlier={loadEarlierHistory}
               onRespondToHitl={async (submission) => {
-                if (!a2uiCanvasEventsMode) return;
+                if (!a2uiCanvasEventsMode && !a2uiCanvasIncrementalEventsMode) return;
                 setA2UICanvasResponse(
                   `${submission.responseData.action_name}:${submission.responseData.source_component_id}`,
                 );

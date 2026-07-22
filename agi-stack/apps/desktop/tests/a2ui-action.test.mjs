@@ -87,7 +87,8 @@ test('restores a history action from its prior canvas block and persisted allow-
     },
   });
 
-  assert.equal(resolveA2UIActionView(historyAsked, [canvas, historyAsked]).actions[0].label, 'Approve');
+  const restored = resolveA2UIActionView(historyAsked, [canvas, historyAsked]);
+  assert.equal(restored.actions[0]?.label, 'Approve', restored.reason ?? undefined);
 });
 
 test('a deleted or malformed latest canvas revision cannot restore a stale action', () => {
@@ -125,6 +126,73 @@ test('a deleted or malformed latest canvas revision cannot restore a stale actio
   assert.deepEqual(resolveA2UIActionView(historyAsked, [created, deleted, historyAsked]).actions, []);
   assert.deepEqual(
     resolveA2UIActionView(historyAsked, [created, malformedUpdate, historyAsked]).actions,
+    [],
+  );
+});
+
+test('replays incremental canvas updates before restoring an A2UI action', () => {
+  const created = {
+    id: 'canvas-created',
+    type: 'canvas_updated',
+    eventTimeUs: 1,
+    eventCounter: 0,
+    payload: {
+      action: 'created',
+      block_id: 'block-1',
+      block: { id: 'block-1', content: components },
+    },
+  };
+  const updated = {
+    id: 'canvas-updated',
+    type: 'canvas_updated',
+    eventTimeUs: 1.5,
+    eventCounter: 1,
+    payload: {
+      action: 'updated',
+      block_id: 'block-1',
+      block: {
+        id: 'block-1',
+        content: JSON.stringify({
+          surfaceUpdate: {
+            surfaceId: 'surface-1',
+            components: [
+              {
+                id: 'label-1',
+                component: { Text: { text: { literalString: 'Ship verified release' } } },
+              },
+            ],
+          },
+        }),
+      },
+    },
+  };
+  const historyAsked = asked({
+    payload: {
+      request_id: 'request-1',
+      block_id: 'block-1',
+      allowed_actions: [{ source_component_id: 'button-1', action_name: 'approve' }],
+    },
+  });
+
+  assert.deepEqual(
+    resolveA2UIActionView(historyAsked, [created, updated, historyAsked]).actions,
+    [
+      {
+        actionName: 'approve',
+        sourceComponentId: 'button-1',
+        label: 'Ship verified release',
+      },
+    ],
+  );
+
+  const crossSurfaceUpdate = structuredClone(updated);
+  crossSurfaceUpdate.id = 'canvas-cross-surface-update';
+  crossSurfaceUpdate.payload.block.content = updated.payload.block.content.replace(
+    'surface-1',
+    'surface-2',
+  );
+  assert.deepEqual(
+    resolveA2UIActionView(historyAsked, [created, crossSurfaceUpdate, historyAsked]).actions,
     [],
   );
 });

@@ -107,9 +107,20 @@ function canvasComponents(item: AgentTimelineItem, timeline: AgentTimelineItem[]
   const payload = asRecord(item.payload) ?? item;
   const blockId = stringValue(payload.block_id ?? payload.blockId ?? item.block_id ?? item.blockId);
   if (!blockId) return null;
-  for (let index = timeline.length - 1; index >= 0; index -= 1) {
-    const candidate = timeline[index];
-    if (candidate.type !== 'canvas_updated' || candidate.eventTimeUs > item.eventTimeUs) continue;
+  const revisions = timeline
+    .filter(
+      (candidate) =>
+        candidate.type === 'canvas_updated' &&
+        (candidate.eventTimeUs < item.eventTimeUs ||
+          (candidate.eventTimeUs === item.eventTimeUs &&
+            candidate.eventCounter <= item.eventCounter)),
+    )
+    .sort((left, right) => {
+      if (left.eventTimeUs !== right.eventTimeUs) return left.eventTimeUs - right.eventTimeUs;
+      return left.eventCounter - right.eventCounter;
+    });
+  let components: string | null = null;
+  for (const candidate of revisions) {
     const candidatePayload = asRecord(candidate.payload) ?? candidate;
     const candidateBlockId = stringValue(
       candidatePayload.block_id ??
@@ -118,10 +129,40 @@ function canvasComponents(item: AgentTimelineItem, timeline: AgentTimelineItem[]
         candidate.blockId,
     );
     if (candidateBlockId !== blockId) continue;
+    const action = stringValue(candidatePayload.action ?? candidate.action);
     const block = asRecord(candidatePayload.block ?? candidate.block);
-    return stringValue(block?.content);
+    const content = stringValue(block?.content);
+    if (
+      action === 'deleted' ||
+      !content ||
+      (action !== null && action !== 'created' && action !== 'updated')
+    ) {
+      components = null;
+      continue;
+    }
+    if (!action || action === 'created' || !components || a2uiStreamReplacesSnapshot(content)) {
+      components = content;
+      continue;
+    }
+    components = `${components}\n${content}`;
   }
-  return null;
+  return components;
+}
+
+function a2uiStreamReplacesSnapshot(content: string): boolean {
+  const lines = content.split(/\r?\n/u).filter((line) => line.trim());
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      return true;
+    }
+    if (!isSafeJsonTree(parsed)) return true;
+    const record = asRecord(parsed);
+    if (asRecord(record?.beginRendering) || asRecord(record?.deleteSurface)) return true;
+  }
+  return false;
 }
 
 function parseSurface(jsonl: string): { root: string; components: Map<string, JsonRecord> } | null {
@@ -158,7 +199,9 @@ function parseSurface(jsonl: string): { root: string; components: Map<string, Js
     for (const value of updateComponents) {
       const component = asRecord(value);
       const id = stringValue(component?.id);
-      if (!component || !id || components.has(id) || components.size >= MAX_COMPONENTS) return null;
+      if (!component || !id || (!components.has(id) && components.size >= MAX_COMPONENTS)) {
+        return null;
+      }
       components.set(id, component);
     }
   }
