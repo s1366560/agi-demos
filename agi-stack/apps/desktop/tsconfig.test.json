@@ -52,6 +52,7 @@
     "src/features/session/sessionTerminalModel.ts",
     "src/features/session/sessionInvocationLedgerModel.ts",
     "src/features/session/sessionAgentTreeModel.ts",
+    "src/features/session/sessionExecutionGraphModel.ts",
     "src/features/session/sessionNarrativeModel.ts",
     "src/features/session/sessionDecisionModel.ts",
     "src/features/session/sessionEvidenceModel.ts",

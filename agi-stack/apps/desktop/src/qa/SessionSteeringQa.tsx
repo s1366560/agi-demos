@@ -38,7 +38,9 @@ import {
 } from '../features/chat/mcpAppCanvasEventModel';
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
 import { SessionAgentsCanvas } from '../features/session/SessionAgentsCanvas';
+import { SessionExecutionGraphCanvas } from '../features/session/SessionExecutionGraphCanvas';
 import { buildSessionAgentTree } from '../features/session/sessionAgentTreeModel';
+import { buildSessionExecutionGraph } from '../features/session/sessionExecutionGraphModel';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
 import type {
@@ -555,6 +557,115 @@ const multiAgentCanvasTimelineItems: ConversationTimelineState['items'] = [
       success: true,
       result: 'All 18 checks have authoritative evidence.',
       artifacts: ['release-verification.md'],
+    },
+  },
+];
+
+const executionGraphCanvasTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'graph-release-started',
+    type: 'graph_run_started',
+    eventTimeUs: 1_784_282_050_000_000,
+    eventCounter: 9,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      graph_id: 'graph-release',
+      graph_name: 'Release verification',
+      pattern: 'supervisor',
+      entry_node_ids: ['graph-plan'],
+    },
+  },
+  {
+    id: 'graph-plan-started',
+    type: 'graph_node_started',
+    eventTimeUs: 1_784_282_051_000_000,
+    eventCounter: 10,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      node_id: 'graph-plan',
+      node_label: 'Plan release checks',
+      agent_definition_id: 'release-planner',
+      agent_session_id: 'conversation-graph-plan',
+    },
+  },
+  {
+    id: 'graph-plan-review-handoff',
+    type: 'graph_handoff',
+    eventTimeUs: 1_784_282_052_000_000,
+    eventCounter: 11,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      from_node_id: 'graph-plan',
+      to_node_id: 'graph-review',
+      from_label: 'Plan release checks',
+      to_label: 'Review evidence',
+      context_summary: 'Release plan ready for independent evidence review.',
+    },
+  },
+  {
+    id: 'graph-plan-completed',
+    type: 'graph_node_completed',
+    eventTimeUs: 1_784_282_053_000_000,
+    eventCounter: 12,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      node_id: 'graph-plan',
+      node_label: 'Plan release checks',
+      output_keys: ['release-plan.md'],
+      duration_seconds: 2.4,
+    },
+  },
+  {
+    id: 'graph-review-started',
+    type: 'graph_node_started',
+    eventTimeUs: 1_784_282_054_000_000,
+    eventCounter: 13,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      node_id: 'graph-review',
+      node_label: 'Review evidence',
+      agent_definition_id: 'evidence-reviewer',
+      agent_session_id: 'conversation-graph-review',
+    },
+  },
+  {
+    id: 'graph-review-publish-handoff',
+    type: 'graph_handoff',
+    eventTimeUs: 1_784_282_055_000_000,
+    eventCounter: 14,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      from_node_id: 'graph-review',
+      to_node_id: 'graph-publish',
+      from_label: 'Review evidence',
+      to_label: 'Publish release',
+      context_summary: 'All release gates have authoritative evidence.',
+    },
+  },
+  {
+    id: 'graph-review-completed',
+    type: 'graph_node_completed',
+    eventTimeUs: 1_784_282_056_000_000,
+    eventCounter: 15,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      node_id: 'graph-review',
+      node_label: 'Review evidence',
+      output_keys: ['verification-report.md', 'test-results.json'],
+      duration_seconds: 4.8,
+    },
+  },
+  {
+    id: 'graph-publish-started',
+    type: 'graph_node_started',
+    eventTimeUs: 1_784_282_057_000_000,
+    eventCounter: 16,
+    payload: {
+      graph_run_id: 'graph-run-release',
+      node_id: 'graph-publish',
+      node_label: 'Publish release',
+      agent_definition_id: 'release-publisher',
+      agent_session_id: 'conversation-graph-publish',
     },
   },
 ];
@@ -1897,6 +2008,7 @@ function SessionSteeringQa() {
   const skillEventsMode = searchParams.get('skill-events') === '1';
   const subagentEventsMode = searchParams.get('subagent-events') === '1';
   const multiAgentCanvasMode = searchParams.get('multi-agent-canvas') === '1';
+  const executionGraphCanvasMode = searchParams.get('execution-graph-canvas') === '1';
   const memoryEventsMode = searchParams.get('memory-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
@@ -1972,6 +2084,13 @@ function SessionSteeringQa() {
     () => buildSessionAgentTree(multiAgentCanvasMode ? multiAgentCanvasTimelineItems : []),
     [multiAgentCanvasMode],
   );
+  const sessionExecutionGraph = useMemo(
+    () =>
+      buildSessionExecutionGraph(
+        executionGraphCanvasMode ? executionGraphCanvasTimelineItems : [],
+      ),
+    [executionGraphCanvasMode],
+  );
   const mcpAppHostApi = useMemo(
     () => ({
       callMCPAppTool: async (_appId: string, toolName: string) => ({
@@ -1999,6 +2118,8 @@ function SessionSteeringQa() {
             ? [...timelineState.items, ...skillTimelineItems]
             : multiAgentCanvasMode
               ? [...timelineState.items, ...multiAgentCanvasTimelineItems]
+              : executionGraphCanvasMode
+                ? [...timelineState.items, ...executionGraphCanvasTimelineItems]
             : mcpAppEventsMode
               ? [...timelineState.items, ...mcpAppTimelineItems]
               : subagentEventsMode
@@ -2336,6 +2457,7 @@ function SessionSteeringQa() {
                 suggestionsMode ||
                 skillEventsMode ||
                 multiAgentCanvasMode ||
+                executionGraphCanvasMode ||
                 subagentEventsMode ||
                 memoryEventsMode ||
                 modelOverrideEventsMode ||
@@ -2456,7 +2578,17 @@ function SessionSteeringQa() {
             {workspaceLifecycleEventMode ? (
               <p data-testid="workspace-lifecycle-stream">{qaWorkspaceLifecycleSummary}</p>
             ) : null}
-            {multiAgentCanvasMode ? (
+            {executionGraphCanvasMode ? (
+              <>
+                <SessionExecutionGraphCanvas
+                  model={sessionExecutionGraph}
+                  onOpenSession={setOpenedAgentSession}
+                />
+                {openedAgentSession ? (
+                  <p data-testid="opened-agent-session">{openedAgentSession}</p>
+                ) : null}
+              </>
+            ) : multiAgentCanvasMode ? (
               <>
                 <SessionAgentsCanvas
                   model={sessionAgentTree}

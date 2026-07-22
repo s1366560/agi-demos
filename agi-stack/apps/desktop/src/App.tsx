@@ -122,6 +122,7 @@ import {
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
 import { SessionAgentsCanvas } from './features/session/SessionAgentsCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
+import { SessionExecutionGraphCanvas } from './features/session/SessionExecutionGraphCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
 import {
   SessionPlanReview,
@@ -160,6 +161,7 @@ import {
   sessionInvocationLedgerSummary,
 } from './features/session/sessionInvocationLedgerModel';
 import { buildSessionAgentTree } from './features/session/sessionAgentTreeModel';
+import { buildSessionExecutionGraph } from './features/session/sessionExecutionGraphModel';
 import {
   decodeConversationSessionProjection,
   signedSessionSnapshotRevision,
@@ -494,7 +496,7 @@ type SidebarRunItem = {
   workspaceId?: string;
   conversation?: AgentConversation;
 };
-type ReviewTab = SessionCanvasTabId | 'pull' | 'background' | 'agents';
+type ReviewTab = SessionCanvasTabId | 'pull' | 'background' | 'agents' | 'graph';
 type WorkspaceArtifactKind = 'Files' | 'Patches' | 'Reports' | 'Logs' | 'Events';
 type WorkspaceArtifact = {
   id: string;
@@ -6856,6 +6858,10 @@ function WorkspaceReviewPanel({
     [invocationLedger],
   );
   const sessionAgentTree = useMemo(() => buildSessionAgentTree(timelineItems), [timelineItems]);
+  const sessionExecutionGraph = useMemo(
+    () => buildSessionExecutionGraph(timelineItems),
+    [timelineItems],
+  );
   const sourceEvidence = useMemo(
     () => artifactEvidenceForCurrentVersions(artifactVersions, 'sources'),
     [artifactVersions],
@@ -6902,6 +6908,9 @@ function WorkspaceReviewPanel({
     if (tab === 'agents' && sessionAgentTree.summary.total) {
       return `${sessionAgentTree.summary.total}`;
     }
+    if (tab === 'graph' && sessionExecutionGraph.summary.nodes) {
+      return `${sessionExecutionGraph.summary.nodes}`;
+    }
     if (tab === 'sources') {
       if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
       return sourceEvidence.missing.length ? t('session.evidence.missing') : undefined;
@@ -6918,6 +6927,15 @@ function WorkspaceReviewPanel({
       label: t(tab.labelKey),
       value: tabValue(tab.id),
     })),
+    ...(sessionExecutionGraph.activeRun
+      ? [
+          {
+            tab: 'graph' as const,
+            label: t('session.canvasGraph'),
+            value: `${sessionExecutionGraph.summary.nodes}`,
+          },
+        ]
+      : []),
     ...(sessionAgentTree.summary.total
       ? [
           {
@@ -6970,6 +6988,7 @@ function WorkspaceReviewPanel({
       [...configuredCanvasTabs.primary, ...configuredCanvasTabs.secondary].map((tab) => tab.id),
     );
     if (mcpAppCanvas.tabs.length) availableTabs.add('apps');
+    if (sessionExecutionGraph.activeRun) availableTabs.add('graph');
     if (sessionAgentTree.summary.total) availableTabs.add('agents');
     if (activeTab === 'background' && availableTabs.has('activity')) {
       onTabChange('activity');
@@ -6988,6 +7007,7 @@ function WorkspaceReviewPanel({
     mcpAppCanvas.tabs.length,
     onTabChange,
     sessionAgentTree.summary.total,
+    sessionExecutionGraph.activeRun,
   ]);
 
   return (
@@ -7280,6 +7300,13 @@ function WorkspaceReviewPanel({
 
         {activeTab === 'agents' ? (
           <SessionAgentsCanvas model={sessionAgentTree} onOpenSession={onOpenAgentSession} />
+        ) : null}
+
+        {activeTab === 'graph' ? (
+          <SessionExecutionGraphCanvas
+            model={sessionExecutionGraph}
+            onOpenSession={onOpenAgentSession}
+          />
         ) : null}
 
         {activeTab === 'apps' ? (
