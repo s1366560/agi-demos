@@ -743,14 +743,24 @@ const taskUiStateTimelineItems: ConversationTimelineState['items'] = [
     type: 'task_start',
     eventTimeUs: 1_784_282_067_000_000,
     eventCounter: 31,
-    payload: { task_id: 'release-task', content: 'Verify the release candidate' },
+    payload: {
+      task_id: 'release-task',
+      content: 'Verify the release candidate',
+      order_index: 0,
+      total_tasks: 2,
+    },
   },
   {
     id: 'task-execution-completed',
     type: 'task_complete',
     eventTimeUs: 1_784_282_067_500_000,
     eventCounter: 32,
-    payload: { task_id: 'release-task', success: true },
+    payload: {
+      task_id: 'release-task',
+      status: 'completed',
+      order_index: 1,
+      total_tasks: 2,
+    },
   },
 ];
 

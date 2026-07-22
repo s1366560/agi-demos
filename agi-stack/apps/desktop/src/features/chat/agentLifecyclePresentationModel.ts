@@ -316,7 +316,7 @@ const lifecycleEventDefinitions: Record<
   memory_recalled: { family: 'memory', state: 'complete' },
   memory_captured: { family: 'memory', state: 'complete' },
   task_start: { family: 'task', state: 'running' },
-  task_complete: { family: 'task', state: 'complete' },
+  task_complete: { family: 'task', state: 'complete', detailFields: ['status'] },
   artifact_created: {
     family: 'artifact',
     state: 'running',
@@ -515,9 +515,10 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
       : '';
   }
   if (family === 'task') {
+    const taskId = timelineEventString(item, ['task_id', 'taskId']) ?? '';
     return item.type === 'task_start'
-      ? timelineEventString(item, ['content']) ?? ''
-      : '';
+      ? timelineEventString(item, ['content']) ?? taskId
+      : taskId;
   }
   if (family === 'artifact') {
     if (item.type === 'artifacts_batch') {
