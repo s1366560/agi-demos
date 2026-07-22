@@ -14,6 +14,7 @@ export type AgentLifecycleFamily =
   | 'toolset'
   | 'doomLoop'
   | 'conversation'
+  | 'planReflection'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -200,6 +201,10 @@ const lifecycleEventDefinitions: Record<
     family: 'conversation',
     state: 'attention',
     detailFields: ['rationale'],
+  },
+  reflection_complete: {
+    family: 'planReflection',
+    state: 'complete',
   },
   agent_definition_created: {
     family: 'agentDefinition',
@@ -416,6 +421,11 @@ export function agentLifecyclePresentation(
     }
   } else if (item.type === 'agent_conversation_finished') {
     state = conversationTerminationState(item);
+  } else if (
+    item.type === 'reflection_complete' &&
+    timelineEventBoolean(item, 'has_adjustments') === true
+  ) {
+    state = 'attention';
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   } else if (
@@ -479,6 +489,9 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     return item.type === 'agent_goal_completed'
       ? timelineEventString(item, ['summary']) ?? ''
       : timelineEventString(item, ['reason']) ?? '';
+  }
+  if (family === 'planReflection') {
+    return timelineEventString(item, ['plan_id', 'planId']) ?? '';
   }
   if (family === 'agentDefinition') {
     return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';
@@ -619,6 +632,14 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
   const lifecycle = lifecycleEventDefinitions[item.type];
+  if (item.type === 'reflection_complete') {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['assessment']),
+        timelineEventString(item, ['reasoning']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
   if (lifecycle && isRuntimeInfrastructureFamily(lifecycle.family)) {
     const error = timelineEventString(item, ['error_message', 'errorMessage', 'error']);
     if (error) return error;

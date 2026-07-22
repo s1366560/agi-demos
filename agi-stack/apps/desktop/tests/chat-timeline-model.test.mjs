@@ -1666,6 +1666,31 @@ test('Agent definition mutation events expose the changed definition and operati
   );
 });
 
+test('plan reflection events expose assessment and adjustment attention without raw JSON', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'plan-reflection-complete-1',
+      type: 'reflection_complete',
+      eventTimeUs: 78_000_000,
+      eventCounter: 1,
+      payload: {
+        plan_id: 'release-plan',
+        assessment: 'needs_adjustment',
+        reasoning: 'Reorder the verification and rollout steps',
+        has_adjustments: true,
+        adjustment_count: 2,
+      },
+    }),
+    {
+      family: 'planReflection',
+      state: 'attention',
+      subject: 'release-plan',
+      detail: 'needs_adjustment · Reorder the verification and rollout steps',
+      isError: false,
+    },
+  );
+});
+
 test('artifact ready and error stream events settle the original created row', () => {
   const created = {
     id: 'artifact-created-1',
