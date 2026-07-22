@@ -26,6 +26,7 @@
     "src/features/chat/mcpAppHostBridge.ts",
     "src/features/chat/hitlResponseEventModel.ts",
     "src/features/chat/workspaceMessageEventModel.ts",
+    "src/features/chat/workspaceTaskEventModel.ts",
     "src/hooks/useAgentSocket.ts",
     "src/hooks/useTerminalProxy.ts",
     "src/features/session/sessionProjectionModel.ts",

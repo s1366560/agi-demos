@@ -71,6 +71,7 @@ const testFiles = [
   'desktop-a11y-i18n.test.mjs',
   'hitl-response-events.test.mjs',
   'workspace-message-event-model.test.mjs',
+  'workspace-task-event-model.test.mjs',
   'login-screen-fidelity.test.mjs',
   'login-screen-model.test.mjs',
   'macos-dev-signing.test.mjs',

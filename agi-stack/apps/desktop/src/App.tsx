@@ -109,6 +109,7 @@ import {
 } from './features/chat/chatTimelineModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import { applyWorkspaceMessageStreamEvent } from './features/chat/workspaceMessageEventModel';
+import { applyWorkspaceTaskStreamEvent } from './features/chat/workspaceTaskEventModel';
 import {
   applyMCPAppCanvasStreamEvent,
   closeMCPAppCanvasTab,
@@ -1672,6 +1673,7 @@ export function App() {
   const conversationMetadataEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const authoritativeRunEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceMessageEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const myWorkRequestRef = useRef(0);
   const myWorkAbortRef = useRef<AbortController | null>(null);
   const myWorkRefreshTimerRef = useRef<number | null>(null);
@@ -2681,6 +2683,20 @@ export function App() {
     },
     [scopedConversationId],
   );
+
+  useEffect(() => {
+    const events = socketEventsSince(socket.events, workspaceTaskEventsHeadRef.current);
+    workspaceTaskEventsHeadRef.current = socket.events[0] ?? null;
+    const workspaceId = config.workspaceId.trim();
+    if (!workspaceId || !events.length) return;
+    updateDataset((current) => {
+      let tasks = current.tasks;
+      for (const event of events) {
+        tasks = applyWorkspaceTaskStreamEvent(tasks, event, workspaceId).tasks;
+      }
+      return tasks === current.tasks ? current : { ...current, tasks };
+    });
+  }, [config.workspaceId, socket.events, updateDataset]);
 
   useEffect(() => {
     const events = socketEventsSince(socket.events, workspaceMessageEventsHeadRef.current);

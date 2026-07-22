@@ -27,6 +27,7 @@ import {
 } from '../features/chat/conversationTitleEventModel';
 import { applyHitlResponseStreamEvent } from '../features/chat/hitlResponseEventModel';
 import { applyWorkspaceMessageStreamEvent } from '../features/chat/workspaceMessageEventModel';
+import { applyWorkspaceTaskStreamEvent } from '../features/chat/workspaceTaskEventModel';
 import {
   applyMCPAppCanvasStreamEvent,
   closeMCPAppCanvasTab,
@@ -44,6 +45,7 @@ import type {
   DesktopRunInput,
   RunInputDelivery,
   WorkspaceMessage,
+  WorkspaceTask,
 } from '../types';
 import '../styles.css';
 import './sessionSteeringQa.css';
@@ -185,6 +187,25 @@ const workspaceMessageCreatedEvent = {
     },
   },
 };
+
+const workspaceTaskEvents = [
+  {
+    type: 'workspace_task_created',
+    data: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-live-release',
+      title: 'Verify live cloud task updates',
+    },
+  },
+  {
+    type: 'workspace_task_status_changed',
+    data: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-live-release',
+      new_status: 'in_progress',
+    },
+  },
+];
 
 const timelineState: ConversationTimelineState = {
   conversationId: 'conversation-desktop-session',
@@ -1416,6 +1437,7 @@ function SessionSteeringQa() {
   const taskRecoveryEventsMode = searchParams.get('task-recovery-events') === '1';
   const toolProgressEventMode = searchParams.get('tool-progress-event') === '1';
   const workspaceMessageEventMode = searchParams.get('workspace-message-event') === '1';
+  const workspaceTaskEventMode = searchParams.get('workspace-task-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1424,6 +1446,7 @@ function SessionSteeringQa() {
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
   const [model, setModel] = useState('gpt-5.5');
   const [qaMessages, setQaMessages] = useState(messages);
+  const [qaTasks, setQaTasks] = useState<WorkspaceTask[]>([]);
   const [switchingModel, setSwitchingModel] = useState(false);
   const [artifactCanvas, setArtifactCanvas] = useState(() =>
     artifactCanvasEventsMode
@@ -1542,6 +1565,20 @@ function SessionSteeringQa() {
       },
     };
   });
+
+  useEffect(() => {
+    if (!workspaceTaskEventMode) return;
+    const timer = window.setTimeout(() => {
+      setQaTasks((current) =>
+        workspaceTaskEvents.reduce(
+          (tasks, event) =>
+            applyWorkspaceTaskStreamEvent(tasks, event, 'workspace-desktop').tasks,
+          current,
+        ),
+      );
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [workspaceTaskEventMode]);
 
   useEffect(() => {
     if (!workspaceMessageEventMode) return;
@@ -1743,6 +1780,7 @@ function SessionSteeringQa() {
                 workspaceOrchestrationEventsMode ||
                 taskRecoveryEventsMode ||
                 workspaceMessageEventMode ||
+                workspaceTaskEventMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
@@ -1808,6 +1846,11 @@ function SessionSteeringQa() {
             />
             {a2uiCanvasResponse ? (
               <p data-testid="a2ui-canvas-response">{a2uiCanvasResponse}</p>
+            ) : null}
+            {workspaceTaskEventMode && qaTasks[0] ? (
+              <p data-testid="workspace-task-stream">
+                {qaTasks[0].title} · {qaTasks[0].status}
+              </p>
             ) : null}
             {mcpAppEventsMode ? (
               <>
