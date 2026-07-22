@@ -15,6 +15,7 @@ export type AgentLifecycleFamily =
   | 'doomLoop'
   | 'conversation'
   | 'planReflection'
+  | 'sessionLifecycle'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -313,6 +314,12 @@ const lifecycleEventDefinitions: Record<
     detailFields: ['compression_level', 'compressionLevel'],
   },
   context_compacted: { family: 'context', state: 'complete' },
+  session_forked: { family: 'sessionLifecycle', state: 'complete' },
+  session_merged: {
+    family: 'sessionLifecycle',
+    state: 'complete',
+    detailFields: ['merge_strategy', 'mergeStrategy'],
+  },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -494,6 +501,18 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
   }
   if (family === 'planReflection') {
     return timelineEventString(item, ['plan_id', 'planId']) ?? '';
+  }
+  if (family === 'sessionLifecycle') {
+    const parent = timelineEventString(item, [
+      'parent_conversation_id',
+      'parentConversationId',
+    ]);
+    const child = timelineEventString(item, [
+      'child_conversation_id',
+      'childConversationId',
+    ]);
+    if (!parent || !child) return parent ?? child ?? '';
+    return item.type === 'session_forked' ? `${parent} → ${child}` : `${child} → ${parent}`;
   }
   if (family === 'agentDefinition') {
     return timelineEventString(item, ['agent_name', 'agentName', 'agent_id', 'agentId']) ?? '';

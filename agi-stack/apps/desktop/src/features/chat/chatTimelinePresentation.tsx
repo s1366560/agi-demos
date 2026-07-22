@@ -177,6 +177,9 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       : t('chat.agentConversationFinished');
   }
   if (lifecycle?.family === 'planReflection') return t('chat.plan');
+  if (lifecycle?.family === 'sessionLifecycle') {
+    return item.type === 'session_forked' ? t('chat.sessionForked') : t('chat.sessionMerged');
+  }
   if (lifecycle?.family === 'agentDefinition') {
     if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
     if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');

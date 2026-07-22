@@ -882,6 +882,30 @@ const contextCompactedTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const sessionLifecycleTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'session-forked-release',
+    type: 'session_forked',
+    eventTimeUs: 1_784_282_075_000_000,
+    eventCounter: 43,
+    payload: {
+      parent_conversation_id: 'conversation-parent',
+      child_conversation_id: 'conversation-child',
+    },
+  },
+  {
+    id: 'session-merged-release',
+    type: 'session_merged',
+    eventTimeUs: 1_784_282_075_500_000,
+    eventCounter: 44,
+    payload: {
+      parent_conversation_id: 'conversation-parent',
+      child_conversation_id: 'conversation-child',
+      merge_strategy: 'result_only',
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1066,6 +1090,7 @@ function SessionSteeringQa() {
   const channelInboundMessageMode = searchParams.get('channel-inbound-message') === '1';
   const toolsUpdatedEventMode = searchParams.get('tools-updated-event') === '1';
   const contextCompactedEventMode = searchParams.get('context-compacted-event') === '1';
+  const sessionLifecycleEventsMode = searchParams.get('session-lifecycle-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1142,6 +1167,8 @@ function SessionSteeringQa() {
                                       ? [...timelineState.items, ...toolsUpdatedTimelineItems]
                                       : contextCompactedEventMode
                                         ? [...timelineState.items, ...contextCompactedTimelineItems]
+                                        : sessionLifecycleEventsMode
+                                          ? [...timelineState.items, ...sessionLifecycleTimelineItems]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1337,6 +1364,7 @@ function SessionSteeringQa() {
                 channelInboundMessageMode ||
                 toolsUpdatedEventMode ||
                 contextCompactedEventMode ||
+                sessionLifecycleEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

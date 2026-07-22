@@ -1027,6 +1027,49 @@ test('context events expose token occupancy and compression results', () => {
   );
 });
 
+test('session fork and merge events expose the child lifecycle direction and strategy', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'session-forked-1',
+      type: 'session_forked',
+      eventTimeUs: 33_600_000,
+      eventCounter: 1,
+      payload: {
+        parent_conversation_id: 'conversation-parent',
+        child_conversation_id: 'conversation-child',
+      },
+    }),
+    {
+      family: 'sessionLifecycle',
+      state: 'complete',
+      subject: 'conversation-parent → conversation-child',
+      detail: '',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'session-merged-1',
+      type: 'session_merged',
+      eventTimeUs: 33_700_000,
+      eventCounter: 2,
+      payload: {
+        parent_conversation_id: 'conversation-parent',
+        child_conversation_id: 'conversation-child',
+        merge_strategy: 'result_only',
+      },
+    }),
+    {
+      family: 'sessionLifecycle',
+      state: 'complete',
+      subject: 'conversation-child → conversation-parent',
+      detail: 'result_only',
+      isError: false,
+    },
+  );
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({
