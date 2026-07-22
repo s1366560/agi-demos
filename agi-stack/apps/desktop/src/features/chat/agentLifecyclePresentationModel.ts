@@ -12,6 +12,7 @@ export type AgentLifecycleFamily =
   | 'selection'
   | 'policy'
   | 'toolset'
+  | 'skill'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -210,6 +211,32 @@ const lifecycleEventDefinitions: Record<
     detailFields: ['denial_reason', 'denialReason', 'policy_layer', 'policyLayer'],
   },
   toolset_changed: { family: 'toolset', state: 'complete' },
+  skill_matched: {
+    family: 'skill',
+    state: 'complete',
+    detailFields: ['execution_mode', 'executionMode'],
+  },
+  skill_execution_start: {
+    family: 'skill',
+    state: 'running',
+    detailFields: ['query'],
+  },
+  skill_tool_start: { family: 'skill', state: 'running' },
+  skill_tool_result: {
+    family: 'skill',
+    state: 'complete',
+    detailFields: ['error'],
+  },
+  skill_execution_complete: {
+    family: 'skill',
+    state: 'complete',
+    detailFields: ['summary', 'error'],
+  },
+  skill_fallback: {
+    family: 'skill',
+    state: 'attention',
+    detailFields: ['error', 'reason'],
+  },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -282,12 +309,23 @@ export function agentLifecyclePresentation(
     state,
     subject,
     detail,
-    isError: state === 'failed' || Boolean(item.isError || item.error),
+    isError:
+      state === 'failed' ||
+      (item.type !== 'skill_fallback' && Boolean(item.isError || item.error)),
     ...(progress ? { progress } : {}),
   };
 }
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
+  if (family === 'skill') {
+    const skill = timelineEventString(item, ['skill_name', 'skillName']);
+    if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
+      const tool = timelineEventString(item, ['tool_name', 'toolName']);
+      if (skill && tool) return `${skill} → ${tool}`;
+      return skill ?? tool ?? '';
+    }
+    return skill ?? '';
+  }
   if (family === 'routing') {
     const path = timelineEventString(item, ['path']);
     const target = timelineEventString(item, ['target']);
@@ -424,6 +462,28 @@ function lifecycleProgress(
   item: AgentTimelineItem,
   family: AgentLifecycleFamily,
 ): AgentLifecyclePresentation['progress'] {
+  if (family === 'skill') {
+    if (item.type === 'skill_matched') {
+      const total = timelineEventStringArray(item, ['tools']).length;
+      return total > 0 ? { unit: 'tools', total } : undefined;
+    }
+    if (item.type === 'skill_execution_start') {
+      const total = timelineEventNumber(item, ['total_steps', 'totalSteps']);
+      return total === null ? undefined : { unit: 'steps', total };
+    }
+    if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
+      const total = timelineEventNumber(item, ['total_steps', 'totalSteps']);
+      const current = timelineEventNumber(item, ['step_index', 'stepIndex']);
+      if (total === null) return undefined;
+      return current === null
+        ? { unit: 'steps', total }
+        : { unit: 'steps', current, total };
+    }
+    if (item.type === 'skill_execution_complete') {
+      const total = timelineEventRecordArray(item, ['tool_results', 'toolResults']).length;
+      return total > 0 ? { unit: 'tools', total } : undefined;
+    }
+  }
   if (family === 'selection') {
     const total = timelineEventNumber(item, ['initial_count', 'initialCount']);
     const current = timelineEventNumber(item, ['final_count', 'finalCount']);

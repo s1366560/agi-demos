@@ -643,6 +643,150 @@ test('tool policy denial and toolset refresh expose blocked and failure states',
   );
 });
 
+test('skill matching and execution expose the selected skill and structured progress', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'skill-matched-1',
+      type: 'skill_matched',
+      eventTimeUs: 24_000_000,
+      eventCounter: 1,
+      payload: {
+        skill_id: 'skill-release-guard',
+        skill_name: 'Release guard',
+        tools: ['read_file', 'shell_command'],
+        match_score: 1,
+        execution_mode: 'forced',
+      },
+    }),
+    {
+      family: 'skill',
+      state: 'complete',
+      subject: 'Release guard',
+      detail: 'forced',
+      isError: false,
+      progress: { unit: 'tools', total: 2 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'skill-execution-start-1',
+      type: 'skill_execution_start',
+      eventTimeUs: 25_000_000,
+      eventCounter: 2,
+      skillName: 'Release guard',
+      query: 'Run release checks',
+      totalSteps: 3,
+    }),
+    {
+      family: 'skill',
+      state: 'running',
+      subject: 'Release guard',
+      detail: 'Run release checks',
+      isError: false,
+      progress: { unit: 'steps', total: 3 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'skill-tool-start-1',
+      type: 'skill_tool_start',
+      eventTimeUs: 26_000_000,
+      eventCounter: 3,
+      payload: {
+        skill_name: 'Release guard',
+        tool_name: 'shell_command',
+        step_index: 1,
+        total_steps: 3,
+        status: 'running',
+      },
+    }),
+    {
+      family: 'skill',
+      state: 'running',
+      subject: 'Release guard → shell_command',
+      detail: '',
+      isError: false,
+      progress: { unit: 'steps', current: 1, total: 3 },
+    },
+  );
+});
+
+test('skill results, completion, and fallback expose outcome semantics', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'skill-tool-result-1',
+      type: 'skill_tool_result',
+      eventTimeUs: 27_000_000,
+      eventCounter: 1,
+      payload: {
+        skill_name: 'Release guard',
+        tool_name: 'shell_command',
+        error: 'Release verification failed',
+        duration_ms: 812,
+        step_index: 2,
+        total_steps: 3,
+        status: 'error',
+      },
+    }),
+    {
+      family: 'skill',
+      state: 'failed',
+      subject: 'Release guard → shell_command',
+      detail: 'Release verification failed',
+      isError: true,
+      progress: { unit: 'steps', current: 2, total: 3 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'skill-execution-complete-1',
+      type: 'skill_execution_complete',
+      eventTimeUs: 28_000_000,
+      eventCounter: 2,
+      payload: {
+        skill_name: 'Release guard',
+        success: true,
+        summary: 'Release checks passed',
+        tool_results: [
+          { tool_name: 'read_file', status: 'completed' },
+          { tool_name: 'shell_command', status: 'completed' },
+        ],
+        execution_time_ms: 1_240,
+      },
+    }),
+    {
+      family: 'skill',
+      state: 'complete',
+      subject: 'Release guard',
+      detail: 'Release checks passed',
+      isError: false,
+      progress: { unit: 'tools', total: 2 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'skill-fallback-1',
+      type: 'skill_fallback',
+      eventTimeUs: 29_000_000,
+      eventCounter: 3,
+      skillName: 'Release guard',
+      reason: 'execution_failed',
+      error: 'Continuing with the general agent',
+    }),
+    {
+      family: 'skill',
+      state: 'attention',
+      subject: 'Release guard',
+      detail: 'Continuing with the general agent',
+      isError: false,
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',

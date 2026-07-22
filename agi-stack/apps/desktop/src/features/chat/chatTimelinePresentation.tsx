@@ -159,6 +159,14 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (lifecycle?.family === 'selection') return t('chat.toolSelection');
   if (lifecycle?.family === 'policy') return t('chat.toolPolicy');
   if (lifecycle?.family === 'toolset') return t('chat.toolsetChange');
+  if (lifecycle?.family === 'skill') {
+    if (item.type === 'skill_matched') return t('chat.skillMatched');
+    if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
+      return t('chat.skillTool');
+    }
+    if (item.type === 'skill_fallback') return t('chat.skillFallback');
+    return t('chat.skillExecution');
+  }
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
