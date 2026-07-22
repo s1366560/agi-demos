@@ -639,6 +639,7 @@ export function shouldShowAgentWorkingIndicator(args: {
   const last = items[items.length - 1];
   if (last.metadata?.streaming) return false;
   if (last.role === 'assistant' || last.type === 'assistant_message') return false;
+  if (last.type === 'agent_conversation_finished') return false;
   return true;
 }
 

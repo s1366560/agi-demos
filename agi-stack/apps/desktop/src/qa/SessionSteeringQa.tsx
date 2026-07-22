@@ -383,6 +383,45 @@ const doomLoopTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const conversationTerminalTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'agent-goal-completed-release',
+    type: 'agent_goal_completed',
+    eventTimeUs: 1_784_282_056_000_000,
+    eventCounter: 16,
+    payload: {
+      conversation_id: 'conversation-release-1',
+      actor_agent_id: 'coordinator',
+      summary: 'Release verification completed with all requested checks passing',
+      artifacts: ['release-report', 'verification-log'],
+    },
+  },
+  {
+    id: 'agent-conversation-finished-budget',
+    type: 'agent_conversation_finished',
+    eventTimeUs: 1_784_282_057_000_000,
+    eventCounter: 17,
+    payload: {
+      conversation_id: 'conversation-budget-1',
+      reason: 'budget_turns',
+      actor: 'system',
+      rationale: 'Turn budget reached before the remaining optional checks',
+    },
+  },
+  {
+    id: 'agent-conversation-finished-safety',
+    type: 'agent_conversation_finished',
+    eventTimeUs: 1_784_282_058_000_000,
+    eventCounter: 18,
+    payload: {
+      conversation_id: 'conversation-safety-1',
+      reason: 'safety_doom_loop',
+      actor: 'supervisor',
+      rationale: 'Repeated terminal calls remained unsafe after intervention',
+    },
+  },
+];
+
 function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
@@ -390,6 +429,7 @@ function SessionSteeringQa() {
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
   const httpServiceEventsMode = searchParams.get('http-service-events') === '1';
   const doomLoopEventsMode = searchParams.get('doom-loop-events') === '1';
+  const terminalEventsMode = searchParams.get('terminal-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -408,7 +448,9 @@ function SessionSteeringQa() {
               ? [...timelineState.items, ...httpServiceTimelineItems]
               : doomLoopEventsMode
                 ? [...timelineState.items, ...doomLoopTimelineItems]
-            : timelineState.items;
+                : terminalEventsMode
+                  ? [...timelineState.items, ...conversationTerminalTimelineItems]
+                  : timelineState.items;
     return {
       ...timelineState,
       items,

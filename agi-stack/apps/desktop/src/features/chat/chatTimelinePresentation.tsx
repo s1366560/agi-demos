@@ -170,6 +170,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
       ? t('chat.doomLoopDetected')
       : t('chat.doomLoopIntervened');
   }
+  if (lifecycle?.family === 'conversation') {
+    return item.type === 'agent_goal_completed'
+      ? t('chat.agentGoalCompleted')
+      : t('chat.agentConversationFinished');
+  }
   if (lifecycle?.family === 'skill') {
     if (item.type === 'skill_matched') return t('chat.skillMatched');
     if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
@@ -226,11 +231,19 @@ export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
   if (timelineHitlType(item) && !item.answered) return true;
   if (item.type === 'work_plan') return true;
   if (item.type === 'doom_loop_detected') return true;
+  if (item.type === 'agent_goal_completed' || item.type === 'agent_conversation_finished') {
+    return true;
+  }
   return false;
 }
 
 export function isTimelineItemInitiallyExpanded(item: AgentTimelineItem): boolean {
-  return isImportantTimelineItem(item) && item.type !== 'doom_loop_detected';
+  if (!isImportantTimelineItem(item)) return false;
+  return (
+    item.type !== 'doom_loop_detected' &&
+    item.type !== 'agent_goal_completed' &&
+    item.type !== 'agent_conversation_finished'
+  );
 }
 
 export function timelineHasDetails(item: AgentTimelineItem, kind: TimelineKind): boolean {

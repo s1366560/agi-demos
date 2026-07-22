@@ -62,7 +62,7 @@ test('doom-loop detection is immediately visible without expanding routine activ
   assert.doesNotMatch(importancePolicy, /item\.type === 'doom_loop_intervened'/);
   assert.match(
     chatSource,
-    /function isTimelineItemInitiallyExpanded[\s\S]*isImportantTimelineItem\(item\)[\s\S]*item\.type !== 'doom_loop_detected'/,
+    /function isTimelineItemInitiallyExpanded[\s\S]*isImportantTimelineItem\(item\)[\s\S]*doom_loop_detected/,
   );
   assert.match(
     chatSource,
@@ -72,6 +72,22 @@ test('doom-loop detection is immediately visible without expanding routine activ
     chatSource,
     /current\[item\.id\] \?\? isTimelineItemInitiallyExpanded\(item\)/,
   );
+});
+
+test('conversation terminal events stay visible while their raw payloads stay collapsed', () => {
+  const importancePolicy = chatSource.match(
+    /function isImportantTimelineItem\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+  const expansionPolicy = chatSource.match(
+    /function isTimelineItemInitiallyExpanded\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+
+  assert.ok(importancePolicy, 'timeline importance policy must remain explicit');
+  assert.ok(expansionPolicy, 'timeline expansion policy must remain explicit');
+  assert.match(importancePolicy, /agent_goal_completed/);
+  assert.match(importancePolicy, /agent_conversation_finished/);
+  assert.match(expansionPolicy, /agent_goal_completed/);
+  assert.match(expansionPolicy, /agent_conversation_finished/);
 });
 
 test('narrow session timelines preserve lifecycle status labels', () => {
@@ -161,6 +177,8 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.httpServiceEvent',
     'chat.doomLoopDetected',
     'chat.doomLoopIntervened',
+    'chat.agentGoalCompleted',
+    'chat.agentConversationFinished',
     'chat.callsCount',
     'chat.suggestedFollowUps',
     'chat.sendSuggestion',

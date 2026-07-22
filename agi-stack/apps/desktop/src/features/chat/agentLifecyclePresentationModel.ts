@@ -13,6 +13,7 @@ export type AgentLifecycleFamily =
   | 'policy'
   | 'toolset'
   | 'doomLoop'
+  | 'conversation'
   | 'skill'
   | 'model'
   | 'context'
@@ -186,6 +187,16 @@ const lifecycleEventDefinitions: Record<
     family: 'agent',
     state: 'stopped',
     detailFields: ['reason'],
+  },
+  agent_goal_completed: {
+    family: 'conversation',
+    state: 'complete',
+    detailFields: ['actor_agent_id', 'actorAgentId'],
+  },
+  agent_conversation_finished: {
+    family: 'conversation',
+    state: 'attention',
+    detailFields: ['rationale'],
   },
   agent_message_sent: {
     family: 'agentMessage',
@@ -385,6 +396,8 @@ export function agentLifecyclePresentation(
     ) {
       state = 'ready';
     }
+  } else if (item.type === 'agent_conversation_finished') {
+    state = conversationTerminationState(item);
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   } else if (
@@ -439,6 +452,11 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     return item.type === 'doom_loop_detected'
       ? timelineEventString(item, ['tool_name', 'toolName', 'tool']) ?? ''
       : timelineEventString(item, ['action']) ?? '';
+  }
+  if (family === 'conversation') {
+    return item.type === 'agent_goal_completed'
+      ? timelineEventString(item, ['summary']) ?? ''
+      : timelineEventString(item, ['reason']) ?? '';
   }
   if (family === 'context') {
     return item.type === 'context_compressed'
@@ -685,6 +703,10 @@ function lifecycleProgress(
     const total = timelineEventNumber(item, ['call_count', 'callCount']);
     return total === null ? undefined : { unit: 'calls', total };
   }
+  if (family === 'conversation' && item.type === 'agent_goal_completed') {
+    const total = timelineEventStringArray(item, ['artifacts']).length;
+    return total > 0 ? { unit: 'artifacts', total } : undefined;
+  }
   if (family === 'context') {
     if (item.type === 'context_status') {
       const total = timelineEventNumber(item, ['token_budget', 'tokenBudget']);
@@ -816,6 +838,14 @@ function lifecycleProgress(
       : { unit: 'steps', current, total };
   }
   return undefined;
+}
+
+function conversationTerminationState(item: AgentTimelineItem): AgentLifecycleState {
+  const reason = timelineEventString(item, ['reason']);
+  if (reason === 'goal_completed') return 'complete';
+  if (reason === 'user_cancel') return 'stopped';
+  if (reason === 'safety_looping' || reason === 'safety_doom_loop') return 'failed';
+  return 'attention';
 }
 
 function lifecycleFailed(item: AgentTimelineItem): boolean {

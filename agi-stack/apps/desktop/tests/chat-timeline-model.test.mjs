@@ -1422,6 +1422,97 @@ test('doom-loop safeguard events expose repeated tool calls and intervention sta
   );
 });
 
+test('conversation terminal events expose completion and gate-specific stop states', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-goal-completed-1',
+      type: 'agent_goal_completed',
+      eventTimeUs: 71_000_000,
+      eventCounter: 1,
+      payload: {
+        conversation_id: 'conversation-1',
+        actor_agent_id: 'coordinator',
+        summary: 'All requested checks passed',
+        artifacts: ['report-1', 'patch-1'],
+      },
+    }),
+    {
+      family: 'conversation',
+      state: 'complete',
+      subject: 'All requested checks passed',
+      detail: 'coordinator',
+      isError: false,
+      progress: { unit: 'artifacts', total: 2 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-conversation-budget-finished-1',
+      type: 'agent_conversation_finished',
+      eventTimeUs: 72_000_000,
+      eventCounter: 2,
+      payload: {
+        conversation_id: 'conversation-1',
+        reason: 'budget_turns',
+        actor: 'system',
+        rationale: 'Turn budget reached',
+      },
+    }),
+    {
+      family: 'conversation',
+      state: 'attention',
+      subject: 'budget_turns',
+      detail: 'Turn budget reached',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-conversation-safety-finished-1',
+      type: 'agent_conversation_finished',
+      eventTimeUs: 73_000_000,
+      eventCounter: 3,
+      payload: {
+        conversation_id: 'conversation-1',
+        reason: 'safety_doom_loop',
+        actor: 'supervisor',
+        rationale: 'Repeated tool calls remained unsafe',
+      },
+    }),
+    {
+      family: 'conversation',
+      state: 'failed',
+      subject: 'safety_doom_loop',
+      detail: 'Repeated tool calls remained unsafe',
+      isError: true,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-conversation-cancelled-1',
+      type: 'agent_conversation_finished',
+      eventTimeUs: 74_000_000,
+      eventCounter: 4,
+      payload: {
+        conversation_id: 'conversation-1',
+        reason: 'user_cancel',
+        actor: 'user',
+        rationale: 'Stopped from the session header',
+      },
+    }),
+    {
+      family: 'conversation',
+      state: 'stopped',
+      subject: 'user_cancel',
+      detail: 'Stopped from the session header',
+      isError: false,
+    },
+  );
+});
+
 test('artifact ready and error stream events settle the original created row', () => {
   const created = {
     id: 'artifact-created-1',
@@ -1928,6 +2019,15 @@ test('working indicator only shows while live, blocked neither by stream nor HIT
   ];
   const answerTail = [{ id: 'a2', type: 'assistant_message', role: 'assistant', eventTimeUs: 3 }];
   const observeTail = [{ id: 'o1', type: 'observe', toolName: 'read_file', eventTimeUs: 4 }];
+  const terminatedTail = [
+    ...observeTail,
+    {
+      id: 'conversation-finished-1',
+      type: 'agent_conversation_finished',
+      eventTimeUs: 5,
+      payload: { reason: 'budget_turns' },
+    },
+  ];
 
   assert.equal(
     shouldShowAgentWorkingIndicator({ items: userTail, presence: 'live', awaitingHitl: false }),
@@ -1943,6 +2043,14 @@ test('working indicator only shows while live, blocked neither by stream nor HIT
   );
   assert.equal(
     shouldShowAgentWorkingIndicator({ items: answerTail, presence: 'live', awaitingHitl: false }),
+    false,
+  );
+  assert.equal(
+    shouldShowAgentWorkingIndicator({
+      items: terminatedTail,
+      presence: 'live',
+      awaitingHitl: false,
+    }),
     false,
   );
   assert.equal(
