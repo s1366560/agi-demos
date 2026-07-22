@@ -146,6 +146,7 @@ test('builds one structured execution trace from routing, selection, policy, and
     refreshStatus: 'success',
     refreshedToolCount: 3,
     mutationFingerprint: 'sha256:release',
+    projectId: null,
     serverName: null,
     toolNames: [],
     requiresRefresh: null,
@@ -217,10 +218,95 @@ test('projects tools_updated as structured MCP registry evidence', () => {
     refreshStatus: null,
     refreshedToolCount: null,
     mutationFingerprint: null,
+    projectId: 'project-release',
     serverName: 'release-tools',
     toolNames: ['mcp__release__verify', 'mcp__release__publish'],
     requiresRefresh: true,
   });
+});
+
+test('correlates MCP registry readiness and lifecycle evidence by exact project and server', () => {
+  const model = buildSessionExecutionInsights([
+    event(
+      'registry-ready',
+      'tools_updated',
+      {
+        project_id: 'project-release',
+        server_name: 'release-tools',
+        tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+        requires_refresh: true,
+      },
+      1
+    ),
+    event(
+      'registry-settled',
+      'toolset_changed',
+      {
+        project_id: 'project-release',
+        server_name: 'release-tools',
+        source: 'register_mcp_server',
+        tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+        refresh_status: 'success',
+        refreshed_tool_count: 2,
+      },
+      2
+    ),
+  ]);
+
+  assert.equal(model.traces.length, 1);
+  assert.equal(model.activeTrace?.groupKey, 'tool-registry:project-release:release-tools');
+  assert.deepEqual(
+    model.activeTrace?.entries.map((entry) => entry.toolset?.updateKind),
+    ['tools_updated', 'toolset_changed'],
+  );
+  assert.equal(model.activeTrace?.entries[1].toolset?.projectId, 'project-release');
+  assert.equal(model.activeTrace?.entries[1].toolset?.serverName, 'release-tools');
+});
+
+test('never correlates MCP registry evidence across project or server identity', () => {
+  const model = buildSessionExecutionInsights([
+    event(
+      'registry-ready',
+      'tools_updated',
+      {
+        project_id: 'project-release',
+        server_name: 'release-tools',
+        tool_names: ['mcp__release__verify'],
+        requires_refresh: true,
+      },
+      1
+    ),
+    event(
+      'different-project',
+      'toolset_changed',
+      {
+        project_id: 'project-other',
+        server_name: 'release-tools',
+        source: 'register_mcp_server',
+      },
+      2
+    ),
+    event(
+      'different-server',
+      'toolset_changed',
+      {
+        project_id: 'project-release',
+        server_name: 'audit-tools',
+        source: 'register_mcp_server',
+      },
+      3
+    ),
+  ]);
+
+  assert.equal(model.traces.length, 3);
+  assert.deepEqual(
+    new Set(model.traces.map((trace) => trace.groupKey)),
+    new Set([
+      'tool-registry:project-release:release-tools',
+      'tool-registry:project-other:release-tools',
+      'tool-registry:project-release:audit-tools',
+    ]),
+  );
 });
 
 test('fails closed for malformed, duplicate, and unrelated diagnostics', () => {
@@ -312,4 +398,5 @@ test('Desktop exposes a dynamic Insights canvas with selectable diagnostic evide
   assert.match(canvasSource, /entry\.toolset\.requiresRefresh/);
   assert.match(qaSource, /execution-insights-canvas/);
   assert.match(qaSource, /insights-release-tools-updated/);
+  assert.match(qaSource, /insights-release-registry-settled/);
 });

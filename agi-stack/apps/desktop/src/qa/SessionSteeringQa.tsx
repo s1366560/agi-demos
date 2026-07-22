@@ -829,6 +829,20 @@ const executionInsightsCanvasTimelineItems: ConversationTimelineState['items'] =
       requires_refresh: true,
     },
   },
+  {
+    id: 'insights-release-registry-settled',
+    type: 'toolset_changed',
+    eventTimeUs: 1_784_282_063_000_000,
+    eventCounter: 22,
+    payload: {
+      project_id: 'project-release',
+      server_name: 'release-tools',
+      source: 'register_mcp_server',
+      tool_names: ['mcp__release__verify', 'mcp__release__publish'],
+      refresh_status: 'success',
+      refreshed_tool_count: 2,
+    },
+  },
 ];
 
 const contextWindowCanvasTimelineItems: ConversationTimelineState['items'] = [

@@ -40,6 +40,7 @@ export type SessionExecutionInsightEntry = {
   } | null;
   toolset: {
     updateKind: 'toolset_changed' | 'tools_updated';
+    projectId: string | null;
     source: string | null;
     action: string | null;
     pluginName: string | null;
@@ -117,7 +118,13 @@ export function buildSessionExecutionInsights(
       ? `trace:${entry.traceId}`
       : entry.routeId
         ? `route:${entry.routeId}`
-        : `event:${entry.id}`;
+        : entry.toolset?.projectId && entry.toolset.serverName
+          ? [
+              'tool-registry',
+              encodeURIComponent(entry.toolset.projectId),
+              encodeURIComponent(entry.toolset.serverName),
+            ].join(':')
+          : `event:${entry.id}`;
     const existing = traces.get(groupKey);
     if (existing) {
       existing.entries.push(entry);
@@ -252,6 +259,7 @@ function readInsightEntry(item: AgentTimelineItem): SessionExecutionInsightEntry
       policy: null,
       toolset: {
         updateKind: 'tools_updated',
+        projectId: fieldString(item, 'project_id', 'projectId'),
         source: null,
         action: null,
         pluginName: null,
@@ -276,6 +284,7 @@ function readInsightEntry(item: AgentTimelineItem): SessionExecutionInsightEntry
     policy: null,
     toolset: {
       updateKind: 'toolset_changed',
+      projectId: fieldString(item, 'project_id', 'projectId'),
       source,
       action: fieldString(item, 'action'),
       pluginName: fieldString(item, 'plugin_name', 'pluginName'),

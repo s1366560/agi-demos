@@ -357,11 +357,14 @@ function stageHeadline(
   if (entry.policy) {
     return t('session.insights.filteredTools', { count: entry.policy.removedTotal });
   }
+  if (entry.toolset?.updateKind === 'tools_updated') {
+    return entry.toolset.serverName ?? '';
+  }
   return (
-    entry.toolset?.serverName ??
     entry.toolset?.pluginName ??
     entry.toolset?.action ??
     entry.toolset?.source ??
+    entry.toolset?.serverName ??
     ''
   );
 }
