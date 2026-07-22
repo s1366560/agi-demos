@@ -1020,6 +1020,37 @@ const agentGovernanceTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const agentAuditTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'agent-supervisor-verdict-release',
+    type: 'agent_supervisor_verdict',
+    eventTimeUs: 1_784_282_080_000_000,
+    eventCounter: 53,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-supervisor',
+      status: 'goal_drift',
+      rationale: 'Implementation diverged from the release objective.',
+      recommended_actions: ['restate goal', 'reassign review'],
+      trigger: 'tick',
+    },
+  },
+  {
+    id: 'agent-decision-logged-release',
+    type: 'agent_decision_logged',
+    eventTimeUs: 1_784_282_080_500_000,
+    eventCounter: 54,
+    payload: {
+      conversation_id: 'conversation-desktop-session',
+      actor_agent_id: 'agent-reviewer',
+      tool_name: 'mark_conflict',
+      output_summary: 'Conflict recorded',
+      rationale: 'Evidence mismatch requires adjudication.',
+      latency_ms: 18,
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1208,6 +1239,7 @@ function SessionSteeringQa() {
   const participantEventsMode = searchParams.get('participant-events') === '1';
   const agentTaskEventsMode = searchParams.get('agent-task-events') === '1';
   const agentGovernanceEventsMode = searchParams.get('agent-governance-events') === '1';
+  const agentAuditEventsMode = searchParams.get('agent-audit-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1295,6 +1327,11 @@ function SessionSteeringQa() {
                                                     ...timelineState.items,
                                                     ...agentGovernanceTimelineItems,
                                                   ]
+                                                : agentAuditEventsMode
+                                                  ? [
+                                                      ...timelineState.items,
+                                                      ...agentAuditTimelineItems,
+                                                    ]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1494,6 +1531,7 @@ function SessionSteeringQa() {
                 participantEventsMode ||
                 agentTaskEventsMode ||
                 agentGovernanceEventsMode ||
+                agentAuditEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

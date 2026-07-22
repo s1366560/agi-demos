@@ -19,6 +19,7 @@ export type AgentLifecycleFamily =
   | 'participant'
   | 'agentTask'
   | 'agentGovernance'
+  | 'agentAudit'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -361,6 +362,14 @@ const lifecycleEventDefinitions: Record<
     family: 'agentGovernance',
     state: 'attention',
   },
+  agent_supervisor_verdict: {
+    family: 'agentAudit',
+    state: 'complete',
+  },
+  agent_decision_logged: {
+    family: 'agentAudit',
+    state: 'complete',
+  },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -485,6 +494,12 @@ export function agentLifecyclePresentation(
     timelineEventString(item, ['urgency']) === 'blocking'
   ) {
     state = 'blocked';
+  } else if (
+    item.type === 'agent_supervisor_verdict' &&
+    explicitStatus !== null &&
+    explicitStatus !== 'healthy'
+  ) {
+    state = 'attention';
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   } else if (
@@ -590,6 +605,15 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
       const target = timelineEventString(item, ['conflict_with', 'conflictWith']);
       if (actor && target) return `${actor} ↔ ${target}`;
       return actor ?? target ?? '';
+    }
+    return actor ?? '';
+  }
+  if (family === 'agentAudit') {
+    const actor = timelineEventString(item, ['actor_agent_id', 'actorAgentId']);
+    if (item.type === 'agent_decision_logged') {
+      const tool = timelineEventString(item, ['tool_name', 'toolName']);
+      if (actor && tool) return `${actor} → ${tool}`;
+      return actor ?? tool ?? '';
     }
     return actor ?? '';
   }
@@ -737,6 +761,29 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
   const lifecycle = lifecycleEventDefinitions[item.type];
+  if (item.type === 'agent_supervisor_verdict') {
+    const actions = timelineEventStringArray(item, [
+      'recommended_actions',
+      'recommendedActions',
+    ]).join(', ');
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['status']),
+        timelineEventString(item, ['rationale']),
+        actions || null,
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
+  if (item.type === 'agent_decision_logged') {
+    const latency = timelineEventNumber(item, ['latency_ms', 'latencyMs']);
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['output_summary', 'outputSummary']),
+        timelineEventString(item, ['rationale']),
+        latency !== null && latency >= 0 ? `${latency} ms` : null,
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
   if (item.type === 'agent_human_input_requested') {
     return uniqueStrings(
       [

@@ -197,6 +197,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
     if (item.type === 'agent_escalated') return t('chat.agentEscalated');
     return t('chat.agentConflictMarked');
   }
+  if (lifecycle?.family === 'agentAudit') {
+    return item.type === 'agent_supervisor_verdict'
+      ? t('chat.agentSupervisorVerdict')
+      : t('chat.agentDecisionLogged');
+  }
   if (lifecycle?.family === 'agentDefinition') {
     if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
     if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');

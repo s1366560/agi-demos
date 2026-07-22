@@ -1262,6 +1262,57 @@ test('agent governance events expose human input, escalation, and conflict evide
   );
 });
 
+test('agent audit events expose supervisor verdicts and decision-call evidence', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-supervisor-verdict-1',
+      type: 'agent_supervisor_verdict',
+      eventTimeUs: 34_600_000,
+      eventCounter: 1,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-supervisor',
+        status: 'goal_drift',
+        rationale: 'Implementation diverged from the release objective.',
+        recommended_actions: ['restate goal', 'reassign review'],
+        trigger: 'tick',
+      },
+    }),
+    {
+      family: 'agentAudit',
+      state: 'attention',
+      subject: 'agent-supervisor',
+      detail:
+        'goal_drift · Implementation diverged from the release objective. · restate goal, reassign review',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'agent-decision-logged-1',
+      type: 'agent_decision_logged',
+      eventTimeUs: 34_700_000,
+      eventCounter: 2,
+      payload: {
+        conversation_id: 'conversation-release',
+        actor_agent_id: 'agent-reviewer',
+        tool_name: 'mark_conflict',
+        output_summary: 'Conflict recorded',
+        rationale: 'Evidence mismatch requires adjudication.',
+        latency_ms: 18,
+      },
+    }),
+    {
+      family: 'agentAudit',
+      state: 'complete',
+      subject: 'agent-reviewer → mark_conflict',
+      detail: 'Conflict recorded · Evidence mismatch requires adjudication. · 18 ms',
+      isError: false,
+    },
+  );
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({
