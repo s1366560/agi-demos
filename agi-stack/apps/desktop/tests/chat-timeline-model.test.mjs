@@ -1974,6 +1974,79 @@ test('UI-state events stay out of the visible conversation timeline', () => {
   );
 });
 
+test('channel inbound message events become conversation rows and other generic messages stay hidden', () => {
+  const inboundUser = {
+    id: 'message-event-user',
+    type: 'message',
+    payload: {
+      id: 'channel-user-1',
+      role: 'user',
+      content: 'Hello from Feishu',
+      metadata: { source: 'channel_inbound', channel: 'feishu' },
+    },
+    eventTimeUs: 56_000_000,
+    eventCounter: 1,
+  };
+  const inboundAssistant = {
+    id: 'message-event-assistant',
+    type: 'message',
+    payload: {
+      id: 'channel-assistant-1',
+      role: 'assistant',
+      content: 'Reply mirrored to the channel',
+      metadata: { source: 'channel_inbound', channel: 'feishu' },
+    },
+    eventTimeUs: 57_000_000,
+    eventCounter: 2,
+  };
+  const nonChannel = {
+    id: 'message-event-internal',
+    type: 'message',
+    payload: {
+      id: 'internal-1',
+      role: 'user',
+      content: 'internal-message-sentinel',
+      metadata: { source: 'agent_runtime' },
+    },
+    eventTimeUs: 58_000_000,
+    eventCounter: 3,
+  };
+  const malformed = {
+    id: 'message-event-malformed',
+    type: 'message',
+    payload: {
+      id: 'malformed-1',
+      role: 'system',
+      content: 'malformed-message-sentinel',
+      metadata: { source: 'channel_inbound' },
+    },
+    eventTimeUs: 59_000_000,
+    eventCounter: 4,
+  };
+
+  assert.deepEqual(timelineItemsForDisplay([inboundUser, inboundAssistant, nonChannel, malformed]), [
+    {
+      ...inboundUser,
+      id: 'channel-user-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Hello from Feishu',
+      message_id: 'channel-user-1',
+      metadata: { source: 'channel_inbound', channel: 'feishu' },
+    },
+    {
+      ...inboundAssistant,
+      id: 'channel-assistant-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Reply mirrored to the channel',
+      message_id: 'channel-assistant-1',
+      metadata: { source: 'channel_inbound', channel: 'feishu' },
+    },
+  ]);
+  assert.equal(inboundUser.type, 'message');
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',

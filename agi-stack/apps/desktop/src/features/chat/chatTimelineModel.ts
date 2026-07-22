@@ -142,7 +142,34 @@ const NON_TIMELINE_EVENT_TYPES = new Set([
 
 /** UI-state events drive affordances or replay and are not conversation log rows. */
 export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
-  return items.filter((item) => !NON_TIMELINE_EVENT_TYPES.has(item.type));
+  return items.flatMap((item) => {
+    if (NON_TIMELINE_EVENT_TYPES.has(item.type)) return [];
+    if (item.type !== 'message') return [item];
+    const message = channelInboundMessageForDisplay(item);
+    return message ? [message] : [];
+  });
+}
+
+function channelInboundMessageForDisplay(item: AgentTimelineItem): AgentTimelineItem | null {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  if (!payload) return null;
+  const metadata = isRecord(payload.metadata) ? payload.metadata : null;
+  if (metadata?.source !== 'channel_inbound') return null;
+  const role = payload?.role;
+  if (role !== 'user' && role !== 'assistant') return null;
+  const content = typeof payload.content === 'string' ? payload.content : '';
+  const messageId =
+    typeof payload.id === 'string' && payload.id.trim() ? payload.id : item.id;
+  return {
+    ...item,
+    id: messageId,
+    type: role === 'user' ? 'user_message' : 'assistant_message',
+    role,
+    content,
+    message_id: messageId,
+    metadata,
+    ...(Array.isArray(payload.artifacts) ? { artifacts: payload.artifacts } : {}),
+  };
 }
 
 /**

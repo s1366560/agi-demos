@@ -810,6 +810,49 @@ const internalUiStateTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const channelInboundMessageTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'channel-message-event',
+    type: 'message',
+    eventTimeUs: 1_784_282_071_000_000,
+    eventCounter: 38,
+    payload: {
+      id: 'channel-message-feishu',
+      role: 'user',
+      content: 'Hello from Feishu',
+      metadata: {
+        source: 'channel_inbound',
+        channel: 'feishu',
+        chat_id: 'release-chat',
+      },
+    },
+  },
+  {
+    id: 'internal-message-event',
+    type: 'message',
+    eventTimeUs: 1_784_282_071_500_000,
+    eventCounter: 39,
+    payload: {
+      id: 'internal-message',
+      role: 'user',
+      content: 'internal-message-sentinel',
+      metadata: { source: 'agent_runtime' },
+    },
+  },
+  {
+    id: 'malformed-channel-message-event',
+    type: 'message',
+    eventTimeUs: 1_784_282_072_000_000,
+    eventCounter: 40,
+    payload: {
+      id: 'malformed-channel-message',
+      role: 'system',
+      content: 'malformed-message-sentinel',
+      metadata: { source: 'channel_inbound' },
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -991,6 +1034,7 @@ function SessionSteeringQa() {
   const planUiStateEventsMode = searchParams.get('plan-ui-state-events') === '1';
   const taskUiStateEventsMode = searchParams.get('task-ui-state-events') === '1';
   const internalUiStateEventsMode = searchParams.get('internal-ui-state-events') === '1';
+  const channelInboundMessageMode = searchParams.get('channel-inbound-message') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1061,6 +1105,8 @@ function SessionSteeringQa() {
                                 ? [...timelineState.items, ...taskUiStateTimelineItems]
                                 : internalUiStateEventsMode
                                   ? [...timelineState.items, ...internalUiStateTimelineItems]
+                                  : channelInboundMessageMode
+                                    ? [...timelineState.items, ...channelInboundMessageTimelineItems]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1253,6 +1299,7 @@ function SessionSteeringQa() {
                 planUiStateEventsMode ||
                 taskUiStateEventsMode ||
                 internalUiStateEventsMode ||
+                channelInboundMessageMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
