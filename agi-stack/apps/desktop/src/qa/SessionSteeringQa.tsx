@@ -358,12 +358,38 @@ const httpServiceTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const doomLoopTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'doom-loop-detected-terminal',
+    type: 'doom_loop_detected',
+    eventTimeUs: 1_784_282_054_000_000,
+    eventCounter: 14,
+    payload: {
+      request_id: 'request-doom-loop-1',
+      tool_name: 'terminal',
+      call_count: 4,
+      last_calls: [],
+    },
+  },
+  {
+    id: 'doom-loop-intervened-terminal',
+    type: 'doom_loop_intervened',
+    eventTimeUs: 1_784_282_055_000_000,
+    eventCounter: 15,
+    payload: {
+      request_id: 'request-doom-loop-1',
+      action: 'resume_with_guardrails',
+    },
+  },
+];
+
 function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
   const httpServiceEventsMode = searchParams.get('http-service-events') === '1';
+  const doomLoopEventsMode = searchParams.get('doom-loop-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
@@ -380,6 +406,8 @@ function SessionSteeringQa() {
             ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
             : httpServiceEventsMode
               ? [...timelineState.items, ...httpServiceTimelineItems]
+              : doomLoopEventsMode
+                ? [...timelineState.items, ...doomLoopTimelineItems]
             : timelineState.items;
     return {
       ...timelineState,
@@ -499,7 +527,10 @@ function SessionSteeringQa() {
                 suggestionsMode ? '' : 'Keep the public API stable and add the missing revision test.'
               }
               activityPresence={
-                suggestionsMode || runtimeEventsMode || httpServiceEventsMode
+                suggestionsMode ||
+                runtimeEventsMode ||
+                httpServiceEventsMode ||
+                doomLoopEventsMode
                   ? 'recorded'
                   : 'live'
               }

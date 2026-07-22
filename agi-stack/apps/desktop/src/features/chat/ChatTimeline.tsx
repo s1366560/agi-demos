@@ -46,6 +46,7 @@ import type { ToolCallPair, ToolCallPresentationKind } from './chatTimelineModel
 import {
   formatTimelineTime,
   isImportantTimelineItem,
+  isTimelineItemInitiallyExpanded,
   timelineDetailLineCount,
   timelineFileMetadata,
   timelineHasDetails,
@@ -334,7 +335,7 @@ export function AgentTimeline({
               {dayDivider}
               <TimelineItemView
                 item={item}
-                expanded={expandedItems[item.id] ?? isImportantTimelineItem(item)}
+                expanded={expandedItems[item.id] ?? isTimelineItemInitiallyExpanded(item)}
                 onToggle={() => onToggleItem(item)}
                 onRespondToHitl={onRespondToHitl}
                 canRespondToHitl={Boolean(

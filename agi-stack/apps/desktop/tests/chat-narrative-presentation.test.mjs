@@ -52,6 +52,28 @@ test('raw task and error payloads stay collapsed until a person opens them', () 
   assert.doesNotMatch(importancePolicy, /startsWith\('task_'\)|artifact_error/);
 });
 
+test('doom-loop detection is immediately visible without expanding routine activity', () => {
+  const importancePolicy = chatSource.match(
+    /function isImportantTimelineItem\(item: AgentTimelineItem\): boolean \{[\s\S]*?\n\}/,
+  )?.[0];
+
+  assert.ok(importancePolicy, 'timeline importance policy must remain explicit');
+  assert.match(importancePolicy, /item\.type === 'doom_loop_detected'/);
+  assert.doesNotMatch(importancePolicy, /item\.type === 'doom_loop_intervened'/);
+  assert.match(
+    chatSource,
+    /function isTimelineItemInitiallyExpanded[\s\S]*isImportantTimelineItem\(item\)[\s\S]*item\.type !== 'doom_loop_detected'/,
+  );
+  assert.match(
+    chatSource,
+    /expanded=\{expandedItems\[item\.id\] \?\? isTimelineItemInitiallyExpanded\(item\)\}/,
+  );
+  assert.match(
+    chatSource,
+    /current\[item\.id\] \?\? isTimelineItemInitiallyExpanded\(item\)/,
+  );
+});
+
 test('narrow session timelines preserve lifecycle status labels', () => {
   assert.match(
     chatStyles,
@@ -137,6 +159,9 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.desktopEvent',
     'chat.terminalEvent',
     'chat.httpServiceEvent',
+    'chat.doomLoopDetected',
+    'chat.doomLoopIntervened',
+    'chat.callsCount',
     'chat.suggestedFollowUps',
     'chat.sendSuggestion',
     'chat.memoriesCount',

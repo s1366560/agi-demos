@@ -1363,6 +1363,65 @@ test('HTTP preview service events expose service identity, preview URL, and stat
   );
 });
 
+test('doom-loop safeguard events expose repeated tool calls and intervention state', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'doom-loop-detected-1',
+      type: 'doom_loop_detected',
+      eventTimeUs: 68_000_000,
+      eventCounter: 1,
+      payload: {
+        request_id: 'request-doom-loop-1',
+        tool_name: 'terminal',
+        call_count: 4,
+        last_calls: [],
+      },
+    }),
+    {
+      family: 'doomLoop',
+      state: 'failed',
+      subject: 'terminal',
+      detail: '',
+      isError: true,
+      progress: { unit: 'calls', total: 4 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'doom-loop-intervened-1',
+      type: 'doom_loop_intervened',
+      eventTimeUs: 69_000_000,
+      eventCounter: 2,
+      payload: {
+        request_id: 'request-doom-loop-1',
+        action: 'resume_with_guardrails',
+      },
+    }),
+    {
+      family: 'doomLoop',
+      state: 'complete',
+      subject: 'resume_with_guardrails',
+      detail: '',
+      isError: false,
+    },
+  );
+
+  assert.equal(
+    agentLifecyclePresentation({
+      id: 'doom-loop-detected-python-1',
+      type: 'doom_loop_detected',
+      eventTimeUs: 70_000_000,
+      eventCounter: 3,
+      payload: {
+        tool: 'desktop',
+        input: { action: 'click' },
+      },
+    })?.subject,
+    'desktop',
+  );
+});
+
 test('artifact ready and error stream events settle the original created row', () => {
   const created = {
     id: 'artifact-created-1',

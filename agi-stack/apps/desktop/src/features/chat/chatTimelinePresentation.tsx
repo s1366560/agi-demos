@@ -165,6 +165,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (lifecycle?.family === 'selection') return t('chat.toolSelection');
   if (lifecycle?.family === 'policy') return t('chat.toolPolicy');
   if (lifecycle?.family === 'toolset') return t('chat.toolsetChange');
+  if (lifecycle?.family === 'doomLoop') {
+    return item.type === 'doom_loop_detected'
+      ? t('chat.doomLoopDetected')
+      : t('chat.doomLoopIntervened');
+  }
   if (lifecycle?.family === 'skill') {
     if (item.type === 'skill_matched') return t('chat.skillMatched');
     if (item.type === 'skill_tool_start' || item.type === 'skill_tool_result') {
@@ -220,7 +225,12 @@ export function isImportantTimelineItem(item: AgentTimelineItem): boolean {
   if (kind === 'user' || kind === 'agent') return true;
   if (timelineHitlType(item) && !item.answered) return true;
   if (item.type === 'work_plan') return true;
+  if (item.type === 'doom_loop_detected') return true;
   return false;
+}
+
+export function isTimelineItemInitiallyExpanded(item: AgentTimelineItem): boolean {
+  return isImportantTimelineItem(item) && item.type !== 'doom_loop_detected';
 }
 
 export function timelineHasDetails(item: AgentTimelineItem, kind: TimelineKind): boolean {

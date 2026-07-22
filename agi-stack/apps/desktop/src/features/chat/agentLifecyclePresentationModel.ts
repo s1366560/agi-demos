@@ -12,6 +12,7 @@ export type AgentLifecycleFamily =
   | 'selection'
   | 'policy'
   | 'toolset'
+  | 'doomLoop'
   | 'skill'
   | 'model'
   | 'context'
@@ -52,6 +53,7 @@ export type AgentLifecyclePresentation = {
       | 'steps'
       | 'tools'
       | 'filteredTools'
+      | 'calls'
       | 'tokens'
       | 'messages'
       | 'memories'
@@ -231,6 +233,8 @@ const lifecycleEventDefinitions: Record<
     detailFields: ['denial_reason', 'denialReason', 'policy_layer', 'policyLayer'],
   },
   toolset_changed: { family: 'toolset', state: 'complete' },
+  doom_loop_detected: { family: 'doomLoop', state: 'failed' },
+  doom_loop_intervened: { family: 'doomLoop', state: 'complete' },
   skill_matched: {
     family: 'skill',
     state: 'complete',
@@ -430,6 +434,11 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
   }
   if (family === 'model') {
     return timelineEventString(item, ['model']) ?? '';
+  }
+  if (family === 'doomLoop') {
+    return item.type === 'doom_loop_detected'
+      ? timelineEventString(item, ['tool_name', 'toolName', 'tool']) ?? ''
+      : timelineEventString(item, ['action']) ?? '';
   }
   if (family === 'context') {
     return item.type === 'context_compressed'
@@ -672,6 +681,10 @@ function lifecycleProgress(
   item: AgentTimelineItem,
   family: AgentLifecycleFamily,
 ): AgentLifecyclePresentation['progress'] {
+  if (family === 'doomLoop' && item.type === 'doom_loop_detected') {
+    const total = timelineEventNumber(item, ['call_count', 'callCount']);
+    return total === null ? undefined : { unit: 'calls', total };
+  }
   if (family === 'context') {
     if (item.type === 'context_status') {
       const total = timelineEventNumber(item, ['token_budget', 'tokenBudget']);

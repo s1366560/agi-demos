@@ -44,7 +44,10 @@ import { ComposerControls } from './ComposerControls';
 import { ComposerPlusMenu, type ComposerCatalogClient } from './ComposerPlusMenu';
 import type { ComposerModelOption } from './ComposerControls';
 import { AgentTimeline, TIMELINE_RENDER_STEP } from './ChatTimeline';
-import { isImportantTimelineItem } from './chatTimelinePresentation';
+import {
+  isImportantTimelineItem,
+  isTimelineItemInitiallyExpanded,
+} from './chatTimelinePresentation';
 import { SessionEmptyState, WorkspaceTranscriptMessage } from './ChatTranscript';
 import { ChatWorkflowStrip } from './ChatWorkflowStrip';
 import type { ChatWorkflowTarget } from './ChatWorkflowStrip';
@@ -503,7 +506,7 @@ export const ChatPanel = memo(function ChatPanel({
   );
   const toggleTimelineItem = useCallback((item: AgentTimelineItem) => {
     setExpandedTimelineItems((current) => {
-      const currentValue = current[item.id] ?? isImportantTimelineItem(item);
+      const currentValue = current[item.id] ?? isTimelineItemInitiallyExpanded(item);
       return { ...current, [item.id]: !currentValue };
     });
   }, []);
