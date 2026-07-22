@@ -108,6 +108,7 @@ import {
   shouldSkipLiveTimelineEvent,
 } from './features/chat/chatTimelineModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
+import { applyWorkspaceLifecycleStreamEvent } from './features/chat/workspaceLifecycleEventModel';
 import { applyWorkspaceMessageStreamEvent } from './features/chat/workspaceMessageEventModel';
 import { applyWorkspaceRosterStreamEvent } from './features/chat/workspaceRosterEventModel';
 import { applyWorkspaceTaskStreamEvent } from './features/chat/workspaceTaskEventModel';
@@ -1673,6 +1674,7 @@ export function App() {
   const sessionEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const conversationMetadataEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const authoritativeRunEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceLifecycleEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceMessageEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceRosterEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
@@ -3271,6 +3273,61 @@ export function App() {
       updateDataset,
     ],
   );
+
+  useEffect(() => {
+    const events = socketEventsSince(socket.events, workspaceLifecycleEventsHeadRef.current);
+    workspaceLifecycleEventsHeadRef.current = socket.events[0] ?? null;
+    const runtimeConfig = configRef.current;
+    const scope = {
+      tenantId: runtimeConfig.tenantId.trim(),
+      projectId: runtimeConfig.projectId.trim(),
+      workspaceId: runtimeConfig.workspaceId.trim(),
+    };
+    if (!scope.tenantId || !scope.projectId || !events.length) return;
+
+    const initialDataset = datasetRef.current;
+    let nextDataset = initialDataset;
+    let activeWorkspaceDeleted = false;
+    let nextWorkspaceId = scope.workspaceId;
+    for (const event of events) {
+      const result = applyWorkspaceLifecycleStreamEvent(nextDataset, event, scope);
+      nextDataset = result.dataset;
+      if (result.activeWorkspaceDeleted) {
+        activeWorkspaceDeleted = true;
+        nextWorkspaceId = result.nextWorkspaceId;
+      }
+    }
+    if (nextDataset === initialDataset) return;
+    updateDataset(() => nextDataset);
+    if (!activeWorkspaceDeleted) return;
+
+    const nextConfig = { ...runtimeConfig, workspaceId: nextWorkspaceId };
+    commitRuntimeConfig(nextConfig);
+    agentConversationSessionRef.current = null;
+    setAgentConversationSession(null);
+    resetConversationTimeline();
+    setAgentTaskSignals([]);
+    setReviewTab('overview');
+    setExpandedWorkspaceIds((current) => {
+      const next = new Set(current);
+      next.delete(scope.workspaceId);
+      if (nextWorkspaceId) next.add(nextWorkspaceId);
+      expandedWorkspaceIdsRef.current = next;
+      return next;
+    });
+    if (activeSectionRef.current === 'chat') {
+      activeSectionRef.current = 'workspace';
+      setActiveSection('workspace');
+      workbenchRef.current?.focus();
+    }
+    void refreshRuntime(nextConfig);
+  }, [
+    commitRuntimeConfig,
+    refreshRuntime,
+    resetConversationTimeline,
+    socket.events,
+    updateDataset,
+  ]);
 
   const loadWorkspaceConversations = useCallback(async (workspaceId: string) => {
     const requestConfig = configRef.current;

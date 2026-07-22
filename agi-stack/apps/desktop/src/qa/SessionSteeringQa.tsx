@@ -26,6 +26,7 @@ import {
   readConversationTitleStreamEvent,
 } from '../features/chat/conversationTitleEventModel';
 import { applyHitlResponseStreamEvent } from '../features/chat/hitlResponseEventModel';
+import { applyWorkspaceLifecycleStreamEvent } from '../features/chat/workspaceLifecycleEventModel';
 import { applyWorkspaceMessageStreamEvent } from '../features/chat/workspaceMessageEventModel';
 import { applyWorkspaceRosterStreamEvent } from '../features/chat/workspaceRosterEventModel';
 import { applyWorkspaceTaskStreamEvent } from '../features/chat/workspaceTaskEventModel';
@@ -44,6 +45,7 @@ import type {
   CodeRangeReference,
   ConversationTimelineState,
   DesktopRunInput,
+  RuntimeDataset,
   RunInputDelivery,
   WorkspaceMessage,
   WorkspaceAgentBinding,
@@ -224,6 +226,68 @@ const workspaceRosterEvents = [
       id: 'binding-live', workspace_id: 'workspace-desktop', agent_id: 'agent-live',
       display_name: 'Cloud release agent', is_active: true,
     } },
+  },
+];
+
+const workspaceLifecycleDataset: RuntimeDataset = {
+  workspaces: [
+    {
+      id: 'workspace-desktop', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
+      name: 'Workspace Alpha', created_by: 'user-live', is_archived: false,
+      created_at: '2026-07-22T08:00:00Z',
+    },
+    {
+      id: 'workspace-beta', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
+      name: 'Workspace Beta', created_by: 'user-live', is_archived: false,
+      created_at: '2026-07-22T08:01:00Z',
+    },
+  ],
+  workspacesByProject: {
+    'project-desktop': [
+      {
+        id: 'workspace-desktop', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
+        name: 'Workspace Alpha', created_by: 'user-live', is_archived: false,
+        created_at: '2026-07-22T08:00:00Z',
+      },
+      {
+        id: 'workspace-beta', tenant_id: 'tenant-desktop', project_id: 'project-desktop',
+        name: 'Workspace Beta', created_by: 'user-live', is_archived: false,
+        created_at: '2026-07-22T08:01:00Z',
+      },
+    ],
+  },
+  conversationsByWorkspace: { 'workspace-desktop': [], 'workspace-beta': [] },
+  nodeState: {
+    projects: { 'project-desktop': { loading: false, error: null } },
+    workspaces: {
+      'workspace-desktop': { loading: false, error: null },
+      'workspace-beta': { loading: false, error: null },
+    },
+  },
+  messages: [],
+  tasks: [],
+  plan: null,
+  workspaceMembers: { status: 'ready', items: [], error: null },
+  workspaceAgents: { status: 'ready', items: [], error: null },
+  sandbox: null,
+  myWork: [],
+  myWorkError: null,
+};
+
+const workspaceLifecycleEvents = [
+  {
+    type: 'workspace_updated',
+    data: {
+      workspace_id: 'workspace-desktop',
+      workspace: {
+        ...workspaceLifecycleDataset.workspaces[0],
+        name: 'Workspace Renamed',
+      },
+    },
+  },
+  {
+    type: 'workspace_deleted',
+    data: { workspace_id: 'workspace-desktop' },
   },
 ];
 
@@ -1459,6 +1523,7 @@ function SessionSteeringQa() {
   const workspaceMessageEventMode = searchParams.get('workspace-message-event') === '1';
   const workspaceTaskEventMode = searchParams.get('workspace-task-event') === '1';
   const workspaceRosterEventMode = searchParams.get('workspace-roster-event') === '1';
+  const workspaceLifecycleEventMode = searchParams.get('workspace-lifecycle-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1474,6 +1539,7 @@ function SessionSteeringQa() {
   const [qaAgents, setQaAgents] = useState<WorkspaceAuthorityCollection<WorkspaceAgentBinding>>({
     status: 'ready', items: [], error: null,
   });
+  const [qaWorkspaceLifecycleSummary, setQaWorkspaceLifecycleSummary] = useState('pending');
   const [switchingModel, setSwitchingModel] = useState(false);
   const [artifactCanvas, setArtifactCanvas] = useState(() =>
     artifactCanvasEventsMode
@@ -1608,6 +1674,29 @@ function SessionSteeringQa() {
     }, 600);
     return () => window.clearTimeout(timer);
   }, [workspaceRosterEventMode]);
+
+  useEffect(() => {
+    if (!workspaceLifecycleEventMode) return;
+    const timer = window.setTimeout(() => {
+      let current = workspaceLifecycleDataset;
+      let nextWorkspaceId = 'workspace-desktop';
+      for (const event of workspaceLifecycleEvents) {
+        const result = applyWorkspaceLifecycleStreamEvent(current, event, {
+          tenantId: 'tenant-desktop',
+          projectId: 'project-desktop',
+          workspaceId: 'workspace-desktop',
+        });
+        current = result.dataset;
+        nextWorkspaceId = result.nextWorkspaceId;
+      }
+      const nextWorkspace = current.workspaces.find(({ id }) => id === nextWorkspaceId);
+      setQaWorkspaceLifecycleSummary(
+        `Workspaces ${current.workspaces.length} · Next ${nextWorkspace?.name ?? 'none'} · ` +
+          `Cleared ${current.workspaceMembers.status === 'unavailable' ? 'yes' : 'no'}`,
+      );
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [workspaceLifecycleEventMode]);
 
   useEffect(() => {
     if (!workspaceTaskEventMode) return;
@@ -1825,6 +1914,7 @@ function SessionSteeringQa() {
                 workspaceMessageEventMode ||
                 workspaceTaskEventMode ||
                 workspaceRosterEventMode ||
+                workspaceLifecycleEventMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
@@ -1901,6 +1991,9 @@ function SessionSteeringQa() {
                 Members {qaMembers.items.length} · Agents {qaAgents.items.length} ·{' '}
                 {qaMembers.items[0]?.role ?? 'pending'}
               </p>
+            ) : null}
+            {workspaceLifecycleEventMode ? (
+              <p data-testid="workspace-lifecycle-stream">{qaWorkspaceLifecycleSummary}</p>
             ) : null}
             {mcpAppEventsMode ? (
               <>

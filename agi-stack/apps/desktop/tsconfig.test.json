@@ -28,6 +28,7 @@
     "src/features/chat/workspaceMessageEventModel.ts",
     "src/features/chat/workspaceTaskEventModel.ts",
     "src/features/chat/workspaceRosterEventModel.ts",
+    "src/features/chat/workspaceLifecycleEventModel.ts",
     "src/hooks/useAgentSocket.ts",
     "src/hooks/useTerminalProxy.ts",
     "src/features/session/sessionProjectionModel.ts",
