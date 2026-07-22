@@ -419,6 +419,22 @@ const llmRuntimeTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const modelOverrideTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'model-switch-next-turn',
+    type: 'model_switch_requested',
+    eventTimeUs: 1_784_282_048_000_000,
+    eventCounter: 8,
+    payload: {
+      model: 'gpt-5.5-mini',
+      provider_type: 'openai',
+      provider_name: 'OpenAI production',
+      scope: 'next_turn',
+      reason: 'Use the faster model for the next verification turn',
+    },
+  },
+];
+
 const runtimeInfrastructureTimelineItems: ConversationTimelineState['items'] = [
   {
     id: 'sandbox-runtime-created',
@@ -1540,6 +1556,7 @@ function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
+  const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
   const httpServiceEventsMode = searchParams.get('http-service-events') === '1';
@@ -1577,7 +1594,9 @@ function SessionSteeringQa() {
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
-  const [model, setModel] = useState('gpt-5.5');
+  const [model, setModel] = useState(
+    modelOverrideEventsMode ? 'gpt-5.5-mini' : 'gpt-5.5',
+  );
   const [qaMessages, setQaMessages] = useState(messages);
   const [qaTasks, setQaTasks] = useState<WorkspaceTask[]>([]);
   const [qaMembers, setQaMembers] = useState<WorkspaceAuthorityCollection<WorkspaceMemberSummary>>({
@@ -1626,7 +1645,9 @@ function SessionSteeringQa() {
         ? anchorTimelineItems
         : suggestionsMode
           ? [...timelineState.items, suggestionTimelineItem]
-          : llmRuntimeEventsMode
+          : modelOverrideEventsMode
+            ? [...timelineState.items, ...modelOverrideTimelineItems]
+            : llmRuntimeEventsMode
             ? [...timelineState.items, ...llmRuntimeTimelineItems]
             : runtimeEventsMode
               ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
@@ -1953,6 +1974,7 @@ function SessionSteeringQa() {
               }
               activityPresence={
                 suggestionsMode ||
+                modelOverrideEventsMode ||
                 llmRuntimeEventsMode ||
                 runtimeEventsMode ||
                 httpServiceEventsMode ||
@@ -2039,6 +2061,16 @@ function SessionSteeringQa() {
                 setModel(value);
                 setSwitchingModel(false);
               }}
+              onModelReset={
+                modelOverrideEventsMode
+                  ? async () => {
+                      setSwitchingModel(true);
+                      await new Promise((resolve) => window.setTimeout(resolve, 180));
+                      setModel('gpt-5.5');
+                      setSwitchingModel(false);
+                    }
+                  : undefined
+              }
               onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />

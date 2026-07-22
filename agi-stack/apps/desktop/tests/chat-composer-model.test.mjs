@@ -25,6 +25,8 @@ const composerPlusMenuSource = readFileSync(
   'utf8',
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const qaSource = readFileSync(new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url), 'utf8');
+const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
 test('session composer keeps run-scoped steering and queue handoff affordances', () => {
   assert.deepEqual(chatComposerPresentation('session'), {
@@ -54,12 +56,24 @@ test('session and workspace composers expose a controlled model switch backed by
   assert.match(chatPanelSource, /modelOptions\?: readonly ComposerModelOption\[\]/);
   assert.match(chatPanelSource, /selectedModelValue\?: string \| null/);
   assert.match(chatPanelSource, /onModelChange\?: \(value: string\) => Promise<void>/);
+  assert.match(chatPanelSource, /onModelReset\?: \(\) => Promise<void>/);
   assert.match(
     chatPanelSource,
     /composerVariant === 'session'[\s\S]*?<ComposerControls[\s\S]*?onModelChange=\{onModelChange\}/,
   );
+  assert.match(composerControlsSource, /chat\.resetModelOverride/);
+  assert.match(composerControlsSource, /onReset/);
+  assert.match(appSource, /updateAgentConversationConfig/);
+  assert.match(appSource, /conversationRuntimeModelSelection/);
+  assert.match(appSource, /onModelReset=\{[\s\S]{0,180}resetChatRuntimeModel/);
   assert.match(composerControlsSource, /role="listbox"/);
   assert.match(composerControlsSource, /type="search"/);
+  assert.match(qaSource, /model-override-events/);
+  assert.equal(
+    i18nSource.split("'chat.resetModelOverride'").length - 1,
+    2,
+    'model reset must cover both locales',
+  );
   assert.doesNotMatch(composerControlsSource, /Workspace model|Cloud model/);
 });
 

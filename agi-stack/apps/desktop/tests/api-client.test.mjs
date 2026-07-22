@@ -2251,6 +2251,55 @@ test('updateAgentConversationMode can switch the active capability explicitly', 
   }
 });
 
+test('updateAgentConversationConfig persists and clears a scoped model override', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        id: 'conversation-1',
+        project_id: 'project-1',
+        agent_config: { llm_model_override: null },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      localApiToken: 'local-session-token',
+    });
+
+    await client.updateAgentConversationConfig(
+      'conversation/1',
+      { llm_model_override: 'gpt-reasoning' },
+      'project/1'
+    );
+    await client.updateAgentConversationConfig(
+      'conversation/1',
+      { llm_model_override: null },
+      'project/1'
+    );
+
+    assert.equal(calls[0]?.init?.method, 'PATCH');
+    assert.equal(
+      String(calls[0]?.input),
+      'http://127.0.0.1:8088/api/v1/agent/conversations/conversation%2F1/config?project_id=project%2F1'
+    );
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+      llm_model_override: 'gpt-reasoning',
+    });
+    assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
+      llm_model_override: null,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('createTaskSession posts one strictly scoped atomic task-session contract', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;

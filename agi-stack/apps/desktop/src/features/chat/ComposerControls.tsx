@@ -29,6 +29,7 @@ type ComposerControlsProps = {
   onAddFiles?: () => void;
   onModeChange?: (value: string) => void;
   onModelChange?: (value: string) => Promise<void>;
+  onModelReset?: () => Promise<void>;
   onEffortChange?: (value: string) => void;
   onRuntimeTargetChange?: (value: string) => void;
 };
@@ -46,6 +47,7 @@ export function ComposerControls({
   onAddFiles,
   onModeChange,
   onModelChange,
+  onModelReset,
   onEffortChange,
   onRuntimeTargetChange,
 }: ComposerControlsProps) {
@@ -151,6 +153,7 @@ export function ComposerControls({
               .then(() => setOpenMenu(null))
               .catch(() => undefined);
           }}
+          onReset={onModelReset}
         />
       ) : null}
       {onEffortChange ? (
@@ -204,6 +207,7 @@ function ComposerModelSwitch({
   selected,
   onToggle,
   onSelect,
+  onReset,
 }: {
   disabled: boolean;
   compactLabel: string;
@@ -215,6 +219,7 @@ function ComposerModelSwitch({
   selected: string | null;
   onToggle: () => void;
   onSelect: (value: string) => void;
+  onReset?: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const listboxId = useId();
@@ -273,7 +278,20 @@ function ComposerModelSwitch({
           role="dialog"
           aria-label={t('chat.modelSwitcherTitle')}
         >
-          <strong>{t('chat.modelSwitcherTitle')}</strong>
+          <div className="composer-model-heading">
+            <strong>{t('chat.modelSwitcherTitle')}</strong>
+            {onReset ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  void onReset().catch(() => undefined);
+                }}
+              >
+                {t('chat.resetModelOverride')}
+              </button>
+            ) : null}
+          </div>
           <label className="composer-model-search">
             <MagnifyingGlassIcon aria-hidden="true" />
             <input

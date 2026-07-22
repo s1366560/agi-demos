@@ -6734,6 +6734,24 @@ html[data-tauri-window] .app-shell [class*="window-dot"] {
   overflow: visible;
 }
 
+.composer-model-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.composer-model-heading strong {
+  flex: 1;
+}
+
+.composer-model-heading button {
+  min-height: 24px;
+  padding: 0 6px;
+  color: var(--desktop-cyan);
+  font-size: 10px;
+}
+
 .composer-model-search {
   display: flex;
   align-items: center;

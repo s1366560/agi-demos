@@ -806,6 +806,8 @@ test('session authority invalidation reads nested envelopes and ignores narrativ
     'env_var_provided',
     'a2ui_action_asked',
     'a2ui_action_answered',
+    'model_switch_requested',
+    'model_override_rejected',
     'workspace_plan_updated',
     'task_execution_session_updated',
   ]) {

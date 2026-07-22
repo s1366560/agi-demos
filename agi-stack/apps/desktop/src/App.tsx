@@ -227,6 +227,10 @@ import { latestAgentDefinitionEvent } from './features/settings/agentDefinitionE
 import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
 import {
+  conversationRuntimeModelSelection,
+  latestConversationRuntimeModelEvent,
+} from './features/settings/workspaceRuntimeProviderModel';
+import {
   NewTaskFlow,
   type NewTaskAgentTurnInput,
   type NewTaskResumeDraft,
@@ -1606,6 +1610,14 @@ export function App() {
   const [lastSync, setLastSync] = useState<string>('never');
   const [localRuntimeStatus, setLocalRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
   const [runtimeProjectionRefreshRevision, setRuntimeProjectionRefreshRevision] = useState(0);
+  const [conversationModelMutation, setConversationModelMutation] = useState({
+    scopeKey: '',
+    switching: false,
+    error: null as string | null,
+    hasOverride: false,
+    overrideModel: null as string | null,
+    baseEventRevision: null as string | null,
+  });
   const [selectedSidebarRunId, setSelectedSidebarRunId] = useState('');
   const [runStateById, setRunStateById] = useState<Record<string, RunControlState>>({});
   const [runControlState, setRunControlState] = useState<RunControlState>('running');
@@ -1694,6 +1706,7 @@ export function App() {
   const datasetRef = useRef(dataset);
   const expandedWorkspaceIdsRef = useRef(expandedWorkspaceIds);
   const runtimeRefreshRequestRef = useRef(0);
+  const conversationModelMutationRequestRef = useRef(0);
   const activeRuntimeConversationRequestsRef = useRef(new Map<string, number>());
   const workspaceConversationRequestGenerationsRef = useRef(new Map<string, number>());
   const configScopeEpochRef = useRef(0);
@@ -5396,6 +5409,150 @@ export function App() {
     runtimeProvider?.provider_type.trim() || t('providers.notAvailable');
   const localRuntimeModelLabel =
     runtimeProvider?.model.trim() || t('providers.notAvailable');
+  const conversationModelEvent = useMemo(
+    () =>
+      conversationTimeline.conversationId === scopedConversationId
+        ? latestConversationRuntimeModelEvent(conversationTimeline.items)
+        : null,
+    [conversationTimeline.conversationId, conversationTimeline.items, scopedConversationId],
+  );
+  const chatModelScopeKey = scopedConversation
+    ? `${agentConversationScopeKey(config)}\u0000${scopedConversation.id}`
+    : '';
+  const currentConversationModelMutation =
+    conversationModelMutation.scopeKey === chatModelScopeKey &&
+    conversationModelMutation.hasOverride &&
+    conversationModelMutation.baseEventRevision === (conversationModelEvent?.revision ?? null)
+      ? conversationModelMutation
+      : null;
+  const chatRuntimeModelSelection = conversationRuntimeModelSelection(
+    scopedConversation?.agent_config,
+    runtimeModelOptions,
+    selectedRuntimeModelValue,
+    localRuntimeModelLabel,
+    currentConversationModelMutation
+      ? currentConversationModelMutation.overrideModel
+      : conversationModelEvent?.overrideModel,
+  );
+  const persistChatRuntimeModelOverride = useCallback(
+    async (overrideModel: string | null): Promise<void> => {
+      const conversation = scopedConversation;
+      if (!conversation || !chatModelScopeKey) {
+        throw new Error(t('chat.selectedModelUnavailable'));
+      }
+      const requestId = conversationModelMutationRequestRef.current + 1;
+      conversationModelMutationRequestRef.current = requestId;
+      const baseEventRevision = conversationModelEvent?.revision ?? null;
+      setConversationModelMutation((current) => ({
+        scopeKey: chatModelScopeKey,
+        switching: true,
+        error: null,
+        hasOverride:
+          current.scopeKey === chatModelScopeKey &&
+          current.baseEventRevision === baseEventRevision &&
+          current.hasOverride,
+        overrideModel:
+          current.scopeKey === chatModelScopeKey &&
+          current.baseEventRevision === baseEventRevision
+            ? current.overrideModel
+            : null,
+        baseEventRevision,
+      }));
+      try {
+        const updated = await api.updateAgentConversationConfig(
+          conversation.id,
+          { llm_model_override: overrideModel },
+          conversation.project_id || config.projectId,
+        );
+        const activeSession = agentConversationSessionRef.current;
+        if (
+          conversationModelMutationRequestRef.current !== requestId ||
+          activeSession?.scopeKey !== agentConversationScopeKey(configRef.current) ||
+          activeSession.conversation.id !== conversation.id
+        ) {
+          return;
+        }
+        setAgentConversationSession((current) => {
+          if (
+            current?.scopeKey !== activeSession.scopeKey ||
+            current.conversation.id !== conversation.id
+          ) {
+            return current;
+          }
+          const next = { ...current, conversation: updated };
+          agentConversationSessionRef.current = next;
+          return next;
+        });
+        updateDataset((current) => {
+          const workspaceId = updated.workspace_id?.trim() || config.workspaceId.trim();
+          const conversations = current.conversationsByWorkspace[workspaceId];
+          if (!conversations?.some((candidate) => candidate.id === updated.id)) return current;
+          return {
+            ...current,
+            conversationsByWorkspace: {
+              ...current.conversationsByWorkspace,
+              [workspaceId]: conversations.map((candidate) =>
+                candidate.id === updated.id ? updated : candidate,
+              ),
+            },
+          };
+        });
+        setConversationModelMutation({
+          scopeKey: chatModelScopeKey,
+          switching: false,
+          error: null,
+          hasOverride: true,
+          overrideModel,
+          baseEventRevision,
+        });
+      } catch (caught) {
+        const message = formatConnectionError(caught, config.apiBaseUrl);
+        if (conversationModelMutationRequestRef.current === requestId) {
+          setConversationModelMutation({
+            scopeKey: chatModelScopeKey,
+            switching: false,
+            error: message,
+            hasOverride: false,
+            overrideModel: null,
+            baseEventRevision,
+          });
+        }
+        throw caught instanceof Error ? caught : new Error(message);
+      }
+    }, [
+      api,
+      chatModelScopeKey,
+      config.apiBaseUrl,
+      config.projectId,
+      config.workspaceId,
+      conversationModelEvent?.revision,
+      scopedConversation,
+      t,
+      updateDataset,
+    ],
+  );
+  const selectChatRuntimeModel = useCallback(
+    async (value: string): Promise<void> => {
+      if (!scopedConversation) return selectRuntimeModel(value);
+      const option = runtimeModelOptions.find((candidate) => candidate.value === value);
+      if (!option) throw new Error(t('chat.selectedModelUnavailable'));
+      return persistChatRuntimeModelOverride(option.modelId);
+    }, [persistChatRuntimeModelOverride, runtimeModelOptions, scopedConversation, selectRuntimeModel, t],
+  );
+  const resetChatRuntimeModel = useCallback(
+    async (): Promise<void> => persistChatRuntimeModelOverride(null),
+    [persistChatRuntimeModelOverride],
+  );
+  const chatRuntimeModelMutationIsCurrent =
+    conversationModelMutation.scopeKey === chatModelScopeKey;
+  const chatRuntimeModelSwitching = scopedConversation
+    ? chatRuntimeModelMutationIsCurrent && conversationModelMutation.switching
+    : switchingRuntimeModel;
+  const chatRuntimeModelError = scopedConversation
+    ? chatRuntimeModelMutationIsCurrent
+      ? conversationModelMutation.error
+      : null
+    : runtimeModelError;
   const runtimeMonitorHealthMetrics = [
     {
       label: 'Provider',
@@ -5936,13 +6093,11 @@ export function App() {
       sending={sending}
       disabledReason={sessionChatDisabledReason}
       activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
-      modelLabel={config.mode === 'local' ? localRuntimeModelLabel : undefined}
-      modelOptions={config.mode === 'local' ? runtimeModelOptions : undefined}
-      selectedModelValue={
-        config.mode === 'local' ? selectedRuntimeModelValue : undefined
-      }
-      modelSwitching={config.mode === 'local' ? switchingRuntimeModel : undefined}
-      modelError={config.mode === 'local' ? runtimeModelError : undefined}
+      modelLabel={chatRuntimeModelSelection.displayLabel}
+      modelOptions={runtimeModelOptions}
+      selectedModelValue={chatRuntimeModelSelection.selectedValue}
+      modelSwitching={chatRuntimeModelSwitching}
+      modelError={chatRuntimeModelError}
       runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
       runtimeTargetOptions={runtimeTargetComposerOptions}
       runInputDelivery={effectiveRunInputDeliveryValue}
@@ -5966,7 +6121,12 @@ export function App() {
         sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
       }
       onWorkflowSelect={selectChatWorkflowTarget}
-      onModelChange={config.mode === 'local' ? selectRuntimeModel : undefined}
+      onModelChange={selectChatRuntimeModel}
+      onModelReset={
+        scopedConversation && chatRuntimeModelSelection.canReset
+          ? resetChatRuntimeModel
+          : undefined
+      }
       onRuntimeTargetChange={handleChatRuntimeTargetChange}
       onOpenCommands={openCommandPalette}
     />

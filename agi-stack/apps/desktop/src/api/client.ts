@@ -738,6 +738,27 @@ export class DesktopApiClient {
     );
   }
 
+  async updateAgentConversationConfig(
+    conversationId: string,
+    payload: {
+      selected_agent_id?: string | null;
+      llm_model_override?: string | null;
+      llm_overrides?: Record<string, unknown> | null;
+    },
+    projectId = this.config.projectId,
+  ): Promise<AgentConversation> {
+    const requiredProjectId = requireValue(projectId, 'project id');
+    return this.request<AgentConversation>(
+      `/api/v1/agent/conversations/${encodeURIComponent(
+        conversationId,
+      )}/config?project_id=${encodeURIComponent(requiredProjectId)}`,
+      {
+        method: 'PATCH',
+        body: payload,
+      },
+    );
+  }
+
   async listConversations(
     projectId = this.config.projectId,
     workspaceId?: string | null,

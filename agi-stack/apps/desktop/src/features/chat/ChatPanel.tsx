@@ -120,6 +120,7 @@ type ChatPanelProps = {
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
   onRuntimeTargetChange?: (value: string) => void;
   onModelChange?: (value: string) => Promise<void>;
+  onModelReset?: () => Promise<void>;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
 };
 
@@ -203,6 +204,7 @@ export const ChatPanel = memo(function ChatPanel({
   onWorkflowSelect,
   onRuntimeTargetChange,
   onModelChange,
+  onModelReset,
   onOpenCommands,
 }: ChatPanelProps) {
   const { t } = useI18n();
@@ -701,6 +703,7 @@ export const ChatPanel = memo(function ChatPanel({
         onWorkflowSelect={onWorkflowSelect}
         onRuntimeTargetChange={onRuntimeTargetChange}
         onModelChange={onModelChange}
+        onModelReset={onModelReset}
         onOpenCommands={onOpenCommands}
         onSend={handleComposerSend}
       />
@@ -770,6 +773,7 @@ type ChatComposerProps = {
   onWorkflowSelect: (target: ChatWorkflowTarget) => void;
   onRuntimeTargetChange?: (value: string) => void;
   onModelChange?: (value: string) => Promise<void>;
+  onModelReset?: () => Promise<void>;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
   onSend: (
     content: string,
@@ -811,6 +815,7 @@ function ChatComposer({
   onWorkflowSelect,
   onRuntimeTargetChange,
   onModelChange,
+  onModelReset,
   onOpenCommands,
   onSend,
 }: ChatComposerProps) {
@@ -1050,6 +1055,7 @@ function ChatComposer({
                 modelPending={modelSwitching}
                 modelError={modelError}
                 onModelChange={onModelChange}
+                onModelReset={onModelReset}
               />
             ) : null}
           </div>
@@ -1096,6 +1102,7 @@ function ChatComposer({
             runtimeTargetLabel={runtimeTargetLabel}
             runtimeTargetOptions={runtimeTargetOptions}
             onModelChange={onModelChange}
+            onModelReset={onModelReset}
             onRuntimeTargetChange={onRuntimeTargetChange}
           />
         ) : null}

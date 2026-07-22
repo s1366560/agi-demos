@@ -10,6 +10,8 @@ const {
   mergeLocalRuntimeStatus,
 } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const {
+  conversationRuntimeModelSelection,
+  latestConversationRuntimeModelEvent,
   workspaceRuntimeModelOptions,
   workspaceRuntimeModelSelectionValue,
   workspaceRuntimeProviderFromAuthority,
@@ -23,7 +25,6 @@ const providerSettingsQaSource = readFileSync(
   new URL('../src/qa/ProviderSettingsQa.tsx', import.meta.url),
   'utf8',
 );
-
 test('Rust desktop backend is the default server preset with Python retained as fallback', () => {
   assert.deepEqual(LOCAL_DEV_SERVER_PRESETS[0], {
     id: 'agistack-rust',
@@ -227,6 +228,128 @@ test('workspace model selector exposes only routable enabled models and marks th
   );
 });
 
+test('active conversations restore a persisted model override without changing workspace routing', () => {
+  const options = [
+    {
+      value: workspaceRuntimeModelSelectionValue('provider-a', 'gpt-primary'),
+      providerId: 'provider-a',
+      providerLabel: 'OpenAI production',
+      modelId: 'gpt-primary',
+      selected: true,
+    },
+    {
+      value: workspaceRuntimeModelSelectionValue('provider-a', 'gpt-reasoning'),
+      providerId: 'provider-a',
+      providerLabel: 'OpenAI production',
+      modelId: 'gpt-reasoning',
+      selected: false,
+    },
+  ];
+
+  assert.deepEqual(
+    conversationRuntimeModelSelection(
+      { llm_model_override: ' gpt-reasoning ' },
+      options,
+      options[0].value,
+      'gpt-primary',
+    ),
+    {
+      overrideModel: 'gpt-reasoning',
+      selectedValue: options[1].value,
+      displayLabel: 'gpt-reasoning',
+      canReset: true,
+    },
+  );
+  assert.deepEqual(
+    conversationRuntimeModelSelection(null, options, options[0].value, 'gpt-primary'),
+    {
+      overrideModel: null,
+      selectedValue: options[0].value,
+      displayLabel: 'gpt-primary',
+      canReset: false,
+    },
+  );
+  assert.deepEqual(
+    conversationRuntimeModelSelection(
+      { llm_model_override: 'unavailable-model' },
+      options,
+      options[0].value,
+      'gpt-primary',
+    ),
+    {
+      overrideModel: 'unavailable-model',
+      selectedValue: null,
+      displayLabel: 'unavailable-model',
+      canReset: true,
+    },
+  );
+});
+
+test('conversation model selection fails closed when a model id is ambiguous', () => {
+  const options = [
+    {
+      value: workspaceRuntimeModelSelectionValue('provider-a', 'shared-model'),
+      providerId: 'provider-a',
+      providerLabel: 'Provider A',
+      modelId: 'shared-model',
+      selected: true,
+    },
+    {
+      value: workspaceRuntimeModelSelectionValue('provider-b', 'shared-model'),
+      providerId: 'provider-b',
+      providerLabel: 'Provider B',
+      modelId: 'shared-model',
+      selected: false,
+    },
+  ];
+  assert.deepEqual(
+    conversationRuntimeModelSelection(
+      { llm_model_override: 'shared-model' },
+      options,
+      options[0].value,
+      'shared-model',
+    ),
+    {
+      overrideModel: 'shared-model',
+      selectedValue: null,
+      displayLabel: 'shared-model',
+      canReset: true,
+    },
+  );
+});
+
+test('latest conversation model events override or clear persisted selector state', () => {
+  assert.deepEqual(
+    latestConversationRuntimeModelEvent([
+      {
+        type: 'model_switch_requested',
+        payload: { model: 'gpt-reasoning' },
+        eventTimeUs: 1,
+        eventCounter: 1,
+      },
+    ]),
+    { overrideModel: 'gpt-reasoning', revision: 'model_switch_requested::1:1' },
+  );
+  assert.deepEqual(
+    latestConversationRuntimeModelEvent([
+      {
+        type: 'model_switch_requested',
+        payload: { model: 'gpt-reasoning' },
+        eventTimeUs: 1,
+        eventCounter: 1,
+      },
+      {
+        type: 'model_override_rejected',
+        payload: { model: 'gpt-reasoning', current_model: 'gpt-primary' },
+        eventTimeUs: 2,
+        eventCounter: 2,
+      },
+    ]),
+    { overrideModel: null, revision: 'model_override_rejected::2:2' },
+  );
+  assert.equal(latestConversationRuntimeModelEvent([{ type: 'context_status' }]), null);
+});
+
 test('workspace model switch replaces only the default route and keeps policy concurrency', () => {
   const config = {
     ...DEFAULT_CONFIG,
@@ -338,8 +461,7 @@ test('Desktop runtime configuration and Tauri configure payload contain no LLM a
     appSource,
     /value: config\.mode === 'local' \? localRuntimeModelLabel : 'server managed'/,
   );
-  assert.match(
-    appSource,
-    /modelLabel=\{config\.mode === 'local' \? localRuntimeModelLabel : undefined\}/,
-  );
+  assert.match(appSource, /modelLabel=\{chatRuntimeModelSelection\.displayLabel\}/);
+  assert.match(appSource, /onModelChange=\{selectChatRuntimeModel\}/);
+  assert.match(appSource, /onModelReset=\{[\s\S]{0,180}resetChatRuntimeModel/);
 });

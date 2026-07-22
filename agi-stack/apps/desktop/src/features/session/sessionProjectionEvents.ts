@@ -21,6 +21,8 @@ const sessionAuthorityEventTypes = new Set([
   'a2ui_action_asked',
   'a2ui_action_answered',
   'hitl_responded',
+  'model_switch_requested',
+  'model_override_rejected',
   'artifact_created',
   'artifact_ready',
   'artifact_error',

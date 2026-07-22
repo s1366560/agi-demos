@@ -19,6 +19,92 @@ export type WorkspaceRuntimeModelOption = {
   contextWindow: string | null;
 };
 
+export type ConversationRuntimeModelSelection = {
+  overrideModel: string | null;
+  selectedValue: string | null;
+  displayLabel: string;
+  canReset: boolean;
+};
+
+/**
+ * Overlay a persisted conversation model override on the workspace routing
+ * catalog. Duplicate model ids intentionally remain unselected because the
+ * conversation contract does not carry a provider id.
+ */
+export function conversationRuntimeModelSelection(
+  agentConfig: Record<string, unknown> | null | undefined,
+  options: readonly WorkspaceRuntimeModelOption[],
+  workspaceSelectedValue: string | null,
+  workspaceDisplayLabel: string,
+  eventOverride: string | null | undefined = undefined,
+): ConversationRuntimeModelSelection {
+  const rawOverride = agentConfig?.llm_model_override;
+  const persistedOverride =
+    typeof rawOverride === 'string' && rawOverride.trim() ? rawOverride.trim() : null;
+  const overrideModel =
+    eventOverride === undefined
+      ? persistedOverride
+      : typeof eventOverride === 'string' && eventOverride.trim()
+        ? eventOverride.trim()
+        : null;
+  if (!overrideModel) {
+    return {
+      overrideModel: null,
+      selectedValue: workspaceSelectedValue,
+      displayLabel: workspaceDisplayLabel,
+      canReset: false,
+    };
+  }
+
+  const matches = options.filter((option) => option.modelId === overrideModel);
+  return {
+    overrideModel,
+    selectedValue: matches.length === 1 ? matches[0]?.value ?? null : null,
+    displayLabel: overrideModel,
+    canReset: true,
+  };
+}
+
+export function latestConversationRuntimeModelEvent(
+  items: readonly unknown[],
+): { overrideModel: string | null; revision: string } | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = recordValue(items[index]);
+    if (!item) continue;
+    const payload = recordValue(item.payload) ?? recordValue(item.data) ?? item;
+    const type = stringValue(item.type) ?? stringValue(item.event_type);
+    const revision = modelEventRevision(item, type);
+    if (type === 'model_override_rejected') return { overrideModel: null, revision };
+    if (type !== 'model_switch_requested') continue;
+    const model = stringValue(payload.model);
+    if (model) return { overrideModel: model, revision };
+  }
+  return null;
+}
+
+function modelEventRevision(item: Record<string, unknown>, type: string | null): string {
+  return [
+    type ?? '',
+    stringValue(item.id) ?? '',
+    numberValue(item.eventTimeUs ?? item.event_time_us ?? item.time_us),
+    numberValue(item.eventCounter ?? item.event_counter ?? item.counter),
+  ].join(':');
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberValue(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+}
+
 export function workspaceRuntimeModelSelectionValue(providerId: string, modelId: string): string {
   return JSON.stringify([providerId, modelId]);
 }
