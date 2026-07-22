@@ -72,6 +72,7 @@ const testFiles = [
   'hitl-response-events.test.mjs',
   'workspace-message-event-model.test.mjs',
   'workspace-task-event-model.test.mjs',
+  'workspace-roster-event-model.test.mjs',
   'login-screen-fidelity.test.mjs',
   'login-screen-model.test.mjs',
   'macos-dev-signing.test.mjs',

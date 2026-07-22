@@ -109,6 +109,7 @@ import {
 } from './features/chat/chatTimelineModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import { applyWorkspaceMessageStreamEvent } from './features/chat/workspaceMessageEventModel';
+import { applyWorkspaceRosterStreamEvent } from './features/chat/workspaceRosterEventModel';
 import { applyWorkspaceTaskStreamEvent } from './features/chat/workspaceTaskEventModel';
 import {
   applyMCPAppCanvasStreamEvent,
@@ -1673,6 +1674,7 @@ export function App() {
   const conversationMetadataEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const authoritativeRunEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceMessageEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const workspaceRosterEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const workspaceTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const myWorkRequestRef = useRef(0);
   const myWorkAbortRef = useRef<AbortController | null>(null);
@@ -2683,6 +2685,25 @@ export function App() {
     },
     [scopedConversationId],
   );
+
+  useEffect(() => {
+    const events = socketEventsSince(socket.events, workspaceRosterEventsHeadRef.current);
+    workspaceRosterEventsHeadRef.current = socket.events[0] ?? null;
+    const workspaceId = config.workspaceId.trim();
+    if (!workspaceId || !events.length) return;
+    updateDataset((current) => {
+      let members = current.workspaceMembers;
+      let agents = current.workspaceAgents;
+      for (const event of events) {
+        const result = applyWorkspaceRosterStreamEvent(members, agents, event, workspaceId);
+        members = result.members;
+        agents = result.agents;
+      }
+      return members === current.workspaceMembers && agents === current.workspaceAgents
+        ? current
+        : { ...current, workspaceMembers: members, workspaceAgents: agents };
+    });
+  }, [config.workspaceId, socket.events, updateDataset]);
 
   useEffect(() => {
     const events = socketEventsSince(socket.events, workspaceTaskEventsHeadRef.current);

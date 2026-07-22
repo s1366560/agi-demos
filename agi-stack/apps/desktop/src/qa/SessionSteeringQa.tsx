@@ -27,6 +27,7 @@ import {
 } from '../features/chat/conversationTitleEventModel';
 import { applyHitlResponseStreamEvent } from '../features/chat/hitlResponseEventModel';
 import { applyWorkspaceMessageStreamEvent } from '../features/chat/workspaceMessageEventModel';
+import { applyWorkspaceRosterStreamEvent } from '../features/chat/workspaceRosterEventModel';
 import { applyWorkspaceTaskStreamEvent } from '../features/chat/workspaceTaskEventModel';
 import {
   applyMCPAppCanvasStreamEvent,
@@ -45,6 +46,9 @@ import type {
   DesktopRunInput,
   RunInputDelivery,
   WorkspaceMessage,
+  WorkspaceAgentBinding,
+  WorkspaceAuthorityCollection,
+  WorkspaceMemberSummary,
   WorkspaceTask,
 } from '../types';
 import '../styles.css';
@@ -204,6 +208,22 @@ const workspaceTaskEvents = [
       task_id: 'task-live-release',
       new_status: 'in_progress',
     },
+  },
+];
+
+const workspaceRosterEvents = [
+  {
+    type: 'workspace_member_joined',
+    data: { workspace_id: 'workspace-desktop', member: {
+      id: 'member-live', workspace_id: 'workspace-desktop', user_id: 'user-live', role: 'owner',
+    } },
+  },
+  {
+    type: 'workspace_agent_bound',
+    data: { workspace_id: 'workspace-desktop', agent: {
+      id: 'binding-live', workspace_id: 'workspace-desktop', agent_id: 'agent-live',
+      display_name: 'Cloud release agent', is_active: true,
+    } },
   },
 ];
 
@@ -1438,6 +1458,7 @@ function SessionSteeringQa() {
   const toolProgressEventMode = searchParams.get('tool-progress-event') === '1';
   const workspaceMessageEventMode = searchParams.get('workspace-message-event') === '1';
   const workspaceTaskEventMode = searchParams.get('workspace-task-event') === '1';
+  const workspaceRosterEventMode = searchParams.get('workspace-roster-event') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1447,6 +1468,12 @@ function SessionSteeringQa() {
   const [model, setModel] = useState('gpt-5.5');
   const [qaMessages, setQaMessages] = useState(messages);
   const [qaTasks, setQaTasks] = useState<WorkspaceTask[]>([]);
+  const [qaMembers, setQaMembers] = useState<WorkspaceAuthorityCollection<WorkspaceMemberSummary>>({
+    status: 'ready', items: [], error: null,
+  });
+  const [qaAgents, setQaAgents] = useState<WorkspaceAuthorityCollection<WorkspaceAgentBinding>>({
+    status: 'ready', items: [], error: null,
+  });
   const [switchingModel, setSwitchingModel] = useState(false);
   const [artifactCanvas, setArtifactCanvas] = useState(() =>
     artifactCanvasEventsMode
@@ -1565,6 +1592,22 @@ function SessionSteeringQa() {
       },
     };
   });
+
+  useEffect(() => {
+    if (!workspaceRosterEventMode) return;
+    const timer = window.setTimeout(() => {
+      let members = qaMembers;
+      let agents = qaAgents;
+      for (const event of workspaceRosterEvents) {
+        ({ members, agents } = applyWorkspaceRosterStreamEvent(
+          members, agents, event, 'workspace-desktop',
+        ));
+      }
+      setQaMembers(members);
+      setQaAgents(agents);
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [workspaceRosterEventMode]);
 
   useEffect(() => {
     if (!workspaceTaskEventMode) return;
@@ -1781,6 +1824,7 @@ function SessionSteeringQa() {
                 taskRecoveryEventsMode ||
                 workspaceMessageEventMode ||
                 workspaceTaskEventMode ||
+                workspaceRosterEventMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
@@ -1850,6 +1894,12 @@ function SessionSteeringQa() {
             {workspaceTaskEventMode && qaTasks[0] ? (
               <p data-testid="workspace-task-stream">
                 {qaTasks[0].title} · {qaTasks[0].status}
+              </p>
+            ) : null}
+            {workspaceRosterEventMode ? (
+              <p data-testid="workspace-roster-stream">
+                Members {qaMembers.items.length} · Agents {qaAgents.items.length} ·{' '}
+                {qaMembers.items[0]?.role ?? 'pending'}
               </p>
             ) : null}
             {mcpAppEventsMode ? (
