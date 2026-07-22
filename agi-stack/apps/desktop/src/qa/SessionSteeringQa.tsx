@@ -38,9 +38,11 @@ import {
 } from '../features/chat/mcpAppCanvasEventModel';
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
 import { SessionAgentsCanvas } from '../features/session/SessionAgentsCanvas';
+import { SessionContextWindowCanvas } from '../features/session/SessionContextWindowCanvas';
 import { SessionExecutionGraphCanvas } from '../features/session/SessionExecutionGraphCanvas';
 import { SessionExecutionInsightsCanvas } from '../features/session/SessionExecutionInsightsCanvas';
 import { buildSessionAgentTree } from '../features/session/sessionAgentTreeModel';
+import { buildSessionContextWindow } from '../features/session/sessionContextWindowModel';
 import { buildSessionExecutionGraph } from '../features/session/sessionExecutionGraphModel';
 import { buildSessionExecutionInsights } from '../features/session/sessionExecutionInsightsModel';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
@@ -749,6 +751,107 @@ const executionInsightsCanvasTimelineItems: ConversationTimelineState['items'] =
       refresh_status: 'success',
       refreshed_tool_count: 3,
       mutation_fingerprint: 'sha256:release-verification',
+    },
+  },
+];
+
+const contextWindowCanvasTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'context-release-status-before',
+    type: 'context_status',
+    eventTimeUs: 1_784_282_062_000_000,
+    eventCounter: 21,
+    payload: {
+      current_tokens: 72_000,
+      token_budget: 128_000,
+      occupancy_pct: 56.25,
+      compression_level: 'none',
+      token_distribution: {
+        system: 8_000,
+        user: 12_000,
+        assistant: 22_000,
+        tool: 24_000,
+        summary: 6_000,
+      },
+      compression_history_summary: {},
+      from_cache: false,
+      messages_in_summary: 0,
+    },
+  },
+  {
+    id: 'context-release-compressed',
+    type: 'context_compressed',
+    eventTimeUs: 1_784_282_063_000_000,
+    eventCounter: 22,
+    payload: {
+      was_compressed: true,
+      compression_strategy: 'summarize',
+      compression_level: 'l2_summarize',
+      original_message_count: 42,
+      final_message_count: 26,
+      estimated_tokens: 54_000,
+      token_budget: 128_000,
+      budget_utilization_pct: 42.2,
+      summarized_message_count: 16,
+      tokens_saved: 18_000,
+      compression_ratio: 0.75,
+      pruned_tool_outputs: 4,
+      duration_ms: 46,
+      token_distribution: {
+        system: 8_000,
+        user: 8_000,
+        assistant: 16_000,
+        tool: 12_000,
+        summary: 10_000,
+      },
+      compression_history_summary: {
+        total_compressions: 2,
+        total_tokens_saved: 28_000,
+        average_compression_ratio: 0.64,
+        average_savings_pct: 36,
+        recent_records: [
+          {
+            timestamp: '2026-07-22T08:02:00Z',
+            level: 'l1_prune',
+            tokens_before: 68_000,
+            tokens_after: 58_000,
+            tokens_saved: 10_000,
+            compression_ratio: 0.85,
+            savings_pct: 14.7,
+            messages_before: 36,
+            messages_after: 31,
+            duration_ms: 18,
+          },
+          {
+            timestamp: '2026-07-22T08:10:00Z',
+            level: 'l2_summarize',
+            tokens_before: 72_000,
+            tokens_after: 54_000,
+            tokens_saved: 18_000,
+            compression_ratio: 0.75,
+            savings_pct: 25,
+            messages_before: 42,
+            messages_after: 26,
+            duration_ms: 46,
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: 'context-release-status-after',
+    type: 'context_status',
+    eventTimeUs: 1_784_282_064_000_000,
+    eventCounter: 23,
+    payload: {
+      current_tokens: 61_000,
+      token_budget: 128_000,
+      occupancy_pct: 47.7,
+      compression_level: 'l2_summarize',
+      token_distribution: {},
+      compression_history_summary: {},
+      from_cache: true,
+      messages_in_summary: 16,
     },
   },
 ];
@@ -2093,6 +2196,7 @@ function SessionSteeringQa() {
   const multiAgentCanvasMode = searchParams.get('multi-agent-canvas') === '1';
   const executionGraphCanvasMode = searchParams.get('execution-graph-canvas') === '1';
   const executionInsightsCanvasMode = searchParams.get('execution-insights-canvas') === '1';
+  const contextWindowCanvasMode = searchParams.get('context-window-canvas') === '1';
   const memoryEventsMode = searchParams.get('memory-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
@@ -2182,6 +2286,13 @@ function SessionSteeringQa() {
       ),
     [executionInsightsCanvasMode],
   );
+  const sessionContextWindow = useMemo(
+    () =>
+      buildSessionContextWindow(
+        contextWindowCanvasMode ? contextWindowCanvasTimelineItems : [],
+      ),
+    [contextWindowCanvasMode],
+  );
   const mcpAppHostApi = useMemo(
     () => ({
       callMCPAppTool: async (_appId: string, toolName: string) => ({
@@ -2213,6 +2324,8 @@ function SessionSteeringQa() {
                 ? [...timelineState.items, ...executionGraphCanvasTimelineItems]
               : executionInsightsCanvasMode
                 ? [...timelineState.items, ...executionInsightsCanvasTimelineItems]
+              : contextWindowCanvasMode
+                ? [...timelineState.items, ...contextWindowCanvasTimelineItems]
             : mcpAppEventsMode
               ? [...timelineState.items, ...mcpAppTimelineItems]
               : subagentEventsMode
@@ -2552,6 +2665,7 @@ function SessionSteeringQa() {
                 multiAgentCanvasMode ||
                 executionGraphCanvasMode ||
                 executionInsightsCanvasMode ||
+                contextWindowCanvasMode ||
                 subagentEventsMode ||
                 memoryEventsMode ||
                 modelOverrideEventsMode ||
@@ -2672,7 +2786,9 @@ function SessionSteeringQa() {
             {workspaceLifecycleEventMode ? (
               <p data-testid="workspace-lifecycle-stream">{qaWorkspaceLifecycleSummary}</p>
             ) : null}
-            {executionInsightsCanvasMode ? (
+            {contextWindowCanvasMode ? (
+              <SessionContextWindowCanvas model={sessionContextWindow} />
+            ) : executionInsightsCanvasMode ? (
               <SessionExecutionInsightsCanvas model={sessionExecutionInsights} />
             ) : executionGraphCanvasMode ? (
               <>

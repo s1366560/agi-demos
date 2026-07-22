@@ -110,6 +110,7 @@ const testFiles = [
   'session-agent-tree-model.test.mjs',
   'session-execution-graph-model.test.mjs',
   'session-execution-insights-model.test.mjs',
+  'session-context-window-model.test.mjs',
   'session-narrative-model.test.mjs',
   'session-decision-model.test.mjs',
   'session-evidence-model.test.mjs',

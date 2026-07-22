@@ -1,0 +1,395 @@
+.session-context-window-canvas {
+  --context-system: #72a7ff;
+  --context-user: #5ed39f;
+  --context-assistant: #b78cff;
+  --context-tool: #efb25f;
+  --context-summary: #4fc7d7;
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  color: var(--gray-12);
+  background:
+    radial-gradient(circle at 14% 3%, color-mix(in srgb, var(--context-summary) 10%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--gray-2) 84%, transparent), transparent 44%);
+}
+
+.session-context-window-canvas.is-empty {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--gray-10);
+}
+
+.session-context-window-canvas.is-empty > svg {
+  width: 28px;
+  height: 28px;
+}
+
+.session-context-window-canvas h2,
+.session-context-window-canvas h3,
+.session-context-window-canvas.is-empty p {
+  margin: 0;
+}
+
+.session-context-window-canvas.is-empty h2 {
+  color: var(--gray-12);
+  font-size: 15px;
+}
+
+.session-context-window-canvas.is-empty p {
+  max-width: 420px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.session-context-header,
+.session-context-heading,
+.session-context-badges,
+.session-context-section > header,
+.session-context-distribution-legend span,
+.session-context-history button,
+.session-context-history button > span {
+  display: flex;
+  align-items: center;
+}
+
+.session-context-header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.session-context-heading {
+  min-width: 0;
+  gap: 10px;
+}
+
+.session-context-heading > span,
+.session-context-section > header > span,
+.session-context-metric > span {
+  display: grid;
+  place-items: center;
+  color: var(--context-summary);
+  background: color-mix(in srgb, var(--context-summary) 14%, var(--gray-3));
+}
+
+.session-context-heading > span {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--context-summary) 45%, transparent);
+  border-radius: 10px;
+}
+
+.session-context-heading small,
+.session-context-section header small,
+.session-context-metric small,
+.session-context-compression-summary small,
+.session-context-history button small,
+.session-context-occupancy > span,
+.session-context-occupancy > small {
+  display: block;
+  color: var(--gray-10);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.session-context-heading small {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.session-context-heading h2 {
+  margin-top: 2px;
+  font-size: 15px;
+}
+
+.session-context-badges {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.session-context-badges code,
+.session-context-badges span {
+  padding: 4px 7px;
+  border: 1px solid var(--gray-6);
+  border-radius: 999px;
+  color: var(--gray-11);
+  background: color-mix(in srgb, var(--gray-3) 76%, transparent);
+  font-size: 10px;
+}
+
+.session-context-badges span {
+  border-color: color-mix(in srgb, var(--context-summary) 44%, var(--gray-6));
+  color: var(--context-summary);
+}
+
+.session-context-usage {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.25fr) repeat(3, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.session-context-occupancy,
+.session-context-metric,
+.session-context-compression-summary > span {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--gray-6) 80%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--gray-2) 82%, transparent);
+}
+
+.session-context-occupancy strong {
+  display: block;
+  margin: 4px 0 7px;
+  font-size: 23px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-context-occupancy > div {
+  height: 7px;
+  overflow: hidden;
+  margin-bottom: 7px;
+  border-radius: 999px;
+  background: var(--gray-5);
+}
+
+.session-context-occupancy > div i {
+  display: block;
+  width: var(--context-occupancy);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-9), var(--context-summary));
+}
+
+.session-context-metric {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.session-context-metric > span {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+}
+
+.session-context-metric strong {
+  margin-top: 7px;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-context-metric em {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--gray-9);
+  font-size: 10px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-section {
+  overflow: hidden;
+  border: 1px solid var(--gray-6);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gray-2) 88%, transparent);
+}
+
+.session-context-section > header {
+  gap: 9px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--gray-6);
+}
+
+.session-context-section > header > span {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+
+.session-context-section h3 {
+  font-size: 12px;
+}
+
+.session-context-distribution-bar {
+  display: flex;
+  height: 16px;
+  overflow: hidden;
+  margin: 15px 14px 10px;
+  border-radius: 5px;
+  background: var(--gray-4);
+}
+
+.session-context-distribution-bar > i {
+  min-width: 2px;
+  height: 100%;
+}
+
+.segment-system { --segment-color: var(--context-system); }
+.segment-user { --segment-color: var(--context-user); }
+.segment-assistant { --segment-color: var(--context-assistant); }
+.segment-tool { --segment-color: var(--context-tool); }
+.segment-summary { --segment-color: var(--context-summary); }
+
+.session-context-distribution-bar > i,
+.session-context-distribution-legend span > i {
+  background: var(--segment-color);
+}
+
+.session-context-distribution-legend {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.session-context-distribution-legend span {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.session-context-distribution-legend span > i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+}
+
+.session-context-distribution-legend strong {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.session-context-distribution-legend em {
+  width: 100%;
+  padding-left: 11px;
+  color: var(--gray-9);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.session-context-compression-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.session-context-compression-summary strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
+}
+
+.session-context-history-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.9fr) minmax(260px, 1.35fr);
+  gap: 10px;
+}
+
+.session-context-history nav {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.session-context-history button {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 9px;
+  border: 1px solid var(--gray-6);
+  border-radius: 8px;
+  text-align: left;
+  color: var(--gray-11);
+  background: var(--gray-3);
+  cursor: pointer;
+}
+
+.session-context-history button:hover,
+.session-context-history button.selected {
+  border-color: color-mix(in srgb, var(--context-summary) 55%, var(--gray-6));
+  color: var(--gray-12);
+  background: color-mix(in srgb, var(--context-summary) 10%, var(--gray-3));
+}
+
+.session-context-history button > span {
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.session-context-history button > span:last-child {
+  align-items: flex-end;
+}
+
+.session-context-history button strong {
+  overflow: hidden;
+  max-width: 150px;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-record-detail dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+}
+
+.session-context-record-detail dl > div {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--gray-6) 76%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gray-3) 64%, transparent);
+}
+
+.session-context-record-detail dt {
+  color: var(--gray-9);
+  font-size: 10px;
+}
+
+.session-context-record-detail dd {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--gray-12);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-empty-copy {
+  margin: 0;
+  padding: 18px 14px;
+  color: var(--gray-9);
+  font-size: 11px;
+  text-align: center;
+}
+
+@container review-panel (max-width: 720px) {
+  .session-context-window-canvas { padding: 14px; }
+  .session-context-usage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .session-context-distribution-legend { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .session-context-history-grid { grid-template-columns: 1fr; }
+}
+
+@container review-panel (max-width: 480px) {
+  .session-context-header { align-items: flex-start; flex-direction: column; }
+  .session-context-badges { justify-content: flex-start; }
+  .session-context-compression-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .session-context-record-detail dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
