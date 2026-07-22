@@ -44,6 +44,8 @@ import {
 } from './chatTimelineModel';
 import type { ToolCallPair, ToolCallPresentationKind } from './chatTimelineModel';
 import { agentLifecyclePresentation } from './agentLifecyclePresentationModel';
+import { groupSubAgentTimelineItems } from './subagentTimelineGroupModel';
+import type { SubAgentTimelineGroup } from './subagentTimelineGroupModel';
 import {
   formatTimelineTime,
   isImportantTimelineItem,
@@ -81,7 +83,17 @@ type TimelineActivityGroupNode = {
   items: AgentTimelineItem[];
 };
 
-type TimelinePresentationNode = SessionNarrativeNode | TimelineActivityGroupNode;
+type TimelineSubAgentGroupNode = {
+  kind: 'subagent_group';
+  id: string;
+  items: AgentTimelineItem[];
+  group: SubAgentTimelineGroup;
+};
+
+type TimelinePresentationNode =
+  | SessionNarrativeNode
+  | TimelineActivityGroupNode
+  | TimelineSubAgentGroupNode;
 
 type TimelineGroupNode = Exclude<TimelinePresentationNode, { kind: 'item' }>;
 
@@ -240,6 +252,25 @@ export function AgentTimeline({
               <TimelineDayDivider key={`day-${dayKey}`} timeUs={nodeTimeUs} />
             ) : null;
           if (dayKey) lastRenderedDayKey = dayKey;
+          if (node.kind === 'subagent_group') {
+            const groupId = timelineGroupIdentity(narrative, index);
+            const open = timelineGroupOpen(
+              node.items,
+              expandedGroupItems,
+              node.group.status === 'running' || node.group.status === 'steered',
+            );
+            return (
+              <Fragment key={groupId}>
+                {dayDivider}
+                <SubAgentGroupView
+                  group={node.group}
+                  expanded={open}
+                  onToggle={() => setGroupOpen(node.items, !open)}
+                  anchorId={groupId}
+                />
+              </Fragment>
+            );
+          }
           if (node.kind === 'activity_group') {
             const groupId = timelineGroupIdentity(narrative, index);
             const open = node.items.some((item) => expandedGroupItems[item.id]);
@@ -856,9 +887,161 @@ function AssistantExecutionSummary({ item }: { item: AgentTimelineItem }) {
   );
 }
 
+function SubAgentGroupView({
+  group,
+  expanded,
+  onToggle,
+  anchorId,
+}: {
+  group: SubAgentTimelineGroup;
+  expanded: boolean;
+  onToggle: () => void;
+  anchorId: string;
+}) {
+  const { t } = useI18n();
+  const displayName = group.subagentName || group.subagentId || t('chat.subagentUnnamed');
+  const title =
+    group.mode === 'parallel'
+      ? t('chat.parallel')
+      : group.mode === 'chain'
+        ? t('chat.chain')
+        : t('chat.subagentExecution', { name: displayName });
+  const phaseEntries = [
+    ['routed', group.phases.routed],
+    ['started', group.phases.started],
+    ['executing', group.phases.executing],
+    ['ended', group.phases.ended],
+  ] as const;
+  const showProgress =
+    group.progress !== null &&
+    group.progress >= 0 &&
+    group.progress <= 100 &&
+    (group.status === 'running' || group.status === 'steered');
+  return (
+    <article
+      className={`timeline-subagent-group status-${group.status} ${expanded ? 'is-expanded' : ''}`}
+      data-timeline-anchor-id={anchorId}
+      data-timeline-anchor-members={JSON.stringify(group.itemIds)}
+      data-subagent-id={group.subagentId || undefined}
+    >
+      <button
+        type="button"
+        className="subagent-group-header"
+        aria-expanded={expanded}
+        aria-label={t(expanded ? 'chat.collapseItem' : 'chat.expandItem', { item: title })}
+        onClick={onToggle}
+      >
+        <span className="subagent-group-chevron" aria-hidden="true">
+          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+        </span>
+        <span className="subagent-group-icon" aria-hidden="true">
+          {group.status === 'success' ? (
+            <CheckIcon />
+          ) : group.status === 'error' || group.status === 'killed' ? (
+            <ExclamationTriangleIcon />
+          ) : (
+            <ActivityLogIcon />
+          )}
+        </span>
+        <span className="subagent-group-copy">
+          <strong>{title}</strong>
+          <small>{t('chat.subagentLifecycleCount', { count: group.items.length })}</small>
+        </span>
+        <span className="subagent-group-metrics">
+          {group.confidence !== null ? (
+            <span>{t('chat.percentCount', { count: Math.round(group.confidence * 100) })}</span>
+          ) : null}
+          {group.tokensUsed !== null && group.tokensUsed > 0 ? (
+            <span>{t('chat.tokensCount', { count: group.tokensUsed })}</span>
+          ) : null}
+          {group.executionTimeMs !== null && group.executionTimeMs > 0 ? (
+            <span>{formatToolCallDuration(group.executionTimeMs)}</span>
+          ) : null}
+          <em className={`timeline-status ${subAgentStatusTone(group.status)}`}>
+            {t(`chat.subagentStatus.${group.status}`)}
+          </em>
+        </span>
+      </button>
+      {showProgress ? (
+        <div
+          className="subagent-progress"
+          role="progressbar"
+          aria-label={t('chat.subagentProgress')}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={group.progress ?? undefined}
+        >
+          <span className="subagent-progress-bar" style={{ width: `${group.progress}%` }} />
+        </div>
+      ) : null}
+      {expanded ? (
+        <div className="subagent-group-body">
+          <div className="subagent-phase-list" aria-label={t('chat.subagentLifecycle')}>
+            {phaseEntries.map(([phase, active]) => (
+              <span className={active ? 'is-active' : undefined} key={phase}>
+                {t(`chat.subagentPhase.${phase}`)}
+              </span>
+            ))}
+          </div>
+          {group.statusMessage ? (
+            <p className="subagent-live-status">{group.statusMessage}</p>
+          ) : null}
+          <SubAgentDetail label={t('chat.task')} value={group.task} />
+          <SubAgentDetail label={t('chat.subagentReason')} value={group.reason} />
+          <SubAgentDetail label={t('chat.subagentResult')} value={group.summary} emphasis />
+          <SubAgentDetail label={t('chat.subagentFailure')} value={group.error} error />
+          {group.toolCallsCount !== null && group.toolCallsCount > 0 ? (
+            <div className="subagent-group-facts">
+              <span>{t('chat.callsCount', { count: group.toolCallsCount })}</span>
+              {group.tokensUsed !== null && group.tokensUsed > 0 ? (
+                <span>{t('chat.tokensCount', { count: group.tokensUsed })}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function SubAgentDetail({
+  label,
+  value,
+  emphasis = false,
+  error = false,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+  error?: boolean;
+}) {
+  if (!value) return null;
+  return (
+    <div
+      className={`subagent-detail${emphasis ? ' is-emphasis' : ''}${error ? ' is-error' : ''}`}
+    >
+      <span>{label}</span>
+      <p>{value}</p>
+    </div>
+  );
+}
+
+function subAgentStatusTone(status: SubAgentTimelineGroup['status']): 'ok' | 'error' | 'waiting' {
+  if (status === 'success') return 'ok';
+  if (status === 'error' || status === 'killed' || status === 'depth_limited') return 'error';
+  return 'waiting';
+}
+
 function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePresentationNode[] {
   const grouped: TimelinePresentationNode[] = [];
   let activityItems: AgentTimelineItem[] = [];
+  const subagentGrouping = groupSubAgentTimelineItems(
+    narrative.flatMap((node) => (node.kind === 'item' ? [node.item] : [])),
+  );
+  const subagentGroupsByStartItem = new Map(
+    subagentGrouping.groups.map((group) => [group.startItemId, group]),
+  );
+  const claimedSubagentItemIds = new Set(subagentGrouping.claimedItemIds);
 
   const flushActivityItems = () => {
     if (!activityItems.length) return;
@@ -871,6 +1054,20 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
   };
 
   narrative.forEach((node) => {
+    if (node.kind === 'item') {
+      const subagentGroup = subagentGroupsByStartItem.get(node.item.id);
+      if (subagentGroup) {
+        flushActivityItems();
+        grouped.push({
+          kind: 'subagent_group',
+          id: subagentGroup.id,
+          items: subagentGroup.items,
+          group: subagentGroup,
+        });
+        return;
+      }
+      if (claimedSubagentItemIds.has(node.item.id)) return;
+    }
     // Reasoning traces stay first-class, collapsible rows instead of being
     // folded into the debug activity group.
     if (node.kind === 'item' && node.item.type === 'thought') {
@@ -946,6 +1143,21 @@ function timelineGroupIdentity(narrative: AnnotatedTimelineNode[], index: number
   const node = narrative[index];
   if (!node || node.kind === 'item') return node?.id ?? `timeline-node:${index}`;
   return node.groupId;
+}
+
+function timelineGroupOpen(
+  items: readonly AgentTimelineItem[],
+  expandedItems: Readonly<Record<string, boolean>>,
+  defaultOpen = false,
+): boolean {
+  let hasExplicitState = false;
+  let open = false;
+  for (const item of items) {
+    if (!Object.prototype.hasOwnProperty.call(expandedItems, item.id)) continue;
+    hasExplicitState = true;
+    open ||= expandedItems[item.id] === true;
+  }
+  return hasExplicitState ? open : defaultOpen;
 }
 
 function resolveTimelineRenderWindow(

@@ -435,6 +435,60 @@ const modelOverrideTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const subagentTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'subagent-review-routed',
+    type: 'subagent_routed',
+    eventTimeUs: 1_784_282_044_000_000,
+    eventCounter: 4,
+    payload: {
+      subagent_id: 'regression-reviewer',
+      subagent_name: 'Regression reviewer',
+      confidence: 0.94,
+      reason: 'Matched repository validation and lifecycle review capabilities',
+    },
+  },
+  {
+    id: 'subagent-review-started',
+    type: 'subagent_started',
+    eventTimeUs: 1_784_282_045_000_000,
+    eventCounter: 5,
+    payload: {
+      subagent_id: 'regression-reviewer',
+      subagent_name: 'Regression reviewer',
+      task: 'Verify concurrent session ownership and regression evidence.',
+    },
+  },
+  {
+    id: 'subagent-review-progress',
+    type: 'subagent_session_update',
+    eventTimeUs: 1_784_282_046_000_000,
+    eventCounter: 6,
+    payload: {
+      subagent_id: 'regression-reviewer',
+      subagent_name: 'Regression reviewer',
+      progress: 70,
+      status_message: 'Running the focused regression suite',
+      tokens_used: 840,
+      tool_calls_count: 4,
+    },
+  },
+  {
+    id: 'subagent-review-completed',
+    type: 'subagent_completed',
+    eventTimeUs: 1_784_282_047_000_000,
+    eventCounter: 7,
+    payload: {
+      subagent_id: 'regression-reviewer',
+      subagent_name: 'Regression reviewer',
+      summary: 'Ownership is isolated and all focused regression checks pass.',
+      tokens_used: 1240,
+      execution_time_ms: 3450,
+      success: true,
+    },
+  },
+];
+
 const runtimeInfrastructureTimelineItems: ConversationTimelineState['items'] = [
   {
     id: 'sandbox-runtime-created',
@@ -1556,6 +1610,7 @@ function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
+  const subagentEventsMode = searchParams.get('subagent-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
@@ -1645,8 +1700,10 @@ function SessionSteeringQa() {
         ? anchorTimelineItems
         : suggestionsMode
           ? [...timelineState.items, suggestionTimelineItem]
-          : modelOverrideEventsMode
-            ? [...timelineState.items, ...modelOverrideTimelineItems]
+          : subagentEventsMode
+            ? [...timelineState.items, ...subagentTimelineItems]
+            : modelOverrideEventsMode
+              ? [...timelineState.items, ...modelOverrideTimelineItems]
             : llmRuntimeEventsMode
             ? [...timelineState.items, ...llmRuntimeTimelineItems]
             : runtimeEventsMode
@@ -1974,6 +2031,7 @@ function SessionSteeringQa() {
               }
               activityPresence={
                 suggestionsMode ||
+                subagentEventsMode ||
                 modelOverrideEventsMode ||
                 llmRuntimeEventsMode ||
                 runtimeEventsMode ||

@@ -25,6 +25,7 @@
     "src/features/chat/mcpAppCanvasEventModel.ts",
     "src/features/chat/mcpAppHostBridge.ts",
     "src/features/chat/hitlResponseEventModel.ts",
+    "src/features/chat/subagentTimelineGroupModel.ts",
     "src/features/chat/workspaceMessageEventModel.ts",
     "src/features/chat/workspaceTaskEventModel.ts",
     "src/features/chat/workspaceRosterEventModel.ts",

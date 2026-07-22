@@ -7,6 +7,9 @@ const require = createRequire(import.meta.url);
 const { agentLifecyclePresentation } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/agentLifecyclePresentationModel.js',
 );
+const { groupSubAgentTimelineItems } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/chat/subagentTimelineGroupModel.js',
+);
 const {
   assistantExecutionSummary,
   detectPayloadLanguage,
@@ -32,6 +35,15 @@ const {
   toolCallPresentationKind,
 } = require('/tmp/agistack-desktop-test-dist/src/features/chat/chatTimelineModel.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const chatTimelineSource = readFileSync(
+  new URL('../src/features/chat/ChatTimeline.tsx', import.meta.url),
+  'utf8',
+);
+const sessionSteeringQaSource = readFileSync(
+  new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url),
+  'utf8',
+);
+const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
 test('assistant text stream preserves whitespace tokens and settles to authoritative full text', () => {
   let items = mergeAssistantTextStreamChunk([], {
@@ -3139,4 +3151,216 @@ test('payload detection pretty-prints JSON and keeps plain text untouched', () =
     code: '$ cargo test\nok',
     language: 'text',
   });
+});
+
+test('SubAgent lifecycle events become one structured execution group', () => {
+  const items = [
+    {
+      id: 'subagent-routed-1',
+      type: 'subagent_routed',
+      eventTimeUs: 1,
+      eventCounter: 1,
+      payload: {
+        subagent_id: 'reviewer-1',
+        subagent_name: 'Regression reviewer',
+        confidence: 0.92,
+        reason: 'Matches concurrent lifecycle review',
+      },
+    },
+    {
+      id: 'subagent-started-1',
+      type: 'subagent_started',
+      eventTimeUs: 2,
+      eventCounter: 2,
+      payload: {
+        subagent_id: 'reviewer-1',
+        subagent_name: 'Regression reviewer',
+        task: 'Verify disposal ownership and regression coverage',
+      },
+    },
+    {
+      id: 'subagent-progress-1',
+      type: 'subagent_session_update',
+      eventTimeUs: 3,
+      eventCounter: 3,
+      payload: {
+        subagent_id: 'reviewer-1',
+        subagent_name: 'Regression reviewer',
+        progress: 70,
+        status_message: 'Running the concurrent regression suite',
+        tokens_used: 840,
+        tool_calls_count: 4,
+      },
+    },
+    {
+      id: 'subagent-completed-1',
+      type: 'subagent_completed',
+      eventTimeUs: 4,
+      eventCounter: 4,
+      payload: {
+        subagent_id: 'reviewer-1',
+        subagent_name: 'Regression reviewer',
+        summary: 'Ownership is isolated and the regression suite passes.',
+        tokens_used: 1_240,
+        execution_time_ms: 3_450,
+        success: true,
+      },
+    },
+  ];
+
+  assert.deepEqual(groupSubAgentTimelineItems(items), {
+    groups: [
+      {
+        id: 'subagent-group:subagent-routed-1:subagent-completed-1',
+        startItemId: 'subagent-routed-1',
+        itemIds: [
+          'subagent-routed-1',
+          'subagent-started-1',
+          'subagent-progress-1',
+          'subagent-completed-1',
+        ],
+        items,
+        mode: 'single',
+        subagentId: 'reviewer-1',
+        subagentName: 'Regression reviewer',
+        status: 'success',
+        task: 'Verify disposal ownership and regression coverage',
+        reason: 'Matches concurrent lifecycle review',
+        summary: 'Ownership is isolated and the regression suite passes.',
+        error: '',
+        confidence: 0.92,
+        tokensUsed: 1_240,
+        executionTimeMs: 3_450,
+        progress: 100,
+        statusMessage: 'Running the concurrent regression suite',
+        toolCallsCount: 4,
+        phases: {
+          routed: true,
+          started: true,
+          executing: true,
+          ended: true,
+        },
+      },
+    ],
+    claimedItemIds: [
+      'subagent-routed-1',
+      'subagent-started-1',
+      'subagent-progress-1',
+      'subagent-completed-1',
+    ],
+  });
+});
+
+test('SubAgent grouping claims a matching terminal event across interleaved main-agent work', () => {
+  const items = [
+    {
+      id: 'subagent-started-2',
+      type: 'subagent_run_started',
+      eventTimeUs: 1,
+      eventCounter: 1,
+      payload: {
+        run_id: 'run-reviewer-2',
+        subagent_name: 'Release reviewer',
+        task: 'Review the release gate',
+      },
+    },
+    {
+      id: 'main-thought-1',
+      type: 'thought',
+      eventTimeUs: 2,
+      eventCounter: 2,
+      content: 'Waiting for delegated evidence.',
+    },
+    {
+      id: 'subagent-completed-2',
+      type: 'subagent_run_completed',
+      eventTimeUs: 3,
+      eventCounter: 3,
+      payload: {
+        run_id: 'run-reviewer-2',
+        subagent_name: 'Release reviewer',
+        summary: 'Release gate approved.',
+        status: 'completed',
+      },
+    },
+  ];
+
+  const grouped = groupSubAgentTimelineItems(items);
+  assert.equal(grouped.groups.length, 1);
+  assert.equal(grouped.groups[0].status, 'success');
+  assert.deepEqual(grouped.groups[0].itemIds, [
+    'subagent-started-2',
+    'subagent-completed-2',
+  ]);
+  assert.deepEqual(grouped.claimedItemIds, [
+    'subagent-started-2',
+    'subagent-completed-2',
+  ]);
+  assert.equal(grouped.claimedItemIds.includes('main-thought-1'), false);
+});
+
+test('SubAgent grouping never combines structurally different executions', () => {
+  const grouped = groupSubAgentTimelineItems([
+    {
+      id: 'subagent-a-started',
+      type: 'subagent_started',
+      eventTimeUs: 1,
+      eventCounter: 1,
+      payload: { subagent_id: 'subagent-a', subagent_name: 'Reviewer A', task: 'Task A' },
+    },
+    {
+      id: 'subagent-b-started',
+      type: 'subagent_started',
+      eventTimeUs: 2,
+      eventCounter: 2,
+      payload: { subagent_id: 'subagent-b', subagent_name: 'Reviewer B', task: 'Task B' },
+    },
+    {
+      id: 'subagent-a-completed',
+      type: 'subagent_completed',
+      eventTimeUs: 3,
+      eventCounter: 3,
+      payload: { subagent_id: 'subagent-a', subagent_name: 'Reviewer A', summary: 'A done' },
+    },
+    {
+      id: 'subagent-b-failed',
+      type: 'subagent_failed',
+      eventTimeUs: 4,
+      eventCounter: 4,
+      payload: { subagent_id: 'subagent-b', subagent_name: 'Reviewer B', error: 'B failed' },
+    },
+  ]);
+
+  assert.deepEqual(
+    grouped.groups.map((group) => ({
+      start: group.startItemId,
+      status: group.status,
+      itemIds: group.itemIds,
+    })),
+    [
+      {
+        start: 'subagent-a-started',
+        status: 'success',
+        itemIds: ['subagent-a-started', 'subagent-a-completed'],
+      },
+      {
+        start: 'subagent-b-started',
+        status: 'error',
+        itemIds: ['subagent-b-started', 'subagent-b-failed'],
+      },
+    ],
+  );
+});
+
+test('Desktop renders SubAgent groups as structured first-class timeline cards', () => {
+  assert.match(chatTimelineSource, /kind: 'subagent_group'/);
+  assert.match(chatTimelineSource, /function SubAgentGroupView/);
+  assert.match(chatTimelineSource, /groupSubAgentTimelineItems/);
+  assert.match(chatTimelineSource, /subagent-progress-bar/);
+  assert.match(sessionSteeringQaSource, /subagent-events/);
+  assert.equal(
+    i18nSource.split("'chat.subagentExecution'").length - 1,
+    2,
+    'SubAgent group labels must cover both locales',
+  );
 });
