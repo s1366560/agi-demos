@@ -574,6 +574,65 @@ const hitlResponseEvents = [
   },
 ];
 
+const a2uiCanvasComponents = [
+  JSON.stringify({ beginRendering: { surfaceId: 'release-surface', root: 'release-root' } }),
+  JSON.stringify({
+    surfaceUpdate: {
+      surfaceId: 'release-surface',
+      components: [
+        {
+          id: 'release-root',
+          component: { Column: { children: { explicitList: ['approve-button'] } } },
+        },
+        {
+          id: 'approve-button',
+          component: {
+            Button: { child: 'approve-label', action: { name: 'approve_release' } },
+          },
+        },
+        {
+          id: 'approve-label',
+          component: { Text: { text: { literalString: 'Approve verified release' } } },
+        },
+      ],
+    },
+  }),
+].join('\n');
+
+const a2uiCanvasTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'a2ui-release-canvas',
+    type: 'canvas_updated',
+    eventTimeUs: 1_784_282_062_000_000,
+    eventCounter: 22,
+    payload: {
+      action: 'created',
+      block_id: 'release-approval',
+      block: {
+        id: 'release-approval',
+        block_type: 'a2ui_surface',
+        title: 'Release approval',
+        content: a2uiCanvasComponents,
+      },
+    },
+  },
+  {
+    id: 'a2ui-release-action',
+    type: 'a2ui_action_asked',
+    eventTimeUs: 1_784_282_063_000_000,
+    eventCounter: 23,
+    requestId: 'a2ui-release-action',
+    question: 'Approve the verified release?',
+    payload: {
+      request_id: 'a2ui-release-action',
+      block_id: 'release-approval',
+      allowed_actions: [
+        { source_component_id: 'approve-button', action_name: 'approve_release' },
+      ],
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -748,6 +807,7 @@ function SessionSteeringQa() {
   const terminalEventsMode = searchParams.get('terminal-events') === '1';
   const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
   const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
+  const a2uiCanvasEventsMode = searchParams.get('a2ui-canvas-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -770,6 +830,7 @@ function SessionSteeringQa() {
       : emptyMCPAppCanvasState(),
   );
   const [mcpAppHostMessage, setMCPAppHostMessage] = useState('');
+  const [a2uiCanvasResponse, setA2UICanvasResponse] = useState('');
   const mcpAppHostApi = useMemo(
     () => ({
       callMCPAppTool: async (_appId: string, toolName: string) => ({
@@ -795,19 +856,21 @@ function SessionSteeringQa() {
           ? [...timelineState.items, suggestionTimelineItem]
           : llmRuntimeEventsMode
             ? [...timelineState.items, ...llmRuntimeTimelineItems]
-          : runtimeEventsMode
-            ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
-            : httpServiceEventsMode
-              ? [...timelineState.items, ...httpServiceTimelineItems]
-              : doomLoopEventsMode
-                ? [...timelineState.items, ...doomLoopTimelineItems]
-                : terminalEventsMode
-                  ? [...timelineState.items, ...conversationTerminalTimelineItems]
-                  : agentDefinitionEventsMode
-                    ? [...timelineState.items, ...agentDefinitionTimelineItems]
-                    : hitlResponseEventsMode
-                      ? [...timelineState.items, ...hitlResponseTimelineItems]
-                    : timelineState.items;
+            : runtimeEventsMode
+              ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
+              : httpServiceEventsMode
+                ? [...timelineState.items, ...httpServiceTimelineItems]
+                : doomLoopEventsMode
+                  ? [...timelineState.items, ...doomLoopTimelineItems]
+                  : terminalEventsMode
+                    ? [...timelineState.items, ...conversationTerminalTimelineItems]
+                    : agentDefinitionEventsMode
+                      ? [...timelineState.items, ...agentDefinitionTimelineItems]
+                      : hitlResponseEventsMode
+                        ? [...timelineState.items, ...hitlResponseTimelineItems]
+                        : a2uiCanvasEventsMode
+                          ? [...timelineState.items, ...a2uiCanvasTimelineItems]
+                          : timelineState.items;
     return {
       ...timelineState,
       items,
@@ -991,6 +1054,7 @@ function SessionSteeringQa() {
                 httpServiceEventsMode ||
                 doomLoopEventsMode ||
                 hitlResponseEventsMode ||
+                a2uiCanvasEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode
@@ -1014,7 +1078,7 @@ function SessionSteeringQa() {
               runInputsError={null}
               promotingRunInputId={null}
               runInputAuthorityRunId="run-desktop-session-42"
-              respondableHitlRequestIds={[]}
+              respondableHitlRequestIds={a2uiCanvasEventsMode ? ['a2ui-release-action'] : []}
               references={references}
               onRunInputDeliveryChange={setDelivery}
               onPromoteRunInput={(input) =>
@@ -1032,7 +1096,12 @@ function SessionSteeringQa() {
               onSend={sendQaMessage}
               onRefresh={() => undefined}
               onLoadEarlier={loadEarlierHistory}
-              onRespondToHitl={async () => undefined}
+              onRespondToHitl={async (submission) => {
+                if (!a2uiCanvasEventsMode) return;
+                setA2UICanvasResponse(
+                  `${submission.responseData.action_name}:${submission.responseData.source_component_id}`,
+                );
+              }}
               onWorkflowSelect={() => undefined}
               onModelChange={async (value) => {
                 setSwitchingModel(true);
@@ -1043,6 +1112,9 @@ function SessionSteeringQa() {
               onRuntimeTargetChange={() => undefined}
               onOpenCommands={() => undefined}
             />
+            {a2uiCanvasResponse ? (
+              <p data-testid="a2ui-canvas-response">{a2uiCanvasResponse}</p>
+            ) : null}
             {mcpAppEventsMode ? (
               <>
                 <DesktopMCPAppCanvas

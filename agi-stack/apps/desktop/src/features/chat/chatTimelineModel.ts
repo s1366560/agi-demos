@@ -98,9 +98,9 @@ export function latestAgentSuggestions(items: AgentTimelineItem[]): string[] {
   return [];
 }
 
-/** Suggestion events drive UI affordances and are not conversation log rows. */
+/** UI-state events drive affordances or replay and are not conversation log rows. */
 export function timelineItemsForDisplay(items: AgentTimelineItem[]): AgentTimelineItem[] {
-  return items.filter((item) => item.type !== 'suggestions');
+  return items.filter((item) => item.type !== 'suggestions' && item.type !== 'canvas_updated');
 }
 
 /**

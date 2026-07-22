@@ -1736,7 +1736,7 @@ test('artifact ready and error stream events settle the original created row', (
   assert.equal(orphanReady[0].filename, 'recovered.zip');
 });
 
-test('suggestions stay scoped to the latest unanswered agent turn and out of the timeline', () => {
+test('suggestions and canvas replay events stay out of the visible conversation timeline', () => {
   const items = [
     {
       id: 'user-message-1',
@@ -1774,6 +1774,17 @@ test('suggestions stay scoped to the latest unanswered agent turn and out of the
       payload: { current_tokens: 1200, token_budget: 8000 },
       eventTimeUs: 54_000_000,
       eventCounter: 4,
+    },
+    {
+      id: 'canvas-replay-1',
+      type: 'canvas_updated',
+      payload: {
+        action: 'created',
+        block_id: 'release-approval',
+        block: { id: 'release-approval', content: '{"beginRendering":{}}' },
+      },
+      eventTimeUs: 54_500_000,
+      eventCounter: 5,
     },
   ];
 
