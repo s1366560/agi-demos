@@ -120,6 +120,7 @@ import {
   type MCPAppCanvasState,
 } from './features/chat/mcpAppCanvasEventModel';
 import { SessionEvidenceCanvas } from './features/session/SessionEvidenceCanvas';
+import { SessionAgentsCanvas } from './features/session/SessionAgentsCanvas';
 import { SessionChangesCanvas } from './features/session/SessionChangesCanvas';
 import { SessionInvocationActivity } from './features/session/SessionInvocationLedger';
 import {
@@ -158,6 +159,7 @@ import {
   buildSessionInvocationLedger,
   sessionInvocationLedgerSummary,
 } from './features/session/sessionInvocationLedgerModel';
+import { buildSessionAgentTree } from './features/session/sessionAgentTreeModel';
 import {
   decodeConversationSessionProjection,
   signedSessionSnapshotRevision,
@@ -492,7 +494,7 @@ type SidebarRunItem = {
   workspaceId?: string;
   conversation?: AgentConversation;
 };
-type ReviewTab = SessionCanvasTabId | 'pull' | 'background';
+type ReviewTab = SessionCanvasTabId | 'pull' | 'background' | 'agents';
 type WorkspaceArtifactKind = 'Files' | 'Patches' | 'Reports' | 'Logs' | 'Events';
 type WorkspaceArtifact = {
   id: string;
@@ -6220,6 +6222,51 @@ export function App() {
     selectConversation(item.project_id, workspaceId, conversation, 'chat');
   };
 
+  const openAgentSession = async (conversationId: string) => {
+    const projectId = config.projectId;
+    const workspaceId = config.workspaceId;
+    const expectedContextRevision = contextRevisionRef.current;
+    const expectedScopeEpoch = configScopeEpochRef.current;
+    if (!conversationId || !projectId || !workspaceId) {
+      setError(t('myWork.sessionUnavailable'));
+      return;
+    }
+    let conversation = (dataset.conversationsByWorkspace[workspaceId] ?? []).find(
+      (candidate) => candidate.id === conversationId,
+    );
+    if (!conversation) {
+      try {
+        const response = await api.listConversations(projectId, workspaceId);
+        conversation = response.items.find((candidate) => candidate.id === conversationId);
+      } catch (caught) {
+        if (
+          !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+          expectedScopeEpoch !== configScopeEpochRef.current
+        ) {
+          return;
+        }
+        setError(formatError(caught));
+        return;
+      }
+    }
+    if (
+      !isCurrentContextRevision(expectedContextRevision, contextRevisionRef.current) ||
+      expectedScopeEpoch !== configScopeEpochRef.current
+    ) {
+      return;
+    }
+    if (
+      !conversation ||
+      conversation.project_id !== projectId ||
+      conversation.tenant_id !== config.tenantId ||
+      conversation.workspace_id !== workspaceId
+    ) {
+      setError(t('myWork.sessionUnavailable'));
+      return;
+    }
+    selectConversation(projectId, workspaceId, conversation, 'chat');
+  };
+
   const renderBoardPanel = () => (
     <MyWorkQueue
       items={dataset.myWork}
@@ -6376,6 +6423,7 @@ export function App() {
       onToggleChangeReference={(reference) =>
         setRunInputReferences((current) => toggleRunInputReference(current, reference))
       }
+      onOpenAgentSession={(conversationId) => void openAgentSession(conversationId)}
       onTabChange={setReviewTab}
       sessionControls={sessionControls}
     />
@@ -6725,6 +6773,7 @@ function WorkspaceReviewPanel({
   onStartTerminal,
   onRefreshChanges,
   onToggleChangeReference,
+  onOpenAgentSession,
   onTabChange,
   sessionControls,
 }: {
@@ -6787,6 +6836,7 @@ function WorkspaceReviewPanel({
   onStartTerminal: () => void;
   onRefreshChanges: () => void;
   onToggleChangeReference: (reference: CodeRangeReference) => void;
+  onOpenAgentSession: (conversationId: string) => void;
   onTabChange: (tab: ReviewTab) => void;
   sessionControls?: SessionCanvasControls;
 }) {
@@ -6805,6 +6855,7 @@ function WorkspaceReviewPanel({
     () => sessionInvocationLedgerSummary(invocationLedger),
     [invocationLedger],
   );
+  const sessionAgentTree = useMemo(() => buildSessionAgentTree(timelineItems), [timelineItems]);
   const sourceEvidence = useMemo(
     () => artifactEvidenceForCurrentVersions(artifactVersions, 'sources'),
     [artifactVersions],
@@ -6826,7 +6877,7 @@ function WorkspaceReviewPanel({
   );
   const configuredCanvasTabs = useMemo(() => sessionCanvasTabs(capabilityMode), [capabilityMode]);
   const chrome = workspaceReviewPanelChrome(Boolean(sessionControls));
-  const tabValue = (tab: SessionCanvasTabId): string | undefined => {
+  const tabValue = (tab: ReviewTab): string | undefined => {
     if (tab === 'changes' && changeSnapshot?.status === 'ready') {
       return `+${changeSnapshot.additions} / −${changeSnapshot.deletions}`;
     }
@@ -6848,6 +6899,9 @@ function WorkspaceReviewPanel({
       if (artifactIds.size) return `${artifactIds.size}`;
     }
     if (tab === 'apps' && mcpAppCanvas.tabs.length) return `${mcpAppCanvas.tabs.length}`;
+    if (tab === 'agents' && sessionAgentTree.summary.total) {
+      return `${sessionAgentTree.summary.total}`;
+    }
     if (tab === 'sources') {
       if (sourceEvidence.rows.length) return `${sourceEvidence.rows.length}`;
       return sourceEvidence.missing.length ? t('session.evidence.missing') : undefined;
@@ -6864,6 +6918,15 @@ function WorkspaceReviewPanel({
       label: t(tab.labelKey),
       value: tabValue(tab.id),
     })),
+    ...(sessionAgentTree.summary.total
+      ? [
+          {
+            tab: 'agents' as const,
+            label: t('session.canvasAgents'),
+            value: `${sessionAgentTree.summary.total}`,
+          },
+        ]
+      : []),
     ...(mcpAppCanvas.tabs.length
       ? [
           {
@@ -6903,10 +6966,11 @@ function WorkspaceReviewPanel({
       ?.focus();
   };
   useEffect(() => {
-    const availableTabs = new Set(
+    const availableTabs = new Set<ReviewTab>(
       [...configuredCanvasTabs.primary, ...configuredCanvasTabs.secondary].map((tab) => tab.id),
     );
     if (mcpAppCanvas.tabs.length) availableTabs.add('apps');
+    if (sessionAgentTree.summary.total) availableTabs.add('agents');
     if (activeTab === 'background' && availableTabs.has('activity')) {
       onTabChange('activity');
       return;
@@ -6918,7 +6982,13 @@ function WorkspaceReviewPanel({
     if (!availableTabs.has(activeTab as SessionCanvasTabId)) {
       onTabChange(configuredCanvasTabs.primary[0]?.id ?? 'plan');
     }
-  }, [activeTab, configuredCanvasTabs, mcpAppCanvas.tabs.length, onTabChange]);
+  }, [
+    activeTab,
+    configuredCanvasTabs,
+    mcpAppCanvas.tabs.length,
+    onTabChange,
+    sessionAgentTree.summary.total,
+  ]);
 
   return (
     <aside className={panelClassName} aria-label={t('session.canvas')}>
@@ -7206,6 +7276,10 @@ function WorkspaceReviewPanel({
 
         {activeTab === 'activity' || activeTab === 'background' ? (
           <SessionInvocationActivity entries={invocationLedger} />
+        ) : null}
+
+        {activeTab === 'agents' ? (
+          <SessionAgentsCanvas model={sessionAgentTree} onOpenSession={onOpenAgentSession} />
         ) : null}
 
         {activeTab === 'apps' ? (

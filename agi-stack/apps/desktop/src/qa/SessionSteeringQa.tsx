@@ -37,6 +37,8 @@ import {
   selectMCPAppCanvasTab,
 } from '../features/chat/mcpAppCanvasEventModel';
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
+import { SessionAgentsCanvas } from '../features/session/SessionAgentsCanvas';
+import { buildSessionAgentTree } from '../features/session/sessionAgentTreeModel';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
 import type {
@@ -486,6 +488,73 @@ const subagentTimelineItems: ConversationTimelineState['items'] = [
       tokens_used: 1240,
       execution_time_ms: 3450,
       success: true,
+    },
+  },
+];
+
+const multiAgentCanvasTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'agent-coordinator-spawned',
+    type: 'agent_spawned',
+    eventTimeUs: 1_784_282_044_000_000,
+    eventCounter: 4,
+    payload: {
+      agent_id: 'agent-coordinator',
+      agent_name: 'Release coordinator',
+      child_session_id: 'conversation-agent-coordinator',
+      task_summary: 'Coordinate release evidence and independent verification.',
+    },
+  },
+  {
+    id: 'agent-reviewer-spawned',
+    type: 'agent_spawned',
+    eventTimeUs: 1_784_282_045_000_000,
+    eventCounter: 5,
+    payload: {
+      agent_id: 'agent-reviewer',
+      agent_name: 'Evidence reviewer',
+      parent_agent_id: 'agent-coordinator',
+      child_session_id: 'conversation-agent-reviewer',
+      task_summary: 'Review test evidence and artifact provenance.',
+    },
+  },
+  {
+    id: 'agent-investigator-spawned',
+    type: 'agent_spawned',
+    eventTimeUs: 1_784_282_046_000_000,
+    eventCounter: 6,
+    payload: {
+      agent_id: 'agent-investigator',
+      agent_name: 'Race investigator',
+      parent_agent_id: 'agent-coordinator',
+      child_session_id: 'conversation-agent-investigator',
+      task_summary: 'Reproduce the concurrent fixture race 50 times.',
+    },
+  },
+  {
+    id: 'agent-coordinator-message',
+    type: 'agent_message_sent',
+    eventTimeUs: 1_784_282_047_000_000,
+    eventCounter: 7,
+    payload: {
+      from_agent_id: 'agent-coordinator',
+      from_agent_name: 'Release coordinator',
+      to_agent_id: 'agent-reviewer',
+      to_agent_name: 'Evidence reviewer',
+      message_preview: 'Verify the report against the raw test output.',
+    },
+  },
+  {
+    id: 'agent-reviewer-completed',
+    type: 'agent_completed',
+    eventTimeUs: 1_784_282_048_000_000,
+    eventCounter: 8,
+    payload: {
+      agent_id: 'agent-reviewer',
+      session_id: 'conversation-agent-reviewer',
+      success: true,
+      result: 'All 18 checks have authoritative evidence.',
+      artifacts: ['release-verification.md'],
     },
   },
 ];
@@ -1827,6 +1896,7 @@ function SessionSteeringQa() {
   const suggestionsMode = searchParams.get('suggestions') === '1';
   const skillEventsMode = searchParams.get('skill-events') === '1';
   const subagentEventsMode = searchParams.get('subagent-events') === '1';
+  const multiAgentCanvasMode = searchParams.get('multi-agent-canvas') === '1';
   const memoryEventsMode = searchParams.get('memory-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
   const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
@@ -1897,6 +1967,11 @@ function SessionSteeringQa() {
   }, []);
   const [mcpAppHostMessage, setMCPAppHostMessage] = useState('');
   const [a2uiCanvasResponse, setA2UICanvasResponse] = useState('');
+  const [openedAgentSession, setOpenedAgentSession] = useState('');
+  const sessionAgentTree = useMemo(
+    () => buildSessionAgentTree(multiAgentCanvasMode ? multiAgentCanvasTimelineItems : []),
+    [multiAgentCanvasMode],
+  );
   const mcpAppHostApi = useMemo(
     () => ({
       callMCPAppTool: async (_appId: string, toolName: string) => ({
@@ -1922,6 +1997,8 @@ function SessionSteeringQa() {
           ? [...timelineState.items, suggestionTimelineItem]
           : skillEventsMode
             ? [...timelineState.items, ...skillTimelineItems]
+            : multiAgentCanvasMode
+              ? [...timelineState.items, ...multiAgentCanvasTimelineItems]
             : mcpAppEventsMode
               ? [...timelineState.items, ...mcpAppTimelineItems]
               : subagentEventsMode
@@ -2258,6 +2335,7 @@ function SessionSteeringQa() {
               activityPresence={
                 suggestionsMode ||
                 skillEventsMode ||
+                multiAgentCanvasMode ||
                 subagentEventsMode ||
                 memoryEventsMode ||
                 modelOverrideEventsMode ||
@@ -2378,7 +2456,17 @@ function SessionSteeringQa() {
             {workspaceLifecycleEventMode ? (
               <p data-testid="workspace-lifecycle-stream">{qaWorkspaceLifecycleSummary}</p>
             ) : null}
-            {mcpAppEventsMode ? (
+            {multiAgentCanvasMode ? (
+              <>
+                <SessionAgentsCanvas
+                  model={sessionAgentTree}
+                  onOpenSession={setOpenedAgentSession}
+                />
+                {openedAgentSession ? (
+                  <p data-testid="opened-agent-session">{openedAgentSession}</p>
+                ) : null}
+              </>
+            ) : mcpAppEventsMode ? (
               <>
                 <DesktopMCPAppCanvas
                   state={mcpAppCanvas}

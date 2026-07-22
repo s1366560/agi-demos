@@ -107,6 +107,7 @@ const testFiles = [
   'session-run-input-model.test.mjs',
   'session-terminal-model.test.mjs',
   'session-invocation-ledger-model.test.mjs',
+  'session-agent-tree-model.test.mjs',
   'session-narrative-model.test.mjs',
   'session-decision-model.test.mjs',
   'session-evidence-model.test.mjs',
