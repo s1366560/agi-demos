@@ -66,6 +66,7 @@ const testFiles = [
   'mcp-app-canvas-events.test.mjs',
   'mcp-app-host-bridge.test.mjs',
   'memory-timeline-model.test.mjs',
+  'skill-timeline-group-model.test.mjs',
   'cloud-session-queue-qa.test.mjs',
   'conversation-title-events.test.mjs',
   'desktop-shell-fidelity.test.mjs',

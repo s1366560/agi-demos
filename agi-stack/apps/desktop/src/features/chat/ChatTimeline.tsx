@@ -69,6 +69,9 @@ import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import { MemoryTimelineEvent } from './MemoryTimelineCards';
 import { isMemoryTimelineEvent } from './memoryTimelineModel';
+import { SkillTimelineCard } from './SkillTimelineCard';
+import { groupSkillTimelineItems } from './skillTimelineGroupModel';
+import type { SkillTimelineGroup } from './skillTimelineGroupModel';
 import {
   MarkdownContent,
   NarrativeMessageFrame,
@@ -92,10 +95,18 @@ type TimelineSubAgentGroupNode = {
   group: SubAgentTimelineGroup;
 };
 
+type TimelineSkillGroupNode = {
+  kind: 'skill_group';
+  id: string;
+  items: AgentTimelineItem[];
+  group: SkillTimelineGroup;
+};
+
 type TimelinePresentationNode =
   | SessionNarrativeNode
   | TimelineActivityGroupNode
-  | TimelineSubAgentGroupNode;
+  | TimelineSubAgentGroupNode
+  | TimelineSkillGroupNode;
 
 type TimelineGroupNode = Exclude<TimelinePresentationNode, { kind: 'item' }>;
 
@@ -278,6 +289,25 @@ export function AgentTimeline({
                 {dayDivider}
                 <SubAgentGroupView
                   group={node.group}
+                  expanded={open}
+                  onToggle={() => setGroupOpen(node.items, !open)}
+                  anchorId={groupId}
+                />
+              </Fragment>
+            );
+          }
+          if (node.kind === 'skill_group') {
+            const groupId = timelineGroupIdentity(narrative, index);
+            const open = timelineGroupOpen(
+              node.items,
+              expandedGroupItems,
+              node.group.status === 'matched' || node.group.status === 'executing',
+            );
+            return (
+              <Fragment key={groupId}>
+                {dayDivider}
+                <SkillTimelineCard
+                  skill={node.group}
                   expanded={open}
                   onToggle={() => setGroupOpen(node.items, !open)}
                   anchorId={groupId}
@@ -1049,13 +1079,17 @@ function subAgentStatusTone(status: SubAgentTimelineGroup['status']): 'ok' | 'er
 function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePresentationNode[] {
   const grouped: TimelinePresentationNode[] = [];
   let activityItems: AgentTimelineItem[] = [];
-  const subagentGrouping = groupSubAgentTimelineItems(
-    narrative.flatMap((node) => (node.kind === 'item' ? [node.item] : [])),
-  );
+  const itemNodes = narrative.flatMap((node) => (node.kind === 'item' ? [node.item] : []));
+  const subagentGrouping = groupSubAgentTimelineItems(itemNodes);
   const subagentGroupsByStartItem = new Map(
     subagentGrouping.groups.map((group) => [group.startItemId, group]),
   );
   const claimedSubagentItemIds = new Set(subagentGrouping.claimedItemIds);
+  const skillGrouping = groupSkillTimelineItems(itemNodes);
+  const skillGroupsByStartItem = new Map(
+    skillGrouping.groups.map((group) => [group.startItemId, group]),
+  );
+  const claimedSkillItemIds = new Set(skillGrouping.claimedItemIds);
 
   const flushActivityItems = () => {
     if (!activityItems.length) return;
@@ -1074,6 +1108,18 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
       return;
     }
     if (node.kind === 'item') {
+      const skillGroup = skillGroupsByStartItem.get(node.item.id);
+      if (skillGroup) {
+        flushActivityItems();
+        grouped.push({
+          kind: 'skill_group',
+          id: skillGroup.id,
+          items: skillGroup.items,
+          group: skillGroup,
+        });
+        return;
+      }
+      if (claimedSkillItemIds.has(node.item.id)) return;
       const subagentGroup = subagentGroupsByStartItem.get(node.item.id);
       if (subagentGroup) {
         flushActivityItems();

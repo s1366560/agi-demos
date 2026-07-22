@@ -489,6 +489,147 @@ const subagentTimelineItems: ConversationTimelineState['items'] = [
   },
 ];
 
+const skillTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'skill-release-match',
+    type: 'skill_matched',
+    eventTimeUs: 1_784_282_044_000_000,
+    eventCounter: 4,
+    payload: {
+      skill_id: 'release-guard',
+      skill_name: 'Release guard',
+      tools: ['read_file', 'shell_command'],
+      match_score: 0.96,
+      execution_mode: 'direct',
+    },
+  },
+  {
+    id: 'skill-release-start',
+    type: 'skill_execution_start',
+    eventTimeUs: 1_784_282_045_000_000,
+    eventCounter: 5,
+    payload: {
+      skill_id: 'release-guard',
+      skill_name: 'Release guard',
+      query: 'Run release checks and preserve the evidence.',
+      total_steps: 2,
+    },
+  },
+  {
+    id: 'skill-release-tool-start',
+    type: 'skill_tool_start',
+    eventTimeUs: 1_784_282_046_000_000,
+    eventCounter: 6,
+    payload: {
+      skill_id: 'release-guard',
+      skill_name: 'Release guard',
+      tool_name: 'shell_command',
+      tool_input: { command: 'pnpm test' },
+      step_index: 1,
+      total_steps: 2,
+      status: 'running',
+    },
+  },
+  {
+    id: 'skill-release-tool-result',
+    type: 'skill_tool_result',
+    eventTimeUs: 1_784_282_047_000_000,
+    eventCounter: 7,
+    payload: {
+      skill_id: 'release-guard',
+      skill_name: 'Release guard',
+      tool_name: 'shell_command',
+      result: 'All release checks passed',
+      duration_ms: 812,
+      step_index: 1,
+      total_steps: 2,
+      status: 'completed',
+    },
+  },
+  {
+    id: 'skill-release-complete',
+    type: 'skill_execution_complete',
+    eventTimeUs: 1_784_282_048_000_000,
+    eventCounter: 8,
+    payload: {
+      skill_id: 'release-guard',
+      skill_name: 'Release guard',
+      success: true,
+      summary: 'Release checks passed with complete evidence.',
+      tool_results: [
+        { tool_name: 'read_file', status: 'completed' },
+        { tool_name: 'shell_command', status: 'completed' },
+      ],
+      execution_time_ms: 1240,
+    },
+  },
+  {
+    id: 'skill-audit-match',
+    type: 'skill_matched',
+    eventTimeUs: 1_784_282_049_000_000,
+    eventCounter: 9,
+    payload: {
+      skill_id: 'dependency-auditor',
+      skill_name: 'Dependency auditor',
+      tools: ['dependency_scan'],
+      match_score: 0.87,
+      execution_mode: 'prompt',
+    },
+  },
+  {
+    id: 'skill-audit-fallback',
+    type: 'skill_fallback',
+    eventTimeUs: 1_784_282_050_000_000,
+    eventCounter: 10,
+    payload: {
+      skill_id: 'dependency-auditor',
+      skill_name: 'Dependency auditor',
+      reason: 'runtime_unavailable',
+      error: 'The managed scanner is temporarily unavailable.',
+    },
+  },
+  {
+    id: 'skill-research-match',
+    type: 'skill_matched',
+    eventTimeUs: 1_784_282_051_000_000,
+    eventCounter: 11,
+    payload: {
+      skill_id: 'source-research',
+      skill_name: 'Source research',
+      tools: ['search', 'read_page', 'summarize'],
+      match_score: 0.91,
+      execution_mode: 'forced',
+    },
+  },
+  {
+    id: 'skill-research-start',
+    type: 'skill_execution_start',
+    eventTimeUs: 1_784_282_052_000_000,
+    eventCounter: 12,
+    payload: {
+      skill_id: 'source-research',
+      skill_name: 'Source research',
+      query: 'Confirm the release behavior against primary sources.',
+      total_steps: 3,
+    },
+  },
+  {
+    id: 'skill-research-tool-start',
+    type: 'skill_tool_start',
+    eventTimeUs: 1_784_282_053_000_000,
+    eventCounter: 13,
+    payload: {
+      skill_id: 'source-research',
+      skill_name: 'Source research',
+      tool_name: 'search',
+      tool_input: { query: 'release behavior primary source' },
+      step_index: 0,
+      total_steps: 3,
+      status: 'running',
+    },
+  },
+];
+
 const memoryTimelineItems: ConversationTimelineState['items'] = [
   {
     id: 'memory-release-context',
@@ -1659,6 +1800,7 @@ function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
+  const skillEventsMode = searchParams.get('skill-events') === '1';
   const subagentEventsMode = searchParams.get('subagent-events') === '1';
   const memoryEventsMode = searchParams.get('memory-events') === '1';
   const modelOverrideEventsMode = searchParams.get('model-override-events') === '1';
@@ -1750,10 +1892,12 @@ function SessionSteeringQa() {
         ? anchorTimelineItems
         : suggestionsMode
           ? [...timelineState.items, suggestionTimelineItem]
-          : subagentEventsMode
-            ? [...timelineState.items, ...subagentTimelineItems]
-            : memoryEventsMode
-              ? [...timelineState.items, ...memoryTimelineItems]
+          : skillEventsMode
+            ? [...timelineState.items, ...skillTimelineItems]
+            : subagentEventsMode
+              ? [...timelineState.items, ...subagentTimelineItems]
+              : memoryEventsMode
+                ? [...timelineState.items, ...memoryTimelineItems]
               : modelOverrideEventsMode
                 ? [...timelineState.items, ...modelOverrideTimelineItems]
             : llmRuntimeEventsMode
@@ -2083,6 +2227,7 @@ function SessionSteeringQa() {
               }
               activityPresence={
                 suggestionsMode ||
+                skillEventsMode ||
                 subagentEventsMode ||
                 memoryEventsMode ||
                 modelOverrideEventsMode ||
