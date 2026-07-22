@@ -161,6 +161,7 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
     return t('chat.chain');
   }
   if (lifecycle?.family === 'background') return t('chat.background');
+  if (lifecycle?.family === 'retry') return t('chat.retrying');
   if (lifecycle?.family === 'routing') return t('chat.routingDecision');
   if (lifecycle?.family === 'selection') return t('chat.toolSelection');
   if (lifecycle?.family === 'policy') return t('chat.toolPolicy');

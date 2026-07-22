@@ -261,6 +261,43 @@ const suggestionTimelineItem: ConversationTimelineState['items'][number] = {
   },
 };
 
+const llmRuntimeTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'llm-runtime-assistant',
+    type: 'assistant_message',
+    eventTimeUs: 1_784_282_046_000_000,
+    eventCounter: 6,
+    role: 'assistant',
+    content: 'The release verification completed after the provider recovered.',
+    metadata: {
+      executionSummary: {
+        stepCount: 4,
+        totalCost: 0.006,
+        totalCostFormatted: '$0.006000',
+        totalTokens: { total: 1_600 },
+      },
+      costTracking: {
+        inputTokens: 1_200,
+        outputTokens: 400,
+        totalTokens: 1_600,
+        costUsd: 0.006,
+        model: 'gpt-5.5',
+      },
+    },
+  },
+  {
+    id: 'llm-runtime-retry',
+    type: 'retry',
+    eventTimeUs: 1_784_282_047_000_000,
+    eventCounter: 7,
+    payload: {
+      attempt: 2,
+      delay_ms: 1_500,
+      message: 'Provider rate limit',
+    },
+  },
+];
+
 const runtimeInfrastructureTimelineItems: ConversationTimelineState['items'] = [
   {
     id: 'sandbox-runtime-created',
@@ -704,6 +741,7 @@ function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
   const suggestionsMode = searchParams.get('suggestions') === '1';
+  const llmRuntimeEventsMode = searchParams.get('llm-runtime-events') === '1';
   const runtimeEventsMode = searchParams.get('runtime-events') === '1';
   const httpServiceEventsMode = searchParams.get('http-service-events') === '1';
   const doomLoopEventsMode = searchParams.get('doom-loop-events') === '1';
@@ -755,6 +793,8 @@ function SessionSteeringQa() {
         ? anchorTimelineItems
         : suggestionsMode
           ? [...timelineState.items, suggestionTimelineItem]
+          : llmRuntimeEventsMode
+            ? [...timelineState.items, ...llmRuntimeTimelineItems]
           : runtimeEventsMode
             ? [...timelineState.items, ...runtimeInfrastructureTimelineItems]
             : httpServiceEventsMode
@@ -946,6 +986,7 @@ function SessionSteeringQa() {
               }
               activityPresence={
                 suggestionsMode ||
+                llmRuntimeEventsMode ||
                 runtimeEventsMode ||
                 httpServiceEventsMode ||
                 doomLoopEventsMode ||

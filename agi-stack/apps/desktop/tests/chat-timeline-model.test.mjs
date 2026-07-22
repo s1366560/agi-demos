@@ -15,6 +15,7 @@ const {
   mergeArtifactStreamItem,
   mergeAssistantTextStreamChunk,
   mergeAssistantCompletionEvent,
+  mergeCostUpdateEvent,
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
   pairToolCallItems,
@@ -148,6 +149,105 @@ test('live Agent complete events preserve final content and execution summary me
   assert.match(appSource, /type === 'complete'[\s\S]*?mergeAssistantCompletionEvent\(/);
   assert.match(appSource, /objectField\(data, 'execution_summary'\)/);
   assert.match(appSource, /readTextField\(data, 'content'\)/);
+});
+
+test('cost updates merge into the current Agent reply without losing execution summary fields', () => {
+  const existing = [
+    {
+      id: 'user-cost-1',
+      type: 'user_message',
+      role: 'user',
+      content: 'Run the verification',
+      eventTimeUs: 1_000_000,
+      eventCounter: 1,
+    },
+    {
+      id: 'assistant-cost-1',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Verification complete',
+      eventTimeUs: 2_000_000,
+      eventCounter: 2,
+      metadata: {
+        streaming: false,
+        executionSummary: { step_count: 4, artifact_count: 1 },
+      },
+    },
+  ];
+
+  const merged = mergeCostUpdateEvent(existing, {
+    cost_usd: 0.0042,
+    total_tokens: 900,
+    input_tokens: 700,
+    output_tokens: 200,
+    model: 'gpt-5.5',
+  });
+
+  assert.notEqual(merged, existing);
+  assert.equal(merged.length, 2);
+  assert.deepEqual(assistantExecutionSummary(merged[1]), {
+    stepCount: 4,
+    artifactCount: 1,
+    callCount: 0,
+    totalCost: 0.0042,
+    totalCostFormatted: '$0.004200',
+    totalTokens: 900,
+    tasks: null,
+  });
+  assert.deepEqual(merged[1].metadata.costTracking, {
+    inputTokens: 700,
+    outputTokens: 200,
+    totalTokens: 900,
+    costUsd: 0.0042,
+    model: 'gpt-5.5',
+  });
+});
+
+test('cost updates accept domain token maps, prefer cumulative totals, and avoid phantom rows', () => {
+  const existing = [
+    {
+      id: 'assistant-cost-2',
+      type: 'assistant_message',
+      role: 'assistant',
+      content: 'Done',
+      eventTimeUs: 3_000_000,
+      eventCounter: 3,
+    },
+  ];
+  const merged = mergeCostUpdateEvent(existing, {
+    cost: 0.001,
+    cumulative_cost_usd: 0.006,
+    tokens: { input: 800, output: 200, total: 1_000 },
+    cumulative_tokens: 1_600,
+  });
+
+  assert.equal(assistantExecutionSummary(merged[0]).totalCost, 0.006);
+  assert.equal(assistantExecutionSummary(merged[0]).totalTokens, 1_600);
+  assert.equal(mergeCostUpdateEvent([], { cost: 0.001, tokens: { total: 100 } }).length, 0);
+  assert.match(appSource, /type === 'cost_update'[\s\S]*?mergeCostUpdateEvent\(/);
+});
+
+test('LLM retry events expose an explicit waiting lifecycle instead of a raw generic event', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'retry-1',
+      type: 'retry',
+      eventTimeUs: 4_000_000,
+      eventCounter: 4,
+      payload: {
+        attempt: 2,
+        delay_ms: 1_500,
+        message: 'Provider rate limit',
+      },
+    }),
+    {
+      family: 'retry',
+      state: 'waiting',
+      subject: '2',
+      detail: 'Provider rate limit',
+      isError: false,
+    },
+  );
 });
 
 test('subagent lifecycle events expose readable subjects, details, and protocol states', () => {

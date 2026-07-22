@@ -102,6 +102,7 @@ import {
   mergeArtifactStreamItem,
   mergeAssistantCompletionEvent,
   mergeAssistantTextStreamChunk,
+  mergeCostUpdateEvent,
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
 } from './features/chat/chatTimelineModel';
@@ -849,6 +850,10 @@ function mergeLiveTimelineEvent(
   if (!event || typeof event !== 'object') return existing;
   const payload = event as Record<string, unknown>;
   const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
+  if (type === 'cost_update') {
+    const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
+    return mergeCostUpdateEvent(existing, data);
+  }
   if (type === 'text_start' || type === 'text_delta' || type === 'text_end') {
     return mergeStreamingTextEvent(existing, payload, type);
   }

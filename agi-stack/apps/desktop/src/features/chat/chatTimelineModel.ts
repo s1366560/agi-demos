@@ -329,6 +329,74 @@ export function mergeAssistantCompletionEvent(
   ]);
 }
 
+/**
+ * Fold a live cost event into the current assistant response. Cost events are
+ * response metadata, not standalone narrative rows, and may arrive in either
+ * the websocket aggregate shape or the domain event token-map shape.
+ */
+export function mergeCostUpdateEvent(
+  existing: AgentTimelineItem[],
+  data: Record<string, unknown>,
+): AgentTimelineItem[] {
+  const targetIndex = findCurrentTurnAssistantIndex(existing);
+  if (targetIndex < 0) return existing;
+
+  const tokens = isRecord(data.tokens) ? data.tokens : null;
+  const inputTokens =
+    optionalFiniteNumber(data.inputTokens ?? data.input_tokens) ??
+    optionalFiniteNumber(tokens?.input) ??
+    0;
+  const outputTokens =
+    optionalFiniteNumber(data.outputTokens ?? data.output_tokens) ??
+    optionalFiniteNumber(tokens?.output) ??
+    0;
+  const totalTokens =
+    optionalFiniteNumber(data.cumulativeTokens ?? data.cumulative_tokens) ??
+    optionalFiniteNumber(data.totalTokens ?? data.total_tokens) ??
+    optionalFiniteNumber(tokens?.total) ??
+    inputTokens + outputTokens;
+  const costUsd =
+    optionalFiniteNumber(data.cumulativeCostUsd ?? data.cumulative_cost_usd) ??
+    optionalFiniteNumber(data.costUsd ?? data.cost_usd) ??
+    optionalFiniteNumber(data.cost) ??
+    0;
+  const model = typeof data.model === 'string' ? data.model : '';
+
+  return existing.map((item, index) => {
+    if (index !== targetIndex) return item;
+    const metadata = isRecord(item.metadata) ? item.metadata : {};
+    const rawSummary = isRecord(metadata.executionSummary)
+      ? metadata.executionSummary
+      : isRecord(metadata.execution_summary)
+        ? metadata.execution_summary
+        : {};
+    const rawTotalTokens = isRecord(rawSummary.totalTokens)
+      ? rawSummary.totalTokens
+      : isRecord(rawSummary.total_tokens)
+        ? rawSummary.total_tokens
+        : {};
+    return {
+      ...item,
+      metadata: {
+        ...metadata,
+        executionSummary: {
+          ...rawSummary,
+          totalCost: costUsd,
+          totalCostFormatted: `$${costUsd.toFixed(6)}`,
+          totalTokens: { ...rawTotalTokens, total: totalTokens },
+        },
+        costTracking: {
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          costUsd,
+          model,
+        },
+      },
+    };
+  });
+}
+
 export function assistantExecutionSummary(
   item: AgentTimelineItem,
 ): AgentExecutionSummary | null {
@@ -753,6 +821,10 @@ function nonNegativeInteger(value: unknown): number | null {
 
 function finiteNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function optionalFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function recordNumber(

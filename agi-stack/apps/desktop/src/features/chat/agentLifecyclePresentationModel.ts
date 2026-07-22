@@ -28,7 +28,8 @@ export type AgentLifecycleFamily =
   | 'httpService'
   | 'graphRun'
   | 'graphNode'
-  | 'graphHandoff';
+  | 'graphHandoff'
+  | 'retry';
 
 export type AgentLifecycleState =
   | 'running'
@@ -69,6 +70,7 @@ const lifecycleEventDefinitions: Record<
   string,
   { family: AgentLifecycleFamily; state: AgentLifecycleState; detailFields?: string[] }
 > = {
+  retry: { family: 'retry', state: 'waiting', detailFields: ['message'] },
   subagent_spawning: { family: 'subagent', state: 'running' },
   subagent_routed: {
     family: 'subagent',
@@ -444,6 +446,10 @@ export function agentLifecyclePresentation(
 }
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
+  if (family === 'retry') {
+    const attempt = timelineEventNumber(item, ['attempt']);
+    return attempt === null ? '' : String(attempt);
+  }
   if (isRuntimeInfrastructureFamily(family)) {
     if (family === 'httpService') {
       return (

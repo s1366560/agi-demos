@@ -169,6 +169,7 @@ test('chat copy and diagnostics are localized in both supported locales', () => 
     'chat.copyMessage',
     'chat.status.waitingForInput',
     'chat.status.blocked',
+    'chat.retrying',
     'chat.routingDecision',
     'chat.toolSelection',
     'chat.toolPolicy',
