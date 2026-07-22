@@ -155,6 +155,10 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
     return t('chat.chain');
   }
   if (lifecycle?.family === 'background') return t('chat.background');
+  if (lifecycle?.family === 'routing') return t('chat.routingDecision');
+  if (lifecycle?.family === 'selection') return t('chat.toolSelection');
+  if (lifecycle?.family === 'policy') return t('chat.toolPolicy');
+  if (lifecycle?.family === 'toolset') return t('chat.toolsetChange');
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
@@ -246,6 +250,9 @@ export function timelineStatus(item: AgentTimelineItem): TimelineStatus | null {
     }
     if (lifecycle.state === 'received') {
       return { kind: 'ok', label: 'chat.status.received', localized: true };
+    }
+    if (lifecycle.state === 'blocked') {
+      return { kind: 'waiting', label: 'chat.status.blocked', localized: true };
     }
     if (lifecycle.state === 'stopped') {
       return { kind: 'waiting', label: 'chat.status.stopped', localized: true };

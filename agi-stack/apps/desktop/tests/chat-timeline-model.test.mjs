@@ -507,6 +507,142 @@ test('background launch exposes the assigned SubAgent and task for both protocol
   );
 });
 
+test('execution governance events expose routing, selection, and policy semantics', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'execution-path-decided-1',
+      type: 'execution_path_decided',
+      eventTimeUs: 18_000_000,
+      eventCounter: 1,
+      payload: {
+        path: 'react_loop',
+        confidence: 0.92,
+        reason: 'Complex task requires tools',
+        target: 'workspace-agent',
+      },
+    }),
+    {
+      family: 'routing',
+      state: 'complete',
+      subject: 'react_loop → workspace-agent',
+      detail: 'Complex task requires tools',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'selection-trace-1',
+      type: 'selection_trace',
+      eventTimeUs: 19_000_000,
+      eventCounter: 2,
+      domainLane: 'code',
+      initialCount: 12,
+      finalCount: 4,
+      removedTotal: 8,
+      budgetExceededStages: ['semantic_ranker_stage'],
+    }),
+    {
+      family: 'selection',
+      state: 'complete',
+      subject: 'code',
+      detail: 'semantic_ranker_stage',
+      isError: false,
+      progress: { unit: 'tools', current: 4, total: 12 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'policy-filtered-1',
+      type: 'policy_filtered',
+      eventTimeUs: 20_000_000,
+      eventCounter: 3,
+      payload: {
+        domain_lane: 'code',
+        removed_total: 3,
+        stage_count: 2,
+        budget_exceeded_stages: ['semantic_ranker_stage'],
+      },
+    }),
+    {
+      family: 'policy',
+      state: 'attention',
+      subject: 'code',
+      detail: 'semantic_ranker_stage',
+      isError: false,
+      progress: { unit: 'filteredTools', total: 3 },
+    },
+  );
+});
+
+test('tool policy denial and toolset refresh expose blocked and failure states', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'tool-policy-denied-1',
+      type: 'tool_policy_denied',
+      eventTimeUs: 21_000_000,
+      eventCounter: 1,
+      payload: {
+        agent_id: 'agent-main',
+        tool_name: 'shell_command',
+        policy_layer: 'workspace',
+        denial_reason: 'Requires approval',
+      },
+    }),
+    {
+      family: 'policy',
+      state: 'blocked',
+      subject: 'shell_command',
+      detail: 'Requires approval',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'toolset-changed-1',
+      type: 'toolset_changed',
+      eventTimeUs: 22_000_000,
+      eventCounter: 2,
+      payload: {
+        source: 'plugin_manager',
+        plugin_name: 'github',
+        action: 'install',
+        refresh_status: 'success',
+        refreshed_tool_count: 3,
+      },
+    }),
+    {
+      family: 'toolset',
+      state: 'complete',
+      subject: 'github',
+      detail: 'install',
+      isError: false,
+      progress: { unit: 'tools', total: 3 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'toolset-changed-failed-1',
+      type: 'toolset_changed',
+      eventTimeUs: 23_000_000,
+      eventCounter: 3,
+      source: 'register_mcp_server',
+      serverName: 'release-tools',
+      refreshStatus: 'failed',
+    }),
+    {
+      family: 'toolset',
+      state: 'failed',
+      subject: 'release-tools',
+      detail: 'register_mcp_server',
+      isError: true,
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',

@@ -8,6 +8,10 @@ export type AgentLifecycleFamily =
   | 'chain'
   | 'chainStep'
   | 'background'
+  | 'routing'
+  | 'selection'
+  | 'policy'
+  | 'toolset'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -20,6 +24,7 @@ export type AgentLifecycleState =
   | 'attention'
   | 'sent'
   | 'received'
+  | 'blocked'
   | 'stopped';
 
 export type AgentLifecyclePresentation = {
@@ -29,7 +34,7 @@ export type AgentLifecyclePresentation = {
   detail: string;
   isError: boolean;
   progress?: {
-    unit: 'tasks' | 'steps';
+    unit: 'tasks' | 'steps' | 'tools' | 'filteredTools';
     current?: number;
     total: number;
   };
@@ -192,6 +197,19 @@ const lifecycleEventDefinitions: Record<
     state: 'running',
     detailFields: ['task', 'task_description', 'taskDescription'],
   },
+  execution_path_decided: {
+    family: 'routing',
+    state: 'complete',
+    detailFields: ['reason'],
+  },
+  selection_trace: { family: 'selection', state: 'complete' },
+  policy_filtered: { family: 'policy', state: 'complete' },
+  tool_policy_denied: {
+    family: 'policy',
+    state: 'blocked',
+    detailFields: ['denial_reason', 'denialReason', 'policy_layer', 'policyLayer'],
+  },
+  toolset_changed: { family: 'toolset', state: 'complete' },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -249,6 +267,11 @@ export function agentLifecyclePresentation(
     state = 'failed';
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
+  } else if (
+    item.type === 'policy_filtered' &&
+    (timelineEventNumber(item, ['removed_total', 'removedTotal']) ?? 0) > 0
+  ) {
+    state = 'attention';
   }
 
   const subject = lifecycleSubject(item, definition.family);
@@ -265,6 +288,32 @@ export function agentLifecyclePresentation(
 }
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
+  if (family === 'routing') {
+    const path = timelineEventString(item, ['path']);
+    const target = timelineEventString(item, ['target']);
+    if (path && target) return `${path} → ${target}`;
+    return path ?? target ?? '';
+  }
+  if (family === 'selection') {
+    return timelineEventString(item, ['domain_lane', 'domainLane']) ?? '';
+  }
+  if (family === 'policy') {
+    if (item.type === 'tool_policy_denied') {
+      return timelineEventString(item, ['tool_name', 'toolName', 'agent_id', 'agentId']) ?? '';
+    }
+    return timelineEventString(item, ['domain_lane', 'domainLane']) ?? '';
+  }
+  if (family === 'toolset') {
+    const namedSubject = timelineEventString(item, [
+      'plugin_name',
+      'pluginName',
+      'server_name',
+      'serverName',
+      'skill_name',
+      'skillName',
+    ]);
+    return namedSubject ?? timelineEventString(item, ['source']) ?? '';
+  }
   if (family === 'parallel') {
     const sourceKey = item.type === 'parallel_started' ? 'subtasks' : 'results';
     const names = timelineEventRecordArray(item, [sourceKey]).flatMap((entry) => {
@@ -334,6 +383,20 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 }
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
+  if (item.type === 'selection_trace' || item.type === 'policy_filtered') {
+    return timelineEventStringArray(item, [
+      'budget_exceeded_stages',
+      'budgetExceededStages',
+    ]).join(', ');
+  }
+  if (item.type === 'toolset_changed') {
+    const subject = lifecycleSubject(item, 'toolset');
+    return (
+      timelineEventString(item, ['action']) ??
+      (subject ? timelineEventString(item, ['source']) : null) ??
+      ''
+    );
+  }
   if (item.type === 'parallel_completed') {
     const failedAgents = timelineEventStringArray(item, ['failed_agents', 'failedAgents']);
     if (failedAgents.length) return failedAgents.join(', ');
@@ -361,6 +424,25 @@ function lifecycleProgress(
   item: AgentTimelineItem,
   family: AgentLifecycleFamily,
 ): AgentLifecyclePresentation['progress'] {
+  if (family === 'selection') {
+    const total = timelineEventNumber(item, ['initial_count', 'initialCount']);
+    const current = timelineEventNumber(item, ['final_count', 'finalCount']);
+    if (total === null) return undefined;
+    return current === null
+      ? { unit: 'tools', total }
+      : { unit: 'tools', current, total };
+  }
+  if (family === 'policy' && item.type === 'policy_filtered') {
+    const total = timelineEventNumber(item, ['removed_total', 'removedTotal']);
+    return total === null ? undefined : { unit: 'filteredTools', total };
+  }
+  if (family === 'toolset') {
+    const total = timelineEventNumber(item, [
+      'refreshed_tool_count',
+      'refreshedToolCount',
+    ]);
+    return total === null ? undefined : { unit: 'tools', total };
+  }
   if (family === 'parallel') {
     const recordCount = timelineEventRecordArray(item, [
       item.type === 'parallel_started' ? 'subtasks' : 'results',
@@ -408,6 +490,9 @@ function lifecycleProgress(
 
 function lifecycleFailed(item: AgentTimelineItem): boolean {
   if (timelineEventBoolean(item, 'success') === false) return true;
+  if (item.type === 'toolset_changed') {
+    return timelineEventString(item, ['refresh_status', 'refreshStatus']) === 'failed';
+  }
   if (item.type !== 'parallel_completed') return false;
 
   const resultStates = timelineEventRecordArray(item, ['results']).flatMap((result) =>
