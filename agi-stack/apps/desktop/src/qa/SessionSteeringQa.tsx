@@ -14,11 +14,16 @@ import {
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import type { ComposerCatalogClient } from '../features/chat/ComposerPlusMenu';
+import {
+  applyConversationTitleUpdate,
+  readConversationTitleStreamEvent,
+} from '../features/chat/conversationTitleEventModel';
 import { applyHitlResponseStreamEvent } from '../features/chat/hitlResponseEventModel';
 import { SessionChangesCanvas } from '../features/session/SessionChangesCanvas';
 import { toggleRunInputReference } from '../features/session/sessionChangesModel';
 import { I18nProvider } from '../i18n';
 import type {
+  AgentConversation,
   ChangeSnapshot,
   CodeRangeReference,
   ConversationTimelineState,
@@ -519,6 +524,27 @@ const hitlResponseEvents = [
   },
 ];
 
+const titleGeneratedEvent = {
+  type: 'title_generated',
+  data: {
+    conversation_id: 'conversation-desktop-session',
+    title: 'Verify cloud session startup',
+    generated_at: '2026-07-22T08:00:00Z',
+  },
+};
+
+const qaConversation: AgentConversation = {
+  id: 'conversation-desktop-session',
+  project_id: 'project-desktop',
+  tenant_id: 'tenant-desktop',
+  user_id: 'user-desktop',
+  title: 'New Conversation',
+  status: 'active',
+  message_count: 2,
+  created_at: '2026-07-22T07:59:00Z',
+  workspace_id: 'workspace-desktop',
+};
+
 function SessionSteeringQa() {
   const searchParams = new URLSearchParams(window.location.search);
   const historyMode = searchParams.get('history');
@@ -529,11 +555,15 @@ function SessionSteeringQa() {
   const terminalEventsMode = searchParams.get('terminal-events') === '1';
   const agentDefinitionEventsMode = searchParams.get('agent-definition-events') === '1';
   const hitlResponseEventsMode = searchParams.get('hitl-response-events') === '1';
+  const titleEventsMode = searchParams.get('title-events') === '1';
   const [delivery, setDelivery] = useState<RunInputDelivery>('steer_now');
   const [references, setReferences] = useState<CodeRangeReference[]>([]);
   const [runInputs, setRunInputs] = useState<DesktopRunInput[]>([queuedInput]);
   const [model, setModel] = useState('gpt-5.5');
   const [switchingModel, setSwitchingModel] = useState(false);
+  const [qaConversations, setQaConversations] = useState<AgentConversation[]>(() => [
+    titleEventsMode ? qaConversation : { ...qaConversation, title: 'Session interaction redesign' },
+  ]);
   const [historyAttempt, setHistoryAttempt] = useState(0);
   const [timeline, setTimeline] = useState<ConversationTimelineState>(() => {
     const items =
@@ -583,6 +613,25 @@ function SessionSteeringQa() {
     }, 1800);
     return () => window.clearTimeout(timer);
   }, [hitlResponseEventsMode]);
+
+  useEffect(() => {
+    if (!titleEventsMode) return;
+    const timer = window.setTimeout(() => {
+      const titleEvent = readConversationTitleStreamEvent(titleGeneratedEvent);
+      const update = titleEvent.update;
+      if (!update) return;
+      setQaConversations((current) =>
+        applyConversationTitleUpdate(
+          null,
+          { 'workspace-desktop': current },
+          update,
+        ).conversationsByWorkspace['workspace-desktop'] ?? current,
+      );
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [titleEventsMode]);
+
+  const qaConversationTitle = qaConversations[0]?.title ?? 'Conversation';
 
   const loadEarlierHistory = () => {
     setTimeline((current) => ({ ...current, loadingEarlier: true, error: null }));
@@ -657,13 +706,21 @@ function SessionSteeringQa() {
           <section>
             <span>WORKSPACE</span>
             <button type="button"><CubeIcon /> Desktop Client</button>
-            <button type="button" className="selected"><ChatBubbleIcon /> Session interaction redesign</button>
+            <button type="button" className="selected">
+              <ChatBubbleIcon /> {qaConversationTitle}
+            </button>
           </section>
           <button type="button"><GearIcon /> Settings</button>
         </aside>
         <main>
           <header className="session-steering-qa-titlebar">
-            <div><CodeIcon /><span><strong>Session interaction redesign</strong><small>Code · Build · Running</small></span></div>
+            <div>
+              <CodeIcon />
+              <span>
+                <strong>{qaConversationTitle}</strong>
+                <small>Code · Build · Running</small>
+              </span>
+            </div>
             <dl>
               <div><dt>Environment</dt><dd>Worktree</dd></div>
               <div><dt>Branch</dt><dd>agistack/desktop-session-42</dd></div>
@@ -673,12 +730,13 @@ function SessionSteeringQa() {
           <div className="session-steering-qa-content">
             <ChatPanel
               api={qaApi}
-              conversations={[]}
+              conversations={qaConversations}
+              selectedConversationId="conversation-desktop-session"
               messages={messages}
               timelineState={timeline}
               agentTaskSignals={[]}
               workflowCounts={{ changes: 2, plan: 'ready' }}
-              sessionTitle="Conversation"
+              sessionTitle={qaConversationTitle}
               scopeLabel="Current run narrative"
               composerVariant="session"
               composerResetKey="qa-session-steering"
@@ -690,7 +748,8 @@ function SessionSteeringQa() {
                 runtimeEventsMode ||
                 httpServiceEventsMode ||
                 doomLoopEventsMode ||
-                hitlResponseEventsMode
+                hitlResponseEventsMode ||
+                titleEventsMode
                   ? 'recorded'
                   : 'live'
               }

@@ -20,6 +20,7 @@
     "src/features/chat/agentLifecyclePresentationModel.ts",
     "src/features/chat/chatComposerModel.ts",
     "src/features/chat/chatTimelineModel.ts",
+    "src/features/chat/conversationTitleEventModel.ts",
     "src/features/chat/hitlResponseEventModel.ts",
     "src/hooks/useAgentSocket.ts",
     "src/hooks/useTerminalProxy.ts",

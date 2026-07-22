@@ -87,6 +87,10 @@ import {
   workspaceMessageRequiresDefaultAgentLaunch,
 } from './features/chat/chatComposerModel';
 import {
+  applyConversationTitleUpdate,
+  readConversationTitleStreamEvent,
+} from './features/chat/conversationTitleEventModel';
+import {
   mergeArtifactStreamItem,
   mergeAssistantCompletionEvent,
   mergeAssistantTextStreamChunk,
@@ -891,6 +895,8 @@ function mergeLiveTimelineEvent(
       payload: data,
     });
   }
+  const titleEvent = readConversationTitleStreamEvent(event);
+  if (titleEvent.handled) return existing;
   const hitlResponse = applyHitlResponseStreamEvent(existing, event);
   if (hitlResponse.handled) return hitlResponse.items;
   const timeline = existing;
@@ -1652,6 +1658,7 @@ export function App() {
   const sessionProjectionRefreshTimerRef = useRef<number | null>(null);
   const agentTaskEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const sessionEventsHeadRef = useRef<AgentWsEvent | null>(null);
+  const conversationMetadataEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const authoritativeRunEventsHeadRef = useRef<AgentWsEvent | null>(null);
   const myWorkRequestRef = useRef(0);
   const myWorkAbortRef = useRef<AbortController | null>(null);
@@ -2616,6 +2623,29 @@ export function App() {
     },
     [scopedConversationId],
   );
+
+  useEffect(() => {
+    const events = socketEventsSince(socket.events, conversationMetadataEventsHeadRef.current);
+    conversationMetadataEventsHeadRef.current = socket.events[0] ?? null;
+    for (const event of events) {
+      const titleEvent = readConversationTitleStreamEvent(event);
+      const update = titleEvent.update;
+      if (!update) continue;
+      setAgentConversationSession((current) =>
+        applyConversationTitleUpdate(current, {}, update).session,
+      );
+      updateDataset((current) => {
+        const conversationsByWorkspace = applyConversationTitleUpdate(
+          null,
+          current.conversationsByWorkspace,
+          update,
+        ).conversationsByWorkspace;
+        return conversationsByWorkspace === current.conversationsByWorkspace
+          ? current
+          : { ...current, conversationsByWorkspace };
+      });
+    }
+  }, [socket.events, updateDataset]);
 
   useEffect(() => {
     const events = socketEventsSince(socket.events, authoritativeRunEventsHeadRef.current);

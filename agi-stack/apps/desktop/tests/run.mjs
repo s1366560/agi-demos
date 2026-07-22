@@ -63,6 +63,7 @@ const testFiles = [
   'chat-narrative-presentation.test.mjs',
   'chat-timeline-model.test.mjs',
   'cloud-session-queue-qa.test.mjs',
+  'conversation-title-events.test.mjs',
   'desktop-shell-fidelity.test.mjs',
   'desktop-a11y-i18n.test.mjs',
   'hitl-response-events.test.mjs',
