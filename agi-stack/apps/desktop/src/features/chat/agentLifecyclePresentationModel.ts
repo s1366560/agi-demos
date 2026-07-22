@@ -21,6 +21,7 @@ export type AgentLifecycleFamily =
   | 'agentGovernance'
   | 'agentAudit'
   | 'workspaceOrchestration'
+  | 'taskRecovery'
   | 'agentDefinition'
   | 'skill'
   | 'model'
@@ -397,6 +398,22 @@ const lifecycleEventDefinitions: Record<
     state: 'complete',
     detailFields: ['final_status', 'finalStatus'],
   },
+  task_execution_session_updated: {
+    family: 'taskRecovery',
+    state: 'running',
+  },
+  task_execution_incident_opened: {
+    family: 'taskRecovery',
+    state: 'attention',
+  },
+  task_recovery_action_started: {
+    family: 'taskRecovery',
+    state: 'running',
+  },
+  task_recovery_action_completed: {
+    family: 'taskRecovery',
+    state: 'complete',
+  },
   mcp_app_registered: { family: 'mcpApp', state: 'ready' },
   mcp_app_result: { family: 'mcpApp', state: 'complete' },
   memory_recalled: { family: 'memory', state: 'complete' },
@@ -527,6 +544,19 @@ export function agentLifecyclePresentation(
     explicitStatus !== 'healthy'
   ) {
     state = 'attention';
+  } else if (item.type === 'task_execution_session_updated') {
+    const health = timelineEventString(item, ['health']);
+    if (health === 'healthy') state = 'ready';
+    if (health === 'blocked') state = 'blocked';
+    if (health === 'warning' || health === 'degraded') state = 'attention';
+  } else if (item.type === 'task_execution_incident_opened') {
+    const severity = timelineEventRecordString(item, ['incident'], ['severity']);
+    state = severity === 'error' ? 'failed' : 'attention';
+  } else if (
+    item.type === 'task_recovery_action_completed' &&
+    explicitStatus === 'queued'
+  ) {
+    state = 'scheduled';
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   } else if (
@@ -652,6 +682,9 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
     ) {
       return timelineEventString(item, ['goal_id', 'goalId']) ?? '';
     }
+    return timelineEventString(item, ['task_id', 'taskId']) ?? '';
+  }
+  if (family === 'taskRecovery') {
     return timelineEventString(item, ['task_id', 'taskId']) ?? '';
   }
   if (family === 'agentDefinition') {
@@ -798,6 +831,39 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
 
 function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
   const lifecycle = lifecycleEventDefinitions[item.type];
+  if (item.type === 'task_execution_session_updated') {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['health']),
+        timelineEventString(item, ['session_status', 'sessionStatus']),
+        timelineEventString(item, [
+          'recommended_recovery_action',
+          'recommendedRecoveryAction',
+        ]),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
+  if (item.type === 'task_execution_incident_opened') {
+    return uniqueStrings(
+      [
+        timelineEventRecordString(item, ['incident'], ['type']),
+        timelineEventRecordString(item, ['incident'], ['severity']),
+        timelineEventRecordString(item, ['incident'], ['summary']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
+  if (
+    item.type === 'task_recovery_action_started' ||
+    item.type === 'task_recovery_action_completed'
+  ) {
+    return uniqueStrings(
+      [
+        timelineEventString(item, ['action']),
+        timelineEventString(item, ['status']),
+        timelineEventString(item, ['message']),
+      ].flatMap((value) => (value ? [value] : [])),
+    ).join(' · ');
+  }
   if (
     item.type === 'workspace_worker_dispatched' ||
     item.type === 'workspace_worker_report_submitted'

@@ -132,6 +132,22 @@ test('artifact batch events use artifact presentation instead of generic runtime
   assert.match(chatSource, /item\.type === 'artifacts_batch'[\s\S]*chat\.artifactsBatch/);
 });
 
+test('task recovery titles bypass the generic task event fallback', () => {
+  assert.match(chatSource, /!taskRecoveryEventTypes\.has\(item\.type\)/);
+  for (const eventType of [
+    'task_execution_session_updated',
+    'task_execution_incident_opened',
+    'task_recovery_action_started',
+    'task_recovery_action_completed',
+  ]) {
+    assert.match(chatSource, new RegExp(`'${eventType}'`));
+  }
+  assert.match(chatSource, /chat\.taskExecutionSessionUpdated/);
+  assert.match(chatSource, /chat\.taskExecutionIncidentOpened/);
+  assert.match(chatSource, /chat\.taskRecoveryActionStarted/);
+  assert.match(chatSource, /chat\.taskRecoveryActionCompleted/);
+});
+
 test('agent suggestions render as actionable follow-ups without becoming timeline log rows', () => {
   assert.match(chatSource, /latestAgentSuggestions\(/);
   assert.match(chatSource, /timelineItemsForDisplay\(/);

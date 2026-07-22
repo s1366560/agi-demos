@@ -1128,6 +1128,68 @@ const workspaceOrchestrationTimelineItems: ConversationTimelineState['items'] = 
   },
 ];
 
+const taskRecoveryTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'task-session-updated-release',
+    type: 'task_execution_session_updated',
+    eventTimeUs: 1_784_282_084_000_000,
+    eventCounter: 61,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-security-review',
+      health: 'degraded',
+      session_status: 'initialization_failed',
+      attempt_id: 'attempt-1',
+      recommended_recovery_action: 'new_attempt',
+    },
+  },
+  {
+    id: 'task-incident-opened-release',
+    type: 'task_execution_incident_opened',
+    eventTimeUs: 1_784_282_084_500_000,
+    eventCounter: 62,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-security-review',
+      conversation_id: 'conversation-desktop-session',
+      attempt_id: 'attempt-1',
+      incident: {
+        type: 'no_assistant_response',
+        severity: 'error',
+        summary: 'Conversation produced no assistant output.',
+      },
+    },
+  },
+  {
+    id: 'task-recovery-started-release',
+    type: 'task_recovery_action_started',
+    eventTimeUs: 1_784_282_085_000_000,
+    eventCounter: 63,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-security-review',
+      action: 'new_attempt',
+      status: 'queued',
+      message: 'Fresh worker attempt queued.',
+      attempt_id: 'attempt-1',
+    },
+  },
+  {
+    id: 'task-recovery-completed-release',
+    type: 'task_recovery_action_completed',
+    eventTimeUs: 1_784_282_085_500_000,
+    eventCounter: 64,
+    payload: {
+      workspace_id: 'workspace-desktop',
+      task_id: 'task-security-review',
+      action: 'new_attempt',
+      status: 'queued',
+      message: 'Fresh worker attempt queued.',
+      attempt_id: 'attempt-1',
+    },
+  },
+];
+
 const titleGeneratedEvent = {
   type: 'title_generated',
   data: {
@@ -1319,6 +1381,7 @@ function SessionSteeringQa() {
   const agentAuditEventsMode = searchParams.get('agent-audit-events') === '1';
   const workspaceOrchestrationEventsMode =
     searchParams.get('workspace-orchestration-events') === '1';
+  const taskRecoveryEventsMode = searchParams.get('task-recovery-events') === '1';
   const titleEventsMode = searchParams.get('title-events') === '1';
   const artifactCanvasEventsMode = searchParams.get('artifact-canvas-events') === '1';
   const mcpAppEventsMode = searchParams.get('mcp-app-events') === '1';
@@ -1416,6 +1479,11 @@ function SessionSteeringQa() {
                                                         ...timelineState.items,
                                                         ...workspaceOrchestrationTimelineItems,
                                                       ]
+                                                    : taskRecoveryEventsMode
+                                                      ? [
+                                                          ...timelineState.items,
+                                                          ...taskRecoveryTimelineItems,
+                                                        ]
                           : a2uiCanvasEventsMode
                             ? [...timelineState.items, ...a2uiCanvasTimelineItems]
                             : timelineState.items;
@@ -1617,6 +1685,7 @@ function SessionSteeringQa() {
                 agentGovernanceEventsMode ||
                 agentAuditEventsMode ||
                 workspaceOrchestrationEventsMode ||
+                taskRecoveryEventsMode ||
                 artifactCanvasEventsMode ||
                 mcpAppEventsMode ||
                 titleEventsMode

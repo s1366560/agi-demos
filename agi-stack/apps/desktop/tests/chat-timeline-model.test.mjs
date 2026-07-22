@@ -1452,6 +1452,110 @@ test('workspace orchestration events expose the complete goal execution lifecycl
   }
 });
 
+test('task recovery events expose session health, incidents, and queued recovery actions', () => {
+  const cases = [
+    {
+      item: {
+        id: 'task-session-updated-1',
+        type: 'task_execution_session_updated',
+        eventTimeUs: 35_400_000,
+        eventCounter: 1,
+        payload: {
+          workspace_id: 'workspace-release',
+          task_id: 'task-security-review',
+          health: 'degraded',
+          session_status: 'initialization_failed',
+          attempt_id: 'attempt-1',
+          recommended_recovery_action: 'new_attempt',
+        },
+      },
+      expected: {
+        family: 'taskRecovery',
+        state: 'attention',
+        subject: 'task-security-review',
+        detail: 'degraded · initialization_failed · new_attempt',
+        isError: false,
+      },
+    },
+    {
+      item: {
+        id: 'task-incident-opened-1',
+        type: 'task_execution_incident_opened',
+        eventTimeUs: 35_500_000,
+        eventCounter: 2,
+        payload: {
+          workspace_id: 'workspace-release',
+          task_id: 'task-security-review',
+          conversation_id: 'conversation-release',
+          attempt_id: 'attempt-1',
+          incident: {
+            type: 'no_assistant_response',
+            severity: 'error',
+            summary: 'Conversation produced no assistant output.',
+          },
+        },
+      },
+      expected: {
+        family: 'taskRecovery',
+        state: 'failed',
+        subject: 'task-security-review',
+        detail: 'no_assistant_response · error · Conversation produced no assistant output.',
+        isError: true,
+      },
+    },
+    {
+      item: {
+        id: 'task-recovery-started-1',
+        type: 'task_recovery_action_started',
+        eventTimeUs: 35_600_000,
+        eventCounter: 3,
+        payload: {
+          workspace_id: 'workspace-release',
+          task_id: 'task-security-review',
+          action: 'new_attempt',
+          status: 'queued',
+          message: 'Fresh worker attempt queued.',
+          attempt_id: 'attempt-1',
+        },
+      },
+      expected: {
+        family: 'taskRecovery',
+        state: 'running',
+        subject: 'task-security-review',
+        detail: 'new_attempt · queued · Fresh worker attempt queued.',
+        isError: false,
+      },
+    },
+    {
+      item: {
+        id: 'task-recovery-completed-1',
+        type: 'task_recovery_action_completed',
+        eventTimeUs: 35_700_000,
+        eventCounter: 4,
+        payload: {
+          workspace_id: 'workspace-release',
+          task_id: 'task-security-review',
+          action: 'new_attempt',
+          status: 'queued',
+          message: 'Fresh worker attempt queued.',
+          attempt_id: 'attempt-1',
+        },
+      },
+      expected: {
+        family: 'taskRecovery',
+        state: 'scheduled',
+        subject: 'task-security-review',
+        detail: 'new_attempt · queued · Fresh worker attempt queued.',
+        isError: false,
+      },
+    },
+  ];
+
+  for (const { item, expected } of cases) {
+    assert.deepEqual(agentLifecyclePresentation(item), expected);
+  }
+});
+
 test('MCP App events expose the registered app and interactive tool result', () => {
   assert.deepEqual(
     agentLifecyclePresentation({

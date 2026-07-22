@@ -145,7 +145,9 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (item.type === 'work_plan') return t('chat.workPlan');
   if (item.type === 'task_start') return t('chat.taskStarted');
   if (item.type === 'task_complete') return t('chat.taskCompleted');
-  if (item.type.startsWith('task_')) return t('chat.task');
+  if (item.type.startsWith('task_') && !taskRecoveryEventTypes.has(item.type)) {
+    return t('chat.task');
+  }
   if (item.type === 'artifact_created') return t('chat.artifactCreated');
   if (item.type === 'artifact_ready') return t('chat.artifactReady');
   if (item.type === 'artifact_error') return t('chat.artifactFailed');
@@ -220,6 +222,17 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
     }
     return t('chat.workspaceGoalCompleted');
   }
+  if (lifecycle?.family === 'taskRecovery') {
+    if (item.type === 'task_execution_session_updated') {
+      return t('chat.taskExecutionSessionUpdated');
+    }
+    if (item.type === 'task_execution_incident_opened') {
+      return t('chat.taskExecutionIncidentOpened');
+    }
+    return item.type === 'task_recovery_action_started'
+      ? t('chat.taskRecoveryActionStarted')
+      : t('chat.taskRecoveryActionCompleted');
+  }
   if (lifecycle?.family === 'agentDefinition') {
     if (item.type === 'agent_definition_created') return t('chat.agentDefinitionCreated');
     if (item.type === 'agent_definition_updated') return t('chat.agentDefinitionUpdated');
@@ -265,6 +278,13 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (item.type.startsWith('agent_')) return t('chat.agentEvent');
   return t('chat.event');
 }
+
+const taskRecoveryEventTypes = new Set([
+  'task_execution_session_updated',
+  'task_execution_incident_opened',
+  'task_recovery_action_started',
+  'task_recovery_action_completed',
+]);
 
 export function timelineIcon(kind: TimelineKind, item: AgentTimelineItem): ReactNode {
   if (item.isError || item.error) return <DotsHorizontalIcon />;
