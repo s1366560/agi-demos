@@ -351,6 +351,162 @@ test('agent messages expose sender to recipient direction for live and history s
   );
 });
 
+test('parallel orchestration exposes task progress, participants, and structured failure', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'parallel-started-1',
+      type: 'parallel_started',
+      eventTimeUs: 11_000_000,
+      eventCounter: 1,
+      payload: {
+        task_count: 2,
+        subtasks: [
+          { subagent_name: 'Researcher', task: 'Collect release evidence' },
+          { subagent_name: 'Reviewer', task: 'Review the release gate' },
+        ],
+      },
+    }),
+    {
+      family: 'parallel',
+      state: 'running',
+      subject: 'Researcher, Reviewer',
+      detail: '',
+      isError: false,
+      progress: { unit: 'tasks', total: 2 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'parallel-completed-1',
+      type: 'parallel_completed',
+      eventTimeUs: 12_000_000,
+      eventCounter: 2,
+      results: [
+        { subagentName: 'Researcher', summary: 'Evidence collected', success: true },
+        { subagentName: 'Reviewer', summary: 'Release gate failed', success: false },
+      ],
+    }),
+    {
+      family: 'parallel',
+      state: 'failed',
+      subject: 'Researcher, Reviewer',
+      detail: 'Reviewer',
+      isError: true,
+      progress: { unit: 'tasks', current: 2, total: 2 },
+    },
+  );
+});
+
+test('chain orchestration preserves step names, previews, summaries, and progress', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'chain-started-1',
+      type: 'chain_started',
+      eventTimeUs: 13_000_000,
+      eventCounter: 1,
+      payload: {
+        total_steps: 3,
+        step_names: ['Plan', 'Review', 'Verify'],
+      },
+    }),
+    {
+      family: 'chain',
+      state: 'running',
+      subject: 'Plan → Review → Verify',
+      detail: '',
+      isError: false,
+      progress: { unit: 'steps', total: 3 },
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'chain-step-started-1',
+      type: 'chain_step_started',
+      eventTimeUs: 14_000_000,
+      eventCounter: 2,
+      stepIndex: 1,
+      stepName: 'Review',
+      taskPreview: 'Review the release evidence',
+    }),
+    {
+      family: 'chainStep',
+      state: 'running',
+      subject: 'Review',
+      detail: 'Review the release evidence',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'chain-step-completed-1',
+      type: 'chain_step_completed',
+      eventTimeUs: 15_000_000,
+      eventCounter: 3,
+      payload: {
+        step_index: 1,
+        step_name: 'Review',
+        summary: 'Evidence passed review',
+        success: true,
+      },
+    }),
+    {
+      family: 'chainStep',
+      state: 'complete',
+      subject: 'Review',
+      detail: 'Evidence passed review',
+      isError: false,
+    },
+  );
+
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'chain-completed-1',
+      type: 'chain_completed',
+      eventTimeUs: 16_000_000,
+      eventCounter: 4,
+      payload: {
+        steps_completed: 3,
+        total_steps: 3,
+        final_summary: 'Release ready',
+        success: true,
+      },
+    }),
+    {
+      family: 'chain',
+      state: 'complete',
+      subject: '',
+      detail: 'Release ready',
+      isError: false,
+      progress: { unit: 'steps', current: 3, total: 3 },
+    },
+  );
+});
+
+test('background launch exposes the assigned SubAgent and task for both protocol shapes', () => {
+  assert.deepEqual(
+    agentLifecyclePresentation({
+      id: 'background-launched-1',
+      type: 'background_launched',
+      eventTimeUs: 17_000_000,
+      eventCounter: 1,
+      payload: {
+        subagent_name: 'Auditor',
+        task_description: 'Audit the release evidence asynchronously',
+      },
+    }),
+    {
+      family: 'background',
+      state: 'running',
+      subject: 'Auditor',
+      detail: 'Audit the release evidence asynchronously',
+      isError: false,
+    },
+  );
+});
+
 test('streaming thought chunks merge into one readable timeline item and then settle', () => {
   let items = mergeThoughtStreamChunk([], {
     kind: 'start',

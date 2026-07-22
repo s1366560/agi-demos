@@ -4,6 +4,10 @@ export type AgentLifecycleFamily =
   | 'subagent'
   | 'agent'
   | 'agentMessage'
+  | 'parallel'
+  | 'chain'
+  | 'chainStep'
+  | 'background'
   | 'graphRun'
   | 'graphNode'
   | 'graphHandoff';
@@ -24,6 +28,11 @@ export type AgentLifecyclePresentation = {
   subject: string;
   detail: string;
   isError: boolean;
+  progress?: {
+    unit: 'tasks' | 'steps';
+    current?: number;
+    total: number;
+  };
 };
 
 const lifecycleEventDefinitions: Record<
@@ -160,6 +169,29 @@ const lifecycleEventDefinitions: Record<
     state: 'received',
     detailFields: ['message_preview', 'messagePreview'],
   },
+  parallel_started: { family: 'parallel', state: 'running' },
+  parallel_completed: { family: 'parallel', state: 'complete' },
+  chain_started: { family: 'chain', state: 'running' },
+  chain_step_started: {
+    family: 'chainStep',
+    state: 'running',
+    detailFields: ['task_preview', 'taskPreview', 'subagent_name', 'subagentName'],
+  },
+  chain_step_completed: {
+    family: 'chainStep',
+    state: 'complete',
+    detailFields: ['summary'],
+  },
+  chain_completed: {
+    family: 'chain',
+    state: 'complete',
+    detailFields: ['final_summary', 'finalSummary'],
+  },
+  background_launched: {
+    family: 'background',
+    state: 'running',
+    detailFields: ['task', 'task_description', 'taskDescription'],
+  },
   graph_run_started: {
     family: 'graphRun',
     state: 'running',
@@ -196,9 +228,10 @@ const lifecycleEventDefinitions: Record<
 };
 
 /**
- * Convert authoritative SubAgent, multi-Agent, and graph protocol fields into
- * compact UI semantics. Event type membership and structured status fields are
- * protocol facts; no free-text classification is used here.
+ * Convert authoritative SubAgent, multi-Agent, orchestration, and graph
+ * protocol fields into compact UI semantics. Event type membership and
+ * structured status fields are protocol facts; no free-text classification is
+ * used here.
  */
 export function agentLifecyclePresentation(
   item: AgentTimelineItem,
@@ -208,25 +241,54 @@ export function agentLifecyclePresentation(
 
   let state = definition.state;
   const explicitStatus = timelineEventString(item, ['status']);
-  const success = timelineEventBoolean(item, 'success');
-  if (success === false || explicitStatus === 'failed' || explicitStatus === 'error') {
+  if (
+    lifecycleFailed(item) ||
+    explicitStatus === 'failed' ||
+    explicitStatus === 'error'
+  ) {
     state = 'failed';
   } else if (explicitStatus === 'cancelled' || explicitStatus === 'skipped') {
     state = 'attention';
   }
 
   const subject = lifecycleSubject(item, definition.family);
-  const detail = timelineEventString(item, definition.detailFields ?? []) ?? item.error ?? '';
+  const detail = lifecycleDetail(item, definition.detailFields ?? []);
+  const progress = lifecycleProgress(item, definition.family);
   return {
     family: definition.family,
     state,
     subject,
     detail,
     isError: state === 'failed' || Boolean(item.isError || item.error),
+    ...(progress ? { progress } : {}),
   };
 }
 
 function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily): string {
+  if (family === 'parallel') {
+    const sourceKey = item.type === 'parallel_started' ? 'subtasks' : 'results';
+    const names = timelineEventRecordArray(item, [sourceKey]).flatMap((entry) => {
+      const name = firstRecordString(entry, [
+        'subagent_name',
+        'subagentName',
+        'agent_name',
+        'agentName',
+      ]);
+      return name ? [name] : [];
+    });
+    return uniqueStrings(names).join(', ');
+  }
+  if (family === 'chain') {
+    const name = timelineEventString(item, ['chain_name', 'chainName']);
+    if (name) return name;
+    return timelineEventStringArray(item, ['step_names', 'stepNames']).join(' → ');
+  }
+  if (family === 'chainStep') {
+    return timelineEventString(item, ['step_name', 'stepName']) ?? '';
+  }
+  if (family === 'background') {
+    return timelineEventString(item, ['subagent_name', 'subagentName']) ?? '';
+  }
   if (family === 'agentMessage') {
     const from = timelineEventString(item, [
       'from_agent_name',
@@ -271,6 +333,101 @@ function lifecycleSubject(item: AgentTimelineItem, family: AgentLifecycleFamily)
   );
 }
 
+function lifecycleDetail(item: AgentTimelineItem, detailFields: string[]): string {
+  if (item.type === 'parallel_completed') {
+    const failedAgents = timelineEventStringArray(item, ['failed_agents', 'failedAgents']);
+    if (failedAgents.length) return failedAgents.join(', ');
+    const results = timelineEventRecordArray(item, ['results']);
+    const failedResultNames = results.flatMap((result) => {
+      if (result.success !== false) return [];
+      const name = firstRecordString(result, [
+        'subagent_name',
+        'subagentName',
+        'agent_name',
+        'agentName',
+      ]);
+      return name ? [name] : [];
+    });
+    if (failedResultNames.length) return uniqueStrings(failedResultNames).join(', ');
+    for (const result of results) {
+      const summary = firstRecordString(result, ['summary', 'result', 'final_content']);
+      if (summary) return summary;
+    }
+  }
+  return timelineEventString(item, detailFields) ?? item.error ?? '';
+}
+
+function lifecycleProgress(
+  item: AgentTimelineItem,
+  family: AgentLifecycleFamily,
+): AgentLifecyclePresentation['progress'] {
+  if (family === 'parallel') {
+    const recordCount = timelineEventRecordArray(item, [
+      item.type === 'parallel_started' ? 'subtasks' : 'results',
+    ]).length;
+    const total =
+      timelineEventNumber(item, [
+        'total_tasks',
+        'totalTasks',
+        'task_count',
+        'taskCount',
+      ]) ?? (recordCount > 0 ? recordCount : null);
+    if (total === null) return undefined;
+    if (item.type === 'parallel_started') return { unit: 'tasks', total };
+
+    const explicitCompleted = timelineEventNumber(item, ['completed']);
+    const succeeded = timelineEventNumber(item, ['succeeded']);
+    const failed = timelineEventNumber(item, ['failed']);
+    const current =
+      explicitCompleted ??
+      (succeeded !== null && failed !== null
+        ? succeeded + failed
+        : recordCount > 0
+          ? recordCount
+          : undefined);
+    return current === undefined
+      ? { unit: 'tasks', total }
+      : { unit: 'tasks', current, total };
+  }
+  if (family === 'chain') {
+    const total = timelineEventNumber(item, [
+      'total_steps',
+      'totalSteps',
+      'step_count',
+      'stepCount',
+    ]);
+    if (total === null) return undefined;
+    if (item.type === 'chain_started') return { unit: 'steps', total };
+    const current = timelineEventNumber(item, ['steps_completed', 'stepsCompleted']);
+    return current === null
+      ? { unit: 'steps', total }
+      : { unit: 'steps', current, total };
+  }
+  return undefined;
+}
+
+function lifecycleFailed(item: AgentTimelineItem): boolean {
+  if (timelineEventBoolean(item, 'success') === false) return true;
+  if (item.type !== 'parallel_completed') return false;
+
+  const resultStates = timelineEventRecordArray(item, ['results']).flatMap((result) =>
+    typeof result.success === 'boolean' ? [result.success] : [],
+  );
+  if (resultStates.length) return resultStates.some((success) => !success);
+
+  const failed = timelineEventNumber(item, ['failed']);
+  if (failed !== null) return failed > 0;
+  if (timelineEventStringArray(item, ['failed_agents', 'failedAgents']).length) return true;
+
+  const succeeded = timelineEventNumber(item, ['succeeded']);
+  const total = timelineEventNumber(item, ['total_tasks', 'totalTasks']);
+  if (succeeded !== null && total !== null) return succeeded < total;
+  return (
+    timelineEventBoolean(item, 'all_succeeded') === false ||
+    timelineEventBoolean(item, 'allSucceeded') === false
+  );
+}
+
 function timelineEventString(item: AgentTimelineItem, keys: string[]): string | null {
   const payload = isRecord(item.payload) ? item.payload : null;
   for (const source of [payload, item]) {
@@ -287,6 +444,60 @@ function timelineEventBoolean(item: AgentTimelineItem, key: string): boolean | n
   const payload = isRecord(item.payload) ? item.payload : null;
   const value = payload?.[key] ?? item[key];
   return typeof value === 'boolean' ? value : null;
+}
+
+function timelineEventNumber(item: AgentTimelineItem, keys: string[]): number | null {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  for (const source of [payload, item]) {
+    if (!source) continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+    }
+  }
+  return null;
+}
+
+function timelineEventStringArray(item: AgentTimelineItem, keys: string[]): string[] {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  for (const source of [payload, item]) {
+    if (!source) continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (!Array.isArray(value)) continue;
+      return value.flatMap((entry) =>
+        typeof entry === 'string' && entry.trim() ? [entry.trim()] : [],
+      );
+    }
+  }
+  return [];
+}
+
+function timelineEventRecordArray(
+  item: AgentTimelineItem,
+  keys: string[],
+): Array<Record<string, unknown>> {
+  const payload = isRecord(item.payload) ? item.payload : null;
+  for (const source of [payload, item]) {
+    if (!source) continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (Array.isArray(value)) return value.filter(isRecord);
+    }
+  }
+  return [];
+}
+
+function firstRecordString(record: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

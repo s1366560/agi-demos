@@ -150,6 +150,11 @@ export function timelineTitle(item: AgentTimelineItem, t: (key: string) => strin
   if (lifecycle?.family === 'subagent') return t('chat.subagent');
   if (lifecycle?.family === 'agent') return t('chat.agentEvent');
   if (lifecycle?.family === 'agentMessage') return t('chat.agentMessage');
+  if (lifecycle?.family === 'parallel') return t('chat.parallel');
+  if (lifecycle?.family === 'chain' || lifecycle?.family === 'chainStep') {
+    return t('chat.chain');
+  }
+  if (lifecycle?.family === 'background') return t('chat.background');
   if (lifecycle?.family === 'graphRun') return t('chat.graphRun');
   if (lifecycle?.family === 'graphNode') return t('chat.graphNode');
   if (lifecycle?.family === 'graphHandoff') return t('chat.graphHandoff');
@@ -193,8 +198,16 @@ export function timelineSummary(
 ): string {
   const lifecycle = agentLifecyclePresentation(item);
   if (lifecycle) {
+    const progress = lifecycle.progress
+      ? lifecycle.progress.current === undefined
+        ? t(`chat.${lifecycle.progress.unit}Count`, { count: lifecycle.progress.total })
+        : t(`chat.${lifecycle.progress.unit}Progress`, {
+            current: lifecycle.progress.current,
+            total: lifecycle.progress.total,
+          })
+      : '';
     return compactTimelineValue(
-      [lifecycle.subject, lifecycle.detail].filter(Boolean).join(' · '),
+      [lifecycle.subject, progress, lifecycle.detail].filter(Boolean).join(' · '),
     ) || item.type;
   }
   if (item.error) return item.error;

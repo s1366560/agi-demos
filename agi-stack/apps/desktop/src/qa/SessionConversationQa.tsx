@@ -15,10 +15,10 @@ declare global {
 
 // Visual QA fixture for the agent conversation timeline: day dividers, a
 // reasoning row, paired tool calls (complete / running / failed), SubAgent,
-// multi-Agent, and graph lifecycle rows, markdown with a highlighted code
-// block, a streaming assistant reply, and the live working indicator. Item
-// timestamps are relative to load time so the day dividers are deterministic
-// ("yesterday" then "today").
+// multi-Agent, orchestration, and graph lifecycle rows, markdown with a
+// highlighted code block, a streaming assistant reply, and the live working
+// indicator. Item timestamps are relative to load time so the day dividers are
+// deterministic ("yesterday" then "today").
 
 const nowMs = Date.now();
 const HOUR = 3_600_000;
@@ -280,6 +280,99 @@ const conversationItems: AgentTimelineItem[] = [
     eventTimeUs: (nowMs - 1.925 * HOUR) * 1000,
     eventCounter: 20,
     timestamp: nowMs - 1.925 * HOUR,
+  }),
+  item({
+    id: 'parallel-started-1',
+    type: 'parallel_started',
+    payload: {
+      task_count: 3,
+      subtasks: [
+        { subagent_name: 'Researcher', task: 'Collect evidence' },
+        { subagent_name: 'Reviewer', task: 'Review evidence' },
+        { subagent_name: 'Verifier', task: 'Verify the gate' },
+      ],
+    },
+    eventTimeUs: (nowMs - 1.922 * HOUR) * 1000,
+    eventCounter: 21,
+    timestamp: nowMs - 1.922 * HOUR,
+  }),
+  item({
+    id: 'chain-started-1',
+    type: 'chain_started',
+    payload: {
+      total_steps: 3,
+      step_names: ['Plan', 'Review', 'Verify'],
+    },
+    eventTimeUs: (nowMs - 1.919 * HOUR) * 1000,
+    eventCounter: 22,
+    timestamp: nowMs - 1.919 * HOUR,
+  }),
+  item({
+    id: 'chain-step-started-1',
+    type: 'chain_step_started',
+    payload: {
+      step_index: 0,
+      step_name: 'Plan',
+      task_preview: 'Prepare the release validation plan',
+    },
+    eventTimeUs: (nowMs - 1.916 * HOUR) * 1000,
+    eventCounter: 23,
+    timestamp: nowMs - 1.916 * HOUR,
+  }),
+  item({
+    id: 'chain-step-completed-1',
+    type: 'chain_step_completed',
+    payload: {
+      step_index: 0,
+      step_name: 'Plan',
+      summary: 'Validation plan prepared',
+      success: true,
+    },
+    eventTimeUs: (nowMs - 1.913 * HOUR) * 1000,
+    eventCounter: 24,
+    timestamp: nowMs - 1.913 * HOUR,
+  }),
+  item({
+    id: 'background-launched-1',
+    type: 'background_launched',
+    payload: {
+      subagent_name: 'Auditor',
+      task_description: 'Audit release evidence asynchronously',
+    },
+    eventTimeUs: (nowMs - 1.91 * HOUR) * 1000,
+    eventCounter: 25,
+    timestamp: nowMs - 1.91 * HOUR,
+  }),
+  item({
+    id: 'chain-completed-1',
+    type: 'chain_completed',
+    payload: {
+      steps_completed: 3,
+      total_steps: 3,
+      final_summary: 'Release chain complete',
+      success: true,
+    },
+    eventTimeUs: (nowMs - 1.907 * HOUR) * 1000,
+    eventCounter: 26,
+    timestamp: nowMs - 1.907 * HOUR,
+  }),
+  item({
+    id: 'parallel-completed-1',
+    type: 'parallel_completed',
+    payload: {
+      total_tasks: 3,
+      succeeded: 2,
+      failed: 1,
+      failed_agents: ['Reviewer'],
+      results: [
+        { subagent_name: 'Researcher', summary: 'Evidence collected', success: true },
+        { subagent_name: 'Reviewer', summary: 'Review failed', success: false },
+        { subagent_name: 'Verifier', summary: 'Gate verified', success: true },
+      ],
+    },
+    eventTimeUs: (nowMs - 1.904 * HOUR) * 1000,
+    eventCounter: 27,
+    timestamp: nowMs - 1.904 * HOUR,
   }),
   item({
     id: 'act-3',
