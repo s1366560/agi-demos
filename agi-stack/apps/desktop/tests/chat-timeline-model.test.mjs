@@ -19,6 +19,7 @@ const {
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
   pairToolCallItems,
+  shouldSkipLiveTimelineEvent,
   toolActivityRows,
   shouldShowAgentWorkingIndicator,
   timelineWorkingStartedAtUs,
@@ -1602,6 +1603,20 @@ test('tool progress events expose structured work progress without raw payload f
       isError: false,
       progress: { unit: 'work', current: 100, total: 100 },
     },
+  );
+});
+
+test('live cloud progress events enter the timeline instead of being discarded', () => {
+  assert.equal(shouldSkipLiveTimelineEvent('progress', null), false);
+  assert.equal(shouldSkipLiveTimelineEvent('status', null), true);
+  assert.equal(shouldSkipLiveTimelineEvent('message', 'subscribe_workspace'), true);
+  assert.match(
+    appSource,
+    /shouldSkipLiveTimelineEvent\(type, readStringField\(payload, 'action'\)\)/,
+  );
+  assert.match(
+    appSource,
+    /const item = timelineItemFromSocketEvent\(event\);[\s\S]*?return item \? mergeTimelineItems/,
   );
 });
 

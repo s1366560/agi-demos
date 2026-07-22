@@ -75,6 +75,30 @@ export type AgentExecutionSummary = {
 
 export type ToolStreamEventKind = 'delta' | 'act' | 'observe';
 
+const SKIPPED_LIVE_TIMELINE_EVENT_TYPES = new Set([
+  'ack',
+  'status',
+  'start',
+  'complete',
+  'cancelled',
+  'heartbeat',
+  'status_update',
+  'lifecycle_state_change',
+  'sandbox_event',
+]);
+
+/** Protocol control events are not conversation rows; progress is intentionally displayable. */
+export function shouldSkipLiveTimelineEvent(
+  type: string,
+  action: string | null | undefined,
+): boolean {
+  return (
+    SKIPPED_LIVE_TIMELINE_EVENT_TYPES.has(type) ||
+    action === 'subscribe' ||
+    action === 'subscribe_workspace'
+  );
+}
+
 /**
  * Return follow-up suggestions for the latest Agent turn. A new user message
  * starts a new turn and therefore invalidates every earlier suggestion event.

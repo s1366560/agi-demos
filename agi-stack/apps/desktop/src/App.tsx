@@ -105,6 +105,7 @@ import {
   mergeCostUpdateEvent,
   mergeThoughtStreamChunk,
   mergeToolStreamItem,
+  shouldSkipLiveTimelineEvent,
 } from './features/chat/chatTimelineModel';
 import { applyHitlResponseStreamEvent } from './features/chat/hitlResponseEventModel';
 import {
@@ -760,7 +761,7 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
   if (!event || typeof event !== 'object') return null;
   const payload = event as Record<string, unknown>;
   const type = readStringField(payload, 'type') ?? readStringField(payload, 'event_type');
-  if (!type || shouldSkipLiveTimelineEvent(type, payload)) return null;
+  if (!type || shouldSkipLiveTimelineEvent(type, readStringField(payload, 'action'))) return null;
   const data = objectField(payload, 'data') ?? objectField(payload, 'payload') ?? {};
   const nowMs = Date.now();
   const eventTimeUs =
@@ -820,27 +821,6 @@ function timelineItemFromSocketEvent(event: unknown): AgentTimelineItem | null {
   if (metadata) item.metadata = metadata;
 
   return item;
-}
-
-function shouldSkipLiveTimelineEvent(type: string, payload: Record<string, unknown>): boolean {
-  if (
-    [
-      'ack',
-      'status',
-      'progress',
-      'start',
-      'complete',
-      'cancelled',
-      'heartbeat',
-      'status_update',
-      'lifecycle_state_change',
-      'sandbox_event',
-    ].includes(type)
-  ) {
-    return true;
-  }
-  const action = readStringField(payload, 'action');
-  return action === 'subscribe' || action === 'subscribe_workspace';
 }
 
 function mergeLiveTimelineEvent(
