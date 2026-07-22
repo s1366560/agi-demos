@@ -64,6 +64,7 @@ const testFiles = [
   'chat-timeline-model.test.mjs',
   'artifact-canvas-events.test.mjs',
   'mcp-app-canvas-events.test.mjs',
+  'mcp-app-timeline-model.test.mjs',
   'mcp-app-host-bridge.test.mjs',
   'memory-timeline-model.test.mjs',
   'skill-timeline-group-model.test.mjs',

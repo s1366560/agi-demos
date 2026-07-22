@@ -67,8 +67,11 @@ import {
 import type { TimelineKind } from './chatTimelinePresentation';
 import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
+import { MCPAppTimelineCard } from './MCPAppTimelineCard';
 import { MemoryTimelineEvent } from './MemoryTimelineCards';
 import { isMemoryTimelineEvent } from './memoryTimelineModel';
+import { groupMCPAppTimelineItems } from './mcpAppTimelineModel';
+import type { MCPAppTimelineGroup } from './mcpAppTimelineModel';
 import { SkillTimelineCard } from './SkillTimelineCard';
 import { groupSkillTimelineItems } from './skillTimelineGroupModel';
 import type { SkillTimelineGroup } from './skillTimelineGroupModel';
@@ -102,11 +105,19 @@ type TimelineSkillGroupNode = {
   group: SkillTimelineGroup;
 };
 
+type TimelineMCPAppGroupNode = {
+  kind: 'mcp_app_group';
+  id: string;
+  items: AgentTimelineItem[];
+  group: MCPAppTimelineGroup;
+};
+
 type TimelinePresentationNode =
   | SessionNarrativeNode
   | TimelineActivityGroupNode
   | TimelineSubAgentGroupNode
-  | TimelineSkillGroupNode;
+  | TimelineSkillGroupNode
+  | TimelineMCPAppGroupNode;
 
 type TimelineGroupNode = Exclude<TimelinePresentationNode, { kind: 'item' }>;
 
@@ -130,6 +141,7 @@ export function AgentTimeline({
   onRespondToHitl,
   respondableHitlRequestIds,
   activityPresence,
+  onOpenMCPAppResult,
 }: {
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
@@ -141,6 +153,7 @@ export function AgentTimeline({
   onRespondToHitl: (submission: HitlResponseSubmission) => Promise<void>;
   respondableHitlRequestIds: readonly string[];
   activityPresence: SessionActivityPresence;
+  onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
 }) {
   const { t } = useI18n();
   const respondableHitlRequestIdSet = useMemo(
@@ -310,6 +323,27 @@ export function AgentTimeline({
                   skill={node.group}
                   expanded={open}
                   onToggle={() => setGroupOpen(node.items, !open)}
+                  anchorId={groupId}
+                />
+              </Fragment>
+            );
+          }
+          if (node.kind === 'mcp_app_group') {
+            const groupId = timelineGroupIdentity(narrative, index);
+            const open = timelineGroupOpen(node.items, expandedGroupItems);
+            const resultItem = node.group.resultItem;
+            const openApp =
+              resultItem && onOpenMCPAppResult
+                ? () => onOpenMCPAppResult(resultItem)
+                : undefined;
+            return (
+              <Fragment key={groupId}>
+                {dayDivider}
+                <MCPAppTimelineCard
+                  app={node.group}
+                  expanded={open}
+                  onToggle={() => setGroupOpen(node.items, !open)}
+                  onOpen={openApp}
                   anchorId={groupId}
                 />
               </Fragment>
@@ -1090,6 +1124,11 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
     skillGrouping.groups.map((group) => [group.startItemId, group]),
   );
   const claimedSkillItemIds = new Set(skillGrouping.claimedItemIds);
+  const mcpAppGrouping = groupMCPAppTimelineItems(itemNodes);
+  const mcpAppGroupsByStartItem = new Map(
+    mcpAppGrouping.groups.map((group) => [group.startItemId, group]),
+  );
+  const claimedMCPAppItemIds = new Set(mcpAppGrouping.claimedItemIds);
 
   const flushActivityItems = () => {
     if (!activityItems.length) return;
@@ -1108,6 +1147,18 @@ function groupNarrativeActivity(narrative: SessionNarrativeNode[]): TimelinePres
       return;
     }
     if (node.kind === 'item') {
+      const mcpAppGroup = mcpAppGroupsByStartItem.get(node.item.id);
+      if (mcpAppGroup) {
+        flushActivityItems();
+        grouped.push({
+          kind: 'mcp_app_group',
+          id: mcpAppGroup.id,
+          items: mcpAppGroup.items,
+          group: mcpAppGroup,
+        });
+        return;
+      }
+      if (claimedMCPAppItemIds.has(node.item.id)) return;
       const skillGroup = skillGroupsByStartItem.get(node.item.id);
       if (skillGroup) {
         flushActivityItems();

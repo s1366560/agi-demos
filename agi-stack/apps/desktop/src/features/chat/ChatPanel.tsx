@@ -121,6 +121,7 @@ type ChatPanelProps = {
   onRuntimeTargetChange?: (value: string) => void;
   onModelChange?: (value: string) => Promise<void>;
   onModelReset?: () => Promise<void>;
+  onOpenMCPAppResult?: (item: AgentTimelineItem) => void;
   onOpenCommands: (trigger?: HTMLElement | null) => void;
 };
 
@@ -205,6 +206,7 @@ export const ChatPanel = memo(function ChatPanel({
   onRuntimeTargetChange,
   onModelChange,
   onModelReset,
+  onOpenMCPAppResult,
   onOpenCommands,
 }: ChatPanelProps) {
   const { t } = useI18n();
@@ -602,6 +604,7 @@ export const ChatPanel = memo(function ChatPanel({
                 onRespondToHitl={onRespondToHitl}
                 respondableHitlRequestIds={respondableHitlRequestIds}
                 activityPresence={activityPresence}
+                onOpenMCPAppResult={onOpenMCPAppResult}
               />
             </>
           ) : messages.length === 0 ? (

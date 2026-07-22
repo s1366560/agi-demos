@@ -129,8 +129,12 @@ test('non-UI and malformed MCP results are consumed without opening an empty can
 });
 
 test('Desktop consumes MCP App results into an official sandboxed renderer and Browser QA', () => {
-  assert.match(appSource, /applyMCPAppCanvasStreamEvent\(emptyMCPAppCanvasState\(\), event\)/);
-  assert.match(appSource, /mcpAppCanvasResult\.handled[\s\S]*return existing/);
+  assert.match(appSource, /applyMCPAppCanvasStreamEvent\(nextMCPAppCanvas, event\)/);
+  assert.doesNotMatch(
+    appSource,
+    /const mcpAppCanvasResult[\s\S]{0,180}mcpAppCanvasResult\.handled\) return existing/,
+  );
+  assert.match(appSource, /const openMCPAppResult = useCallback/);
   assert.match(appSource, /setReviewTab\('apps'\)/);
   assert.match(componentSource, /import\('@mcp-ui\/client'\)/);
   assert.match(componentSource, /sandbox=\{sandboxConfig\}/);

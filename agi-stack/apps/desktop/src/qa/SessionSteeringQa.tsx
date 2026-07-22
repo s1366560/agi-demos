@@ -1,5 +1,5 @@
 import '@radix-ui/themes/styles.css';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Theme } from '@radix-ui/themes';
 import {
@@ -41,6 +41,7 @@ import { toggleRunInputReference } from '../features/session/sessionChangesModel
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
+  AgentTimelineItem,
   ChangeSnapshot,
   CodeRangeReference,
   ConversationTimelineState,
@@ -1784,6 +1785,30 @@ const mcpAppResultEvent = {
   },
 };
 
+const mcpAppTimelineItems: ConversationTimelineState['items'] = [
+  {
+    id: 'mcp-app-release-registered',
+    type: 'mcp_app_registered',
+    eventTimeUs: 1_784_282_044_000_000,
+    eventCounter: 4,
+    payload: {
+      app_id: 'release-verification-dashboard',
+      server_name: 'release-tools',
+      tool_name: 'show_release_verification',
+      source: 'agent_developed',
+      resource_uri: 'ui://release/verification-dashboard',
+      title: 'Release verification',
+    },
+  },
+  {
+    id: 'mcp-app-release-result',
+    type: 'mcp_app_result',
+    eventTimeUs: 1_784_282_045_000_000,
+    eventCounter: 5,
+    payload: mcpAppResultEvent.data,
+  },
+];
+
 const qaConversation: AgentConversation = {
   id: 'conversation-desktop-session',
   project_id: 'project-desktop',
@@ -1867,6 +1892,9 @@ function SessionSteeringQa() {
       ? applyMCPAppCanvasStreamEvent(emptyMCPAppCanvasState(), mcpAppResultEvent).state
       : emptyMCPAppCanvasState(),
   );
+  const openQaMCPAppResult = useCallback((item: AgentTimelineItem) => {
+    setMCPAppCanvas((current) => applyMCPAppCanvasStreamEvent(current, item).state);
+  }, []);
   const [mcpAppHostMessage, setMCPAppHostMessage] = useState('');
   const [a2uiCanvasResponse, setA2UICanvasResponse] = useState('');
   const mcpAppHostApi = useMemo(
@@ -1894,10 +1922,12 @@ function SessionSteeringQa() {
           ? [...timelineState.items, suggestionTimelineItem]
           : skillEventsMode
             ? [...timelineState.items, ...skillTimelineItems]
-            : subagentEventsMode
-              ? [...timelineState.items, ...subagentTimelineItems]
-              : memoryEventsMode
-                ? [...timelineState.items, ...memoryTimelineItems]
+            : mcpAppEventsMode
+              ? [...timelineState.items, ...mcpAppTimelineItems]
+              : subagentEventsMode
+                ? [...timelineState.items, ...subagentTimelineItems]
+                : memoryEventsMode
+                  ? [...timelineState.items, ...memoryTimelineItems]
               : modelOverrideEventsMode
                 ? [...timelineState.items, ...modelOverrideTimelineItems]
             : llmRuntimeEventsMode
@@ -2328,6 +2358,7 @@ function SessionSteeringQa() {
                   : undefined
               }
               onRuntimeTargetChange={() => undefined}
+              onOpenMCPAppResult={openQaMCPAppResult}
               onOpenCommands={() => undefined}
             />
             {a2uiCanvasResponse ? (

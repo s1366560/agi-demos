@@ -23,6 +23,7 @@
     "src/features/chat/artifactCanvasEventModel.ts",
     "src/features/chat/conversationTitleEventModel.ts",
     "src/features/chat/mcpAppCanvasEventModel.ts",
+    "src/features/chat/mcpAppTimelineModel.ts",
     "src/features/chat/mcpAppHostBridge.ts",
     "src/features/chat/hitlResponseEventModel.ts",
     "src/features/chat/memoryTimelineModel.ts",

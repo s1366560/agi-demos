@@ -911,8 +911,6 @@ function mergeLiveTimelineEvent(
   if (titleEvent.handled) return existing;
   const artifactCanvasResult = applyArtifactCanvasStreamEvent(emptyArtifactCanvasState(), event);
   if (artifactCanvasResult.handled) return existing;
-  const mcpAppCanvasResult = applyMCPAppCanvasStreamEvent(emptyMCPAppCanvasState(), event);
-  if (mcpAppCanvasResult.handled) return existing;
   const hitlResponse = applyHitlResponseStreamEvent(existing, event);
   if (hitlResponse.handled) return hitlResponse.items;
   const timeline = existing;
@@ -5977,6 +5975,15 @@ export function App() {
     setReviewTab('plan');
   }, []);
 
+  const openMCPAppResult = useCallback((item: AgentTimelineItem) => {
+    const result = applyMCPAppCanvasStreamEvent(mcpAppCanvasStateRef.current, item);
+    if (!result.handled || result.action !== 'open') return;
+    mcpAppCanvasStateRef.current = result.state;
+    setMCPAppCanvasState(result.state);
+    setReviewTab('apps');
+    setReviewPanelOpen(true);
+  }, []);
+
   const handleChatRemoveReference = useCallback((reference: CodeRangeReference) => {
     setRunInputReferences((current) => toggleRunInputReference(current, reference));
   }, []);
@@ -6128,6 +6135,7 @@ export function App() {
           : undefined
       }
       onRuntimeTargetChange={handleChatRuntimeTargetChange}
+      onOpenMCPAppResult={openMCPAppResult}
       onOpenCommands={openCommandPalette}
     />
   );
